@@ -96,6 +96,7 @@
     <Compile Include="DownloadManager.cs" />
     <Compile Include="GithubRelease.cs" />
     <Compile Include="UpdateChecker.cs" />
+    <Compile Include="UpdateException.cs" />
     <Compile Include="DownloadProgressWindow.xaml.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
