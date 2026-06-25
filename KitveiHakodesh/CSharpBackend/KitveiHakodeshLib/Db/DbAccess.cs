@@ -31,9 +31,39 @@ namespace KitveiHakodeshLib.Db
         public DbAccess(string path)
         {
             _connectionString = "Data Source=" + path + ";Version=3;Read Only=True;";
+            _EnsureIndexes(path);
             _pool = new SQLiteConnection[POOL_SIZE];
             for (int i = 0; i < POOL_SIZE; i++)
                 _pool[i] = _OpenConnection();
+        }
+
+        /// <summary>
+        /// Creates any missing performance indexes on the database.
+        /// Uses a separate read-write connection (the pool connections are read-only).
+        /// Runs synchronously before the read-only pool is opened so the indexes are
+        /// guaranteed to exist before any query executes.
+        /// </summary>
+        private static void _EnsureIndexes(string path)
+        {
+            string readWriteConnectionString = "Data Source=" + path + ";Version=3;";
+            try
+            {
+                using (var conn = new SQLiteConnection(readWriteConnectionString))
+                {
+                    conn.Open();
+                    conn.Execute(
+                        "CREATE INDEX IF NOT EXISTS idx_link_type_target_line " +
+                        "ON link(connectionTypeId, targetLineId)"
+                    );
+                }
+            }
+            catch (Exception ex)
+            {
+                // Non-fatal — the index is a performance optimization, not a correctness requirement.
+                // If the DB is read-only or the index already exists under a different name,
+                // queries will still work, just potentially slower.
+                System.Diagnostics.Debug.WriteLine("[DbAccess] EnsureIndexes failed: " + ex.Message);
+            }
         }
 
         private SQLiteConnection _OpenConnection()

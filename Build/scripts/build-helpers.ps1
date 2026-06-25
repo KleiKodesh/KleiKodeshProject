@@ -12,6 +12,8 @@ $SolutionPath        = Join-Path $ProjectRoot "KleiKodeshProject.slnx"
 $NsisScriptPath      = Join-Path $BuildDir    "nsis\KleiKodeshWrapper.nsi"
 $ReleasesDir         = Join-Path $BuildDir    "releases"
 $ReleaseNotesFile    = Join-Path $ProjectRoot "RELEASE_NOTES.txt"
+$DemoAppProjectPath  = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\KitveiHakodeshDemoApp.csproj"
+$DemoAppReleaseDir   = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\bin\Release"
 
 # -- Read current version from source -----------------------------------------
 function Get-CurrentVersion {

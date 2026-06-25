@@ -64,8 +64,14 @@ foreach ($folder in @("bin\Release", "bin\Release-x64", "bin\Release-x86")) {
     $path = Join-Path $ProjectRoot "KleiKodeshVsto\$folder"
     if (Test-Path $path) {
         Remove-Item $path -Recurse -Force
-        Write-Host "Deleted $folder" -ForegroundColor Gray
+        Write-Host "Deleted KleiKodeshVsto\$folder" -ForegroundColor Gray
     }
+}
+
+# Wipe DemoApp Release folder so the rebuild is clean
+if (Test-Path $DemoAppReleaseDir) {
+    Remove-Item $DemoAppReleaseDir -Recurse -Force
+    Write-Host "Deleted KitveiHakodeshDemoApp\bin\Release" -ForegroundColor Gray
 }
 
 # ── 2. Update version ─────────────────────────────────────────────────────────
@@ -179,6 +185,34 @@ $installerAny = $script:LastBuiltInstaller
 Write-Host ""
 Write-Host "AnyCPU variant built successfully." -ForegroundColor Green
 
+# ── 4b. Build KitveiHakodeshPortable (DemoApp, Release|AnyCPU) + zip ─────────
+Write-Host ""
+Write-Host "Building KitveiHakodeshPortable (Release|AnyCPU)..." -ForegroundColor Yellow
+
+$msbuild = Find-MSBuild
+if (-not $msbuild) {
+    Write-Host "ERROR: MSBuild not found — cannot build KitveiHakodeshDemoApp." -ForegroundColor Red
+    exit 1
+}
+
+& $msbuild $DemoAppProjectPath /p:Configuration=Release /p:Platform=AnyCPU /nologo /verbosity:minimal
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: KitveiHakodeshDemoApp build failed." -ForegroundColor Red
+    exit 1
+}
+
+$portableZip = Join-Path $ReleasesDir "KitveiHakodeshPortable-${version}.zip"
+if (Test-Path $portableZip) { Remove-Item $portableZip -Force }
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($DemoAppReleaseDir, $portableZip)
+
+if (-not (Test-Path $portableZip)) {
+    Write-Host "ERROR: KitveiHakodeshPortable zip not created: $portableZip" -ForegroundColor Red
+    exit 1
+}
+Write-Host "OK: $(Split-Path -Leaf $portableZip)" -ForegroundColor Green
+
 # ── 5. GitHub release ─────────────────────────────────────────────────────────
 if ($NoRelease) { Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
 
@@ -219,7 +253,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-foreach ($asset in @($installerX64, $installerX86, $installerAny) | Where-Object { $_ }) {
+foreach ($asset in @($installerX64, $installerX86, $installerAny, $portableZip) | Where-Object { $_ }) {
     Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
     gh release upload $version $asset --repo KleiKodesh/KleiKodeshProject --clobber
     if ($LASTEXITCODE -ne 0) {
