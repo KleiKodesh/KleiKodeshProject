@@ -159,13 +159,18 @@ namespace UpdateCheckerLib
             }
         }
 
+        static DownloadManager()
+        {
+            // Ensure TLS 1.2 is used for GitHub connections (required by NetFree and modern security standards).
+            // This must be set globally before any HttpClient is created, as it affects all connections.
+            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+        }
+
         private static async Task DownloadFileAsync(
             string url, string filePath, DownloadProgressForm form, CancellationToken token)
         {
             const int maxAttempts = 3;
             const int retryDelayMs = 2000;
-
-            ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             // Track the last HTTP status and inner exception for the final error message.
             HttpStatusCode? lastStatus = null;
