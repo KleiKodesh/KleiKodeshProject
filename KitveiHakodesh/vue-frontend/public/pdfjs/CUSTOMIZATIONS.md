@@ -106,6 +106,45 @@ PDF.js uses `enableOptimizedPartialRendering` to render pages in tiles. `minDura
 
 ---
 
+### 0c. Reset renderingState after cancellation (stuck spinner fix)
+
+This patch fixes pages getting permanently stuck on the loading animation after a large scroll jump.
+
+**Root cause:** `_cancelRendering()` calls `pageView.cancelRendering()` on each page, which cancels the active `renderTask` but does **not** touch `renderingState`. Inside `_drawCanvas`, a cancelled task throws `RenderingCancelledException`, which causes an early return — the `this.renderingState = RenderingStates.FINISHED` line at the bottom of `_drawCanvas` is never reached. The page remains in `RUNNING` state indefinitely, spinner visible. The only accidental fix was zooming, because zoom calls `reset()` internally which explicitly sets the state back to `INITIAL`.
+
+**The fix:** in `_cancelRendering()`, after calling `pageView.cancelRendering()`, check if the page was in `RUNNING` or `PAUSED` state and reset it to `INITIAL`. This removes the spinner immediately and allows the page to be re-queued for rendering correctly.
+
+Search for:
+```js
+  _cancelRendering() {
+    for (const pageView of this._pages) {
+      pageView.cancelRendering();
+    }
+  }
+```
+
+Replace with:
+```js
+  _cancelRendering() {
+    for (const pageView of this._pages) {
+      // PATCH: reset renderingState to INITIAL after cancelling so that pages
+      // stuck in RUNNING state (spinner visible) are cleaned up immediately.
+      // Without this, cancelled pages stay in RUNNING state and the loading
+      // spinner is never removed — the only way out was to zoom, which calls
+      // reset() internally. Calling cancelRendering() only cancels the task;
+      // it does not touch renderingState, so the spinner stays forever.
+      const wasRunning = pageView.renderingState === RenderingStates.RUNNING ||
+                         pageView.renderingState === RenderingStates.PAUSED;
+      pageView.cancelRendering();
+      if (wasRunning) {
+        pageView.renderingState = RenderingStates.INITIAL;
+      }
+    }
+  }
+```
+
+---
+
 ### 0b. Cancel in-progress renders on large scroll jumps
 
 This is the most impactful patch for the "slow scrollbar jump" complaint.
