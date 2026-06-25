@@ -15563,7 +15563,18 @@ class PDFViewer {
   }
   _cancelRendering() {
     for (const pageView of this._pages) {
+      // PATCH: reset renderingState to INITIAL after cancelling so that pages
+      // stuck in RUNNING state (spinner visible) are cleaned up immediately.
+      // Without this, cancelled pages stay in RUNNING state and the loading
+      // spinner is never removed — the only way out was to zoom, which calls
+      // reset() internally. Calling cancelRendering() only cancels the task;
+      // it does not touch renderingState, so the spinner stays forever.
+      const wasRunning = pageView.renderingState === RenderingStates.RUNNING ||
+                         pageView.renderingState === RenderingStates.PAUSED;
       pageView.cancelRendering();
+      if (wasRunning) {
+        pageView.renderingState = RenderingStates.INITIAL;
+      }
     }
   }
   async #ensurePdfPageLoaded(pageView) {
