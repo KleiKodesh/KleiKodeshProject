@@ -26,7 +26,7 @@ Virtual-scrolled main text display for the book view. Handles line rendering, se
 
 **useBookViewLinesNavigation.ts** - programmatic scroll navigation. `scrollToLineId(id, fallbackIndex)` scrolls to a line by id, skipping if visible. `scrollToLineIndex(index, occurrenceOffset)` scrolls to a specific index with search match highlighting.
 
-**useBookViewLinesScroll.ts** - scroll position management. `captureScrollPos()` / `restoreScrollPos()` for session restore. Saves position to tabStore IDB on visibilitychange, beforeunload, and unmount.
+**useBookViewLinesScroll.ts** - scroll position save and restore. Save: captures `firstVisible.index` (not the overscan item) and the pixel offset within that item; skips saves where the gap between scrollTop and firstVisible.start exceeds 2000px (stale mid-restore state). Restore: two-stage virtualizer-API-only approach — stage 1 calls `scrollToIndex` immediately with estimated heights, stage 2 fires when the target chunk loads, re-issues `scrollToIndex`, then tracks `item.start` in a rAF loop until stable (correcting each time background chunks above shift the layout), then applies the saved sub-line offset via `scrollToOffset` if it fits within the item's actual height. A post-stabilization watch handles late-loading chunks. Never sets `scrollTop` directly.
 
 ## Utilities
 

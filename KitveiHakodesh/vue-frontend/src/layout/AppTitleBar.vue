@@ -12,7 +12,7 @@ import {
   IconOptions24Filled,
   IconColor24Regular,
   IconColor24Filled,
-  IconCrop20Regular,
+  IconConvertToText24Regular
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 // Both dropdowns are v-if — lazy-load them so their imports (including fluent-color icons)
@@ -265,15 +265,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </div>
       <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" />
       <button
-        v-if="isTitleBarButtonVisible('toolbar-toggle') && (bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view')"
-        class="bar-btn"
-        :title="toolbarTitle"
-        @click.stop="bookViewStore.isBookViewActive ? bookViewStore.toggleToolbar() : tabStore.togglePdfViewerTitleBar()"
-      >
-        <IconOptions24Filled v-if="bookViewStore.isBookViewActive ? bookViewStore.toolbarVisible : activeTab?.pdfViewerTitleBarVisible !== false" />
-        <IconOptions24Regular v-else />
-      </button>
-      <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"
         :title="pdfFilterTitle"
@@ -281,6 +272,15 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       >
         <IconColor24Filled v-if="settingsStore.pdfPageFilters" />
         <IconColor24Regular v-else />
+      </button>
+      <button
+        v-if="isTitleBarButtonVisible('toolbar-toggle') && (bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view')"
+        class="bar-btn"
+        :title="toolbarTitle"
+        @click.stop="bookViewStore.isBookViewActive ? bookViewStore.toggleToolbar() : tabStore.togglePdfViewerTitleBar()"
+      >
+        <IconOptions24Filled v-if="bookViewStore.isBookViewActive ? bookViewStore.toolbarVisible : activeTab?.pdfViewerTitleBarVisible !== false" />
+        <IconOptions24Regular v-else />
       </button>
     </div>
 
@@ -297,7 +297,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         title="בחירת טקסט באזור (OCR)"
         @click.stop="pdfOcrStore.toggle()"
       >
-        <IconCrop20Regular />
+        <IconConvertToText24Regular />
       </button>
       <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" title="בית (Ctrl+G)" @click.stop="goHome"><IconHome20Regular /></button>
       <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="openNewTab">
