@@ -79,7 +79,7 @@ defineExpose({ show, showAtPosition, hide })
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop>
+    <div v-if="visible" ref="menuRef" class="context-menu" :style="menuStyle" @click.stop @mousedown.prevent>
       <template v-for="(item, index) in items" :key="index">
         <div v-if="item.type === 'separator'" class="context-menu-separator" />
         <component
@@ -113,8 +113,10 @@ defineExpose({ show, showAtPosition, hide })
   box-shadow:
     0 2px 8px rgba(0, 0, 0, 0.12),
     0 8px 24px rgba(0, 0, 0, 0.08);
-  min-width: 160px;
+  min-width: 140px;
   direction: rtl;
+  border-radius: 4px;
+  padding-block: 2px;
 }
 .context-menu-separator {
   height: 1px;
@@ -122,9 +124,13 @@ defineExpose({ show, showAtPosition, hide })
   margin-block: 2px;
 }
 .context-menu-item {
-  padding: 8px 16px;
+  padding: 0 12px;
+  height: 26px;
+  display: flex;
+  align-items: center;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
   text-align: right;
 }
 .context-menu-item:hover {
@@ -134,15 +140,13 @@ defineExpose({ show, showAtPosition, hide })
   background: color-mix(in srgb, var(--text-primary) 13%, transparent);
 }
 .context-menu-checkbox {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .checkbox-mark {
   display: inline-block;
-  width: 14px;
+  width: 12px;
   text-align: center;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--accent-color);
   flex-shrink: 0;
 }

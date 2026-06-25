@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IconEdit24Regular, IconEraser24Regular } from '@iconify-prerendered/vue-fluent'
+import { IconEdit20Regular, IconEraser20Regular } from '@iconify-prerendered/vue-fluent'
 import { HIGHLIGHT_COLORS_LIST } from './bookViewAnnotationColors'
 import AlertDialog from '@/components/AlertDialog.vue'
 
@@ -54,7 +54,7 @@ function argbToCss(signedArgb: number): string {
       @close="showNoSelectionAlert = false"
     />
     <div class="note-row" @click="onNote">
-      <IconEdit24Regular class="note-icon" />
+      <IconEdit20Regular class="note-icon" />
       <span class="note-label">הוסף הערה</span>
     </div>
     <div class="separator" />
@@ -69,7 +69,7 @@ function argbToCss(signedArgb: number): string {
         @click="onColorClick(colorArgb)"
       />
       <button class="clear-button" :aria-label="'הסר סימון'" @click="onClear">
-        <IconEraser24Regular />
+        <IconEraser20Regular />
       </button>
     </div>
   </div>
@@ -83,10 +83,11 @@ function argbToCss(signedArgb: number): string {
 .note-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 0 12px;
+  height: 26px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .note-row:hover {
@@ -115,20 +116,21 @@ function argbToCss(signedArgb: number): string {
 .highlight-row {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 5px;
+  padding: 0 12px;
+  height: 26px;
   direction: rtl;
 }
 
 .highlight-label {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
   margin-inline-end: 2px;
 }
 
 .color-swatch {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 3px;
   border: none;
   cursor: pointer;
@@ -137,7 +139,7 @@ function argbToCss(signedArgb: number): string {
 }
 
 .color-swatch:hover {
-  transform: scale(1.12);
+  transform: scale(1.15);
 }
 
 .color-swatch:active {
@@ -145,8 +147,8 @@ function argbToCss(signedArgb: number): string {
 }
 
 .clear-button {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 4px;
   border: none;
   background: none;
@@ -156,7 +158,7 @@ function argbToCss(signedArgb: number): string {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-inline-start: 2px;
+  margin-inline-start: 1px;
 }
 
 .clear-button:hover {

@@ -8,20 +8,34 @@ using Word = Microsoft.Office.Interop.Word;
 namespace KitveiHakodeshLib
 {
     /// <summary>
-    /// Exports book content (provided as an HTML string) to a new Microsoft Word document.
+    /// Exports book content (provided as an HTML string) to a new Microsoft Word document,
+    /// or pastes from the Windows clipboard into the active Word document at the cursor.
     ///
-    /// Writes the HTML to a temp file, then opens it directly in Word (visible).
-    /// Word detection order:
+    /// Word detection order for both operations:
     ///   1. Reuse WordToPdfConverter.HostApplication if set (VSTO scenario).
     ///   2. Bind to an already-running Word instance via Marshal.GetActiveObject.
     ///   3. Spawn a new Word instance.
     /// </summary>
     public static class WordExporter
     {
+        // ── Public API ────────────────────────────────────────────────────────
+
         public static Task ExportAsync(string html, string title = "")
         {
             return Task.Run(() => ExportCore(html, title));
         }
+
+        /// <summary>
+        /// Pastes the current clipboard content at the cursor position in the active Word document.
+        /// The caller is responsible for placing the HTML on the clipboard before calling this.
+        /// If no document is open, creates a new blank document first.
+        /// </summary>
+        public static Task PasteAtCursorAsync()
+        {
+            return Task.Run(() => PasteAtCursorCore());
+        }
+
+        // ── Private implementation ────────────────────────────────────────────
 
         private static void ExportCore(string html, string title)
         {
@@ -70,12 +84,45 @@ namespace KitveiHakodeshLib
             }
         }
 
+        private static void PasteAtCursorCore()
+        {
+            Word.Application app = null;
+            bool ownsApp = false;
+
+            try
+            {
+                app = AcquireWordApplication(out ownsApp);
+                app.Visible = true;
+
+                if (ownsApp)
+                    System.Threading.Thread.Sleep(800);
+
+                if (app.Documents.Count == 0)
+                {
+                    app.Documents.Add();
+                    System.Threading.Thread.Sleep(300);
+                }
+
+                // The clipboard already contains the formatted HTML set by the frontend.
+                // Selection.Paste() picks up the best available format automatically.
+                app.ActiveDocument.ActiveWindow.Selection.Paste();
+                app.Activate();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[WordExporter] PasteAtCursor failed: " + ex.Message);
+            }
+            finally
+            {
+                if (app != null && !ownsApp) Marshal.ReleaseComObject(app);
+            }
+        }
+
         private static string BuildSafeFileName(string title)
         {
             if (string.IsNullOrWhiteSpace(title))
                 return "kitvei_export_" + Guid.NewGuid().ToString("N");
 
-            // Strip characters that are invalid in file names
             char[] invalid = Path.GetInvalidFileNameChars();
             var safe = new System.Text.StringBuilder();
             foreach (char c in title.Trim())
@@ -88,7 +135,6 @@ namespace KitveiHakodeshLib
             if (result.Length == 0)
                 return "kitvei_export_" + Guid.NewGuid().ToString("N");
 
-            // Cap length to avoid hitting MAX_PATH with the temp folder prefix
             if (result.Length > 80)
                 result = result.Substring(0, 80).TrimEnd();
 
@@ -99,11 +145,11 @@ namespace KitveiHakodeshLib
         {
             ownsApp = false;
 
-            // Reuse VSTO host application if available
+            // Reuse VSTO host application if available.
             if (WordToPdfConverter.HostApplication != null)
                 return WordToPdfConverter.HostApplication;
 
-            // Bind to an already-running Word instance
+            // Bind to an already-running Word instance.
             try
             {
                 var running = (Word.Application)Marshal.GetActiveObject("Word.Application");
@@ -111,7 +157,7 @@ namespace KitveiHakodeshLib
             }
             catch (COMException) { }
 
-            // Spawn a new Word instance
+            // Spawn a new Word instance.
             ownsApp = true;
             var app = new Word.Application { Visible = false };
             app.DisplayAlerts = Word.WdAlertLevel.wdAlertsNone;

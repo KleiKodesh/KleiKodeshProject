@@ -7,6 +7,8 @@ import type { useTabStore } from '@/stores/tabStore'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { pasteIntoWord } from '@/webview-host/bridge'
+import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -39,22 +41,12 @@ interface EndnoteEntry {
   quote: string
 }
 
-/**
- * Replaces user-note-marker superscripts with numbered references and returns
- * the modified HTML plus a list of endnote entries in encounter order.
- *
- * resolveNote receives a noteId and returns the Note (or undefined) by looking
- * it up in the live DOM + in-memory notes map — the caller provides this closure
- * because the DOM structure differs between book view (data-index) and commentary
- * view (data-line-id).
- */
 function extractEndnotes(
   html: string,
   resolveNote: (noteId: number) => { noteText: string; quote: string } | undefined,
 ): { html: string; endnotes: EndnoteEntry[] } {
   const endnotes: EndnoteEntry[] = []
   let counter = 0
-
   const replaced = html.replace(
     /<sup[^>]*class="user-note-marker"[^>]*data-note-id="(\d+)"[^>]*>.*?<\/sup>/gs,
     (_match: string, noteIdStr: string) => {
@@ -66,7 +58,6 @@ function extractEndnotes(
       return `<sup><a href="#note-${counter}" id="ref-${counter}" style="color:var(--accent-color,#0078d4);text-decoration:none">${counter}</a></sup>`
     },
   )
-
   return { html: replaced, endnotes }
 }
 
@@ -82,28 +73,16 @@ function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
 }
 
 // ── Shared DOM copy helper ────────────────────────────────────────────────────
+// execCopyHtmlToClipboard is imported from useLineCopy — it sets _isProgrammaticCopy
+// before calling execCommand('copy') so useScopedCopy skips re-processing.
 
-function execCopyHtml(html: string): void {
-  const container = document.createElement('div')
-  container.setAttribute('dir', 'rtl')
-  container.style.position = 'fixed'
-  container.style.left = '-9999px'
-  container.style.top = '-9999px'
-  container.innerHTML = html
-  document.body.appendChild(container)
+// ── Hebrew search query extraction ───────────────────────────────────────────
 
-  const selection = window.getSelection()
-  const range = document.createRange()
-  range.selectNodeContents(container)
-  selection?.removeAllRanges()
-  selection?.addRange(range)
-
-  try {
-    document.execCommand('copy')
-  } finally {
-    selection?.removeAllRanges()
-    document.body.removeChild(container)
-  }
+/** Strips everything that isn't a Hebrew letter or whitespace, preserving word integrity. */
+function toHebrewSearchQuery(html: string): string {
+  const text = html.replace(/<[^>]*>/g, ' ')
+  const stripped = text.replace(/[^א-ת\s]/g, '')
+  return stripped.replace(/\s+/g, ' ').trim()
 }
 
 // ── Selection extraction ──────────────────────────────────────────────────────
@@ -120,8 +99,6 @@ function extractSelection(
   renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
 ): SelectionResult | null {
   if (isSelectAll) {
-    // When a renderer is provided (copy-with-notes path) use rendered content so
-    // note markers are present. Otherwise use raw content (faster, no markers needed).
     const joined = lines
       .filter((l) => l.content != null)
       .map((l) => (renderLine ? renderLine(l.content!, l.lineIndex, l.id) : l.content!))
@@ -143,7 +120,6 @@ function extractSelection(
   if (!joined) joined = tmp.innerHTML
   if (!joined.trim()) return null
 
-  // Find the lineIndex of the first DOM line element that intersects the selection
   let firstLineIndex: number | null = null
   if (scrollerEl) {
     for (const el of Array.from(scrollerEl.querySelectorAll('.line'))) {
@@ -164,8 +140,6 @@ function extractSelection(
 
 /**
  * Builds the full RTL HTML for exporting a book to Word.
- * Renders all lines (using the provided renderer), injects numbered endnotes,
- * and wraps everything in a proper HTML document shell.
  */
 export function buildBookExportHtml(
   lines: LineItem[],
@@ -173,7 +147,6 @@ export function buildBookExportHtml(
   renderLine: (raw: string, lineIndex: number, lineId: number) => string,
   getNotesForLine: (lineId: number) => Note[],
 ): string {
-  // Build a noteId → note lookup by scanning all lines
   function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
     for (const lineItem of lines) {
       const found = getNotesForLine(lineItem.id).find((n) => n.id === noteId)
@@ -188,18 +161,13 @@ export function buildBookExportHtml(
     .join('\n')
 
   const { html: bodyHtml, endnotes } = extractEndnotes(renderedLines, resolveNote)
-
   const endnotesHtml = buildEndnotesHtml(endnotes)
 
   return (
     `<!DOCTYPE html><html dir="rtl" lang="he"><head><meta charset="utf-8">` +
     `<title>${bookTitle}</title>` +
     `<style>body{direction:rtl;font-family:"David","Times New Roman",serif;font-size:14pt;line-height:1.8}` +
-    `.book-line{margin-bottom:4pt}` +
-    `a{color:#0078d4}` +
-    `sup{font-size:0.7em}` +
-    `ol{margin-top:12pt}` +
-    `li{margin-bottom:4pt}` +
+    `.book-line{margin-bottom:4pt}a{color:#0078d4}sup{font-size:0.7em}ol{margin-top:12pt}li{margin-bottom:4pt}` +
     `</style></head><body>` +
     `<h1>${bookTitle}</h1>` +
     bodyHtml +
@@ -208,13 +176,43 @@ export function buildBookExportHtml(
   )
 }
 
-export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuItem[] {
+// ── Copy flag semantics ───────────────────────────────────────────────────────
+//
+// ALL copy paths (menu העתק, Ctrl+C, paste-to-Word) build HTML via buildFormattedHtml,
+// then put the result on the clipboard. The RTL wrapper (dir="rtl") is always applied.
+//
+// copyAsBlob (independent checkbox)
+//   ON:  use extractSelection to collect .line element innerHTML, then wrap each
+//        line in <div>...</div> and set via execCopyHtml. The other flags (source,
+//        notes, cleanText) are applied to this extracted content.
+//   OFF: copy directly from the browser's current text selection (native path);
+//        the other flags are still applied to what the browser selected.
+//   Note: has nothing to do with note markers.
+//   Note: has nothing to do with note markers.
+//
+// copySourcePosition (radio pair — at most one active at a time)
+//   'start': prepend <h2 dir="rtl">book, toc path</h2> before the text
+//   'end':   append (book, toc path) after the text
+//   null:    no source decoration
+//
+// copyWithNotes (independent checkbox)
+//   ON:  convert user-note-marker superscripts to numbered endnotes
+//   OFF: strip note markers from the HTML
+//
+// copyCleanText (independent checkbox)
+//   ON:  run cleanHebrewText() on the result (strips diacritics/cantillation marks)
+//   OFF: leave text as-is
+//
+// ── Paste-to-Word ─────────────────────────────────────────────────────────────
+//
+// "העתק לתוך וורד" follows the exact same path as "העתק" (builds HTML, sets clipboard),
+// then additionally sends the pasteIntoWord bridge message so C# opens Word (or reuses
+// the running instance) and calls Selection.Paste() to paste from the clipboard.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null } {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
-
-  function maybeClean(html: string): string {
-    return settingsStore.copyCleanText ? cleanHebrewText(html) : html
-  }
 
   function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {
     const separator = includeComma ? ', ' : ' '
@@ -222,74 +220,133 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
       const entry = options.getActiveTocEntry(firstLineIndex)
       if (entry) return `${bookTitle}${separator}${options.getTocPath(entry)}`
     }
-    // Fall back to the live scroll-position TOC path
     const tocPath = tabStore.activeTab.tocPath
     return tocPath ? `${bookTitle}${separator}${tocPath}` : bookTitle
   }
 
-  function copyAsBlock(): void {
-    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
-    if (!result) return
-    execCopyHtml(maybeClean(stripNoteMarkers(result.joined)))
-  }
+  /**
+   * Builds the final HTML for the current selection applying all active copy flags.
+   * Returns null when there is no selection.
+   * See the copy flag semantics block above for a full description of each flag.
+   */
+  function buildFormattedHtml(): string | null {
+    // ── Acquire raw HTML and firstLineIndex ───────────────────────────────────
+    // copyAsBlob ON:  use extractSelection (collects .line innerHTML, can use note renderer)
+    // copyAsBlob OFF: use raw browser selection HTML directly
+    let joined: string
+    let firstLineIndex: number | null = null
 
-  function copyWithSource(sourceAtEnd: boolean): void {
-    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
-    if (!result) return
-    const { joined, firstLineIndex } = result
-    const source = buildSource(firstLineIndex, sourceAtEnd)
-    const cleanHtml = maybeClean(stripNoteMarkers(joined))
-
-    const html = sourceAtEnd
-      ? `${cleanHtml} (${source})`
-      : `<h2 dir="rtl">${source}</h2>${cleanHtml}`
-
-    execCopyHtml(html)
-  }
-
-  function copyWithNotes(sourceAtEnd: boolean): void {
-    // For select-all: use rendered content so note markers are present in the HTML.
-    // For partial selection: the DOM selection already has rendered innerHTML.
-    const result = extractSelection(
-      scrollerEl.value,
-      lines(),
-      isSelectAll.value,
-      options.getRenderedLineContent,
-    )
-    if (!result) return
-    const { joined, firstLineIndex } = result
-    const source = buildSource(firstLineIndex, sourceAtEnd)
-
-    function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
-      if (!options.getNotesForLine) return undefined
-      if (isSelectAll.value) {
-        // Select-all: scan all lines directly — no need to touch the DOM.
-        for (const lineItem of lines()) {
-          const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-          if (found) return { noteText: found.note, quote: found.quote }
+    if (settingsStore.copyAsBlob) {
+      const renderLine = settingsStore.copyWithNotes ? options.getRenderedLineContent : undefined
+      const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value, renderLine)
+      if (!result) return null
+      joined = result.joined
+      firstLineIndex = result.firstLineIndex
+    } else {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
+      const range = sel.getRangeAt(0)
+      const fragment = range.cloneContents()
+      const tmp = document.createElement('div')
+      tmp.appendChild(fragment)
+      joined = tmp.innerHTML
+      if (!joined.trim()) return null
+      // Resolve firstLineIndex from the DOM for source building
+      if (scrollerEl.value) {
+        for (const el of Array.from(scrollerEl.value.querySelectorAll('.line'))) {
+          if (range.intersectsNode(el)) {
+            const dataIndex = (el.closest('[data-index]') as HTMLElement | null)?.dataset['index']
+            if (dataIndex != null) {
+              firstLineIndex = lines()[parseInt(dataIndex, 10)]?.lineIndex ?? null
+            }
+            break
+          }
         }
-        return undefined
       }
-      // Partial selection: resolve via the live scroller DOM using [data-index].
-      if (!scrollerEl.value) return undefined
-      const markerEl = scrollerEl.value.querySelector(
-        `[data-note-id="${noteId}"]`,
-      ) as HTMLElement | null
-      if (!markerEl) return undefined
-      const rowEl = markerEl.closest('[data-index]') as HTMLElement | null
-      if (!rowEl) return undefined
-      const lineItem = lines()[parseInt(rowEl.dataset['index'] ?? '', 10)]
-      if (!lineItem) return undefined
-      const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-      return found ? { noteText: found.note, quote: found.quote } : undefined
     }
 
-    const { html: textHtml, endnotes } = extractEndnotes(joined, resolveNote)
-    const processedText = maybeClean(textHtml)
-    const withSource = sourceAtEnd
-      ? `${processedText} (${source})`
-      : `<h2 dir="rtl">${source}</h2>${processedText}`
-    execCopyHtml(withSource + buildEndnotesHtml(endnotes))
+    // ── Step 1: note markers ─────────────────────────────────────────────────
+    let html: string
+    let endnotesHtml = ''
+    if (settingsStore.copyWithNotes) {
+      function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
+        if (!options.getNotesForLine) return undefined
+        if (isSelectAll.value) {
+          for (const lineItem of lines()) {
+            const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
+            if (found) return { noteText: found.note, quote: found.quote }
+          }
+          return undefined
+        }
+        if (!scrollerEl.value) return undefined
+        const markerEl = scrollerEl.value.querySelector(`[data-note-id="${noteId}"]`) as HTMLElement | null
+        if (!markerEl) return undefined
+        const rowEl = markerEl.closest('[data-index]') as HTMLElement | null
+        if (!rowEl) return undefined
+        const lineItem = lines()[parseInt(rowEl.dataset['index'] ?? '', 10)]
+        if (!lineItem) return undefined
+        const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
+        return found ? { noteText: found.note, quote: found.quote } : undefined
+      }
+      const { html: extracted, endnotes } = extractEndnotes(joined, resolveNote)
+      html = extracted
+      endnotesHtml = buildEndnotesHtml(endnotes)
+    } else {
+      html = stripNoteMarkers(joined)
+    }
+
+    // ── Step 2: copyAsBlob div-wrapping ──────────────────────────────────────
+    // Only when blob mode is on — wrap each line in <div>...</div>
+    if (settingsStore.copyAsBlob) {
+      html = html
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0)
+        .map((line) => `<div>${line}</div>`)
+        .join('\n')
+    }
+
+    // ── Step 3: copyCleanText ────────────────────────────────────────────────
+    if (settingsStore.copyCleanText) {
+      html = cleanHebrewText(html)
+    }
+
+    // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
+    const position = settingsStore.copySourcePosition
+    if (position === 'start') {
+      const source = buildSource(firstLineIndex, false)
+      html = `<h2 dir="rtl">${source}</h2>${html}`
+    } else if (position === 'end') {
+      const source = buildSource(firstLineIndex, true)
+      html = `${html} (${source})`
+    }
+
+    return html + endnotesHtml
+  }
+
+  function onCopy(): void {
+    const html = buildFormattedHtml()
+    if (html === null) {
+      document.execCommand('copy')
+      return
+    }
+    execCopyHtmlToClipboard(html)
+  }
+
+  // Sets clipboard via execCopyHtmlToClipboard, then tells C# to open Word and call Selection.Paste().
+  function onPasteIntoWord(): void {
+    const html = buildFormattedHtml()
+    if (html === null) return
+    execCopyHtmlToClipboard(html)
+    pasteIntoWord().catch(() => {})
+  }
+
+  function onSearchInRepository(): void {
+    const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value)
+    if (!result) return
+    const query = toHebrewSearchQuery(result.joined)
+    if (!query) return
+    tabStore.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
   }
 
   const annotationRow: ContextMenuItem = {
@@ -302,21 +359,49 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): ContextMenuIt
     },
   }
 
-  return [
-    { label: 'העתק', action: () => document.execCommand('copy') },
-    { label: 'העתק כבלוק', action: copyAsBlock },
-    { label: 'העתק עם מקור בסוף', action: () => copyWithSource(true) },
-    { label: 'העתק עם מקור בהתחלה', action: () => copyWithSource(false) },
-    { label: 'העתק עם הערות', action: () => copyWithNotes(false) },
-    { label: 'בחר הכל', action: selectAllInContainer },
-    { type: 'separator' },
-    {
-      type: 'checkbox',
-      label: 'העתק טקסט נקי',
-      get checked() { return settingsStore.copyCleanText },
-      onChange: (value: boolean) => { settingsStore.copyCleanText = value },
-    },
-    { type: 'separator' },
-    annotationRow,
-  ]
+  return {
+    items: [
+      { label: 'העתק', action: onCopy },
+      { label: 'העתק לתוך וורד', action: onPasteIntoWord },
+      { label: 'העתק לחיפוש במאגר', action: onSearchInRepository },
+      { label: 'בחר הכל', action: selectAllInContainer },
+      { type: 'separator' },
+      // Independent checkboxes — all can be active simultaneously
+      {
+        type: 'checkbox',
+        label: 'העתק כבלוק',
+        get checked() { return settingsStore.copyAsBlob },
+        onChange: (value: boolean) => { settingsStore.copyAsBlob = value },
+      },
+      // Radio pair — checking one unchecks the other (both off is valid)
+      {
+        type: 'checkbox',
+        label: 'העתק עם מקור בהתחלה',
+        get checked() { return settingsStore.copySourcePosition === 'start' },
+        onChange: (value: boolean) => { settingsStore.copySourcePosition = value ? 'start' : null },
+      },
+      {
+        type: 'checkbox',
+        label: 'העתק עם מקור בסוף',
+        get checked() { return settingsStore.copySourcePosition === 'end' },
+        onChange: (value: boolean) => { settingsStore.copySourcePosition = value ? 'end' : null },
+      },
+      // Independent checkboxes
+      {
+        type: 'checkbox',
+        label: 'העתק עם הערות',
+        get checked() { return settingsStore.copyWithNotes },
+        onChange: (value: boolean) => { settingsStore.copyWithNotes = value },
+      },
+      {
+        type: 'checkbox',
+        label: 'העתק טקסט נקי',
+        get checked() { return settingsStore.copyCleanText },
+        onChange: (value: boolean) => { settingsStore.copyCleanText = value },
+      },
+      { type: 'separator' },
+      annotationRow,
+    ],
+    buildFormattedHtml,
+  }
 }

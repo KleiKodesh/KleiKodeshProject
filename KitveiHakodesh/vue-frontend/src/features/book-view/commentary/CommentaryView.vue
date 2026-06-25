@@ -136,15 +136,21 @@ const flatItems = computed<FlatItem[]>(() => {
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
 })
-useScopedCopy(
-  scrollerEl,
-  () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.content)),
-  isSelectAll,
-)
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 
-onLongPress(scrollerEl, (event) => contextMenuRef.value?.showAtPosition(event.clientX, event.clientY))
+onLongPress(scrollerEl, (event) => {
+  if (!scrollerEl.value) return
+  // In RTL layout the scrollbar is on the physical LEFT side of the container.
+  // clientWidth excludes the scrollbar track, so the scrollbar occupies the gap
+  // between the element's left edge and (left + offsetWidth - clientWidth).
+  // Any pointer position to the left of (rect.left + scrollbarWidth) hit the scrollbar.
+  const el = scrollerEl.value
+  const rect = el.getBoundingClientRect()
+  const scrollbarWidth = el.offsetWidth - el.clientWidth
+  if (event.clientX <= rect.left + scrollbarWidth) return
+  contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
+})
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -226,7 +232,7 @@ useVirtualScrollerKeys(
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-const { contextMenuItems } = useCommentaryCopy(
+const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
     return pinned
@@ -254,6 +260,12 @@ const { contextMenuItems } = useCommentaryCopy(
       })
     }),
   props.getNotesForLine,
+)
+useScopedCopy(
+  scrollerEl,
+  () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.content)),
+  isSelectAll,
+  buildCommentaryFormattedHtml,
 )
 
 function onScroll() {

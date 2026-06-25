@@ -216,6 +216,16 @@ export function exportToWord(html: string, title: string = ''): Promise<{ ok?: b
 }
 
 /**
+ * Paste into Word at the current cursor position by reading from the Windows clipboard.
+ * The caller must have already set the clipboard via execCopyHtml / copyToClipboard
+ * before calling this — the C# side calls Selection.Paste() which picks up whatever
+ * is on the clipboard, so no HTML needs to be sent over the bridge.
+ */
+export function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
+  return action<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
+}
+
+/**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
  * If localFolder is provided, C# will first check for {localFolder}\{bookId}.pdf
  * before falling back to the download flow.

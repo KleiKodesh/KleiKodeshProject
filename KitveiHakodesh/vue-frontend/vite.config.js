@@ -119,6 +119,29 @@ export default defineConfig({
             'temporal-polyfill/global': fileURLToPath(new URL('./src/stubs/temporal-polyfill-stub.ts', import.meta.url)),
         },
     },
+    server: {
+        // Pre-transform the critical path on dev server start so the first browser
+        // request is served from cache rather than compiled on demand.
+        warmup: {
+            clientFiles: [
+                './src/main.ts',
+                './src/App.vue',
+                './src/layout/AppTitleBar.vue',
+                './src/layout/AppPageView.vue',
+                './src/layout/AppTitleBarNavDropdown.vue',
+                './src/layout/AppTitleBarTabDropdown.vue',
+                './src/stores/tabStore.ts',
+                './src/stores/settingsStore.ts',
+                './src/stores/bookViewStore.ts',
+                './src/stores/booksDataStore.ts',
+                './src/stores/workspaceStore.ts',
+                './src/theme/themeStore.ts',
+                './src/utils/persistence.ts',
+                './src/webview-host/seforimDb.ts',
+                './src/features/home/HomePage.vue',
+            ],
+        },
+    },
     optimizeDeps: {
         // Exclude large packages that tree-shake well from dep pre-bundling.
         // Including them in the pre-bundle means the browser downloads and parses the
