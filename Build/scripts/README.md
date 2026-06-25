@@ -15,18 +15,19 @@ PowerShell scripts that orchestrate the build, packaging, and deployment pipelin
 
 **`build-installer.ps1`** — Main orchestrator (headless, no interactivity). Called by `build-menu.ps1`. Flow:
 1. Calls `UpdateVersion.ps1` to bump version in `AddinInstaller.cs` + `.csproj`
-2. Builds VSTO add-in for x64 → creates embedded zip
-3. Builds WPF installer for x64 via `dotnet build`
-4. Wraps in NSIS → `KleiKodeshSetup-vX.Y.Z-x64.exe`
-5. Repeats for x86, AnyCPU
-6. Optionally creates GitHub release with 3 installer EXEs
+2. Wipes VSTO release folders + `KitveiHakodeshDemoApp\bin\Release\` for a clean build
+3. Builds VSTO add-in (AnyCPU) → creates embedded zip
+4. Builds WPF installer via `dotnet build` → wraps in NSIS → `KleiKodeshSetup-vX.Y.Z.exe`
+5. Builds `KitveiHakodeshDemoApp` (Release|AnyCPU) via MSBuild → zips output → `KitveiHakodeshPortable-vX.Y.Z.zip`
+6. Optionally creates GitHub release and uploads installer EXE + portable ZIP
 
-**`build-helpers.ps1`** — Shared functions used by other build scripts:
-- `Get-VersionFromSource` — Reads version from `AddinInstaller.cs`
-- `Invoke-MSBuild` — Wrapper around MSBuild with platform config
-- `New-InstallerVariant` — Builds a single platform variant
-- `Test-Prerequisites` — Checks for required tools (MSBuild, NSIS, VS)
-- `New-GitHubRelease` — Creates release + uploads artifacts
+**`build-helpers.ps1`** — Shared path constants and utility functions used by other build scripts:
+- `$DemoAppProjectPath` — Path to `KitveiHakodeshDemoApp.csproj`
+- `$DemoAppReleaseDir` — Path to `KitveiHakodeshDemoApp\bin\Release\`
+- `Get-CurrentVersion` — Reads version from `AddinInstaller.cs`
+- `Find-MSBuild` — Locates MSBuild from Visual Studio installation
+- `Invoke-SolutionClean` — Cleans the solution via MSBuild or dotnet
+- `New-ReleaseNotes` — Builds release notes string from git commits and/or `RELEASE_NOTES.txt`
 
 ## SvgToPng Subfolder
 

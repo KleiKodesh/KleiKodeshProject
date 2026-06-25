@@ -46,7 +46,8 @@ Build/
 ├── releases/               — Output folder
 │   ├── KleiKodeshSetup-vX.Y.Z-x64.exe
 │   ├── KleiKodeshSetup-vX.Y.Z-x86.exe
-│   └── KleiKodeshSetup-vX.Y.Z.exe     (AnyCPU)
+│   ├── KleiKodeshSetup-vX.Y.Z.exe          (AnyCPU)
+│   └── KitveiHakodeshPortable-vX.Y.Z.zip   (standalone demo app)
 ├── build-menu.bat         — Entry point (launches PowerShell menu)
 └── RELEASE_NOTES.txt      — Template for release notes
 ```
@@ -59,26 +60,27 @@ build-menu.bat  ──┐
                   │
                   └─→ build-installer.ps1 -VersionIncrement patch -ReleaseNotesSource commits
                       ├─ UpdateVersion.ps1 (bumps AddinInstaller.cs + csproj)
-                      ├─ dotnet build WPF installer -p:InstallerVariant=x64 -p:VstoPlatform=x64
-                      │  └─ Pre-build target: MSBuild KleiKodeshVsto (x64), zip → KleiKodesh.zip → embed as resource
-                      │  └─ #if INSTALLER_VARIANT_X64 const baked in
+                      ├─ dotnet build WPF installer -p:InstallerVariant=AnyCPU -p:VstoPlatform=AnyCPU
+                      │  └─ Pre-build target: MSBuild KleiKodeshVsto (AnyCPU), zip → KleiKodesh.zip → embed as resource
                       ├─ makensis /DPRODUCT_VERSION=vX.Y.Z /DWPF_EXE_PATH=...
-                      │  └─ KleiKodeshSetup-vX.Y.Z-x64.exe
-                      ├─ (repeat for x86, AnyCPU)
-                      └─ gh release create + upload 3 EXEs
+                      │  └─ KleiKodeshSetup-vX.Y.Z.exe
+                      ├─ MSBuild KitveiHakodeshDemoApp (Release|AnyCPU)
+                      │  └─ Zip bin\Release\ → KitveiHakodeshPortable-vX.Y.Z.zip
+                      └─ gh release create + upload installer EXE + portable ZIP
 ```
 
-## Three Installer Variants
+## Build Output
 
-Single build run produces three installers:
+Single build run produces one installer and one portable zip:
 
-| Variant | Platform | VSTO Build | Output |
-|---------|----------|-----------|--------|
-| x64 | `Release\|x64` | `bin\Release-x64\` | `KleiKodeshSetup-vX.Y.Z-x64.exe` |
-| x86 | `Release\|x86` | `bin\Release-x86\` | `KleiKodeshSetup-vX.Y.Z-x86.exe` |
-| AnyCPU | `Release\|AnyCPU` | `bin\Release\` | `KleiKodeshSetup-vX.Y.Z.exe` |
+| Output | Description |
+|--------|-------------|
+| `KleiKodeshSetup-vX.Y.Z.exe` | NSIS installer wrapping the WPF installer (AnyCPU, supports both 32-bit and 64-bit Word) |
+| `KitveiHakodeshPortable-vX.Y.Z.zip` | Standalone KitveiHakodesh app — no installation needed, run `כתבי הקודש.exe` directly |
 
-Each variant embeds the correct VSTO binary for its platform via the pre-build target. See `.kiro/steering/build-variants.md` for configuring new projects in the dependency chain.
+Both files are placed in `Build/releases/` and uploaded to the GitHub release.
+
+> x64 and x86 variants are defined in the script but currently disabled (commented out). Only the AnyCPU variant is built.
 
 ## Version Management
 
