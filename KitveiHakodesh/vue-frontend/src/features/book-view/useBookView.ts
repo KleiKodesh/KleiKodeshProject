@@ -18,6 +18,7 @@ import {
 import { useToc } from './toc/useBookViewToc'
 import { useLines } from './lines/useBookViewLinesTable'
 import { useCommentary } from './commentary/useCommentary'
+import { ensureConnectionTypeNamesLoaded } from './commentary/commentaryConnectionTypes'
 import { useBookViewSearch } from './useBookViewSearch'
 import { useCommentarySearch } from './commentary/useCommentarySearch'
 import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
@@ -196,6 +197,12 @@ export function useBookView(
   // Lines load immediately in parallel with TOC — scrollStateReady is always true,
   // BookViewLinesContent mounts immediately and its scroll watcher handles late IDB restore.
   const { lines, prioritise, prefetch, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
+
+  // Warm up the connection type ID table immediately — it's a single tiny query and
+  // must be resolved before any line-tap commentary load can fire its reverse queries.
+  // Kicking it off here means it races the line/TOC loads and is almost certainly
+  // ready by the time the user taps a line.
+  void ensureConnectionTypeNamesLoaded()
 
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
@@ -565,8 +572,6 @@ export function useBookView(
   onMounted(async () => {
     // Clear groups before session restore so loading animation shows immediately
     groups.value = []
-    // Warm up commentary metadata in the background so the first toggle is instant.
-    void ensureStaticFilterGroupsLoaded()
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
