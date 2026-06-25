@@ -523,6 +523,7 @@ namespace KitveiHakodeshLib
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         case "exportToWord": HandleExportToWord(root, id); break;
+                        case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -654,6 +655,12 @@ namespace KitveiHakodeshLib
             string title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
 
             _ = WordExporter.ExportAsync(html, title);
+        }
+
+        private void HandlePasteIntoWord(JsonElement root, string id)
+        {
+            _bridge.Reply(id, new { ok = true });
+            _ = WordExporter.PasteAtCursorAsync();
         }
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)

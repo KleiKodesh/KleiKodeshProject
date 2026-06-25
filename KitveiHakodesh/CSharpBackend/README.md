@@ -10,6 +10,7 @@ Contains the .NET libraries that back the KitveiHakodesh Vue app.
 | [`Ftslib-Csharp`](Ftslib-Csharp/README.md)              | Custom LSM-style full-text search index for seforim                 |
 | [`KitveiHakodeshDemoApp`](KitveiHakodeshDemoApp/README.md)                         | Standalone WinForms demo app for testing KitveiHakodeshLib outside of Word |
 | [`DocumentLocator`](DocumentLocator/README.md)           | NTFS MFT file index service + named-pipe client for local file search |
+| [`KitveiHakodeshService`](KitveiHakodeshService/README.md) | .NET 10 Worker Service that re-hosts the app features over HTTP, outside of VSTO/WebView2 |
 
 ## Solution
 

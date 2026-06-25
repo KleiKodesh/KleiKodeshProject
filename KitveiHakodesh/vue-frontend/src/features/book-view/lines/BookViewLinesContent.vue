@@ -80,11 +80,6 @@ useZoomHandler({ zoom, target: scrollerEl, keyboard: false })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
 })
-useScopedCopy(
-  scrollerEl,
-  () => props.lines.map((line) => line.content).filter(Boolean) as string[],
-  isSelectAll,
-)
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -161,7 +156,7 @@ watch(
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const contextMenuItems = useBookViewLineCopyMenu({
+const { items: contextMenuItems, buildFormattedHtml } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
   isSelectAll,
@@ -176,9 +171,24 @@ const contextMenuItems = useBookViewLineCopyMenu({
   onClearHighlight,
   onAddNote,
 })
-onLongPress(scrollerEl, (event) =>
-  contextMenuRef.value?.showAtPosition(event.clientX, event.clientY),
+useScopedCopy(
+  scrollerEl,
+  () => props.lines.map((line) => line.content).filter(Boolean) as string[],
+  isSelectAll,
+  buildFormattedHtml,
 )
+onLongPress(scrollerEl, (event) => {
+  if (!scrollerEl.value) return
+  // In RTL layout the scrollbar is on the physical LEFT side of the container.
+  // clientWidth excludes the scrollbar track, so the scrollbar occupies the gap
+  // between the element's left edge and (left + offsetWidth - clientWidth).
+  // Any pointer position to the left of (rect.left + scrollbarWidth) hit the scrollbar.
+  const el = scrollerEl.value
+  const rect = el.getBoundingClientRect()
+  const scrollbarWidth = el.offsetWidth - el.clientWidth
+  if (event.clientX <= rect.left + scrollbarWidth) return
+  contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
+})
 
 const { scrollToLineId, scrollToLineIndex } = useBookViewLinesNavigation(
   scrollerEl,
