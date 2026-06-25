@@ -1,10 +1,11 @@
-/**
+﻿/**
  * Manages scroll position for the book view lines scroller.
  *
  * Responsibilities:
  * - captureScrollPos — read the current virtualizer offset into a plain object
  * - restoreScrollPos — scroll the virtualizer to a specific line index + pixel offset,
- *   using a MutationObserver to apply the offset as soon as the item is measured
+ *   using a MutationObserver to apply the offset as soon as the item is measured,
+ *   with a post-apply verification rAF to re-correct if the virtualizer snaps scrollTop back
  * - Initial-scroll-on-load — waits for lines + target index, then restores once
  * - savePos — writes the current position + all relevant sidebar state to tabStore IDB
  * - Saves on: visibilitychange hidden, beforeunload, onBeforeUnmount
@@ -103,19 +104,29 @@ export function useBookViewLinesScroll(
     const scrollerCaptured: HTMLElement = scroller
     let applied = false
 
-    function tryApply(): boolean {
+    function applyAndVerify(): boolean {
       const item = virtualizer().measurementsCache.find((measurement) => measurement.index === lineIndex)
       if (!item) return false
-      scrollerCaptured.scrollTop = item.start + scrollOffset
+      const target = item.start + scrollOffset
+      scrollerCaptured.scrollTop = target
+      // Verify one rAF later that scrollTop actually stuck. The virtualizer may
+      // run its own correction pass in the next frame and snap it back.
+      requestAnimationFrame(() => {
+        if (Math.abs(scrollerCaptured.scrollTop - target) > 2) {
+          // Re-read measurement in case the virtualizer updated item sizes
+          const fresh = virtualizer().measurementsCache.find((m) => m.index === lineIndex)
+          scrollerCaptured.scrollTop = fresh ? fresh.start + scrollOffset : target
+        }
+        programmaticScrolling = false
+      })
       return true
     }
 
     // Fast path — item may already be in the cache (e.g. already in the rendered window).
     requestAnimationFrame(() => {
       if (applied) return
-      if (tryApply()) {
+      if (applyAndVerify()) {
         applied = true
-        requestAnimationFrame(() => { programmaticScrolling = false })
         return
       }
 
@@ -123,10 +134,9 @@ export function useBookViewLinesScroll(
       // and apply as soon as the measurement lands in the cache.
       const observer = new MutationObserver(() => {
         if (applied) return
-        if (tryApply()) {
+        if (applyAndVerify()) {
           applied = true
           observer.disconnect()
-          requestAnimationFrame(() => { programmaticScrolling = false })
         }
       })
       observer.observe(scrollerCaptured, { childList: true, subtree: true })
@@ -190,12 +200,23 @@ export function useBookViewLinesScroll(
             }),
           )
           if (props.searchHighlightLineIndex != null && scrollerEl.value) {
-            nextTick(() => {
-              const mark = scrollerEl.value!.querySelector(
-                'mark.search-match',
-              ) as HTMLElement | null
-              mark?.scrollIntoView({ block: 'center' })
-            })
+            // The <mark> element only exists once the chunk loads and Vue re-renders
+            // the virtualizer row — which happens after restoreScrollPos completes.
+            // Poll via rAF until the mark appears (up to ~500ms), then center on it.
+            const scrollerForMark = scrollerEl.value
+            let markScrolled = false
+            let markAttempts = 0
+            function tryScrollToMark() {
+              if (markScrolled) return
+              const mark = scrollerForMark.querySelector('mark.search-match') as HTMLElement | null
+              if (mark) {
+                markScrolled = true
+                mark.scrollIntoView({ block: 'center' })
+                return
+              }
+              if (++markAttempts < 30) requestAnimationFrame(tryScrollToMark)
+            }
+            requestAnimationFrame(tryScrollToMark)
           }
           scrollerEl.value?.focus({ preventScroll: true })
         })
