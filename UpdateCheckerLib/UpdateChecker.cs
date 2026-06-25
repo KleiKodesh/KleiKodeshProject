@@ -35,16 +35,43 @@ namespace UpdateCheckerLib
 
         public static async Task<GitHubRelease> GetLatestReleaseAsync()
         {
-            try
+            const int maxAttempts = 3;
+            const int retryDelayMs = 2000;
+
+            for (int attempt = 1; attempt <= maxAttempts; attempt++)
             {
-                var response = await httpClient.GetStringAsync(API_URL);
-                return JsonSerializer.Deserialize<GitHubRelease>(response);
+                try
+                {
+                    var response = await httpClient.GetStringAsync(API_URL);
+                    return JsonSerializer.Deserialize<GitHubRelease>(response);
+                }
+                catch (HttpRequestException ex) when (IsRetryable(ex) && attempt < maxAttempts)
+                {
+                    Debug.WriteLine($"Update check attempt {attempt} failed ({ex.Message}), retrying in {retryDelayMs}ms...");
+                    await Task.Delay(retryDelayMs);
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Update check failed: {ex.Message}");
+                    return null;
+                }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Update check failed: {ex.Message}");
-                return null;
-            }
+            return null;
+        }
+
+        /// <summary>
+        /// Returns true for HTTP errors that are worth retrying (404, 5xx, network issues).
+        /// 404 from GitHub can be a transient CDN/propagation glitch.
+        /// </summary>
+        private static bool IsRetryable(HttpRequestException ex)
+        {
+            var msg = ex.Message;
+            // HttpRequestException message contains the status code text for .NET Framework
+            return msg.Contains("404") ||
+                   msg.Contains("500") ||
+                   msg.Contains("502") ||
+                   msg.Contains("503") ||
+                   msg.Contains("504");
         }
 
         public static int CompareVersions(string githubVersion, string registryVersion)

@@ -153,40 +153,84 @@ namespace UpdateCheckerLib
         private static async Task DownloadFileAsync(
             string url, string filePath, DownloadProgressForm form, CancellationToken token)
         {
+            const int maxAttempts = 3;
+            const int retryDelayMs = 2000;
+
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
 
             using (var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) })
             {
                 client.DefaultRequestHeaders.Add("User-Agent", "KleiKodesh-UpdateChecker");
-                form.SetIndeterminate("מתחבר לשרת...");
 
-                using (var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token))
+                for (int attempt = 1; attempt <= maxAttempts; attempt++)
                 {
-                    response.EnsureSuccessStatusCode();
-                    var totalBytes = response.Content.Headers.ContentLength ?? 0;
+                    token.ThrowIfCancellationRequested();
 
-                    using (var input  = await response.Content.ReadAsStreamAsync())
-                    using (var output = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
+                    if (attempt > 1)
                     {
-                        var buffer    = new byte[8192];
-                        long totalRead = 0;
-                        int read;
+                        form.SetIndeterminate($"מנסה שוב... ({attempt}/{maxAttempts})");
+                        await Task.Delay(retryDelayMs, token);
+                    }
+                    else
+                    {
+                        form.SetIndeterminate("מתחבר לשרת...");
+                    }
 
-                        while ((read = await input.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
+                    HttpResponseMessage response = null;
+                    try
+                    {
+                        response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
+
+                        if (IsRetryableStatus(response.StatusCode) && attempt < maxAttempts)
                         {
-                            await output.WriteAsync(buffer, 0, read, token);
-                            totalRead += read;
-
-                            if (totalBytes > 0)
-                                form.UpdateProgress((int)(totalRead * 100 / totalBytes),
-                                    $"הורדה: {FormatBytes(totalRead)} מתוך {FormatBytes(totalBytes)}");
-                            else
-                                form.UpdateProgress(0, $"הורדה: {FormatBytes(totalRead)}");
+                            Debug.WriteLine($"Download attempt {attempt} got {(int)response.StatusCode}, retrying...");
+                            response.Dispose();
+                            continue;
                         }
+
+                        response.EnsureSuccessStatusCode();
+                        var totalBytes = response.Content.Headers.ContentLength ?? 0;
+
+                        using (var input  = await response.Content.ReadAsStreamAsync())
+                        using (var output = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
+                        {
+                            var buffer     = new byte[8192];
+                            long totalRead = 0;
+                            int read;
+
+                            while ((read = await input.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
+                            {
+                                await output.WriteAsync(buffer, 0, read, token);
+                                totalRead += read;
+
+                                if (totalBytes > 0)
+                                    form.UpdateProgress((int)(totalRead * 100 / totalBytes),
+                                        $"הורדה: {FormatBytes(totalRead)} מתוך {FormatBytes(totalBytes)}");
+                                else
+                                    form.UpdateProgress(0, $"הורדה: {FormatBytes(totalRead)}");
+                            }
+                        }
+
+                        return; // success
+                    }
+                    finally
+                    {
+                        response?.Dispose();
                     }
                 }
             }
         }
+
+        /// <summary>
+        /// Returns true for HTTP status codes that are worth retrying.
+        /// 404 can be a transient CDN/release-propagation glitch on GitHub.
+        /// </summary>
+        private static bool IsRetryableStatus(HttpStatusCode status) =>
+            status == HttpStatusCode.NotFound ||           // 404
+            status == HttpStatusCode.InternalServerError || // 500
+            status == HttpStatusCode.BadGateway ||          // 502
+            status == HttpStatusCode.ServiceUnavailable ||  // 503
+            status == HttpStatusCode.GatewayTimeout;        // 504
 
         private static void TryDeleteFile(string path)
         {
