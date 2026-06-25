@@ -1,7 +1,5 @@
 import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
-import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
-import { useSettingsStore } from '@/stores/settingsStore'
 
 function wrapRtlHtml(innerHtml: string): string {
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
@@ -16,37 +14,22 @@ function htmlToPlainText(html: string): string {
   return tempDiv.textContent ?? ''
 }
 
-function linesToHtml(lines: string[]): string {
-  return lines.map((l) => `<div>${l}</div>`).join('\n')
-}
-
-function selectedHtml(): string {
-  const selection = window.getSelection()
-  if (!selection || selection.rangeCount === 0) return ''
-  const range = selection.getRangeAt(0)
-  const fragment = range.cloneContents()
-  const container = document.createElement('div')
-  container.appendChild(fragment)
-  return container.innerHTML
-}
-
-function stripNoteMarkers(html: string): string {
-  return html.replace(/<sup[^>]*class="user-note-marker"[^>]*>.*?<\/sup>/gs, '')
-}
-
 /**
- * Set to true while execCopyHtml is executing document.execCommand('copy') so that
- * the useScopedCopy event listener can ignore the programmatic copy event and avoid
- * double-processing (which would append source decorations twice).
+ * Set to true while execCopyHtmlToClipboard is running document.execCommand('copy').
+ * In Chromium/WebView2, execCommand fires the copy event with isTrusted=true, so we
+ * cannot use event.isTrusted to distinguish programmatic from user-initiated copies.
+ * This flag lets useScopedCopy skip the programmatic event and avoid double-processing
+ * (which would apply source decorations twice).
+ * Reset is deferred via setTimeout because in Chromium/WebView2 the copy event fires
+ * asynchronously — after the synchronous finally block — so the flag must stay true
+ * until the next event loop turn.
  */
 let _isProgrammaticCopy = false
 
 /**
- * Copy HTML to the clipboard by placing it in a hidden off-screen RTL container,
- * selecting it, and calling execCommand('copy').
- *
- * Sets _isProgrammaticCopy = true before the execCommand call so that any
- * useScopedCopy listener on the same element skips re-processing.
+ * Copies formatted HTML to the clipboard by placing it in a hidden off-screen RTL
+ * container, selecting it, and calling execCommand('copy').
+ * Sets _isProgrammaticCopy so useScopedCopy skips the resulting copy event.
  */
 export function execCopyHtmlToClipboard(html: string): void {
   const container = document.createElement('div')
@@ -67,8 +50,6 @@ export function execCopyHtmlToClipboard(html: string): void {
     _isProgrammaticCopy = true
     document.execCommand('copy')
   } finally {
-    // Reset asynchronously — in Chromium/WebView2 the copy event from execCommand
-    // may fire after the synchronous finally block, so delay the flag reset.
     setTimeout(() => { _isProgrammaticCopy = false }, 0)
     selection?.removeAllRanges()
     document.body.removeChild(container)
@@ -77,14 +58,17 @@ export function execCopyHtmlToClipboard(html: string): void {
 
 /**
  * Intercepts the native browser copy event on a scroller element and applies the
- * active copy format settings (copyCleanText, copyAsBlock, copySourcePosition).
+ * active copy format settings via buildFormattedHtml.
  *
- * When buildFormattedHtml is provided, it is called instead of the default raw-HTML
- * path so that all copy paths — native Ctrl+C, menu copy, and paste-to-Word — use
- * the same formatting logic.
+ * Flow for all copy paths (menu, Ctrl+C):
+ *   1. Copy action fires document.execCommand('copy')
+ *   2. Browser dispatches copy event on the focused element
+ *   3. This handler intercepts it, calls buildFormattedHtml to apply all active flags
+ *      (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText)
+ *   4. Writes the result to event.clipboardData and calls event.preventDefault()
  *
- * When buildFormattedHtml returns null (no selection), the event is not intercepted
- * and the browser handles the copy natively.
+ * Programmatic copies from execCopyHtmlToClipboard are skipped via _isProgrammaticCopy.
+ * When buildFormattedHtml returns null (no selection), the event is not intercepted.
  */
 export function useScopedCopy(
   scrollerEl: Ref<HTMLElement | null>,
@@ -92,53 +76,23 @@ export function useScopedCopy(
   isSelectAll: Ref<boolean>,
   buildFormattedHtml?: () => string | null,
 ) {
-  const settingsStore = useSettingsStore()
-
   useEventListener(scrollerEl, 'copy', (event: ClipboardEvent) => {
-    // Skip programmatic copy events triggered by execCopyHtmlToClipboard.
-    // In Chromium/WebView2, execCommand('copy') fires with isTrusted=true so
-    // we use the explicit _isProgrammaticCopy flag instead.
     if (_isProgrammaticCopy) return
+    if (!buildFormattedHtml) return
 
-    let innerHtml: string
+    const formatted = buildFormattedHtml()
+    if (formatted === null) return
 
-    if (buildFormattedHtml) {
-      const formatted = buildFormattedHtml()
-      if (formatted === null) return // no selection — let browser handle it
-      innerHtml = formatted
-    } else {
-      const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
-      if (!raw.trim()) return
-      innerHtml = stripNoteMarkers(raw)
-      if (settingsStore.copyCleanText) innerHtml = cleanHebrewText(innerHtml)
-    }
-
-    const htmlContent = wrapRtlHtml(innerHtml)
-    const plainText = htmlToPlainText(innerHtml)
-
-    event.clipboardData?.setData('text/html', htmlContent)
-    event.clipboardData?.setData('text/plain', plainText)
+    event.clipboardData?.setData('text/html', wrapRtlHtml(formatted))
+    event.clipboardData?.setData('text/plain', htmlToPlainText(formatted))
     event.preventDefault()
   })
 
   useEventListener(scrollerEl, 'dragstart', (event: DragEvent) => {
-    let innerHtml: string
-
-    if (buildFormattedHtml) {
-      const formatted = buildFormattedHtml()
-      if (formatted === null) return
-      innerHtml = formatted
-    } else {
-      const raw = isSelectAll.value ? linesToHtml(getLines()) : selectedHtml()
-      if (!raw.trim()) return
-      innerHtml = stripNoteMarkers(raw)
-      if (settingsStore.copyCleanText) innerHtml = cleanHebrewText(innerHtml)
-    }
-
-    const htmlContent = wrapRtlHtml(innerHtml)
-    const plainText = htmlToPlainText(innerHtml)
-
-    event.dataTransfer?.setData('text/html', htmlContent)
-    event.dataTransfer?.setData('text/plain', plainText)
+    if (!buildFormattedHtml) return
+    const formatted = buildFormattedHtml()
+    if (formatted === null) return
+    event.dataTransfer?.setData('text/html', wrapRtlHtml(formatted))
+    event.dataTransfer?.setData('text/plain', htmlToPlainText(formatted))
   })
 }
