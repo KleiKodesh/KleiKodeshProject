@@ -39,16 +39,39 @@ const y = ref(0)
 const menuRef = ref<HTMLElement>()
 const menuStyle = computed(() => ({ left: `${x.value}px`, top: `${y.value}px` }))
 
+// Saved selection range at the time the menu opened — restored before executing
+// any action so that copy operations can read the user's original text selection.
+let _savedRange: Range | null = null
+
+function saveSelection(): void {
+  const sel = window.getSelection()
+  if (sel && sel.rangeCount > 0 && !sel.isCollapsed) {
+    _savedRange = sel.getRangeAt(0).cloneRange()
+  } else {
+    _savedRange = null
+  }
+}
+
+function restoreSelection(): void {
+  if (!_savedRange) return
+  const sel = window.getSelection()
+  if (!sel) return
+  sel.removeAllRanges()
+  sel.addRange(_savedRange)
+}
+
 useDropdownClose(menuRef, () => {
   visible.value = false
 })
 
 async function show(event: MouseEvent) {
   event.preventDefault()
+  saveSelection()
   await showAtPosition(event.clientX, event.clientY)
 }
 
 async function showAtPosition(clientX: number, clientY: number) {
+  saveSelection()
   x.value = clientX
   y.value = clientY
   visible.value = true
@@ -65,6 +88,7 @@ function hide() {
 }
 
 function runItem(item: ContextMenuTextItem) {
+  restoreSelection()
   item.action()
   hide()
 }

@@ -63,18 +63,12 @@ function extractEndnotes(
 
 function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
   if (!endnotes.length) return ''
+  const separator = '<hr dir="rtl" style="border:none;border-top:1px solid #ccc;margin:8pt 0"/>'
   const items = endnotes
-    .map(
-      (e) =>
-        `<li id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</li>`,
-    )
+    .map((e) => `<div dir="rtl" id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</div>`)
     .join('\n')
-  return `<ol dir="rtl" style="padding-inline-start:1.5em">\n${items}\n</ol>`
+  return `\n${separator}\n${items}`
 }
-
-// ── Shared DOM copy helper ────────────────────────────────────────────────────
-// execCopyHtmlToClipboard is imported from useLineCopy — it sets _isProgrammaticCopy
-// before calling execCommand('copy') so useScopedCopy skips re-processing.
 
 // ── Hebrew search query extraction ───────────────────────────────────────────
 
@@ -178,17 +172,17 @@ export function buildBookExportHtml(
 
 // ── Copy flag semantics ───────────────────────────────────────────────────────
 //
-// ALL copy paths (menu העתק, Ctrl+C, paste-to-Word) build HTML via buildFormattedHtml,
-// then put the result on the clipboard. The RTL wrapper (dir="rtl") is always applied.
+// ALL copy paths (menu העתק, Ctrl+C) go through useScopedCopy's copy event handler
+// which calls buildFormattedHtml and writes to event.clipboardData.
+// onCopy fires document.execCommand('copy') to trigger that event.
+// onPasteIntoWord calls buildFormattedHtml directly, sets clipboard via
+// execCopyHtmlToClipboard, then sends the pasteIntoWord bridge message so C# opens
+// Word and calls Selection.Paste().
 //
 // copyAsBlob (independent checkbox)
-//   ON:  use extractSelection to collect .line element innerHTML, then wrap each
-//        line in <div>...</div> and set via execCopyHtml. The other flags (source,
-//        notes, cleanText) are applied to this extracted content.
-//   OFF: copy directly from the browser's current text selection (native path);
-//        the other flags are still applied to what the browser selected.
-//   Note: has nothing to do with note markers.
-//   Note: has nothing to do with note markers.
+//   ON:  use extractSelection to collect .line element innerHTML, wrap each line in
+//        <div>...</div>. Has nothing to do with note markers.
+//   OFF: use raw browser selection HTML directly.
 //
 // copySourcePosition (radio pair — at most one active at a time)
 //   'start': prepend <h2 dir="rtl">book, toc path</h2> before the text
@@ -200,14 +194,8 @@ export function buildBookExportHtml(
 //   OFF: strip note markers from the HTML
 //
 // copyCleanText (independent checkbox)
-//   ON:  run cleanHebrewText() on the result (strips diacritics/cantillation marks)
+//   ON:  run cleanHebrewText() (strips diacritics/cantillation marks)
 //   OFF: leave text as-is
-//
-// ── Paste-to-Word ─────────────────────────────────────────────────────────────
-//
-// "העתק לתוך וורד" follows the exact same path as "העתק" (builds HTML, sets clipboard),
-// then additionally sends the pasteIntoWord bridge message so C# opens Word (or reuses
-// the running instance) and calls Selection.Paste() to paste from the clipboard.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null } {
@@ -325,12 +313,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   }
 
   function onCopy(): void {
-    const html = buildFormattedHtml()
-    if (html === null) {
-      document.execCommand('copy')
-      return
-    }
-    execCopyHtmlToClipboard(html)
+    // Fire the native copy event — useScopedCopy intercepts it and applies all
+    // active flags (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText).
+    document.execCommand('copy')
   }
 
   // Sets clipboard via execCopyHtmlToClipboard, then tells C# to open Word and call Selection.Paste().
@@ -384,14 +369,22 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         type: 'checkbox',
         label: 'העתק עם מקור בסוף',
         get checked() { return settingsStore.copySourcePosition === 'end' },
-        onChange: (value: boolean) => { settingsStore.copySourcePosition = value ? 'end' : null },
+        onChange: (value: boolean) => {
+          settingsStore.copySourcePosition = value ? 'end' : null
+          // מקור בסוף is incompatible with הערות — clear notes when end-source is enabled
+          if (value) settingsStore.copyWithNotes = false
+        },
       },
       // Independent checkboxes
       {
         type: 'checkbox',
         label: 'העתק עם הערות',
         get checked() { return settingsStore.copyWithNotes },
-        onChange: (value: boolean) => { settingsStore.copyWithNotes = value },
+        onChange: (value: boolean) => {
+          settingsStore.copyWithNotes = value
+          // הערות is incompatible with מקור בסוף — clear end-source when notes are enabled
+          if (value && settingsStore.copySourcePosition === 'end') settingsStore.copySourcePosition = null
+        },
       },
       {
         type: 'checkbox',

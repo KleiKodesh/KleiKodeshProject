@@ -1,4 +1,3 @@
-import { ref } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import type { Note } from '../lines/useBookViewNotes'
@@ -8,36 +7,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
-
-// ── Copy flag semantics ───────────────────────────────────────────────────────
-//
-// ALL copy paths (menu העתק, Ctrl+C, paste-to-Word) build HTML via buildFormattedHtml,
-// then put the result on the clipboard. The RTL wrapper (dir="rtl") is always applied.
-//
-// copyAsBlob (independent checkbox)
-//   ON:  each selected line is wrapped in <div>...</div>
-//   OFF: lines joined as plain text, no div wrappers
-//   Note: has nothing to do with note markers.
-//
-// copySourcePosition (radio pair — at most one active at a time)
-//   'start': prepend <h2 dir="rtl">book, toc path</h2> before the text
-//   'end':   append (book, toc path) after the text
-//   null:    no source decoration
-//
-// copyWithNotes (independent checkbox)
-//   ON:  convert user-note-marker superscripts to numbered endnotes
-//   OFF: strip note markers from the HTML
-//
-// copyCleanText (independent checkbox)
-//   ON:  run cleanHebrewText() on the result (strips diacritics/cantillation marks)
-//   OFF: leave text as-is
-//
-// ── Paste-to-Word ─────────────────────────────────────────────────────────────
-//
-// "העתק לתוך וורד" follows the exact same path as "העתק" (builds HTML, sets clipboard),
-// then additionally sends the pasteIntoWord bridge message so C# opens Word (or reuses
-// the running instance) and calls Selection.Paste() to paste from the clipboard.
-// ─────────────────────────────────────────────────────────────────────────────
 
 export function useCommentaryCopy(
   getActiveGroup: () => { bookTitle: string; bookId: number } | null,
@@ -49,7 +18,6 @@ export function useCommentaryCopy(
   onAddNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => void,
   getNotesForLine?: (lineId: number) => Note[],
 ) {
-  const contextMenuRef = ref<any>(null)
   const settingsStore = useSettingsStore()
   const tabStore = useTabStore()
 
@@ -59,10 +27,6 @@ export function useCommentaryCopy(
     const cleanTitle = bookTitle.replace(/\s+מפרשים\s*$/, '').replace(/\s+רשנם\s*$/, '')
     return tocPath ? `${cleanTitle}, ${tocPath}` : cleanTitle
   }
-
-  // ── DOM copy helper ─────────────────────────────────────────────────────────
-  // execCopyHtmlToClipboard (imported from useLineCopy) sets _isProgrammaticCopy
-  // before calling execCommand so useScopedCopy skips re-processing.
 
   // ── Selection extraction (for highlight/note offset tracking) ───────────────
 
@@ -191,10 +155,11 @@ export function useCommentaryCopy(
 
   function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
     if (!endnotes.length) return ''
+    const separator = '<hr dir="rtl" style="border:none;border-top:1px solid #ccc;margin:8pt 0"/>'
     const items = endnotes
-      .map((e) => `<li id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</li>`)
+      .map((e) => `<div dir="rtl" id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</div>`)
       .join('\n')
-    return `<ol dir="rtl" style="padding-inline-start:1.5em">\n${items}\n</ol>`
+    return `\n${separator}\n${items}`
   }
 
   // ── Copy actions ────────────────────────────────────────────────────────────
@@ -272,12 +237,9 @@ export function useCommentaryCopy(
   }
 
   function onCopy(): void {
-    const html = buildFormattedHtml()
-    if (html === null) {
-      document.execCommand('copy')
-      return
-    }
-    execCopyHtmlToClipboard(html)
+    // Fire the native copy event — useScopedCopy intercepts it and applies all
+    // active flags (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText).
+    document.execCommand('copy')
   }
 
   // Sets clipboard via execCopyHtmlToClipboard, then tells C# to open Word and call Selection.Paste().
@@ -337,14 +299,20 @@ export function useCommentaryCopy(
       type: 'checkbox',
       label: 'העתק עם מקור בסוף',
       get checked() { return settingsStore.copySourcePosition === 'end' },
-      onChange: (value: boolean) => { settingsStore.copySourcePosition = value ? 'end' : null },
+      onChange: (value: boolean) => {
+        settingsStore.copySourcePosition = value ? 'end' : null
+        if (value) settingsStore.copyWithNotes = false
+      },
     },
     // Independent checkboxes
     {
       type: 'checkbox',
       label: 'העתק עם הערות',
       get checked() { return settingsStore.copyWithNotes },
-      onChange: (value: boolean) => { settingsStore.copyWithNotes = value },
+      onChange: (value: boolean) => {
+        settingsStore.copyWithNotes = value
+        if (value && settingsStore.copySourcePosition === 'end') settingsStore.copySourcePosition = null
+      },
     },
     {
       type: 'checkbox',
@@ -357,17 +325,7 @@ export function useCommentaryCopy(
   ]
 
   return {
-    contextMenuRef,
     contextMenuItems,
     buildFormattedHtml,
-    // Kept for external callers (CommentaryView uses these directly)
-    copyAsBlob: () => { const html = buildFormattedHtml(); if (html) execCopyHtmlToClipboard(html) },
-    copyWithSource: (sourceAtEnd: boolean) => {
-      const prev = settingsStore.copySourcePosition
-      settingsStore.copySourcePosition = sourceAtEnd ? 'end' : 'start'
-      const html = buildFormattedHtml()
-      settingsStore.copySourcePosition = prev
-      if (html) execCopyHtmlToClipboard(html)
-    },
   }
 }
