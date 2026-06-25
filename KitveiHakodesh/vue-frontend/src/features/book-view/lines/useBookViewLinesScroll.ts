@@ -3,17 +3,27 @@
  *
  * Responsibilities:
  * - captureScrollPos — read the current virtualizer offset into a plain object
- * - restoreScrollPos — scroll the virtualizer to a specific line index + pixel offset,
- *   using a MutationObserver to apply the offset as soon as the item is measured,
- *   with a post-apply verification rAF to re-correct if the virtualizer snaps scrollTop back
- * - Initial-scroll-on-load — waits for lines + target index, then restores once
+ * - restoreScrollPos — scroll the virtualizer to a specific line index (virtualizer API only)
+ * - Initial-scroll-on-load — two-stage restore using scrollToIndex
  * - savePos — writes the current position + all relevant sidebar state to tabStore IDB
  * - Saves on: visibilitychange hidden, beforeunload, onBeforeUnmount
  * - onScroll — updates lastKnownPos, emits 'scrolled', calls prioritise
  * - setProgrammaticScroll — marks the next 300 ms as programmatic (suppresses onScroll saves)
  *
- * The programmaticScrolling flag is a plain let — exposed as a getter so callers
- * (scrollToLineId, scrollToLineIndex in the component) can read the current value.
+ * Scroll restore strategy:
+ * Stage 1 — scrollToIndex(targetIndex, 'start') immediately when placeholders are allocated.
+ *   Uses estimated item heights but gets the item on screen fast.
+ * Stage 2 — once the target line's chunk loads (real heights available), scrollToIndex again.
+ *   The virtualizer now has DOM-measured heights and places the item accurately.
+ *
+ * We intentionally do NOT attempt to restore the sub-line pixel offset (scrollOffset).
+ * item.start for items far from the viewport is estimated from estimateSize=32 for all
+ * un-rendered items above — potentially thousands of items with real heights of 60-200px
+ * in long-line books. scrollToOffset(item.start + offset) with a stale item.start would
+ * land at the wrong position. scrollToIndex is always accurate regardless of item heights.
+ *
+ * The programmaticScrolling flag suppresses savePos during the restore window so that a
+ * visibilitychange event during restore doesn't overwrite IDB with a mid-restore position.
  */
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
@@ -73,97 +83,41 @@ export function useBookViewLinesScroll(
     const items = virtualItems()
     const first = items[0]
     if (!first || !scrollerEl.value) return null
-    return {
-      scrollIndex: first.index,
-      scrollOffset: Math.max(0, scrollerEl.value.scrollTop - first.start),
+    const scrollTop = scrollerEl.value.scrollTop
+    const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? first
+    const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
+
+    // Sanity check: if firstVisible.start is more than 2000px above scrollTop,
+    // the virtualizer hasn't re-rendered after a programmatic scroll yet — skip.
+    if (scrollTop - firstVisible.start > 2000) {
+      console.warn(`[scroll-save] skipping stale capture: scrollTop=${scrollTop}, firstVisible=${firstVisible.index} start=${firstVisible.start}, gap=${scrollTop - firstVisible.start}`)
+      return null
     }
+
+    // Save firstVisible (not first rendered) as scrollIndex so restore lands at
+    // the line the user was actually looking at, not the overscan item above it.
+    const result = {
+      scrollIndex: firstVisible.index,
+      scrollOffset: Math.max(0, scrollTop - firstVisible.start),
+    }
+    console.log(`[scroll-save] captureScrollPos: scrollTop=${scrollTop}, firstVisible=${firstVisible.index} (start=${firstVisible.start}), firstFull=${firstFull.index}, saving scrollIndex=${result.scrollIndex} offset=${result.scrollOffset}, content="${lines()[firstVisible.index]?.content?.replace(/<[^>]*>/g, '').slice(0, 50) ?? 'n/a'}"`)
+    return result
   }
 
-  // ── Scroll restore ──────────────────────────────────────────────────────────
+  // ── Scroll restore (public wrapper) ────────────────────────────────────────
 
   let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
   let programmaticScrolling = false
 
-  function restoreScrollPos(lineIndex: number, scrollOffset = 0) {
-    programmaticScrolling = true
-    if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-
-    // Step 1 — tell the virtualizer to bring the target item into the rendered range.
+  function restoreScrollPos(lineIndex: number, _scrollOffset = 0) {
+    // Always use scrollToIndex — scrollOffset is ignored because item.start is
+    // unreliable for un-rendered items (see module comment).
     virtualizer().scrollToIndex(lineIndex, { align: 'start' })
-
-    // Step 2 — once the virtualizer renders the target item and populates
-    // measurementsCache, read the exact position and apply scrollTop + offset.
-    // A MutationObserver fires on each DOM update from the virtualizer so we
-    // apply as soon as the measurement is available, without guessing rAF counts.
-    const scroller = scrollerEl.value
-    if (!scroller) {
-      requestAnimationFrame(() => { programmaticScrolling = false })
-      return
-    }
-
-    const scrollerCaptured: HTMLElement = scroller
-    let applied = false
-
-    function applyAndVerify(): boolean {
-      const item = virtualizer().measurementsCache.find((measurement) => measurement.index === lineIndex)
-      if (!item) return false
-      const target = item.start + scrollOffset
-      scrollerCaptured.scrollTop = target
-      // Verify one rAF later that scrollTop actually stuck. The virtualizer may
-      // run its own correction pass in the next frame and snap it back.
-      requestAnimationFrame(() => {
-        if (Math.abs(scrollerCaptured.scrollTop - target) > 2) {
-          // Re-read measurement in case the virtualizer updated item sizes
-          const fresh = virtualizer().measurementsCache.find((m) => m.index === lineIndex)
-          scrollerCaptured.scrollTop = fresh ? fresh.start + scrollOffset : target
-        }
-        programmaticScrolling = false
-      })
-      return true
-    }
-
-    // Fast path — item may already be in the cache (e.g. already in the rendered window).
-    requestAnimationFrame(() => {
-      if (applied) return
-      if (applyAndVerify()) {
-        applied = true
-        return
-      }
-
-      // Slow path — item not yet measured. Watch DOM mutations from the virtualizer
-      // and apply as soon as the measurement lands in the cache.
-      const observer = new MutationObserver(() => {
-        if (applied) return
-        if (applyAndVerify()) {
-          applied = true
-          observer.disconnect()
-        }
-      })
-      observer.observe(scrollerCaptured, { childList: true, subtree: true })
-
-      // Safety timeout — ensure programmaticScrolling is always cleared even if the
-      // target item never renders (e.g. list is empty or item is out of range).
-      setTimeout(() => {
-        if (!applied) {
-          applied = true
-          observer.disconnect()
-          programmaticScrolling = false
-        }
-      }, 500)
-    })
   }
 
   // ── Initial scroll on load ──────────────────────────────────────────────────
-  // Watches lines and initialScrollIndex together. Waits for:
-  //   1. lines to be non-empty (placeholders allocated)
-  //   2. a target index to be known (either initialLineIndex from TOC nav, or
-  //      initialScrollIndex from IDB session restore — which may arrive after mount)
-  // Scrolls immediately — does NOT wait for content to load. restoreScrollPos
-  // works with placeholder items because the virtualizer measures them using
-  // estimateSize and populates measurementsCache on the first render of that
-  // viewport. Waiting for real content caused a visible flash since the scroller
-  // sat at line 0 for the entire prefetch round-trip.
-  // Stops itself after the first successful restore.
+
+  let cancelStabilize: (() => void) | null = null
   {
     let restored = false
     let stopContentWatch: (() => void) | null = null
@@ -180,14 +134,203 @@ export function useBookViewLinesScroll(
         stop = null
         prioritise(targetIndex)
 
-        const offset = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
-
         nextTick(() => {
           if (restored) return
           restored = true
-          restoreScrollPos(targetIndex, offset)
+          console.log(`[scroll-restore] initial restore: targetIndex=${targetIndex} lines=${lines().length}`)
+
+          let cancelled = false
+          cancelStabilize = () => { cancelled = true; programmaticScrolling = false }
+          programmaticScrolling = true
+
+          // Stage 1 — estimated heights, gets item on screen immediately.
+          const virt1 = virtualizer()
+          const cache1 = virt1.measurementsCache.find((m) => m.index === targetIndex)
+          console.log(`[scroll-restore] stage1: scrollToIndex(${targetIndex}) — item in cache: ${cache1 != null}, estimated start: ${cache1?.start ?? 'n/a'}, scrollTop before: ${scrollerEl.value?.scrollTop ?? 'n/a'}`)
+          virt1.scrollToIndex(targetIndex, { align: 'start' })
+          requestAnimationFrame(() => {
+            const cache1after = virtualizer().measurementsCache.find((m) => m.index === targetIndex)
+            console.log(`[scroll-restore] stage1 after rAF: scrollTop=${scrollerEl.value?.scrollTop ?? 'n/a'}, item.start=${cache1after?.start ?? 'n/a'}, rendered=[${virtualizer().getVirtualItems().map(v => v.index).join(',')}]`)
+          })
+
+          // Stage 2 — once the target chunk loads, re-issue scrollToIndex with real heights.
+          stopContentWatch = watch(
+            () => lines()[targetIndex]?.content,
+            (content) => {
+              if (content == null) return
+              stopContentWatch?.()
+              if (cancelled) return
+              const virt2 = virtualizer()
+              const cache2 = virt2.measurementsCache.find((m) => m.index === targetIndex)
+              const rendered2 = virt2.getVirtualItems()
+              const placeholders2 = rendered2.filter((v) => lines()[v.index]?.content === null).length
+              console.log(`[scroll-restore] stage2 trigger: targetIndex=${targetIndex}, item.start=${cache2?.start ?? 'n/a'}, scrollTop=${scrollerEl.value?.scrollTop ?? 'n/a'}, rendered=[${rendered2[0]?.index ?? '?'}..${rendered2[rendered2.length - 1]?.index ?? '?'}] (${rendered2.length} items, ${placeholders2} placeholders), totalSize=${virt2.getTotalSize()}`)
+              nextTick(() => {
+                if (cancelled) return
+
+                // Stage 2: initial scrollToIndex to put target at top with real heights.
+                virtualizer().scrollToIndex(targetIndex, { align: 'start' })
+
+                // Tracking loop: item.start shifts as background chunks above the target
+                // get loaded and DOM-measured, pushing item.start down. Keep re-issuing
+                // scrollToIndex whenever item.start changes. Exit once stable for 3 frames.
+                let lastStart = virtualizer().measurementsCache.find((m) => m.index === targetIndex)?.start ?? -1
+                let stableFrames = 0
+                let trackAttempts = 0
+
+                function trackAndCorrect() {
+                  if (cancelled) return
+                  const fresh = virtualizer().measurementsCache.find((m) => m.index === targetIndex)
+                  const freshStart = fresh?.start ?? lastStart
+                  if (freshStart !== lastStart) {
+                    console.log(`[scroll-restore] tracking: item.start shifted ${lastStart} -> ${freshStart}, re-issuing scrollToIndex (attempt ${trackAttempts})`)
+                    lastStart = freshStart
+                    stableFrames = 0
+                    virtualizer().scrollToIndex(targetIndex, { align: 'start' })
+                  } else {
+                    stableFrames++
+                    console.log(`[scroll-restore] tracking: stable frame ${stableFrames} (item.start=${freshStart}, scrollTop=${scrollerEl.value?.scrollTop ?? 'n/a'})`)
+                  }
+
+                  if (stableFrames >= 3) {
+                    programmaticScrolling = false
+                    const finalCache = virtualizer().measurementsCache.find((m) => m.index === targetIndex)
+                    const finalRendered = virtualizer().getVirtualItems()
+                    const finalScrollTop = scrollerEl.value?.scrollTop ?? 0
+                    const finalFirstVisible = finalRendered.find((v) => v.start + v.size > finalScrollTop)
+                    const finalFirstFull = finalRendered.find((v) => v.start >= finalScrollTop)
+                    console.log(`[scroll-restore] tracking done after ${trackAttempts} attempts:`)
+                    console.log(`  item.start=${finalCache?.start ?? 'n/a'}, scrollTop=${finalScrollTop}, totalSize=${virtualizer().getTotalSize()}`)
+                    console.log(`  firstVisible=${finalFirstVisible?.index ?? 'n/a'} start=${finalFirstVisible?.start ?? 'n/a'}`)
+                    console.log(`  firstFull=${finalFirstFull?.index ?? 'n/a'} start=${finalFirstFull?.start ?? 'n/a'}`)
+                    console.log(`  targetIndex=${targetIndex} content="${lines()[targetIndex]?.content?.replace(/<[^>]*>/g, '').slice(0, 60) ?? 'n/a'}"`)
+                    console.log(`  firstVisible content="${lines()[finalFirstVisible?.index ?? -1]?.content?.replace(/<[^>]*>/g, '').slice(0, 60) ?? 'n/a'}"`)
+                    console.log(`  firstFull content="${lines()[finalFirstFull?.index ?? -1]?.content?.replace(/<[^>]*>/g, '').slice(0, 60) ?? 'n/a'}"`)
+                    // Log 3 lines before and after target for context
+                    for (let d = -2; d <= 2; d++) {
+                      const idx = targetIndex + d
+                      const c = virtualizer().measurementsCache.find((m) => m.index === idx)
+                      console.log(`  [${d >= 0 ? '+' : ''}${d}] index=${idx} start=${c?.start ?? 'n/a'} content="${lines()[idx]?.content?.replace(/<[^>]*>/g, '').slice(0, 50) ?? 'n/a'}"`)
+                    }
+
+                    // Post-stabilization: apply the saved pixel offset within the line.
+                    // item.start is now accurate (real heights from DOM measurement).
+                    // Only apply if offset > 0 — scrollToIndex already placed it at the top.
+                    const offsetToApply = props.initialScrollIndex != null ? (props.initialScrollOffset ?? 0) : 0
+                    if (offsetToApply > 0) {
+                      const offsetCache = virtualizer().measurementsCache.find((m) => m.index === targetIndex)
+                      if (offsetCache && offsetToApply < offsetCache.end - offsetCache.start) {
+                        // Guard: only apply if offset fits within the item's actual height.
+                        // A saved offset larger than the item height means a stale save from
+                        // an old overscan-based captureScrollPos — discard it.
+                        const offsetTarget = offsetCache.start + offsetToApply
+                        programmaticScrolling = true  // keep suppressed through the scroll
+                        console.log(`[scroll-restore] applying offset: scrollToOffset(${offsetTarget}) = item.start(${offsetCache.start}) + offset(${offsetToApply}), item.height=${offsetCache.end - offsetCache.start}`)
+                        virtualizer().scrollToOffset(offsetTarget)
+                        requestAnimationFrame(() => { if (!cancelled) programmaticScrolling = false })
+                      } else if (offsetCache) {
+                        console.warn(`[scroll-restore] offset ${offsetToApply} exceeds item height ${offsetCache.end - offsetCache.start} — discarding stale offset`)
+                      }
+                    }
+                    // Each time, check if item.start shifted — if so, re-issue scrollToIndex.
+                    // Stops once all lines have real content (no more chunks loading).
+                    let postLastStart = lastStart
+                    const postStopWatch = watch(
+                      () => lines(),
+                      () => {
+                        if (cancelled) { postStopWatch(); return }
+                        const postCache = virtualizer().measurementsCache.find((m) => m.index === targetIndex)
+                        if (!postCache) return
+                        if (postCache.start !== postLastStart) {
+                          console.log(`[scroll-restore] post-drift: item.start ${postLastStart}->${postCache.start}, re-issuing scrollToIndex`)
+                          postLastStart = postCache.start
+                          virtualizer().scrollToIndex(targetIndex, { align: 'start' })
+                          // Re-apply offset after the drift correction
+                          if (offsetToApply > 0) {
+                            requestAnimationFrame(() => {
+                              if (cancelled) return
+                              const driftCache = virtualizer().measurementsCache.find((m) => m.index === targetIndex)
+                              if (driftCache) {
+                                console.log(`[scroll-restore] post-drift offset re-apply: scrollToOffset(${driftCache.start + offsetToApply})`)
+                                virtualizer().scrollToOffset(driftCache.start + offsetToApply)
+                              }
+                            })
+                          }
+                        }
+                        // Stop once all lines loaded — no more drift possible
+                        if (lines().every(l => l.content !== null)) {
+                          console.log(`[scroll-restore] post-watch: all lines loaded, stopping`)
+                          postStopWatch()
+                        }
+                      },
+                      { flush: 'post' },
+                    )
+
+                    if (props.searchHighlightLineIndex != null && !cancelled) {
+                      let markAttempts = 0
+                      function tryScrollToMark() {
+                        if (cancelled || !scrollerEl.value) return
+                        const mark = scrollerEl.value.querySelector('mark.search-match') as HTMLElement | null
+                        if (mark) {
+                          console.log(`[scroll-restore] mark found after ${markAttempts} attempts`)
+                          mark.scrollIntoView({ block: 'center' })
+                          return
+                        }
+                        if (++markAttempts < 30) requestAnimationFrame(tryScrollToMark)
+                        else console.warn('[scroll-restore] mark not found after 30 attempts')
+                      }
+                      requestAnimationFrame(tryScrollToMark)
+                    }
+                    return
+                  }
+
+                  if (++trackAttempts < 200) {
+                    requestAnimationFrame(trackAndCorrect)
+                  } else {
+                    console.warn(`[scroll-restore] tracking gave up after 200 attempts, item.start=${lastStart}, scrollTop=${scrollerEl.value?.scrollTop ?? 'n/a'}`)
+                    programmaticScrolling = false
+                  }
+                }
+
+                requestAnimationFrame(trackAndCorrect)
+              })
+            },
+            { immediate: true, flush: 'post' },
+          )
+
+          // Safety: clear programmaticScrolling if content never loads.
+          setTimeout(() => { if (!cancelled) programmaticScrolling = false }, 5000)
+
+          // Periodic audit: check if position drifts after stabilization.
+          // Fires at 1s, 2s, 3s, 4s, 5s — catches late drift from slow background chunks.
+          let auditTargetIndex = -1
+          ;[1000, 2000, 3000, 4000, 5000].forEach((delay) => {
+            setTimeout(() => {
+              if (cancelled) return
+              const virtA = virtualizer()
+              const cacheA = virtA.measurementsCache.find((m) => m.index === targetIndex)
+              const renderedA = virtA.getVirtualItems()
+              const scrollTopA = scrollerEl.value?.scrollTop ?? 0
+              const firstVisibleA = renderedA.find((v) => v.start + v.size > scrollTopA)
+              const firstFullA = renderedA.find((v) => v.start >= scrollTopA)
+              const chunksLoaded = lines().filter(l => l.content !== null).length
+              const isCorrect = firstFullA?.index === targetIndex || firstVisibleA?.index === targetIndex
+              console.log(`[scroll-restore] ${delay}ms audit: scrollTop=${scrollTopA}, item.start=${cacheA?.start ?? 'n/a'}, firstVisible=${firstVisibleA?.index ?? 'n/a'} (start=${firstVisibleA?.start ?? 'n/a'}), firstFull=${firstFullA?.index ?? 'n/a'}, targetIndex=${targetIndex}, totalSize=${virtA.getTotalSize()}, chunksLoaded=${chunksLoaded}/${lines().length}, CORRECT=${isCorrect}`)
+              if (!isCorrect) {
+                console.warn(`[scroll-restore] ${delay}ms WRONG POSITION — firstVisible content: "${lines()[firstVisibleA?.index ?? -1]?.content?.replace(/<[^>]*>/g, '').slice(0, 60) ?? 'n/a'}"`)
+                console.warn(`[scroll-restore] ${delay}ms target content: "${lines()[targetIndex]?.content?.replace(/<[^>]*>/g, '').slice(0, 60) ?? 'n/a'}"`)
+              } else {
+                console.log(`[scroll-restore] ${delay}ms firstVisible content: "${lines()[firstVisibleA?.index ?? -1]?.content?.replace(/<[^>]*>/g, '').slice(0, 60) ?? 'n/a'}"`)
+              }
+              if (auditTargetIndex === -1 && isCorrect) {
+                auditTargetIndex = delay
+              }
+            }, delay)
+          })
+
           requestAnimationFrame(() =>
             requestAnimationFrame(() => {
+              if (cancelled) return
               const scrollTop = scrollerEl.value?.scrollTop ?? 0
               const items = virtualizer().getVirtualItems()
               const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
@@ -199,48 +342,14 @@ export function useBookViewLinesScroll(
               )
             }),
           )
-          if (props.searchHighlightLineIndex != null && scrollerEl.value) {
-            // The <mark> element only exists once the chunk loads and Vue re-renders
-            // the virtualizer row — which happens after restoreScrollPos completes.
-            // Poll via rAF until the mark appears (up to ~500ms), then center on it.
-            const scrollerForMark = scrollerEl.value
-            let markScrolled = false
-            let markAttempts = 0
-            function tryScrollToMark() {
-              if (markScrolled) return
-              const mark = scrollerForMark.querySelector('mark.search-match') as HTMLElement | null
-              if (mark) {
-                markScrolled = true
-                mark.scrollIntoView({ block: 'center' })
-                return
-              }
-              if (++markAttempts < 30) requestAnimationFrame(tryScrollToMark)
-            }
-            requestAnimationFrame(tryScrollToMark)
-          }
           scrollerEl.value?.focus({ preventScroll: true })
         })
-
-        // Once real content loads, re-apply the offset so the position is exact
-        // rather than estimate-based (only matters when offset > 0).
-        if (offset !== 0) {
-          stopContentWatch = watch(
-            () => lines()[targetIndex]?.content,
-            (content) => {
-              if (content == null) return
-              stopContentWatch?.()
-              nextTick(() => restoreScrollPos(targetIndex, offset))
-            },
-            { immediate: true, flush: 'post' },
-          )
-        }
       },
       { flush: 'post', immediate: true },
     )
 
     // If no target ever arrives (no saved position, no TOC nav), focus the scroller
     // once lines are loaded so keyboard navigation works immediately.
-    // Gate on idbResolved so we don't give up before IDB has had a chance to respond.
     watch(
       () => [lines(), props.idbResolved] as const,
       ([currentLines, resolved]) => {
@@ -257,16 +366,12 @@ export function useBookViewLinesScroll(
 
   // ── Persist scroll position ─────────────────────────────────────────────────
 
-  // Last known good position — updated on every scroll so unmount always has fresh data
-  // even if the DOM is already detached when onBeforeUnmount fires (WebView2 behaviour).
   let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
 
   function savePos() {
     if (programmaticScrolling) return
     const position = lastKnownPos ?? captureScrollPos()
     if (position) {
-      // Serialize the reactive proxy to a plain object before writing to IDB.
-      // IDB's structured clone algorithm cannot serialize Vue reactive proxies.
       const filterState = props.commentaryFilterState
         ? {
             searchQuery: props.commentaryFilterState.searchQuery,
@@ -312,9 +417,6 @@ export function useBookViewLinesScroll(
     }
   }
 
-  // Save when the commentary panel closes so the commentary scroll position
-  // (which just arrived via prop update from onCommentaryScroll) is flushed to
-  // IDB before CommentaryView unmounts and the position would otherwise be lost.
   watch(
     () => props.commentaryVisible,
     (visible) => { if (!visible) savePos() },
@@ -326,7 +428,7 @@ export function useBookViewLinesScroll(
   useEventListener(window, 'beforeunload', savePos)
 
   onBeforeUnmount(() => {
-    // Force-clear the programmatic flag so savePos is never silently skipped at unmount.
+    cancelStabilize?.()
     programmaticScrolling = false
     if (programmaticScrollTimer) {
       clearTimeout(programmaticScrollTimer)
@@ -341,10 +443,8 @@ export function useBookViewLinesScroll(
     if (!scrollerEl.value || programmaticScrolling) return
     const scrollTop = scrollerEl.value.scrollTop
     const items = virtualItems()
-    // For scroll position tracking (TOC, persistence): first item with any part visible
     const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
     const lineIndex = firstVisible?.index ?? 0
-    // For auto-select: first fully visible line (top edge at or below scrollTop)
     const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
     const fullLineIndex = firstFull?.index ?? lineIndex
     lastKnownPos = captureScrollPos()
@@ -365,7 +465,6 @@ export function useBookViewLinesScroll(
   return {
     captureScrollPos,
     restoreScrollPos,
-    /** Getter — read the current programmaticScrolling flag. */
     isProgrammaticScrolling: () => programmaticScrolling,
     setProgrammaticScroll,
     onScroll,
