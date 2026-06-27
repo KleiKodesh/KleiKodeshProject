@@ -228,3 +228,7 @@ If a shell command is genuinely needed to inspect file content (not modify it), 
 In virtual scroller components, scroll position must only be saved on `visibilitychange` (when `document.visibilityState === 'hidden'`), `beforeunload`, and `onBeforeUnmount`. Never save on the `scroll` event — not even debounced. A debounced scroll save races with the programmatic restore: the restore sets `scrollTop`, the debounce timer fires shortly after and overwrites it with the position from before the restore. The `onScroll` handler must be a no-op or omitted entirely.
 
 This applies to `FullTextSearchResultsList.vue` and any future virtual scroller component that persists scroll position.
+
+## No Browser Dialogs
+
+Never use `window.alert`, `window.confirm`, or `window.prompt` anywhere in the app. These are blocking browser dialogs that look out of place in a native WebView2 host and cannot be styled. For error messages, use a reactive ref in the relevant store and display the message inline in the page — either as a dismissible banner, an inline error state, or within the existing page error UI. For confirmation, use `ConfirmDialog.vue`.
