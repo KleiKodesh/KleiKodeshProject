@@ -35,25 +35,24 @@ namespace DocDesign
         {
             Loaded += OnLoaded;
 
-            // Refresh styles when control becomes visible — deferred so it doesn't
-            // block the visibility transition itself
+            // Refresh styles when control becomes visible
             IsVisibleChanged += (_, e) =>
             {
                 if ((bool)e.NewValue && DataContext is DocDesignViewModel vm)
-                    Dispatcher.BeginInvoke(new System.Action(() =>
-                    {
-                        vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                    }), DispatcherPriority.ApplicationIdle);
+                {
+                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
+                }
             };
 
-            // Refresh styles when control gets focus — deferred
+            // Refresh styles when control gets focus
             GotFocus += (_, __) =>
             {
                 if (DataContext is DocDesignViewModel vm)
-                    Dispatcher.BeginInvoke(new System.Action(() =>
-                    {
-                        vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                    }), DispatcherPriority.ApplicationIdle);
+                {
+                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
+                }
             };
         }
 
@@ -69,7 +68,7 @@ namespace DocDesign
                 if (DataContext is DocDesignViewModel vm)
                 {
                     vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                    vm.ParagraphsViewModel.FirstWordStyle.DeferredInit();
+                    vm.ParagraphsViewModel.FirstWordStyle.DeferredInit(); // also calls RefreshStyles internally
                     vm.SpacingViewModel.DeferredInit();
                 }
             }), DispatcherPriority.ApplicationIdle);
