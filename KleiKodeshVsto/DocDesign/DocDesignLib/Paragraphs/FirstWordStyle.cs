@@ -7,6 +7,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using WpfLib.ViewModels;
 
 namespace DocDesign.Paragraphs
 {
@@ -14,13 +15,16 @@ namespace DocDesign.Paragraphs
     {
         string _selectedStyle = "מילה ראשונה";
         ObservableCollection<string> _styles = new ObservableCollection<string>();
-        public string SelectedStyle 
+        public string SelectedStyle
         {
-            get => _selectedStyle; 
-            set => SetProperty(ref _selectedStyle, value); 
+            get => _selectedStyle;
+            set => SetProperty(ref _selectedStyle, value);
         }
 
         public ObservableCollection<string> Styles { get => _styles; set => SetProperty(ref _styles, value); }
+
+        readonly object _loadLock = new object();
+        bool _loadInProgress = false;
 
         public FirstWordStyle()
         {
@@ -30,13 +34,109 @@ namespace DocDesign.Paragraphs
         public void DeferredInit()
         {
             if (Vsto.Application == null) return;
-            Dispatcher.CurrentDispatcher.InvokeAsync(() =>
+
+            // Ensure the style exists first (must be on UI/COM thread)
+            CreateFirstWordStyle();
+
+            RefreshStyles();
+        }
+
+        public RelayCommand CreateNewStyleCommand => new RelayCommand(CreateNewStyle);
+
+        void CreateNewStyle()
+        {
+            if (Vsto.Application == null) return;
+
+            string name = Interaction.InputBox(
+                "הזן שם לסגנון התו החדש:",
+                "צור סגנון חדש",
+                "");
+
+            if (string.IsNullOrWhiteSpace(name)) return;
+
+            name = name.Trim();
+
+            // Check if already exists
+            foreach (Style s in Vsto.ActiveDocument.Styles)
             {
-                CreateFirstWordStyle();
-                foreach (Style style in Vsto.ActiveDocument.Styles)
-                    if (style.Type == WdStyleType.wdStyleTypeCharacter)
-                        Styles.Add(style.NameLocal);
-            }, DispatcherPriority.ApplicationIdle);
+                try
+                {
+                    if (string.Equals(s.NameLocal, name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        System.Windows.Forms.MessageBox.Show(
+                            $"סגנון בשם '{name}' כבר קיים במסמך.",
+                            "צור סגנון חדש",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Warning,
+                            System.Windows.Forms.MessageBoxDefaultButton.Button1,
+                            System.Windows.Forms.MessageBoxOptions.RightAlign | System.Windows.Forms.MessageBoxOptions.RtlReading);
+                        return;
+                    }
+                }
+                catch { }
+            }
+
+            // Create as character style based on מילה ראשונה — inherits all its presets
+            Style baseStyle = CreateFirstWordStyle();
+            Style newStyle = Vsto.ActiveDocument.Styles.Add(name, WdStyleType.wdStyleTypeCharacter);
+            object baseStyleObj = baseStyle;
+            newStyle.set_BaseStyle(ref baseStyleObj);
+
+            // Refresh list and auto-select the new style
+            RefreshStyles();
+            SelectedStyle = newStyle.NameLocal;
+
+            System.Windows.Forms.MessageBox.Show(
+                $"הסגנון '{name}' נוצר בהצלחה וזמין לשימוש.\n\nכדי לערוך את עיצובו, השתמש בכלי עריכת הסגנונות המובנה של וורד').",
+                "סגנון נוצר",
+                System.Windows.Forms.MessageBoxButtons.OK,
+                System.Windows.Forms.MessageBoxIcon.Information,
+                System.Windows.Forms.MessageBoxDefaultButton.Button1,
+                System.Windows.Forms.MessageBoxOptions.RightAlign | System.Windows.Forms.MessageBoxOptions.RtlReading);
+        }
+
+        public void RefreshStyles()
+        {
+            if (Vsto.Application == null) return;
+            if (_loadInProgress) return;
+            _loadInProgress = true;
+
+            try
+            {
+                // COM must be accessed on the STA/UI thread — no Task.Run.
+                var names = new List<string>();
+                var doc = Vsto.ActiveDocument;
+                if (doc != null)
+                {
+                    foreach (Style s in doc.Styles)
+                    {
+                        try
+                        {
+                            if (s.Type == WdStyleType.wdStyleTypeCharacter && !s.BuiltIn)
+                                names.Add(s.NameLocal);
+                        }
+                        catch { }
+                    }
+                }
+
+                // Diff — only rebuild if the list actually changed
+                bool changed = names.Count != Styles.Count
+                            || !names.SequenceEqual(Styles);
+                if (changed)
+                {
+                    var current = SelectedStyle;
+                    Styles.Clear();
+                    foreach (var name in names)
+                        Styles.Add(name);
+                    // Restore selection by value
+                    if (!string.IsNullOrEmpty(current))
+                        SelectedStyle = current;
+                }
+            }
+            finally
+            {
+                _loadInProgress = false;
+            }
         }
 
         public void Apply(List<Style> styles, int minLineCount)
