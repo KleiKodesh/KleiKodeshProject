@@ -43,65 +43,46 @@ namespace RegexFindLib.UI
             });
         }
 
-        // ── Style loading — per-instance, async, refreshed on visibility/focus ──
+        // ── Style loading — per-instance, refreshed on visibility/focus ──
         // Styles are document-specific and filtered by InUse — they can change mid-session.
-        // Load asynchronously to avoid blocking UI, but refresh when control becomes visible or focused.
+        // COM (Word Styles) must be accessed on the STA/UI thread — no Task.Run.
 
-        readonly object _styleLock = new object();
         bool _styleRefreshInProgress = false;
 
         void LoadStyles()
         {
-            lock (_styleLock)
+            // Guard against re-entrant calls (IsVisible + GotFocus firing together)
+            if (_styleRefreshInProgress) return;
+            _styleRefreshInProgress = true;
+
+            try
             {
-                if (_styleRefreshInProgress) return;
-                _styleRefreshInProgress = true;
+                var names = _word.GetStyleNames().ToList();
+
+                // Only rebuild if actually changed — avoids clearing ComboBox selection
+                bool changed = names.Count != StyleList.Count
+                            || !names.SequenceEqual(StyleList);
+
+                if (changed)
+                {
+                    var findStyle    = FindFormatting.StyleName;
+                    var replaceStyle = ReplaceFormatting.StyleName;
+
+                    StyleList.Clear();
+                    foreach (var name in names)
+                        StyleList.Add(name);
+
+                    // Restore selections by value so the ComboBox doesn't go blank
+                    if (!string.IsNullOrEmpty(findStyle))
+                        FindFormatting.StyleName = findStyle;
+                    if (!string.IsNullOrEmpty(replaceStyle))
+                        ReplaceFormatting.StyleName = replaceStyle;
+                }
             }
-
-            var dispatcher = System.Windows.Application.Current?.Dispatcher
-                          ?? System.Windows.Threading.Dispatcher.CurrentDispatcher;
-            System.Threading.Tasks.Task.Run(() =>
+            finally
             {
-                try
-                {
-                    var names = _word.GetStyleNames().ToList();
-                    dispatcher.BeginInvoke(new System.Action(() =>
-                    {
-                        lock (_styleLock)
-                        {
-                            // Only rebuild the list if it actually changed — avoids
-                            // clearing the ComboBox selection on every focus/visibility event.
-                            bool changed = names.Count != StyleList.Count
-                                        || !names.SequenceEqual(StyleList);
-
-                            if (changed)
-                            {
-                                var findStyle    = FindFormatting.StyleName;
-                                var replaceStyle = ReplaceFormatting.StyleName;
-
-                                StyleList.Clear();
-                                foreach (var name in names)
-                                    StyleList.Add(name);
-
-                                // Restore selections by value so the ComboBox doesn't go blank
-                                if (!string.IsNullOrEmpty(findStyle))
-                                    FindFormatting.StyleName = findStyle;
-                                if (!string.IsNullOrEmpty(replaceStyle))
-                                    ReplaceFormatting.StyleName = replaceStyle;
-                            }
-
-                            _styleRefreshInProgress = false;
-                        }
-                    }), System.Windows.Threading.DispatcherPriority.Background);
-                }
-                catch
-                {
-                    lock (_styleLock)
-                    {
-                        _styleRefreshInProgress = false;
-                    }
-                }
-            });
+                _styleRefreshInProgress = false;
+            }
         }
 
         public void EnsureStylesLoaded()
