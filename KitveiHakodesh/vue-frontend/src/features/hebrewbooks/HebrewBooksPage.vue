@@ -1,13 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { useLocalFileStore } from '@/stores/localFileStore'
+import { storeToRefs } from 'pinia'
+
+const localFileStore = useLocalFileStore()
+const { downloadErrorMessage } = storeToRefs(localFileStore)
+
 const {
   displayedBooks,
   isLoading,
@@ -59,6 +65,12 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
 
 <template>
   <div class="hb-page">
+    <div v-if="downloadErrorMessage" class="hb-error-banner">
+      <span>{{ downloadErrorMessage }}</span>
+      <button class="hb-error-dismiss" @click="downloadErrorMessage = null">
+        <IconDismiss20Regular />
+      </button>
+    </div>
     <div ref="scrollEl" class="hb-list" tabindex="0">
       <LoadingAnimation v-if="isLoading" />
 
@@ -163,5 +175,28 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
 }
 .search-input::-webkit-search-cancel-button {
   filter: grayscale(1) opacity(0.4);
+}
+
+.hb-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, #e53e3e 12%, var(--bg-secondary));
+  border-bottom: 1px solid color-mix(in srgb, #e53e3e 30%, transparent);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.hb-error-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 </style>

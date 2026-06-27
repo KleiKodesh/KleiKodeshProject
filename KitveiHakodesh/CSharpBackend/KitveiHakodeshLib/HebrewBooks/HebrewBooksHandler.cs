@@ -49,6 +49,17 @@ namespace KitveiHakodeshLib.HebrewBooks
             _owner = owner;
         }
 
+        // Called from AppViewer when navigation to hebrewbooks.org/message.aspx is detected,
+        // meaning the requested book does not exist on the server.
+        internal void NotifyBookNotFound()
+        {
+            string tabId = _pendingDownload.HasValue ? _pendingDownload.Value.TabId : null;
+            _pendingDownload = null;
+            _pendingSaveAs   = null;
+            if (tabId != null)
+                _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId, notFound = true });
+        }
+
         public void HandleRestoreHbPdf(JsonElement root, string id)
         {
             try
@@ -88,6 +99,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string url         = root.GetProperty("url").GetString();
                 string tabId       = root.GetProperty("tabId").GetString();
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                bool   isOnline    = !root.TryGetProperty("isOnline", out var on) || on.GetBoolean();
 
                 // 1. Local folder hit — serve directly, no download.
                 string localPath = GetLocalFolderPath(localFolder, bookId);
@@ -106,7 +118,13 @@ namespace KitveiHakodeshLib.HebrewBooks
                     return;
                 }
 
-                // 3. Download — destination is localFolder if configured, otherwise app cache.
+                // 3. Download required — check connectivity before navigating.
+                if (!isOnline)
+                {
+                    _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId, noInternet = true });
+                    return;
+                }
+
                 Log("Navigating to: " + url);
                 _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId, DestFolder = localFolder };
                 NavigateSafe(url);

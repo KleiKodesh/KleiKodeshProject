@@ -236,8 +236,16 @@ export function triggerHbDownload(
   url: string,
   tabId: string,
   localFolder?: string,
+  isOnline?: boolean,
 ): Promise<{ ok?: boolean }> {
-  return action<{ ok?: boolean }>('triggerHbDownload', { bookId, bookTitle, url, tabId, localFolder: localFolder || '' })
+  return action<{ ok?: boolean }>('triggerHbDownload', {
+    bookId,
+    bookTitle,
+    url,
+    tabId,
+    localFolder: localFolder || '',
+    isOnline: isOnline !== false,
+  })
 }
 
 /**

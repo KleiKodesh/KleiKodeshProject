@@ -407,6 +407,7 @@ namespace KitveiHakodeshLib
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
             _webView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
+            _webView.CoreWebView2.NavigationStarting += OnNavigationStarting;
 
             _webView.Source = new Uri("http://KitveiHakodesh-vue-app/index.html");
 
@@ -422,6 +423,49 @@ namespace KitveiHakodeshLib
             // Hide the splash regardless of success — a failed navigation still shows the
             // WebView error page, which is more useful than an infinite splash screen.
             _HideSplash();
+        }
+
+        // Allowlist of URL origins the WebView2 may navigate to.
+        // Any navigation to a URL that doesn't match one of these prefixes is cancelled.
+        //
+        // Allowed origins:
+        //   http://KitveiHakodesh-vue-app/   — the main Vue app and the HebrewBooks PDF cache
+        //                                       (CacheUrl serves from /cache/hebrewbooks/ on this host)
+        //   http://kitvei-localfile-          — per-folder virtual hosts registered by LocalFileHandler
+        //                                       for local PDF, HTML, and converted Word files
+        //   http://kitvei-hb-local-           — per-folder virtual hosts registered by HebrewBooksHandler
+        //                                       for PDFs served from a user-configured local folder
+        //   https://download.hebrewbooks.org/ — the HebrewBooks download endpoint; the WebView2
+        //                                       browser engine must navigate here so the DownloadStarting
+        //                                       event fires and we can intercept the file save path.
+        //                                       Direct HTTP fetch cannot be used because HebrewBooks
+        //                                       blocks non-browser requests.
+        private static readonly string[] _allowedNavigationPrefixes = new[]
+        {
+            "http://KitveiHakodesh-vue-app/",
+            "http://kitvei-localfile-",
+            "http://kitvei-hb-local-",
+            "https://download.hebrewbooks.org/",
+        };
+
+        private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
+        {
+            string url = e.Uri ?? "";
+
+            if (url.IndexOf("hebrewbooks.org/message.aspx", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                e.Cancel = true;
+                _hb?.NotifyBookNotFound();
+                return;
+            }
+
+            foreach (string prefix in _allowedNavigationPrefixes)
+            {
+                if (url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return;
+            }
+            e.Cancel = true;
+            System.Diagnostics.Debug.WriteLine("[AppViewer] Blocked navigation to: " + url);
         }
 
         private async Task HandleReload()

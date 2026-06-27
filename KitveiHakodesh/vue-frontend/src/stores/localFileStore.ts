@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import type { TabRoute } from './tabStore'
 import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-host/bridge'
@@ -13,6 +13,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
   const fileName = computed(() => tabStore.activeTab.localFileName ?? null)
   const converting = computed(() => tabStore.activeTab.localFileConverting ?? false)
   const loadingType = computed(() => tabStore.activeTab.localFileLoadingType ?? 'converting')
+
+  // Shown in the HebrewBooks page when a download fails (book not found on server).
+  const downloadErrorMessage = ref<string | null>(null)
 
   // Set of tabIds currently converting — used to ignore results after cancel/navigate/close
   const _converting = new Set<string>()
@@ -90,7 +93,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       )
     }
     if (msg.event === 'hbPdfCancelled') {
-      cancelHbDownload(msg.tabId as string)
+      cancelHbDownload(msg.tabId as string, !!(msg.notFound as boolean), !!(msg.noInternet as boolean))
     }
   })
 
@@ -215,10 +218,24 @@ export const useLocalFileStore = defineStore('localFile', () => {
     })
   }
 
-  /** Called on hbPdfError — closes the tab. */
-  function cancelHbDownload(tabId: string) {
+  /** Called on hbPdfCancelled — closes the tab. Shows an error if the book was not found. */
+  function cancelHbDownload(tabId: string, notFound = false, noInternet = false) {
     _converting.delete(tabId)
-    tabStore.closeTab(tabId)
+    if (noInternet || notFound) {
+      // Navigate back to the HebrewBooks page so the user sees the error banner
+      // rather than losing the tab entirely.
+      tabStore.updateTab(tabId, {
+        route: '/hebrewbooks',
+        title: 'היברו-בוקס',
+        localFileConverting: false,
+        localFileVirtualUrl: undefined,
+        localFileName: undefined,
+      })
+      if (noInternet) downloadErrorMessage.value = 'אין חיבור לאינטרנט'
+      else downloadErrorMessage.value = 'הספר המבוקש אינו זמין להורדה'
+    } else {
+      tabStore.closeTab(tabId)
+    }
   }
 
   /** Open a HebrewBooks PDF directly (used by session restore). */
@@ -271,6 +288,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
     fileName,
     converting,
     loadingType,
+    downloadErrorMessage,
     startLocalFileConversion,
     finishLocalFileConversion,
     cancelConversion,

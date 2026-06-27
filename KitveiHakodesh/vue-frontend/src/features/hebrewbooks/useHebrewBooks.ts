@@ -56,10 +56,15 @@ export function useHebrewBooks() {
       getHbPdfUrl(book.id),
       tabId,
       settings.hebrewBooksLocalFolder || undefined,
+      navigator.onLine,
     ).catch(() => {})
   }
 
   function downloadBook(book: HebrewBook) {
+    if (!navigator.onLine) {
+      localFileStore.downloadErrorMessage = 'אין חיבור לאינטרנט'
+      return
+    }
     triggerHbSaveAs(String(book.id), book.title, getHbPdfUrl(book.id)).catch(() => {})
   }
 
