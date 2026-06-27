@@ -33,7 +33,8 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     workers[targetScript] = await createWorker(LANG_FILES[targetScript], 1, {
       langPath: '/tesseract/',
       gzip: false,
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@v5/tesseract-core.wasm.js',
+      workerPath: '/tesseract/worker.min.js',
+      corePath: '/tesseract/tesseract-core.wasm.js',
     })
     workerReady[targetScript] = true
   }
