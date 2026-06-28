@@ -155,6 +155,11 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
     loadSetting(KEYS.SETTINGS_COPY_WITH_NOTES, copyWithNotes)
     loadSetting(KEYS.SETTINGS_HB_LOCAL_FOLDER, hebrewBooksLocalFolder)
+    // If the WPF installer configured a local folder but localStorage has nothing yet,
+    // seed it from the injected value so the settings page reflects it immediately.
+    if (!hebrewBooksLocalFolder.value && window.__webviewHbLocalFolder) {
+      hebrewBooksLocalFolder.value = window.__webviewHbLocalFolder
+    }
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)

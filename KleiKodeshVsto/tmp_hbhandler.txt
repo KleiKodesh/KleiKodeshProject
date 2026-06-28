@@ -1,0 +1,140 @@
+﻿using KitveiHakodeshLib.Bridge;
+using Microsoft.Web.WebView2.Core;
+using Microsoft.Web.WebView2.WinForms;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using System.Windows.Forms;
+
+namespace KitveiHakodeshLib.HebrewBooks
+{
+    /// <summary>
+    /// Handles HebrewBooks PDF restore, download-to-cache, and Save As flows.
+    /// Intercepts WebView2 downloads via DownloadStarting.
+    /// </summary>
+    public class HebrewBooksHandler
+    {
+        private static readonly string HbCacheDir =
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "cache", "hebrewbooks");
+
+        private readonly WebBridge _bridge;
+        private readonly WebView2 _webView;
+        private readonly Control _owner;
+
+        private HbDownloadInfo? _pendingDownload;
+        private HbSaveAsInfo? _pendingSaveAs;
+
+        // Process-global map from folder path → stable virtual host name.
+        // Shared across all AppViewer instances so the same folder always gets the
+        // same hostname (e.g. "kitvei-hb-local-1"), no matter how many viewers exist.
+        // Each AppViewer's WebView2 still needs its own SetVirtualHostNameToFolderMapping
+        // call, tracked in _registeredOnThisWebView below.
+        private static readonly Dictionary<string, string> _globalFolderHosts =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private static int _globalHostCounter;
+        private static readonly object _globalHostLock = new object();
+
+        // Host names already registered on THIS instance's WebView2.
+        // Avoids calling SetVirtualHostNameToFolderMapping more than once per host per WebView.
+        private readonly HashSet<string> _registeredOnThisWebView = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        private struct HbDownloadInfo { public string BookId; public string BookTitle; public string TabId; public string DestFolder; }
+        private struct HbSaveAsInfo { public string BookId; public string BookTitle; }
+
+        public HebrewBooksHandler(WebBridge bridge, WebView2 webView, Control owner)
+        {
+            _bridge = bridge;
+            _webView = webView;
+            _owner = owner;
+        }
+
+        // Called from AppViewer when navigation to hebrewbooks.org/message.aspx is detected,
+        // meaning the requested book does not exist on the server.
+        internal void NotifyBookNotFound()
+        {
+            string tabId = _pendingDownload.HasValue ? _pendingDownload.Value.TabId : null;
+            _pendingDownload = null;
+            _pendingSaveAs   = null;
+            if (tabId != null)
+                _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId, notFound = true });
+        }
+
+        public void HandleRestoreHbPdf(JsonElement root, string id)
+        {
+            try
+            {
+                string bookId      = root.GetProperty("bookId").GetString();
+                string bookTitle   = root.GetProperty("bookTitle").GetString();
+                string tabId       = root.GetProperty("tabId").GetString();
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+
+                // Check local folder first — same priority order as HandleTriggerHbDownload.
+                string localPath = GetLocalFolderPath(localFolder, bookId);
+                if (localPath != null)
+                {
+                    Log("Restore — local folder hit: " + localPath);
+                    _bridge.Reply(id, new { url = RegisterLocalBookHost(localPath, bookId) });
+                    return;
+                }
+
+                string cached = GetCachePath(bookId);
+                if (File.Exists(cached)) { _bridge.Reply(id, new { url = CacheUrl(bookId) }); return; }
+
+                // Cache miss — must re-download.
+                _bridge.Reply(id, new { redownload = true });
+                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId, DestFolder = localFolder };
+                NavigateSafe("https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId);
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        public void HandleTriggerHbDownload(JsonElement root, string id)
+        {
+            try
+            {
+                _bridge.Reply(id, new { ok = true });
+                string bookId      = root.GetProperty("bookId").GetString();
+                string bookTitle   = root.GetProperty("bookTitle").GetString();
+                string url         = root.GetProperty("url").GetString();
+                string tabId       = root.GetProperty("tabId").GetString();
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                bool   isOnline    = !root.TryGetProperty("isOnline", out var on) || on.GetBoolean();
+
+                // 1. Local folder hit — serve directly, no download.
+                string localPath = GetLocalFolderPath(localFolder, bookId);
+                if (localPath != null)
+                {
+                    Log("Local folder hit: " + localPath);
+                    _bridge.PushEvent(new { @event = "hbPdfReady", url = RegisterLocalBookHost(localPath, bookId), bookId, bookTitle, tabId });
+                    return;
+                }
+
+                // 2. Cache hit.
+                string cached = GetCachePath(bookId);
+                if (File.Exists(cached))
+                {
+                    _bridge.PushEvent(new { @event = "hbPdfReady", url = CacheUrl(bookId), bookId, bookTitle, tabId });
+                    return;
+                }
+
+                // 3. Download required — check connectivity before navigating.
+                if (!isOnline)
+                {
+                    _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId, noInternet = true });
+                    return;
+                }
+
+                Log("Navigating to: " + url);
+                _pendingDownload = new HbDownloadInfo { BookId = bookId, BookTitle = bookTitle, TabId = tabId, DestFolder = localFolder };
+                NavigateSafe(url);
+            }
+            catch (Exception ex) { _bridge.PushEvent(new { @event = "hbPdfError", error = ex.Message }); }
+        }
+
+        public void HandleTriggerHbSaveAs(JsonElement root, string id)
+        {
+            try
+            {
+                _bridge.Reply(id, new { ok = true });
+                string bookId    = root.GetProperty("bookId").GetString();

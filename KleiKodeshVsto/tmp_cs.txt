@@ -1,4 +1,4 @@
-using KleiKodesh.Helpers;
+﻿using KleiKodesh.Helpers;
 using KleiKodeshVstoInstallerWpf.Helpers;
 using Microsoft.VisualBasic;
 using Microsoft.Win32;
@@ -36,7 +36,6 @@ namespace KleiKodeshVstoInstallerWpf
         private readonly bool _showKitveiHakodesh;
         private readonly bool _showWebsites;
         private string _pendingDbPath;
-        private string _pendingHbLocalFolder;
 
         public ComponentSettingsPage(MainWindow host, bool showKitveiHakodesh, bool showWebsites)
         {
@@ -47,15 +46,13 @@ namespace KleiKodeshVstoInstallerWpf
 
             ApplyVisibility();
             LoadDbPath();
-            LoadHbLocalFolder();
             LoadShellPreference();
         }
 
         private void ApplyVisibility()
         {
             KitveiHakodeshSection.Visibility  = _showKitveiHakodesh  ? Visibility.Visible : Visibility.Collapsed;
-            HebrewBooksSection.Visibility     = _showKitveiHakodesh  ? Visibility.Visible : Visibility.Collapsed;
-            WebsitesSection.Visibility        = _showWebsites        ? Visibility.Visible : Visibility.Collapsed;
+            WebsitesSection.Visibility = _showWebsites ? Visibility.Visible : Visibility.Collapsed;
             // Hide divider if either section is hidden
             SectionDivider.Visibility  = (_showKitveiHakodesh && _showWebsites)
                 ? Visibility.Visible : Visibility.Collapsed;
@@ -136,49 +133,6 @@ namespace KleiKodeshVstoInstallerWpf
             }
         }
 
-        // ── HebrewBooks local folder ──────────────────────────────────────────────
-
-        private void LoadHbLocalFolder()
-        {
-            string existing = Interaction.GetSetting("KitveiHakodesh", "HebrewBooks", "LocalFolder", "");
-            if (!string.IsNullOrEmpty(existing))
-            {
-                HbLocalFolderText.Text = existing;
-                HbLocalFolderHintText.Text = "לחץ לשינוי התיקייה";
-            }
-        }
-
-        private void HbLocalFolderButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                string seed = _pendingHbLocalFolder
-                    ?? Interaction.GetSetting("KitveiHakodesh", "HebrewBooks", "LocalFolder", "");
-
-                var dialog = new System.Windows.Forms.FolderBrowserDialog
-                {
-                    Description         = "בחר תיקייה המכילה ספרי PDF מהיברו בוקס",
-                    ShowNewFolderButton = false,
-                };
-
-                if (!string.IsNullOrEmpty(seed) && Directory.Exists(seed))
-                    dialog.SelectedPath = seed;
-
-                if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
-
-                _pendingHbLocalFolder       = dialog.SelectedPath;
-                HbLocalFolderText.Text      = dialog.SelectedPath;
-                HbLocalFolderHintText.Text  = "לחץ לשינוי התיקייה";
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"שגיאה בהגדרת תיקיית HebrewBooks: {ex.Message}", "שגיאה",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        // ─────────────────────────────────────────────────────────────────────────
-
         private void EditWhitelistButton_Click(object sender, RoutedEventArgs e)
         {
             // Load the full default catalogue, with IsVisible pre-set from the user's
@@ -219,8 +173,6 @@ namespace KleiKodeshVstoInstallerWpf
         {
             if (_pendingDbPath != null)
                 Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", _pendingDbPath);
-            if (_pendingHbLocalFolder != null)
-                Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "LocalFolder", _pendingHbLocalFolder);
         }
 
         private void LoadShellPreference()

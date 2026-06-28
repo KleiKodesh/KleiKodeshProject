@@ -187,89 +187,6 @@
                 </StackPanel>
                 <!-- /KitveiHakodeshSection -->
 
-
-                <!-- ── HebrewBooks local folder section ──────────────────────── -->
-                <StackPanel x:Name="HebrewBooksSection" Margin="0,12,0,0">
-
-                    <TextBlock Text="ספרים בעברית (HebrewBooks)"
-                               FontSize="11"
-                               Foreground="#5A5A5A"
-                               Margin="0,0,0,6"/>
-
-                    <Button x:Name="HbLocalFolderButton"
-                            Height="32"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Stretch"
-                            Padding="0"
-                            Cursor="Hand"
-                            Click="HbLocalFolderButton_Click">
-                        <Button.Style>
-                            <Style TargetType="Button">
-                                <Setter Property="Background"      Value="#F8F8F8"/>
-                                <Setter Property="BorderBrush"     Value="#E5E5E5"/>
-                                <Setter Property="BorderThickness" Value="1"/>
-                                <Setter Property="Template">
-                                    <Setter.Value>
-                                        <ControlTemplate TargetType="Button">
-                                            <Border x:Name="Bd"
-                                                    Background="{TemplateBinding Background}"
-                                                    BorderBrush="{TemplateBinding BorderBrush}"
-                                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                                    CornerRadius="6"
-                                                    Padding="10,0">
-                                                <ContentPresenter HorizontalAlignment="Stretch"
-                                                                  VerticalAlignment="Center"/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Bd" Property="BorderBrush" Value="#7333FF"/>
-                                                    <Setter TargetName="Bd" Property="Background"  Value="#F5F0FF"/>
-                                                </Trigger>
-                                                <Trigger Property="IsPressed" Value="True">
-                                                    <Setter TargetName="Bd" Property="Background" Value="#EDE5FF"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
-                                    </Setter.Value>
-                                </Setter>
-                            </Style>
-                        </Button.Style>
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="auto"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <Viewbox Grid.Column="0"
-                                     Width="14" Height="14"
-                                     Margin="0,0,8,0"
-                                     FlowDirection="LeftToRight"
-                                     VerticalAlignment="Center">
-                                <Path Data="M1,3 L1,11 L13,11 L13,4 L7,4 L5.5,2 L1,2 Z M13,4 L7,4"
-                                      Stroke="#5A5A5A" StrokeThickness="1"
-                                      Fill="Transparent" StrokeLineJoin="Round"/>
-                            </Viewbox>
-                            <TextBlock x:Name="HbLocalFolderText"
-                                       Grid.Column="1"
-                                       Text="לא הוגדר — יוריד לאחסון זמני"
-                                       FontSize="11"
-                                       Foreground="#5A5A5A"
-                                       FlowDirection="LeftToRight"
-                                       TextAlignment="Left"
-                                       TextTrimming="CharacterEllipsis"
-                                       VerticalAlignment="Center"/>
-                        </Grid>
-                    </Button>
-
-                    <TextBlock x:Name="HbLocalFolderHintText"
-                               FontSize="11"
-                               Foreground="#5A5A5A"
-                               Opacity="0.7"
-                               Margin="0,4,0,0"
-                               TextWrapping="Wrap"
-                               Text="תיקייה שבה מאוחסנים קובצי PDF — אם הספר נמצא שם לא יוריד"/>
-
-                </StackPanel>
-                <!-- /HebrewBooksSection -->
                 <!-- Hidden spacer — keeps SectionDivider name for code-behind -->
                 <Border x:Name="SectionDivider" Height="0"/>
 
@@ -400,4 +317,3 @@
         </Border>
     </Grid>
 </Page>
-
