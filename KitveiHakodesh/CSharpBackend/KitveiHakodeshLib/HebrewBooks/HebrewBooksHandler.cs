@@ -1,4 +1,5 @@
-using KitveiHakodeshLib.Bridge;
+﻿using KitveiHakodeshLib.Bridge;
+using KitveiHakodeshLib.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -68,6 +69,8 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string bookTitle   = root.GetProperty("bookTitle").GetString();
                 string tabId       = root.GetProperty("tabId").GetString();
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                // Fall back to registry-configured folder when frontend sends nothing (e.g. first-run via installer).
+                if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
 
                 // Check local folder first — same priority order as HandleTriggerHbDownload.
                 string localPath = GetLocalFolderPath(localFolder, bookId);
@@ -99,6 +102,8 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string url         = root.GetProperty("url").GetString();
                 string tabId       = root.GetProperty("tabId").GetString();
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                // Fall back to registry-configured folder when frontend sends nothing.
+                if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
                 bool   isOnline    = !root.TryGetProperty("isOnline", out var on) || on.GetBoolean();
 
                 // 1. Local folder hit — serve directly, no download.
@@ -348,3 +353,4 @@ namespace KitveiHakodeshLib.HebrewBooks
         }
     }
 }
+

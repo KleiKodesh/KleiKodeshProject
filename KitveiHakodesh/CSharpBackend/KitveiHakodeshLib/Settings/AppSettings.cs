@@ -1,4 +1,4 @@
-using Microsoft.VisualBasic;
+﻿using Microsoft.VisualBasic;
 using System;
 using System.IO;
 
@@ -78,9 +78,21 @@ namespace KitveiHakodeshLib.Settings
             return DateTime.MinValue;
         }
 
+
+        public static string LoadHbLocalFolder()
+        {
+            return Interaction.GetSetting("KitveiHakodesh", "HebrewBooks", "LocalFolder", "");
+        }
+
+        public static void SaveHbLocalFolder(string path)
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "LocalFolder", path);
+        }
+
         public static void SaveHbCsvLastUpdated(DateTime utcDate)
         {
             Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "CsvLastUpdated", utcDate.ToString("o"));
         }
     }
 }
+

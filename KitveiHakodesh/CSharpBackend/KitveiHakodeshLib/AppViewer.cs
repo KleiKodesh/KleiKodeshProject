@@ -370,13 +370,16 @@ namespace KitveiHakodeshLib
             string savedPath = AppSettings.LoadDbPath();
             bool dbReady = File.Exists(savedPath);
             string escapedPath = savedPath.Replace("\\", "\\\\");
+            string hbLocalFolder = AppSettings.LoadHbLocalFolder();
+            string escapedHbFolder = hbLocalFolder.Replace("\\", "\\\\");
 
             // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
             // each call is a browser-process round-trip, so one call is faster than two.
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
+                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 
@@ -478,10 +481,13 @@ namespace KitveiHakodeshLib
             string savedPath = AppSettings.LoadDbPath();
             bool dbReady = File.Exists(savedPath);
             string escapedPath = savedPath.Replace("\\", "\\\\");
+            string hbLocalFolder = AppSettings.LoadHbLocalFolder();
+            string escapedHbFolder = hbLocalFolder.Replace("\\", "\\\\");
             string dbScript =
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";";
+                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
+                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 

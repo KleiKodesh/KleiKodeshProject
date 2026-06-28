@@ -10,6 +10,7 @@ declare global {
     __webviewDbPath?: string
     __webviewDbReady?: boolean
     __webviewShowPopOut?: boolean
+    __webviewHbLocalFolder?: string
     __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
   }
 }
