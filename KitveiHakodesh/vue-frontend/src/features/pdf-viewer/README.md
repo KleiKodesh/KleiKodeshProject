@@ -1,13 +1,107 @@
-# pdf-viewer
+# PDF Viewer
 
-PDF viewer with OCR text extraction.
+PDF viewing with OCR-based text extraction and script recognition.
 
-**PdfViewPage.vue** — renders the PDF.js viewer in an iframe served via a C# virtual host. Handles local files, HebrewBooks downloads, and Word-to-PDF conversions. Session restore is handled by `localFileStore` at app boot — do not add restore logic here. Displays a conversion progress overlay while files are being processed.
+## Files
 
-**usePdfOcrSelection.ts** — composable that manages OCR text extraction. Injects a selection tool into the PDF.js iframe, captures user-drawn rectangles, attempts text extraction from the text layer first, and falls back to Tesseract.js OCR on canvas data if needed. Supports Hebrew and Rashi scripts. Returns extracted text via `result` ref.
+**Page & UI:**
+- `PdfViewPage.vue` — main PDF viewer page; manages iframe lifecycle, toolbar visibility, and OCR mode toggle
+- `PdfOcrResultPopup.vue` — modal popup showing extracted/recognized text with copy functionality
 
-**PdfOcrResultPopup.vue** — modal popup displaying OCR results. Shows extracted text in an editable textarea, allows script switching (Hebrew/Rashi), and provides copy-to-clipboard functionality. Dismisses on overlay click or Escape key.
+**OCR Logic:**
+- `usePdfOcrSelection.ts` — composable; manages Tesseract workers, iframe injection, and OCR workflow coordination
+- `pdfOcrInjectedScript.ts` — script injected into the PDF.js iframe; handles rectangle selection, text layer extraction, and canvas capture
+- `pdfViewerTypes.ts` — TypeScript types: `OcrScript` (`'hebrew' | 'rashi' | 'mixed'`), `OcrSelectionResult`
 
-**pdfOcrInjectedScript.ts** — injected script that runs inside the PDF.js iframe. Implements the selection rectangle UI (crosshair cursor, dashed selection box), text layer hit testing, and canvas capture. Communicates back to the parent window via postMessage.
+**Store:**
+- `pdfOcrStore.ts` (in `src/stores/`) — OCR UI state: active flag, script selection, skip-existing-text flag
 
-**pdfViewerTypes.ts** — TypeScript types for the PDF viewer: `OcrScript` ('hebrew' | 'rashi' | 'mixed') and `OcrSelectionResult` (text + isOcr flag).
+## OCR Workflow
+
+### Activation
+
+1. User clicks the OCR button in the title bar (only visible on `/pdf-view` tabs)
+2. `pdfOcrStore.toggle()` sets `isActive = true`
+3. `PdfViewPage.vue` watches the store and calls `ocr.activate()`
+4. `usePdfOcrSelection.activate()` injects `pdfOcrInjectedScript` into the PDF.js iframe
+5. The injected script switches the cursor to a crosshair and waits for a drag selection
+
+### Selection & Text Extraction
+
+1. User drags a rectangle over the PDF content
+2. The injected script's `processRect()` function runs:
+   - **First:** attempts `extractText(rect)` — queries all `.textLayer span` elements inside the selection
+   - **If text found:** posts `kitvei-hakodesh-ocr-result` message with `isOcr: false` — no Tesseract involved
+   - **If no text:** calls `captureCanvas(rect)` to extract the PDF rendering as a PNG data URL, then posts `kitvei-hakodesh-ocr-canvas` with the data URL
+
+### OCR Processing (if needed)
+
+1. `usePdfOcrSelection` receives the `kitvei-hakodesh-ocr-canvas` message
+2. Sets `isProcessing = true` and shows the popup immediately (with empty text and progress bar)
+3. Initializes a Tesseract worker for the selected script (`hebrew`, `rashi`, or `mixed`)
+4. Calls `worker.recognize(dataUrl)` to OCR the canvas image
+5. Cleans up the recognized text and posts the result to the popup
+6. After popup closes, OCR mode deactivates automatically
+
+### Result Display & Copy
+
+The `PdfOcrResultPopup.vue` modal shows:
+- Badge indicating source: "טקסט נבחר" (text layer) or "טקסט מזוהה (OCR)" (recognized)
+- Editable textarea with the extracted/recognized text
+- Progress bar (during OCR processing)
+- Copy button — copies to clipboard via `navigator.clipboard.writeText()` with fallback to `document.execCommand('copy')`
+- Cancel button — dismisses the popup and deactivates OCR mode
+
+## Script Selection
+
+When OCR mode is active, a floating toolbar slides down from the top with three script buttons:
+- **עברי** — standard Hebrew (Tesseract `heb` model)
+- **רש"י** — Rashi script (Tesseract `heb_rashi` model)
+- **מעורב** — mixed: both `heb+heb_rashi` combined
+
+Script selection is synced between `pdfOcrStore.script` and `usePdfOcrSelection.script`. Changing the script:
+1. Updates the composable's script ref
+2. Preloads the Tesseract worker for that script
+3. Updates the injected iframe's language setting for future selections
+
+## Integration Points
+
+**Title bar (`src/layout/AppTitleBar.vue`):**
+- Renders the OCR button only on PDF tabs (`activeTab?.route === '/pdf-view'`)
+- Button is hidden if `settingsStore.titleBarHiddenButtons` includes `'ocr'`
+- Calls `pdfOcrStore.toggle()` on click
+
+**Stores:**
+- `pdfOcrStore` — owns all OCR UI state; shared with `PdfViewPage` and composable
+- `localFileStore` — manages PDF file virtual host; used by `PdfViewPage` to set iframe `src`
+- `tabStore` — tracks PDF toolbar visibility setting per tab
+
+## Performance & Resource Management
+
+**Tesseract workers:**
+- Initialized on first use (not on app boot) — reduces cold-start parse cost
+- Workers persist in memory across multiple OCR operations
+- Cleaned up in `onUnmounted` when the PDF tab closes
+- Language model files (`heb.traineddata`, `heb_rashi.traineddata`) loaded from `/tesseract/` public folder
+
+**Iframe:**
+- Aggressively torn down in `onBeforeUnmount` — iframe is set to `about:blank` and removed to release the PDF.js worker, canvases, and WebView2 sub-frame immediately
+
+**Popup:**
+- Uses `v-if` so the component unmounts entirely when dismissed
+- Text is editable but not persisted — only in memory during the session
+
+## Accessibility & RTL
+
+- All text in Hebrew (no English user-facing strings)
+- Popup uses `dir="rtl"` explicitly
+- Button labels are right-aligned in the textarea
+- Escape key dismisses the popup
+- Tab-trappable via focus management in the modal overlay
+
+## Known Limitations
+
+- Text extraction requires a text layer in the PDF — scanned PDFs must be OCR'd (no fallback to image-based search)
+- Tesseract OCR quality depends on image resolution and script clarity; Rashi script can be particularly challenging
+- OCR is slow on large selections or low-end devices — progress bar provides visual feedback
+- Cannot select across multiple pages — rectangle is drawn on a single viewport

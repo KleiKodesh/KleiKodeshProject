@@ -201,7 +201,7 @@ function pickCity(name: string) {
       </Teleport>
     </SettingRow>
 
-    <SettingRow label="שעון מסך במצב מסך מלא" hint="הצג שעון שקוף בפינה השמאלית התחתונה בעת שימוש במצב מסך מלא">
+    <SettingRow label="הצג שעון במצב מסך מלא" hint="הצג שעון שקוף בפינה השמאלית התחתונה בעת שימוש במצב מסך מלא">
       <ToggleGroup
         v-model="showClock"
         :options="[

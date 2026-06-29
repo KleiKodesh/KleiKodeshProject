@@ -18,6 +18,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   const result = ref<OcrSelectionResult | null>(null)
   const script = ref<OcrScript>('hebrew')
   const processingProgress = ref(0)
+  const forceOcr = ref(false)
 
   const workers: Partial<Record<OcrScript, Worker>> = {}
   const workerReady: Partial<Record<OcrScript, boolean>> = {}
@@ -74,13 +75,6 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
       result.value = { text: cleanText, isOcr: event.data.isOcr }
       isProcessing.value = false
     } else if (event.data?.type === 'kitvei-hakodesh-ocr-canvas') {
-      // Check if user wants to skip OCR for existing text
-      if (event.data.hasExistingText && !event.data.forceOcr) {
-        // Text layer exists and user didn't force OCR, so skip
-        isProcessing.value = false
-        return
-      }
-      
       // Show popup immediately with processing state
       result.value = { text: '', isOcr: true }
       isProcessing.value = true
@@ -128,7 +122,7 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   function activate() {
     if (!ensureInjected()) return
     const win = (getIframe()?.contentWindow as any)
-    win.__kitveiHakodeshOcrTool.activate(LANG_FILES[script.value])
+    win.__kitveiHakodeshOcrTool.activate(LANG_FILES[script.value], forceOcr.value)
     isActive.value = true
   }
 
@@ -157,16 +151,27 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
     }
   }
 
+  function setForceOcr(value: boolean) {
+    forceOcr.value = value
+    // Update flag in iframe if active so next selection immediately respects the change
+    const win = (getIframe()?.contentWindow as any)
+    if (win?.__kitveiHakodeshOcrTool?.isActive) {
+      win.__kitveiHakodeshOcrTool.forceOcr = value
+    }
+  }
+
   return {
     isActive,
     isProcessing,
     processingProgress,
     result,
     script,
+    forceOcr,
     toggle,
     activate,
     deactivate,
     dismissResult,
     setScript,
+    setForceOcr,
   }
 }
