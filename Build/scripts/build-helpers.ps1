@@ -55,7 +55,6 @@ function Invoke-SolutionClean {
 function New-ReleaseNotes {
     param([string]$Version, [string]$Source)   # Source: commits | file | both
 
-    $buildInfo   = "**Build:** Release - three variants: KleiKodeshSetup-${Version}-x64.exe (64-bit Word), KleiKodeshSetup-${Version}-x86.exe (32-bit Word), KleiKodeshSetup-${Version}.exe (universal)"
     $fileContent = if (Test-Path $ReleaseNotesFile) { Get-Content $ReleaseNotesFile -Raw } else { "" }
 
     $previousTag = gh release list --limit 1 --json tagName --jq '.[0].tagName' 2>$null
@@ -71,16 +70,16 @@ function New-ReleaseNotes {
 
     switch ($Source) {
         "commits" {
-            return "Release $Version`n`n$buildInfo`n`n$commitBlock"
+            return "Release $Version`n`n$commitBlock"
         }
         "file" {
             $prefix = if ($fileContent) { $fileContent + "`n`n" } else { "" }
-            return "Release $Version`n`n$prefix$buildInfo"
+            return "Release $Version`n`n$prefix"
         }
         "both" {
             $sep    = "`n`n---`n`n"
             $prefix = if ($fileContent) { $fileContent + $sep } else { "Release $Version`n`n" }
-            return "$prefix$buildInfo`n`n$commitBlock"
+            return "$prefix$commitBlock"
         }
     }
 }
