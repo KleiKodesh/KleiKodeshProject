@@ -231,6 +231,7 @@ export const KEYS = {
   SETTINGS_NEW_TAB_PAGE: 'newTabPage',
   SETTINGS_PDF_FILTERS: 'pdfPageFilters',
   SETTINGS_RESUME_LAST_READ: 'resumeLastRead',
+  SETTINGS_SHOW_CLOCK: 'showClock',
   SETTINGS_THEME: 'theme',
   SETTINGS_SETUP_DONE: 'setupDone',
   SETTINGS_ZMANIM_CITY: 'zmanim.city',

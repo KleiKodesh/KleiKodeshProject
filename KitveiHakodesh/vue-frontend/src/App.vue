@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppTitleBar from '@/layout/AppTitleBar.vue'
 import AppPageView from '@/layout/AppPageView.vue'
+import ClockWidget from '@/components/ClockWidget.vue'
 import { defineAsyncComponent } from 'vue'
 import { resetting } from '@/features/settings/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -16,7 +17,7 @@ const SetupWizard = defineAsyncComponent(
 )
 
 const settingsStore = useSettingsStore()
-const { setupDone } = storeToRefs(settingsStore)
+const { setupDone, showClock } = storeToRefs(settingsStore)
 </script>
 
 <template>
@@ -25,6 +26,7 @@ const { setupDone } = storeToRefs(settingsStore)
     <main class="app-content">
       <AppPageView />
     </main>
+    <ClockWidget v-if="showClock" />
     <SetupWizard v-if="!setupDone" />
     <div v-if="resetting" class="reset-overlay" />
   </div>

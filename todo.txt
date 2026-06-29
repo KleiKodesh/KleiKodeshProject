@@ -10,10 +10,16 @@ fetch surrounding lines for context for very short lines - willr equire paying m
 ספרים קרובים update for book with source
 
 add focused search to fts thi si seasy because it can be itegrated in te galloping 
-ocr not working for offliners
 add Hebrew books folder option to installer
-
 create excluded folders dilgue for the document locator
+add to msword context menu
+
+שורות מיותרות במרכוז שורה אחרונה
+לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
+
+create clock wdget for full screen
+
+pdf ehre we are holding
 
 maybe the pdf file memory leak is due to the fact that it defines whole folders as server?
 
