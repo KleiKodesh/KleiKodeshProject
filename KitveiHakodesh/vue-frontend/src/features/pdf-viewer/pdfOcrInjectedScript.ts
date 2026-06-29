@@ -15,6 +15,7 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     selectionDiv: null,
     crosshairDiv: null,
     langFile: 'heb',
+    forceOcr: false,
   };
 
   window.__kitveiHakodeshOcrTool = tool;
@@ -194,15 +195,18 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   // ── Process selection ────────────────────────────────────────────────────
 
   function processRect(rect) {
-    const text = extractText(rect);
-    if (text) {
-      window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-result', text, isOcr: false }, '*');
-      return;
+    // When forceOcr is set, skip the text layer entirely and go straight to canvas OCR.
+    if (!tool.forceOcr) {
+      const text = extractText(rect);
+      if (text) {
+        window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-result', text, isOcr: false }, '*');
+        return;
+      }
     }
-    // Need OCR — send canvas data to parent
+    // No text found (or forceOcr is active) — send canvas data to parent for Tesseract.
     const dataUrl = captureCanvas(rect);
     if (dataUrl) {
-      window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-canvas', dataUrl, langFile: tool.langFile, hasExistingText: false }, '*');
+      window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-canvas', dataUrl, langFile: tool.langFile }, '*');
     } else {
       window.parent.postMessage({ type: 'kitvei-hakodesh-ocr-result', text: '', isOcr: true }, '*');
     }
@@ -210,9 +214,10 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 
   // ── Activate / deactivate ────────────────────────────────────────────────
 
-  tool.activate = function(langFile) {
+  tool.activate = function(langFile, forceOcr) {
     tool.isActive = true;
     tool.langFile = langFile || 'heb';
+    tool.forceOcr = !!forceOcr;
     const container = document.getElementById('viewerContainer');
     if (!container) return;
     container.classList.add('kitvei-hakodesh-ocr-mode');

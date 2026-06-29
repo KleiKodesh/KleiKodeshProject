@@ -36,6 +36,9 @@ watch(pdfOcrStore, () => {
   if (pdfOcrStore.script !== ocr.script.value) {
     ocr.setScript(pdfOcrStore.script)
   }
+  if (pdfOcrStore.skipExistingText !== ocr.forceOcr.value) {
+    ocr.setForceOcr(pdfOcrStore.skipExistingText)
+  }
 })
 
 // Deactivate store when composable deactivates (e.g. after selection)
@@ -153,16 +156,14 @@ function cancelConversion() {
                 מעורב
               </button>
             </div>
-<!--
-<button
-  class="toggle-btn"
-  :class="{ active: pdfOcrStore.skipExistingText }"
-  @click="pdfOcrStore.toggleSkipExistingText()"
-  title="כפה OCR גם אם קיים טקסט"
->
-  כפה OCR
-</button>
--->
+            <button
+              class="toggle-btn"
+              :class="{ active: pdfOcrStore.skipExistingText }"
+              @click="pdfOcrStore.toggleSkipExistingText()"
+              title="כפה — דלג על שכבת הטקסט וזהה ישירות מהתמונה"
+            >
+              כפה
+            </button>
             <button class="close-btn" @click="ocr.deactivate()" title="סגור (Esc)">
               <IconDismiss20Regular />
             </button>
