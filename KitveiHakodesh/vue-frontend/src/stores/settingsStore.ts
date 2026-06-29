@@ -25,6 +25,7 @@ const DEFAULTS = {
   newTabPage: 'homepage' as NewTabPage,
   pdfPageFilters: false,
   resumeLastRead: false,
+  showClock: false,
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
   searchContextMarginWords: 30,
@@ -61,6 +62,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
   const resumeLastRead = ref(DEFAULTS.resumeLastRead)
+  const showClock = ref(DEFAULTS.showClock)
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
@@ -141,6 +143,7 @@ export const useSettingsStore = defineStore('settings', () => {
     if (storedNewTabPage != null) newTabPage.value = storedNewTabPage
     loadSetting(KEYS.SETTINGS_PDF_FILTERS, pdfPageFilters)
     loadSetting(KEYS.SETTINGS_RESUME_LAST_READ, resumeLastRead)
+    loadSetting(KEYS.SETTINGS_SHOW_CLOCK, showClock)
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
@@ -184,6 +187,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
   persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
   persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
+  persistSetting(showClock, KEYS.SETTINGS_SHOW_CLOCK)
   persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
   persistSetting(searchContextMarginWords, KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN)
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
@@ -252,6 +256,7 @@ export const useSettingsStore = defineStore('settings', () => {
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
+    showClock.value = DEFAULTS.showClock
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
@@ -275,6 +280,7 @@ export const useSettingsStore = defineStore('settings', () => {
     censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
+    showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,

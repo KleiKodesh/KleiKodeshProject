@@ -16,6 +16,7 @@ import { isHosted, onDbReady } from '@/webview-host/seforimDb'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pickFolder } from '@/webview-host/bridge'
+import ToggleGroup from './ToggleGroup.vue'
 
 const { resetSettings, resetSearchIndex, resetAll, resetDocumentLocatorIndex } = useSettings()
 
@@ -46,7 +47,7 @@ async function commitPath() {
 // ── Hebrew Books local folder ─────────────────────────────────────────────────
 
 const settings = useSettingsStore()
-const { hebrewBooksLocalFolder } = storeToRefs(settings)
+const { hebrewBooksLocalFolder, showClock } = storeToRefs(settings)
 
 async function pickHebrewBooksFolder() {
   const result = await pickFolder()
@@ -167,9 +168,9 @@ function pickCity(name: string) {
 </script>
 
 <template>
-  <!-- ── לוח שנה ── -->
-  <div data-section="section-calendar" data-section-label="לוח שנה">
-    <div id="section-calendar" class="section-label">לוח שנה</div>
+  <!-- ── לוח שנה ושעון ── -->
+  <div data-section="section-calendar" data-section-label="לוח שנה ושעון">
+    <div id="section-calendar" class="section-label">לוח שנה ושעון</div>
 
     <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
       <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
@@ -198,6 +199,16 @@ function pickCity(name: string) {
           </div>
         </div>
       </Teleport>
+    </SettingRow>
+
+    <SettingRow label="שעון מסך במצב מסך מלא" hint="הצג שעון שקוף בפינה השמאלית התחתונה בעת שימוש במצב מסך מלא">
+      <ToggleGroup
+        v-model="showClock"
+        :options="[
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
+        ]"
+      />
     </SettingRow>
   </div>
 
