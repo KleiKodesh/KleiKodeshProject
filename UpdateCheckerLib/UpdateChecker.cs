@@ -104,6 +104,11 @@ namespace UpdateCheckerLib
             catch (UpdateCheckException ex)
             {
                 Debug.WriteLine($"Update check failed: {ex.Message} — {ex.InnerException?.Message}");
+
+                // No internet connection — cancel silently, don't bother the user.
+                if (IsNoConnectivityException(ex.InnerException))
+                    return;
+
                 ShowHebrewMessageBox(
                     $"בדיקת עדכונים נכשלה.\n\n{ex.ToUserMessage()}",
                     "שגיאה - כלי קודש",
@@ -143,6 +148,31 @@ namespace UpdateCheckerLib
                    msg.Contains("502") ||
                    msg.Contains("503") ||
                    msg.Contains("504");
+        }
+
+        /// <summary>
+        /// Returns true when the exception indicates there is no internet connectivity,
+        /// so the update check should be cancelled silently without showing an error.
+        /// </summary>
+        private static bool IsNoConnectivityException(Exception ex)
+        {
+            if (ex == null) return false;
+
+            // WebException wraps most no-internet failures on .NET Framework
+            if (ex is WebException we)
+            {
+                return we.Status == WebExceptionStatus.NameResolutionFailure ||
+                       we.Status == WebExceptionStatus.ConnectFailure       ||
+                       we.Status == WebExceptionStatus.Timeout              ||
+                       we.Status == WebExceptionStatus.SendFailure          ||
+                       we.Status == WebExceptionStatus.ReceiveFailure;
+            }
+
+            // HttpRequestException wraps WebException on some paths — check inner too
+            if (ex is HttpRequestException && ex.InnerException != null)
+                return IsNoConnectivityException(ex.InnerException);
+
+            return false;
         }
 
         private static DialogResult ShowHebrewMessageBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon) =>
