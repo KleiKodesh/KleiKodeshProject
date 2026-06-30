@@ -27,6 +27,8 @@ pdf ehre we are holding
 
 maybe the pdf file memory leak is due to the fact that it defines whole folders as server?
 
+add bookmarks feature
+
 רא"ש מקוואות סימן ט
 הלכך אסור להטביל בשותת ובמים הנמשכין ממנו.
 צ"ל בשוקת
