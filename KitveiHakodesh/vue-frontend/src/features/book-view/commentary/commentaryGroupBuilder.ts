@@ -127,6 +127,7 @@ export function buildCommentaryGroupsFromEntries(entries: CommentaryBookEntry[])
   addFlat('SOURCE')
   addFlat('TARGUM')
   addMergedByCategory('COMMENTARY')
+  addFlat('EIN_MISHPAT')
   addMergedByCategory('OTHER')
   addFlat('REFERENCE')
 
@@ -329,9 +330,12 @@ export async function buildStaticCommentaryFilterGroups(
   if (cached) return cached
   await ensureConnectionTypeNamesLoaded()
 
-  // Forward lookup: COMMENTARY only (SOURCE and TARGUM are unreliable in the forward
-  // direction — both are discovered via reverse lookups instead).
-  const forwardDbNames = getDbNamesForCanonicalType('COMMENTARY')
+  // Forward lookup: COMMENTARY and EIN_MISHPAT (SOURCE and TARGUM are unreliable in the
+  // forward direction — both are discovered via reverse lookups instead).
+  const forwardDbNames = [
+    ...getDbNamesForCanonicalType('COMMENTARY'),
+    ...getDbNamesForCanonicalType('EIN_MISHPAT'),
+  ]
   const forwardConnectionTypeIds = forwardDbNames
     .map((name) => getConnectionTypeId(name))
     .filter((id): id is number => id != null)

@@ -6,13 +6,14 @@
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 
-export type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'OTHER' | 'REFERENCE'
-export type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY'
+export type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT' | 'OTHER' | 'REFERENCE'
+export type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT'
 
 export const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
   'SOURCE',
   'TARGUM',
   'COMMENTARY',
+  'EIN_MISHPAT',
   'OTHER',
   'REFERENCE',
 ]
@@ -21,6 +22,7 @@ const STATIC_FILTER_CONNECTION_TYPE_LIST: StaticFilterConnectionType[] = [
   'SOURCE',
   'TARGUM',
   'COMMENTARY',
+  'EIN_MISHPAT',
 ]
 
 export const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>(
@@ -34,7 +36,8 @@ export const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType
  * when the name is actually returned by the DB.
  *
  * COMMENTARY equivalents: SUPER_COMMENTARY, PARSHANUT, MIDRASH
- * REFERENCE (ציונים) equivalents: MESORAH_HASHAS, EIN_MISHPAT, MISHNAH_IN_TALMUD
+ * EIN_MISHPAT maps to its own canonical type — displayed under עין משפט.
+ * REFERENCE (ציונים) equivalents: MESORAH_HASHAS, MISHNAH_IN_TALMUD
  * All other unknown names fall back to OTHER (קשרים).
  */
 const DB_CONNECTION_TYPE_TO_CANONICAL: Record<string, CommentaryConnectionType> = {
@@ -46,7 +49,7 @@ const DB_CONNECTION_TYPE_TO_CANONICAL: Record<string, CommentaryConnectionType> 
   MIDRASH: 'COMMENTARY',
   REFERENCE: 'REFERENCE',
   MESORAH_HASHAS: 'REFERENCE',
-  EIN_MISHPAT: 'REFERENCE',
+  EIN_MISHPAT: 'EIN_MISHPAT',
   MISHNAH_IN_TALMUD: 'REFERENCE',
   OTHER: 'OTHER',
 }
@@ -59,6 +62,7 @@ export const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, st
   SOURCE: 'מקור',
   TARGUM: 'תרגומים',
   COMMENTARY: 'מפרשים',
+  EIN_MISHPAT: 'עין משפט',
   OTHER: 'קשרים',
   REFERENCE: 'ציונים',
 }
@@ -68,6 +72,7 @@ export const SECTION_LABEL_TO_CONNECTION_TYPE: Record<string, CommentaryConnecti
   מקור: 'SOURCE',
   תרגומים: 'TARGUM',
   מפרשים: 'COMMENTARY',
+  'עין משפט': 'EIN_MISHPAT',
   קשרים: 'OTHER',
   ציונים: 'REFERENCE',
 }
