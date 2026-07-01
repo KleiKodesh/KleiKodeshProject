@@ -2,11 +2,9 @@ taamey fonts?
 if doesn't have nikkud dont show the toggle
 וְרַבִּים כָּאֵ-לֶּה?
 add optional index drives with index saved on teh drive
-singleton pages shouldn't stay open?
-cntl tab should skip singleton tabs
-open with changes window size
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
+
 ספרים קרובים update for book with source
 
 add focused search to fts thi si seasy because it can be itegrated in te galloping 
@@ -15,8 +13,6 @@ add to msword context menu
 
 שורות מיותרות במרכוז שורה אחרונה
 לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
-
-labe מסורת הש"ס and עין משפט sepratly
 
 adjust kitvei hakodesh to check for updates too
 
@@ -33,12 +29,6 @@ remove nikkud aloso remove -
 is there a connection type called מקבילות
 
 deos webview have a צריכת חשמל mode מצב חיסכון
-
-add לעזי רש"י to dictionary
-
-refractore and cbetarlize all sqqqqqqqqlite uiries
-
-make sure the uninstaller unsiatalles the new theme registry value
 
 הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
 but the similar buttons in wzard are working
