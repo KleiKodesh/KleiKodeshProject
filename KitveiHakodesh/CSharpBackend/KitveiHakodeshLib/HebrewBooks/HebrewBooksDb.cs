@@ -33,6 +33,9 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         [JsonPropertyName("categories")]
         public string Categories { get; set; }
+
+        [JsonPropertyName("hasLocalFile")]
+        public bool HasLocalFile { get; set; }
     }
 
     /// <summary>
@@ -136,8 +139,10 @@ namespace KitveiHakodeshLib.HebrewBooks
         /// Each word is pushed into SQLite as a LIKE clause against the concatenated search text,
         /// so no rows are loaded into memory unless they match.
         /// Returns up to <see cref="SearchResultLimit"/> results sorted by title.
+        /// If <paramref name="localFolder"/> is non-empty, each result is stamped with
+        /// <see cref="HebrewBookInfo.HasLocalFile"/> = true when {localFolder}\{id}.pdf exists.
         /// </summary>
-        public List<HebrewBookInfo> Search(string query)
+        public List<HebrewBookInfo> Search(string query, string localFolder = null)
         {
             if (!IsInitialized) return new List<HebrewBookInfo>();
             if (string.IsNullOrWhiteSpace(query)) return new List<HebrewBookInfo>();
@@ -146,6 +151,8 @@ namespace KitveiHakodeshLib.HebrewBooks
                 .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
 
             if (words.Length == 0) return new List<HebrewBookInfo>();
+
+            bool checkLocalFolder = !string.IsNullOrWhiteSpace(localFolder);
 
             try
             {
@@ -182,7 +189,19 @@ namespace KitveiHakodeshLib.HebrewBooks
 
                 var results = new List<HebrewBookInfo>(rows.Count);
                 foreach (HbRow row in rows)
-                    results.Add(row.ToInfo());
+                {
+                    HebrewBookInfo info = row.ToInfo();
+                    if (checkLocalFolder)
+                    {
+                        try
+                        {
+                            info.HasLocalFile = File.Exists(
+                                Path.Combine(localFolder, info.Id + ".pdf"));
+                        }
+                        catch (Exception) { /* disconnected drive or permission error — leave false */ }
+                    }
+                    results.Add(info);
+                }
 
                 return results;
             }

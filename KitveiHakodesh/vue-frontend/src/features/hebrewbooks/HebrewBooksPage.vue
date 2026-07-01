@@ -19,10 +19,12 @@ const {
   isLoading,
   error,
   searchTerm,
+  localFileBookIds,
   load,
   search,
   openBook,
   downloadBook,
+  deleteLocalFile,
 } = useHebrewBooks()
 
 const searchInputRef = ref<HTMLInputElement>()
@@ -94,8 +96,10 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
             <HebrewBooksListItem
               :book="displayedBooks[vRow.index]!"
               :focused="containerFocused && focusedIndex === vRow.index"
+              :has-local-file="localFileBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @book-clicked="onBookClicked(vRow.index, displayedBooks[vRow.index]!)"
               @download-clicked="downloadBook"
+              @delete-clicked="deleteLocalFile"
             />
           </div>
         </div>

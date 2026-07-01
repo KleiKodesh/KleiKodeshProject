@@ -59,6 +59,7 @@ namespace KitveiHakodeshLib
                         case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "deleteHbLocalFile": _hb.HandleDeleteHbLocalFile(root, id); break;
+                        case "checkHbLocalFiles": _hb.HandleCheckHbLocalFiles(root, id); break;
                         case "hbSearch": HandleHebrewBooksSearch(root, id); break;
                         case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
@@ -230,9 +231,11 @@ namespace KitveiHakodeshLib
                 return;
             }
             string query = root.TryGetProperty("query", out var q) ? (q.GetString() ?? "") : "";
+            string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+            if (string.IsNullOrWhiteSpace(localFolder)) localFolder = KitveiHakodeshLib.Settings.AppSettings.LoadHbLocalFolder();
             try
             {
-                var results = _hebrewBooksDb.Search(query);
+                var results = _hebrewBooksDb.Search(query, localFolder);
                 _bridge.Reply(id, new { books = results });
             }
             catch (Exception ex)

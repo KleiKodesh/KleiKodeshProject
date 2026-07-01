@@ -173,10 +173,17 @@ export async function toggleFullscreen(): Promise<void> {
 
 /**
  * Search the Hebrew Books catalog via the C# database backend.
+ * If localFolder is provided, C# stamps hasLocalFile on each result.
  * Returns books as plain objects — caller casts to HebrewBook[].
  */
-export function hbSearch(query: string): Promise<{ books?: unknown[]; error?: string }> {
-  return action<{ books?: unknown[]; error?: string }>('hbSearch', { query })
+export function hbSearch(
+  query: string,
+  localFolder?: string,
+): Promise<{ books?: unknown[]; error?: string }> {
+  return action<{ books?: unknown[]; error?: string }>('hbSearch', {
+    query,
+    localFolder: localFolder || '',
+  })
 }
 
 /**
@@ -255,6 +262,35 @@ export function triggerHbDownload(
     tabId,
     localFolder: localFolder || '',
     isOnline: isOnline !== false,
+  })
+}
+
+/**
+ * Check which of the supplied book IDs have a {bookId}.pdf in the local folder.
+ * Returns the subset of IDs that exist on disk. Batch call — send all visible IDs at once.
+ */
+export function checkHbLocalFiles(
+  bookIds: string[],
+  localFolder: string,
+): Promise<{ existingIds?: string[]; error?: string }> {
+  return action<{ existingIds?: string[]; error?: string }>('checkHbLocalFiles', {
+    bookIds,
+    localFolder,
+  })
+}
+
+/**
+ * Delete a HebrewBooks PDF from the user's configured local folder.
+ * Returns { ok: true } on success, { notFound: true } if the file is not there,
+ * or { error: "..." } on failure.
+ */
+export function deleteHbLocalFile(
+  bookId: string,
+  localFolder: string,
+): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
+  return action<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
+    bookId,
+    localFolder,
   })
 }
 
