@@ -236,15 +236,18 @@ if ($LASTEXITCODE -eq 0) {
     gh release delete $version --repo KleiKodesh/KleiKodeshProject --yes
 }
 
-$notes  = New-ReleaseNotes -Version $version -Source $ReleaseNotesSource
-$branch = git rev-parse --abbrev-ref HEAD
+$notes      = New-ReleaseNotes -Version $version -Source $ReleaseNotesSource
+$branch     = git rev-parse --abbrev-ref HEAD
+$notesFile  = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($notesFile, $notes, (New-Object System.Text.UTF8Encoding($false)))
 
 # Upload all three installers to the same release.
 # Files are uploaded one at a time to avoid Windows command-line length limits.
+# --notes-file avoids shell-splitting bugs when $notes contains newlines or special chars.
 gh release create $version `
     --repo KleiKodesh/KleiKodeshProject `
     --title "KleiKodesh $version" `
-    --notes $notes `
+    --notes-file $notesFile `
     --target $branch
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: GitHub release creation failed." -ForegroundColor Red
@@ -259,6 +262,8 @@ foreach ($asset in @($installerX64, $installerX86, $installerAny, $portableZip) 
         exit 1
     }
 }
+
+Remove-Item $notesFile -ErrorAction SilentlyContinue
 
 if ($LASTEXITCODE -eq 0) {
     Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green
