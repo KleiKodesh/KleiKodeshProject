@@ -791,25 +791,18 @@ namespace KitveiHakodeshLib
 
         /// <summary>
         /// Handles the "setTheme" bridge action sent by Vue whenever the user toggles
-        /// dark/light mode.  Persists the preference and updates the host Form's title bar.
+        /// dark/light mode. Persists the preference and updates the host Form's title bar.
         /// </summary>
         private void HandleSetTheme(JsonElement root, string id)
         {
             _bridge.Reply(id, new { });
 
             bool isDark = root.TryGetProperty("isDark", out var v) && v.GetBoolean();
-            System.Diagnostics.Trace.WriteLine(
-                $"[AppViewer] HandleSetTheme: isDark={isDark}" +
-                $", InvokeRequired={InvokeRequired}" +
-                $", thread={System.Threading.Thread.CurrentThread.ManagedThreadId}");
 
             AppSettings.SaveDarkMode(isDark);
 
             if (InvokeRequired)
-            {
-                System.Diagnostics.Trace.WriteLine($"[AppViewer] HandleSetTheme: dispatching via Invoke");
                 Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
-            }
             else
                 ApplyTitleBarTheme(isDark);
 

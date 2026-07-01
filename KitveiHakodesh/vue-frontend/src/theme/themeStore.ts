@@ -51,9 +51,7 @@ export const useThemeStore = defineStore('theme', () => {
     })
     apply()
     // Notify the C# host so it can update the WinForms title bar via DarkNet.
-    const isDark = themePreset.value.includes('-dark')
-    console.log('[themeStore] watch fired: themePreset=', themePreset.value, 'readingBackground=', readingBackground.value, 'isDark=', isDark)
-    setTheme(isDark)
+    setTheme(themePreset.value.includes('-dark'))
   })
 
   return { themePreset, readingBackground, toggleDarkMode, init }
