@@ -5,7 +5,7 @@ import { searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCata
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { triggerHbDownload, triggerHbSaveAs } from '@/webview-host/bridge'
+import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles } from '@/webview-host/bridge'
 
 export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
@@ -17,11 +17,38 @@ export function useHebrewBooks() {
   const error = ref<string | null>(null)
   const searchTerm = ref('')
 
+  // IDs of books whose PDF exists in the configured local folder.
+  // For search results: populated directly from the hasLocalFile flag C# stamps on each result.
+  // For history items: populated via a checkHbLocalFiles round-trip (C# never sees history IDs).
+  const localFileBookIds = ref(new Set<string>())
+
+  // History path — C# doesn't know these IDs, so we ask explicitly.
+  async function refreshLocalFileIdsFromHistory(bookList: HebrewBook[]) {
+    const folder = settings.hebrewBooksLocalFolder
+    if (!folder || !bookList.length) {
+      localFileBookIds.value = new Set()
+      return
+    }
+    const ids = bookList.map((book) => String(book.id))
+    const result = await checkHbLocalFiles(ids, folder).catch(() => ({ existingIds: [] }))
+    localFileBookIds.value = new Set(result.existingIds ?? [])
+  }
+
+  // Search path — C# already stamped hasLocalFile on each result, no extra call needed.
+  function applyLocalFileIdsFromSearchResults(bookList: HebrewBook[]) {
+    const ids = new Set<string>()
+    for (const book of bookList) {
+      if (book.hasLocalFile) ids.add(String(book.id))
+    }
+    localFileBookIds.value = ids
+  }
+
   async function load() {
     isLoading.value = true
     error.value = null
     try {
       books.value = await history.getHistory()
+      await refreshLocalFileIdsFromHistory(books.value)
     } catch {
       error.value = 'שגיאה בטעינת הספרים'
     } finally {
@@ -32,8 +59,10 @@ export function useHebrewBooks() {
   const runSearch = useDebounceFn(async (term: string) => {
     if (!term.trim()) {
       books.value = await history.getHistory()
+      await refreshLocalFileIdsFromHistory(books.value)
     } else {
-      books.value = await searchHbCatalog(term)
+      books.value = await searchHbCatalog(term, settings.hebrewBooksLocalFolder || undefined)
+      applyLocalFileIdsFromSearchResults(books.value)
     }
   }, 200)
 
@@ -68,6 +97,24 @@ export function useHebrewBooks() {
     triggerHbSaveAs(String(book.id), book.title, getHbPdfUrl(book.id)).catch(() => {})
   }
 
+  async function deleteLocalFile(book: HebrewBook) {
+    const folder = settings.hebrewBooksLocalFolder
+    if (!folder) return
+    const result = await deleteHbLocalFile(String(book.id), folder).catch(
+      () => ({ error: 'שגיאה' }) as { error: string },
+    )
+    if ('error' in result && result.error) {
+      localFileStore.downloadErrorMessage = result.error
+    } else if ('notFound' in result && result.notFound) {
+      localFileStore.downloadErrorMessage = 'הקובץ לא נמצא בתיקייה'
+    } else if ('ok' in result && result.ok) {
+      // Remove immediately so the button disappears without a round-trip.
+      const updated = new Set(localFileBookIds.value)
+      updated.delete(String(book.id))
+      localFileBookIds.value = updated
+    }
+  }
+
   const displayedBooks = computed(() => books.value)
 
   return {
@@ -75,10 +122,12 @@ export function useHebrewBooks() {
     isLoading,
     error,
     searchTerm,
+    localFileBookIds,
     load,
     search,
     trackAccess,
     openBook,
     downloadBook,
+    deleteLocalFile,
   }
 }

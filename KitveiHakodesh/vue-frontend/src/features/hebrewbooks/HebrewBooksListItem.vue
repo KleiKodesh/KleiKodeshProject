@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconArrowDownload20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconArrowDownload20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import type { HebrewBook } from './hebrewBooksCatalog'
 
-const props = defineProps<{ book: HebrewBook; focused?: boolean }>()
+const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean }>()
 const emit = defineEmits<{
   'book-clicked': [book: HebrewBook]
   'download-clicked': [book: HebrewBook]
+  'delete-clicked': [book: HebrewBook]
 }>()
 
 const tags = computed(() =>
@@ -48,6 +49,15 @@ const tooltip = computed(() => {
         @click.stop="emit('download-clicked', book)"
       >
         <IconArrowDownload20Regular />
+      </button>
+      <button
+        v-if="hasLocalFile"
+        class="dl-btn delete-btn"
+        :title="'מחק מהתיקייה: ' + book.title"
+        tabindex="-1"
+        @click.stop="emit('delete-clicked', book)"
+      >
+        <IconDelete20Regular />
       </button>
     </div>
     <div class="row-bottom">
@@ -122,6 +132,9 @@ const tooltip = computed(() => {
 }
 .dl-btn:hover {
   color: var(--text-primary);
+}
+.delete-btn:hover {
+  color: #e53e3e;
 }
 
 .row-bottom {

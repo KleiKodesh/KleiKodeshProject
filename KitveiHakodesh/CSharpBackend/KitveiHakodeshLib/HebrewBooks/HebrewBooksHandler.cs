@@ -138,6 +138,42 @@ namespace KitveiHakodeshLib.HebrewBooks
         }
 
         /// <summary>
+        /// Checks which of the supplied book IDs have a corresponding {bookId}.pdf in the
+        /// configured local folder. Returns { existingIds: string[] } — a subset of the
+        /// requested IDs that were found on disk. I/O errors (disconnected drive, permission
+        /// denied) are swallowed per-file so the rest of the batch still completes.
+        /// </summary>
+        public void HandleCheckHbLocalFiles(JsonElement root, string id)
+        {
+            try
+            {
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
+
+                var existingIds = new List<string>();
+
+                if (!string.IsNullOrWhiteSpace(localFolder) && Directory.Exists(localFolder))
+                {
+                    var bookIds = root.GetProperty("bookIds");
+                    foreach (var element in bookIds.EnumerateArray())
+                    {
+                        string bookId = element.GetString();
+                        if (string.IsNullOrEmpty(bookId)) continue;
+                        try
+                        {
+                            if (File.Exists(Path.Combine(localFolder, bookId + ".pdf")))
+                                existingIds.Add(bookId);
+                        }
+                        catch (Exception) { /* disconnected drive or permission error — skip */ }
+                    }
+                }
+
+                _bridge.Reply(id, new { existingIds });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        /// <summary>
         /// Deletes {bookId}.pdf from the configured local folder.
         /// Returns { ok: true } on success, { notFound: true } if the file does not exist,
         /// or { error: "..." } if deletion fails for any other reason.
