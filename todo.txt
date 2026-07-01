@@ -10,7 +10,6 @@ fetch surrounding lines for context for very short lines - willr equire paying m
 ספרים קרובים update for book with source
 
 add focused search to fts thi si seasy because it can be itegrated in te galloping 
-add Hebrew books folder option to installer
 create excluded folders dilgue for the document locator
 add to msword context menu
 
@@ -20,8 +19,6 @@ bug: search bar stays in place when toolbar is hdden
 לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
 
 labe מסורת הש"ס and עין משפט sepratly
-
-create clock wdget for full screen
 
 pdf ehre we are holding
 
