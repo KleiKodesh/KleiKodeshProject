@@ -4,7 +4,6 @@ using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.FileSystemSearch;
-using KitveiHakodeshLib.Helpers;
 using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.LocalFile;
 using KitveiHakodeshLib.Search;
@@ -13,16 +12,23 @@ using KitveiHakodeshLib.UserSettings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
-using System.Drawing;
 using System.IO;
-using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace KitveiHakodeshLib
 {
-    public class AppViewer : UserControl
+    // Core AppViewer partial — WebView2 environment setup, initialisation, suspension,
+    // and public API surface.
+    //
+    // Split across partial classes by concern:
+    //   AppViewerSplash.cs          — splash screen show/hide
+    //   AppViewerTheme.cs           — DarkNet title-bar theme wiring and setTheme handler
+    //   AppViewerNavigation.cs      — navigation guard (allowlist) and reload logic
+    //   AppViewerMessageHandlers.cs — bridge message dispatch and all Handle* methods
+    public partial class AppViewer : UserControl
     {
         private static readonly string AppDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh");
@@ -97,6 +103,8 @@ namespace KitveiHakodeshLib
             return _sharedEnvTask;
         }
 
+        // ── Fields ──────────────────────────────────────────────────────────────────
+
         private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
         private WebBridge _bridge;
         private DbHandler _db;
@@ -109,12 +117,19 @@ namespace KitveiHakodeshLib
         private UserSettingsDbHandler _userSettings;
         private string _dbInjectionScriptId;
 
+        // A file path queued before the Vue app has finished mounting.
+        // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
+        // event listeners (localFileStore) are live before the push event fires.
+        private string _pendingFilePath;
+        // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
+        private bool _appReady;
+
         // Reference count for active AppViewer instances — used to know when the
         // last instance is disposed so the shared user settings DB can be closed.
         private static int _instanceCount;
         private bool _instanceCounted;
 
-        private SplashOverlay _splash;
+        // ── Public API ──────────────────────────────────────────────────────────────
 
         /// <summary>
         /// Controls whether the "חלון עצמאי / חלונית" (pop-out) button is shown in the
@@ -126,6 +141,41 @@ namespace KitveiHakodeshLib
         /// <see cref="InitAsyncCore"/> injects the startup script).
         /// </summary>
         public bool ShowPopOutButton { get; set; } = false;
+
+        /// <summary>
+        /// Set by the host to handle the popout toggle.
+        /// The bool parameter indicates whether to enter fullscreen mode after popping out.
+        /// </summary>
+        public Action<bool> TogglePopOut { get; set; }
+
+        /// <summary>
+        /// Called by TaskPaneManager via reflection to wire up the popout toggle.
+        /// Accepts Action&lt;bool&gt; from the new TaskPanePopOut.Toggle(bool) signature.
+        /// </summary>
+        public void SetPopOutToggleAction(Action<bool> action)
+        {
+            TogglePopOut = action;
+        }
+
+        /// <summary>
+        /// Opens a file by path, as if the user had picked it via the file picker.
+        /// Safe to call immediately after construction — if the Vue app is not yet
+        /// ready the path is queued and opened as soon as 'appReady' is received.
+        /// </summary>
+        public void OpenFileFromPath(string filePath)
+        {
+            if (!_appReady)
+            {
+                // Vue event listeners not live yet — queue until appReady fires.
+                _pendingFilePath = filePath;
+            }
+            else
+            {
+                _ = _localFile.OpenFileFromPathAsync(filePath);
+            }
+        }
+
+        // ── Constructor ─────────────────────────────────────────────────────────────
 
         // Subfolder name under KitveiHakodesh\ used as the WebView2 user-data folder.
         // Stored as a readonly field so it is captured before InitAsync runs.
@@ -150,78 +200,7 @@ namespace KitveiHakodeshLib
             _ = InitAsync();
         }
 
-        private void OnParentChanged(object sender, EventArgs e)
-        {
-            Form hostForm = FindForm();
-            if (hostForm == null) return;
-            bool isDark = AppSettings.LoadDarkMode();
-            ApplySplashTheme(isDark);
-            // Subscribe to the host Form's HandleCreated to apply the per-window theme
-            // before the form is shown — the required moment for SetWindowThemeForms.
-            // OnHandleCreated on the UserControl fires too late (form already visible).
-            hostForm.HandleCreated -= OnHostFormHandleCreated;
-            hostForm.HandleCreated += OnHostFormHandleCreated;
-            // If the form already has a handle (re-parenting into an already-shown window),
-            // HandleCreated won't fire again — apply directly.
-            if (hostForm.IsHandleCreated)
-                OnHostFormHandleCreated(hostForm, EventArgs.Empty);
-        }
-
-        private void OnHostFormHandleCreated(object sender, EventArgs e)
-        {
-            var hostForm = (Form)sender;
-            hostForm.HandleCreated -= OnHostFormHandleCreated;
-            bool isDark = AppSettings.LoadDarkMode();
-            try
-            {
-                // Form has an HWND but WS_VISIBLE is not yet set — the correct moment
-                // for DarkNet's initial registration of the window handle.
-                DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
-            }
-            catch { /* best-effort — VSTO or other hosts may not support this */ }
-        }
-
-        protected override void OnHandleCreated(EventArgs e)
-        {
-            base.OnHandleCreated(e);
-            // Title bar theme is applied via OnHostFormHandleCreated (host Form's
-            // HandleCreated event), which fires before the form is visible — the
-            // correct moment for DarkNet. Nothing to do here.
-        }
-
-        private void ApplyTitleBarTheme(bool isDark)
-        {
-            try
-            {
-                Form hostForm = FindForm();
-                if (hostForm == null) return;
-                // SetWindowThemeForms is safe to call multiple times after the window
-                // is shown — this is the documented live-toggle API per the DarkNet README.
-                DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
-            }
-            catch { /* best-effort — no-op if DarkNet can't apply the theme */ }
-        }
-
-        /// <summary>
-        /// Applies the current persisted dark mode preference to an explicitly provided
-        /// Form.  Used by VSTO's TaskPanePopOut, which moves the WebView2 child control
-        /// directly into a new floating Form — bypassing the normal ParentChanged path
-        /// that only fires when AppViewer itself is re-parented.
-        /// Call this after the popout Form is created but before or after Show().
-        /// </summary>
-        public void ApplyTitleBarThemeToForm(Form form)
-        {
-            if (form == null) return;
-            bool isDark = AppSettings.LoadDarkMode();
-            try { DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light); }
-            catch { /* best-effort */ }
-            // Track this form so live toggles from HandleSetTheme also update it.
-            _extraThemeForm = form;
-            form.FormClosed += (_, __) => { if (_extraThemeForm == form) _extraThemeForm = null; };
-        }
-
-        // Extra form to keep in sync with theme toggles (used by VSTO popout).
-        private Form _extraThemeForm;
+        // ── Visibility / suspension ─────────────────────────────────────────────────
 
         // Suspend the WebView2 renderer when the control is hidden (e.g. the host
         // task pane is collapsed or the window is minimised) to free CPU and allow
@@ -246,7 +225,7 @@ namespace KitveiHakodeshLib
                 return;
             }
 
-            if (_webView.CoreWebView2 == null) return;   // not yet initialised
+            if (_webView.CoreWebView2 == null) return;    // not yet initialised
             if (_webView.CoreWebView2.IsSuspended) return; // already suspended
 
             // Signal the browser engine to drop cached data and swap memory to disk
@@ -270,50 +249,14 @@ namespace KitveiHakodeshLib
             }
         }
 
-        private void _InitSplash()
+        // ── Initialisation ──────────────────────────────────────────────────────────
+
+        protected override void OnHandleCreated(EventArgs e)
         {
-            Image logo = null;
-            using (var stream = Assembly.GetExecutingAssembly()
-                .GetManifestResourceStream("KitveiHakodesh.png"))
-            {
-                if (stream != null)
-                    logo = Image.FromStream(stream);
-            }
-
-            _splash = new SplashOverlay(logo) { Dock = DockStyle.Fill };
-            Controls.Add(_splash);
-            _SyncSplashBackColor();
-            _splash.BringToFront();
-        }
-
-        /// <summary>
-        /// Sets the AppViewer BackColor to match the current theme, which the splash
-        /// screen picks up automatically via _SyncSplashBackColor / BackColorChanged.
-        /// Light: standard window background. Dark: near-black matching the Vue dark UI.
-        /// </summary>
-        private static readonly Color _darkBg  = Color.FromArgb(0x1a, 0x1a, 0x1a);
-        private static readonly Color _lightBg = SystemColors.Control;
-
-        private void ApplySplashTheme(bool isDark)
-        {
-            // Set the color directly on the splash rather than going through BackColor,
-            // which would fire BackColorChanged and potentially re-trigger handle logic.
-            if (_splash != null)
-                _splash.BackColor = isDark ? _darkBg : _lightBg;
-        }
-
-        private void _SyncSplashBackColor()
-        {
-            if (_splash == null) return;
-            _splash.BackColor = BackColor;
-        }
-
-        private void _HideSplash()
-        {
-            if (_splash == null) return;
-            if (InvokeRequired) { Invoke(new Action(_HideSplash)); return; }
-            _splash.FadeOut();
-            _splash = null;
+            base.OnHandleCreated(e);
+            // Title bar theme is applied via OnHostFormHandleCreated (host Form's
+            // HandleCreated event), which fires before the form is visible — the
+            // correct moment for DarkNet. Nothing to do here.
         }
 
         private async Task InitAsync()
@@ -327,7 +270,7 @@ namespace KitveiHakodeshLib
                 // InitAsync is fire-and-forget — swallowed exceptions leave the splash up forever.
                 // Hide the splash and surface the error so the user isn't stuck on a blank screen.
                 _HideSplash();
-                string message = _BuildErrorMessage(ex);
+                string message = BuildErrorMessage(ex);
                 if (InvokeRequired)
                     Invoke(new Action(() => MessageBox.Show(
                         message, "כזית", MessageBoxButtons.OK, MessageBoxIcon.Error)));
@@ -342,9 +285,9 @@ namespace KitveiHakodeshLib
         /// For SQLite interop errors, appends environment diagnostics so users
         /// can include the full context in a bug report.
         /// </summary>
-        private static string _BuildErrorMessage(Exception ex)
+        private static string BuildErrorMessage(Exception ex)
         {
-            string base_ = "שגיאה באתחול האפליקציה:\n" + ex.Message;
+            string baseMessage = "שגיאה באתחול האפליקציה:\n" + ex.Message;
 
             // Detect SQLite native interop failures — these are the hardest to
             // diagnose remotely because they depend on process bitness, Word bitness,
@@ -356,17 +299,17 @@ namespace KitveiHakodeshLib
                 (ex.Message != null && ex.Message.IndexOf("SQLite", StringComparison.OrdinalIgnoreCase) >= 0) ||
                 (ex.Message != null && ex.Message.IndexOf("Interop", StringComparison.OrdinalIgnoreCase) >= 0);
 
-            if (!isSqliteError) return base_;
+            if (!isSqliteError) return baseMessage;
 
             try
             {
-                var diag = EnvironmentDiagnostics.Collect();
-                var sb = new System.Text.StringBuilder();
-                sb.AppendLine(base_);
+                var diagnostics = EnvironmentDiagnostics.Collect();
+                var sb = new StringBuilder();
+                sb.AppendLine(baseMessage);
                 sb.AppendLine();
                 sb.AppendLine("── פרטי סביבה ──");
 
-                // The most relevant fields for this error class
+                // The most relevant fields for this error class.
                 var keys = new[]
                 {
                     "process.bitness",
@@ -394,7 +337,7 @@ namespace KitveiHakodeshLib
 
                 foreach (string key in keys)
                 {
-                    if (diag.TryGetValue(key, out string val))
+                    if (diagnostics.TryGetValue(key, out string val))
                         sb.AppendLine($"  {key}: {val}");
                 }
 
@@ -403,14 +346,15 @@ namespace KitveiHakodeshLib
             catch
             {
                 // Diagnostics collection failed — just return the base message.
-                return base_;
+                return baseMessage;
             }
         }
 
         private async Task InitAsyncCore()
         {
-            string udf = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", _webCacheFolder);
-            var env = await GetSharedEnv(udf);
+            string userDataFolder = Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", _webCacheFolder);
+            var env = await GetSharedEnv(userDataFolder);
 
             await _webView.EnsureCoreWebView2Async(env);
 
@@ -427,7 +371,6 @@ namespace KitveiHakodeshLib
             settings.IsSwipeNavigationEnabled = false;
 
             // No autofill or password saving — the app has no login forms.
-            //settings.IsGeneralAutofillEnabled = false;
             settings.IsPasswordAutosaveEnabled = false;
 
             // No status bar — the hover-URL tooltip at the bottom left is irrelevant
@@ -499,6 +442,7 @@ namespace KitveiHakodeshLib
             _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
             _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
+
             _db.OnDbPathPicked = path =>
             {
                 _search.ResetAndReindex(path);
@@ -528,397 +472,7 @@ namespace KitveiHakodeshLib
             _search.OnDbReady(savedPath);
         }
 
-        private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
-        {
-            _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
-            // Hide the splash regardless of success — a failed navigation still shows the
-            // WebView error page, which is more useful than an infinite splash screen.
-            _HideSplash();
-        }
-
-        // Allowlist of URL origins the WebView2 may navigate to.
-        // Any navigation to a URL that doesn't match one of these prefixes is cancelled.
-        //
-        // Allowed origins:
-        //   http://KitveiHakodesh-vue-app/   — the main Vue app and the HebrewBooks PDF cache
-        //                                       (CacheUrl serves from /cache/hebrewbooks/ on this host)
-        //   http://kitvei-localfile-          — per-folder virtual hosts registered by LocalFileHandler
-        //                                       for local PDF, HTML, and converted Word files
-        //   http://kitvei-hb-local-           — per-folder virtual hosts registered by HebrewBooksHandler
-        //                                       for PDFs served from a user-configured local folder
-        //   https://download.hebrewbooks.org/ — the HebrewBooks download endpoint; the WebView2
-        //                                       browser engine must navigate here so the DownloadStarting
-        //                                       event fires and we can intercept the file save path.
-        //                                       Direct HTTP fetch cannot be used because HebrewBooks
-        //                                       blocks non-browser requests.
-        private static readonly string[] _allowedNavigationPrefixes = new[]
-        {
-            "http://KitveiHakodesh-vue-app/",
-            "http://kitvei-localfile-",
-            "http://kitvei-hb-local-",
-            "https://download.hebrewbooks.org/",
-        };
-
-        private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
-        {
-            string url = e.Uri ?? "";
-
-            if (url.IndexOf("hebrewbooks.org/message.aspx", StringComparison.OrdinalIgnoreCase) >= 0)
-            {
-                e.Cancel = true;
-                _hb?.NotifyBookNotFound();
-                return;
-            }
-
-            foreach (string prefix in _allowedNavigationPrefixes)
-            {
-                if (url.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    return;
-            }
-            e.Cancel = true;
-            System.Diagnostics.Debug.WriteLine("[AppViewer] Blocked navigation to: " + url);
-        }
-
-        private async Task HandleReload()
-        {
-            // Remove the stale db-path injection script and register a fresh one
-            // with the current registry values before navigating.
-            if (_dbInjectionScriptId != null)
-                _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_dbInjectionScriptId);
-
-            string savedPath = AppSettings.LoadDbPath();
-            bool dbReady = File.Exists(savedPath);
-            string escapedPath = savedPath.Replace("\\", "\\\\");
-            string hbLocalFolder = AppSettings.LoadHbLocalFolder();
-            string escapedHbFolder = hbLocalFolder.Replace("\\", "\\\\");
-            string dbScript =
-                "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";" +
-                "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
-            _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                JsBridge.Script + "\n" + dbScript);
-
-            // Re-init the DB handler; keep the existing search handler and its index state
-            _db = new DbHandler(_bridge, _webView, savedPath);
-            _db.OnDbPathPicked = path =>
-            {
-                _search.ResetAndReindex(path);
-                _userSettings.UpdateSeforimDbPath(path);
-            };
-            _db.ResetTitleBarToLight = () =>
-            {
-                if (InvokeRequired)
-                    Invoke(new Action(() => ApplyTitleBarTheme(false)));
-                else
-                    ApplyTitleBarTheme(false);
-                ApplySplashTheme(false);
-            };
-
-            // Re-init user settings DB for the (possibly changed) seforim DB path
-            _userSettings?.Dispose();
-            _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
-
-            // Always call OnDbReady — if the file doesn't exist it pushes ftsDbNotFound
-            // to the frontend; if it does exist it starts or resumes indexing.
-            _search.OnDbReady(savedPath);
-
-            _webView.CoreWebView2.Navigate("http://KitveiHakodesh-vue-app/index.html");
-        }
-
-        private void OnDownloadStarting(object sender, CoreWebView2DownloadStartingEventArgs e)
-            => _hb.OnDownloadStarting(sender, e);
-
-        private async void OnMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
-        {
-            try
-            {
-                await OnMessageReceivedAsync(e);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[AppViewer] Unhandled exception in OnMessageReceived: " + ex);
-            }
-        }
-
-        private async Task OnMessageReceivedAsync(CoreWebView2WebMessageReceivedEventArgs e)
-        {
-            string id = null;
-            try
-            {
-                using (var doc = JsonDocument.Parse(e.WebMessageAsJson))
-                {
-                    var root = doc.RootElement;
-                    id = root.GetProperty("id").GetString();
-                    string action = root.TryGetProperty("action", out var a)
-                        ? a.GetString()
-                        : root.TryGetProperty("sql", out _) ? "sql" : null;
-
-                    switch (action)
-                    {
-                        case "sql": await _db.HandleSql(root, id); break;
-                        case "dict-sql": await HandleDictSql(root, id); break;
-                        case "setDbPath": _db.HandleSetDbPath(root, id); break;
-                        case "pickDbPath": _db.HandlePickDbPath(id, this); break;
-                        case "resetSettings": _db.HandleResetSettings(id); break;
-                        case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
-                        case "pickFile": _localFile.HandlePickFile(id, this); break;
-                        case "pickFolder": _localFile.HandlePickFolder(id, this); break;
-                        case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
-                        case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
-                        case "appReady": HandleAppReady(id); break;
-                        case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
-                        case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
-                        case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
-                        case "hbSearch": HandleHebrewBooksSearch(root, id); break;
-                        case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
-                        case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
-                        case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
-                        case "DeleteFtsIndex":
-                            _search.HandleDeleteIndex(id);
-                            break;
-                        case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;
-                        case "TogglePopOut": HandleTogglePopOut(id); break;
-                        case "toggleFullscreen": HandleToggleFullscreen(id); break;
-                        case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
-                        case "getFonts": HandleGetFonts(id); break;
-                        case "getDiagnostics": HandleGetDiagnostics(id); break;
-                        case "fileSystemSearchPageLoad": _fileSystemSearch.HandlePageLoad(id); break;
-                        case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
-                        case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
-                        case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
-                        case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
-                        case "exportToWord": HandleExportToWord(root, id); break;
-                        case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
-                        case "setTheme": HandleSetTheme(root, id); break;
-                        default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                if (id != null) _bridge.Reply(id, new { error = ex.Message });
-            }
-        }
-
-        private void HandleGetWordSynonyms(JsonElement root, string id)
-        {
-            string word = root.TryGetProperty("word", out var w) ? w.GetString() : null;
-            var groups = WordThesaurusProvider.GetSynonyms(word);
-            _bridge.Reply(id, new { groups });
-        }
-
-        private async Task HandleDictSql(JsonElement root, string id)
-        {
-            if (!_dictionary.IsReady) { _bridge.Reply(id, new { error = "Dictionary database not available" }); return; }
-            string sql = root.GetProperty("sql").GetString();
-            try
-            {
-                var rows = await Task.Run(() => _dictionary.Query(sql, DbHandler.ParseParamsStatic(root)));
-                _bridge.Reply(id, new { rows });
-            }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
-        }
-
-        private async Task HandleWikiDictSql(JsonElement root, string id)
-        {
-            if (!_dictionary.IsWikiReady) { _bridge.Reply(id, new { error = "Wikidict database not available" }); return; }
-            string sql = root.GetProperty("sql").GetString();
-            try
-            {
-                var rows = await Task.Run(() => _dictionary.QueryWiki(sql, DbHandler.ParseParamsStatic(root)));
-                _bridge.Reply(id, new { rows });
-            }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
-        }
-
-        private void HandleTogglePopOut(string id)
-        {
-            _bridge.Reply(id, new { });
-            if (InvokeRequired)
-                Invoke(new Action(() => TogglePopOut?.Invoke(false)));
-            else
-                TogglePopOut?.Invoke(false);
-        }
-
-        private void HandleToggleFullscreen(string id)
-        {
-            _bridge.Reply(id, new { });
-            if (InvokeRequired)
-                Invoke(new Action(() => ToggleFormFullscreen()));
-            else
-                ToggleFormFullscreen();
-        }
-
-        // The window state saved just before entering fullscreen, so we can restore
-        // it exactly (Normal or Maximized) when the user exits fullscreen.
-        private FormWindowState _preFullscreenWindowState = FormWindowState.Normal;
-
-        private void ToggleFormFullscreen()
-        {
-            // AppViewer itself stays in the task pane host even when popped out —
-            // TaskPanePopOut moves _webView (the first child) into the floating form.
-            // So we must look for the form that contains _webView, not AppViewer itself.
-            Form hostForm = _webView.FindForm();
-
-            // If not hosted in a window (e.g., still in the VSTO task pane), pop out first
-            if (hostForm == null)
-            {
-                TogglePopOut?.Invoke(true); // pop out and go fullscreen in one step
-                return;
-            }
-
-            // Already in a floating window — just toggle fullscreen, never touch popout
-            if (hostForm.FormBorderStyle == FormBorderStyle.None && hostForm.WindowState == FormWindowState.Maximized)
-            {
-                // Exit fullscreen — restore to whatever state we were in before entering
-                hostForm.FormBorderStyle = FormBorderStyle.Sizable;
-                hostForm.WindowState = _preFullscreenWindowState;
-            }
-            else
-            {
-                // Save the current state before entering fullscreen so we can restore it on exit
-                _preFullscreenWindowState = hostForm.WindowState;
-
-                // Enter fullscreen — must be Normal before removing the border,
-                // otherwise setting Maximized again does nothing and chrome doesn't get removed.
-                if (hostForm.WindowState == FormWindowState.Maximized)
-                {
-                    hostForm.WindowState = FormWindowState.Normal;
-                }
-                hostForm.FormBorderStyle = FormBorderStyle.None;
-                hostForm.WindowState = FormWindowState.Maximized;
-            }
-        }
-
-        private void HandleGetFonts(string id)
-        {
-            _bridge.Reply(id, new { fonts = FontsProvider.GetHebrewFonts() });
-        }
-
-        private void HandleAppReady(string id)
-        {
-            _bridge.Reply(id, new { });
-            _appReady = true;
-            if (_pendingFilePath != null)
-            {
-                string path = _pendingFilePath;
-                _pendingFilePath = null;
-                _ = _localFile.OpenFileFromPathAsync(path);
-            }
-        }
-
-        private void HandleGetDiagnostics(string id)
-        {
-            var report = EnvironmentDiagnostics.Collect();
-            _bridge.Reply(id, new { diagnostics = report });
-        }
-
-        private void HandleExportToWord(JsonElement root, string id)
-        {
-            _bridge.Reply(id, new { ok = true });
-
-            string html = root.TryGetProperty("html", out var h) ? h.GetString() ?? "" : "";
-            string title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-
-            _ = WordExporter.ExportAsync(html, title);
-        }
-
-        private void HandlePasteIntoWord(JsonElement root, string id)
-        {
-            _bridge.Reply(id, new { ok = true });
-            _ = WordExporter.PasteAtCursorAsync();
-        }
-
-        /// <summary>
-        /// Handles the "setTheme" bridge action sent by Vue whenever the user toggles
-        /// dark/light mode. Persists the preference and updates the host Form's title bar.
-        /// </summary>
-        private void HandleSetTheme(JsonElement root, string id)
-        {
-            _bridge.Reply(id, new { });
-
-            bool isDark = root.TryGetProperty("isDark", out var v) && v.GetBoolean();
-
-            AppSettings.SaveDarkMode(isDark);
-
-            if (InvokeRequired)
-                Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
-            else
-                ApplyTitleBarTheme(isDark);
-
-            // Also update the VSTO popout window if one is active.
-            // That form hosts the WebView2 directly and is not reachable via FindForm().
-            if (_extraThemeForm != null && !_extraThemeForm.IsDisposed)
-            {
-                try { DarkNet.Instance.SetWindowThemeForms(_extraThemeForm, isDark ? Theme.Dark : Theme.Light); }
-                catch { }
-            }
-
-            ApplySplashTheme(isDark);
-        }
-
-        private void HandleHebrewBooksSearch(JsonElement root, string id)
-        {
-            if (!_hebrewBooksDb.IsInitialized)
-            {
-                _bridge.Reply(id, new { error = "Hebrew Books database not available" });
-                return;
-            }
-
-            string query = root.TryGetProperty("query", out var q) ? (q.GetString() ?? "") : "";
-
-            try
-            {
-                var results = _hebrewBooksDb.Search(query);
-                _bridge.Reply(id, new { books = results });
-            }
-            catch (Exception ex)
-            {
-                _bridge.Reply(id, new { error = ex.Message });
-            }
-        }
-
-        // A file path queued before the Vue app has finished mounting.
-        // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
-        // event listeners (localFileStore) are live before the push event fires.
-        private string _pendingFilePath;
-        // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
-        private bool _appReady;
-
-        /// <summary>
-        /// Opens a file by path, as if the user had picked it via the file picker.
-        /// Safe to call immediately after construction — if the Vue app is not yet
-        /// ready the path is queued and opened as soon as 'appReady' is received.
-        /// </summary>
-        public void OpenFileFromPath(string filePath)
-        {
-            if (!_appReady)
-            {
-                // Vue event listeners not live yet — queue until appReady fires.
-                _pendingFilePath = filePath;
-            }
-            else
-            {
-                _ = _localFile.OpenFileFromPathAsync(filePath);
-            }
-        }
-
-        /// <summary>
-        /// Set by the host to handle the popout toggle.
-        /// The bool parameter indicates whether to enter fullscreen mode after popping out.
-        /// </summary>
-        public Action<bool> TogglePopOut { get; set; }
-
-        /// <summary>
-        /// Called by TaskPaneManager via reflection to wire up the popout toggle.
-        /// Accepts Action<bool> from the new TaskPanePopOut.Toggle(bool) signature.
-        /// </summary>
-        public void SetPopOutToggleAction(Action<bool> action)
-        {
-            TogglePopOut = action;
-        }
+        // ── Dispose ─────────────────────────────────────────────────────────────────
 
         protected override void Dispose(bool disposing)
         {
