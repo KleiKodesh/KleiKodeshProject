@@ -2,7 +2,7 @@
  * Hebrew text processing utilities.
  * State 0: full diacritics (nikkud + cantillation)
  * State 1: remove cantillation only (U+0591–U+05AF, U+05C0)
- * State 2: remove nikkud — delegates to stripNikkudFromHtml
+ * State 2: remove nikkud and all dash types — delegates to stripNikkudFromHtml
  *
  * Operates directly on the HTML string with regex — no DOM parsing — so it is
  * safe to call on every render cycle without layout/GC cost.
@@ -44,14 +44,17 @@ export function applyDiacriticsFilter(html: string, state: number): string {
  * Transformations applied to text nodes only (tags are passed through unchanged):
  *   - Cantillation marks U+0591–U+05AF, U+05C0 removed
  *   - Nikkud U+05B0–U+05BD, U+05C1, U+05C2, U+05C4, U+05C5, U+05C7 removed
- *   - Em dash U+2014 (—) and its trailing space (if present) removed
+ *   - All dash types followed by a space (or end of string) removed:
+ *       hyphen-minus U+002D (-), en dash U+2013 (–), em dash U+2014 (—),
+ *       figure dash U+2012, horizontal bar U+2015 (―), minus sign U+2212 (−)
+ *       A dash between two letters (e.g. divine-name censor separator א-ל) is preserved.
  *   - ! → .   ? → .   ; → , (modern punctuation uncommon in older Hebrew texts)
  */
 export function stripNikkudFromHtml(html: string): string {
   return html.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
     if (tag) return tag
     text = text.replace(/[\u0591-\u05AF\u05C0]/g, '')
-    text = text.replace(/\u2014 ?/g, '')
+    text = text.replace(/[\u002D\u2012\u2013\u2014\u2015\u2212] /g, '')
     text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5\u05C7]/g, '')
     text = text.replace(/[!?]/g, '.')
     // Replace standalone semicolons but not ones inside HTML entities like &nbsp;
