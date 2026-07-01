@@ -162,7 +162,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
       :commentary-mode="commentaryMode"
       @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="searchVisible = !searchVisible"
-      @toggle-toc="toggleTocPanel"`n      @export-to-word="onExportToWord"
+      @toggle-toc="toggleTocPanel"
+      @export-to-word="onExportToWord"
     />
     <!-- Middle row: right toolbar + content + left toolbar (RTL: first child = physical right) -->
     <div class="body-row">
@@ -187,7 +188,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
         :commentary-mode="commentaryMode"
         @cycle-commentary-mode="cycleCommentaryMode"
         @toggle-search="searchVisible = !searchVisible"
-        @toggle-toc="toggleTocPanel"`n      @export-to-word="onExportToWord"
+        @toggle-toc="toggleTocPanel"
+        @export-to-word="onExportToWord"
     />
       <div class="content-area">
         <div
@@ -403,7 +405,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => {
       :commentary-mode="commentaryMode"
       @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="searchVisible = !searchVisible"
-      @toggle-toc="toggleTocPanel"`n      @export-to-word="onExportToWord"
+      @toggle-toc="toggleTocPanel"
+      @export-to-word="onExportToWord"
     />
   </div>
 </template>
