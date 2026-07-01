@@ -39,6 +39,12 @@ const { focusedIndex, containerFocused } = useVirtualListKeys(
 // Reset focus when the book list changes (new search query)
 watch(() => props.books, () => { focusedIndex.value = -1 })
 
+function onBookRowClick(index: number) {
+  focusedIndex.value = index
+  const book = props.books[index]
+  if (book) emit('toggleBook', book.id)
+}
+
 function focusList() {
   scrollEl.value?.focus()
 }
@@ -69,7 +75,7 @@ defineExpose({ focusList })
             checked: checkedBookIds.has(books[vRow.index]!.id),
             focused: containerFocused && focusedIndex === vRow.index,
           }"
-          @click="focusedIndex = vRow.index; emit('toggleBook', books[vRow.index]!.id)"
+          @click="onBookRowClick(vRow.index)"
         >
           <span class="check-col">
             <span v-if="checkedBookIds.has(books[vRow.index]!.id)" class="check-mark">✓</span>
