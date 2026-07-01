@@ -43,6 +43,10 @@ make sure the uninstaller unsiatalles the new theme registry value
 הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
 but the similar buttons in wzard are working
 
+המצב כיום הוא שאם אני רוצה לשנות את הזום לא למספרים עגולים הדרך היחידה היא לשנות עם משטח המגע של העכבר
+הייתי שמח אם הייתה אפשרות להקליד את אחוזי הזום כדי להתאימם אישית לפי הצורך
+
+
 
 add deletion option for the Hebrew books
 
