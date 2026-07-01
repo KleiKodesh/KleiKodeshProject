@@ -20,11 +20,17 @@ bug: search bar stays in place when toolbar is hdden
 
 labe מסורת הש"ס and עין משפט sepratly
 
+adjust kitvei hakodesh to check for updates too
+
+demo app window rreact to theme
+
 pdf ehre we are holding
 
 maybe the pdf file memory leak is due to the fact that it defines whole folders as server?
 
 add bookmarks feature
+
+is there a connection type called מקבילות
 
 רא"ש מקוואות סימן ט
 הלכך אסור להטביל בשותת ובמים הנמשכין ממנו.
