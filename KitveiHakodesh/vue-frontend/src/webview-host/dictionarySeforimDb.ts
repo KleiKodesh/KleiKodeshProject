@@ -3,6 +3,7 @@
 // Book IDs are looked up at runtime by title pattern and cached — never hardcoded.
 
 import { query as querySeforim } from './seforimDb'
+import { SQL } from './queries.sql'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -39,10 +40,7 @@ export interface AruchRow {
 
 async function getBookIds(titlePattern: string, cache: { ids: number[] | null }): Promise<number[]> {
   if (cache.ids !== null) return cache.ids
-  const rows = await querySeforim<{ id: number }>(
-    `SELECT id FROM book WHERE title LIKE ?`,
-    [titlePattern]
-  )
+  const rows = await querySeforim<{ id: number }>(SQL.GET_BOOK_IDS_BY_TITLE_PATTERN, [titlePattern])
   cache.ids = rows.map(r => r.id)
   return cache.ids
 }
@@ -80,15 +78,10 @@ function headerMatchesPrefix(headerWord: string, term: string): boolean {
 }
 
 async function queryBoldLines(pattern: string, bookIds: number[]): Promise<MetzudatRow[]> {
-  const inClause = bookIds.join(',')
   type LineRow = { content: string; title: string; bookId: number; lineId: number; lineIndex: number }
   const rows = await querySeforim<LineRow>(
-    `SELECT l.content, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
-     FROM line l JOIN book b ON b.id = l.bookId
-     WHERE l.bookId IN (${inClause})
-       AND l.content LIKE ?
-     LIMIT 50`,
-    [pattern]
+    SQL.GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS(bookIds.length),
+    [...bookIds, pattern]
   )
   return rows
     .map(r => parseBoldLine(r.content, r.title, r.bookId, r.lineId, r.lineIndex))
@@ -169,9 +162,7 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
   // it is preamble and section headers, not dictionary content.
   // Pattern covers both with and without trailing space before </big>.
   const bigRows = await querySeforim<RawLine>(
-    `SELECT id, lineIndex, content FROM line
-     WHERE bookId = ? AND (content LIKE ? OR content LIKE ?)
-     ORDER BY lineIndex LIMIT 20`,
+    SQL.GET_LINES_WITH_EITHER_CONTENT_PATTERN,
     [bookId, `%<big>%${term}</big>%`, `%<big>%${term} </big>%`]
   )
 
@@ -183,7 +174,7 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
     if (!normalized.includes(term)) continue
 
     const nextRows = await querySeforim<RawLine>(
-      `SELECT id, lineIndex, content FROM line WHERE bookId = ? AND lineIndex = ?`,
+      SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX,
       [bookId, row.lineIndex + 1]
     )
     const nextLine = nextRows[0]
@@ -220,13 +211,10 @@ function parseBigBoldLine(content: string): { word: string; text: string } | nul
 }
 
 export async function aruchLookup(term: string): Promise<AruchRow[]> {
-  // Use exact title match via a dedicated query — '%ספר הערוך%' also matches
-  // 'הפלאה שבערכין על ספר הערוך' which is a different book with no <big> entries.
+  // Use exact title match — '%ספר הערוך%' also matches 'הפלאה שבערכין על ספר הערוך'
+  // which is a different book with no <big> entries.
   if (_aruchCache.ids === null) {
-    const rows = await querySeforim<{ id: number }>(
-      `SELECT id FROM book WHERE title = ?`,
-      ['ספר הערוך']
-    )
+    const rows = await querySeforim<{ id: number }>(SQL.GET_BOOK_ID_BY_EXACT_TITLE, ['ספר הערוך'])
     _aruchCache.ids = rows.map(r => r.id)
   }
   if (_aruchCache.ids.length === 0) return []
@@ -234,12 +222,9 @@ export async function aruchLookup(term: string): Promise<AruchRow[]> {
 
   type RawLine = { id: number; lineIndex: number; content: string }
 
-  // Query lines with <b><big>TERM</big></b> pattern
   // Pattern covers both with and without trailing space before </big>
   const rows = await querySeforim<RawLine>(
-    `SELECT id, lineIndex, content FROM line
-     WHERE bookId = ? AND (content LIKE ? OR content LIKE ?)
-     ORDER BY lineIndex LIMIT 20`,
+    SQL.GET_LINES_WITH_EITHER_CONTENT_PATTERN,
     [bookId, `%<big>${term}</big>%`, `%<big>${term} </big>%`]
   )
 

@@ -488,4 +488,60 @@ export const SQL = {
     LIMIT 1
   `,
 
+  // ── Dictionary seforim lookups ────────────────────────────────────────────
+
+  /**
+   * Look up book IDs by title LIKE pattern.
+   * Used by dictionarySeforimDb.ts to resolve book IDs for מצודת ציון, מלבי"ם, etc.
+   * Bind: titlePattern (e.g. '%מצודת ציון%')
+   */
+  GET_BOOK_IDS_BY_TITLE_PATTERN: `
+    SELECT id FROM book WHERE title LIKE ?
+  `,
+
+  /**
+   * Look up a single book ID by exact title.
+   * Used by dictionarySeforimDb.ts for ספר הערוך (where LIKE would match unrelated books).
+   * Bind: title (exact string)
+   */
+  GET_BOOK_ID_BY_EXACT_TITLE: `
+    SELECT id FROM book WHERE title = ?
+  `,
+
+  /**
+   * Fetch lines from a set of books whose content matches a LIKE pattern.
+   * Used by dictionarySeforimDb.ts to find bold-tagged headword lines in
+   * מצודת ציון and מלבי"ם באור המילות.
+   * Bind: bookId1, bookId2, ..., contentPattern (e.g. '<b>TERM</b>%')
+   */
+  GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS: (bookCount: number) => `
+    SELECT l.content, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
+    FROM line l JOIN book b ON b.id = l.bookId
+    WHERE l.bookId IN (${Array(bookCount).fill('?').join(', ')})
+      AND l.content LIKE ?
+    LIMIT 50
+  `,
+
+  /**
+   * Fetch lines from a single book whose content matches either of two LIKE patterns.
+   * Used by dictionarySeforimDb.ts to find <big>-tagged headword lines in
+   * מחברת מנחם and ספר הערוך (with/without trailing space before the closing tag).
+   * Bind: bookId, pattern1, pattern2
+   */
+  GET_LINES_WITH_EITHER_CONTENT_PATTERN: `
+    SELECT id, lineIndex, content FROM line
+    WHERE bookId = ? AND (content LIKE ? OR content LIKE ?)
+    ORDER BY lineIndex LIMIT 20
+  `,
+
+  /**
+   * Fetch a single line from a book by its lineIndex.
+   * Used by dictionarySeforimDb.ts to retrieve the definition line that immediately
+   * follows a מחברת מנחם headword line.
+   * Bind: bookId, lineIndex
+   */
+  GET_LINE_BY_BOOK_AND_LINE_INDEX: `
+    SELECT id, lineIndex, content FROM line WHERE bookId = ? AND lineIndex = ?
+  `,
+
 } as const
