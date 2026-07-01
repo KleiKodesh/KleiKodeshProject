@@ -126,6 +126,18 @@
     <Compile Include="AppViewer.cs">
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="AppViewerSplash.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AppViewerTheme.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AppViewerNavigation.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+    </Compile>
+    <Compile Include="AppViewerMessageHandlers.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+    </Compile>
     <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
     <Compile Include="SplashOverlay.cs">
       <SubType>Component</SubType>

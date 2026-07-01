@@ -71,7 +71,8 @@ export function useAppNavigation() {
     }
     if (label === 'פתח קובץ') { await handleFilePicker(false); return }
     if (label === 'התקן כתבי הקודש') { handleExternalLink(); return }
-    if (label === 'בחר מסד נתונים') { handleDbPicker(); return }
+    if (label === 'הורד מסד ספרים') { handleExternalLink(); return }
+    if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 
   async function navigateInNewTab(label: string): Promise<void> {
@@ -90,7 +91,8 @@ export function useAppNavigation() {
     }
     if (label === 'פתח קובץ') { await handleFilePicker(true); return }
     if (label === 'התקן כתבי הקודש') { handleExternalLink(); return }
-    if (label === 'בחר מסד נתונים') { handleDbPicker(); return }
+    if (label === 'הורד מסד ספרים') { handleExternalLink(); return }
+    if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 
   return { navigate, navigateInNewTab }
