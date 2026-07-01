@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 using System.Reflection;
 using System.Windows.Forms;
@@ -10,17 +11,17 @@ namespace KitveiHakodeshLib
     {
         private SplashOverlay _splash;
 
-        private static readonly Color _darkBg  = System.Drawing.Color.FromArgb(0x1a, 0x1a, 0x1a);
+        private static readonly Color _darkBg  = Color.FromArgb(0x1a, 0x1a, 0x1a);
         private static readonly Color _lightBg = SystemColors.Control;
 
         private void _InitSplash()
         {
-            System.Drawing.Image logo = null;
+            Image logo = null;
             using (var stream = Assembly.GetExecutingAssembly()
                 .GetManifestResourceStream("KitveiHakodesh.png"))
             {
                 if (stream != null)
-                    logo = System.Drawing.Image.FromStream(stream);
+                    logo = Image.FromStream(stream);
             }
 
             _splash = new SplashOverlay(logo) { Dock = DockStyle.Fill };
@@ -50,7 +51,7 @@ namespace KitveiHakodeshLib
         internal void _HideSplash()
         {
             if (_splash == null) return;
-            if (InvokeRequired) { Invoke(new System.Action(_HideSplash)); return; }
+            if (InvokeRequired) { Invoke(new Action(_HideSplash)); return; }
             _splash.FadeOut();
             _splash = null;
         }
