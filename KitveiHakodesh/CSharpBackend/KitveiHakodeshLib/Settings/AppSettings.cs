@@ -93,6 +93,21 @@ namespace KitveiHakodeshLib.Settings
         {
             Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "CsvLastUpdated", utcDate.ToString("o"));
         }
+
+        /// <summary>
+        /// Persists whether the app is currently in dark mode.
+        /// Stored as "1" (dark) or "0" (light) so the host window title bar can be
+        /// themed correctly before the Vue app loads and sends its first setTheme message.
+        /// </summary>
+        public static void SaveDarkMode(bool isDark)
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "Appearance", "DarkMode", isDark ? "1" : "0");
+        }
+
+        public static bool LoadDarkMode()
+        {
+            return Interaction.GetSetting("KitveiHakodesh", "Appearance", "DarkMode", "0") == "1";
+        }
     }
 }
 

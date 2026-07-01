@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import { applyTheme, getTheme, toggleThemeMode, type ThemePreset } from './themes'
+import { setTheme } from '@/webview-host/bridge'
 export type { ThemePreset } from './themes'
 
 interface ThemeState {
@@ -49,6 +50,10 @@ export const useThemeStore = defineStore('theme', () => {
       readingBackground: readingBackground.value,
     })
     apply()
+    // Notify the C# host so it can update the WinForms title bar via DarkNet.
+    const isDark = themePreset.value.includes('-dark')
+    console.log('[themeStore] watch fired: themePreset=', themePreset.value, 'readingBackground=', readingBackground.value, 'isDark=', isDark)
+    setTheme(isDark)
   })
 
   return { themePreset, readingBackground, toggleDarkMode, init }
