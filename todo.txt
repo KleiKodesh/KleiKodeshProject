@@ -13,8 +13,6 @@ add focused search to fts thi si seasy because it can be itegrated in te gallopi
 create excluded folders dilgue for the document locator
 add to msword context menu
 
-bug: search bar stays in place when toolbar is hdden
-
 שורות מיותרות במרכוז שורה אחרונה
 לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
 
@@ -30,9 +28,18 @@ maybe the pdf file memory leak is due to the fact that it defines whole folders 
 
 add bookmarks feature
 
+remove nikkud aloso remove -
+
 is there a connection type called מקבילות
 
-רא"ש מקוואות סימן ט
-הלכך אסור להטביל בשותת ובמים הנמשכין ממנו.
-צ"ל בשוקת
+deos webview have a צריכת חשמל mode מצב חיסכון
+
+add לעזי רש"י to dictionary
+
+refractore and cbetarlize all sqqqqqqqqlite uiries
+
+make sure the uninstaller unsiatalles the new theme registry value
+
+הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
+but the similar buttons in wzard are working
 

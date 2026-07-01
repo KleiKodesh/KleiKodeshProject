@@ -154,18 +154,18 @@ namespace KitveiHakodeshLib
             Form hostForm = FindForm();
             if (hostForm == null) return;
             bool isDark = AppSettings.LoadDarkMode();
-            // Use Theme.Auto for the process default — passing Dark or Light here locks
-            // the process theme and causes DarkNet to ignore subsequent per-window calls
-            // when the OS theme matches (e.g. process=Light + OS=Light → toggles to Dark
-            // are silently ignored). Auto leaves the process default to the OS and lets
-            // explicit per-window calls (SetWindowThemeForms) work unconditionally.
+            System.Diagnostics.Trace.WriteLine($"[AppViewer] OnParentChanged: isDark={isDark}, hostForm={hostForm.GetType().Name}, Visible={hostForm.Visible}, HasHandle={hostForm.IsHandleCreated}");
             DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
             ApplySplashTheme(isDark);
-            // Subscribe to the host Form's HandleCreated to apply the per-window theme
-            // before the form is shown — the required moment for SetWindowThemeForms.
-            // OnHandleCreated on the UserControl fires too late (form already visible).
             hostForm.HandleCreated -= OnHostFormHandleCreated;
             hostForm.HandleCreated += OnHostFormHandleCreated;
+            // If the form already has a handle (re-parenting into an already-shown window),
+            // HandleCreated won't fire again — apply directly.
+            if (hostForm.IsHandleCreated)
+            {
+                System.Diagnostics.Trace.WriteLine($"[AppViewer] OnParentChanged: handle already exists, applying directly");
+                OnHostFormHandleCreated(hostForm, EventArgs.Empty);
+            }
         }
 
         private void OnHostFormHandleCreated(object sender, EventArgs e)
@@ -173,13 +173,16 @@ namespace KitveiHakodeshLib
             var hostForm = (Form)sender;
             hostForm.HandleCreated -= OnHostFormHandleCreated;
             bool isDark = AppSettings.LoadDarkMode();
+            System.Diagnostics.Trace.WriteLine($"[AppViewer] OnHostFormHandleCreated: isDark={isDark}, hostForm={hostForm.GetType().Name}, Visible={hostForm.Visible}");
             try
             {
-                // Form has an HWND but WS_VISIBLE is not yet set — the correct moment
-                // for DarkNet's initial registration of the window handle.
                 DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
+                System.Diagnostics.Trace.WriteLine($"[AppViewer] SetWindowThemeForms succeeded.");
             }
-            catch { /* best-effort — VSTO or other hosts may not support this */ }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Trace.WriteLine($"[AppViewer] SetWindowThemeForms failed: {ex.Message}");
+            }
         }
 
         protected override void OnHandleCreated(EventArgs e)
