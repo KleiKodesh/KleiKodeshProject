@@ -151,7 +151,8 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
-        /// Returns true when the exception indicates there is no internet connectivity,
+        /// Returns true when the exception indicates there is no internet connectivity
+        /// or that the request was blocked by a content filter / proxy (e.g. NetFree returns 418),
         /// so the update check should be cancelled silently without showing an error.
         /// </summary>
         private static bool IsNoConnectivityException(Exception ex)
@@ -168,9 +169,23 @@ namespace UpdateCheckerLib
                        we.Status == WebExceptionStatus.ReceiveFailure;
             }
 
-            // HttpRequestException wraps WebException on some paths — check inner too
-            if (ex is HttpRequestException && ex.InnerException != null)
-                return IsNoConnectivityException(ex.InnerException);
+            // HttpRequestException: check for proxy/content-filter blocks (e.g. NetFree → 418).
+            // Any 4xx response that isn't 404 (which is retried as a transient GitHub glitch)
+            // means the request was blocked or rejected by a proxy — treat as silent failure.
+            if (ex is HttpRequestException hre)
+            {
+                var msg = hre.Message;
+                if (msg.Contains("418") ||   // NetFree "I'm a teapot" content filter block
+                    msg.Contains("407") ||   // Proxy authentication required
+                    msg.Contains("403") ||   // Forbidden (firewall / proxy rule)
+                    msg.Contains("400") ||   // Bad request from proxy
+                    msg.Contains("451"))     // Unavailable for legal reasons
+                    return true;
+
+                // Also recurse into inner for wrapped WebExceptions
+                if (hre.InnerException != null)
+                    return IsNoConnectivityException(hre.InnerException);
+            }
 
             return false;
         }

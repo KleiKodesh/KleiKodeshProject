@@ -137,6 +137,38 @@ namespace KitveiHakodeshLib.HebrewBooks
             catch (Exception ex) { _bridge.PushEvent(new { @event = "hbPdfError", error = ex.Message }); }
         }
 
+        /// <summary>
+        /// Deletes {bookId}.pdf from the configured local folder.
+        /// Returns { ok: true } on success, { notFound: true } if the file does not exist,
+        /// or { error: "..." } if deletion fails for any other reason.
+        /// </summary>
+        public void HandleDeleteHbLocalFile(JsonElement root, string id)
+        {
+            try
+            {
+                string bookId      = root.GetProperty("bookId").GetString();
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
+
+                if (string.IsNullOrWhiteSpace(localFolder))
+                {
+                    _bridge.Reply(id, new { error = "לא הוגדרה תיקיית שמירה" });
+                    return;
+                }
+
+                string filePath = Path.Combine(localFolder, bookId + ".pdf");
+                if (!File.Exists(filePath))
+                {
+                    _bridge.Reply(id, new { notFound = true });
+                    return;
+                }
+
+                File.Delete(filePath);
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
         public void HandleTriggerHbSaveAs(JsonElement root, string id)
         {
             try
