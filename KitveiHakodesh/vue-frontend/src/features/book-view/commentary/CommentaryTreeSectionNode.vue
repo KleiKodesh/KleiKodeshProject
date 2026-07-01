@@ -26,6 +26,12 @@ function collectLeafItems(node: CommentaryTreeNode): CommentaryVisibilityItem[] 
   return result
 }
 
+function childKey(child: CommentaryTreeNode | CommentaryVisibilityItem): string {
+  return isTreeNode(child)
+    ? child.label
+    : `${child.bookId}::${child.sectionLabel}::${child.subSectionLabel}`
+}
+
 const leafItems = computed(() => collectLeafItems(props.node))
 
 const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
@@ -66,7 +72,7 @@ function navigateToFirstBook() {
     <template v-if="expanded">
       <template
         v-for="child in node.children"
-        :key="isTreeNode(child) ? child.label : `${child.bookId}::${child.sectionLabel}::${child.subSectionLabel}`"
+        :key="childKey(child)"
       >
         <CommentaryTreeSectionNode
           v-if="isTreeNode(child)"

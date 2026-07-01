@@ -60,6 +60,27 @@ function onDiacriticsClick() {
 }
 
 const tocBtnRef = ref<HTMLElement | null>(null)
+
+const autoSelectTopLineTitle = computed(() =>
+  autoSelectTopLine.value
+    ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'
+    : 'סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה',
+)
+
+const zoomOutTitle = computed(
+  () => `הקטן (Ctrl-)\nטקסט: ${zoom.value}% | פירוש: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
+)
+
+const zoomInTitle = computed(
+  () => `הגדל (Ctrl+)\nטקסט: ${zoom.value}% | פירוש: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
+)
+
+const commentaryModeTitle = computed(() => {
+  if (commentaryMode.value === 'off') return 'פאנל מפרשים (Ctrl+J)'
+  if (commentaryMode.value === 'bottom') return 'עבור לתצוגה צדדית'
+  return 'סגור פאנל מפרשים'
+})
+
 defineExpose({ tocBtnRef })
 </script>
 
@@ -86,7 +107,7 @@ defineExpose({ tocBtnRef })
     <button
       :class="{ active: commentaryMode !== 'off' }"
       :disabled="!hasCommentaries"
-      :title="commentaryMode === 'off' ? 'פאנל מפרשים (Ctrl+J)' : commentaryMode === 'bottom' ? 'עבור לתצוגה צדדית' : 'סגור פאנל מפרשים'"
+      :title="commentaryModeTitle"
       @click="$emit('cycleCommentaryMode')"
     >
       <IconLayoutColumnTwoFocusLeft20Filled v-if="commentaryMode === 'side'" />
@@ -96,11 +117,7 @@ defineExpose({ tocBtnRef })
     <button
       :class="{ active: autoSelectTopLine }"
       :disabled="!hasCommentaries"
-      :title="
-        autoSelectTopLine
-          ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'
-          : 'סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה'
-      "
+      :title="autoSelectTopLineTitle"
       @click="bookViewStore.toggleAutoSelectTopLine()"
     >
       <IconTimeline20Filled v-if="autoSelectTopLine" />
@@ -117,14 +134,14 @@ defineExpose({ tocBtnRef })
     <div class="separator" />
 
     <button
-      :title="`הקטן (Ctrl-)\nטקסט: ${zoom}% | פירוש: ${commentaryZoom}%\nאיפוס: Ctrl+0`"
+      :title="zoomOutTitle"
       :disabled="zoom <= ZOOM_CONFIG.MIN && commentaryZoom <= ZOOM_CONFIG.MIN"
       @click="bookViewStore.zoomOut()"
     >
       <IconZoomOut20Regular />
     </button>
     <button
-      :title="`הגדל (Ctrl+)\nטקסט: ${zoom}% | פירוש: ${commentaryZoom}%\nאיפוס: Ctrl+0`"
+      :title="zoomInTitle"
       :disabled="zoom >= ZOOM_CONFIG.MAX && commentaryZoom >= ZOOM_CONFIG.MAX"
       @click="bookViewStore.zoomIn()"
     >

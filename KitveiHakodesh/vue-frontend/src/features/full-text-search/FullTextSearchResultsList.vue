@@ -56,6 +56,13 @@ function renderSnippet(snippet: string): string {
   return settingsStore.censorDivineNames ? censorDivineNames(snippet) : snippet
 }
 
+function resultTitle(result: FullTextSearchResult): string {
+  const base = result.tocText
+    ? `${result.bookTitle} › ${result.tocText}\n\nלחץ לניווט למיקום`
+    : `${result.bookTitle}\n\nלחץ לניווט למיקום`
+  return base
+}
+
 function captureScrollPos() {
   if (!scrollEl.value) return null
   const first = virtualizer.value.getVirtualItems()[0]
@@ -165,14 +172,7 @@ defineExpose({ captureScrollPos })
             <div class="result-item">
               <div
                 class="result-header"
-                :title="
-                  results[vRow.index]!.tocText
-                    ? results[vRow.index]!.bookTitle +
-                      ' › ' +
-                      results[vRow.index]!.tocText +
-                      '\n\nלחץ לניווט למיקום'
-                    : results[vRow.index]!.bookTitle + '\n\nלחץ לניווט למיקום'
-                "
+                :title="resultTitle(results[vRow.index]!)"
                 @click="emit('resultClick', results[vRow.index]!)"
               >
                 <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
