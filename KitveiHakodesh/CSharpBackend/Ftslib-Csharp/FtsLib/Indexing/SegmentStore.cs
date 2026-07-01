@@ -332,14 +332,13 @@ namespace FtsLib.Indexing
                 _merger.MergeLevel(op.Level, targetSegId: op.Target);
                 FtsLog.Write("SegmentStore.Recover", "recovery merge complete");
             }
-            catch (InvalidDataException ex)
+            catch (Exception ex) when (ex is InvalidDataException || ex is FileNotFoundException || ex is IOException)
             {
-                Console.WriteLine("[Recovery] Corrupt segment detected during merge — wiping index for rebuild: " + ex.Message);
+                Console.WriteLine("[Recovery] Corrupt or missing segment during merge — wiping index for rebuild: " + ex.Message);
                 FtsLog.Write("SegmentStore.Recover",
-                    "corrupt segment during recovery merge — wiping: " + ex.Message);
-                Wal.Close();
+                    "corrupt/missing segment during recovery merge — wiping: " + ex.GetType().Name + ": " + ex.Message);
                 WipeIndexDirectory();
-                throw new CorruptIndexException("Corrupt segment detected during merge — index wiped for rebuild.", ex);
+                throw new CorruptIndexException("Corrupt or missing segment detected during merge — index wiped for rebuild.", ex);
             }
             finally
             {
