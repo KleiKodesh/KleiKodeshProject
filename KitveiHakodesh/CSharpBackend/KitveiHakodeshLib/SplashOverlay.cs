@@ -24,7 +24,7 @@ namespace KitveiHakodeshLib
         private const int AR = 124, AG = 92, AB = 252;
 
         private Image _logo;
-        private float _alpha  = 0f;
+        private float _alpha  = 1f;   // always fully opaque — no fade-in
         private bool  _fading = false;
         private float _phase  = 0f;   // advances each tick
         private readonly Timer _timer;
@@ -43,7 +43,17 @@ namespace KitveiHakodeshLib
             _timer.Start();
         }
 
-        public void FadeOut() { _fading = true; }
+        public void FadeOut()
+        {
+            // Instant hide — remove from parent immediately instead of fading out.
+            _timer.Stop();
+            var p = Parent;
+            if (p != null) { p.Controls.Remove(this); p.Invalidate(); }
+            Dispose();
+
+            // ── Fade-out animation (commented out) ───────────────────────────────
+            // _fading = true;
+        }
 
         private void OnTick(object sender, EventArgs e)
         {
@@ -52,20 +62,22 @@ namespace KitveiHakodeshLib
 
             if (_fading)
             {
-                _alpha -= 0.045f;
-                if (_alpha <= 0f)
-                {
-                    _alpha = 0f;
-                    _timer.Stop();
-                    var p = Parent;
-                    if (p != null) { p.Controls.Remove(this); p.Invalidate(); }
-                    Dispose();
-                    return;
-                }
+                // ── Fade-out alpha step (commented out) ───────────────────────────
+                // _alpha -= 0.045f;
+                // if (_alpha <= 0f)
+                // {
+                //     _alpha = 0f;
+                //     _timer.Stop();
+                //     var p = Parent;
+                //     if (p != null) { p.Controls.Remove(this); p.Invalidate(); }
+                //     Dispose();
+                //     return;
+                // }
             }
             else
             {
-                _alpha = Math.Min(1f, _alpha + 0.035f);
+                // ── Fade-in alpha step (commented out) ────────────────────────────
+                // _alpha = Math.Min(1f, _alpha + 0.035f);
             }
 
             Invalidate();

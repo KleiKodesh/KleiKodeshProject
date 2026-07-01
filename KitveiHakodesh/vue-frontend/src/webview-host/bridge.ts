@@ -226,6 +226,16 @@ export function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
 }
 
 /**
+ * Notify the C# host that the Vue theme has changed.
+ * The host persists the preference and updates the WinForms title bar via DarkNet.
+ * Fire-and-forget — no meaningful return value.
+ */
+export function setTheme(isDark: boolean): void {
+  if (typeof window.__webviewAction !== 'function') return
+  action('setTheme', { isDark }).catch(() => {})
+}
+
+/**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
  * If localFolder is provided, C# will first check for {localFolder}\{bookId}.pdf
  * before falling back to the download flow.

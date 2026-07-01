@@ -1,3 +1,4 @@
+using Dark.Net;
 using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
@@ -137,11 +138,69 @@ namespace KitveiHakodeshLib
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
             VisibleChanged += OnVisibleChanged;
+            // Hook ParentChanged so we can apply the title bar theme as soon as the
+            // control is added to a Form — before the Form is shown.  OnHandleCreated
+            // fires too late (the Form is already visible by then).
+            ParentChanged += OnParentChanged;
             Controls.Add(_webView);
             _InitSplash();
             System.Threading.Interlocked.Increment(ref _instanceCount);
             _instanceCounted = true;
             _ = InitAsync();
+        }
+
+        private void OnParentChanged(object sender, EventArgs e)
+        {
+            Form hostForm = FindForm();
+            if (hostForm == null) return;
+            bool isDark = AppSettings.LoadDarkMode();
+            // Use Theme.Auto for the process default — passing Dark or Light here locks
+            // the process theme and causes DarkNet to ignore subsequent per-window calls
+            // when the OS theme matches (e.g. process=Light + OS=Light → toggles to Dark
+            // are silently ignored). Auto leaves the process default to the OS and lets
+            // explicit per-window calls (SetWindowThemeForms) work unconditionally.
+            DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
+            ApplySplashTheme(isDark);
+            // Subscribe to the host Form's HandleCreated to apply the per-window theme
+            // before the form is shown — the required moment for SetWindowThemeForms.
+            // OnHandleCreated on the UserControl fires too late (form already visible).
+            hostForm.HandleCreated -= OnHostFormHandleCreated;
+            hostForm.HandleCreated += OnHostFormHandleCreated;
+        }
+
+        private void OnHostFormHandleCreated(object sender, EventArgs e)
+        {
+            var hostForm = (Form)sender;
+            hostForm.HandleCreated -= OnHostFormHandleCreated;
+            bool isDark = AppSettings.LoadDarkMode();
+            try
+            {
+                // Form has an HWND but WS_VISIBLE is not yet set — the correct moment
+                // for DarkNet's initial registration of the window handle.
+                DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
+            }
+            catch { /* best-effort — VSTO or other hosts may not support this */ }
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            // Title bar theme is applied via OnHostFormHandleCreated (host Form's
+            // HandleCreated event), which fires before the form is visible — the
+            // correct moment for DarkNet. Nothing to do here.
+        }
+
+        private void ApplyTitleBarTheme(bool isDark)
+        {
+            try
+            {
+                Form hostForm = FindForm();
+                if (hostForm == null) return;
+                // SetWindowThemeForms is safe to call multiple times after the window
+                // is shown — this is the documented live-toggle API per the DarkNet README.
+                DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
+            }
+            catch { /* best-effort — no-op if DarkNet can't apply the theme */ }
         }
 
         // Suspend the WebView2 renderer when the control is hidden (e.g. the host
@@ -205,6 +264,22 @@ namespace KitveiHakodeshLib
             Controls.Add(_splash);
             _SyncSplashBackColor();
             _splash.BringToFront();
+        }
+
+        /// <summary>
+        /// Sets the AppViewer BackColor to match the current theme, which the splash
+        /// screen picks up automatically via _SyncSplashBackColor / BackColorChanged.
+        /// Light: standard window background. Dark: near-black matching the Vue dark UI.
+        /// </summary>
+        private static readonly Color _darkBg  = Color.FromArgb(0x1a, 0x1a, 0x1a);
+        private static readonly Color _lightBg = SystemColors.Control;
+
+        private void ApplySplashTheme(bool isDark)
+        {
+            // Set the color directly on the splash rather than going through BackColor,
+            // which would fire BackColorChanged and potentially re-trigger handle logic.
+            if (_splash != null)
+                _splash.BackColor = isDark ? _darkBg : _lightBg;
         }
 
         private void _SyncSplashBackColor()
@@ -574,6 +649,7 @@ namespace KitveiHakodeshLib
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         case "exportToWord": HandleExportToWord(root, id); break;
                         case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
+                        case "setTheme": HandleSetTheme(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -711,6 +787,33 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { ok = true });
             _ = WordExporter.PasteAtCursorAsync();
+        }
+
+        /// <summary>
+        /// Handles the "setTheme" bridge action sent by Vue whenever the user toggles
+        /// dark/light mode.  Persists the preference and updates the host Form's title bar.
+        /// </summary>
+        private void HandleSetTheme(JsonElement root, string id)
+        {
+            _bridge.Reply(id, new { });
+
+            bool isDark = root.TryGetProperty("isDark", out var v) && v.GetBoolean();
+            System.Diagnostics.Trace.WriteLine(
+                $"[AppViewer] HandleSetTheme: isDark={isDark}" +
+                $", InvokeRequired={InvokeRequired}" +
+                $", thread={System.Threading.Thread.CurrentThread.ManagedThreadId}");
+
+            AppSettings.SaveDarkMode(isDark);
+
+            if (InvokeRequired)
+            {
+                System.Diagnostics.Trace.WriteLine($"[AppViewer] HandleSetTheme: dispatching via Invoke");
+                Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
+            }
+            else
+                ApplyTitleBarTheme(isDark);
+
+            ApplySplashTheme(isDark);
         }
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)
