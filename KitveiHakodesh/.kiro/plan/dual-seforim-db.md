@@ -6,7 +6,11 @@ Add support for a second parallel seforim SQLite database. The two databases are
 
 All implementation lives on branch **`feature/dual-seforim-db`**. The `master` branch does not contain any of the code changes — only this plan file.
 
-To continue working on this feature:
+**`master`** — clean, no dual-DB code. Only has this plan file (`dual-seforim-db.md`) as a reference document.
+
+**`feature/dual-seforim-db`** — has all the implementation in a single commit on top of the same base as master.
+
+To continue working on the remaining open tasks (smoke test, visual regression check on tree IDs > 10M):
 ```
 git checkout feature/dual-seforim-db
 ```
@@ -22,6 +26,8 @@ To review all changes relative to master:
 git diff master...feature/dual-seforim-db --stat
 git diff master...feature/dual-seforim-db
 ```
+
+This plan file lives on master and will always show you where things stand — the branch name, what's done, and what still needs testing.
 
 ## Tasks
 
