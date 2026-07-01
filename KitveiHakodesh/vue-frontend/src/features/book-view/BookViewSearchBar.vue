@@ -7,6 +7,7 @@ import {
   IconChevronDown20Regular,
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import type { SearchMode } from './bookViewTypes'
 
 const props = defineProps<{
@@ -46,9 +47,18 @@ watch(() => props.commentaryVisible, (v) => {
 const APP_TITLE_BAR = 40
 const BOOK_TOOLBAR = 32
 
+const { titleBarVisible } = useUiChromeVisibility()
+
+const isBottomAnchored = computed(() => props.toolbarPosition === 'bottom')
+
 const panelStyle = computed(() => {
+  if (isBottomAnchored.value) {
+    const toolbarOffset = props.toolbarVisible ? BOOK_TOOLBAR : 0
+    return { bottom: `${toolbarOffset + 4}px` }
+  }
+  const titleBarOffset = titleBarVisible.value ? APP_TITLE_BAR : 0
   const toolbarOffset = props.toolbarVisible && props.toolbarPosition === 'top' ? BOOK_TOOLBAR : 0
-  return { top: `${APP_TITLE_BAR + toolbarOffset + 4}px` }
+  return { top: `${titleBarOffset + toolbarOffset + 4}px` }
 })
 
 const placeholder = computed(() =>
@@ -85,7 +95,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 
 <template>
   <Transition name="search-bar">
-    <div v-if="visible" class="search-bar" :style="panelStyle">
+    <div v-if="visible" class="search-bar" :class="{ 'bottom-anchored': isBottomAnchored }" :style="panelStyle">
       <div class="search-inner">
         <input
           ref="inputRef"
@@ -207,6 +217,11 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 .search-bar-enter-from, .search-bar-leave-to {
   opacity: 0;
   transform: translateY(-6px);
+}
+.bottom-anchored.search-bar-enter-from,
+.bottom-anchored.search-bar-leave-to {
+  opacity: 0;
+  transform: translateY(6px);
 }
 
 .mode-btn {
