@@ -138,9 +138,10 @@ namespace KitveiHakodeshLib
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
             VisibleChanged += OnVisibleChanged;
-            // Hook ParentChanged so we can apply the title bar theme as soon as the
-            // control is added to a Form — before the Form is shown.  OnHandleCreated
-            // fires too late (the Form is already visible by then).
+            // SetCurrentProcessTheme(Auto) must be called before any window in this
+            // process is shown — do it here unconditionally so it runs in both the
+            // standalone demo app and the VSTO (Word) process.
+            DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
             ParentChanged += OnParentChanged;
             Controls.Add(_webView);
             _InitSplash();
@@ -154,18 +155,16 @@ namespace KitveiHakodeshLib
             Form hostForm = FindForm();
             if (hostForm == null) return;
             bool isDark = AppSettings.LoadDarkMode();
-            System.Diagnostics.Trace.WriteLine($"[AppViewer] OnParentChanged: isDark={isDark}, hostForm={hostForm.GetType().Name}, Visible={hostForm.Visible}, HasHandle={hostForm.IsHandleCreated}");
-            DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
             ApplySplashTheme(isDark);
+            // Subscribe to the host Form's HandleCreated to apply the per-window theme
+            // before the form is shown — the required moment for SetWindowThemeForms.
+            // OnHandleCreated on the UserControl fires too late (form already visible).
             hostForm.HandleCreated -= OnHostFormHandleCreated;
             hostForm.HandleCreated += OnHostFormHandleCreated;
             // If the form already has a handle (re-parenting into an already-shown window),
             // HandleCreated won't fire again — apply directly.
             if (hostForm.IsHandleCreated)
-            {
-                System.Diagnostics.Trace.WriteLine($"[AppViewer] OnParentChanged: handle already exists, applying directly");
                 OnHostFormHandleCreated(hostForm, EventArgs.Empty);
-            }
         }
 
         private void OnHostFormHandleCreated(object sender, EventArgs e)
@@ -173,16 +172,13 @@ namespace KitveiHakodeshLib
             var hostForm = (Form)sender;
             hostForm.HandleCreated -= OnHostFormHandleCreated;
             bool isDark = AppSettings.LoadDarkMode();
-            System.Diagnostics.Trace.WriteLine($"[AppViewer] OnHostFormHandleCreated: isDark={isDark}, hostForm={hostForm.GetType().Name}, Visible={hostForm.Visible}");
             try
             {
+                // Form has an HWND but WS_VISIBLE is not yet set — the correct moment
+                // for DarkNet's initial registration of the window handle.
                 DarkNet.Instance.SetWindowThemeForms(hostForm, isDark ? Theme.Dark : Theme.Light);
-                System.Diagnostics.Trace.WriteLine($"[AppViewer] SetWindowThemeForms succeeded.");
             }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Trace.WriteLine($"[AppViewer] SetWindowThemeForms failed: {ex.Message}");
-            }
+            catch { /* best-effort — VSTO or other hosts may not support this */ }
         }
 
         protected override void OnHandleCreated(EventArgs e)
@@ -205,6 +201,27 @@ namespace KitveiHakodeshLib
             }
             catch { /* best-effort — no-op if DarkNet can't apply the theme */ }
         }
+
+        /// <summary>
+        /// Applies the current persisted dark mode preference to an explicitly provided
+        /// Form.  Used by VSTO's TaskPanePopOut, which moves the WebView2 child control
+        /// directly into a new floating Form — bypassing the normal ParentChanged path
+        /// that only fires when AppViewer itself is re-parented.
+        /// Call this after the popout Form is created but before or after Show().
+        /// </summary>
+        public void ApplyTitleBarThemeToForm(Form form)
+        {
+            if (form == null) return;
+            bool isDark = AppSettings.LoadDarkMode();
+            try { DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light); }
+            catch { /* best-effort */ }
+            // Track this form so live toggles from HandleSetTheme also update it.
+            _extraThemeForm = form;
+            form.FormClosed += (_, __) => { if (_extraThemeForm == form) _extraThemeForm = null; };
+        }
+
+        // Extra form to keep in sync with theme toggles (used by VSTO popout).
+        private Form _extraThemeForm;
 
         // Suspend the WebView2 renderer when the control is hidden (e.g. the host
         // task pane is collapsed or the window is minimised) to free CPU and allow
@@ -457,7 +474,10 @@ namespace KitveiHakodeshLib
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
                 "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";";
+                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";" +
+                // Persisted dark mode — lets Vue sync its theme to the title bar on
+                // startup, so both always agree regardless of which host last saved.
+                "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 
@@ -483,6 +503,16 @@ namespace KitveiHakodeshLib
             {
                 _search.ResetAndReindex(path);
                 _userSettings.UpdateSeforimDbPath(path);
+            };
+            _db.ResetTitleBarToLight = () =>
+            {
+                // After a full settings reset, restore the title bar to light immediately
+                // so it matches the light theme Vue will apply after the subsequent reload.
+                if (InvokeRequired)
+                    Invoke(new Action(() => ApplyTitleBarTheme(false)));
+                else
+                    ApplyTitleBarTheme(false);
+                ApplySplashTheme(false);
             };
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
@@ -565,7 +595,8 @@ namespace KitveiHakodeshLib
                 "window.__webviewDbPath=\"" + escapedPath + "\";" +
                 "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
                 "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";";
+                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";" +
+                "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
                 JsBridge.Script + "\n" + dbScript);
 
@@ -575,6 +606,14 @@ namespace KitveiHakodeshLib
             {
                 _search.ResetAndReindex(path);
                 _userSettings.UpdateSeforimDbPath(path);
+            };
+            _db.ResetTitleBarToLight = () =>
+            {
+                if (InvokeRequired)
+                    Invoke(new Action(() => ApplyTitleBarTheme(false)));
+                else
+                    ApplyTitleBarTheme(false);
+                ApplySplashTheme(false);
             };
 
             // Re-init user settings DB for the (possibly changed) seforim DB path
@@ -808,6 +847,14 @@ namespace KitveiHakodeshLib
                 Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
             else
                 ApplyTitleBarTheme(isDark);
+
+            // Also update the VSTO popout window if one is active.
+            // That form hosts the WebView2 directly and is not reachable via FindForm().
+            if (_extraThemeForm != null && !_extraThemeForm.IsDisposed)
+            {
+                try { DarkNet.Instance.SetWindowThemeForms(_extraThemeForm, isDark ? Theme.Dark : Theme.Light); }
+                catch { }
+            }
 
             ApplySplashTheme(isDark);
         }

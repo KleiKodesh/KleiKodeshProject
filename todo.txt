@@ -43,3 +43,7 @@ make sure the uninstaller unsiatalles the new theme registry value
 הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
 but the similar buttons in wzard are working
 
+
+add deletion option for the Hebrew books
+
+when screen is wifde enough no need to use overlay for bookview sidepanel it can show side by side with content

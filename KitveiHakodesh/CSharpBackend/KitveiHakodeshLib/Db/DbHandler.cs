@@ -50,9 +50,19 @@ namespace KitveiHakodeshLib.Db
         public void HandleResetSettings(string id)
         {
             // Wipe the entire KitveiHakodesh VB settings subtree (Database, Popout, HebrewBooks, etc.)
+            // This also clears the persisted dark mode (Appearance/DarkMode), so the app
+            // resets to light theme. Apply light to the title bar immediately so it matches
+            // the Vue theme that will be applied after the reload that follows this call.
             try { Interaction.DeleteSetting("KitveiHakodesh"); } catch { }
+            ResetTitleBarToLight?.Invoke();
             _bridge.Reply(id, new { });
         }
+
+        /// <summary>
+        /// Invoked after a settings reset to immediately apply light theme to the title bar.
+        /// Set by AppViewer after construction.
+        /// </summary>
+        public Action ResetTitleBarToLight { get; set; }
 
         public void HandleSetDbPath(JsonElement root, string id)
         {
