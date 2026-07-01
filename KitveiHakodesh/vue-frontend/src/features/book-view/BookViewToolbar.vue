@@ -68,16 +68,16 @@ const autoSelectTopLineTitle = computed(() =>
 )
 
 const zoomOutTitle = computed(
-  () => `הקטן (Ctrl-)\nטקסט: ${zoom.value}% | פירוש: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
+  () => `הקטן (Ctrl-)\nטקסט: ${zoom.value}% | מפרשים: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
 )
 
 const zoomInTitle = computed(
-  () => `הגדל (Ctrl+)\nטקסט: ${zoom.value}% | פירוש: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
+  () => `הגדל (Ctrl+)\nטקסט: ${zoom.value}% | מפרשים: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
 )
 
 const commentaryModeTitle = computed(() => {
-  if (commentaryMode.value === 'off') return 'פאנל מפרשים (Ctrl+J)'
-  if (commentaryMode.value === 'bottom') return 'עבור לתצוגה צדדית'
+  if (props.commentaryMode === 'off') return 'פאנל מפרשים (Ctrl+J)'
+  if (props.commentaryMode === 'bottom') return 'עבור לתצוגה צדדית'
   return 'סגור פאנל מפרשים'
 })
 

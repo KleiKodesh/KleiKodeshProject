@@ -11,8 +11,6 @@ import { useEventListener } from '@vueuse/core'
 import {
   ZOOM_CONFIG,
   calculateZoom,
-  zoomIn as zoomInUtil,
-  zoomOut as zoomOutUtil,
   resetZoom as resetZoomUtil,
 } from '@/composables/useZoom'
 import { useToc } from './toc/useBookViewToc'
@@ -101,15 +99,20 @@ export function useBookView(
     const tabId = tab.id
     const bookId = tab.bookId
 
+    const KEYBOARD_ZOOM_STEP = 2
     function applyToLines() {
       const current = bookViewStore.getLinesZoom(tabId, bookId)
       bookViewStore.setLinesZoom(tabId, bookId,
-        isZoomIn ? zoomInUtil(current) : isZoomOut ? zoomOutUtil(current) : resetZoomUtil())
+        isZoomIn ? calculateZoom(current, KEYBOARD_ZOOM_STEP)
+          : isZoomOut ? calculateZoom(current, -KEYBOARD_ZOOM_STEP)
+          : resetZoomUtil())
     }
     function applyToCommentary() {
       const current = bookViewStore.getCommentaryZoom(tabId, bookId)
       bookViewStore.setCommentaryZoom(tabId, bookId,
-        isZoomIn ? zoomInUtil(current) : isZoomOut ? zoomOutUtil(current) : resetZoomUtil())
+        isZoomIn ? calculateZoom(current, KEYBOARD_ZOOM_STEP)
+          : isZoomOut ? calculateZoom(current, -KEYBOARD_ZOOM_STEP)
+          : resetZoomUtil())
     }
 
     if (focusInLines) {
