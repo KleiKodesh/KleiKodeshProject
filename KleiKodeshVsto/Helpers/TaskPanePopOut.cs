@@ -1,4 +1,6 @@
-﻿using Microsoft.Office.Tools;
+﻿using Dark.Net;
+using KitveiHakodeshLib.Settings;
+using Microsoft.Office.Tools;
 using System;
 using System.Drawing;
 using System.IO;
@@ -88,9 +90,25 @@ namespace KleiKodesh.Helpers
 
                 _form.Load += (_, __) => { FormSettingsHelper.LoadFormSettings(_form, "KleiKodesh", content.AccessibleName); };
                 _form.FormClosing += (_, __) => { FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", content.AccessibleName); };
-         
 
-            SetOwner(_form.Handle);
+                // ── DarkNet title bar theming ─────────────────────────────────────
+                // In the VSTO (Word) context, AppViewer's child WebView2 is moved
+                // directly into this new Form — AppViewer itself stays in the task
+                // pane host and never becomes a child of this Form.  This means
+                // AppViewer's own OnParentChanged/OnHostFormHandleCreated hooks never
+                // fire for this window, so we apply the theme here instead.
+                //
+                // We subscribe to HandleCreated BEFORE calling SetOwner, because
+                // SetOwner accesses _form.Handle which forces immediate HWND creation
+                // and fires HandleCreated synchronously on that line.  If we subscribed
+                // after SetOwner, the event would already have fired and been missed.
+                //
+                // If the handle was already created before our subscription (can happen
+                // on repeated popout), we call the handler directly as a fallback.
+                _form.HandleCreated += OnPopoutFormHandleCreated;
+                SetOwner(_form.Handle);
+                if (_form.IsHandleCreated)
+                    OnPopoutFormHandleCreated(_form, EventArgs.Empty);
 
                 _form.FormClosing += OnFormClosing;
                 _pane.VisibleChanged += OnPaneVisibilityChanged;
@@ -142,6 +160,30 @@ namespace KleiKodesh.Helpers
             _form = null;
 
             _host.BeginInvoke(new Action(() => _pane.Visible = true));
+        }
+
+        void OnPopoutFormHandleCreated(object sender, EventArgs e)
+        {
+            var form = (Form)sender;
+            form.HandleCreated -= OnPopoutFormHandleCreated;
+            bool isDark = AppSettings.LoadDarkMode();
+            try
+            {
+                // SetCurrentProcessTheme(Auto) must be called immediately before
+                // SetWindowThemeForms in the Word process.  Without it, DarkNet
+                // silently ignores SetWindowThemeForms(Light) when the OS is also in
+                // light mode — the window stays unregistered and subsequent live-toggle
+                // calls have no effect.  Calling Auto here resets DarkNet's process
+                // state so the explicit per-window call always takes effect.
+                DarkNet.Instance.SetCurrentProcessTheme(Theme.Auto);
+                DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light);
+            }
+            catch { /* best-effort — title bar theming is non-critical */ }
+
+            // Register this form with AppViewer so live theme toggles from Vue
+            // (HandleSetTheme) also update this popout window's title bar.
+            var applyThemeMethod = _host.GetType().GetMethod("ApplyTitleBarThemeToForm");
+            applyThemeMethod?.Invoke(_host, new object[] { form });
         }
 
         void OnFormClosing(object sender, FormClosingEventArgs e)

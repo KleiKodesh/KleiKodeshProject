@@ -3,7 +3,7 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
-import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex } from '@/webview-host/bridge'
+import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, setTheme } from '@/webview-host/bridge'
 
 export function useSettings() {
   const settings = useSettingsStore()
@@ -58,6 +58,10 @@ export function useSettings() {
 
   function resetSettings() {
     settings.reset()
+    // Reset the title bar to light mode — settings reset implies reverting to
+    // defaults, which includes light theme. setTheme(false) also saves false to
+    // the registry so the next startup loads light mode correctly.
+    setTheme(false)
   }
 
   return {
