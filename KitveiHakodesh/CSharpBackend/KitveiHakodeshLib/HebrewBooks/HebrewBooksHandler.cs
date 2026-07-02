@@ -17,7 +17,7 @@ namespace KitveiHakodeshLib.HebrewBooks
     public class HebrewBooksHandler
     {
         private static readonly string HbCacheDir =
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "cache", "hebrewbooks");
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "hebrewbooks-cache");
 
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
@@ -403,7 +403,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             Path.Combine(HbCacheDir, bookId + ".pdf");
 
         private static string CacheUrl(string bookId) =>
-            "http://KitveiHakodesh-vue-app/cache/hebrewbooks/" + bookId + ".pdf";
+            "http://KitveiHakodesh-vue-app/hebrewbooks-cache/" + bookId + ".pdf";
 
         private static void EvictCache()
         {

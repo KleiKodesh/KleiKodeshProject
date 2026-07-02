@@ -338,8 +338,8 @@ namespace KitveiHakodeshLib.Search
             {
                 FtsIndexPath,
                 BloomFolderPath,
-                Path.Combine(baseDir, "KitveiHakodesh", "cache", "word"),
-                Path.Combine(baseDir, "KitveiHakodesh", "cache", "hebrewbooks"),
+                Path.Combine(baseDir, "KitveiHakodesh", "word-cache"),
+                Path.Combine(baseDir, "KitveiHakodesh", "hebrewbooks-cache"),
                 Path.Combine(baseDir, "KitveiHakodesh", "webcache"),
             };
 
