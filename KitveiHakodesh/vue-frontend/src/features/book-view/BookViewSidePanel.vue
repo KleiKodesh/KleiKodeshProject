@@ -4,28 +4,41 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 
 const props = defineProps<{
   toggleButtonEl?: HTMLElement | null
+  isOverlay: boolean
 }>()
 
 const emit = defineEmits<{ close: [] }>()
 
 const panelRef = ref<HTMLElement | null>(null)
 
+// Click-outside close only applies in overlay mode.
 useDropdownClose(
   panelRef,
-  () => emit('close'),
+  () => { if (props.isOverlay) emit('close') },
   { toggleButton: computed(() => props.toggleButtonEl ?? null) },
 )
 </script>
 
 <template>
-  <div class="side-panel-shell" @click.self="emit('close')">
-    <div ref="panelRef" class="side-panel">
+  <!-- Overlay mode: full-screen backdrop + floating panel -->
+  <template v-if="isOverlay">
+    <div class="side-panel-shell" @click.self="emit('close')">
+      <div ref="panelRef" class="side-panel side-panel-overlay">
+        <slot />
+      </div>
+    </div>
+  </template>
+
+  <!-- Inline mode: plain column, no backdrop -->
+  <template v-else>
+    <div ref="panelRef" class="side-panel side-panel-inline">
       <slot />
     </div>
-  </div>
+  </template>
 </template>
 
 <style scoped>
+/* ── Overlay mode ──────────────────────────────────────────────────────────── */
 .side-panel-shell {
   position: absolute;
   top: 0;
@@ -36,11 +49,15 @@ useDropdownClose(
   background: rgba(0, 0, 0, 0.28);
 }
 
-.side-panel {
+.side-panel-overlay {
   position: absolute;
   top: 0;
   right: 0;
   bottom: 0;
+}
+
+/* ── Shared panel styles ───────────────────────────────────────────────────── */
+.side-panel {
   display: flex;
   flex-direction: column;
   width: fit-content;
@@ -48,5 +65,11 @@ useDropdownClose(
   border-left: 1px solid var(--border-color);
   overflow: hidden;
   --tree-bg: var(--bg-secondary);
+}
+
+/* ── Inline mode ───────────────────────────────────────────────────────────── */
+.side-panel-inline {
+  height: 100%;
+  flex-shrink: 0;
 }
 </style>
