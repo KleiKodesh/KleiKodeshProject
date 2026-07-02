@@ -98,7 +98,7 @@ const _commentaryZoom = computed({
   get: () => _bookViewStore.getCommentaryZoom(_tabId, _bookId),
   set: (value: number) => _bookViewStore.setCommentaryZoom(_tabId, _bookId, value),
 })
-useZoomHandler({ zoom: _commentaryZoom, target: scrollerEl, keyboard: false })
+useZoomHandler({ zoom: _commentaryZoom, target: scrollerEl, keyboard: true })
 
 const visibleGroups = computed(() => {
   if (!props.visibilityList.length) return props.groups

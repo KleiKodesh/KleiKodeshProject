@@ -84,6 +84,12 @@ Always use `e.code` instead of `e.key` when handling keyboard shortcuts. `e.key`
 
 The only legitimate use of `e.key` is when you specifically need the character the user typed — for example, filtering a list as the user types, or handling printable input in a text field. For every shortcut that combines a modifier key (Ctrl, Alt, Shift, Meta) with a letter or function key, always use `e.code`.
 
+## Pointer Events
+
+Always use the Pointer Events API (`pointerdown`, `pointerup`, `pointerleave`, `pointercancel`) for interactive controls that respond to press — buttons, sliders, drag handles, and any element with press-and-hold behavior. Pointer Events unify mouse, touch, and pen input in a single event model, so you never need separate `mousedown`/`touchstart` branches.
+
+The one legitimate exception is pinch-to-zoom: detecting the distance between two simultaneous touch points requires `touchstart`/`touchmove`/`touchend` because the Pointer Events API does not expose multi-touch geometry in a usable form for pinch scaling. Use Touch Events only for this case.
+
 ## VueUse
 
 - Prefer VueUse composables over hand-rolling equivalent logic — don't reinvent what's already there

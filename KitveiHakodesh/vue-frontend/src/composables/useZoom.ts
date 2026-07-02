@@ -5,7 +5,8 @@ export const ZOOM_CONFIG = {
   MIN: 50,
   MAX: 400,
   DEFAULT: 100,
-  STEP: 10,
+  /** Step used for discrete zoom inputs: toolbar buttons and keyboard Ctrl+±. */
+  STEP: 2,
   WHEEL_SENSITIVITY: 1,
   PINCH_SENSITIVITY: 2,
 } as const

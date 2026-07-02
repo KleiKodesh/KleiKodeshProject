@@ -1,13 +1,8 @@
-taamey fonts?
-if doesn't have nikkud dont show the toggle
-וְרַבִּים כָּאֵ-לֶּה?
 add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
 תצוגה מפוצלת
-
-zoom jump in 5 not ten
 
 ספרים קרובים update for book with source
 
@@ -20,15 +15,11 @@ add to msword context menu
 
 adjust kitvei hakodesh to check for updates too
 
-demo app window rreact to theme
-
 pdf ehre we are holding
 
 maybe the pdf file memory leak is due to the fact that it defines whole folders as server?
 
 add bookmarks feature
-
-remove nikkud aloso remove -
 
 is there a connection type called מקבילות
 
