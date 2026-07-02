@@ -21,18 +21,13 @@ maybe the pdf file memory leak is due to the fact that it defines whole folders 
 
 add bookmarks feature
 
-is there a connection type called מקבילות
-
 deos webview have a צריכת חשמל mode מצב חיסכון
 
 הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
 but the similar buttons in wzard are working
 
-המצב כיום הוא שאם אני רוצה לשנות את הזום לא למספרים עגולים הדרך היחידה היא לשנות עם משטח המגע של העכבר
-הייתי שמח אם הייתה אפשרות להקליד את אחוזי הזום כדי להתאימם אישית לפי הצורך
-
 test if reverted scroll restore in any form
 
-add deletion option for the Hebrew books
+test deletion option for the Hebrew books
 
 when screen is wifde enough no need to use overlay for bookview sidepanel it can show side by side with content
