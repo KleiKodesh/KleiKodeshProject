@@ -76,7 +76,7 @@ const diacriticsState = computed(() => settingsStore.diacriticsState)
 const fontPx = computed(() => (zoom.value / 100) * (settingsStore.fontSize / 100) * 15)
 
 const scrollerEl = ref<HTMLElement | null>(null)
-useZoomHandler({ zoom, target: scrollerEl, keyboard: false })
+useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
 })

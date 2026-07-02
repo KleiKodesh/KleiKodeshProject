@@ -61,6 +61,36 @@ function onDiacriticsClick() {
 
 const tocBtnRef = ref<HTMLElement | null>(null)
 
+// Continuous zoom — fires immediately on pointerdown, then waits 400ms before
+// repeating every 80ms. The delay prevents a normal tap from triggering more
+// than one step.
+let zoomInterval: ReturnType<typeof setInterval> | null = null
+let zoomDelayTimeout: ReturnType<typeof setTimeout> | null = null
+
+function startContinuousZoom(direction: 'in' | 'out') {
+  if (zoomInterval !== null || zoomDelayTimeout !== null) return
+  if (direction === 'in') bookViewStore.zoomIn()
+  else bookViewStore.zoomOut()
+  zoomDelayTimeout = setTimeout(() => {
+    zoomDelayTimeout = null
+    zoomInterval = setInterval(() => {
+      if (direction === 'in') bookViewStore.zoomIn()
+      else bookViewStore.zoomOut()
+    }, 80)
+  }, 400)
+}
+
+function stopContinuousZoom() {
+  if (zoomDelayTimeout !== null) {
+    clearTimeout(zoomDelayTimeout)
+    zoomDelayTimeout = null
+  }
+  if (zoomInterval !== null) {
+    clearInterval(zoomInterval)
+    zoomInterval = null
+  }
+}
+
 const autoSelectTopLineTitle = computed(() =>
   autoSelectTopLine.value
     ? 'סנכרן מפרשים\nלחץ לכיבוי הסנכרון האוטומטי'
@@ -68,11 +98,11 @@ const autoSelectTopLineTitle = computed(() =>
 )
 
 const zoomOutTitle = computed(
-  () => `הקטן (Ctrl-)\nטקסט: ${zoom.value}% | מפרשים: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
+  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(zoom.value)}% | מפרשים: ${Math.round(commentaryZoom.value)}%\nאיפוס: Ctrl+0`,
 )
 
 const zoomInTitle = computed(
-  () => `הגדל (Ctrl+)\nטקסט: ${zoom.value}% | מפרשים: ${commentaryZoom.value}%\nאיפוס: Ctrl+0`,
+  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(zoom.value)}% | מפרשים: ${Math.round(commentaryZoom.value)}%\nאיפוס: Ctrl+0`,
 )
 
 const commentaryModeTitle = computed(() => {
@@ -136,14 +166,20 @@ defineExpose({ tocBtnRef })
     <button
       :title="zoomOutTitle"
       :disabled="zoom <= ZOOM_CONFIG.MIN && commentaryZoom <= ZOOM_CONFIG.MIN"
-      @click="bookViewStore.zoomOut()"
+      @pointerdown="startContinuousZoom('out')"
+      @pointerup="stopContinuousZoom"
+      @pointerleave="stopContinuousZoom"
+      @pointercancel="stopContinuousZoom"
     >
       <IconZoomOut20Regular />
     </button>
     <button
       :title="zoomInTitle"
       :disabled="zoom >= ZOOM_CONFIG.MAX && commentaryZoom >= ZOOM_CONFIG.MAX"
-      @click="bookViewStore.zoomIn()"
+      @pointerdown="startContinuousZoom('in')"
+      @pointerup="stopContinuousZoom"
+      @pointerleave="stopContinuousZoom"
+      @pointercancel="stopContinuousZoom"
     >
       <IconZoomIn20Regular />
     </button>
