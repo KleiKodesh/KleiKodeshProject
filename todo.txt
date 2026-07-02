@@ -5,6 +5,10 @@ add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
+תצוגה מפוצלת
+
+zoom jump in 5 not ten
+
 ספרים קרובים update for book with source
 
 add focused search to fts thi si seasy because it can be itegrated in te galloping 

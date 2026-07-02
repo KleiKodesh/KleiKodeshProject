@@ -18,7 +18,7 @@ namespace KitveiHakodeshLib.LocalFile
     public class LocalFileHandler
     {
         private static readonly string WordCacheDir =
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "cache", "word");
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "word-cache");
 
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
@@ -103,7 +103,7 @@ namespace KitveiHakodeshLib.LocalFile
                             watcherFired = true;
                             watcher.EnableRaisingEvents = false;
                             watcher.Dispose();
-                            string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
+                            string url2 = "http://KitveiHakodesh-vue-app/word-cache/" + destFileName;
                             _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
                         };
                         watcher.Created += onReady;
@@ -126,7 +126,7 @@ namespace KitveiHakodeshLib.LocalFile
 
                     if (!watcherFired)
                     {
-                        string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
+                        string url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached);
                         _bridge.PushEvent(new { @event = "localFileConversionReady", url, fileName = displayName, filePath });
                     }
                 }
@@ -206,7 +206,7 @@ namespace KitveiHakodeshLib.LocalFile
                                     fired = true;
                                     watcher.EnableRaisingEvents = false;
                                     watcher.Dispose();
-                                    string url2 = "http://KitveiHakodesh-vue-app/cache/word/" + destFileName;
+                                    string url2 = "http://KitveiHakodesh-vue-app/word-cache/" + destFileName;
                                     _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
                                 };
                                 watcher.Created += onReady;
@@ -222,7 +222,7 @@ namespace KitveiHakodeshLib.LocalFile
                             }
 
                             if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן." }); return; }
-                            string url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached);
+                            string url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached);
                             _bridge.Reply(id, new { cancelled = false, url, fileName = displayName, filePath });
                         }
                     }
@@ -251,7 +251,7 @@ namespace KitveiHakodeshLib.LocalFile
                 string cached = GetCachePath(filePath);
                 if (!File.Exists(cached)) cached = await ConvertToPdfAsync(filePath);
                 if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ" }); return; }
-                _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/cache/word/" + Path.GetFileName(cached) });
+                _bridge.Reply(id, new { url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached) });
             }
             catch (Exception ex)
             {

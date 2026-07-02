@@ -17,8 +17,9 @@ namespace KitveiHakodeshLib
         // Any navigation to a URL that doesn't match one of these prefixes is cancelled.
         //
         // Allowed origins:
-        //   http://KitveiHakodesh-vue-app/   — the main Vue app and the HebrewBooks PDF cache
-        //                                       (CacheUrl serves from /cache/hebrewbooks/ on this host)
+        //   http://KitveiHakodesh-vue-app/   — the main Vue app, the HebrewBooks PDF cache
+        //                                       (/hebrewbooks-cache/), and converted Word files
+        //                                       (/word-cache/) — all served from KitveiHakodesh\
         //   http://kitvei-localfile-          — per-folder virtual hosts registered by LocalFileHandler
         //                                       for local PDF, HTML, and converted Word files
         //   http://kitvei-hb-local-           — per-folder virtual hosts registered by HebrewBooksHandler
