@@ -6,6 +6,7 @@ import type { Plugin } from 'vite'
 import { Worker } from 'node:worker_threads'
 import path from 'node:path'
 import { fileURLToPath as toPath } from 'node:url'
+import net from 'node:net'
 
 // Two workers — one handles the lines chunk (LCP path), the other handles the
 // TOC query that fires simultaneously. Both open the same DB file, but two
@@ -19,10 +20,8 @@ interface PendingRequest {
 
 function createWorkerPool(workerPath: string, workerData: object) {
   const workers: Worker[] = []
-  // pending[requestId] → { resolve, reject }
   const pending = new Map<number, PendingRequest>()
   let nextRequestId = 0
-  // Round-robin index for dispatching to workers
   let robin = 0
 
   for (let i = 0; i < POOL_SIZE; i++) {
@@ -55,6 +54,103 @@ function createWorkerPool(workerPath: string, workerData: object) {
   return { dispatch, terminate }
 }
 
+// ── DocumentLocator named-pipe proxy ──────────────────────────────────────────
+const DOCUMENT_LOCATOR_PIPE = '\\\\.\\pipe\\DocumentLocator'
+const DOCUMENT_LOCATOR_CONNECT_TIMEOUT_MS = 1_500
+const DOCUMENT_LOCATOR_STARTUP_TIMEOUT_MS = 30_000
+const DOCUMENT_LOCATOR_STARTUP_POLL_MS    = 500
+
+function tryCallDocumentLocatorPipe(requestJson: string, connectTimeoutMs: number): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = net.createConnection(DOCUMENT_LOCATOR_PIPE)
+    const connectTimer = setTimeout(() => {
+      socket.destroy()
+      reject(Object.assign(new Error('DocumentLocator pipe connection timed out'), { code: 'ETIMEDOUT' }))
+    }, connectTimeoutMs)
+
+    let responseBuffer = Buffer.alloc(0)
+    let expectedLength = -1
+
+    socket.on('connect', () => {
+      clearTimeout(connectTimer)
+      const body = Buffer.from(requestJson, 'utf8')
+      const header = Buffer.alloc(4)
+      header.writeInt32LE(body.length, 0)
+      socket.write(Buffer.concat([header, body]))
+    })
+
+    socket.on('data', (chunk) => {
+      responseBuffer = Buffer.concat([responseBuffer, chunk])
+      if (expectedLength === -1 && responseBuffer.length >= 4) {
+        expectedLength = responseBuffer.readInt32LE(0)
+      }
+      if (expectedLength !== -1 && responseBuffer.length >= 4 + expectedLength) {
+        const responseJson = responseBuffer.slice(4, 4 + expectedLength).toString('utf8')
+        socket.destroy()
+        resolve(responseJson)
+      }
+    })
+
+    socket.on('error', (err) => {
+      clearTimeout(connectTimer)
+      reject(err)
+    })
+  })
+}
+
+function startDocumentLocatorService(): Promise<void> {
+  return new Promise((resolve) => {
+    const { exec } = require('node:child_process') as typeof import('node:child_process')
+    exec('sc start DocumentLocatorSvc', (err) => {
+      if (err && !err.message.includes('1056') && !err.message.includes('already running')) {
+        console.warn('[dev-document-locator] sc start failed:', err.message)
+      }
+      resolve()
+    })
+  })
+}
+
+function waitForDocumentLocatorPipe(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const deadline = Date.now() + DOCUMENT_LOCATOR_STARTUP_TIMEOUT_MS
+
+    function attempt() {
+      const socket = net.createConnection(DOCUMENT_LOCATOR_PIPE)
+      socket.setTimeout(300)
+      socket.on('connect', () => { socket.destroy(); resolve() })
+      socket.on('timeout', () => { socket.destroy(); retry() })
+      socket.on('error', () => { retry() })
+    }
+
+    function retry() {
+      if (Date.now() >= deadline) {
+        reject(new Error('DocumentLocator service did not start in time'))
+        return
+      }
+      setTimeout(attempt, DOCUMENT_LOCATOR_STARTUP_POLL_MS)
+    }
+
+    attempt()
+  })
+}
+
+async function callDocumentLocatorPipe(requestJson: string): Promise<string> {
+  const pipeNotAvailable = (err: NodeJS.ErrnoException) =>
+    err.code === 'ENOENT' || err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT'
+
+  try {
+    return await tryCallDocumentLocatorPipe(requestJson, DOCUMENT_LOCATOR_CONNECT_TIMEOUT_MS)
+  } catch (firstError) {
+    if (!pipeNotAvailable(firstError as NodeJS.ErrnoException)) throw firstError
+
+    console.log('[dev-document-locator] service not responding — starting via sc start...')
+    await startDocumentLocatorService()
+    await waitForDocumentLocatorPipe()
+
+    return await tryCallDocumentLocatorPipe(requestJson, DOCUMENT_LOCATOR_CONNECT_TIMEOUT_MS)
+  }
+}
+
 function devSqlitePlugin(): Plugin {
   let pool: ReturnType<typeof createWorkerPool> | null = null
 
@@ -62,6 +158,11 @@ function devSqlitePlugin(): Plugin {
     name: 'dev-sqlite',
     apply: 'serve',
     enforce: 'pre',
+
+    async handleHotUpdate(ctx) {
+      // Ensure the plugin is alive
+      return ctx.modules
+    },
 
     configureServer(server) {
       const env = loadEnv('development', process.cwd(), '')
@@ -75,48 +176,132 @@ function devSqlitePlugin(): Plugin {
 
       server.httpServer?.on('close', () => pool?.terminate())
 
-      const middleware = (req: any, res: any, next: any) => {
+      // Wrap middleware registration to ensure it runs after all built-in Vite middleware is set up
+      console.log('[dev-sqlite] registering API middleware')
+      server.middlewares.use((req: any, res: any, next: any) => {
         if (req.url?.startsWith('/pdfjs/')) {
           res.setHeader('Cache-Control', 'no-store')
         }
 
-        const urlToType: Record<string, string> = {
-          '/query':                  'query',
-          '/query-dict':             'query-dict',
-          '/query-user-settings':    'query-user-settings',
-          '/execute-user-settings':  'exec-user-settings',
+        if (req.method !== 'POST') {
+          next()
+          return
         }
-        const type = req.method === 'POST' ? urlToType[req.url] : undefined
-        if (!type) { next(); return }
 
-        let body = ''
-        req.on('data', (chunk: string) => (body += chunk))
-        req.on('error', () => {
-          res.writeHead(400, { 'Content-Type': 'application/json' })
-          res.end(JSON.stringify({ error: 'Request error' }))
-        })
-        req.on('end', () => {
-          let sql: string, params: unknown[]
-          try {
-            ;({ sql, params = [] } = JSON.parse(body))
-          } catch {
-            res.writeHead(400, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: 'Invalid JSON' }))
+        // Document Locator endpoint
+        if (req.url === '/document-locator') {
+            let body = ''
+
+            req.on('data', (chunk: Buffer | string) => {
+              body += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+            })
+
+            req.on('error', (err: Error) => {
+              console.error('[dev-document-locator] request error:', err.message)
+              if (!res.headersSent) {
+                res.writeHead(400, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ error: 'Request error' }))
+              }
+            })
+
+            req.on('end', async () => {
+              let requestJson: string
+              try {
+                const parsed = JSON.parse(body) as Record<string, unknown>
+                // Convert frontend request format to DocumentLocator pipe format
+                // Frontend sends: { type: 'search', query: string, max: number }
+                // Pipe expects: { q: string, limit?: number }
+                const q = (parsed.query as string) || (parsed.q as string) || ''
+                const limit = Math.min((parsed.max as number) || 200, 5000)
+                requestJson = JSON.stringify(limit > 0 ? { q, limit } : { q })
+              } catch (err) {
+                if (!res.headersSent) {
+                  res.writeHead(400, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ error: 'Invalid JSON' }))
+                }
+                return
+              }
+
+              try {
+                const responseJson = await callDocumentLocatorPipe(requestJson)
+                const pipeResponse = JSON.parse(responseJson) as Record<string, unknown>
+
+                // Transform the pipe response to match C# FileSystemSearchHandler format
+                let reply: Record<string, unknown>
+                if (pipeResponse.status === 'error') {
+                  reply = { error: (pipeResponse.message as string) || 'Search error' }
+                } else if (pipeResponse.status === 'ok') {
+                  // Convert pipe response to C# format: { results: [{fileName, path}, ...], total }
+                  const paths = (pipeResponse.paths as string[]) || []
+                  const results = paths.map((fullPath) => {
+                    const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'))
+                    return {
+                      fileName: lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath,
+                      path: lastSep >= 0 ? fullPath.slice(0, lastSep) : '',
+                    }
+                  })
+                  reply = { results, total: (pipeResponse.total as number) || 0 }
+                } else {
+                  reply = { error: 'Unexpected response from DocumentLocator service' }
+                }
+
+                if (!res.headersSent) {
+                  res.writeHead(200, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify(reply))
+                }
+              } catch (err: any) {
+                console.error('[dev-document-locator] error:', err.message)
+                if (!res.headersSent) {
+                  res.writeHead(503, { 'Content-Type': 'application/json' })
+                  res.end(JSON.stringify({ error: err.message }))
+                }
+              }
+            })
             return
           }
 
-          pool!.dispatch(type, sql, params).then((result) => {
-            res.writeHead(200, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify(result))
-          }).catch((err: Error) => {
-            console.error('[dev-sqlite] query error:', err.message)
-            res.writeHead(500, { 'Content-Type': 'application/json' })
-            res.end(JSON.stringify({ error: err.message }))
+          // SQLite endpoints
+          const urlToType: Record<string, string> = {
+            '/query': 'query',
+            '/query-dict': 'query-dict',
+            '/query-user-settings': 'query-user-settings',
+            '/execute-user-settings': 'exec-user-settings',
+          }
+          const type = urlToType[req.url]
+          if (!type) {
+            next()
+            return
+          }
+
+          let body = ''
+          req.on('data', (chunk: string) => (body += chunk))
+          req.on('error', () => {
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'Request error' }))
+          })
+          req.on('end', () => {
+            let sql: string, params: unknown[]
+            try {
+              ;({ sql, params = [] } = JSON.parse(body))
+            } catch {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: 'Invalid JSON' }))
+              return
+            }
+
+            pool!
+              .dispatch(type, sql, params)
+              .then((result) => {
+                res.writeHead(200, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify(result))
+              })
+              .catch((err: Error) => {
+                console.error('[dev-sqlite] query error:', err.message)
+                res.writeHead(500, { 'Content-Type': 'application/json' })
+                res.end(JSON.stringify({ error: err.message }))
+              })
           })
         })
-      }
-
-      server.middlewares.use(middleware)
     },
   }
 }
@@ -133,8 +318,6 @@ export default defineConfig({
     },
   },
   server: {
-    // Pre-transform the critical path on dev server start so the first browser
-    // request is served from cache rather than compiled on demand.
     warmup: {
       clientFiles: [
         './src/main.ts',
@@ -156,10 +339,6 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    // Exclude large packages that tree-shake well from dep pre-bundling.
-    // Including them in the pre-bundle means the browser downloads and parses the
-    // entire package on cold start. Excluding lets Vite serve only the symbols
-    // actually imported, as individual transformed modules.
     exclude: [
       '@iconify-prerendered/vue-fluent',
       '@iconify-prerendered/vue-fluent-color',

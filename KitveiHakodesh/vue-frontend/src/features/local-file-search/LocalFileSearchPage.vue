@@ -14,9 +14,8 @@ const tabStore = useTabStore()
 
 const searchQuery = ref('')
 const {
-  results, searching, showLoadingAnimation, isIndexing, indexingMessage,
-  totalCount, errorMessage, installConsentPending,
-  onInstallConsentGranted, onInstallConsentDeclined,
+  results, searching, showLoadingAnimation,
+  totalCount, errorMessage,
 } = useLocalFileSearch(searchQuery)
 
 const searchInputElement = ref<HTMLInputElement | null>(null)
@@ -73,41 +72,14 @@ async function onOpenFile(item: LocalFileSearchResult) {
 <template>
   <div class="local-file-search-page">
     <div class="local-file-search-content">
-      <!-- Install consent prompt — shown first time the page opens -->
-      <div v-if="installConsentPending" class="consent-panel">
-        <div class="consent-card">
-          <h2 class="consent-title">חיפוש קבצים מקומיים</h2>
-          <p class="consent-body">
-            תכונה זו משתמשת בשירות אינדקס קבצים (DocumentLocator) שצריך להיות מותקן
-            במחשב כשירות מערכת. ההתקנה דורשת אישור מנהל מערכת (UAC) פעם אחת בלבד.
-          </p>
-          <p class="consent-body">
-            האם ברצונך להתקין את שירות האינדקס?
-          </p>
-          <div class="consent-buttons">
-            <button class="consent-btn consent-btn--yes" @click="onInstallConsentGranted">
-              כן, התקן
-            </button>
-            <button class="consent-btn consent-btn--no" @click="onInstallConsentDeclined">
-              לא
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Index building — show spinner with live progress message from C# -->
-      <div v-else-if="isIndexing" class="indexing-state">
-        <LoadingAnimation :text="indexingMessage ?? 'האינדקס בטעינה'" />
-      </div>
-
       <!-- Error state -->
-      <div v-else-if="errorMessage" class="state-banner error-banner">
+      <div v-if="errorMessage" class="state-banner error-banner">
         <IconWarning20Regular class="banner-icon banner-icon--error" />
         <span>{{ errorMessage }}</span>
       </div>
 
-      <!-- Results or empty state (only render when NOT indexing) -->
-      <div v-else-if="!isIndexing" class="results-container">
+      <!-- Results or empty state -->
+      <div v-else class="results-container">
         <!-- Loading while any search is in flight for more than 200ms -->
         <div v-if="showLoadingAnimation" class="searching-state">
           <LoadingAnimation text="מחפש..." />
@@ -125,7 +97,6 @@ async function onOpenFile(item: LocalFileSearchResult) {
           ref="resultsListElement"
           :items="results"
           :searching="searching"
-          :is-indexing="isIndexing"
           @open-file="onOpenFile"
         />
 
@@ -203,71 +174,6 @@ async function onOpenFile(item: LocalFileSearchResult) {
   filter: grayscale(1) opacity(0.4);
 }
 
-/* Install consent */
-.consent-panel {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-}
-.consent-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 28px 32px;
-  max-width: 340px;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 14px;
-  text-align: center;
-}
-.consent-title {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-}
-.consent-body {
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin: 0;
-}
-.consent-buttons {
-  display: flex;
-  gap: 10px;
-  margin-top: 4px;
-  width: 100%;
-  justify-content: center;
-}
-.consent-btn {
-  padding: 8px 22px;
-  font-size: 13px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-family: inherit;
-  border: 1px solid var(--border-color);
-  transition: background 0.1s;
-}
-.consent-btn--yes {
-  background: var(--accent-color, #0078d4);
-  color: #fff;
-  border-color: transparent;
-}
-.consent-btn--yes:hover {
-  background: color-mix(in srgb, var(--accent-color, #0078d4) 85%, #fff);
-}
-.consent-btn--no {
-  background: var(--bg-primary);
-  color: var(--text-secondary);
-}
-.consent-btn--no:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-
 /* Banners */
 .state-banner {
   display: flex;
@@ -294,8 +200,7 @@ async function onOpenFile(item: LocalFileSearchResult) {
   color: inherit;
 }
 
-/* Indexing / searching state */
-.indexing-state,
+/* Searching state */
 .searching-state {
   display: flex;
   flex-direction: column;

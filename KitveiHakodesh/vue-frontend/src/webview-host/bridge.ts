@@ -7,7 +7,7 @@
  */
 
 import { isHosted } from './seforimDb'
-import { devPickPdf } from './devFallbacks'
+import { devPickPdf, devFileSystemSearch } from './devFallbacks'
 
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
@@ -187,19 +187,27 @@ export function hbSearch(
 }
 
 /**
- * Notify C# that the file search page has loaded.
- * C# replies immediately with { isReady: bool }.
- * If isReady=false, C# launches Everything in the background and pushes
- * fileSystemIndexingStatus { isIndexing: false } when ready.
+ * Notify C# to warm up the DocumentLocator service in the background.
+ * Fire-and-forget — no reply is needed. By the time the user types a query
+ * the service will likely already be running and the index ready.
  */
-export function fileSystemSearchPageLoad(): Promise<{ isReady: boolean }> {
-  return action('fileSystemSearchPageLoad')
+export function fileSystemSearchWarmup(): void {
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev mode: poke the pipe via the Vite middleware — also fire-and-forget.
+    fetch('/document-locator', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 'status' }),
+    }).catch(() => {})
+    return
+  }
+  action('fileSystemSearchWarmup').catch(() => {})
 }
 
 /**
- * Search the file system using the Everything index.
- * Results are restricted to MS Word and document formats (FilterToDocumentTypes = true).
- * Returns up to `max` results (default 200).
+ * Search the file system using the DocumentLocator service.
+ * Starts the service on demand if it has stopped and waits until the index is ready before returning results.
+ * Vue's loading animation covers the wait. Returns up to `max` results (default 200).
  */
 export function fileSystemSearch(
   query: string,
@@ -207,9 +215,9 @@ export function fileSystemSearch(
 ): Promise<{
   results?: Array<{ fileName: string; path: string }>
   total?: number
-  notInstalled?: boolean
   error?: string
 }> {
+  if (typeof window.__webviewAction !== 'function') return devFileSystemSearch(query, max)
   return action('fileSystemSearch', { query, max })
 }
 
