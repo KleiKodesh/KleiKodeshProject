@@ -48,3 +48,53 @@ export function devPickPdf(): Promise<LocalFileResult | null> {
     input.click()
   })
 }
+
+// ── DocumentLocator fallbacks ─────────────────────────────────────────────────
+
+/**
+ * Dev-mode fallback for fileSystemSearch() — hits the Vite dev middleware at
+ * /document-locator. The middleware translates between the frontend request format
+ * and the DocumentLocator pipe protocol, and converts the pipe response to the
+ * C# FileSystemSearchHandler format.
+ */
+export async function devFileSystemSearch(
+  query: string,
+  max = 200,
+): Promise<{
+  results?: Array<{ fileName: string; path: string }>
+  total?: number
+  error?: string
+}> {
+  try {
+    const response = await callDocumentLocatorDev({ type: 'search', query, max })
+
+    // Response is already in C# format: { results, total } or { error }
+    if ('error' in response) {
+      return { error: (response.error as string) || 'Search error' }
+    }
+
+    if ('results' in response) {
+      return {
+        results: response.results as Array<{ fileName: string; path: string }>,
+        total: (response.total as number) || 0,
+      }
+    }
+
+    return { error: 'Unexpected response format from DocumentLocator' }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Unknown error'
+    return { error: message }
+  }
+}
+
+async function callDocumentLocatorDev(request: object): Promise<Record<string, unknown>> {
+  const res = await fetch('/document-locator', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(request),
+  })
+  if (!res.ok) {
+    throw new Error(`DocumentLocator request failed: ${res.status} ${res.statusText}`)
+  }
+  return (await res.json()) as Record<string, unknown>
+}

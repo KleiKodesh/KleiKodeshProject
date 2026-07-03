@@ -10,22 +10,15 @@ namespace KitveiHakodeshLib.FileSystemSearch
     /// <summary>
     /// Bridge between the Vue frontend and DocumentLocatorAdapter.
     ///
-    /// Push events sent to Vue:
-    ///   fileSystemIndexingStatus { isIndexing: bool, message?: string }
-    ///     — pushed during index build with progress messages, and once with
-    ///       isIndexing=false when the index becomes ready.
-    ///
     /// Actions:
-    ///   fileSystemSearchPageLoad
-    ///     — Vue sends on page load (only after user has consented to install).
-    ///       Replies immediately with { isReady: bool }.
-    ///       All blocking work (StopIfStale, IsReady, EnsureInstalled, EnsureReady)
-    ///       runs on a background thread — never on the WebMessageReceived thread.
-    ///
     ///   fileSystemSearch
-    ///     — Vue sends a query. C# passes the limit straight through to the
-    ///       DocumentLocator pipe so Lucene caps the result set server-side.
-    ///       Replies with { results, total, error? }.
+    ///     — Vue sends a query. C# starts the service on demand if it is stopped,
+    ///       waits until the index is ready, then executes the search and replies.
+    ///       Vue shows its own loading animation during the wait — no push events needed.
+    ///       Replies with { results, total } on success or { error } on failure.
+    ///
+    ///   ResetDocumentLocatorIndex
+    ///     — Wipes and rebuilds the index from scratch. Replies immediately with {}.
     /// </summary>
     public class FileSystemSearchHandler : IDisposable
     {
@@ -35,9 +28,7 @@ namespace KitveiHakodeshLib.FileSystemSearch
         private readonly WebBridge _bridge;
         private readonly DocumentLocatorAdapter _adapter;
         private CancellationTokenSource _currentSearch;
-        private CancellationTokenSource _ensureReadyCts;
         private CancellationTokenSource _reindexCts;
-        private volatile bool _reindexInProgress;
 
         public FileSystemSearchHandler(WebBridge bridge)
         {
@@ -45,154 +36,35 @@ namespace KitveiHakodeshLib.FileSystemSearch
             _adapter = new DocumentLocatorAdapter();
         }
 
-        // ── Page load: check ready ────────────────────────────────────────────────
+        // ── Search ────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Vue sends this on page load to find out if the index is ready.
-        /// This is only called after the user has consented to install the service.
-        ///
-        /// Replies immediately with { isReady: false } and moves ALL blocking work
-        /// (StopIfStale, IsInstalled, IsReady, EnsureInstalled, EnsureReady) to a
-        /// background thread so the WebMessageReceived handler returns immediately.
+        /// Vue sends this on page load to warm up the service in the background.
+        /// Replies immediately with {} so the RPC completes, then starts the service
+        /// and waits for the index on a background thread — silently. No push events.
         /// </summary>
-        public void HandlePageLoad(string id)
+        public void HandleWarmup(string id)
         {
-            // If a reindex is already running, its WaitUntilReadyAsync loop is already
-            // pushing fileSystemIndexingStatus events — there is nothing else to start.
-            // Just reply and let the in-flight reindex drive the UI.
-            if (_reindexInProgress)
-            {
-                _bridge.Reply(id, new { isReady = false });
-                return;
-            }
-
-            // Cancel any previous ensure-ready loop (e.g. user navigated away and back).
-            var previous = Interlocked.Exchange(ref _ensureReadyCts, new CancellationTokenSource());
-            previous?.Cancel();
-            previous?.Dispose();
-
-            var cts = _ensureReadyCts;
-
-            // Reply immediately — everything else is background work.
-            // We always say isReady=false here and let the background thread push
-            // fileSystemIndexingStatus { isIndexing: false } when actually ready.
-            // This avoids the complexity of racing a synchronous IsReady check
-            // against the WebMessageReceived thread constraint.
-            _bridge.Reply(id, new { isReady = false });
-
-            Task.Run(() => RunEnsureReadyLoop(cts.Token), cts.Token);
-        }
-
-        private void RunEnsureReadyLoop(CancellationToken ct)
-        {
-            try
-            {
-                // Stop a stale running service binary so the fresh exe is picked up.
-                ServiceBridge.StopIfStale();
-
-                // Install the service (UAC prompt once) if it isn't registered yet.
-                if (!ServiceBridge.IsInstalled())
-                {
-                    PushIndexingStatus(isIndexing: true, message: "מתקין את שירות האינדקס…");
-                    bool installed = ServiceBridge.EnsureInstalled();
-                    if (!installed)
-                    {
-                        // User cancelled the UAC prompt.
-                        PushIndexingStatus(isIndexing: true, message: "ההתקנה בוטלה על ידי המשתמש.");
-                        return;
-                    }
-                }
-
-                // Mirror WaitForIndexAsync from the demo — polls GetStatusAsync in a loop,
-                // forwarding progress messages to Vue via push events.
-                _adapter.WaitUntilReadyAsync(ct, message =>
-                    PushIndexingStatus(isIndexing: true, message: message))
-                    .GetAwaiter().GetResult();
-
-                // Index is ready.
-                PushIndexingStatus(isIndexing: false, message: null);
-            }
-            catch (OperationCanceledException) { /* page closed or superseded — fine */ }
-            catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException) { }
-            catch (Exception ex)
-            {
-                PushIndexingStatus(isIndexing: true, message: "שגיאה: " + Unwrap(ex).Message);
-            }
-        }
-
-        private static Exception Unwrap(Exception ex)
-        {
-            while (ex is AggregateException ae && ae.InnerException != null)
-                ex = ae.InnerException;
-            return ex;
-        }
-
-        private void PushIndexingStatus(bool isIndexing, string message)
-        {
-            if (message != null)
-                _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing, message });
-            else
-                _bridge.PushEvent(new { @event = "fileSystemIndexingStatus", isIndexing });
-        }
-
-        // ── Reindex ───────────────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Vue sends this when the user requests a full DocumentLocator index rebuild.
-        /// Replies immediately with {} and runs the reindex + wait-until-ready loop
-        /// on a background thread, forwarding progress via fileSystemIndexingStatus
-        /// push events — the same events the search page already listens to.
-        /// </summary>
-        public void HandleReindex(string id)
-        {
-            // Cancel any previous reindex in progress.
-            var previous = Interlocked.Exchange(ref _reindexCts, new CancellationTokenSource());
-            previous?.Cancel();
-            previous?.Dispose();
-
-            // Also cancel the ensure-ready loop — no point waiting for ready when we
-            // are about to wipe and rebuild from scratch.
-            var prevEnsure = Interlocked.Exchange(ref _ensureReadyCts, null);
-            prevEnsure?.Cancel();
-            prevEnsure?.Dispose();
-
-            var cts = _reindexCts;
-            _reindexInProgress = true;
-
             _bridge.Reply(id, new { });
 
-            Task.Run(async () =>
+            Task.Run(() =>
             {
                 try
                 {
-                    PushIndexingStatus(isIndexing: true, message: "שולח בקשת בנייה מחדש…");
-                    await _adapter.ReindexAsync(cts.Token).ConfigureAwait(false);
-                    await _adapter.WaitUntilReadyAsync(cts.Token, message =>
-                        PushIndexingStatus(isIndexing: true, message: message))
-                        .ConfigureAwait(false);
-                    PushIndexingStatus(isIndexing: false, message: null);
+                    ServiceBridge.StopIfStale();
+                    _adapter.WaitUntilReadyAsync(CancellationToken.None, _ => { })
+                        .GetAwaiter().GetResult();
                 }
-                catch (OperationCanceledException) { }
-                catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException) { }
-                catch (Exception ex)
-                {
-                    PushIndexingStatus(isIndexing: true, message: "שגיאה: " + Unwrap(ex).Message);
-                }
-                finally
-                {
-                    _reindexInProgress = false;
-                }
-            }, cts.Token);
+                catch { /* warmup is best-effort — silently ignore any failure */ }
+            });
         }
 
         // ── Search ────────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Vue sends this when it has a query to run.
-        /// The limit is passed straight through to the service so Lucene caps the
-        /// result set server-side (faster than fetching everything and truncating here).
-        /// Replies with { results, total, error? }.
-        /// total reflects the full match count from the index, even when results are capped.
+        /// Executes a search. Starts the service on demand if it has stopped, waits
+        /// until the index is ready, then replies with { results, total } or { error }.
+        /// Rapid keystrokes cancel the previous in-flight call.
         /// </summary>
         public void HandleSearch(JsonElement root, string id)
         {
@@ -212,6 +84,16 @@ namespace KitveiHakodeshLib.FileSystemSearch
             {
                 try
                 {
+                    // Start-on-demand: start the service if it has stopped, then wait
+                    // until its index is ready. No-op if the service is already running
+                    // and the index is ready. This blocks the search reply until ready,
+                    // which is intentional — Vue's loading animation covers the wait.
+                    ServiceBridge.StopIfStale();
+                    await _adapter.WaitUntilReadyAsync(cts.Token, _ => { })
+                        .ConfigureAwait(false);
+
+                    if (cts.Token.IsCancellationRequested) return;
+
                     var (results, total) = await _adapter.SearchAsync(query, max, cts.Token)
                         .ConfigureAwait(false);
 
@@ -227,18 +109,55 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 {
                     // Superseded by a newer search — no reply needed.
                 }
+                catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException)
+                {
+                    // Same — superseded.
+                }
                 catch (Exception ex)
                 {
-                    // If the service is no longer installed (user uninstalled it while
-                    // the app was running), tell Vue so it can re-show the install prompt.
-                    if (!ServiceBridge.IsInstalled())
-                    {
-                        _bridge.Reply(id, new { notInstalled = true });
-                        return;
-                    }
-                    _bridge.Reply(id, new { error = ex.Message });
+                    _bridge.Reply(id, new { error = Unwrap(ex).Message });
                 }
             });
+        }
+
+        // ── Reindex ───────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Wipes and rebuilds the DocumentLocator index from scratch.
+        /// Replies immediately with {}. Progress is not pushed to Vue — the next
+        /// search call will block in WaitUntilReadyAsync until the rebuild finishes.
+        /// </summary>
+        public void HandleReindex(string id)
+        {
+            var previous = Interlocked.Exchange(ref _reindexCts, new CancellationTokenSource());
+            previous?.Cancel();
+            previous?.Dispose();
+
+            var cts = _reindexCts;
+            _bridge.Reply(id, new { });
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    await _adapter.ReindexAsync(cts.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { }
+                catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException) { }
+                catch (Exception ex)
+                {
+                    Console.WriteLine("[FileSystemSearch] Reindex error: " + Unwrap(ex).Message);
+                }
+            }, cts.Token);
+        }
+
+        // ── Helpers ───────────────────────────────────────────────────────────────
+
+        private static Exception Unwrap(Exception ex)
+        {
+            while (ex is AggregateException ae && ae.InnerException != null)
+                ex = ae.InnerException;
+            return ex;
         }
 
         public void Dispose()
@@ -246,10 +165,6 @@ namespace KitveiHakodeshLib.FileSystemSearch
             var reindexCts = Interlocked.Exchange(ref _reindexCts, null);
             reindexCts?.Cancel();
             reindexCts?.Dispose();
-
-            var ensureCts = Interlocked.Exchange(ref _ensureReadyCts, null);
-            ensureCts?.Cancel();
-            ensureCts?.Dispose();
 
             var searchCts = Interlocked.Exchange(ref _currentSearch, null);
             searchCts?.Cancel();

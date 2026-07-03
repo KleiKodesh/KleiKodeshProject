@@ -71,7 +71,7 @@ namespace KitveiHakodeshLib
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getFonts": HandleGetFonts(id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
-                        case "fileSystemSearchPageLoad": _fileSystemSearch.HandlePageLoad(id); break;
+                        case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;

@@ -2,34 +2,19 @@
  * Local file search composable.
  *
  * Flow:
- * 1. On mount, check if the user has consented to installing the DocumentLocator service.
- *    - Not yet consented → installConsentPending = true. No bridge call is made.
- *    - Already consented → proceed to step 2.
- *
- * 2. Call fileSystemSearchPageLoad(). C# always replies { isReady: false } immediately
- *    and does all blocking work (StopIfStale, install, index wait) on a background thread.
- *    C# pushes fileSystemIndexingStatus events while the index builds:
- *      { event: 'fileSystemIndexingStatus', isIndexing: true,  message: 'Crawling C:…' }
- *      { event: 'fileSystemIndexingStatus', isIndexing: false }  ← index ready
- *
- * 3. The indexingMessage ref tracks the latest progress string from C# so the UI can
- *    show it inside the spinner. Cleared when isIndexing becomes false.
- *
- * 4. Search only fires when isIndexing = false and installConsentPending = false.
- *    If the user typed before the index was ready the isIndexing watcher retries.
- *
- * 5. Consent is stored in localStorage via KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED.
- *    "No" clears the key so the prompt reappears on the next page visit.
- *
- * 6. The webview event listener is registered once and never re-registered, guarded
- *    by _eventListenerRegistered so multiple startPageLoad calls are safe.
+ * The user types a query → debounce fires → fileSystemSearch() is called.
+ * C# (or the Vite dev middleware) starts the DocumentLocator service on demand,
+ * waits until the index is ready, then executes the search. The whole thing is
+ * one blocking call from Vue's perspective — Vue's loading animation covers the
+ * wait. If the service fails to start or the index errors, { error } is returned
+ * and shown as an error banner. No page-load handshake, no push events, no
+ * separate indexing state.
  */
 
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { fileSystemSearch, fileSystemSearchPageLoad } from '@/webview-host/bridge'
-import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
-import { lsGet, lsSet, lsDelete, KEYS } from '@/utils/persistence'
+import { fileSystemSearch, fileSystemSearchWarmup } from '@/webview-host/bridge'
+import { useTabStore } from '@/stores/tabStore'
 
 export interface LocalFileSearchResult {
   fileName: string
@@ -45,14 +30,10 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
   const results = ref<LocalFileSearchResult[]>([])
   const searching = ref(false)
   const showLoadingAnimation = ref(false)
-  const isIndexing = ref(true)
-  const indexingMessage = ref<string | null>(null) // progress text from C# during index build
   const totalCount = ref(0)
   const errorMessage = ref<string | null>(null)
-  const installConsentPending = ref(false)
 
   let loadingAnimationTimer: ReturnType<typeof setTimeout> | null = null
-  let _eventListenerRegistered = false
 
   function startLoadingAnimationTimer() {
     cancelLoadingAnimationTimer()
@@ -71,72 +52,15 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
   onUnmounted(() => cancelLoadingAnimationTimer())
 
-  function registerEventListener() {
-    if (_eventListenerRegistered) return
-    _eventListenerRegistered = true
-
-    onWebviewEvent((event: any) => {
-      if (event.event !== 'fileSystemIndexingStatus') return
-
-      if (event.isIndexing === false) {
-        // Index is ready — clear the spinner and any progress message.
-        indexingMessage.value = null
-        isIndexing.value = false
-      } else {
-        // Still building — update the progress message if provided.
-        if (typeof event.message === 'string') {
-          indexingMessage.value = event.message
-        }
-        isIndexing.value = true
-      }
-    })
-  }
-
-  function startPageLoad() {
-    registerEventListener()
-
-    fileSystemSearchPageLoad()
-      .then(() => {
-        // C# always replies { isReady: false } and does the real work on a background thread.
-        // The isIndexing state is driven entirely by fileSystemIndexingStatus push events.
-        // Nothing to do here — keep isIndexing=true and wait for the push.
-      })
-      .catch(() => {
-        // Bridge unavailable (dev mode without host) — unblock search.
-        isIndexing.value = false
-      })
-  }
-
-  /** User clicked "כן, התקן" — save consent and kick off the page-load handshake. */
-  function onInstallConsentGranted() {
-    lsSet(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED, true)
-    installConsentPending.value = false
-    isIndexing.value = true
-    startPageLoad()
-  }
-
-  /** User clicked "לא" — clear any stored consent so the prompt reappears next visit. */
-  function onInstallConsentDeclined() {
-    installConsentPending.value = false
-    lsDelete(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED)
-    errorMessage.value = 'שירות האינדקס אינו מותקן. פתח את הדף שוב כדי להתקינו.'
-    isIndexing.value = false
-  }
-
-  onMounted(() => {
-    if (!isHosted) {
-      isIndexing.value = false
-      return
-    }
-
-    const alreadyConsented = lsGet<boolean>(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED)
-    if (alreadyConsented) {
-      startPageLoad()
-    } else {
-      installConsentPending.value = true
-      isIndexing.value = false
-    }
-  })
+  // Warm up the service every time the user navigates to this page — fire-and-forget.
+  // The component is a singleton (not keyed), so onMounted only fires once. Watching
+  // the active route fires on first mount and on every subsequent navigation back here.
+  const tabStore = useTabStore()
+  watch(
+    () => tabStore.activeTab.route,
+    (route) => { if (route === '/file-search') fileSystemSearchWarmup() },
+    { immediate: true },
+  )
 
   const debouncedQuery = refDebounced(searchQuery, DEBOUNCE_MS)
   let generation = 0
@@ -153,28 +77,12 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
       return
     }
 
-    if (isIndexing.value || installConsentPending.value) {
-      searching.value = false
-      return
-    }
-
     searching.value = true
     startLoadingAnimationTimer()
 
     try {
       const response = await fileSystemSearch(trimmed, MAX_RESULTS)
       if (thisGeneration !== generation) return
-
-      if (response.notInstalled) {
-        // Service was uninstalled while the app was running — clear consent and
-        // re-show the install prompt so the user can reinstall.
-        lsDelete(KEYS.SETTINGS_DOCUMENT_LOCATOR_INSTALL_CONSENTED)
-        isIndexing.value = false
-        installConsentPending.value = true
-        results.value = []
-        totalCount.value = 0
-        return
-      }
 
       if (response.error) {
         errorMessage.value = response.error
@@ -204,22 +112,11 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
   watch(debouncedQuery, (rawQuery) => runSearch(rawQuery ?? ''), { immediate: true })
 
-  watch(isIndexing, (nowIndexing) => {
-    if (!nowIndexing && (debouncedQuery.value ?? '').trim()) {
-      runSearch(debouncedQuery.value ?? '')
-    }
-  })
-
   return {
     results,
     searching,
     showLoadingAnimation,
-    isIndexing,
-    indexingMessage,
     totalCount,
     errorMessage,
-    installConsentPending,
-    onInstallConsentGranted,
-    onInstallConsentDeclined,
   }
 }

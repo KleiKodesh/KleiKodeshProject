@@ -13,7 +13,6 @@ import type { LocalFileSearchResult } from './useLocalFileSearch'
 const props = defineProps<{
   items: LocalFileSearchResult[]
   searching: boolean
-  isIndexing: boolean
 }>()
 
 const emit = defineEmits<{ openFile: [LocalFileSearchResult] }>()
