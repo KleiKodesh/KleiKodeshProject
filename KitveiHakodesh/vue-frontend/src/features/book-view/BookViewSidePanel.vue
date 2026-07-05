@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, useAttrs } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 
 const props = defineProps<{
@@ -8,6 +8,10 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ close: [] }>()
+
+// Fragment root — attrs cannot be inherited automatically.
+defineOptions({ inheritAttrs: false })
+const attrs = useAttrs()
 
 const panelRef = ref<HTMLElement | null>(null)
 
@@ -29,9 +33,9 @@ useDropdownClose(
     </div>
   </template>
 
-  <!-- Inline mode: plain column, no backdrop -->
+  <!-- Inline mode: plain column, no backdrop. Accepts attrs (e.g. :style width from parent). -->
   <template v-else>
-    <div ref="panelRef" class="side-panel side-panel-inline">
+    <div ref="panelRef" v-bind="attrs" class="side-panel side-panel-inline">
       <slot />
     </div>
   </template>

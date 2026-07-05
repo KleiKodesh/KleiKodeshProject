@@ -106,8 +106,9 @@ function onPointerUp() {
   background: var(--border-color);
   transition: height 120ms;
 }
-.divider:hover::after {
-  height: 6px;
-  background: color-mix(in srgb, var(--text-secondary) 25%, transparent);
+.divider:hover::after,
+.divider:active::after {
+  height: 4px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
 }
 </style>

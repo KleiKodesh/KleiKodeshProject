@@ -51,7 +51,7 @@ function onSplitPointerUp() {
 // can measure the total available width for fraction calculations.
 const sidePanelResizeArea = ref<HTMLElement | null>(null)
 const isSidePanelDragging = ref(false)
-const sidePanelFraction = ref(0.25)
+const sidePanelFraction = ref<number | null>(null)
 
 function onSidePanelDividerPointerDown(e: PointerEvent) {
   isSidePanelDragging.value = true
@@ -211,7 +211,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => { toggleTocPanel() })
           <BookViewSidePanel
             :toggle-button-el="sidePanelToggleButtonEl"
             :is-overlay="false"
-            :style="{ width: `${sidePanelFraction * 100}%` }"
+            :style="sidePanelFraction !== null ? { width: `${sidePanelFraction * 100}%` } : undefined"
             @close="closeSidePanel"
           >
             <BookViewTocTree
@@ -542,9 +542,10 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => { toggleTocPanel() })
   transition: width 120ms;
 }
 
-.side-panel-divider:hover::after {
-  width: 6px;
-  background: color-mix(in srgb, var(--text-secondary) 25%, transparent);
+.side-panel-divider:hover::after,
+.side-panel-divider:active::after {
+  width: 4px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
 }
 
 /* ── Commentary side-by-side layout ───────────────────────────────────────── */
