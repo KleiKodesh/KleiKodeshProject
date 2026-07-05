@@ -3,7 +3,7 @@ import { useDebounceFn } from '@vueuse/core'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCatalog'
 import { useLocalFileStore } from '@/stores/localFileStore'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles } from '@/webview-host/bridge'
 
@@ -11,6 +11,7 @@ export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
   const history = useHebrewBooksHistoryStore()
   const settings = useSettingsStore()
+  const paneNavigation = usePaneNavigation()
 
   const books = ref<HebrewBook[]>([])
   const isLoading = ref(false)
@@ -77,7 +78,7 @@ export function useHebrewBooks() {
 
   function openBook(book: HebrewBook) {
     trackAccess(book)
-    const tabId = useTabStore().activeTabId
+    const tabId = paneNavigation.activeTabId
     localFileStore.startHbDownload(book.title, tabId)
     triggerHbDownload(
       String(book.id),

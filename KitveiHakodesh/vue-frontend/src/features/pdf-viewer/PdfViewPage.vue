@@ -2,6 +2,7 @@
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { syncPdfViewerTheme } from '@/theme/themes'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
@@ -12,6 +13,7 @@ import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
 const pdfOcrStore = usePdfOcrStore()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
@@ -119,7 +121,7 @@ watch(ocr.isActive, (active) => {
 
 // Update PDF.js toolbar visibility when the setting changes
 watch(
-  () => tabStore.activeTab?.pdfViewerTitleBarVisible,
+  () => paneNavigation.activeTab?.pdfViewerTitleBarVisible,
   (visible) => {
     setPdfToolbarVisible(visible !== false)
   },
@@ -149,37 +151,39 @@ function onIframeLoad() {
   setTimeout(() => {
     syncPdfViewerTheme()
     // Apply toolbar visibility based on current setting
-    setPdfToolbarVisible(tabStore.activeTab?.pdfViewerTitleBarVisible !== false)
+    setPdfToolbarVisible(paneNavigation.activeTab?.pdfViewerTitleBarVisible !== false)
   }, 100)
 }
 
 const iframeSrc = computed(() => {
-  const url = localFileStore.virtualUrl
+  const url = paneNavigation.activeTab.localFileVirtualUrl
   if (!url) return null
   const p = new URLSearchParams({ file: url, locale: 'he', cMapPacked: 'true' })
-  if (localFileStore.fileName) p.set('filename', encodeURIComponent(localFileStore.fileName))
-  // No hash fragment — any hash value becomes initialBookmark in PDF.js and
-  // takes priority over the stored scroll/zoom position from ViewHistory,
-  // breaking session restore. All options (including disableAutoFetch) are
-  // set via AppOptions.setAll() in the viewer.mjs patch instead.
+  const fileName = paneNavigation.activeTab.localFileName
+  if (fileName) p.set('filename', encodeURIComponent(fileName))
   return `/pdfjs/web/viewer.html?${p}`
 })
 
+// Computed pane-specific converting state (localFileStore.converting reads pane 1 only)
+const converting = computed(() => paneNavigation.activeTab.localFileConverting ?? false)
+const loadingType = computed(() => paneNavigation.activeTab.localFileLoadingType ?? 'converting')
+const fileName = computed(() => paneNavigation.activeTab.localFileName ?? null)
+
 function cancelConversion() {
-  localFileStore.cancelConversion(tabStore.activeTabId)
+  localFileStore.cancelConversion(paneNavigation.activeTabId)
 }
 
 </script>
 
 <template>
   <div class="pdf-page">
-    <div v-if="localFileStore.converting" class="converting">
+    <div v-if="converting" class="converting">
       <div class="converting-card">
         <LoadingAnimation />
-        <div class="converting-name">{{ localFileStore.fileName }}</div>
+        <div class="converting-name">{{ fileName }}</div>
         <div class="converting-sub">
           {{
-            localFileStore.loadingType === 'downloading'
+            loadingType === 'downloading'
               ? 'מוריד את הספר — אנא המתן'
               : 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
           }}

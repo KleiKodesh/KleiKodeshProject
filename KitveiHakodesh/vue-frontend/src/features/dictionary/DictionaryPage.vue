@@ -5,9 +5,9 @@ import { storeToRefs } from 'pinia'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import DictionaryWordPage from './DictionaryWordPage.vue'
-import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useZoomHandler } from '@/composables/useZoom'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { dictionaryCacheGet, dictionaryCacheSet, dictionaryCacheClear } from './dictionaryCache'
 import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/webview-host/dictionaryDb'
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
@@ -38,11 +38,12 @@ async function fetchThesaurus(word: string): Promise<string[]> {
   return []
 }
 
-const tabStore  = useTabStore()
 const settingsStore = useSettingsStore()
+const paneNavigation = usePaneNavigation()
+const paneActiveTab = computed(() => paneNavigation.activeTab)
 const { dictionaryZoom: zoom } = storeToRefs(settingsStore)
 
-const isDictionaryActive = computed(() => tabStore.activeTab?.route === '/dictionary')
+const isDictionaryActive = computed(() => paneNavigation.activeTab?.route === '/dictionary')
 useZoomHandler({ zoom, enabled: isDictionaryActive })
 
 const fontPx = computed(() => (zoom.value / 100) * 13)
@@ -56,12 +57,12 @@ function focusSearchInput() {
 
 onMounted(() => {
   dictionaryCacheClear()
-  const saved = tabStore.activeTab?.searchQuery
+  const saved = paneActiveTab.value?.searchQuery
   if (saved) searchQuery.value = saved
   focusSearchInput()
 })
 
-watch(() => tabStore.activeTab?.route, (route) => {
+watch(() => paneActiveTab.value?.route, (route) => {
   if (route === '/dictionary') focusSearchInput()
 })
 
@@ -74,11 +75,11 @@ const suggestions = ref<string[]>([])
 
 watch(debouncedQuery, async (q) => {
   const trimmed = q.trim()
-  tabStore.updateActiveTab({ searchQuery: trimmed || undefined })
+  paneNavigation.updateActiveTab({ searchQuery: trimmed || undefined })
   if (!trimmed) {
     pageData.value = null
     noResults.value = false
-    tabStore.updateActiveTab({ title: 'מילון' })
+    paneNavigation.updateActiveTab({ title: 'מילון' })
     return
   }
   searching.value = true
@@ -88,7 +89,7 @@ watch(debouncedQuery, async (q) => {
     const cached = await dictionaryCacheGet(trimmed)
     if (cached) {
       pageData.value = cached
-      tabStore.updateActiveTab({ title: `מילון · ${trimmed}` })
+      paneNavigation.updateActiveTab({ title: `מילון · ${trimmed}` })
       return
     }
 
@@ -143,7 +144,7 @@ watch(debouncedQuery, async (q) => {
     if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !aruchRows.length && !synonyms.length) {
       pageData.value = null
       noResults.value = true
-      tabStore.updateActiveTab({ title: 'מילון' })
+      paneNavigation.updateActiveTab({ title: 'מילון' })
     } else {
       const result: WordPageData = {
         headword:    trimmed,
@@ -159,7 +160,7 @@ watch(debouncedQuery, async (q) => {
       }
       pageData.value = result
       dictionaryCacheSet(trimmed, result)
-      tabStore.updateActiveTab({ title: `מילון · ${trimmed}` })
+      paneNavigation.updateActiveTab({ title: `מילון · ${trimmed}` })
     }
   } finally {
     searching.value = false

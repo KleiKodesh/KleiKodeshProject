@@ -15,6 +15,7 @@ import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useToc } from './toc/useBookViewToc'
 import { useLines } from './lines/useBookViewLinesTable'
 import { useCommentary } from './commentary/useCommentary'
@@ -66,23 +67,25 @@ export function useBookView(
   const bookViewStore = useBookViewStore()
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
+  const paneNavigation = usePaneNavigation()
   const { toolbarPosition } = storeToRefs(bookViewStore)
 
   // ── Tab state captured at mount (stable for component lifetime) ──────────
+  // Read from paneNavigation so pane 2 gets its own active tab, not pane 1's.
 
-  const tabId = tabStore.activeTabId
-  const bookId = tabStore.activeTab.bookId
-  const bookTitle = tabStore.activeTab.title
+  const tabId = paneNavigation.activeTabId
+  const bookId = paneNavigation.activeTab.bookId
+  const bookTitle = paneNavigation.activeTab.title
 
-  const openTocEntryId = tabStore.activeTab.openTocEntryId
-  const openTocLineIndex = tabStore.activeTab.openTocLineIndex
-  const searchHighlightLineIndex = tabStore.activeTab.searchHighlightLineIndex
-  const searchHighlightQuery = tabStore.activeTab.searchHighlightQuery ?? ''
-  const searchHighlightSnippet = tabStore.activeTab.searchHighlightSnippet
-  const searchHighlightTerms = tabStore.activeTab.searchHighlightTerms
+  const openTocEntryId = paneNavigation.activeTab.openTocEntryId
+  const openTocLineIndex = paneNavigation.activeTab.openTocLineIndex
+  const searchHighlightLineIndex = paneNavigation.activeTab.searchHighlightLineIndex
+  const searchHighlightQuery = paneNavigation.activeTab.searchHighlightQuery ?? ''
+  const searchHighlightSnippet = paneNavigation.activeTab.searchHighlightSnippet
+  const searchHighlightTerms = paneNavigation.activeTab.searchHighlightTerms
 
   if (openTocEntryId != null)
-    tabStore.updateActiveTab({
+    paneNavigation.updateActiveTab({
       openTocEntryId: undefined,
       openTocLineIndex: undefined,
       searchHighlightLineIndex: undefined,
@@ -277,7 +280,7 @@ export function useBookView(
   }
 
   function openBookInTab(targetBookId: number, lineIndex: number | undefined) {
-    tabStore.openTab({
+    paneNavigation.openTab({
       title: groups.value.find((group) => group.bookId === targetBookId)?.bookTitle ?? '',
       route: '/book-view',
       bookId: targetBookId,
@@ -319,7 +322,7 @@ export function useBookView(
     if (result?.pinnedCommentaryGroup != null) restorePin(result.pinnedCommentaryGroup)
   })
 
-  onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
+  onBeforeUnmount(() => paneNavigation.updateActiveTab({ tocPath: undefined }))
 
   watch(searchPanel.searchVisible, (visible) => {
     if (!visible) { contentSearch.clear(); commentarySearch.clear() }

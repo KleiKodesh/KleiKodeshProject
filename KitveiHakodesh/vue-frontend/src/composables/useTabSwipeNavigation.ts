@@ -35,7 +35,7 @@ export function useTabSwipeNavigation() {
   const tabStore = useTabStore()
 
   function switchToAdjacentTab(direction: 'next' | 'previous') {
-    const tabs = tabStore.tabs
+    const tabs = tabStore.pane1Tabs
     if (tabs.length < 2) return
     const currentIndex = tabs.findIndex((tab) => tab.id === tabStore.activeTabId)
     if (currentIndex === -1) return

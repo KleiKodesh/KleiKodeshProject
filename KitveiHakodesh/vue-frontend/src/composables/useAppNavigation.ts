@@ -1,4 +1,5 @@
-import { useTabStore } from '@/stores/tabStore'
+import { inject } from 'vue'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pickLocalFile } from '@/webview-host/bridge'
 import type { TabRoute } from '@/stores/tabStore'
 
@@ -7,9 +8,12 @@ import type { TabRoute } from '@/stores/tabStore'
  * Singletons are routed via navigateToSingleton (enforces one-tab rule + closes current).
  * Multi-instance pages use updateActiveTab (in-place navigation).
  * Side-effects (file picker, external links) are handled here too.
+ *
+ * Uses the PANE_NAVIGATION_KEY injection provided by AppShell so all navigation
+ * operates on the correct pane's tab set. Defaults to pane 1 when outside a shell.
  */
 export function useAppNavigation() {
-  const tabStore = useTabStore()
+  const pane = usePaneNavigation()
 
   const SINGLETON_ROUTES: Partial<Record<string, TabRoute>> = {
     ספרים: '/books',
@@ -29,7 +33,6 @@ export function useAppNavigation() {
     // In hosted mode, push events handle navigation — pickLocalFile() returns null.
     // In dev mode, navigate directly with the blob URL.
     if (!result) return
-    // Determine route based on file extension: HTML opens in html-view.
     const fn = result.fileName ?? ''
     const ext = fn.substring(fn.lastIndexOf('.')).toLowerCase()
     const isTxt = ext === '.txt'
@@ -43,8 +46,8 @@ export function useAppNavigation() {
       localFileVirtualUrl: result.url,
       localFileConverting: false,
     }
-    if (newTab) tabStore.openTab(tabData)
-    else tabStore.updateActiveTab(tabData)
+    if (newTab) pane.openTab(tabData)
+    else pane.updateActiveTab(tabData)
   }
 
   // NOTE: "זית" (Zayit) here refers to the external Zayit app (zayitapp.com) — a separate
@@ -63,11 +66,11 @@ export function useAppNavigation() {
   async function navigate(label: string): Promise<void> {
     const singleton = SINGLETON_ROUTES[label]
     if (singleton) {
-      tabStore.navigateToSingleton(singleton)
+      pane.navigateToSingleton(singleton)
       return
     }
     if (label === 'חיפוש') {
-      tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' })
+      pane.updateActiveTab({ route: '/search', title: 'חיפוש' })
       return
     }
     if (label === 'פתח קובץ') { await handleFilePicker(false); return }
@@ -79,15 +82,14 @@ export function useAppNavigation() {
   async function navigateInNewTab(label: string): Promise<void> {
     const singleton = SINGLETON_ROUTES[label]
     if (singleton) {
-      // If a singleton tab already exists, just switch to it (don't close current).
-      // Otherwise open a brand new tab for it.
-      const existing = tabStore.tabs.find((t) => t.route === singleton)
-      if (existing) tabStore.switchTab(existing.id)
-      else tabStore.openTab({ route: singleton, title: label })
+      // Singleton in new-tab context: switch to existing pane-scoped tab or open a new one
+      const existing = pane.tabs.find((t) => t.route === singleton)
+      if (existing) pane.switchTab(existing.id)
+      else pane.openTab({ route: singleton, title: label })
       return
     }
     if (label === 'חיפוש') {
-      tabStore.openTab({ route: '/search', title: 'חיפוש' })
+      pane.openTab({ route: '/search', title: 'חיפוש' })
       return
     }
     if (label === 'פתח קובץ') { await handleFilePicker(true); return }

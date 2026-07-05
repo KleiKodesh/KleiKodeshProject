@@ -10,12 +10,14 @@ import BookCatalogViewList from './BookCatalogView.List.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
 import type { BookRow, CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
 import { getDiagnostics } from '@/webview-host/bridge'
 import type { ComponentPublicInstance } from 'vue'
 
+const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
 const {
   loading,
@@ -119,7 +121,7 @@ onMounted(() => {
 })
 
 function onSelectBook(book: BookRow) {
-  tabStore.updateActiveTab({
+  paneNavigation.updateActiveTab({
     title: book.title,
     route: '/book-view',
     bookId: book.id,
@@ -127,7 +129,7 @@ function onSelectBook(book: BookRow) {
   })
 }
 function onSelectToc(item: TocFsItem) {
-  tabStore.updateActiveTab({
+  paneNavigation.updateActiveTab({
     title: item.book.title,
     route: '/book-view',
     bookId: item.book.id,

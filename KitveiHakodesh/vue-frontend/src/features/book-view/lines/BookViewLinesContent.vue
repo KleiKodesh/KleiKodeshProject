@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
 import type { CommentaryTreeState, PinnedCommentaryGroup } from '../bookViewTypes'
@@ -60,10 +61,11 @@ const props = defineProps<{
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
+const paneNavigation = usePaneNavigation()
 const { autoSelectTopLine } = storeToRefs(bookViewStore)
-const tabId = tabStore.activeTabId
-const bookId = tabStore.activeTab.bookId!
-const bookTitle = tabStore.activeTab.title
+const tabId = paneNavigation.activeTabId
+const bookId = paneNavigation.activeTab.bookId!
+const bookTitle = paneNavigation.activeTab.title
 
 // Read lines zoom directly by tabId+bookId — NOT via bookViewStore.zoom computed (gated on
 // activeTab). If this tab is not active when savePos fires, the computed returns DEFAULT.
@@ -163,6 +165,7 @@ const { items: contextMenuItems, buildFormattedHtml } = useBookViewLineCopyMenu(
   selectAllInContainer,
   bookTitle,
   tabStore,
+  paneNavigation,
   getActiveTocEntry: props.getActiveTocEntry,
   getTocPath: props.getTocPath,
   getNotesForLine,

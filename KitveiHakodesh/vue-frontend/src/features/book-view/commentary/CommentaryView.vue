@@ -7,6 +7,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useZoomHandler } from '@/composables/useZoom'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
@@ -92,8 +93,9 @@ const headerNavRef = ref<InstanceType<typeof CommentaryHeaderNav> | null>(null)
 // also stays scoped to the commentary panel when the scroller is focused.
 const _tabStore = useTabStore()
 const _bookViewStore = useBookViewStore()
-const _tabId = _tabStore.activeTabId
-const _bookId = _tabStore.activeTab.bookId!
+const _paneNavigation = usePaneNavigation()
+const _tabId = _paneNavigation.activeTabId
+const _bookId = _paneNavigation.activeTab.bookId!
 const _commentaryZoom = computed({
   get: () => _bookViewStore.getCommentaryZoom(_tabId, _bookId),
   set: (value: number) => _bookViewStore.setCommentaryZoom(_tabId, _bookId, value),

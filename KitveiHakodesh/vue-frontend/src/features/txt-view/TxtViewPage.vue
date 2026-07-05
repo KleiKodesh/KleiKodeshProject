@@ -4,6 +4,7 @@ import { useTabStore } from '@/stores/tabStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { readTxtFileContent } from '@/webview-host/bridge'
 import { isHosted } from '@/webview-host/seforimDb'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
@@ -25,10 +26,11 @@ const tabStore = useTabStore()
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
+const paneNavigation = usePaneNavigation()
 
-const tabId = tabStore.activeTabId
-const filePath = computed(() => tabStore.activeTab.localFilePath ?? null)
-const virtualUrl = computed(() => tabStore.activeTab.localFileVirtualUrl ?? null)
+const tabId = paneNavigation.activeTabId
+const filePath = computed(() => paneNavigation.activeTab.localFilePath ?? null)
+const virtualUrl = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?? null)
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
 
 const { titleBarVisible } = useUiChromeVisibility()
@@ -59,7 +61,7 @@ onLongPress(scrollContainerRef, (event) => {
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 
 const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
-const isTxtViewActive = computed(() => tabStore.activeTab.route === '/txt-view')
+const isTxtViewActive = computed(() => paneNavigation.activeTab.route === '/txt-view')
 
 useZoomHandler({ zoom, enabled: isTxtViewActive })
 

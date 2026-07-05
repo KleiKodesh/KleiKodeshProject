@@ -3,7 +3,7 @@ import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
@@ -29,7 +29,7 @@ export function useFullTextSearchFilters(
   executeSearch: (q: string) => Promise<void>,
   clearSearch: () => void,
 ) {
-  const tabStore = useTabStore()
+  const paneNavigation = usePaneNavigation()
   const booksStore = useBooksDataStore()
 
   const searchQuery = ref('')
@@ -164,7 +164,7 @@ export function useFullTextSearchFilters(
   }
 
   async function handleSearch(q: string) {
-    tabStore.updateActiveTab({ title: `חיפוש: ${q}` })
+    paneNavigation.updateActiveTab({ title: `חיפוש: ${q}` })
     await executeSearch(q)
   }
 
@@ -172,7 +172,7 @@ export function useFullTextSearchFilters(
     clearSearch()
     searchQuery.value = ''
     atFilters.value = []
-    tabStore.updateActiveTab({ title: 'חיפוש' })
+    paneNavigation.updateActiveTab({ title: 'חיפוש' })
   }
 
   async function handleResultClick(result: FullTextSearchResult) {
@@ -184,7 +184,7 @@ export function useFullTextSearchFilters(
       const lineIndex = rows[0]?.lineIndex
       const bookId = rows[0]?.bookId
       if (lineIndex == null || bookId == null) return
-      tabStore.openTab({
+      paneNavigation.openTab({
         title: result.bookTitle,
         route: '/book-view',
         bookId,

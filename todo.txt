@@ -10,6 +10,8 @@ add focused search to fts thi si seasy because it can be itegrated in te gallopi
 create excluded folders dilgue for the document locator
 add to msword context menu
 
+add some padding at bottom of the ines view
+
 שורות מיותרות במרכוז שורה אחרונה
 לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
 

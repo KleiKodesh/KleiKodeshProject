@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordPageData } from './dictionaryTypes'
 
@@ -9,7 +9,7 @@ const props = defineProps<{ data: WordPageData; fontPx?: number }>()
 const emit  = defineEmits<{ (e: 'select', headword: string): void }>()
 
 const settings = useSettingsStore()
-const tabStore  = useTabStore()
+const paneNavigation = usePaneNavigation()
 
 function maybeFilter(text: string): string {
   return settings.censorDivineNames ? censorDivineNames(text) : text
@@ -139,7 +139,7 @@ const specialEntries = computed((): SenseItem[] => {
 function onSourceClick(event: MouseEvent, location: BookLocation | null) {
   if (!event.ctrlKey || !location) return
   event.preventDefault()
-  tabStore.openTab({
+  paneNavigation.openTab({
     title: location.bookTitle,
     route: '/book-view',
     bookId: location.bookId,

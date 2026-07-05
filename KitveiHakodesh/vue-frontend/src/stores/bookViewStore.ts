@@ -130,6 +130,10 @@ export const useBookViewStore = defineStore('bookView', () => {
     const autoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
     if (autoSelect != null) autoSelectTopLine.value = autoSelect
     else autoSelectTopLine.value = useSettingsStore().defaultAutoSyncCommentary
+    const splitView = lsGet<boolean>(KEYS.SETTINGS_SPLIT_VIEW)
+    if (splitView != null) splitViewEnabled.value = splitView
+    const splitFraction = lsGet<number>(KEYS.SETTINGS_SPLIT_VIEW_FRACTION)
+    if (splitFraction != null) splitViewFraction.value = splitFraction
   }
 
   function toggleToolbar() {
@@ -150,6 +154,21 @@ export const useBookViewStore = defineStore('bookView', () => {
   function setAutoSelectTopLine(value: boolean) {
     autoSelectTopLine.value = value
     lsSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, value)
+  }
+
+  // ── Split view ─────────────────────────────────────────────────────────────
+
+  const splitViewEnabled = ref(false)
+  const splitViewFraction = ref(0.5)
+
+  function toggleSplitView() {
+    splitViewEnabled.value = !splitViewEnabled.value
+    lsSet(KEYS.SETTINGS_SPLIT_VIEW, splitViewEnabled.value)
+  }
+
+  function setSplitViewFraction(fraction: number) {
+    splitViewFraction.value = fraction
+    lsSet(KEYS.SETTINGS_SPLIT_VIEW_FRACTION, fraction)
   }
 
   function zoomIn() {
@@ -179,6 +198,10 @@ export const useBookViewStore = defineStore('bookView', () => {
     txtViewSearchVisible,
     isBookViewActive,
     isTxtViewActive,
+    splitViewEnabled,
+    splitViewFraction,
+    toggleSplitView,
+    setSplitViewFraction,
     zoom,
     commentaryZoom,
     getZoom,
