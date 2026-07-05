@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.IO.MemoryMappedFiles;
 
 namespace FtsLib.Indexing
 {
@@ -32,25 +31,23 @@ namespace FtsLib.Indexing
     /// <summary>
     /// Holds open resources for one segment pair (.dat + .db).
     ///
-    /// The .dat posting file is mapped into the process's virtual address space via
-    /// <see cref="MemoryMappedFile"/>. Random-access reads for individual posting
-    /// chunks are served directly from the OS page cache rather than through a
-    /// buffered <see cref="FileStream"/>, avoiding kernel transitions and copy overhead
-    /// on every seek+read pair.
+    /// The .dat posting file is read via a plain <see cref="FileStream"/> with a
+    /// lock-guarded Seek+Read so that concurrent searches sharing the same handle
+    /// do not race on the stream position.  A memory-mapped approach was used
+    /// previously but exhausts the 32-bit virtual address space when the index
+    /// contains many large segments, producing "Not enough memory resources" errors.
     ///
-    /// The underlying FileStream is opened with <c>FileShare.Read | FileShare.Delete</c>
-    /// so that another process (or the segment merger in this process) can call
-    /// <see cref="File.Delete"/> on the .dat file while this mapping is still alive.
-    /// On Windows, <c>FILE_SHARE_DELETE</c> unlinks the file from the directory entry
-    /// but the memory-mapped content remains accessible through the existing handle
-    /// until all handles are closed and the mapping is released.  Without this flag
-    /// a concurrent delete attempt throws "The process cannot access the file because
-    /// it is being used by another process".
+    /// The FileStream is opened with <c>FileShare.Read | FileShare.Delete</c>:
+    ///   - FileShare.Delete allows the segment merger (or another process) to call
+    ///     File.Delete on the .dat file while this handle is still open.  On Windows,
+    ///     FILE_SHARE_DELETE unlinks the directory entry but the file content remains
+    ///     accessible through the existing handle until all handles are closed.
+    ///   - FileShare.Read allows multiple concurrent SegmentHandles to open the same
+    ///     file simultaneously.
     ///
     /// Disposal order still matters: <see cref="Search.IndexReader.Dispose"/> disposes
-    /// all SegmentHandles (unmapping the .dat file) before it releases the
-    /// <see cref="SearchLease"/>.  This ensures that the file handle is fully closed
-    /// before the merger's write lock is released and any subsequent file cleanup runs.
+    /// all SegmentHandles before it releases the <see cref="SearchLease"/>, ensuring
+    /// file handles are fully closed before the merger's write lock is released.
     /// </summary>
     internal sealed class SegmentHandle : IDisposable
     {
@@ -58,68 +55,27 @@ namespace FtsLib.Indexing
         public readonly System.Data.SQLite.SQLiteConnection Conn;
         public readonly System.Data.SQLite.SQLiteCommand    Lookup;
 
-        // Memory-mapped view of the entire .dat file.
-        // ReadBytes() reads from this instead of a FileStream.
-        private readonly MemoryMappedFile         _mmapFile;
-        private readonly MemoryMappedViewAccessor _mmapView;
+        // Plain FileStream for positioned reads.
+        // ReadBytes() locks _readLock before seeking so concurrent callers are serialised.
+        private readonly FileStream _datStream;
+        private readonly object     _readLock = new object();
 
         public SegmentHandle(string datPath, string dbPath)
         {
             DatPath = datPath;
 
-            // Map the entire .dat file read-only.
-            //
-            // FileShare.ReadWrite | FileShare.Delete is required for two reasons:
-            //
-            //   1. FileShare.Delete — allows another process (or the merger in this
-            //      process) to call File.Delete on the .dat file while this mapping
-            //      is still open.  On Windows, File.Delete with FILE_SHARE_DELETE
-            //      marks the file for deletion but keeps it accessible via the existing
-            //      handle until all handles are closed.  Without FileShare.Delete, any
-            //      File.Delete attempt on an open memory-mapped file throws
-            //      "The process cannot access the file because it is being used by
-            //      another process" — the exact error observed during concurrent
-            //      searches and merges, especially when a second app instance has the
-            //      same segment files open.
-            //
-            //   2. FileShare.Read — allows concurrent readers (other SegmentHandles
-            //      opened by other searches) to map the same file simultaneously.
-            //
-            // The MemoryMappedFile.CreateFromFile overload that accepts a FileStream
-            // is used here so we can specify the exact FileShare flags.  The
-            // MemoryMappedFileAccess.Read access mode ensures the mapping itself is
-            // read-only regardless of the underlying FileStream access flags.
-            var fileStream = new FileStream(
+            _datStream = new FileStream(
                 datPath,
                 FileMode.Open,
                 FileAccess.Read,
-                FileShare.Read | FileShare.Delete);
-
-            try
-            {
-                _mmapFile = MemoryMappedFile.CreateFromFile(
-                    fileStream,
-                    mapName: null,
-                    capacity: 0,
-                    access: MemoryMappedFileAccess.Read,
-                    inheritability: System.IO.HandleInheritability.None,
-                    leaveOpen: false);   // MemoryMappedFile owns and closes the stream
-            }
-            catch
-            {
-                fileStream.Dispose();
-                throw;
-            }
-
-            _mmapView = _mmapFile.CreateViewAccessor(
-                offset: 0,
-                size: 0,                // 0 = map the entire file
-                access: MemoryMappedFileAccess.Read);
+                FileShare.Read | FileShare.Delete,
+                bufferSize: 4096,
+                useAsync: false);
 
             try
             {
                 Conn = new System.Data.SQLite.SQLiteConnection(
-                    $"Data Source={dbPath};Version=3;Read Only=True;");
+                    string.Format("Data Source={0};Version=3;Read Only=True;", dbPath));
                 Conn.Open();
                 Lookup = Conn.CreateCommand();
                 Lookup.CommandText =
@@ -128,8 +84,7 @@ namespace FtsLib.Indexing
             }
             catch
             {
-                _mmapView.Dispose();
-                _mmapFile.Dispose();
+                _datStream.Dispose();
                 throw;
             }
         }
@@ -139,19 +94,33 @@ namespace FtsLib.Indexing
         /// in the .dat file into <paramref name="buffer"/> beginning at
         /// <paramref name="bufferOffset"/>.
         ///
+        /// Thread-safe: concurrent callers are serialised on <c>_readLock</c> so they
+        /// do not race on the stream's shared position.
+        ///
         /// Returns the number of bytes actually read (always equals
         /// <paramref name="count"/> for a well-formed segment).
         /// </summary>
         public int ReadBytes(long offset, byte[] buffer, int bufferOffset, int count)
-            => _mmapView.ReadArray(offset, buffer, bufferOffset, count);
+        {
+            lock (_readLock)
+            {
+                _datStream.Seek(offset, SeekOrigin.Begin);
+                int totalRead = 0;
+                while (totalRead < count)
+                {
+                    int read = _datStream.Read(buffer, bufferOffset + totalRead, count - totalRead);
+                    if (read == 0) break;
+                    totalRead += read;
+                }
+                return totalRead;
+            }
+        }
 
         public void Dispose()
         {
             Lookup?.Dispose();
             Conn?.Dispose();
-            // Unmap BEFORE the file handle is closed so Windows can later delete the file.
-            _mmapView?.Dispose();
-            _mmapFile?.Dispose();
+            _datStream?.Dispose();
         }
     }
 }

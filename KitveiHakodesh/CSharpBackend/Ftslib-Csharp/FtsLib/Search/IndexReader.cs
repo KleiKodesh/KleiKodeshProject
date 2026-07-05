@@ -210,9 +210,8 @@ namespace FtsLib.Search
             var  buf      = new byte[totalBytes];
             long readFrom = chunk.SkipCount > 0 ? chunk.SkipOffset : chunk.Offset;
 
-            // MemoryMappedViewAccessor.ReadArray reads directly from the OS page
-            // cache — no kernel seek+read round-trip.  It always fills the buffer
-            // for a well-formed segment (returns totalBytes).
+            // SegmentHandle.ReadBytes does a lock-guarded Seek+Read on a plain
+            // FileStream.  It always fills the buffer for a well-formed segment.
             chunk.Seg.ReadBytes(readFrom, buf, 0, totalBytes);
 
             // Deserialise skip table from the front of the buffer.
