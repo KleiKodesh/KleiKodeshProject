@@ -47,7 +47,6 @@ const virtualizer = useVirtualizer(
     estimateSize: () => 80,
     overscan: 8,
     getItemKey: (index) => props.results[index]?.lineId ?? index,
-    measureElement: (el) => el.getBoundingClientRect().height,
   })),
 )
 

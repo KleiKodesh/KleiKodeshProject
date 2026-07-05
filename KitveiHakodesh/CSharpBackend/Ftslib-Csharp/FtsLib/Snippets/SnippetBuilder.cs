@@ -32,8 +32,11 @@ namespace FtsLib.Snippets
 
         // ── Reused per-call state ─────────────────────────────────────
 
-        private readonly Dictionary<string, int> _termToGroup =
-            new Dictionary<string, int>(System.StringComparer.Ordinal);
+        // A term can appear in multiple AND groups (e.g. "אין דרך אין תורה" has
+        // "אין" in group 0 and group 2). Map term → all group indices it belongs to
+        // so every token occurrence can cover any of its owning groups.
+        private readonly Dictionary<string, List<int>> _termToGroups =
+            new Dictionary<string, List<int>>(System.StringComparer.Ordinal);
         private int[] _groupCount = new int[8];
 
         private readonly HashSet<string> _termSet    = new HashSet<string>(System.StringComparer.Ordinal);
@@ -140,13 +143,18 @@ namespace FtsLib.Snippets
             List<TextToken>             tokens,
             IReadOnlyCollection<string> queryTerms)
         {
-            _termToGroup.Clear();
+            _termToGroups.Clear();
             int g = 0;
             foreach (var t in queryTerms)
-                if (!_termToGroup.ContainsKey(t))
-                    _termToGroup[t] = g++;
+            {
+                if (!_termToGroups.ContainsKey(t))
+                    _termToGroups[t] = new List<int>(1);
+                if (!_termToGroups[t].Contains(g))
+                    _termToGroups[t].Add(g);
+                g++;
+            }
 
-            int required = _termToGroup.Count;
+            int required = g; // one group per query term (even repeated ones)
             EnsureGroupCount(required);
             for (int i = 0; i < required; i++) _groupCount[i] = 0;
             return RunSlidingWindow(tokens, required);
@@ -156,11 +164,21 @@ namespace FtsLib.Snippets
             List<TextToken>                            tokens,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
         {
-            _termToGroup.Clear();
+            _termToGroups.Clear();
             for (int gi = 0; gi < queryGroups.Count; gi++)
+            {
                 foreach (var t in queryGroups[gi])
-                    if (!_termToGroup.ContainsKey(t))
-                        _termToGroup[t] = gi;
+                {
+                    List<int> groupIndices;
+                    if (!_termToGroups.TryGetValue(t, out groupIndices))
+                    {
+                        groupIndices = new List<int>(1);
+                        _termToGroups[t] = groupIndices;
+                    }
+                    if (!groupIndices.Contains(gi))
+                        groupIndices.Add(gi);
+                }
+            }
 
             int required = queryGroups.Count;
             EnsureGroupCount(required);
@@ -179,8 +197,12 @@ namespace FtsLib.Snippets
             for (int R = 0; R < tokens.Count; R++)
             {
                 string rt = tokens[R].Normalized;
-                if (_termToGroup.TryGetValue(rt, out int rg))
-                    if (_groupCount[rg]++ == 0) covered++;
+                List<int> rGroups;
+                if (_termToGroups.TryGetValue(rt, out rGroups))
+                {
+                    foreach (int rg in rGroups)
+                        if (_groupCount[rg]++ == 0) covered++;
+                }
 
                 while (covered == required)
                 {
@@ -193,8 +215,12 @@ namespace FtsLib.Snippets
                         bestIRight = R;
                     }
                     string lt = tokens[L].Normalized;
-                    if (_termToGroup.TryGetValue(lt, out int lg))
-                        if (--_groupCount[lg] == 0) covered--;
+                    List<int> lGroups;
+                    if (_termToGroups.TryGetValue(lt, out lGroups))
+                    {
+                        foreach (int lg in lGroups)
+                            if (--_groupCount[lg] == 0) covered--;
+                    }
                     L++;
                 }
             }
@@ -215,24 +241,27 @@ namespace FtsLib.Snippets
         /// where each query group is satisfied by a token appearing strictly after
         /// the token satisfying the previous group (left-to-right order).
         ///
-        /// Relies on <see cref="_termToGroup"/> already being populated by the
+        /// Relies on <see cref="_termToGroups"/> already being populated by the
         /// preceding <see cref="FindWindowGroups"/> call — no rebuild needed.
         /// Uses a greedy forward scan: O(n) in token count.
         /// </summary>
         private bool HasOrderedMatch(List<TextToken> tokens)
         {
-            // _termToGroup is already populated by FindWindowGroups.
+            // _termToGroups is already populated by FindWindowGroups.
             // Determine the number of groups from the max value stored.
             int numGroups = 0;
-            foreach (var kv in _termToGroup)
-                if (kv.Value >= numGroups) numGroups = kv.Value + 1;
+            foreach (var kv in _termToGroups)
+                foreach (int idx in kv.Value)
+                    if (idx >= numGroups) numGroups = idx + 1;
 
             if (numGroups <= 1) return true; // single group — order is trivially satisfied
 
             // Try every starting token that belongs to group 0.
             for (int start = 0; start < tokens.Count; start++)
             {
-                if (!_termToGroup.TryGetValue(tokens[start].Normalized, out int g0) || g0 != 0)
+                List<int> startGroups;
+                if (!_termToGroups.TryGetValue(tokens[start].Normalized, out startGroups)
+                    || !startGroups.Contains(0))
                     continue;
 
                 // Greedily advance through groups 1..numGroups-1.
@@ -240,7 +269,9 @@ namespace FtsLib.Snippets
                 int nextGroup = 1;
                 while (nextGroup < numGroups && pos < tokens.Count)
                 {
-                    if (_termToGroup.TryGetValue(tokens[pos].Normalized, out int tg) && tg == nextGroup)
+                    List<int> tGroups;
+                    if (_termToGroups.TryGetValue(tokens[pos].Normalized, out tGroups)
+                        && tGroups.Contains(nextGroup))
                         nextGroup++;
                     pos++;
                 }
