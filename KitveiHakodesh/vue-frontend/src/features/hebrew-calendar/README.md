@@ -16,6 +16,6 @@ Hebrew calendar page. Singleton route `/hebrew-calendar`. Two views — monthly 
 
 **useMonthlyView.ts** — month navigation state. Keeps Gregorian and Hebrew month/year in sync. Use `jumpToHebrew(year, month)` to navigate to a specific Hebrew month.
 
-**useWeeklyView.ts** — week navigation state and data. Builds a full `CalendarWeek` for the current week using `@hebcal/core`, including all events, candle lighting times, and daily learning via `hebrewCalendarLearning.ts`. Rebuilds automatically when the city changes.
+**useWeeklyView.ts** — week navigation state and data. Builds a full `CalendarWeek` for the current week using `@hebcal/core`, including all events, candle lighting times, and daily learning via `hebrewCalendarLearning.ts`. Rebuilds automatically when the city changes. Requesting a week that includes a molad event causes `@hebcal/core/molad.js` to run, which requires `Temporal.ZonedDateTime` — covered by the conditional polyfill in `src/stubs/temporal-polyfill-stub.ts`.
 
 **useZmanim.ts** — city selection and zmanim calculation. Tries geolocation first, falls back to Jerusalem. Persists the selected city to localStorage via `KEYS.SETTINGS_ZMANIM_CITY`. Exports `CITIES` (the full city list), `calcDayZmanim` (used by `useWeeklyView`), and `useZmanim` (the composable for the city picker UI).
