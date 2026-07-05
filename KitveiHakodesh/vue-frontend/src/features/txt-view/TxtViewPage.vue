@@ -3,14 +3,18 @@ import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { readTxtFileContent } from '@/webview-host/bridge'
 import { isHosted } from '@/webview-host/seforimDb'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useTxtViewSearch } from './useTxtViewSearch'
+import { useTxtViewCopyMenu, useTxtViewScopedCopy } from './useTxtViewCopyMenu'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
+import { onLongPress } from '@vueuse/core'
 import { getTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
+import ContextMenu from '@/components/ContextMenu.vue'
 import {
   IconChevronUp20Regular,
   IconChevronDown20Regular,
@@ -20,6 +24,7 @@ import {
 const tabStore = useTabStore()
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
+const bookViewStore = useBookViewStore()
 
 const tabId = tabStore.activeTabId
 const filePath = computed(() => tabStore.activeTab.localFilePath ?? null)
@@ -37,7 +42,19 @@ const loading = ref(false)
 const error = ref<string | null>(null)
 
 const scrollContainerRef = ref<HTMLDivElement | null>(null)
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 let scrollSaveTimer: number | null = null
+
+// ── Context menu ──────────────────────────────────────────────────────────────
+
+const { items: contextMenuItems, buildFormattedHtml } = useTxtViewCopyMenu({
+  scrollerEl: scrollContainerRef,
+})
+useTxtViewScopedCopy(scrollContainerRef, buildFormattedHtml)
+
+onLongPress(scrollContainerRef, (event) => {
+  contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
+})
 
 // ── Zoom ──────────────────────────────────────────────────────────────────────
 
@@ -116,13 +133,29 @@ const {
 
 function openSearch() {
   searchVisible.value = true
+  bookViewStore.txtViewSearchVisible = true
   nextTick(() => searchInputRef.value?.focus())
 }
 
 function closeSearch() {
   searchVisible.value = false
+  bookViewStore.txtViewSearchVisible = false
   searchClear()
 }
+
+// Watch the toggle signal fired from the title bar button or Ctrl+F in AppTitleBar
+watch(
+  () => bookViewStore.txtViewToggleSearchSignal,
+  () => {
+    if (searchVisible.value) closeSearch()
+    else openSearch()
+  },
+)
+
+// Keep store in sync when the component is torn down (tab switch / close)
+onBeforeUnmount(() => {
+  bookViewStore.txtViewSearchVisible = false
+})
 
 function scrollToCurrentMatch() {
   const lineIndex = currentMatchLineIndex.value
@@ -162,15 +195,6 @@ function onSearchKeydown(event: KeyboardEvent) {
 }
 
 // Remove auto-scroll watch — only scroll on explicit next/prev navigation
-
-// Ctrl+F to open search
-function onKeydown(event: KeyboardEvent) {
-  if ((event.ctrlKey || event.metaKey) && event.code === 'KeyF') {
-    event.preventDefault()
-    if (searchVisible.value) searchInputRef.value?.focus()
-    else openSearch()
-  }
-}
 
 // Highlight the matching query substring within the line html.
 // Walks the html string tag-aware, inserts <mark> only around the specific
@@ -276,7 +300,6 @@ async function loadContent() {
 watch([filePath, virtualUrl], loadContent)
 
 onMounted(async () => {
-  window.addEventListener('keydown', onKeydown)
   // Restore zoom before content loads so font size is correct on first render
   const saved = await tabStore.getTabViewState(tabId)
   if (saved?.txtViewZoom != null) zoom.value = saved.txtViewZoom
@@ -305,7 +328,6 @@ async function restoreScrollPosition() {
 }
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
   if (scrollSaveTimer !== null) {
     clearTimeout(scrollSaveTimer)
     scrollSaveTimer = null
@@ -329,6 +351,7 @@ async function retry() {
 
 <template>
   <div class="txt-view-page" :style="{ filter: htmlFilter }">
+    <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <div v-if="loading" class="txt-state-message">
       <span>בטעינה...</span>
     </div>
@@ -342,10 +365,11 @@ async function retry() {
       class="txt-content"
       :style="{ fontSize: `${fontPx}px` }"
       @scroll="onScroll"
+      @contextmenu="contextMenuRef?.show($event)"
     >
       <template v-for="(line, index) in parsedLines" :key="index">
-        <h2 v-if="line.tag === 'h2'" v-html="highlightedHtml(line, index)" />
-        <div v-else class="txt-line" v-html="highlightedHtml(line, index)" />
+        <h2 v-if="line.tag === 'h2'" dir="auto" v-html="highlightedHtml(line, index)" />
+        <div v-else class="txt-line" dir="auto" v-html="highlightedHtml(line, index)" />
       </template>
     </div>
 
@@ -412,10 +436,6 @@ async function retry() {
 
 .txt-content > * {
   content-visibility: auto;
-}
-
-.txt-line {
-  unicode-bidi: plaintext;
 }
 
 .txt-state-message {

@@ -99,6 +99,7 @@ The one legitimate exception is pinch-to-zoom: detecting the distance between tw
 
 - Layout is owned by the parent — a component never positions or spaces itself, the parent controls how its children are laid out
 - Use logical CSS properties (`margin-inline-start`, `padding-inline-end`, etc.) where possible to stay direction-agnostic
+- The global `* { user-select: none }` in `main.css` disables text selection everywhere. To make a content area selectable, add its root class to the whitelist line in `main.css`: `.lines-content *, .commentary-view *, .word-page *, .txt-content * { user-select: text }`. A scoped `user-select: text` on the container alone is not enough — the global rule targets every child element individually and wins.
 
 ## UI Density
 

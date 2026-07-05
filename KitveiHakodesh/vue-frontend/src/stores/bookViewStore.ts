@@ -19,6 +19,8 @@ export const useBookViewStore = defineStore('bookView', () => {
   const toggleBottomPanelSignal = ref(0)
   const openSearchSignal = ref(0)
   const toggleTocPanelSignal = ref(0)
+  const txtViewToggleSearchSignal = ref(0)
+  const txtViewSearchVisible = ref(false)
   const autoSelectTopLine = ref(false)
 
   function toggleBottomPanel() {
@@ -33,7 +35,12 @@ export const useBookViewStore = defineStore('bookView', () => {
     toggleTocPanelSignal.value++
   }
 
+  function txtViewToggleSearch() {
+    txtViewToggleSearchSignal.value++
+  }
+
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
+  const isTxtViewActive = computed(() => tabStore.activeTab.route === '/txt-view')
 
   // Per-tab+book zoom maps — one for lines text, one for commentary text.
   // Keys: `${tabId}:${bookId}`
@@ -167,7 +174,11 @@ export const useBookViewStore = defineStore('bookView', () => {
     openSearch,
     toggleTocPanelSignal,
     toggleTocPanel,
+    txtViewToggleSearchSignal,
+    txtViewToggleSearch,
+    txtViewSearchVisible,
     isBookViewActive,
+    isTxtViewActive,
     zoom,
     commentaryZoom,
     getZoom,
