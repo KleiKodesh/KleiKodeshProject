@@ -20,6 +20,7 @@ export type TabRoute =
   | '/'
   | '/pdf-view'
   | '/html-view'
+  | '/txt-view'
   | '/settings'
   | '/books'
   | '/book-view'

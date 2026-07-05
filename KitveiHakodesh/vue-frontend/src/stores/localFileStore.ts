@@ -29,12 +29,29 @@ export const useLocalFileStore = defineStore('localFile', () => {
         !!(msg.openInNewTab as boolean),
       )
     }
+    if (msg.event === 'localFileTxtReady') {
+      // .txt files are opened in /txt-view — no virtual URL, just the file path for restore
+      const tabFields = {
+        route: '/txt-view' as TabRoute,
+        title: msg.fileName as string,
+        localFileName: msg.fileName as string,
+        localFilePath: msg.filePath as string,
+        localFileConverting: false,
+      }
+      let tabId: string
+      if (msg.openInNewTab) {
+        tabId = tabStore.openTab(tabFields).id
+      } else {
+        tabId = tabStore.activeTabId
+        tabStore.updateActiveTab(tabFields)
+      }
+      _converting.delete(tabId)
+    }
     if (msg.event === 'localFileReady') {
-      // Choose the route based on the picked file type: HTML and plain-text files open in
-      // html-view (iframe), PDFs open in the PDF viewer.
+      // HTML and PDF files — served via virtual host URL
       const path = (msg.filePath as string) ?? ''
       const extension = path.substring(path.lastIndexOf('.')).toLowerCase()
-      const isHtmlLike = extension === '.htm' || extension === '.html' || extension === '.txt'
+      const isHtmlLike = extension === '.htm' || extension === '.html'
       const route: TabRoute = isHtmlLike ? '/html-view' : '/pdf-view'
       const tabFields = {
         route,
@@ -107,7 +124,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       for (const tabId of Array.from(_converting)) {
         const wasRemoved = !currentIds.has(tabId)
         const route = current.find((t) => t.id === tabId)?.route
-        const navigatedAway = route !== '/pdf-view' && route !== '/html-view'
+        const navigatedAway = route !== '/pdf-view' && route !== '/html-view' && route !== '/txt-view'
         if (wasRemoved || navigatedAway) _converting.delete(tabId)
       }
     },
@@ -273,12 +290,17 @@ export const useLocalFileStore = defineStore('localFile', () => {
       }
       // redownload: true — stays in _converting, hbPdfReady push event will finish it
     } else if (tab.localFilePath) {
-      const res = await restoreLocalFile(tab.localFilePath)
-      if (res) {
-        const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
-        const isHtmlLike = ext === '.htm' || ext === '.html' || ext === '.txt'
-        const route = isHtmlLike ? '/html-view' : '/pdf-view'
-        tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
+      const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
+      if (ext === '.txt') {
+        // .txt tabs restore directly — TxtViewPage reads the file itself via bridge
+        tabStore.updateTab(tabId, { route: '/txt-view' })
+      } else {
+        const res = await restoreLocalFile(tab.localFilePath)
+        if (res) {
+          const isHtmlLike = ext === '.htm' || ext === '.html'
+          const route = isHtmlLike ? '/html-view' : '/pdf-view'
+          tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
+        }
       }
     }
   }

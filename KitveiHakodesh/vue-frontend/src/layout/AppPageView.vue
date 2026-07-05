@@ -11,6 +11,7 @@ const pages: Record<string, unknown> = {
   '/book-view': defineAsyncComponent(() => import('@/features/book-view/BookViewPage.vue')),
   '/pdf-view': defineAsyncComponent(() => import('@/features/pdf-viewer/PdfViewPage.vue')),
   '/html-view': defineAsyncComponent(() => import('@/features/html-view/HtmlViewPage.vue')),
+  '/txt-view': defineAsyncComponent(() => import('@/features/txt-view/TxtViewPage.vue')),
   '/settings': defineAsyncComponent(() => import('@/features/settings/SettingsPage.vue')),
   '/hebrewbooks': defineAsyncComponent(
     () => import('@/features/hebrewbooks/HebrewBooksPage.vue'),
@@ -31,6 +32,6 @@ const pages: Record<string, unknown> = {
 <template>
   <component
     :is="pages[route]"
-    :key="route === '/book-view' || route === '/search' ? tabStore.activeTabId : undefined"
+    :key="route === '/book-view' || route === '/search' || route === '/txt-view' ? tabStore.activeTabId : undefined"
   />
 </template>

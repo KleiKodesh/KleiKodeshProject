@@ -79,6 +79,7 @@ export interface TabState {
   searchScrollIndex?: number      // virtual scroller item index for scroll restore
   searchScrollOffset?: number     // virtual scroller item offset for scroll restore
   htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
+  txtViewZoom?: number            // per-tab zoom level for /txt-view tabs (50–400)
 }
 
 export interface BookState {

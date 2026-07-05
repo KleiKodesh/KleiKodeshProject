@@ -48,7 +48,7 @@ const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 void Promise.all(
   tabStore.tabs
-    .filter((t) => t.route === '/pdf-view' || t.route === '/html-view')
+    .filter((t) => t.route === '/pdf-view' || t.route === '/html-view' || t.route === '/txt-view')
     .map((t) => localFileStore.restoreTab(t.id)),
 )
 

@@ -66,6 +66,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 | `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                       |
 | `/pdf-viewer`      | `PdfViewPage.vue`          | multi-instance                  |
 | `/html-view`       | `HtmlViewPage.vue`         | multi-instance                  |
+| `/txt-view`        | `TxtViewPage.vue`          | multi-instance                  |
 | `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
 | `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
 | `/dictionary`      | `DictionaryPage.vue`       | singleton                       |
@@ -212,6 +213,12 @@ PDF viewer with OCR support. Embeds a PDF.js iframe and provides OCR text extrac
 HTML file viewer for local HTML documents.
 
 - `HtmlViewPage.vue` — main HTML viewer page
+
+### txt-view/
+
+Native Vue viewer for local `.txt` files. Renders content directly in a `<div>` — no iframe, no virtual host.
+
+- `TxtViewPage.vue` — loads raw text via bridge (`readTxtFileContent` action in C#), parses custom line markup (`@#$` → h2, `!` → strip prefix), renders with RTL layout. Scroll position persisted to `TabState.htmlViewScrollTop`.
 
 ### dictionary/
 
