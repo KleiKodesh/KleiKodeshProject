@@ -1,11 +1,19 @@
 import { useSwipe } from '@vueuse/core'
 import { useEventListener } from '@vueuse/core'
-import { ref } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 
 const TRACKPAD_DELTA_THRESHOLD = 150
 const TRACKPAD_COOLDOWN_MS = 400
 const TOUCH_THRESHOLD_PX = 60
+
+// Custom event name used by iframe relays (PdfViewPage, HtmlViewPage, etc.) to
+// signal a completed swipe gesture that originated inside an iframe where native
+// touch/wheel events cannot bubble to the parent document.
+export const TAB_SWIPE_EVENT = 'tab-swipe-gesture'
+
+export interface TabSwipeGestureEventDetail {
+  direction: 'next' | 'previous'
+}
 
 /**
  * Wires up tab switching via horizontal swipe (touch) and trackpad horizontal scroll.
@@ -17,6 +25,11 @@ const TOUCH_THRESHOLD_PX = 60
  * Touch: uses VueUse useSwipe on the document body.
  * Trackpad: listens to wheel events and accumulates deltaX until a threshold is crossed.
  * A cooldown prevents multiple switches from a single long swipe gesture.
+ *
+ * Iframe relay: iframes (PDF viewer, HTML viewer) cannot bubble touch/wheel events
+ * to the parent document. Those pages track gestures internally and fire a
+ * TAB_SWIPE_EVENT CustomEvent on the parent window when a swipe is detected.
+ * This composable listens for that event and handles it identically to native gestures.
  */
 export function useTabSwipeNavigation() {
   const tabStore = useTabStore()
@@ -35,7 +48,7 @@ export function useTabSwipeNavigation() {
     tabStore.switchTab(tabs[targetIndex]!.id)
   }
 
-  // ── Touch swipe ─────────────────────────────────────────────────────────────
+  // ── Touch swipe (native — document body) ────────────────────────────────────
 
   useSwipe(document.body, {
     threshold: TOUCH_THRESHOLD_PX,
@@ -45,7 +58,7 @@ export function useTabSwipeNavigation() {
     },
   })
 
-  // ── Trackpad horizontal scroll ───────────────────────────────────────────────
+  // ── Trackpad horizontal scroll (native — parent document) ───────────────────
 
   let accumulatedDeltaX = 0
   let lastSwitchTime = 0
@@ -75,4 +88,15 @@ export function useTabSwipeNavigation() {
     },
     { passive: true },
   )
+
+  // ── Iframe relay (PDF viewer, HTML viewer, etc.) ─────────────────────────────
+  // Iframes capture touch and wheel events — they never reach this document.
+  // Pages that embed iframes track gestures internally and dispatch TAB_SWIPE_EVENT
+  // on the parent window when a swipe completes. We handle it here exactly like
+  // a native swipe so the tab-switching logic stays in one place.
+
+  useEventListener(window, TAB_SWIPE_EVENT, (event: Event) => {
+    const { direction } = (event as CustomEvent<TabSwipeGestureEventDetail>).detail
+    switchToAdjacentTab(direction)
+  })
 }
