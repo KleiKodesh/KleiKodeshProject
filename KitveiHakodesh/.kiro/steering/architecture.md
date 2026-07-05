@@ -177,8 +177,11 @@ Full-text search backed by FtsLib with a custom LSM-style segment index. Support
 
 App settings across three tabs: general, reading, and advanced. Also contains the setup wizard.
 
-- `SettingsPage.vue` — single-page settings view with a sticky search bar and a nav panel dropdown for jumping to sections; all settings rendered in one continuous scroll
-- `SettingsAdvancedPane.vue` — calendar city picker, database path picker (hosted only), and reset actions; accepts `visibleSections` prop for search filtering
+- `SettingsPage.vue` — page shell: layout (side nav + scroll body), sticky search bar, narrow-screen nav dropdown, and section scroll navigation; no business logic
+- `SettingsPageDisplaySection.vue` — theme, dark mode, PDF filter, app zoom, toolbar position, new-tab destination, title bar button chips
+- `SettingsPageReadingSection.vue` — reading preferences, book display fonts/sizes, commentary display overrides
+- `SettingsPageSystemSection.vue` — calendar city picker, clock toggle, HebrewBooks local folder, database path picker, and all reset actions
+- `SettingsPageShortcutsSection.vue` — keyboard shortcuts reference grid (no script)
 - `SettingRow.vue`, `HintIcon.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
 - `useSettingsPage.ts`
