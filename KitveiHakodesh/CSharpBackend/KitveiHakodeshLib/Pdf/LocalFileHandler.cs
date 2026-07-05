@@ -182,7 +182,7 @@ namespace KitveiHakodeshLib.LocalFile
                     using (var dlg = new OpenFileDialog())
                     {
                         dlg.Title  = "פתח קובץ";
-                        dlg.Filter = "קבצים נתמכים (*.pdf;*.doc;*.docx;*.rtf;*.txt;*.htm;*.html)|*.pdf;*.doc;*.docx;*.rtf;*.txt;*.htm;*.html|כל הקבצים (*.*)|*.*";
+                        dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.mht;*.mhtml;*.odt;*.rtf;*.txt;*.wps;*.xps)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.mht;*.mhtml;*.odt;*.rtf;*.txt;*.wps;*.xps|כל הקבצים (*.*)|*.*";
                         if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
 
                         string filePath = dlg.FileName;
