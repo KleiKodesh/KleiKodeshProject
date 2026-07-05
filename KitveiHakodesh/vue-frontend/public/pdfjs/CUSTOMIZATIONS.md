@@ -66,6 +66,40 @@ The page filter (`--pdf-filter-custom`) is applied only when the `data-pdf-filte
 
 ---
 
+## `build/pdf.worker.mjs` — Patches
+
+### Uint8Array.prototype.toHex polyfill (old WebView2 compatibility)
+
+PDF.js 5.7.284 calls `.toHex()` on `Uint8Array` values in the `fingerprints` getter (to convert MD5 bytes and PDF trailer ID bytes to hex strings). `Uint8Array.prototype.toHex` was added in Chromium 136; users on WebView2 builds older than that get `"UnknownErrorException: hashOriginal.toHex is not a function"` and the PDF fails to load.
+
+Search for:
+```js
+ * pdfjsBuild = 7e5b36c2d
+ */
+/******/ // The require scope
+```
+
+Replace with:
+```js
+ * pdfjsBuild = 7e5b36c2d
+ */
+
+// PATCH: Uint8Array.prototype.toHex polyfill for WebView2 builds on Chromium < 136.
+// PDF.js 5.7.284 calls .toHex() on Uint8Array values returned by calculateMD5()
+// and on raw bytes from the PDF trailer ID array. Chromium 136 introduced this
+// method natively; older WebView2 builds don't have it and throw
+// "UnknownErrorException: hashOriginal.toHex is not a function" when loading any PDF.
+if (typeof Uint8Array.prototype.toHex !== 'function') {
+  Uint8Array.prototype.toHex = function () {
+    return Array.from(this, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  };
+}
+
+/******/ // The require scope
+```
+
+---
+
 ## `web/viewer.html` — Added Tags
 
 Add these two lines immediately after `<link rel="stylesheet" href="viewer.css" />`:
