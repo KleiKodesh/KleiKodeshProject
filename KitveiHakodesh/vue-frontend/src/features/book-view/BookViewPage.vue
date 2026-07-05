@@ -1,6 +1,6 @@
 ﻿<script setup lang="ts">
-import { ref, computed, watch } from 'vue'
-import { useMediaQuery } from '@vueuse/core'
+import { ref, computed, watch, inject } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { isHosted } from '@/webview-host/seforimDb'
@@ -18,13 +18,20 @@ const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
+const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
+const paneId = inject<1 | 2>('paneId', 1)
 
 type CommentaryMode = 'off' | 'bottom' | 'side'
 const commentaryMode = ref<CommentaryMode>('off')
 const sideBySide = computed(() => commentaryMode.value === 'side')
-const isWideScreen = useMediaQuery('(min-width: 650px)')
-const isSidePanelWideScreen = useMediaQuery('(min-width: 520px)')
+
+// Track the shell's own width instead of the viewport width so that in split
+// view each pane responds to its own size, not the full window size.
+const shellWidth = ref(window.innerWidth)
+useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry.contentRect.width })
+const isWideScreen = computed(() => shellWidth.value >= 650)
+const isSidePanelWideScreen = computed(() => shellWidth.value >= 520)
 const sidePanelIsOverlay = computed(() => !isSidePanelWideScreen.value)
 const commentaryFraction = ref(0.4)
 const stackedCommentaryFraction = ref(0.5)
@@ -132,13 +139,13 @@ watch(commentaryMode, (mode, previous) => {
 watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
 watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commentaryFraction.value = fraction }, { once: true })
 watch(restoredStackedCommentaryFraction, (fraction) => { if (fraction != null) stackedCommentaryFraction.value = fraction }, { once: true })
-watch(() => bookViewStore.openSearchSignal, () => { openContentSearch() })
-watch(() => bookViewStore.toggleBottomPanelSignal, () => { cycleCommentaryMode() })
-watch(() => bookViewStore.toggleTocPanelSignal, () => { toggleTocPanel() })
+watch(() => bookViewStore.openSearchSignal, (signal) => { if (signal.paneId === paneId) openContentSearch() })
+watch(() => bookViewStore.toggleBottomPanelSignal, (signal) => { if (signal.paneId === paneId) cycleCommentaryMode() })
+watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId === paneId) toggleTocPanel() })
 </script>
 
 <template>
-  <div class="book-view">
+  <div class="book-view" ref="bookViewRoot">
     <!-- Top toolbar -->
     <BookViewToolbar
       v-if="toolbarVisible && toolbarPosition === 'top'"

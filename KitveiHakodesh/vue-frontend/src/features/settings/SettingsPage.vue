@@ -141,6 +141,7 @@ async function navigateToSection(sectionId: string) {
   direction: rtl;
   background: var(--bg-primary);
   position: relative;
+  container-type: inline-size;
 }
 
 .settings-body {
@@ -259,7 +260,7 @@ async function navigateToSection(sectionId: string) {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
-@media (min-width: 900px) {
+@container (min-width: 900px) {
   .narrow-only {
     display: none;
   }

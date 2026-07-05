@@ -135,7 +135,7 @@ const emit = defineEmits<{
   color: var(--text-primary);
 }
 
-@media (min-width: 900px) {
+@container (min-width: 900px) {
   .settings-side-nav {
     display: block;
   }

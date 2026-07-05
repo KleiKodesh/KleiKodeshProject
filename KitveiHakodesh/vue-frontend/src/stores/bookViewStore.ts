@@ -14,29 +14,40 @@ export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 export const useBookViewStore = defineStore('bookView', () => {
   const tabStore = useTabStore()
 
-  const toolbarVisible = ref(true)
+  // Per-pane toolbar visibility. Both panes start from the same persisted preference,
+  // but can be toggled independently once split view is active.
+  const toolbarVisibleByPane = ref<Map<1 | 2, boolean>>(new Map([[1, true], [2, true]]))
+
+  function getToolbarVisible(paneId: 1 | 2): boolean {
+    return toolbarVisibleByPane.value.get(paneId) ?? true
+  }
+
+  // Single computed for backward-compat consumers that don't pass a pane ID.
+  // Always reflects pane 1.
+  const toolbarVisible = computed(() => getToolbarVisible(1))
+
   const toolbarPosition = ref<ToolbarPosition>('top')
-  const toggleBottomPanelSignal = ref(0)
-  const openSearchSignal = ref(0)
-  const toggleTocPanelSignal = ref(0)
-  const txtViewToggleSearchSignal = ref(0)
+  const toggleBottomPanelSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
+  const openSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
+  const toggleTocPanelSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
+  const txtViewToggleSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const txtViewSearchVisible = ref(false)
   const autoSelectTopLine = ref(false)
 
-  function toggleBottomPanel() {
-    toggleBottomPanelSignal.value++
+  function toggleBottomPanel(paneId: 1 | 2 = 1) {
+    toggleBottomPanelSignal.value = { count: toggleBottomPanelSignal.value.count + 1, paneId }
   }
 
-  function openSearch() {
-    openSearchSignal.value++
+  function openSearch(paneId: 1 | 2 = 1) {
+    openSearchSignal.value = { count: openSearchSignal.value.count + 1, paneId }
   }
 
-  function toggleTocPanel() {
-    toggleTocPanelSignal.value++
+  function toggleTocPanel(paneId: 1 | 2 = 1) {
+    toggleTocPanelSignal.value = { count: toggleTocPanelSignal.value.count + 1, paneId }
   }
 
-  function txtViewToggleSearch() {
-    txtViewToggleSearchSignal.value++
+  function txtViewToggleSearch(paneId: 1 | 2 = 1) {
+    txtViewToggleSearchSignal.value = { count: txtViewToggleSearchSignal.value.count + 1, paneId }
   }
 
   const isBookViewActive = computed(() => tabStore.activeTab.route === '/book-view')
@@ -124,7 +135,10 @@ export const useBookViewStore = defineStore('bookView', () => {
   // Synchronous — all bookView settings are in localStorage
   function init() {
     const toolbar = lsGet<boolean>(KEYS.SETTINGS_TOOLBAR)
-    if (toolbar != null) toolbarVisible.value = toolbar
+    if (toolbar != null) {
+      toolbarVisibleByPane.value.set(1, toolbar)
+      toolbarVisibleByPane.value.set(2, toolbar)
+    }
     const pos = lsGet<ToolbarPosition>(KEYS.SETTINGS_TOOLBAR_POSITION)
     if (pos != null) toolbarPosition.value = pos
     const autoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
@@ -136,9 +150,11 @@ export const useBookViewStore = defineStore('bookView', () => {
     if (splitFraction != null) splitViewFraction.value = splitFraction
   }
 
-  function toggleToolbar() {
-    toolbarVisible.value = !toolbarVisible.value
-    lsSet(KEYS.SETTINGS_TOOLBAR, toolbarVisible.value)
+  function toggleToolbar(paneId: 1 | 2 = 1) {
+    const next = !getToolbarVisible(paneId)
+    toolbarVisibleByPane.value.set(paneId, next)
+    // Persist using pane 1's value as the canonical preference.
+    if (paneId === 1) lsSet(KEYS.SETTINGS_TOOLBAR, next)
   }
 
   function setToolbarPosition(pos: ToolbarPosition) {
@@ -160,6 +176,11 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   const splitViewEnabled = ref(false)
   const splitViewFraction = ref(0.5)
+  const focusedPaneId = ref<1 | 2>(1)
+
+  function setFocusedPane(paneId: 1 | 2) {
+    focusedPaneId.value = paneId
+  }
 
   function toggleSplitView() {
     splitViewEnabled.value = !splitViewEnabled.value
@@ -187,6 +208,7 @@ export const useBookViewStore = defineStore('bookView', () => {
   return {
     toolbarVisible,
     toolbarPosition,
+    getToolbarVisible,
     toggleBottomPanelSignal,
     toggleBottomPanel,
     openSearchSignal,
@@ -200,6 +222,8 @@ export const useBookViewStore = defineStore('bookView', () => {
     isTxtViewActive,
     splitViewEnabled,
     splitViewFraction,
+    focusedPaneId,
+    setFocusedPane,
     toggleSplitView,
     setSplitViewFraction,
     zoom,

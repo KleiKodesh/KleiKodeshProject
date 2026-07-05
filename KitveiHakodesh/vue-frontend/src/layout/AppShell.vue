@@ -4,6 +4,7 @@ import AppPageView from './AppPageView.vue'
 import { provide } from 'vue'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useTabStore } from '@/stores/tabStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { PANE_NAVIGATION_KEY } from '@/composables/usePaneNavigation'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
@@ -16,6 +17,11 @@ if (props.paneId === 2) {
 }
 
 const pane = useAppShellPane(props.paneId)
+const bookViewStore = useBookViewStore()
+
+function onPaneFocus() {
+  bookViewStore.setFocusedPane(props.paneId as 1 | 2)
+}
 
 /** Every component inside this shell injects 'paneId' to know which pane it lives in. */
 provide('paneId', props.paneId)
@@ -34,7 +40,7 @@ provide(PANE_NAVIGATION_KEY, {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div class="app-shell" @pointerdown.capture="onPaneFocus">
     <AppTitleBar :pane-id="props.paneId" />
     <main class="app-shell-content">
       <AppPageView :pane-id="props.paneId" />

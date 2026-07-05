@@ -42,7 +42,7 @@ const DEFAULTS = {
   hebrewBooksLocalFolder: '',
   linesContentMaxWidth: 0,
   commentaryMaxWidth: 0,
-  titleBarHiddenButtons: [] as string[],
+  titleBarHiddenButtons: ['theme-toggle'] as string[],
 }
 
 export const useSettingsStore = defineStore('settings', () => {

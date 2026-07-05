@@ -10,7 +10,7 @@
  * - useBookViewSearchPanel        — search panel state and match navigation
  * - useBookViewCommentaryPanel    — commentary panel visibility and scroll restore
  */
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -68,6 +68,7 @@ export function useBookView(
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
   const paneNavigation = usePaneNavigation()
+  const paneId = inject<1 | 2>('paneId', 1)
   const { toolbarPosition } = storeToRefs(bookViewStore)
 
   // ── Tab state captured at mount (stable for component lifetime) ──────────
@@ -333,7 +334,7 @@ export function useBookView(
   return {
     // store state
     toolbarPosition,
-    toolbarVisible: computed(() => bookViewStore.toolbarVisible),
+    toolbarVisible: computed(() => bookViewStore.getToolbarVisible(paneId)),
     // tab data
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
     // book metadata
