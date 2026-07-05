@@ -10,6 +10,8 @@ import {
   IconZoomOut20Regular,
   IconTimeline20Regular,
   IconTimeline20Filled,
+  IconChevronLeft20Regular,
+  IconChevronRight20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
@@ -35,7 +37,7 @@ const props = defineProps<{
   onRelatedBooksOpen?: () => void
   commentaryMode?: 'off' | 'bottom' | 'side'
 }>()
-defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: []; exportToWord: [] }>()
+defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -124,6 +126,20 @@ defineExpose({ tocBtnRef })
       @click="$emit('toggleToc')"
     >
       <IconTreeRtl />
+    </button>
+    <button
+      :disabled="!hasToc"
+      title="קטע הקודם (Ctrl+חץ ימני)"
+      @click="$emit('navigateToPreviousSection')"
+    >
+      <IconChevronRight20Regular />
+    </button>
+    <button
+      :disabled="!hasToc"
+      title="קטע הבא (Ctrl+חץ שמאלי)"
+      @click="$emit('navigateToNextSection')"
+    >
+      <IconChevronLeft20Regular />
     </button>
     <BookViewRelatedBooksDropdown
       :book-id="bookId"

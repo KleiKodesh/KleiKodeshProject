@@ -39,7 +39,7 @@ export function useBookViewLinesNavigation(
     virtualizer().scrollToIndex(lineIndex, { align: 'start' })
   }
 
-  function scrollToLineIndex(lineIndex: number, occurrence = 0) {
+  function scrollToLineIndex(lineIndex: number, occurrence = 0, forceScroll = false) {
     if (!scrollerEl.value) return
 
     const reserved = searchBarVisible() ? 44 : 0
@@ -68,7 +68,10 @@ export function useBookViewLinesNavigation(
     if (measurement) {
       setProgrammaticScroll()
       const targetScrollTop = measurement.start - reserved - 8
-      if (Math.abs(scrollerEl.value.scrollTop - targetScrollTop) > 2) {
+      // forceScroll bypasses the proximity guard — used for explicit section navigation
+      // where the current scrollTop may be within 2px of the target due to sub-pixel
+      // rounding but the view is not actually at the section start.
+      if (forceScroll || Math.abs(scrollerEl.value.scrollTop - targetScrollTop) > 2) {
         scrollerEl.value.scrollTop = targetScrollTop
       }
       const scroller = scrollerEl.value
