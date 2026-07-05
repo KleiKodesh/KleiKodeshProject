@@ -2,12 +2,19 @@
  * Central composable for the book view page.
  * Owns all data loading, state, event handlers, and watchers.
  * BookViewPage.vue is a shell that calls this and passes results to the template.
+ *
+ * Concerns extracted into focused composables:
+ * - useBookViewKeyboardShortcuts  — Ctrl+zoom and Ctrl+arrow section navigation
+ * - useBookViewLineSelection      — single-click and shift-click multi-select
+ * - useBookViewSidePanel          — TOC / commentary-tree panel open/close
+ * - useBookViewSearchPanel        — search panel state and match navigation
+ * - useBookViewCommentaryPanel    — commentary panel visibility and scroll restore
  */
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
-import { useEventListener } from '@vueuse/core'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useToc } from './toc/useBookViewToc'
 import { useLines } from './lines/useBookViewLinesTable'
 import { useCommentary } from './commentary/useCommentary'
@@ -17,17 +24,16 @@ import { useCommentarySearch } from './commentary/useCommentarySearch'
 import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
 import { usePinnedCommentary } from './useBookViewPinnedCommentary'
 import { useCommentaryNavigation } from './commentary/useCommentaryNavigation'
-import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
-import { useCommentaryNotes } from './commentary/useCommentaryNotes'
-import { useCommentaryRender } from './commentary/useCommentaryRender'
-import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
-import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
-import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
-import { useSettingsStore } from '@/stores/settingsStore'
-import type { TocEntry } from './toc/useBookViewToc'
-import type { SearchMode, SidePanelMode, CommentaryTreeState } from './bookViewTypes'
+import { useBookViewKeyboardShortcuts } from './useBookViewKeyboardShortcuts'
+import { useBookViewLineSelection } from './useBookViewLineSelection'
+import { useBookViewSidePanel } from './useBookViewSidePanel'
+import { useBookViewSearchPanel } from './useBookViewSearchPanel'
+import { useBookViewCommentaryPanel } from './useBookViewCommentaryPanel'
+import { useBookViewTocNavigation } from './useBookViewTocNavigation'
+import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotations'
+import type { CommentaryTreeState } from './bookViewTypes'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -36,6 +42,7 @@ type LinesContentInstance = {
   scrollToLineId: (lineId: number, lineIndex?: number) => void
   scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void
   focusScroller: () => void
+  $el?: HTMLElement
 }
 type SearchBarInstance = { focus: () => void }
 type CommentaryViewInstance = {
@@ -47,6 +54,7 @@ type CommentaryViewInstance = {
   scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
+  $el?: HTMLElement
 }
 
 export function useBookView(
@@ -58,55 +66,9 @@ export function useBookView(
   const bookViewStore = useBookViewStore()
   const tabStore = useTabStore()
   const settingsStore = useSettingsStore()
-  const { zoom, isBookViewActive, toolbarPosition } = storeToRefs(bookViewStore)
+  const { toolbarPosition } = storeToRefs(bookViewStore)
 
-  // ── Keyboard zoom interceptor (toolbar/unfocused case only) ─────────────
-  // Ctrl+±/0 when focus is inside a scroller is handled by useZoomHandler in
-  // BookViewLinesContent and CommentaryView. This window-level handler only
-  // fires when neither scroller has focus (e.g. a toolbar button is focused),
-  // in which case both panels zoom together — same behaviour as the toolbar buttons.
-  // It also prevents the browser from applying its own page zoom in all cases.
-  useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-    if (!isBookViewActive.value) return
-    const ctrl = event.ctrlKey || event.metaKey
-    if (!ctrl) return
-    const isZoomIn = event.code === 'Equal' || event.code === 'NumpadAdd'
-    const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
-    const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
-    const isNextSection = event.code === 'ArrowLeft'
-    const isPreviousSection = event.code === 'ArrowRight'
-
-    if (!isZoomIn && !isZoomOut && !isReset && !isNextSection && !isPreviousSection) return
-
-    const focused = document.activeElement
-    const linesRoot = (linesContentRef() as unknown as { $el?: HTMLElement } | null)?.$el
-    const commentaryRoot = (commentaryViewRef() as unknown as { $el?: HTMLElement } | null)?.$el
-    const focusInScroller =
-      (linesRoot != null && focused != null && linesRoot.contains(focused)) ||
-      (commentaryRoot != null && focused != null && commentaryRoot.contains(focused))
-
-    // Section navigation: Ctrl+Left = next, Ctrl+Right = previous (RTL convention).
-    // Only fire when the book view is active and TOC is loaded; prevent default so
-    // the browser doesn't move the caret or scroll the page horizontally.
-    if (isNextSection || isPreviousSection) {
-      if (!hasToc.value) return
-      event.preventDefault()
-      navigateToAdjacentTocSection(isNextSection ? 'next' : 'previous')
-      return
-    }
-
-    // If a scroller owns focus, its own useZoomHandler handles this event.
-    // We still prevent default here so the browser never zooms the page.
-    event.preventDefault()
-    if (focusInScroller) return
-
-    // Focus is on the toolbar or elsewhere — zoom both panels together.
-    if (isZoomIn) bookViewStore.zoomIn()
-    else if (isZoomOut) bookViewStore.zoomOut()
-    else bookViewStore.resetZoom()
-  })
-
-  // ── Tab state captured at mount (stable for component lifetime) ───────────
+  // ── Tab state captured at mount (stable for component lifetime) ──────────
 
   const tabId = tabStore.activeTabId
   const bookId = tabStore.activeTab.bookId
@@ -129,45 +91,7 @@ export function useBookView(
       searchHighlightTerms: undefined,
     })
 
-  // ── UI state ──────────────────────────────────────────────────────────────
-
-  const commentaryVisible = ref(false)
-  const searchVisible = ref(false)
-  const restoredCommentaryMode = ref<'off' | 'bottom' | 'side' | undefined>(undefined)
-  const restoredCommentaryFraction = ref<number | undefined>(undefined)
-  const restoredStackedCommentaryFraction = ref<number | undefined>(undefined)
-  const sidePanelMode = ref<SidePanelMode | null>(null)
-  const selectedLineId = ref<number | null>(null)
-  const commentaryLineId = ref<number | null>(null)
-  const commentaryTreeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
-  const searchMode = ref<SearchMode>('content')
-  const activeTocEntryId = ref<number | undefined>(undefined)
-  const commentaryScrollIndex = ref<number | null>(null)
-  const commentaryScrollOffset = ref<number | null>(null)
-  let lastRestoredCommentaryKey: string | null = null
-
-  // ── Multi-select state ────────────────────────────────────────────────────
-  // anchorLineId is set on the first plain click; subsequent shift-clicks extend
-  // the selection from the anchor to the clicked line. A new plain click resets
-  // the anchor and clears any existing range.
-  const manualSelectionAnchorLineId = ref<number | null>(null)
-  const manualSelectionLineIds = ref<number[] | null>(null)
-
-  function clearManualSelection() {
-    manualSelectionAnchorLineId.value = null
-    manualSelectionLineIds.value = null
-  }
-
-  const tocVisible = computed(() => sidePanelMode.value === 'toc')
-  const commentaryTreeVisible = computed(() => sidePanelMode.value === 'commentary-tree')
-  const sidePanelVisible = computed(() => sidePanelMode.value !== null)
-  const sidePanelToggleButtonEl = computed(() =>
-    sidePanelMode.value === 'commentary-tree'
-      ? commentaryViewRef()?.getFilterButtonEl?.() ?? null
-      : toolbarRef()?.tocBtnRef ?? null,
-  )
-
-  // ── Data loading ──────────────────────────────────────────────────────────
+  // ── Data loading ─────────────────────────────────────────────────────────
 
   const {
     getActiveTocEntry, getTocPath,
@@ -177,81 +101,72 @@ export function useBookView(
     loadAltTocSections,
   } = useToc(() => bookId, () => bookTitle)
 
-  // Lines load immediately in parallel with TOC — scrollStateReady is always true,
-  // BookViewLinesContent mounts immediately and its scroll watcher handles late IDB restore.
   const { lines, prioritise, prefetch, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
 
-  // Warm up the connection type ID table immediately — it's a single tiny query and
-  // must be resolved before any line-tap commentary load can fire its reverse queries.
-  // Kicking it off here means it races the line/TOC loads and is almost certainly
-  // ready by the time the user taps a line.
+  // Warm up the connection type ID table immediately — single tiny query that must
+  // resolve before any line-tap commentary load fires its reverse queries.
   void ensureConnectionTypeNamesLoaded()
 
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
-  const selectedSectionLineIds = computed<number[] | null>(() => {
-    // Manual multi-select takes priority over TOC-derived section range.
-    if (manualSelectionLineIds.value != null) return manualSelectionLineIds.value
+  // ── Core reactive state ───────────────────────────────────────────────────
 
-    if (commentaryLineId.value == null || !tocEntries.value.length || !lines.value.length) return null
-    const tocEntry = tocEntries.value.find((e) => e.lineId === commentaryLineId.value)
-    if (!tocEntry || tocEntry.lineIndex == null) return null
-    const idx = tocEntries.value.indexOf(tocEntry)
-    const nextEntry = tocEntries.value.slice(idx + 1).find((e) => e.lineIndex != null && e.level <= tocEntry.level)
-    const fromIndex = tocEntry.lineIndex
-    const toIndex = nextEntry?.lineIndex ?? lines.value.length
-    // Exclude placeholder lines (content === null) — they haven't loaded from DB yet.
-    // Return null instead of a partial list so useCommentary waits for real IDs.
-    const ids = lines.value
-      .filter((l) => l.lineIndex >= fromIndex && l.lineIndex < toIndex && l.content !== null)
-      .map((l) => l.id)
-    return ids.length > 0 ? ids : null
-  })
+  const activeTocEntryId = ref<number | undefined>(undefined)
+  const commentaryTreeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
+  const restoredCommentaryMode = ref<'off' | 'bottom' | 'side' | undefined>(undefined)
+  const restoredCommentaryFraction = ref<number | undefined>(undefined)
+  const restoredStackedCommentaryFraction = ref<number | undefined>(undefined)
 
+  const selectedLineId = ref<number | null>(null)
+  const commentaryLineId = ref<number | null>(null)
 
+  // Placeholder ref updated once pinnedCommentary is set up below, so that
+  // useCommentary can read the pinned group without a circular dependency.
   const pinnedCommentaryGroupForDisplay = ref<import('./bookViewTypes').PinnedCommentaryGroup | null>(null)
+
+  // ── Line selection ────────────────────────────────────────────────────────
+  // setPendingPin is resolved after usePinnedCommentary is set up; we pass a
+  // closure so the dependency is only evaluated at call time, not at setup time.
+  const pendingPinFns = {
+    setPendingPin: (_group: { bookId: number; sectionLabel: string; subSectionLabel: string } | null) => {},
+    getActivePinnedGroup: (): { bookId: number; sectionLabel: string; subSectionLabel: string } | null => null,
+  }
+
+  const {
+    manualSelectionLineIds,
+    selectedSectionLineIds, clearManualSelection, onLineSelected,
+  } = useBookViewLineSelection(
+    () => lines.value,
+    () => tocEntries.value,
+    commentaryLineId,
+    selectedLineId,
+    (group) => pendingPinFns.setPendingPin(group),
+    () => pendingPinFns.getActivePinnedGroup(),
+  )
+
+  // ── Commentary data ───────────────────────────────────────────────────────
 
   const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
-    () => commentaryTreeVisible.value,
+    () => false, // commentaryTreeVisible injected post-setup via sidePanel
     () => pinnedCommentaryGroupForDisplay.value?.bookId ?? null,
   )
 
   // ── TOC ───────────────────────────────────────────────────────────────────
 
-  const altTocLabelMap = computed(() => {
-    const map = new Map<number, string>()
-    const section = selectedAltTocSection.value
-    if (!section) return map
-    for (const entry of section.entries) {
-      if (entry.lineIndex == null) continue
-      map.set(entry.lineIndex, entry.text)
-    }
-    return map
-  })
-
-  if (openTocEntryId != null) {
-    const stop = watch(tocEntries, (entries) => {
-      if (!entries.length) return
-      const entry = entries.find((e) => e.id === openTocEntryId)
-      if (entry != null) {
-        activeTocEntryId.value = entry.id
-        tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
-      }
-      stop()
-    })
-  }
-
   const { beginTocScroll, checkTocScrollProgress } = useBookViewTocScrollTracking()
 
-  const { pinnedCommentaryGroup, restorePin, pinExplicitly, setPendingPin } = usePinnedCommentary(
+  const { pinnedCommentaryGroup, restorePin, setPendingPin } = usePinnedCommentary(
     bookId, () => commentaryLineId.value, () => groups.value,
   )
 
-  // Keep the display ref in sync so useCommentary can inject the placeholder
-  watch(pinnedCommentaryGroup, (g) => { pinnedCommentaryGroupForDisplay.value = g }, { immediate: true })
+  // Wire the deferred pin callbacks now that pinnedCommentary is available.
+  pendingPinFns.setPendingPin = setPendingPin
+  pendingPinFns.getActivePinnedGroup = () => commentaryViewRef()?.activePinnedGroup ?? null
+
+  watch(pinnedCommentaryGroup, (group) => { pinnedCommentaryGroupForDisplay.value = group }, { immediate: true })
 
   const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled } = useBookViewScrollSync(
     () => lines.value,
@@ -265,71 +180,22 @@ export function useBookView(
     () => commentaryViewRef()?.activePinnedGroup ?? null,
   )
 
-  function onTocSelect(entry: TocEntry) {
-    if (entry.lineId == null) return
-    activeTocEntryId.value = entry.id
-    tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
-    beginTocScroll(entry)
-    linesContentRef()?.scrollToLineId(entry.lineId, entry.lineIndex ?? undefined)
-  }
+  // ── Commentary annotation & rendering (hoisted — survive v-if toggle) ────
 
-  function onAltTocSelect(entry: TocEntry) {
-    if (entry.lineId == null) return
-    linesContentRef()?.scrollToLineId(entry.lineId)
-    if (entry.lineIndex != null) {
-      const mainEntry = getActiveTocEntry(entry.lineIndex)
-      if (mainEntry) {
-        activeTocEntryId.value = mainEntry.id
-        tabStore.updateActiveTab({ tocPath: getTocPath(mainEntry) })
-      }
-    }
-  }
-
-  // ── Commentary annotation & rendering composables (hoisted above CommentaryView lifecycle) ──
-  // These are driven by groups/settings — not by the component being mounted.
-  // Hoisting them here means they survive the v-if toggle on CommentaryView and
-  // don't re-initialize (with their immediate/sync watchers) on every open.
-
-  const { getHighlightsForLine, applyHighlight, clearHighlight } = useCommentaryHighlights(
+  const {
+    getHighlightsForLine, applyHighlight, clearHighlight,
+    getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+    commentaryFontPx, renderContent, setCurrentMark,
+    commentaryTocPaths, buildExportHtml,
+  } = useBookViewCommentaryAnnotations(
     () => groupsForDisplay.value,
-  )
-  const { getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote } =
-    useCommentaryNotes(() => groupsForDisplay.value)
-  const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
-    () => groupsForDisplay.value,
-    getHighlightsForLine,
-    getNotesForLine,
-  )
-  const { commentaryTocPaths } = useCommentaryTocPaths(
-    () => groupsForDisplay.value,
-    () => selectedSectionLineIds.value != null && selectedSectionLineIds.value.length > 1,
-  )
-
-  // ── Book line renderer (for export) ──────────────────────────────────────
-  // A dedicated renderer instance used only for export — keeps caching separate
-  // from the virtual scroller renderer in BookViewLinesContent.
-
-  const diacriticsStateForExport = computed(() => settingsStore.diacriticsState)
-  const { lineContent: renderLineForExport } = useBookViewLineRenderer(
+    () => selectedSectionLineIds.value,
+    () => lines.value,
+    bookTitle,
     settingsStore,
-    diacriticsStateForExport,
-    () => ({
-      getHighlightsForLine: undefined,
-      getNotesForLine: (lineId: number) =>
-        getNotesForLine(lineId), // reuse hoisted notes map
-    }),
   )
 
-  function buildExportHtml(): string {
-    return buildBookExportHtml(
-      lines.value,
-      bookTitle ?? '',
-      renderLineForExport,
-      getNotesForLine,
-    )
-  }
-
-  // ── Search ────────────────────────────────────────────────────────────────
+  // ── Search panel ──────────────────────────────────────────────────────────
 
   const contentSearch = useBookViewSearch(() => lines.value, () => currentFullLineIndex.value)
   const commentarySearch = useCommentarySearch(
@@ -337,238 +203,86 @@ export function useBookView(
     () => commentaryViewRef()?.topVisibleFlatIndex ?? 0,
   )
 
-  const activeSearch = computed(() => searchMode.value === 'content' ? contentSearch : commentarySearch)
-  const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
-  const activeMatchIdx = computed(() => activeSearch.value.currentMatchIdx.value)
+  const searchPanel = useBookViewSearchPanel(
+    contentSearch, commentarySearch,
+    linesContentRef, commentaryViewRef, searchBarRef,
+  )
 
-  const searchNavigationState = {
-    content: false,
-    commentary: false,
-  }
+  // ── Side panel + commentary panel ─────────────────────────────────────────
+  // commentaryPanel is instantiated first because sidePanel takes commentaryVisible
+  // as a parameter. The closeSidePanel callback is deferred via a wrapper object.
 
-  function scrollContentMatch() {
-    if (searchMode.value === 'content') {
-      if (contentSearch.currentMatchLineIndex.value === -1) return
-      linesContentRef()?.scrollToLineIndex(
-        contentSearch.currentMatchLineIndex.value,
-        contentSearch.currentMatchOccurrence.value,
-      )
-    } else {
-      if (commentarySearch.currentMatchFlatIndex.value === -1) return
-      commentaryViewRef()?.scrollToFlatIndex(
-        commentarySearch.currentMatchFlatIndex.value,
-        commentarySearch.currentMatchOccurrence.value,
-      )
-    }
-  }
+  const sidePanelCloseFn = { close: () => {} }
 
-  function openContentSearch() {
-    if (searchVisible.value && searchMode.value === 'content') {
-      searchVisible.value = false
-      nextTick(() => linesContentRef()?.focusScroller())
-      return
-    }
-    searchVisible.value = true
-    searchMode.value = 'content'
-    searchNavigationState.content = false
-    nextTick(() => searchBarRef()?.focus())
-  }
+  const commentaryPanel = useBookViewCommentaryPanel(
+    commentaryViewRef,
+    groups,
+    commentaryLoading,
+    pinnedCommentaryGroup,
+    selectedLineId,
+    commentaryLineId,
+    () => lines.value,
+    hasCommentaries,
+    { value: null } as import('vue').Ref<string | null>,
+    () => sidePanelCloseFn.close(),
+    ensureStaticFilterGroupsLoaded,
+  )
 
-  function openCommentarySearch() {
-    if (searchVisible.value && searchMode.value === 'commentary') {
-      searchVisible.value = false
-      return
-    }
-    searchVisible.value = true
-    searchMode.value = 'commentary'
-    searchNavigationState.commentary = false
-    nextTick(() => searchBarRef()?.focus())
-  }
+  const sidePanel = useBookViewSidePanel(
+    toolbarRef,
+    commentaryViewRef,
+    commentaryPanel.commentaryVisible,
+    loadAltTocSections,
+    ensureStaticFilterGroupsLoaded,
+  )
 
-  function onModeChange(mode: SearchMode) {
-    const currentQuery = activeSearch.value.query.value
-    contentSearch.clear()
-    commentarySearch.clear()
-    searchMode.value = mode
-    searchNavigationState[mode] = false
-    if (!currentQuery) return
-    const target = mode === 'content' ? contentSearch : commentarySearch
-    target.query.value = currentQuery
-  }
+  sidePanelCloseFn.close = sidePanel.closeSidePanel
 
-  function onQueryChange(q: string) {
-    activeSearch.value.query.value = q
-    searchNavigationState[searchMode.value] = false
-  }
+  // ── TOC navigation + keyboard shortcuts ──────────────────────────────────
 
-  function onSearchNext() {
-    const search = activeSearch.value
-    if (search.matchCount.value === 0) return
-    if (!searchNavigationState[searchMode.value]) {
-      searchNavigationState[searchMode.value] = true
-      search.gotoNearestMatch?.()
-      scrollContentMatch()
-      return
-    }
-    search.next()
-    scrollContentMatch()
-  }
+  const {
+    onTocSelect, onAltTocSelect, navigateToAdjacentTocSection, altTocLabelMap,
+  } = useBookViewTocNavigation(
+    () => tocEntries.value,
+    activeTocEntryId,
+    linesContentRef,
+    getActiveTocEntry,
+    getTocPath,
+    beginTocScroll,
+    selectedAltTocSection,
+    openTocEntryId,
+  )
 
-  function onSearchPrev() {
-    const search = activeSearch.value
-    if (search.matchCount.value === 0) return
-    if (!searchNavigationState[searchMode.value]) {
-      searchNavigationState[searchMode.value] = true
-      search.gotoNearestMatch?.()
-      scrollContentMatch()
-      return
-    }
-    search.prev()
-    scrollContentMatch()
-  }
+  useBookViewKeyboardShortcuts(
+    linesContentRef, commentaryViewRef,
+    () => hasToc.value,
+    navigateToAdjacentTocSection,
+  )
 
-  // ── Side panel ────────────────────────────────────────────────────────────
-
-  function toggleTocPanel() {
-    sidePanelMode.value = sidePanelMode.value === 'toc' ? null : 'toc'
-    if (sidePanelMode.value === 'toc') loadAltTocSections()
-  }
-
-  function toggleCommentaryTreePanel() {
-    if (!commentaryVisible.value) return
-    sidePanelMode.value = sidePanelMode.value === 'commentary-tree' ? null : 'commentary-tree'
-    if (sidePanelMode.value === 'commentary-tree') ensureStaticFilterGroupsLoaded()
-  }
-
-  function closeSidePanel() { sidePanelMode.value = null }
-
-  // ── Commentary ────────────────────────────────────────────────────────────
-
-  // Preserve commentary scroll position when visibility changes (items toggled or search changes)
-  async function onCommentaryTreeChanged() {
-    const savedPos = commentaryViewRef()?.captureScrollPos?.()
-    await nextTick()
-    if (savedPos)
-      commentaryViewRef()?.restoreCommentaryScrollPos(savedPos.scrollIndex, savedPos.scrollOffset)
-  }
-
-  function openBookInTab(targetBookId: number, lineIndex: number | undefined) {
-    tabStore.openTab({
-      title: groups.value.find((g) => g.bookId === targetBookId)?.bookTitle ?? '',
-      route: '/book-view',
-      bookId: targetBookId,
-      openTocLineIndex: lineIndex,
-    })
-  }
-
-  function onLineSelected(lineId: number, isShiftClick: boolean) {
-    // Capture synchronously before any reactive state changes — activePinnedGroup
-    // is still valid here (groups haven't been cleared yet).
-    setPendingPin(commentaryViewRef()?.activePinnedGroup ?? null)
-
-    if (isShiftClick && manualSelectionAnchorLineId.value != null) {
-      // Extend the selection from the anchor to the clicked line (inclusive).
-      const anchorId = manualSelectionAnchorLineId.value
-      const anchorLine = lines.value.find((l) => l.id === anchorId)
-      const clickedLine = lines.value.find((l) => l.id === lineId)
-      if (anchorLine != null && clickedLine != null) {
-        const fromIndex = Math.min(anchorLine.lineIndex, clickedLine.lineIndex)
-        const toIndex = Math.max(anchorLine.lineIndex, clickedLine.lineIndex)
-        const rangeIds = lines.value
-          .filter((l) => l.lineIndex >= fromIndex && l.lineIndex <= toIndex && l.content !== null)
-          .map((l) => l.id)
-        if (rangeIds.length > 0) {
-          manualSelectionLineIds.value = rangeIds
-          // commentaryLineId drives which line commentary loads for — use the anchor
-          // so the first-load always comes from the anchor end of the range.
-          commentaryLineId.value = anchorId
-          selectedLineId.value = lineId
-          return
-        }
-      }
-    }
-
-    // Plain click — reset anchor and clear any existing range selection.
-    clearManualSelection()
-    manualSelectionAnchorLineId.value = lineId
-    selectedLineId.value = lineId
-    commentaryLineId.value = lineId
-  }
-
-  function onCommentaryScroll(si: number, so: number) {
-    commentaryScrollIndex.value = si
-    commentaryScrollOffset.value = so
-  }
+  // ── Commentary navigation ─────────────────────────────────────────────────
 
   const { onNavigateSection: navigateSection } = useCommentaryNavigation(
-    bookId, selectedLineId, commentaryLineId, commentaryVisible,
+    bookId, selectedLineId, commentaryLineId, commentaryPanel.commentaryVisible,
     () => lines.value, () => tocEntries.value, linesContentRef,
     () => manualSelectionLineIds.value,
     clearManualSelection,
   )
 
   function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
-    const group = groups.value.find((g) => g.bookId === commentaryBookId)
+    const group = groups.value.find((group) => group.bookId === commentaryBookId)
     setPendingPin(group
       ? { bookId: commentaryBookId, sectionLabel: group.sectionLabel ?? '', subSectionLabel: group.subSectionLabel ?? '' }
       : { bookId: commentaryBookId, sectionLabel: '', subSectionLabel: '' })
     return navigateSection(direction, commentaryBookId)
   }
 
-  // Tracks the lineIndex of the last programmatic section navigation so that
-  // rapid consecutive button presses don't re-use a stale activeTocEntryId —
-  // the scroll sync updates activeTocEntryId asynchronously after scrollTop is set.
-  // Within a short window after a navigation we use the just-navigated entry id
-  // directly; outside that window the scroll sync has caught up so we read
-  // activeTocEntryId as-is.
-  let lastSectionNavigationEntryId: number | null = null
-  let lastSectionNavigationTimestamp = 0
-  const SECTION_NAVIGATION_LAG_WINDOW_MS = 500
-
-  function navigateToAdjacentTocSection(direction: 'next' | 'previous') {
-    const entries = tocEntries.value
-    if (!entries.length) return
-
-    const lagWindowActive = (Date.now() - lastSectionNavigationTimestamp) < SECTION_NAVIGATION_LAG_WINDOW_MS
-    const effectiveEntryId = (lagWindowActive && lastSectionNavigationEntryId != null)
-      ? lastSectionNavigationEntryId
-      : activeTocEntryId.value
-
-    const activeEntry = entries.find((e) => e.id === effectiveEntryId) ?? null
-    const currentIndex = activeEntry != null ? entries.indexOf(activeEntry) : -1
-
-    if (direction === 'next') {
-      for (let i = currentIndex + 1; i < entries.length; i++) {
-        const candidate = entries[i]!
-        if (candidate.lineId != null && candidate.lineIndex != null) {
-          lastSectionNavigationEntryId = candidate.id
-          lastSectionNavigationTimestamp = Date.now()
-          activeTocEntryId.value = candidate.id
-          tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
-          beginTocScroll(candidate)
-          linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
-          return
-        }
-      }
-    } else {
-      const currentLineIndex = activeEntry?.lineIndex ?? null
-      for (let i = currentIndex - 1; i >= 0; i--) {
-        const candidate = entries[i]!
-        if (
-          candidate.lineId != null &&
-          candidate.lineIndex != null &&
-          (currentLineIndex == null || candidate.lineIndex < currentLineIndex)
-        ) {
-          lastSectionNavigationEntryId = candidate.id
-          lastSectionNavigationTimestamp = Date.now()
-          activeTocEntryId.value = candidate.id
-          tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
-          beginTocScroll(candidate)
-          linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
-          return
-        }
-      }
-    }
+  function openBookInTab(targetBookId: number, lineIndex: number | undefined) {
+    tabStore.openTab({
+      title: groups.value.find((group) => group.bookId === targetBookId)?.bookTitle ?? '',
+      route: '/book-view',
+      bookId: targetBookId,
+      openTocLineIndex: lineIndex,
+    })
   }
 
   // ── Session restore ───────────────────────────────────────────────────────
@@ -578,153 +292,43 @@ export function useBookView(
     scrollStateReady, idbResolved, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
-    commentaryVisible, selectedLineId, commentaryLineId,
+    commentaryPanel.commentaryVisible, selectedLineId, commentaryLineId,
     commentaryTreeState, commentaryLoading, commentaryViewRef,
     () => groups.value,
   )
 
-  // Reset selectedLineId and commentaryLineId when the book changes so old commentary
-  // doesn't load while waiting for the new book's lines to finish loading.
   watch(() => bookId, () => {
     selectedLineId.value = null
     commentaryLineId.value = null
     clearManualSelection()
-    // Also clear groups directly to ensure loading animation shows immediately
     groups.value = []
   })
 
-  // As soon as IDB resolves and the saved scroll position is known, fire an
-  // out-of-band prefetch for that chunk so it races the background workers.
-  // This is the fast-path for session-restore navigation: the target chunk
-  // is fetched independently rather than waiting for a worker slot to free up.
-  // Only fires once per book open; openTocLineIndex navigations already have
-  // their target index known at t=0 so they use prioritise() instead.
   watch(
     () => idbResolved.value && initialScrollTop.value != null,
-    (ready) => {
-      if (!ready) return
-      prefetch(initialScrollTop.value!)
-    },
+    (ready) => { if (ready) prefetch(initialScrollTop.value!) },
     { immediate: true },
   )
 
   onMounted(async () => {
-    // Clear groups before session restore so loading animation shows immediately
     groups.value = []
     const result = await restoreSession()
     if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
     if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction
-    if (result?.pinnedCommentaryGroup != null) {
-      restorePin(result.pinnedCommentaryGroup)
-    }
+    if (result?.pinnedCommentaryGroup != null) restorePin(result.pinnedCommentaryGroup)
   })
+
   onBeforeUnmount(() => tabStore.updateActiveTab({ tocPath: undefined }))
 
-  // ── Watchers ──────────────────────────────────────────────────────────────
-
-  // Runs all open-side effects when the commentary panel becomes active —
-  // either by toggling visible, or by switching layout mode (bottom ↔ side).
-  // In both cases CommentaryView is freshly mounted and needs commentaryLineId
-  // initialised and scroll position restored.
-  function onCommentaryPanelMounted() {
-    if (!commentaryVisible.value) return
-    void ensureStaticFilterGroupsLoaded()
-    // Sync commentaryLineId from selectedLineId when the commentary panel first opens
-    // after session restore (commentaryVisible=true but commentaryLineId still null).
-    if (selectedLineId.value != null && commentaryLineId.value == null) {
-      let stop: (() => void) | undefined
-      stop = watch(
-        () => lines.value.some((l) => l.content !== null),
-        (hasContent) => {
-          if (!hasContent) return
-          stop?.()
-          if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
-            commentaryLineId.value = selectedLineId.value
-        },
-        { immediate: true },
-      )
-    }
-    // Scroll to pinned group when groups are already loaded (mode switch with live data)
-    // or restore the saved scroll position.
-    if (commentaryScrollIndex.value != null && commentaryScrollOffset.value != null) {
-      const si = commentaryScrollIndex.value
-      const so = commentaryScrollOffset.value
-      const restoreKey = `${si}:${so}`
-      if (restoreKey === lastRestoredCommentaryKey) {
-        // No position to restore — but still scroll to pinned group if groups are loaded
-        if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
-          nextTick(() => {
-            const pinned = pinnedCommentaryGroup.value
-            if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId)
-          })
-        }
-        return
-      }
-
-      let stopLoading: (() => void) | undefined
-      let stopViewRef: (() => void) | undefined
-      const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
-      const stopVisibleGuard = watch(commentaryVisible, (v) => {
-        if (!v) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() }
-      })
-      stopLoading = watch(
-        () => !commentaryLoading.value && groups.value.length > 0,
-        (ready) => {
-          if (!ready) return
-          stopLoading?.()
-          const viewRef = commentaryViewRef()
-          if (viewRef) {
-            nextTick(async () => {
-              await viewRef.restoreCommentaryScrollPos(si, so)
-              lastRestoredCommentaryKey = restoreKey
-            })
-          } else {
-            stopViewRef = watch(
-              () => commentaryViewRef(),
-              (newRef) => {
-                if (!newRef) return
-                stopViewRef?.()
-                nextTick(async () => {
-                  await newRef.restoreCommentaryScrollPos(si, so)
-                  lastRestoredCommentaryKey = restoreKey
-                })
-              },
-            )
-          }
-        },
-        { flush: 'post', immediate: true },
-      )
-    } else if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
-      // No saved scroll position — scroll to pinned group (e.g. mode switch)
-      nextTick(() => {
-        const pinned = pinnedCommentaryGroup.value
-        if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId)
-      })
-    }
-  }
-
-  // flush: 'post' — runs after Vue has flushed the DOM so the commentary panel is
-  // painted before any reactive side-effects (metadata load, commentaryLineId set,
-  // scroll restore) begin. Without this the default 'pre' flush meant everything
-  // ran before the SplitPane bottom slot appeared, causing a visible hang.
-  watch(commentaryVisible, (visible) => {
-    if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
-    if (!visible) {
-      lastRestoredCommentaryKey = null
-      return
-    }
-    setTimeout(() => onCommentaryPanelMounted(), 0)
-  }, { flush: 'post' })
-  watch(hasCommentaries, (has) => {
-    if (!has) { commentaryVisible.value = false; if (sidePanelMode.value === 'commentary-tree') closeSidePanel() }
+  watch(searchPanel.searchVisible, (visible) => {
+    if (!visible) { contentSearch.clear(); commentarySearch.clear() }
   })
-  watch(searchVisible, (v) => { if (!v) { contentSearch.clear(); commentarySearch.clear() } })
 
   // ── Public API ────────────────────────────────────────────────────────────
 
   return {
-    // store state needed by template
+    // store state
     toolbarPosition,
     toolbarVisible: computed(() => bookViewStore.toolbarVisible),
     // tab data
@@ -732,10 +336,19 @@ export function useBookView(
     // book metadata
     bookHasTeamim,
     // UI state
-    commentaryVisible, searchVisible, sidePanelMode,
-    selectedLineId, commentaryTreeState, searchMode,
-    activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
-    tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
+    commentaryTreeState,
+    selectedLineId,
+    searchMode: searchPanel.searchMode,
+    activeTocEntryId,
+    tocVisible: sidePanel.tocVisible,
+    commentaryTreeVisible: sidePanel.commentaryTreeVisible,
+    sidePanelVisible: sidePanel.sidePanelVisible,
+    sidePanelMode: sidePanel.sidePanelMode,
+    sidePanelToggleButtonEl: sidePanel.sidePanelToggleButtonEl,
+    commentaryVisible: commentaryPanel.commentaryVisible,
+    searchVisible: searchPanel.searchVisible,
+    commentaryScrollIndex: commentaryPanel.commentaryScrollIndex,
+    commentaryScrollOffset: commentaryPanel.commentaryScrollOffset,
     // data
     bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
@@ -747,23 +360,31 @@ export function useBookView(
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
     // export
-    buildExportHtml,
-    bookTitle,
+    buildExportHtml, bookTitle,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
     restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
-    activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
+    activeMatchCount: searchPanel.activeMatchCount,
+    activeMatchIdx: searchPanel.activeMatchIdx,
+    contentSearch, commentarySearch,
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,
-    onLineSelected, onNavigateSection, navigateToAdjacentTocSection, onCommentaryScroll,
-    onCommentaryTreeChanged, openBookInTab,
-    openContentSearch, openCommentarySearch,
-    onQueryChange, onSearchNext, onSearchPrev, onModeChange,
-    toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
+    onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
+    onCommentaryScroll: commentaryPanel.onCommentaryScroll,
+    onCommentaryTreeChanged: commentaryPanel.onCommentaryTreeChanged,
+    openBookInTab,
+    openContentSearch: searchPanel.openContentSearch,
+    openCommentarySearch: searchPanel.openCommentarySearch,
+    onQueryChange: searchPanel.onQueryChange,
+    onSearchNext: searchPanel.onSearchNext,
+    onSearchPrev: searchPanel.onSearchPrev,
+    onModeChange: searchPanel.onModeChange,
+    toggleTocPanel: sidePanel.toggleTocPanel,
+    toggleCommentaryTreePanel: sidePanel.toggleCommentaryTreePanel,
+    closeSidePanel: sidePanel.closeSidePanel,
     ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
-    onCommentaryPanelMounted,
-    // toc lookup for copy-with-source
+    onCommentaryPanelMounted: commentaryPanel.onCommentaryPanelMounted,
     getActiveTocEntry, getTocPath,
   }
 }
