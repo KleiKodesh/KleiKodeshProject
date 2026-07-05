@@ -34,7 +34,7 @@ const filePath = computed(() => paneNavigation.activeTab.localFilePath ?? null)
 const virtualUrl = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?? null)
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
 
-const { titleBarVisible } = useUiChromeVisibility()
+const { titleBarVisible } = useUiChromeVisibility(paneId)
 const APP_TITLE_BAR_HEIGHT = 40
 const searchBarStyle = computed(() => ({
   top: `${(titleBarVisible.value ? APP_TITLE_BAR_HEIGHT : 0) + 4}px`,

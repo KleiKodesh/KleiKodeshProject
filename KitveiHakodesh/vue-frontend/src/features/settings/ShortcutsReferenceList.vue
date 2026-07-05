@@ -34,7 +34,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>חץ ימני</kbd></div><span class="shortcut-description">קטע הקודם</span></div>
     <!-- Display -->
     <div class="shortcuts-group-label">תצוגה</div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>|</kbd></div><span class="shortcut-description">תצוגה מפוצלת</span></div>
+    <div class="shortcut-row" v-if="!isVstoEnvironment"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>|</kbd></div><span class="shortcut-description">תצוגה מפוצלת</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd></div><span class="shortcut-description">הצג / הסתר סרגל כלים</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd></div><span class="shortcut-description">הגדל תצוגה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd></div><span class="shortcut-description">הקטן תצוגה</span></div>
@@ -44,6 +44,10 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F7</kbd></div><span class="shortcut-description">הפעלת סמן טקסט לניווט ובחירה</span></div>
   </div>
 </template>
+
+<script setup lang="ts">
+import { isVstoEnvironment } from '@/webview-host/bridge'
+</script>
 
 <style scoped>
 .shortcuts-list {

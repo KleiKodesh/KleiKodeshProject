@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconArrowDownload20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
+import {
+  IconArrowDownload20Regular,
+  IconDelete20Regular,
+  IconFolderOpen20Regular,
+} from '@iconify-prerendered/vue-fluent'
 import type { HebrewBook } from './hebrewBooksCatalog'
 
 const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean }>()
@@ -8,6 +12,7 @@ const emit = defineEmits<{
   'book-clicked': [book: HebrewBook]
   'download-clicked': [book: HebrewBook]
   'delete-clicked': [book: HebrewBook]
+  'reveal-clicked': [book: HebrewBook]
 }>()
 
 const tags = computed(() =>
@@ -42,23 +47,34 @@ const tooltip = computed(() => {
         <span class="title">{{ book.title }}</span>
         <span v-if="book.author" class="author">{{ book.author }}</span>
       </div>
-      <button
-        class="dl-btn"
-        :title="'הורד ' + book.title"
-        tabindex="-1"
-        @click.stop="emit('download-clicked', book)"
-      >
-        <IconArrowDownload20Regular />
-      </button>
-      <button
-        v-if="hasLocalFile"
-        class="dl-btn delete-btn"
-        :title="'מחק מהתיקייה: ' + book.title"
-        tabindex="-1"
-        @click.stop="emit('delete-clicked', book)"
-      >
-        <IconDelete20Regular />
-      </button>
+      <div class="actions">
+          <IconArrowDownload20Regular />
+        </button>
+        <button
+          v-if="hasLocalFile"
+          class="dl-btn reveal-btn"
+          :title="'פתח בסייר הקבצים: ' + book.title"
+          tabindex="-1"
+          @click.stop="emit('reveal-clicked', book)"
+        >
+          <IconFolderOpen20Regular />
+        </button>
+        <button
+          v-if="hasLocalFile"
+          class="dl-btn delete-btn"
+          :title="'מחק מהתיקייה: ' + book.title"
+          tabindex="-1"
+          @click.stop="emit('delete-clicked', book)"
+        >
+          <IconDelete20Regular />
+        </button>
+        <button
+          class="dl-btn"
+          :title="'הורד ' + book.title"
+          tabindex="-1"
+          @click.stop="emit('download-clicked', book)"
+        >
+      </div>
     </div>
     <div class="row-bottom">
       <div v-if="tags.length" class="tags">
@@ -130,11 +146,20 @@ const tooltip = computed(() => {
   justify-content: center;
   color: var(--text-secondary);
 }
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
 .dl-btn:hover {
   color: var(--text-primary);
 }
 .delete-btn:hover {
   color: #e53e3e;
+}
+.reveal-btn:hover {
+  color: #3478f6;
 }
 
 .row-bottom {

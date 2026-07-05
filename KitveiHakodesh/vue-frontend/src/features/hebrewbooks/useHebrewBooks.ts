@@ -5,7 +5,7 @@ import { searchHbCatalog, getHbPdfUrl, type HebrewBook } from './hebrewBooksCata
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles } from '@/webview-host/bridge'
+import { triggerHbDownload, triggerHbSaveAs, deleteHbLocalFile, checkHbLocalFiles, revealHbLocalFile } from '@/webview-host/bridge'
 
 export function useHebrewBooks() {
   const localFileStore = useLocalFileStore()
@@ -116,6 +116,12 @@ export function useHebrewBooks() {
     }
   }
 
+  function revealInFolder(book: HebrewBook) {
+    const folder = settings.hebrewBooksLocalFolder
+    if (!folder) return
+    revealHbLocalFile(String(book.id), folder).catch(() => {})
+  }
+
   const displayedBooks = computed(() => books.value)
 
   return {
@@ -130,5 +136,6 @@ export function useHebrewBooks() {
     openBook,
     downloadBook,
     deleteLocalFile,
+    revealInFolder,
   }
 }

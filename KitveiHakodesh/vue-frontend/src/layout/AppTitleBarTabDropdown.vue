@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, inject } from 'vue'
 import {
   IconDismiss20Regular,
   IconHome20Regular,
@@ -17,7 +17,8 @@ import type { Tab } from '@/stores/tabStore'
 const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
-const { titleBarVisible } = useUiChromeVisibility()
+const paneId = inject<1 | 2>('paneId', 1)
+const { titleBarVisible } = useUiChromeVisibility(paneId)
 const containerRef = ref<HTMLElement | null>(null)
 const visibleTabs = computed(() => {
   const filtered = props.tabs.filter((t) => t.route !== '/settings')

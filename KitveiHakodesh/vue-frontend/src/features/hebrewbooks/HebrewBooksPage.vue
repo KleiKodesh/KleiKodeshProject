@@ -25,6 +25,7 @@ const {
   openBook,
   downloadBook,
   deleteLocalFile,
+  revealInFolder,
 } = useHebrewBooks()
 
 const searchInputRef = ref<HTMLInputElement>()
@@ -100,6 +101,7 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
               @book-clicked="onBookClicked(vRow.index, displayedBooks[vRow.index]!)"
               @download-clicked="downloadBook"
               @delete-clicked="deleteLocalFile"
+              @reveal-clicked="revealInFolder"
             />
           </div>
         </div>

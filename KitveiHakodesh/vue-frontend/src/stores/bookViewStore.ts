@@ -187,6 +187,11 @@ export const useBookViewStore = defineStore('bookView', () => {
     lsSet(KEYS.SETTINGS_SPLIT_VIEW, splitViewEnabled.value)
   }
 
+  function disableSplitView() {
+    splitViewEnabled.value = false
+    lsSet(KEYS.SETTINGS_SPLIT_VIEW, false)
+  }
+
   function setSplitViewFraction(fraction: number) {
     splitViewFraction.value = fraction
     lsSet(KEYS.SETTINGS_SPLIT_VIEW_FRACTION, fraction)
@@ -225,6 +230,7 @@ export const useBookViewStore = defineStore('bookView', () => {
     focusedPaneId,
     setFocusedPane,
     toggleSplitView,
+    disableSplitView,
     setSplitViewFraction,
     zoom,
     commentaryZoom,

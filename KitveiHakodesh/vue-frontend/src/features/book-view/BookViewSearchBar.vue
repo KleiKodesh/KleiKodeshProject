@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick } from 'vue'
+import { ref, watch, computed, nextTick, inject } from 'vue'
 import {
   IconLayoutRowTwoFocusTop20Filled,
   IconLayoutRowTwoFocusBottom20Filled,
@@ -47,7 +47,8 @@ watch(() => props.commentaryVisible, (v) => {
 const APP_TITLE_BAR = 40
 const BOOK_TOOLBAR = 32
 
-const { titleBarVisible } = useUiChromeVisibility()
+const paneId = inject<1 | 2>('paneId', 1)
+const { titleBarVisible } = useUiChromeVisibility(paneId)
 
 const isBottomAnchored = computed(() => props.toolbarPosition === 'bottom')
 

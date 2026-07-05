@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, defineAsyncComponent } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useWindowSize } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
@@ -27,8 +27,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { useThemeStore } from '@/theme/themeStore'
-import { toggleFullscreen } from '@/webview-host/bridge'
-import { useAppNavigation } from '@/composables/useAppNavigation'
+import { toggleFullscreen, isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -38,7 +37,13 @@ const settingsStore = useSettingsStore()
 const pdfOcrStore = usePdfOcrStore()
 const themeStore = useThemeStore()
 const { navigateInNewTab } = useAppNavigation()
-const { titleBarVisible } = useUiChromeVisibility()
+const { titleBarVisible } = useUiChromeVisibility(props.paneId)
+
+const { width: windowWidth } = useWindowSize()
+
+// Split view requires enough horizontal space for two usable panes.
+const SPLIT_VIEW_MIN_WIDTH = 768
+const isSplitViewAvailable = computed(() => !isVsto && windowWidth.value >= SPLIT_VIEW_MIN_WIDTH)
 
 // ── Button visibility helpers ─────────────────────────────────────────────────
 
@@ -248,7 +253,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   if (props.paneId === 1) {
     if (e.ctrlKey && e.code === 'Backslash') {
       e.preventDefault()
-      bookViewStore.toggleSplitView()
+      if (isSplitViewAvailable.value) bookViewStore.toggleSplitView()
     } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
       e.preventDefault()
       toggleFullscreen()
@@ -306,7 +311,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <IconOptions24Regular v-else />
       </button>
       <button
-        v-if="isTitleBarButtonVisible('split-view')"
+        v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable"
         class="bar-btn"
         :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"
         @click.stop="bookViewStore.toggleSplitView()"
