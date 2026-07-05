@@ -4,6 +4,7 @@ import { useEventListener, useWindowSize } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
+import { useAppNavigation } from '@/composables/useAppNavigation'
 import {
   IconLineHorizontal320Regular,
   IconAdd20Regular,

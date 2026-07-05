@@ -81,17 +81,16 @@ function confirmResetAll() {
     <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
 
     <p class="reset-description" data-search-ignore>
-      מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
-    </p>
-
-    <p class="reset-description" data-search-ignore>
       מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס החיפוש. לא ניתן לבטל פעולה זו.
     </p>
+    <button class="reset-btn" @click="confirmResetAll">איפוס האפליקציה</button>
 
-     <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">
+    <p class="reset-description" data-search-ignore>
+      מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
+    </p>
+    <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">
       בנייה מחדש של אינדקס חיפוש קבצים
     </button>
-    <button class="reset-btn" @click="confirmResetAll">איפוס האפליקציה</button>
   </div>
 
   <ConfirmDialog
