@@ -94,6 +94,8 @@ namespace KitveiHakodeshLib.Settings
             Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "CsvLastUpdated", utcDate.ToString("o"));
         }
 
+        // ── Dark mode ─────────────────────────────────────────────────────────────
+
         /// <summary>
         /// Persists whether the app is currently in dark mode.
         /// Stored as "1" (dark) or "0" (light) so the host window title bar can be

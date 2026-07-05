@@ -28,7 +28,8 @@ KitveiHakodeshLib/
 │   ├── DictionaryHandler.cs        — Dictionary lookup handler
 │   └── WordThesaurusProvider.cs    — Thesaurus data provider
 ├── FileSystemSearch/
-│   ├── FileSystemSearchHandler.cs  — File system search handler
+│   ├── FileSystemSearchHandler.cs  — Bridge handler for file-system search and excluded folders management
+│   ├── ExcludedFoldersForm.cs      — RTL Hebrew WinForms dialog for managing excluded folders
 │   └── DocumentLocatorAdapter.cs   — Adapter for DocumentLocator service
 ├── HebrewBooks/
 │   ├── HebrewBooksHandler.cs       — Download, cache, and serve HebrewBooks PDFs
@@ -87,7 +88,11 @@ Push events (e.g. `ftsIndexProgress`, `ftsIndexInvalidated`) use `WebBridge.Push
 | `FtsSearchStart`           | `SearchHandler` | Start a full-text search                      |
 | `FtsSearchCancel`          | `SearchHandler` | Cancel an in-progress search                  |
 | `GetFtsIndexingProgress`   | `SearchHandler` | Poll indexing progress                        |
-| `ResetFtsIndex`            | `SearchHandler` | Trigger a full index rebuild                  |
+| `ResetFtsIndex`            | `SearchHandler` | Trigger a full FTS index rebuild              |
+| `fileSystemSearchWarmup`   | `FileSystemSearchHandler` | Warm up the DocumentLocator service in the background |
+| `fileSystemSearch`         | `FileSystemSearchHandler` | Search the file system via the DocumentLocator service |
+| `ResetDocumentLocatorIndex` | `FileSystemSearchHandler` | Wipe and rebuild the file-system index from scratch |
+| `openExcludedFoldersManager` | `FileSystemSearchHandler` | Open the RTL WinForms dialog to manage excluded folders; persists changes immediately (search-time filtering, no rebuild needed) |
 
 ## Startup Sequence
 

@@ -1,6 +1,8 @@
+using DocumentLocator;
 using DocumentLocator.Client;
 using KitveiHakodeshLib.Bridge;
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +21,11 @@ namespace KitveiHakodeshLib.FileSystemSearch
     ///
     ///   ResetDocumentLocatorIndex
     ///     — Wipes and rebuilds the index from scratch. Replies immediately with {}.
+    ///
+    ///   openExcludedFoldersManager
+    ///     — Opens the ExcludedFoldersForm WinForms dialog on the UI thread.
+    ///       Replies with { saved: true } after the user confirms, or { saved: false }
+    ///       if the user cancels. Persists changes via AppSettings.
     /// </summary>
     public class FileSystemSearchHandler : IDisposable
     {
@@ -149,6 +156,96 @@ namespace KitveiHakodeshLib.FileSystemSearch
                     Console.WriteLine("[FileSystemSearch] Reindex error: " + Unwrap(ex).Message);
                 }
             }, cts.Token);
+        }
+
+        // ── Excluded folders manager ──────────────────────────────────────────────
+
+        /// <summary>
+        /// A reference to the host control used to marshal UI work onto the UI thread.
+        /// Set by AppViewer after construction.
+        /// </summary>
+        public System.Windows.Forms.Control UiControl { get; set; }
+
+        /// <summary>
+        /// Opens the ExcludedFoldersForm dialog on the UI thread.
+        /// Fetches the current list from the service first, then saves the updated
+        /// list back to the service (and thus to excluded_folders.json) if the user
+        /// confirms. Replies with { saved: true/false }.
+        /// </summary>
+        public void HandleOpenExcludedFoldersManager(string id)
+        {
+            Task.Run(async () =>
+            {
+                try
+                {
+                    // Just ensure the service process is running — we only need the
+                    // pipe to be available for getExcludedFolders / setExcludedFolders.
+                    // We do NOT wait for the index to be ready; that would block the
+                    // dialog from opening while a full MFT crawl is in progress.
+                    ServiceBridge.StopIfStale();
+                    try { ServiceBridge.StartService(); } catch { /* already running */ }
+
+                    // Give the pipe a moment to become available if the service just started.
+                    await Task.Delay(600).ConfigureAwait(false);
+
+                    var currentFolders = await ServiceBridge
+                        .GetExcludedFoldersAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
+
+                    // Show the WinForms dialog on the UI thread.
+                    bool saved = false;
+                    List<string> updatedFolders = null;
+
+                    var control = UiControl;
+                    if (control == null || control.IsDisposed)
+                    {
+                        _bridge.Reply(id, new { error = "UI context not available" });
+                        return;
+                    }
+
+                    // BeginInvoke + TaskCompletionSource so we can await the dialog result
+                    // without blocking the thread-pool thread.
+                    var tcs = new TaskCompletionSource<bool>();
+                    control.BeginInvoke(new Action(() =>
+                    {
+                        try
+                        {
+                            using (var form = new ExcludedFoldersForm(currentFolders))
+                            {
+                                var result = form.ShowDialog(control.FindForm());
+                                if (result == System.Windows.Forms.DialogResult.OK)
+                                {
+                                    updatedFolders = form.ExcludedFolders;
+                                    saved = true;
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("[FileSystemSearch] ExcludedFoldersForm error: " + ex.Message);
+                        }
+                        finally
+                        {
+                            tcs.TrySetResult(saved);
+                        }
+                    }));
+
+                    saved = await tcs.Task.ConfigureAwait(false);
+
+                    if (saved && updatedFolders != null)
+                    {
+                        await ServiceBridge
+                            .SetExcludedFoldersAsync(updatedFolders, CancellationToken.None)
+                            .ConfigureAwait(false);
+                    }
+
+                    _bridge.Reply(id, new { saved });
+                }
+                catch (Exception ex)
+                {
+                    _bridge.Reply(id, new { error = Unwrap(ex).Message });
+                }
+            });
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────────

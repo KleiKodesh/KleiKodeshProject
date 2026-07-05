@@ -149,6 +149,23 @@ export async function resetDocumentLocatorIndex(): Promise<void> {
 }
 
 /**
+ * Open the excluded folders manager dialog (WinForms, shown by C#).
+ * The dialog lets the user add/remove folders excluded from the file-system index.
+ * Returns { saved: true } when the user confirms changes, { saved: false } on cancel,
+ * or null on error.
+ */
+export async function openExcludedFoldersManager(): Promise<{ saved: boolean } | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  try {
+    const result = await action<{ saved?: boolean; error?: string }>('openExcludedFoldersManager')
+    if (result.error) return null
+    return { saved: result.saved ?? false }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Reset the FTS search index on the C# side.
  */
 export async function resetSearchIndex(): Promise<void> {

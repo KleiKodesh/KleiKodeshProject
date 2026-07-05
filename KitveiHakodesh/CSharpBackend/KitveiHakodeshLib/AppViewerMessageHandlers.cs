@@ -75,6 +75,7 @@ namespace KitveiHakodeshLib
                         case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
+                        case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         case "exportToWord": HandleExportToWord(root, id); break;
