@@ -2,8 +2,16 @@
 import { computed, defineAsyncComponent } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 
+const props = defineProps<{ paneId?: 1 | 2 }>()
 const tabStore = useTabStore()
-const route = computed(() => tabStore.activeTab.route)
+
+const activeTab = computed(() =>
+  props.paneId === 2 ? tabStore.activeTabForPane(2) : tabStore.activeTab,
+)
+const activeTabId = computed(() =>
+  props.paneId === 2 ? tabStore.pane2ActiveTabId : tabStore.activeTabId,
+)
+const route = computed(() => activeTab.value.route)
 
 const pages: Record<string, unknown> = {
   '/': defineAsyncComponent(() => import('@/features/home/HomePage.vue')),
@@ -32,6 +40,6 @@ const pages: Record<string, unknown> = {
 <template>
   <component
     :is="pages[route]"
-    :key="route === '/book-view' || route === '/search' || route === '/txt-view' ? tabStore.activeTabId : undefined"
+    :key="route === '/book-view' || route === '/search' || route === '/txt-view' ? activeTabId : undefined"
   />
 </template>

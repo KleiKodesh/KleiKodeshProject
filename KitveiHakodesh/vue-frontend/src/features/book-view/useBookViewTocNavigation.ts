@@ -10,7 +10,7 @@
  * - altTocLabelMap — maps line index → alt TOC label for the selected alt structure
  */
 import { computed, watch } from 'vue'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { TocEntry } from './toc/useBookViewToc'
 
 type LinesContentInstance = {
@@ -32,7 +32,7 @@ export function useBookViewTocNavigation(
   selectedAltTocSection: import('vue').Ref<AltTocSection | null>,
   openTocEntryId: number | undefined,
 ) {
-  const tabStore = useTabStore()
+  const paneNavigation = usePaneNavigation()
 
   // Restore initial TOC entry when opening a book via a deep link (openTocEntryId is set).
   if (openTocEntryId != null) {
@@ -43,7 +43,7 @@ export function useBookViewTocNavigation(
         const entry = entries.find((e) => e.id === openTocEntryId)
         if (entry != null) {
           activeTocEntryId.value = entry.id
-          tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
+          paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
         }
         stopWatcher()
       },
@@ -67,7 +67,7 @@ export function useBookViewTocNavigation(
   function onTocSelect(entry: TocEntry) {
     if (entry.lineId == null) return
     activeTocEntryId.value = entry.id
-    tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
+    paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
     beginTocScroll(entry)
     linesContentRef()?.scrollToLineId(entry.lineId, entry.lineIndex ?? undefined)
   }
@@ -79,7 +79,7 @@ export function useBookViewTocNavigation(
       const mainEntry = getActiveTocEntry(entry.lineIndex)
       if (mainEntry) {
         activeTocEntryId.value = mainEntry.id
-        tabStore.updateActiveTab({ tocPath: getTocPath(mainEntry) })
+        paneNavigation.updateActiveTab({ tocPath: getTocPath(mainEntry) })
       }
     }
   }
@@ -105,7 +105,7 @@ export function useBookViewTocNavigation(
           lastSectionNavigationEntryId = candidate.id
           lastSectionNavigationTimestamp = Date.now()
           activeTocEntryId.value = candidate.id
-          tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
+          paneNavigation.updateActiveTab({ tocPath: getTocPath(candidate) })
           beginTocScroll(candidate)
           linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
           return
@@ -123,7 +123,7 @@ export function useBookViewTocNavigation(
           lastSectionNavigationEntryId = candidate.id
           lastSectionNavigationTimestamp = Date.now()
           activeTocEntryId.value = candidate.id
-          tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
+          paneNavigation.updateActiveTab({ tocPath: getTocPath(candidate) })
           beginTocScroll(candidate)
           linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
           return

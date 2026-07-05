@@ -6,6 +6,7 @@ import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useFullTextSearch } from './useFullTextSearch'
 import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchFilters'
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -15,15 +16,16 @@ import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
 import FullTextSearchAdvancedPanel from './FullTextSearchAdvancedPanel.vue'
 import FullTextSearchIndexingOverlay from './FullTextSearchIndexingOverlay.vue'
 
+const paneNavigation = usePaneNavigation()
 const tabStore = useTabStore()
 const booksStore = useBooksDataStore()
 const settings = useSettingsStore()
 
 // Capture tabId at mount time — stable for this component's lifetime (/search is keyed by tabId)
-const tabId = tabStore.activeTabId
+const tabId = paneNavigation.activeTabId
 
 const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
-const isSearchActive = computed(() => tabStore.activeTab?.route === '/search')
+const isSearchActive = computed(() => paneNavigation.activeTab?.route === '/search')
 useZoomHandler({ zoom, enabled: isSearchActive })
 
 const { state: indexingState } = useFullTextSearchIndexingStatus()
@@ -134,12 +136,11 @@ watch(
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)
-  // Store the full raw query in the tab (for display/restore) but search only the term part
-  tabStore.updateActiveTab({ searchQuery: q, title: `חיפוש: ${term || q}` })
+  paneNavigation.updateActiveTab({ searchQuery: q, title: `חיפוש: ${term || q}` })
   if (term) handleSearch(term)
 }
 function onClearSearch() {
-  tabStore.updateActiveTab({ searchQuery: undefined, title: 'חיפוש' })
+  paneNavigation.updateActiveTab({ searchQuery: undefined, title: 'חיפוש' })
   handleClearSearch()
 }
 
@@ -167,12 +168,12 @@ async function saveFilterState() {
 }
 
 async function restoreFromTab() {
-  const savedQuery = tabStore.activeTab.searchQuery
+  const savedQuery = paneNavigation.activeTab.searchQuery
   if (!savedQuery) return
   searchQuery.value = savedQuery
   const { term, atFilters: tokens } = parseSearchQuery(savedQuery)
   setAtFilters(tokens)
-  tabStore.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
+  paneNavigation.updateActiveTab({ title: `חיפוש: ${term || savedQuery}` })
   const fromCache = await loadCachedResults(term || savedQuery)
   if (!fromCache) handleSearch(term || savedQuery)
 }
@@ -225,7 +226,7 @@ onBeforeUnmount(() => {
   // If the tab no longer exists in the store, it was closed — clear its cache entry
   // since the results are no longer needed for session restore or tab switching.
   // If the tab still exists, the user just switched away — keep the cache for restore.
-  const tabStillExists = tabStore.tabs.some((t) => t.id === tabId)
+  const tabStillExists = tabStore.pane1Tabs.concat(tabStore.pane2Tabs).some((t) => t.id === tabId)
   if (!tabStillExists && executedQuery.value) {
     clearCachedResults(executedQuery.value)
   }

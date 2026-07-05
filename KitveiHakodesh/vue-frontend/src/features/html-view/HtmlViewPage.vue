@@ -3,6 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { getTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
 import { TAB_SWIPE_EVENT, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
@@ -12,8 +13,9 @@ import { shallowRef } from 'vue'
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
 const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
 
-const src = computed(() => localFileStore.virtualUrl)
+const src = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?? null)
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
@@ -22,7 +24,7 @@ const error = ref<string | null>(null)
 const loading = ref(false)
 let loadTimeoutId: number | null = null
 
-const tabId = tabStore.activeTabId
+const tabId = paneNavigation.activeTabId
 let scrollSaveTimer: number | null = null
 
 // ── Load handling ─────────────────────────────────────────────────────────────

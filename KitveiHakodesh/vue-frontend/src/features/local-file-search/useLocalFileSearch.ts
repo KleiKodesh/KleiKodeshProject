@@ -14,7 +14,7 @@
 import { ref, watch, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchWarmup } from '@/webview-host/bridge'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
 export interface LocalFileSearchResult {
   fileName: string
@@ -55,9 +55,9 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
   // Warm up the service every time the user navigates to this page — fire-and-forget.
   // The component is a singleton (not keyed), so onMounted only fires once. Watching
   // the active route fires on first mount and on every subsequent navigation back here.
-  const tabStore = useTabStore()
+  const paneNavigation = usePaneNavigation()
   watch(
-    () => tabStore.activeTab.route,
+    () => paneNavigation.activeTab.route,
     (route) => { if (route === '/file-search') fileSystemSearchWarmup() },
     { immediate: true },
   )

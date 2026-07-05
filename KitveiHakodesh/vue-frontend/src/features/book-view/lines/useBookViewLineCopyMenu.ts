@@ -4,11 +4,16 @@ import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
 import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
+import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
+
+// CopyMenuOptions now accepts paneNavigation instead of tabStore
+// so the "search in repository" action navigates the correct pane.
+import type { PaneNavigation } from '@/composables/usePaneNavigation'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -19,6 +24,7 @@ interface CopyMenuOptions {
   selectAllInContainer: () => void
   bookTitle: string
   tabStore: TabStore
+  paneNavigation?: PaneNavigation
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
   getTocPath?: (entry: TocEntry) => string
   getNotesForLine?: (lineId: number) => Note[]
@@ -331,7 +337,12 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     if (!result) return
     const query = toHebrewSearchQuery(result.joined)
     if (!query) return
-    tabStore.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+    const nav: PaneNavigation | undefined = options.paneNavigation
+    if (nav) {
+      nav.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+    } else {
+      tabStore.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+    }
   }
 
   const annotationRow: ContextMenuItem = {

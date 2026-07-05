@@ -8,7 +8,7 @@
  */
 import { ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { Ref } from 'vue'
 import type { LineItem } from './lines/useBookViewLinesTable'
@@ -25,7 +25,7 @@ export function useBookViewScrollSync(
   setPendingPin: (group: { bookId: number; sectionLabel: string; subSectionLabel: string } | null) => void,
   getActivePinnedGroup: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null,
 ) {
-  const tabStore = useTabStore()
+  const paneNavigation = usePaneNavigation()
   const bookViewStore = useBookViewStore()
   const { autoSelectTopLine } = storeToRefs(bookViewStore)
 
@@ -42,7 +42,7 @@ export function useBookViewScrollSync(
     const entry = getActiveTocEntry(lineIndex)
     if (entry && entry.id !== activeTocEntryId.value) {
       activeTocEntryId.value = entry.id
-      tabStore.updateActiveTab({ tocPath: getTocPath(entry) })
+      paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
     }
 
     if (!autoSelectTopLine.value) return

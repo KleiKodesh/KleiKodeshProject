@@ -1,10 +1,10 @@
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { useTabStore } from '@/stores/tabStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
+import type { PaneNavigation } from '@/composables/usePaneNavigation'
 
 // ─── Daf string parsing ───────────────────────────────────────────────────────
 
@@ -41,9 +41,8 @@ function parseDafYomiString(dafYomi: string): { tractate: string; dafPrefix: str
  * the TOC directly with a LIKE prefix — no full TOC load or tree scoring needed
  * because the daf structure is always "דף X עמוד Y".
  */
-export async function navigateToDafYomi(dafYomi: string): Promise<void> {
+export async function navigateToDafYomi(dafYomi: string, paneNavigation: PaneNavigation): Promise<void> {
   const store = useBooksDataStore()
-  const tabStore = useTabStore()
 
   await store.ensureLoaded()
 
@@ -73,7 +72,7 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
 
   if (rows.length > 0) {
     const tocEntry = rows[0]!
-    tabStore.updateActiveTab({
+    paneNavigation.updateActiveTab({
       route: '/book-view',
       title: book.title,
       bookId: book.id,
@@ -81,7 +80,6 @@ export async function navigateToDafYomi(dafYomi: string): Promise<void> {
       openTocLineIndex: tocEntry.lineIndex ?? undefined,
     })
   } else {
-    // TOC entry not found — open the book at the start
-    tabStore.updateActiveTab({ route: '/book-view', title: book.title, bookId: book.id })
+    paneNavigation.updateActiveTab({ route: '/book-view', title: book.title, bookId: book.id })
   }
 }

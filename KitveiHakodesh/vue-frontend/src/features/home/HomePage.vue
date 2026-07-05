@@ -19,10 +19,10 @@ import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { navigateToDafYomi } from './dafYomiNavigation'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
 const { navigate } = useAppNavigation()
-const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
 
 const tiles = computed(() => {
   const dbMissing = isHosted && !dbReady.value
@@ -79,7 +79,7 @@ async function onTap(label: string) {
     <div class="date-bar">
       <button
         class="date-hebrew date-hebrew--btn"
-        @click="tabStore.navigateToSingleton('/hebrew-calendar')"
+        @click="paneNavigation.navigateToSingleton('/hebrew-calendar')"
       >
         {{ dateInfo.hebrewDate }}
       </button>
@@ -87,7 +87,7 @@ async function onTap(label: string) {
       <button
         v-if="dateInfo.dafYomi && dbReady"
         class="bar-item bar-item--btn"
-        @click="navigateToDafYomi(dateInfo.dafYomi)"
+        @click="navigateToDafYomi(dateInfo.dafYomi, paneNavigation)"
       >
         <span class="bar-lbl">דף יומי:</span> {{ dateInfo.dafYomi }}
       </button>
@@ -107,6 +107,7 @@ async function onTap(label: string) {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
   outline: none;
+  position: relative;
 }
 
 .home-inner {

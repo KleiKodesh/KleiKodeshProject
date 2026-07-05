@@ -36,6 +36,8 @@ export interface Tab {
   id: string
   title: string
   route: TabRoute
+  /** Which split pane this tab belongs to. Defaults to 1 when absent. */
+  pane?: 1 | 2
   // Local file state (PDF, HTML, Word)
   localFileVirtualUrl?: string // in-memory only — not persisted, reconstructed on restore
   localFileName?: string
@@ -70,6 +72,8 @@ const DEFAULT_TAB: Tab = { id: '1', title: 'בית', route: '/' }
 export const useTabStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>([DEFAULT_TAB])
   const activeTabId = ref('1')
+  // Active tab for the secondary (right) pane in split view. Empty string means no pane 2 tab exists yet.
+  const pane2ActiveTabId = ref('')
   let nextId = 1
 
   // ── Init (called once from main.ts before mount) ──────────────────────────
@@ -158,6 +162,78 @@ export const useTabStore = defineStore('tabs', () => {
   const activeTab = computed(
     (): Tab => tabs.value.find((t) => t.id === activeTabId.value) ?? tabs.value[0]!,
   )
+
+  /** All tabs belonging to pane 1 (default) — tabs without a pane field or pane === 1. */
+  const pane1Tabs = computed(() => tabs.value.filter((t) => !t.pane || t.pane === 1))
+
+  /** All tabs belonging to pane 2. */
+  const pane2Tabs = computed(() => tabs.value.filter((t) => t.pane === 2))
+
+  /** Active tab for the given pane number. */
+  function activeTabForPane(pane: 1 | 2): Tab {
+    if (pane === 1) return activeTab.value
+    const id = pane2ActiveTabId.value
+    // Never fall back to pane 1's active tab — return the first pane-2 tab, or a
+    // stable placeholder. The placeholder prevents mirroring when pane 2 is just
+    // being initialized (ensurePane2HasTab hasn't run yet on this render cycle).
+    return (
+      tabs.value.find((t) => t.id === id && t.pane === 2) ??
+      pane2Tabs.value[0] ??
+      { id: '', title: 'בית', route: '/', pane: 2 as const }
+    )
+  }
+
+  /** Open a new tab in pane 2, making it the active pane-2 tab. */
+  function openPane2Tab(partial: Omit<Tab, 'id' | 'pane'>): Tab {
+    const tab: Tab = { id: String(++nextId), pane: 2, ...partial }
+    tabs.value.push(tab)
+    pane2ActiveTabId.value = tab.id
+    return tab
+  }
+
+  /** Switch the active tab within a specific pane. */
+  function switchPaneTab(id: string, pane: 1 | 2) {
+    if (pane === 1) {
+      switchTab(id)
+    } else {
+      if (tabs.value.some((t) => t.id === id && t.pane === 2)) {
+        pane2ActiveTabId.value = id
+      }
+    }
+  }
+
+  /** Close a pane-2 tab. Falls back to another pane-2 tab or opens a home tab in pane 2. */
+  function closePane2Tab(id: string) {
+    const idx = tabs.value.findIndex((t) => t.id === id && t.pane === 2)
+    if (idx === -1) return
+    const tab = tabs.value[idx]!
+    if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
+    const wsId = useWorkspaceStore().activeId
+    idbTabsDelete(KEYS.tab(wsId, id))
+    idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
+    for (const key of _bookStateCache.keys()) {
+      if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
+    }
+    tabs.value.splice(idx, 1)
+    // Update pane2ActiveTabId if the closed tab was active
+    if (pane2ActiveTabId.value === id) {
+      const remaining = tabs.value.filter((t) => t.pane === 2)
+      pane2ActiveTabId.value = remaining.length > 0 ? remaining[0]!.id : ''
+    }
+  }
+
+  /** Ensure pane 2 has at least one tab; returns the active pane-2 tab id. */
+  function ensurePane2HasTab(): string {
+    const existing = tabs.value.filter((t) => t.pane === 2)
+    if (existing.length > 0) {
+      if (!pane2ActiveTabId.value || !existing.some((t) => t.id === pane2ActiveTabId.value)) {
+        pane2ActiveTabId.value = existing[0]!.id
+      }
+      return pane2ActiveTabId.value
+    }
+    const tab = openPane2Tab({ title: 'בית', route: '/' })
+    return tab.id
+  }
 
   // ── Per-tab state ─────────────────────────────────────────────────────────
 
@@ -322,25 +398,45 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab) Object.assign(tab, patch)
   }
 
+  /** Navigate the active pane-2 tab in place (equivalent of updateActiveTab for pane 2). */
+  function updatePane2ActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
+    const id = pane2ActiveTabId.value
+    if (!id) return
+    const tab = tabs.value.find((t) => t.id === id && t.pane === 2)
+    if (tab) Object.assign(tab, patch)
+  }
+
   function openNewHomeTab() {
     const existing = tabs.value.find((t) => t.route === '/')
     if (existing) switchTab(existing.id)
     else openTab({ title: 'בית', route: '/' })
   }
 
-  // Singleton pages — only one tab per route allowed; switch if exists, else replace current tab
-  // These routes are never persisted across sessions — they are always stripped before saving
+  // Singleton pages — only one tab per route allowed *within a pane*.
+  // Pane 1 and pane 2 each enforce their own singleton independently.
+  // These routes are never persisted across sessions — they are always stripped before saving.
 
-  function navigateToSingleton(route: TabRoute) {
-    const existing = tabs.value.find((t) => t.route === route)
-    if (existing) {
-      // Already open in another tab — switch to it and close the current one
-      const currentId = activeTabId.value
-      switchTab(existing.id)
-      if (currentId !== existing.id) closeTab(currentId)
+  function navigateToSingleton(route: TabRoute, pane: 1 | 2 = 1) {
+    const paneTabs = pane === 1
+      ? tabs.value.filter((t) => !t.pane || t.pane === 1)
+      : tabs.value.filter((t) => t.pane === 2)
+    const existing = paneTabs.find((t) => t.route === route)
+    if (pane === 1) {
+      if (existing) {
+        const currentId = activeTabId.value
+        switchTab(existing.id)
+        if (currentId !== existing.id) closeTab(currentId)
+      } else {
+        updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
+      }
     } else {
-      // Not open anywhere — navigate in place (replace current tab's content)
-      updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
+      if (existing) {
+        const currentId = pane2ActiveTabId.value
+        switchPaneTab(existing.id, 2)
+        if (currentId !== existing.id) closePane2Tab(currentId)
+      } else {
+        updatePane2ActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
+      }
     }
   }
 
@@ -357,6 +453,15 @@ export const useTabStore = defineStore('tabs', () => {
     tabs,
     activeTabId,
     activeTab,
+    pane1Tabs,
+    pane2Tabs,
+    pane2ActiveTabId,
+    activeTabForPane,
+    openPane2Tab,
+    switchPaneTab,
+    closePane2Tab,
+    ensurePane2HasTab,
+    updatePane2ActiveTab,
     init,
     openTab,
     switchTab,

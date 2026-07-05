@@ -5,12 +5,12 @@ import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
 import { useLocalFileSearch } from './useLocalFileSearch'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { restoreLocalFile } from '@/webview-host/bridge'
 import { isHosted } from '@/webview-host/seforimDb'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
 
-const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
 
 const searchQuery = ref('')
 const {
@@ -40,7 +40,7 @@ async function onOpenFile(item: LocalFileSearchResult) {
 
     if (extension === '.txt') {
       // .txt files are rendered natively by TxtViewPage — no virtual host needed
-      tabStore.updateActiveTab({
+      paneNavigation.updateActiveTab({
         route: '/txt-view',
         title: item.fileName,
         localFileName: item.fileName,
@@ -56,7 +56,7 @@ async function onOpenFile(item: LocalFileSearchResult) {
     const restored = await restoreLocalFile(item.fullPath)
     if (!restored?.url) return
 
-    tabStore.updateActiveTab({
+    paneNavigation.updateActiveTab({
       route,
       title: item.fileName,
       localFileName: item.fileName,

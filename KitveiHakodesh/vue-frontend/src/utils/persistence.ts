@@ -253,6 +253,8 @@ export const KEYS = {
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'linesContentMaxWidth',
   SETTINGS_COMMENTARY_MAX_WIDTH: 'commentaryMaxWidth',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
+  SETTINGS_SPLIT_VIEW: 'splitView.enabled',
+  SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

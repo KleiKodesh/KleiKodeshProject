@@ -4,7 +4,7 @@ import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
 
@@ -19,7 +19,7 @@ export function useCommentaryCopy(
   getNotesForLine?: (lineId: number) => Note[],
 ) {
   const settingsStore = useSettingsStore()
-  const tabStore = useTabStore()
+  const paneNavigation = usePaneNavigation()
 
   // ── Source builder ──────────────────────────────────────────────────────────
 
@@ -260,7 +260,7 @@ export function useCommentaryCopy(
     const rawText = tmp.innerHTML.replace(/<[^>]*>/g, ' ')
     const query = rawText.replace(/[^א-ת\s]/g, '').replace(/\s+/g, ' ').trim()
     if (!query) return
-    tabStore.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+    paneNavigation.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
   }
 
   // ── Context menu ────────────────────────────────────────────────────────────

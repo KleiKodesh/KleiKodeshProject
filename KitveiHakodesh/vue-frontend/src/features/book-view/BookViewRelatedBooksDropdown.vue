@@ -18,7 +18,7 @@ import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
@@ -37,7 +37,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{ 'open-change': [isOpen: boolean] }>()
 
-const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
 
@@ -163,7 +163,7 @@ async function onBookClick(book: RelatedBook) {
   setOpen(false)
   try {
     const targetLineIndex = await resolveTargetLineIndex(book.bookId)
-    tabStore.openTab({
+    paneNavigation.openTab({
       route: '/book-view',
       title: book.bookTitle,
       bookId: book.bookId,

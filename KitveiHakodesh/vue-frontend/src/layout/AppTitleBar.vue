@@ -3,6 +3,7 @@ import { ref, computed, defineAsyncComponent } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
+import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
   IconLineHorizontal320Regular,
   IconAdd20Regular,
@@ -14,14 +15,14 @@ import {
   IconColor24Filled,
   IconConvertToText24Regular,
   IconSearch24Regular,
+  IconBoardSplit20Regular,
+  IconBoardSplit20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 // Both dropdowns are v-if — lazy-load them so their imports (including fluent-color icons)
 // don't add to the cold-start parse cost. They load on first open, which is imperceptible.
 const AppTitleBarTabDropdown = defineAsyncComponent(() => import('./AppTitleBarTabDropdown.vue'))
 const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarNavDropdown.vue'))
-import { useTabStore } from '@/stores/tabStore'
-import type { TabRoute } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
@@ -29,9 +30,11 @@ import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen } from '@/webview-host/bridge'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
+const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
+
+const pane = useAppShellPane(props.paneId)
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
-const tabStore = useTabStore()
 const pdfOcrStore = usePdfOcrStore()
 const themeStore = useThemeStore()
 const { navigateInNewTab } = useAppNavigation()
@@ -39,16 +42,11 @@ const { titleBarVisible } = useUiChromeVisibility()
 
 // ── Button visibility helpers ─────────────────────────────────────────────────
 
-/**
- * Returns true when a button with the given identifier is NOT hidden in settings.
- * The conditional buttons (toolbar toggle, PDF filter, OCR) have their own existing
- * conditions — this setting is evaluated on top of those.
- */
 function isTitleBarButtonVisible(buttonId: string): boolean {
   return !settingsStore.titleBarHiddenButtons.includes(buttonId)
 }
 
-const activeTab = computed(() => tabStore.activeTab)
+const activeTab = computed(() => pane.activeTab.value)
 const dropdownOpen = ref(false)
 const navDropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
@@ -58,6 +56,11 @@ const isPdfTab = computed(
   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
 )
 
+// bookViewStore.isBookViewActive and isTxtViewActive read from tabStore.activeTab (pane 1).
+// For pane 2 we compute these directly from the pane's active tab.
+const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
+const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
+
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
@@ -66,7 +69,7 @@ const barTitle = computed(() => {
 })
 
 const toolbarTitle = computed(() => {
-  const baseTitle = bookViewStore.isBookViewActive
+  const baseTitle = isBookViewActive.value
     ? bookViewStore.toolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'
     : activeTab.value?.pdfViewerTitleBarVisible !== false ? 'הסתר סרגל כותרת PDF' : 'הצג סרגל כותרת PDF'
   return `${baseTitle} (Ctrl+B)`
@@ -80,13 +83,6 @@ const { justClosed } = useDropdownClose(barRef, () => {
   dropdownOpen.value = false
 })
 
-const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
-  homepage: { title: 'בית', route: '/' },
-  openfile: { title: 'ספרים', route: '/books' },
-  hebrewbooks: { title: 'היברו-בוקס', route: '/hebrewbooks' },
-  search: { title: 'חיפוש', route: '/search' as TabRoute },
-}
-
 function toggleTabDropdown() {
   if (justClosed.value) return
   dropdownOpen.value = !dropdownOpen.value
@@ -97,40 +93,18 @@ function toggleNavDropdown() {
   dropdownOpen.value = false
 }
 
-function openNewTab() {
-  const target = ROUTE_MAP[settingsStore.newTabPage] ?? { title: 'בית', route: '/' as TabRoute }
-  if (target.route === '/') {
-    tabStore.openNewHomeTab()
-  } else {
-    tabStore.openTab({ title: target.title, route: target.route })
-  }
-}
-
 function selectTab(id: string) {
-  tabStore.switchTab(id)
+  pane.switchTab(id)
   dropdownOpen.value = false
 }
 
-function goHome() {
-  const cur = tabStore.activeTabId
-  const existing = tabStore.tabs.find((t) => t.route === '/')
-  if (existing) {
-    if (existing.id !== cur) {
-      tabStore.switchTab(existing.id)
-      tabStore.closeTab(cur)
-    }
-  } else {
-    tabStore.updateActiveTab({ route: '/', title: 'בית' })
-  }
-}
+// Keyboard shortcuts — only installed on pane 1's title bar.
+// Pane 2 is a secondary reading pane; all keyboard navigation targets pane 1.
+// The iframe relay (message handler below) also only fires on pane 1.
+if (props.paneId === 1) {
 
 // Forward Ctrl+key shortcuts from child iframes (HTML viewer) back into the
-// top-level keydown pipeline.  When focus is inside an iframe, keyboard events
-// fire on the iframe's window and never reach the listeners below.  The injected
-// IframeScrollScript posts an 'iframeKeydown' message to window.top for every
-// Ctrl+key it sees; we reconstruct a synthetic KeyboardEvent here so all existing
-// shortcut handlers fire normally without any duplication.
-// Note: TxtViewPage renders natively in Vue (no iframe) so this is not needed there.
+// top-level keydown pipeline.
 useEventListener('message', (e: MessageEvent) => {
   if (!e.data || e.data.type !== 'iframeKeydown') return
   window.dispatchEvent(new KeyboardEvent('keydown', {
@@ -144,41 +118,38 @@ useEventListener('message', (e: MessageEvent) => {
   }))
 })
 
-// Keyboard event listener — always active, even when title bar is hidden.
-// Uses capture phase to intercept shortcuts before child elements (e.g. the book view scroller)
-// can consume them with preventDefault().
 useEventListener('keydown', (e: KeyboardEvent) => {
   if (e.ctrlKey && e.code === 'KeyW') {
     e.preventDefault()
-    tabStore.closeTab(tabStore.activeTabId)
+    pane.closeTab(pane.activeTabId.value)
   } else if (e.ctrlKey && e.code === 'KeyX') {
     e.preventDefault()
-    tabStore.closeAllTabs()
+    pane.closeAllTabs()
   } else if (e.ctrlKey && !e.shiftKey && e.code === 'Tab') {
     e.preventDefault()
-    const tabs = tabStore.tabs
-    const currentIndex = tabs.findIndex((t) => t.id === tabStore.activeTabId)
-    const nextIndex = (currentIndex + 1) % tabs.length
-    tabStore.switchTab(tabs[nextIndex]!.id)
+    const paneTabs = pane.tabs.value
+    const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
+    const nextIndex = (currentIndex + 1) % paneTabs.length
+    pane.switchTab(paneTabs[nextIndex]!.id)
   } else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
     e.preventDefault()
-    const tabs = tabStore.tabs
-    const currentIndex = tabs.findIndex((t) => t.id === tabStore.activeTabId)
-    const previousIndex = (currentIndex - 1 + tabs.length) % tabs.length
-    tabStore.switchTab(tabs[previousIndex]!.id)
+    const paneTabs = pane.tabs.value
+    const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
+    const previousIndex = (currentIndex - 1 + paneTabs.length) % paneTabs.length
+    pane.switchTab(paneTabs[previousIndex]!.id)
   } else if (e.ctrlKey && e.code === 'KeyB') {
     e.preventDefault()
-    if (bookViewStore.isBookViewActive) {
+    if (isBookViewActive.value) {
       bookViewStore.toggleToolbar()
-    } else if (tabStore.activeTab?.route === '/pdf-view') {
-      tabStore.togglePdfViewerTitleBar()
+    } else if (activeTab.value?.route === '/pdf-view') {
+      pane.togglePdfViewerTitleBar()
     }
   } else if (e.ctrlKey && e.code === 'KeyJ') {
     e.preventDefault()
-    if (bookViewStore.isBookViewActive) bookViewStore.toggleBottomPanel()
+    if (isBookViewActive.value) bookViewStore.toggleBottomPanel()
   } else if (e.ctrlKey && e.code === 'KeyK') {
     e.preventDefault()
-    if (bookViewStore.isBookViewActive) bookViewStore.toggleTocPanel()
+    if (isBookViewActive.value) bookViewStore.toggleTocPanel()
   } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
     e.preventDefault()
     toggleFullscreen()
@@ -186,15 +157,11 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault()
     toggleFullscreen()
   } else if (e.ctrlKey && e.code === 'KeyF') {
-    // Only intercept Ctrl+F when the focused element has not claimed it via
-    // data-ctrlf-enabled — components like CommentaryView use that attribute
-    // to signal they own Ctrl+F for their own search toggle.
     if (document.activeElement?.closest('[data-ctrlf-enabled]')) return
     e.preventDefault()
-    if (bookViewStore.isBookViewActive) {
-      // Open search bar in book view from anywhere (no focus required)
+    if (isBookViewActive.value) {
       bookViewStore.openSearch()
-    } else if (bookViewStore.isTxtViewActive) {
+    } else if (isTxtViewActive.value) {
       bookViewStore.txtViewToggleSearch()
     }
   } else if (e.ctrlKey && e.code === 'KeyP') {
@@ -207,13 +174,13 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     toggleTabDropdown()
   } else if (e.ctrlKey && e.code === 'KeyN') {
     e.preventDefault()
-    openNewTab()
+    pane.openNewTab()
   } else if (e.ctrlKey && e.code === 'KeyL') {
     e.preventDefault()
     themeStore.toggleDarkMode()
   } else if (e.ctrlKey && e.code === 'KeyG') {
     e.preventDefault()
-    goHome()
+    pane.goHome()
   } else if (e.code === 'F1') {
     e.preventDefault()
     navigateInNewTab('הגדרות')
@@ -244,11 +211,10 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   } else if (e.ctrlKey && e.code === 'Digit9') {
     e.preventDefault()
     navigateInNewTab('סביבות עבודה')
-  } else if (e.code === 'F1') {
-    e.preventDefault()
-    navigateInNewTab('הגדרות')
   }
 }, { capture: true })
+
+} // end paneId === 1 keyboard guard
 </script>
 
 <template>
@@ -269,7 +235,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </div>
       <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" />
       <button
-        v-if="bookViewStore.isTxtViewActive"
+        v-if="isTxtViewActive"
         class="bar-btn"
         title="חיפוש בטקסט (Ctrl+F)"
         @click.stop="bookViewStore.txtViewToggleSearch()"
@@ -286,13 +252,23 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <IconColor24Regular v-else />
       </button>
       <button
-        v-if="isTitleBarButtonVisible('toolbar-toggle') && (bookViewStore.isBookViewActive || activeTab?.route === '/pdf-view')"
+        v-if="isTitleBarButtonVisible('toolbar-toggle') && (isBookViewActive || activeTab?.route === '/pdf-view')"
         class="bar-btn"
         :title="toolbarTitle"
-        @click.stop="bookViewStore.isBookViewActive ? bookViewStore.toggleToolbar() : tabStore.togglePdfViewerTitleBar()"
+        @click.stop="isBookViewActive ? bookViewStore.toggleToolbar() : pane.togglePdfViewerTitleBar()"
       >
-        <IconOptions24Filled v-if="bookViewStore.isBookViewActive ? bookViewStore.toolbarVisible : activeTab?.pdfViewerTitleBarVisible !== false" />
+        <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.toolbarVisible : activeTab?.pdfViewerTitleBarVisible !== false" />
         <IconOptions24Regular v-else />
+      </button>
+      <button
+        v-if="isTitleBarButtonVisible('split-view')"
+        class="bar-btn"
+        :class="{ active: bookViewStore.splitViewEnabled }"
+        :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת' : 'פתח תצוגה מפוצלת'"
+        @click.stop="bookViewStore.toggleSplitView()"
+      >
+        <IconBoardSplit20Filled v-if="bookViewStore.splitViewEnabled" />
+        <IconBoardSplit20Regular v-else />
       </button>
     </div>
 
@@ -311,15 +287,15 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       >
         <IconConvertToText24Regular />
       </button>
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" title="בית (Ctrl+G)" @click.stop="goHome"><IconHome20Regular /></button>
-      <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="openNewTab">
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="pane.openNewTab()">
         <IconAdd20Regular />
       </button>
       <button
         v-if="isTitleBarButtonVisible('close-tab')"
         class="bar-btn"
         title="סגור לשונית (Ctrl+W)"
-        @click.stop="tabStore.closeTab(tabStore.activeTabId)"
+        @click.stop="pane.closeTab(pane.activeTabId.value)"
       >
         <IconDismiss20Regular />
       </button>
@@ -330,10 +306,10 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   <!-- Tab dropdown — kept outside header so it stays visible when header is hidden -->
   <AppTitleBarTabDropdown
     v-if="dropdownOpen"
-    :tabs="tabStore.tabs"
-    :active-tab-id="tabStore.activeTabId"
+    :tabs="pane.tabs.value"
+    :active-tab-id="pane.activeTabId.value"
     @select="selectTab"
-    @close="tabStore.closeTab"
+    @close="pane.closeTab"
     @dismiss="dropdownOpen = false"
     @click.stop
   />

@@ -2,12 +2,14 @@ import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, setTheme } from '@/webview-host/bridge'
 
 export function useSettings() {
   const settings = useSettingsStore()
   const tabStore = useTabStore()
+  const paneNavigation = usePaneNavigation()
   const searchCache = useSearchCacheStore()
 
   const {
@@ -43,17 +45,12 @@ export function useSettings() {
   async function resetSearchIndexAction() {
     await searchCache.clear()
     await bridgeResetSearchIndex()
-    // Navigate to the search page so the indexing overlay is visible while the
-    // index rebuilds. The search page mounts useFullTextSearchIndexingStatus which
-    // polls GetFtsIndexingProgress and subscribes to ftsIndexProgress events.
-    tabStore.updateActiveTab({ route: '/search', title: 'חיפוש' })
+    paneNavigation.updateActiveTab({ route: '/search', title: 'חיפוש' })
   }
 
   async function resetDocumentLocatorIndexAction() {
     await bridgeResetDocumentLocatorIndex()
-    // Navigate to the file search page so the indexing overlay is visible while
-    // the index rebuilds — the same pattern used by resetSearchIndexAction.
-    tabStore.updateActiveTab({ route: '/file-search', title: 'חיפוש קבצים' })
+    paneNavigation.updateActiveTab({ route: '/file-search', title: 'חיפוש קבצים' })
   }
 
   function resetSettings() {
