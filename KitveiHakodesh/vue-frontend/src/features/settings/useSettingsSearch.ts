@@ -1,5 +1,17 @@
 import { ref, watch, nextTick, type Ref } from 'vue'
 
+export interface SettingsNavEntry {
+  id: string
+  label: string
+  children: SettingsNavChildEntry[]
+}
+
+export interface SettingsNavChildEntry {
+  id: string
+  label: string
+  isSubsectionHeading: boolean
+}
+
 /**
  * DOM-walker based settings search.
  *
@@ -79,8 +91,7 @@ export function useSettingsSearch(scrollContainerRef: Ref<HTMLElement | null>) {
     applyFilter(query.trim())
   })
 
-  // Build the nav panel entry list from the live DOM so it always matches
-  // what is actually rendered, in document order.
+  // Build the flat nav panel entry list from the live DOM.
   function getSectionNavEntries(): { id: string; label: string }[] {
     const container = scrollContainerRef.value
     if (!container) return []
@@ -90,5 +101,32 @@ export function useSettingsSearch(scrollContainerRef: Ref<HTMLElement | null>) {
     }))
   }
 
-  return { searchQuery, getSectionNavEntries }
+  // Build the tree nav entry list: top-level sections with all individually-identified
+  // setting rows as children. Each child must have an `id` attribute and a `data-nav-label`
+  // attribute on its root element. Subsection headings (.subsection-label[id]) are included
+  // as separator-style entries (visually distinct in the side nav).
+  function getSectionNavTree(): SettingsNavEntry[] {
+    const container = scrollContainerRef.value
+    if (!container) return []
+    return findSections(container).map((el) => {
+      // Collect all child nav targets in DOM order:
+      // 1. Subsection headings — .subsection-label[id]
+      // 2. Individual setting rows — [data-nav-label][id]
+      // Both are keyed by their id for scroll targeting.
+      const children = Array.from(
+        el.querySelectorAll<HTMLElement>('[id][data-nav-label]'),
+      ).map((child) => ({
+        id: child.id,
+        label: child.dataset.navLabel ?? '',
+        isSubsectionHeading: false,
+      }))
+      return {
+        id: el.dataset.section ?? '',
+        label: el.dataset.sectionLabel ?? '',
+        children,
+      }
+    })
+  }
+
+  return { searchQuery, getSectionNavEntries, getSectionNavTree }
 }

@@ -5,8 +5,9 @@ import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerender
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useThemeStore } from '@/theme/themeStore'
 import { useSettings } from './useSettingsPage'
-import { useSettingsSearch } from './useSettingsSearch'
+import { useSettingsSearch, type SettingsNavEntry } from './useSettingsSearch'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
@@ -37,6 +38,15 @@ const {
   titleBarHiddenButtons,
   pdfPageFilters,
 } = storeToRefs(settings)
+
+const themeStore = useThemeStore()
+const { themePreset } = storeToRefs(themeStore)
+
+const isDarkMode = computed(() => themePreset.value.includes('-dark'))
+
+function applyDarkMode(value: boolean) {
+  if (value !== isDarkMode.value) themeStore.toggleDarkMode()
+}
 
 // ── Title bar button toggle ───────────────────────────────────────────────────
 
@@ -76,9 +86,32 @@ useSettings() // wires the commentary-mirror watcher
 
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
-const { searchQuery, getSectionNavEntries } = useSettingsSearch(scrollContainerRef)
+const { searchQuery, getSectionNavEntries, getSectionNavTree } = useSettingsSearch(scrollContainerRef)
 
-// ── Nav dropdown ─────────────────────────────────────────────────────────────
+// ── Side nav tree (wide screen) ───────────────────────────────────────────────
+
+const sideNavTree = ref<SettingsNavEntry[]>([])
+const sideNavExpandedSections = ref<Set<string>>(new Set())
+
+function rebuildSideNavTree() {
+  sideNavTree.value = getSectionNavTree()
+  // Auto-expand all sections that have children
+  sideNavExpandedSections.value = new Set(
+    sideNavTree.value.filter((entry) => entry.children.length > 0).map((entry) => entry.id),
+  )
+}
+
+function toggleSideNavSection(sectionId: string) {
+  const expanded = new Set(sideNavExpandedSections.value)
+  if (expanded.has(sectionId)) {
+    expanded.delete(sectionId)
+  } else {
+    expanded.add(sectionId)
+  }
+  sideNavExpandedSections.value = expanded
+}
+
+// ── Nav dropdown (narrow screen) ─────────────────────────────────────────────
 
 const navPanelOpen = ref(false)
 const navToggleRef = ref<HTMLElement | null>(null)
@@ -90,7 +123,10 @@ const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value 
 })
 
 onMounted(() => {
-  nextTick(() => { navEntries.value = getSectionNavEntries() })
+  nextTick(() => {
+    navEntries.value = getSectionNavEntries()
+    rebuildSideNavTree()
+  })
 })
 
 function toggleNavPanel() {
@@ -104,8 +140,10 @@ function toggleNavPanel() {
 async function navigateToSection(sectionId: string) {
   navPanelOpen.value = false
   await nextTick()
-  // Target the card element (data-section) so scroll-margin-top on the card is respected
-  const el = document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`)
+  // Try data-section card first, then fall back to a plain id (subsection headings)
+  const el =
+    document.querySelector<HTMLElement>(`[data-section="${sectionId}"]`) ??
+    document.getElementById(sectionId)
   el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
@@ -140,15 +178,50 @@ const commentaryMaxWidthSlider = computed({
 <template>
   <div class="settings-page">
 
+    <!-- ── Wide-screen side nav ── -->
+    <nav class="settings-side-nav">
+      <ul class="side-nav-list">
+        <li v-for="entry in sideNavTree" :key="entry.id" class="side-nav-section">
+          <button
+            class="side-nav-section-btn"
+            :class="{ 'has-children': entry.children.length > 0 }"
+            @click="entry.children.length > 0 ? toggleSideNavSection(entry.id) : navigateToSection(entry.id)"
+          >
+            <span class="side-nav-section-label" @click.stop="navigateToSection(entry.id)">
+              {{ entry.label }}
+            </span>
+            <span
+              v-if="entry.children.length > 0"
+              class="side-nav-chevron"
+              :class="{ expanded: sideNavExpandedSections.has(entry.id) }"
+            >›</span>
+          </button>
+          <ul
+            v-if="entry.children.length > 0 && sideNavExpandedSections.has(entry.id)"
+            class="side-nav-children"
+          >
+            <li v-for="child in entry.children" :key="child.id">
+              <div v-if="child.isSubsectionHeading" class="side-nav-subsection-heading">
+                {{ child.label }}
+              </div>
+              <button v-else class="side-nav-child-btn" @click="navigateToSection(child.id)">
+                {{ child.label }}
+              </button>
+            </li>
+          </ul>
+        </li>
+      </ul>
+    </nav>
+
     <!-- ── Full-width scroller — scrollbar at page edge ── -->
     <div ref="scrollContainerRef" class="settings-body">
       <!-- ── Centered content column ── -->
       <div class="settings-body-inner">
 
-        <!-- ── Sticky search bar + nav dropdown ── -->
+        <!-- ── Sticky search bar + nav dropdown (narrow screen) ── -->
         <div class="settings-toolbar">
           <div class="search-container">
-            <div class="nav-toggle-wrapper">
+            <div class="nav-toggle-wrapper narrow-only">
               <button
                 ref="navToggleRef"
                 class="nav-toggle-btn"
@@ -181,15 +254,26 @@ const commentaryMaxWidthSlider = computed({
           </div>
         </div>
 
-        <!-- ── אפליקציה ── -->
-        <div data-section="section-app" data-section-label="אפליקציה">
-          <div id="section-app" class="section-label">אפליקציה</div>
+        <!-- ── ערכת נושא ── -->
+        <div data-section="section-theme" data-section-label="ערכת נושא">
+          <div id="section-theme" class="section-label">ערכת נושא</div>
 
-          <SettingRow label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
+          <SettingRow id="nav-theme-picker" data-nav-label="ערכת נושא" label="ערכת נושא" hint="צבעי הממשק של האפליקציה">
             <ThemePicker />
           </SettingRow>
 
-          <SettingRow label="החל ערכת נושא על דפי PDF" hint="מחיל את צבעי ערכת הנושא על תוכן דפי PDF">
+          <SettingRow id="nav-dark-mode" data-nav-label="מצב כהה" label="מצב כהה" hint="החלף בין מצב בהיר לכהה">
+            <ToggleGroup
+              :model-value="isDarkMode"
+              :options="[
+                { label: 'בהיר', value: false },
+                { label: 'כהה', value: true },
+              ]"
+              @update:model-value="applyDarkMode"
+            />
+          </SettingRow>
+
+          <SettingRow id="nav-pdf-filters" data-nav-label="החל על דפי PDF" label="החל ערכת נושא על דפי PDF" hint="מחיל את צבעי ערכת הנושא על תוכן דפי PDF">
             <ToggleGroup
               :model-value="pdfPageFilters"
               :options="[
@@ -199,8 +283,15 @@ const commentaryMaxWidthSlider = computed({
               @update:model-value="applyPdfPageFilters"
             />
           </SettingRow>
+        </div>
+
+        <!-- ── אפליקציה ── -->
+        <div data-section="section-app" data-section-label="אפליקציה">
+          <div id="section-app" class="section-label">אפליקציה</div>
 
           <SliderSetting
+            id="nav-app-zoom"
+            data-nav-label="גודל תצוגה"
             label="גודל תצוגה"
             v-model="appZoom"
             :min="0.5"
@@ -208,8 +299,8 @@ const commentaryMaxWidthSlider = computed({
             :step="0.05"
             hint="משנה את גודל כל ממשק האפליקציה"
           />
-          
-          <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
+
+          <SettingRow id="nav-toolbar-position" data-nav-label="מיקום סרגל הכלים" label="מיקום סרגל הכלים בתצוגת ספר" wrap>
             <ToggleGroup
               v-model="toolbarPosition"
               :options="[
@@ -222,7 +313,7 @@ const commentaryMaxWidthSlider = computed({
             />
           </SettingRow>
 
-          <SettingRow label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
+          <SettingRow id="nav-new-tab-page" data-nav-label="פתח טאב חדש אל" label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
             <ToggleGroup
               v-model="newTabPage"
               :options="[
@@ -233,12 +324,9 @@ const commentaryMaxWidthSlider = computed({
               ]"
             />
           </SettingRow>
-        </div>
 
-        <!-- ── כפתורי סרגל הכותרת ── -->
-        <div data-section="section-title-bar-buttons" data-section-label="כפתורי סרגל הכלים של האפליקציה">
-          <div id="section-title-bar-buttons" class="section-label">כפתורי סרגל הכלים של האפליקציה</div>
-          <SettingRow label="הצג / הסתר כפתורים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
+          <div id="section-title-bar-buttons" class="subsection-label">כפתורי סרגל הכלים</div>
+          <SettingRow id="nav-title-bar-buttons" data-nav-label="הצג / הסתר כפתורים" label="הצג / הסתר כפתורים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
             <div class="title-bar-chips">
               <button
                 v-for="button in TITLE_BAR_BUTTONS"
@@ -255,6 +343,8 @@ const commentaryMaxWidthSlider = computed({
           <div id="section-reading" class="section-label">קריאה</div>
 
           <SettingRow
+            id="nav-resume-last-read"
+            data-nav-label="זכור מיקום אחרון"
             label="זכור מיקום אחרון בספר"
             hint="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
           >
@@ -268,6 +358,8 @@ const commentaryMaxWidthSlider = computed({
           </SettingRow>
 
           <SettingRow
+            id="nav-auto-sync-commentary"
+            data-nav-label="סנכרן מפרשים"
             label="סנכרן מפרשים כברירת מחדל"
             hint="ניתן לשנות לכל ספר בנפרד דרך כפתור סנכרן מפרשים בסרגל הכלים"
           >
@@ -280,12 +372,12 @@ const commentaryMaxWidthSlider = computed({
             />
           </SettingRow>
 
-          <SettingRow label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ד׳">
+          <SettingRow id="nav-censor-divine-names" data-nav-label="כיסוי שם ה'" label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ד׳">
             <ToggleGroup
               v-model="censorDivineNames"
               :options="[
-                { label: 'כתיב מלא', value: false },
                 { label: 'כיסוי (ה←ד)', value: true },
+                { label: 'כתיב מלא', value: false },
               ]"
             />
           </SettingRow>
@@ -296,6 +388,8 @@ const commentaryMaxWidthSlider = computed({
           <div id="section-book-display" class="section-label">תצוגת ספר</div>
 
           <FontDisplaySettings
+            id="nav-book-font-display"
+            data-nav-label="גופן וגודל"
             ref="bookDisplayRef"
             v-model:header-font="headerFont"
             v-model:text-font="textFont"
@@ -305,6 +399,8 @@ const commentaryMaxWidthSlider = computed({
           />
 
           <SliderSetting
+            id="nav-lines-max-width"
+            data-nav-label="רוחב מקסימלי"
             label="רוחב מקסימלי עבור עמודת הטקסט"
             hint="הגבל את רוחב שורת הקריאה לנוחות מרבית"
             v-model="linesContentMaxWidthSlider"
@@ -316,7 +412,7 @@ const commentaryMaxWidthSlider = computed({
 
           <div id="section-commentary-display" class="subsection-label">תצוגת פירושים</div>
 
-          <SettingRow hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
+          <SettingRow id="nav-commentary-settings-mode" data-nav-label="הגדרות נפרדות לפירושים" hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
             <ToggleGroup
               v-model="useSeparateCommentarySettings"
               :options="[
@@ -328,6 +424,8 @@ const commentaryMaxWidthSlider = computed({
 
           <FontDisplaySettings
             v-if="useSeparateCommentarySettings"
+            id="nav-commentary-font-display"
+            data-nav-label="גופן פירושים"
             ref="commentaryDisplayRef"
             v-model:header-font="commentaryHeaderFont"
             v-model:text-font="commentaryTextFont"
@@ -338,6 +436,8 @@ const commentaryMaxWidthSlider = computed({
 
           <SliderSetting
             v-if="useSeparateCommentarySettings"
+            id="nav-commentary-max-width"
+            data-nav-label="רוחב מקסימלי פירושים"
             label="רוחב מקסימלי עבור עמודת הפירושים"
             hint="הגבל את רוחב שורת הקריאה בפירושים לנוחות מרבית"
             v-model="commentaryMaxWidthSlider"
@@ -489,11 +589,131 @@ const commentaryMaxWidthSlider = computed({
 <style scoped>
 .settings-page {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   height: 100%;
   direction: rtl;
   background: var(--bg-primary);
   position: relative;
+}
+
+/* ── Side nav — hidden on narrow, fixed column on wide ── */
+.settings-side-nav {
+  display: none;
+  flex-shrink: 0;
+  width: 180px;
+  height: 100%;
+  overflow-y: auto;
+  border-left: 1px solid var(--border-color);
+  padding: 16px 0 40px;
+  background: var(--bg-secondary);
+}
+
+.side-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.side-nav-section {
+  margin: 0;
+}
+
+.side-nav-section-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 32px;
+  padding: 0 14px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  text-align: right;
+  gap: 4px;
+}
+.side-nav-section-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
+.side-nav-section-label {
+  flex: 1;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.side-nav-chevron {
+  flex-shrink: 0;
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1;
+  display: inline-block;
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+.side-nav-chevron.expanded {
+  transform: rotate(-90deg);
+}
+
+.side-nav-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.side-nav-child-btn {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 28px;
+  padding: 0 14px 0 20px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.side-nav-child-btn:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
+}
+
+.side-nav-subsection-heading {
+  padding: 6px 14px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Full-width scroller: scrollbar at the page edge ── */
+.settings-body {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-width: 0;
+}
+
+/* ── Centered content column inside the scroller ── */
+.settings-body-inner {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 12px 16px 40px;
+  box-sizing: border-box;
 }
 
 /* ── Sticky search bar — lives inside the scroll flow, sticks to the top ── */
@@ -504,7 +724,6 @@ const commentaryMaxWidthSlider = computed({
   background: var(--bg-primary);
   padding: 8px 0;
   margin-bottom: 4px;
-  /* Bleed background to the edges of the inner column */
   margin-inline: -16px;
   padding-inline: 16px;
 }
@@ -513,6 +732,11 @@ const commentaryMaxWidthSlider = computed({
 .nav-toggle-wrapper {
   position: relative;
   flex-shrink: 0;
+}
+
+/* Hide the dropdown toggle on wide screens where the side nav is visible */
+.narrow-only {
+  display: flex;
 }
 
 .search-container {
@@ -592,21 +816,6 @@ const commentaryMaxWidthSlider = computed({
 }
 .nav-panel-item:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-
-/* ── Full-width scroller: scrollbar at the page edge ── */
-.settings-body {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-/* ── Centered content column inside the scroller ── */
-.settings-body-inner {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 12px 16px 40px;
-  box-sizing: border-box;
 }
 
 /* ── Section cards ── */
@@ -714,6 +923,16 @@ kbd {
   background: var(--accent-color);
   color: white;
   border-color: var(--accent-color);
+}
+
+/* ── Wide screen: show side nav, hide dropdown toggle ── */
+@media (min-width: 900px) {
+  .settings-side-nav {
+    display: block;
+  }
+  .narrow-only {
+    display: none;
+  }
 }
 </style>
 
