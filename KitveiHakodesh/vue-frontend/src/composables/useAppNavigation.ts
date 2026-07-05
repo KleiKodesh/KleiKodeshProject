@@ -82,10 +82,10 @@ export function useAppNavigation() {
   async function navigateInNewTab(label: string): Promise<void> {
     const singleton = SINGLETON_ROUTES[label]
     if (singleton) {
-      // Singleton in new-tab context: switch to existing pane-scoped tab or open a new one
-      const existing = pane.tabs.find((t) => t.route === singleton)
-      if (existing) pane.switchTab(existing.id)
-      else pane.openTab({ route: singleton, title: label })
+      // Delegate entirely to navigateToSingleton so the one-tab rule is enforced
+      // correctly in both panes — it closes the current tab and switches to the
+      // existing singleton tab, or replaces in-place if none exists yet.
+      pane.navigateToSingleton(singleton)
       return
     }
     if (label === 'חיפוש') {

@@ -128,15 +128,19 @@
     </Compile>
     <Compile Include="AppViewerSplash.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="AppViewerTheme.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="AppViewerNavigation.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="AppViewerMessageHandlers.cs">
       <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
     <Compile Include="SplashOverlay.cs">

@@ -218,7 +218,16 @@ export const useTabStore = defineStore('tabs', () => {
     // Update pane2ActiveTabId if the closed tab was active
     if (pane2ActiveTabId.value === id) {
       const remaining = tabs.value.filter((t) => t.pane === 2)
-      pane2ActiveTabId.value = remaining.length > 0 ? remaining[0]!.id : ''
+      if (remaining.length > 0) {
+        pane2ActiveTabId.value = remaining[0]!.id
+      } else {
+        // Pane 2 must never be left with no tab — mirror the pane-1 closeTab guarantee.
+        // Without this, pane2ActiveTabId stays '' and any subsequent navigateToSingleton
+        // call hits the `if (!id) return` guard in updatePane2ActiveTab and silently does nothing.
+        const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
+        tabs.value.push(home)
+        pane2ActiveTabId.value = home.id
+      }
     }
   }
 
