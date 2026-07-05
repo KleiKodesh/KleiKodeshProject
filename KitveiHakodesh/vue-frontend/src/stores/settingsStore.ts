@@ -24,7 +24,7 @@ const DEFAULTS = {
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
   pdfPageFilters: false,
-  resumeLastRead: false,
+  resumeLastRead: true,
   showClock: false,
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
