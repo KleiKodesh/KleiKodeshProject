@@ -5,7 +5,7 @@ import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
 import { isHosted, onDbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { pickFolder, openExcludedFoldersManager } from '@/webview-host/bridge'
+import { pickFolder, clearDbPath, clearHbLocalFolder, openExcludedFoldersManager } from '@/webview-host/bridge'
 
 // ── Database path ─────────────────────────────────────────────────────────────
 
@@ -39,6 +39,21 @@ function commitHebrewBooksFolder(newPath: string) {
   hebrewBooksLocalFolder.value = newPath
 }
 
+async function resetHebrewBooksFolder() {
+  await clearHbLocalFolder()
+  hebrewBooksLocalFolder.value = ''
+}
+
+// ── Database path clear ───────────────────────────────────────────────────────
+
+async function resetDbPath() {
+  const defaultPath = await clearDbPath()
+  if (defaultPath !== null) {
+    dbPath.value = defaultPath
+    onDbReady(defaultPath)
+  }
+}
+
 // ── Excluded folders ──────────────────────────────────────────────────────────
 
 async function openExcludedFolders() {
@@ -47,10 +62,12 @@ async function openExcludedFolders() {
 </script>
 
 <template>
-  <!-- ── היברו בוקס ── -->
-  <div data-section="section-hebrewbooks" data-section-label="היברו בוקס">
-    <div id="section-hebrewbooks" class="section-label">היברו בוקס</div>
+  <!-- ── מתקדם ── -->
+  <div data-section="section-advanced" data-section-label="מתקדם">
+    <div id="section-advanced" class="section-label">מתקדם</div>
 
+    <!-- היברו בוקס -->
+    <div class="subsection-label">היברו בוקס</div>
     <SettingRow
       label="תיקיית ספרים מקומית"
       hint="אם ברשותך אוסף מקומי של ספרים מהיברו בוקס, ציין את נתיב התיקייה. הספרים יטענו מהתיקייה במקום להוריד מהאינטרנט. אם ספר אינו נמצא בתיקייה, תתבצע הורדה רגילה."
@@ -62,17 +79,14 @@ async function openExcludedFolders() {
         :editable="true"
         :disabled="!isHosted"
         @pick="pickHebrewBooksFolder"
-        @clear="hebrewBooksLocalFolder = ''"
+        @clear="resetHebrewBooksFolder"
         @commit="commitHebrewBooksFolder"
       />
     </SettingRow>
     <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
-  </div>
 
-  <!-- ── חיפוש קבצים ── -->
-  <div data-section="section-file-search" data-section-label="חיפוש קבצים">
-    <div id="section-file-search" class="section-label">חיפוש קבצים</div>
-
+    <!-- חיפוש קבצים -->
+    <div class="subsection-label">חיפוש קבצים</div>
     <SettingRow
       label="תיקיות מוחרגות"
       hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
@@ -86,25 +100,24 @@ async function openExcludedFolders() {
       </button>
     </SettingRow>
     <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
-  </div>
 
-  <!-- ── מסד נתונים ── -->
-  <div data-section="section-database" data-section-label="מסד נתונים">
-    <div id="section-database" class="section-label">מסד נתונים</div>
-
+    <!-- מסד נתונים -->
+    <div class="subsection-label">מסד נתונים</div>
     <template v-if="isHosted">
       <div class="db-path-row">
         <span class="db-path-label">נתיב מסד הנתונים</span>
         <SettingsPagePathField
           :value="dbPath"
           placeholder="לא נבחר נתיב"
+          :clearable="true"
           :editable="true"
           @pick="pickDbPath"
+          @clear="resetDbPath"
           @commit="commitDbPath"
         />
       </div>
     </template>
-    <p v-else class="db-path-label">זמין רק בתוך האפליקציה המארחת</p>
+    <p v-else class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
   </div>
 </template>
 

@@ -64,6 +64,37 @@ namespace KitveiHakodeshLib.Db
         /// </summary>
         public Action ResetTitleBarToLight { get; set; }
 
+        /// <summary>
+        /// Resets the database path to the auto-resolved default and reopens the DB.
+        /// Replies with { path } so the frontend can update its displayed path.
+        /// </summary>
+        public void HandleClearDbPath(string id)
+        {
+            string defaultPath = AppSettings.ResolveDefaultDbPath();
+            AppSettings.SaveDbPath(defaultPath);
+            if (_db != null) _db.Dispose();
+            if (File.Exists(defaultPath))
+            {
+                try { _db = new DbAccess(defaultPath); }
+                catch { _db = null; }
+            }
+            else
+            {
+                _db = null;
+            }
+            _bridge.Reply(id, new { path = defaultPath });
+            OnDbPathPicked?.Invoke(defaultPath);
+        }
+
+        /// <summary>
+        /// Clears the persisted HebrewBooks local folder setting (saves an empty string).
+        /// </summary>
+        public void HandleClearHbLocalFolder(string id)
+        {
+            AppSettings.SaveHbLocalFolder("");
+            _bridge.Reply(id, new { });
+        }
+
         public void HandleSetDbPath(JsonElement root, string id)
         {
             string path = root.GetProperty("path").GetString();
