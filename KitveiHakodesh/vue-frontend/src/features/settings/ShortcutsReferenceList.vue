@@ -34,6 +34,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>חץ ימני</kbd></div><span class="shortcut-description">קטע הקודם</span></div>
     <!-- Display -->
     <div class="shortcuts-group-label">תצוגה</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>|</kbd></div><span class="shortcut-description">תצוגה מפוצלת</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd></div><span class="shortcut-description">הצג / הסתר סרגל כלים</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd></div><span class="shortcut-description">הגדל תצוגה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd></div><span class="shortcut-description">הקטן תצוגה</span></div>

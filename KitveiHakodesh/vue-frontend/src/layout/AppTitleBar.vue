@@ -15,8 +15,8 @@ import {
   IconColor24Filled,
   IconConvertToText24Regular,
   IconSearch24Regular,
-  IconBoardSplit20Regular,
-  IconBoardSplit20Filled,
+  IconSplitVertical20Regular,
+  IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 // Both dropdowns are v-if — lazy-load them so their imports (including fluent-color icons)
@@ -70,7 +70,7 @@ const barTitle = computed(() => {
 
 const toolbarTitle = computed(() => {
   const baseTitle = isBookViewActive.value
-    ? bookViewStore.toolbarVisible ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'
+    ? bookViewStore.getToolbarVisible(props.paneId) ? 'הסתר סרגל כלים' : 'הצג סרגל כלים'
     : activeTab.value?.pdfViewerTitleBarVisible !== false ? 'הסתר סרגל כותרת PDF' : 'הצג סרגל כותרת PDF'
   return `${baseTitle} (Ctrl+B)`
 })
@@ -98,123 +98,168 @@ function selectTab(id: string) {
   dropdownOpen.value = false
 }
 
-// Keyboard shortcuts — only installed on pane 1's title bar.
-// Pane 2 is a secondary reading pane; all keyboard navigation targets pane 1.
-// The iframe relay (message handler below) also only fires on pane 1.
-if (props.paneId === 1) {
+// Keyboard shortcuts — each pane installs its own handler.
+// Pane-scoped shortcuts (tab ops, book view actions, navigation within a pane)
+// only fire when this pane is the focused pane.
+// App-wide shortcuts (theme, fullscreen, split view, quick-nav, settings) are
+// handled exclusively by pane 1 — they must not fire twice.
 
 // Forward Ctrl+key shortcuts from child iframes (HTML viewer) back into the
-// top-level keydown pipeline.
-useEventListener('message', (e: MessageEvent) => {
-  if (!e.data || e.data.type !== 'iframeKeydown') return
-  window.dispatchEvent(new KeyboardEvent('keydown', {
-    code: e.data.code,
-    ctrlKey: e.data.ctrlKey,
-    shiftKey: e.data.shiftKey,
-    metaKey: e.data.metaKey,
-    altKey: e.data.altKey,
-    bubbles: true,
-    cancelable: true,
-  }))
-})
+// top-level keydown pipeline. Only pane 1 needs to do this — iframes only
+// appear in pane 1 (txt-view / html-view).
+if (props.paneId === 1) {
+  useEventListener('message', (e: MessageEvent) => {
+    if (!e.data || e.data.type !== 'iframeKeydown') return
+    window.dispatchEvent(new KeyboardEvent('keydown', {
+      code: e.data.code,
+      ctrlKey: e.data.ctrlKey,
+      shiftKey: e.data.shiftKey,
+      metaKey: e.data.metaKey,
+      altKey: e.data.altKey,
+      bubbles: true,
+      cancelable: true,
+    }))
+  })
+}
+
+const isThisPaneFocused = computed(
+  () => !bookViewStore.splitViewEnabled || bookViewStore.focusedPaneId === props.paneId,
+)
 
 useEventListener('keydown', (e: KeyboardEvent) => {
-  if (e.ctrlKey && e.code === 'KeyW') {
-    e.preventDefault()
-    pane.closeTab(pane.activeTabId.value)
-  } else if (e.ctrlKey && e.code === 'KeyX') {
-    e.preventDefault()
-    pane.closeAllTabs()
-  } else if (e.ctrlKey && !e.shiftKey && e.code === 'Tab') {
-    e.preventDefault()
-    const paneTabs = pane.tabs.value
-    const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
-    const nextIndex = (currentIndex + 1) % paneTabs.length
-    pane.switchTab(paneTabs[nextIndex]!.id)
-  } else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
-    e.preventDefault()
-    const paneTabs = pane.tabs.value
-    const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
-    const previousIndex = (currentIndex - 1 + paneTabs.length) % paneTabs.length
-    pane.switchTab(paneTabs[previousIndex]!.id)
-  } else if (e.ctrlKey && e.code === 'KeyB') {
-    e.preventDefault()
-    if (isBookViewActive.value) {
-      bookViewStore.toggleToolbar()
-    } else if (activeTab.value?.route === '/pdf-view') {
-      pane.togglePdfViewerTitleBar()
+  // ── Pane-scoped shortcuts ──────────────────────────────────────────────────
+  // Only fire when this pane is focused (or split view is not active).
+  if (isThisPaneFocused.value) {
+    if (e.ctrlKey && e.code === 'KeyW') {
+      e.preventDefault()
+      pane.closeTab(pane.activeTabId.value)
+      return
+    } else if (e.ctrlKey && e.code === 'KeyX') {
+      e.preventDefault()
+      pane.closeAllTabs()
+      return
+    } else if (e.ctrlKey && !e.shiftKey && e.code === 'Tab') {
+      e.preventDefault()
+      const paneTabs = pane.tabs.value
+      const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
+      const nextIndex = (currentIndex + 1) % paneTabs.length
+      pane.switchTab(paneTabs[nextIndex]!.id)
+      return
+    } else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
+      e.preventDefault()
+      const paneTabs = pane.tabs.value
+      const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
+      const previousIndex = (currentIndex - 1 + paneTabs.length) % paneTabs.length
+      pane.switchTab(paneTabs[previousIndex]!.id)
+      return
+    } else if (e.ctrlKey && e.code === 'KeyB') {
+      e.preventDefault()
+      if (isBookViewActive.value) {
+        bookViewStore.toggleToolbar(props.paneId)
+      } else if (activeTab.value?.route === '/pdf-view') {
+        pane.togglePdfViewerTitleBar()
+      }
+      return
+    } else if (e.ctrlKey && e.code === 'KeyJ') {
+      e.preventDefault()
+      if (isBookViewActive.value) bookViewStore.toggleBottomPanel(props.paneId)
+      return
+    } else if (e.ctrlKey && e.code === 'KeyK') {
+      e.preventDefault()
+      if (isBookViewActive.value) bookViewStore.toggleTocPanel(props.paneId)
+      return
+    } else if (e.ctrlKey && e.code === 'KeyF') {
+      if (document.activeElement?.closest('[data-ctrlf-enabled]')) return
+      e.preventDefault()
+      if (isBookViewActive.value) {
+        bookViewStore.openSearch(props.paneId)
+      } else if (isTxtViewActive.value) {
+        bookViewStore.txtViewToggleSearch(props.paneId)
+      }
+      return
+    } else if (e.ctrlKey && e.code === 'KeyT') {
+      e.preventDefault()
+      toggleTabDropdown()
+      return
+    } else if (e.ctrlKey && e.code === 'KeyN') {
+      e.preventDefault()
+      pane.openNewTab()
+      return
+    } else if (e.ctrlKey && e.code === 'KeyG') {
+      e.preventDefault()
+      pane.goHome()
+      return
+    } else if (e.ctrlKey && e.code === 'KeyH') {
+      e.preventDefault()
+      titleBarVisible.value = !titleBarVisible.value
+      return
+    } else if (e.ctrlKey && e.code === 'KeyL') {
+      e.preventDefault()
+      themeStore.toggleDarkMode()
+      return
+    } else if (e.ctrlKey && e.code === 'KeyM') {
+      e.preventDefault()
+      toggleNavDropdown()
+      return
+    } else if (e.code === 'F1') {
+      e.preventDefault()
+      navigateInNewTab('הגדרות')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit1') {
+      e.preventDefault()
+      navigateInNewTab('ספרים')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit2') {
+      e.preventDefault()
+      navigateInNewTab('חיפוש')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit3') {
+      e.preventDefault()
+      navigateInNewTab('היברו-בוקס')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit4') {
+      e.preventDefault()
+      navigateInNewTab('פתח קובץ')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit5') {
+      e.preventDefault()
+      navigateInNewTab('חיפוש קבצים')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit6') {
+      e.preventDefault()
+      navigateInNewTab('מילון')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit7') {
+      e.preventDefault()
+      navigateInNewTab('לוח שנה')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit8') {
+      e.preventDefault()
+      navigateInNewTab('מידות ושיעורים')
+      return
+    } else if (e.ctrlKey && e.code === 'Digit9') {
+      e.preventDefault()
+      navigateInNewTab('סביבות עבודה')
+      return
     }
-  } else if (e.ctrlKey && e.code === 'KeyJ') {
-    e.preventDefault()
-    if (isBookViewActive.value) bookViewStore.toggleBottomPanel()
-  } else if (e.ctrlKey && e.code === 'KeyK') {
-    e.preventDefault()
-    if (isBookViewActive.value) bookViewStore.toggleTocPanel()
-  } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
-    e.preventDefault()
-    toggleFullscreen()
-  } else if (e.code === 'F11') {
-    e.preventDefault()
-    toggleFullscreen()
-  } else if (e.ctrlKey && e.code === 'KeyF') {
-    if (document.activeElement?.closest('[data-ctrlf-enabled]')) return
-    e.preventDefault()
-    if (isBookViewActive.value) {
-      bookViewStore.openSearch()
-    } else if (isTxtViewActive.value) {
-      bookViewStore.txtViewToggleSearch()
+  }
+
+  // ── App-wide shortcuts — pane 1 only ──────────────────────────────────────
+  if (props.paneId === 1) {
+    if (e.ctrlKey && e.code === 'Backslash') {
+      e.preventDefault()
+      bookViewStore.toggleSplitView()
+    } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
+      e.preventDefault()
+      toggleFullscreen()
+    } else if (e.code === 'F11') {
+      e.preventDefault()
+      toggleFullscreen()
+    } else if (e.ctrlKey && e.code === 'KeyP') {
+      e.preventDefault()
     }
-  } else if (e.ctrlKey && e.code === 'KeyP') {
-    e.preventDefault()
-  } else if (e.ctrlKey && e.code === 'KeyM') {
-    e.preventDefault()
-    toggleNavDropdown()
-  } else if (e.ctrlKey && e.code === 'KeyT') {
-    e.preventDefault()
-    toggleTabDropdown()
-  } else if (e.ctrlKey && e.code === 'KeyN') {
-    e.preventDefault()
-    pane.openNewTab()
-  } else if (e.ctrlKey && e.code === 'KeyL') {
-    e.preventDefault()
-    themeStore.toggleDarkMode()
-  } else if (e.ctrlKey && e.code === 'KeyG') {
-    e.preventDefault()
-    pane.goHome()
-  } else if (e.code === 'F1') {
-    e.preventDefault()
-    navigateInNewTab('הגדרות')
-  } else if (e.ctrlKey && e.code === 'Digit1') {
-    e.preventDefault()
-    navigateInNewTab('ספרים')
-  } else if (e.ctrlKey && e.code === 'Digit2') {
-    e.preventDefault()
-    navigateInNewTab('חיפוש')
-  } else if (e.ctrlKey && e.code === 'Digit3') {
-    e.preventDefault()
-    navigateInNewTab('היברו-בוקס')
-  } else if (e.ctrlKey && e.code === 'Digit4') {
-    e.preventDefault()
-    navigateInNewTab('פתח קובץ')
-  } else if (e.ctrlKey && e.code === 'Digit5') {
-    e.preventDefault()
-    navigateInNewTab('חיפוש קבצים')
-  } else if (e.ctrlKey && e.code === 'Digit6') {
-    e.preventDefault()
-    navigateInNewTab('מילון')
-  } else if (e.ctrlKey && e.code === 'Digit7') {
-    e.preventDefault()
-    navigateInNewTab('לוח שנה')
-  } else if (e.ctrlKey && e.code === 'Digit8') {
-    e.preventDefault()
-    navigateInNewTab('מידות ושיעורים')
-  } else if (e.ctrlKey && e.code === 'Digit9') {
-    e.preventDefault()
-    navigateInNewTab('סביבות עבודה')
   }
 }, { capture: true })
-
-} // end paneId === 1 keyboard guard
 </script>
 
 <template>
@@ -238,7 +283,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         v-if="isTxtViewActive"
         class="bar-btn"
         title="חיפוש בטקסט (Ctrl+F)"
-        @click.stop="bookViewStore.txtViewToggleSearch()"
+        @click.stop="bookViewStore.txtViewToggleSearch(props.paneId)"
       >
         <IconSearch24Regular />
       </button>
@@ -255,20 +300,19 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         v-if="isTitleBarButtonVisible('toolbar-toggle') && (isBookViewActive || activeTab?.route === '/pdf-view')"
         class="bar-btn"
         :title="toolbarTitle"
-        @click.stop="isBookViewActive ? bookViewStore.toggleToolbar() : pane.togglePdfViewerTitleBar()"
+        @click.stop="isBookViewActive ? bookViewStore.toggleToolbar(props.paneId) : pane.togglePdfViewerTitleBar()"
       >
-        <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.toolbarVisible : activeTab?.pdfViewerTitleBarVisible !== false" />
+        <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.getToolbarVisible(props.paneId) : activeTab?.pdfViewerTitleBarVisible !== false" />
         <IconOptions24Regular v-else />
       </button>
       <button
         v-if="isTitleBarButtonVisible('split-view')"
         class="bar-btn"
-        :class="{ active: bookViewStore.splitViewEnabled }"
-        :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת' : 'פתח תצוגה מפוצלת'"
+        :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"
         @click.stop="bookViewStore.toggleSplitView()"
       >
-        <IconBoardSplit20Filled v-if="bookViewStore.splitViewEnabled" />
-        <IconBoardSplit20Regular v-else />
+        <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
+        <IconSplitVertical20Regular v-else />
       </button>
     </div>
 

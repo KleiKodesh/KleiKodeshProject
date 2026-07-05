@@ -49,6 +49,8 @@ function onDividerPointerDown(event: PointerEvent) {
 function onPointerMove(event: PointerEvent) {
   if (!isDragging) return
   const containerWidth = containerRef.value?.getBoundingClientRect().width ?? window.innerWidth
+  // In RTL, fraction controls pane 2 (physical left side). Dragging right
+  // grows pane 2, so fraction increases with positive clientX delta.
   const delta = event.clientX - dragStartX
   const newFraction = Math.min(0.85, Math.max(0.15, dragStartFraction + delta / containerWidth))
   bookViewStore.setSplitViewFraction(newFraction)
@@ -65,7 +67,7 @@ function onPointerUp() {
     class="app-layout"
     :class="{ 'split-active': bookViewStore.splitViewEnabled }"
     :style="bookViewStore.splitViewEnabled
-      ? { gridTemplateColumns: `${bookViewStore.splitViewFraction * 100}% 4px 1fr` }
+      ? { gridTemplateColumns: `1fr 4px ${bookViewStore.splitViewFraction * 100}%` }
       : undefined"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -123,7 +125,7 @@ function onPointerUp() {
 
 .split-divider:hover,
 .split-divider:active {
-  background: color-mix(in srgb, var(--text-secondary) 25%, transparent);
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
 }
 
 .reset-overlay {

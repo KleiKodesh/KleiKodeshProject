@@ -7,9 +7,10 @@
  *   When focus is elsewhere (toolbar, etc.) we zoom both panels together.
  * - Ctrl+Left / Ctrl+Right: section navigation (RTL — Left = next, Right = previous).
  */
+import { inject } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { storeToRefs } from 'pinia'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
 type LinesContentInstance = {
   scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void
@@ -24,10 +25,14 @@ export function useBookViewKeyboardShortcuts(
   navigateToAdjacentTocSection: (direction: 'next' | 'previous') => void,
 ) {
   const bookViewStore = useBookViewStore()
-  const { isBookViewActive } = storeToRefs(bookViewStore)
+  const paneNavigation = usePaneNavigation()
+  const paneId = inject<1 | 2>('paneId', 1)
 
   useEventListener(window, 'keydown', (event: KeyboardEvent) => {
-    if (!isBookViewActive.value) return
+    // Only respond when split view is off, or this pane is the focused one.
+    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+    // Only respond when the active tab in this pane is a book view.
+    if (paneNavigation.activeTab.route !== '/book-view') return
     const ctrl = event.ctrlKey || event.metaKey
     if (!ctrl) return
 

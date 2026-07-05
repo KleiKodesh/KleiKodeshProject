@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, inject } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -26,6 +26,7 @@ const tabStore = useTabStore()
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
+const paneId = inject<1 | 2>('paneId', 1)
 const paneNavigation = usePaneNavigation()
 
 const tabId = paneNavigation.activeTabId
@@ -148,7 +149,8 @@ function closeSearch() {
 // Watch the toggle signal fired from the title bar button or Ctrl+F in AppTitleBar
 watch(
   () => bookViewStore.txtViewToggleSearchSignal,
-  () => {
+  (signal) => {
+    if (signal.paneId !== paneId) return
     if (searchVisible.value) closeSearch()
     else openSearch()
   },
