@@ -24,6 +24,18 @@
  * pdfjsVersion = 5.7.284
  * pdfjsBuild = 7e5b36c2d
  */
+
+// PATCH: Uint8Array.prototype.toHex polyfill for WebView2 builds on Chromium < 136.
+// PDF.js 5.7.284 calls .toHex() on Uint8Array values returned by calculateMD5()
+// and on raw bytes from the PDF trailer ID array. Chromium 136 introduced this
+// method natively; older WebView2 builds don't have it and throw
+// "UnknownErrorException: hashOriginal.toHex is not a function" when loading any PDF.
+if (typeof Uint8Array.prototype.toHex !== 'function') {
+  Uint8Array.prototype.toHex = function () {
+    return Array.from(this, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  };
+}
+
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
 /******/ 
