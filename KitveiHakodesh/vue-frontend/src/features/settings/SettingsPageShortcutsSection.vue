@@ -25,7 +25,7 @@
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>9</kbd><span class="shortcut-description">סביבות עבודה</span></div>
       <div class="shortcut-row"><kbd>F1</kbd><span class="shortcut-description">הגדרות</span></div>
       <!-- Book view controls -->
-      <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd><span class="shortcut-description">הצג / הסתר סרגל כלים (בתצוגת ספר)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd><span class="shortcut-description">הצג / הסתר סרגל כלים</span></div>
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd><span class="shortcut-description">הצג / הסתר מפרשים (בתצוגת ספר)</span></div>
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>K</kbd><span class="shortcut-description">הצג / הסתר תוכן עניינים (בתצוגת ספר)</span></div>
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd><span class="shortcut-description">חיפוש (בתצוגת ספר)</span></div>

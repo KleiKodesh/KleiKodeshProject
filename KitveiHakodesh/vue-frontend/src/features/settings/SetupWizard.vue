@@ -6,15 +6,16 @@ import SetupWizardStepDb from './SetupWizardStepDb.vue'
 import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
 import SetupWizardStepGeneral from './SetupWizardStepGeneral.vue'
 import SetupWizardStepBookDisplay from './SetupWizardStepBookDisplay.vue'
+import SetupWizardStepShortcuts from './SetupWizardStepShortcuts.vue'
 
 const settings = useSettingsStore()
 
-type Step = 'welcome' | 'db' | 'theme' | 'general' | 'book-display'
+type Step = 'welcome' | 'db' | 'theme' | 'general' | 'book-display' | 'shortcuts'
 
 const steps = computed<Step[]>(() => {
   const s: Step[] = ['welcome']
   if (isHosted && !dbReady.value) s.push('db')
-  s.push('theme', 'general', 'book-display')
+  s.push('theme', 'general', 'book-display', 'shortcuts')
   return s
 })
 
@@ -23,6 +24,7 @@ const stepComponents: Record<Exclude<Step, 'welcome'>, unknown> = {
   theme: SetupWizardStepTheme,
   general: SetupWizardStepGeneral,
   'book-display': SetupWizardStepBookDisplay,
+  shortcuts: SetupWizardStepShortcuts,
 }
 
 const stepIndex = ref(0)
