@@ -31,29 +31,31 @@ function focusResults() {
 }
 
 async function onOpenFile(item: LocalFileSearchResult) {
-  if (!isHosted) {
-    console.log('[LocalFileSearch] not hosted — skipping open')
-    return
-  }
+  if (!isHosted) return
 
-  console.log('[LocalFileSearch] onOpenFile', item)
   openingFile.value = true
 
   try {
     const extension = item.fileName.substring(item.fileName.lastIndexOf('.')).toLowerCase()
-    const isHtmlLike = extension === '.htm' || extension === '.html' || extension === '.txt'
-    const route = isHtmlLike ? '/html-view' : '/pdf-view'
-    console.log('[LocalFileSearch] extension:', extension, 'route:', route, 'fullPath:', item.fullPath)
 
-    const restored = await restoreLocalFile(item.fullPath)
-    console.log('[LocalFileSearch] restoreLocalFile result:', restored)
-
-    if (!restored?.url) {
-      console.warn('[LocalFileSearch] no url returned — aborting open')
+    if (extension === '.txt') {
+      // .txt files are rendered natively by TxtViewPage — no virtual host needed
+      tabStore.updateActiveTab({
+        route: '/txt-view',
+        title: item.fileName,
+        localFileName: item.fileName,
+        localFilePath: item.fullPath,
+        localFileVirtualUrl: undefined,
+      })
       return
     }
 
-    console.log('[LocalFileSearch] navigating to', route, 'url:', restored.url)
+    const isHtmlLike = extension === '.htm' || extension === '.html'
+    const route = isHtmlLike ? '/html-view' : '/pdf-view'
+
+    const restored = await restoreLocalFile(item.fullPath)
+    if (!restored?.url) return
+
     tabStore.updateActiveTab({
       route,
       title: item.fileName,
@@ -61,8 +63,6 @@ async function onOpenFile(item: LocalFileSearchResult) {
       localFilePath: item.fullPath,
       localFileVirtualUrl: restored.url,
     })
-  } catch (error) {
-    console.error('[LocalFileSearch] onOpenFile error:', error)
   } finally {
     openingFile.value = false
   }
