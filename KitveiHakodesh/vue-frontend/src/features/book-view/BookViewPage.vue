@@ -29,7 +29,7 @@ const sideBySide = computed(() => commentaryMode.value === 'side')
 // Track the shell's own width instead of the viewport width so that in split
 // view each pane responds to its own size, not the full window size.
 const shellWidth = ref(window.innerWidth)
-useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry.contentRect.width })
+useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.contentRect.width })
 const isWideScreen = computed(() => shellWidth.value >= 650)
 const isSidePanelWideScreen = computed(() => shellWidth.value >= 520)
 const sidePanelIsOverlay = computed(() => !isSidePanelWideScreen.value)

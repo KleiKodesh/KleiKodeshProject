@@ -11,10 +11,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
 
-// CopyMenuOptions now accepts paneNavigation instead of tabStore
-// so the "search in repository" action navigates the correct pane.
-import type { PaneNavigation } from '@/composables/usePaneNavigation'
-
 type TabStore = ReturnType<typeof useTabStore>
 
 interface CopyMenuOptions {
