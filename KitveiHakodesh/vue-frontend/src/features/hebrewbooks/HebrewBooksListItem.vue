@@ -48,8 +48,6 @@ const tooltip = computed(() => {
         <span v-if="book.author" class="author">{{ book.author }}</span>
       </div>
       <div class="actions">
-          <IconArrowDownload20Regular />
-        </button>
         <button
           v-if="hasLocalFile"
           class="dl-btn reveal-btn"
@@ -74,6 +72,8 @@ const tooltip = computed(() => {
           tabindex="-1"
           @click.stop="emit('download-clicked', book)"
         >
+          <IconArrowDownload20Regular />
+        </button>
       </div>
     </div>
     <div class="row-bottom">
