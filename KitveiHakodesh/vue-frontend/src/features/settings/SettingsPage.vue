@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
-import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular, IconNavigation20Regular, IconChevronLeft20Regular, IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -96,9 +96,7 @@ const sideNavExpandedSections = ref<Set<string>>(new Set())
 function rebuildSideNavTree() {
   sideNavTree.value = getSectionNavTree()
   // Auto-expand all sections that have children
-  sideNavExpandedSections.value = new Set(
-    sideNavTree.value.filter((entry) => entry.children.length > 0).map((entry) => entry.id),
-  )
+  sideNavExpandedSections.value = new Set()
 }
 
 function toggleSideNavSection(sectionId: string) {
@@ -184,27 +182,23 @@ const commentaryMaxWidthSlider = computed({
         <li v-for="entry in sideNavTree" :key="entry.id" class="side-nav-section">
           <button
             class="side-nav-section-btn"
-            :class="{ 'has-children': entry.children.length > 0 }"
             @click="entry.children.length > 0 ? toggleSideNavSection(entry.id) : navigateToSection(entry.id)"
           >
             <span class="side-nav-section-label" @click.stop="navigateToSection(entry.id)">
               {{ entry.label }}
             </span>
-            <span
+            <component
               v-if="entry.children.length > 0"
+              :is="sideNavExpandedSections.has(entry.id) ? IconChevronDown20Regular : IconChevronLeft20Regular"
               class="side-nav-chevron"
-              :class="{ expanded: sideNavExpandedSections.has(entry.id) }"
-            >›</span>
+            />
           </button>
           <ul
             v-if="entry.children.length > 0 && sideNavExpandedSections.has(entry.id)"
             class="side-nav-children"
           >
             <li v-for="child in entry.children" :key="child.id">
-              <div v-if="child.isSubsectionHeading" class="side-nav-subsection-heading">
-                {{ child.label }}
-              </div>
-              <button v-else class="side-nav-child-btn" @click="navigateToSection(child.id)">
+              <button class="side-nav-child-btn" @click="navigateToSection(child.id)">
                 {{ child.label }}
               </button>
             </li>
@@ -600,22 +594,24 @@ const commentaryMaxWidthSlider = computed({
 .settings-side-nav {
   display: none;
   flex-shrink: 0;
-  width: 180px;
+  width: 200px;
   height: 100%;
   overflow-y: auto;
-  border-left: 1px solid var(--border-color);
-  padding: 16px 0 40px;
-  background: var(--bg-secondary);
+  overflow-x: hidden;
+  padding: 12px 0 40px;
+  background: var(--bg-primary);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .side-nav-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 8px;
 }
 
 .side-nav-section {
-  margin: 0;
+  margin-bottom: 2px;
 }
 
 .side-nav-section-btn {
@@ -623,19 +619,25 @@ const commentaryMaxWidthSlider = computed({
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  height: 32px;
-  padding: 0 14px;
+  height: 36px;
+  padding: 0 12px;
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-primary);
   font-size: 13px;
+  font-weight: 500;
   text-align: right;
   gap: 4px;
+  transition: background 100ms, transform 80ms;
 }
 .side-nav-section-btn:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.side-nav-section-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent-color);
 }
 
 .side-nav-section-label {
@@ -648,32 +650,24 @@ const commentaryMaxWidthSlider = computed({
 
 .side-nav-chevron {
   flex-shrink: 0;
-  font-size: 14px;
   color: var(--text-secondary);
-  line-height: 1;
-  display: inline-block;
-  transform: rotate(90deg);
-  transition: transform 120ms ease;
-}
-.side-nav-chevron.expanded {
-  transform: rotate(-90deg);
 }
 
 .side-nav-children {
   list-style: none;
-  margin: 0;
-  padding: 0;
+  margin: 2px 0 4px 0;
+  padding: 0 0 0 12px;
 }
 
 .side-nav-child-btn {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 28px;
-  padding: 0 14px 0 20px;
+  height: 32px;
+  padding: 0 12px;
   background: transparent;
   border: none;
-  border-radius: 0;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-secondary);
   font-size: 12px;
@@ -681,23 +675,16 @@ const commentaryMaxWidthSlider = computed({
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 100ms, color 100ms, transform 80ms;
 }
 .side-nav-child-btn:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
   color: var(--text-primary);
 }
-
-.side-nav-subsection-heading {
-  padding: 6px 14px 2px;
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  opacity: 0.7;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.side-nav-child-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent-color);
+  font-weight: 500;
 }
 
 /* ── Full-width scroller: scrollbar at the page edge ── */

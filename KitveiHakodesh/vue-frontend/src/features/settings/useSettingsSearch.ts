@@ -9,7 +9,6 @@ export interface SettingsNavEntry {
 export interface SettingsNavChildEntry {
   id: string
   label: string
-  isSubsectionHeading: boolean
 }
 
 /**
@@ -118,7 +117,6 @@ export function useSettingsSearch(scrollContainerRef: Ref<HTMLElement | null>) {
       ).map((child) => ({
         id: child.id,
         label: child.dataset.navLabel ?? '',
-        isSubsectionHeading: false,
       }))
       return {
         id: el.dataset.section ?? '',
