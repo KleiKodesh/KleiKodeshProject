@@ -2,13 +2,27 @@
 
 App settings UI and first-launch setup wizard.
 
-**SettingsPage.vue** — settings layout with a search bar + nav dropdown in a top toolbar, and a centered content column (max 680px) below it. The content column is inside a full-width scroller so the scrollbar sits at the page edge. Each section is a card (rounded border, bg-secondary). Sections: אפליקציה, ניווט, קריאה, תצוגת ספר, תצוגת פירושים, לוח שנה, מסד נתונים, איפוס.
+## Page structure
 
-**SettingsAdvancedPane.vue** — the calendar, database, and reset sections. Each section is wrapped in `data-section` / `data-section-label` divs so the DOM walker in `useSettingsSearch` can find and filter them. No props.
+`SettingsPage.vue` is the page shell. It owns the layout (side nav + scroll body), the sticky search bar, the narrow-screen nav dropdown, and section scroll navigation. It renders four section components in order, with no business logic of its own.
 
-**SettingRow.vue** — labeled layout wrapper for a single setting row. Use this for every new setting to keep spacing consistent.
+The section components are independent — each imports the stores it needs directly. The `[data-section]` / `data-section-label` attributes on every section root are picked up automatically by `useSettingsSearch`; no manual registration needed.
 
-**HintIcon.vue** — small info icon that shows a tooltip on hover. Used inside `SettingRow` to display hint text. Pass the hint string as a prop.
+## Section components
+
+**SettingsPageDisplaySection.vue** — theme picker, dark mode toggle, PDF filter toggle, app zoom, toolbar position, new-tab destination, and title bar button visibility chips.
+
+**SettingsPageReadingSection.vue** — resume last read, commentary sync default, divine name censoring, book display fonts/sizes/padding, max content width, and commentary display overrides. Calls `useSettings()` to wire the commentary-mirror watcher.
+
+**SettingsPageSystemSection.vue** — calendar city picker, clock toggle, HebrewBooks local folder, and database path.
+
+**SettingsPageResetSection.vue** — the four reset actions (settings, search index, document locator index, full app reset) with their `ConfirmDialog`. Completely self-contained — no props.
+
+**SettingsPageShortcutsSection.vue** — keyboard shortcuts reference grid. No script, no reactivity.
+
+## Shared primitives
+
+**SettingRow.vue** — labeled layout wrapper for a single setting row. Use for every new setting to keep spacing consistent.
 
 **SliderSetting.vue** — labeled slider for numeric settings.
 
@@ -16,28 +30,28 @@ App settings UI and first-launch setup wizard.
 
 **ThemePicker.vue** — theme preset selector with color swatches grouped by family × light/dark.
 
-**FontDisplaySettings.vue** — font and size controls for main text or commentary. Used in `SettingsPage` for both book and commentary display sections.
+**FontDisplaySettings.vue** — font and size controls for main text or commentary.
 
 **FontSelector.vue** — font family dropdown. Detects installed fonts via `detectFonts.ts` from `src/utils/`.
 
-**SetupWizard.vue** — full-screen onboarding overlay shown when `settingsStore.setupDone` is false. Steps: welcome, database setup (hosted only), theme, general, book display. Completion sets `setupDone = true` in IDB and the wizard never shows again.
+## Composables
 
-**SetupWizardStepBookDisplay.vue** — setup wizard step for book display settings: font, font size, and commentary font selection.
+**useSettingsPage.ts** — wires the commentary-mirror watcher (syncs commentary font settings to book settings when `useSeparateCommentarySettings` is false) and exposes reset actions (`resetSettings`, `resetSearchIndex`, `resetDocumentLocatorIndex`, `resetAll`). Called by `SettingsPageReadingSection` and `SettingsPageSystemSection`.
 
-**SetupWizardStepDb.vue** — setup wizard step for database setup (hosted only). Provides a file picker to select the seforim DB file and shows progress/status.
-
-**SetupWizardStepGeneral.vue** — setup wizard step for general settings: language, search defaults, and navigation preferences.
-
-**SetupWizardStepTheme.vue** — setup wizard step for theme selection: light, dark, or auto with color swatch previews.
-
-**useSettingsPage.ts** — composable for the settings page. Watches settings changes and triggers side effects: search index rebuild, document locator rebuild, and full app reset.
-
-**useSettingsSearch.ts** — DOM-walker search composable. Accepts a ref to the scroll container, watches `searchQuery`, and after each render tick walks every `[data-section]` element, reads all its text nodes, and toggles `data-section-hidden` on sections that don't match. Also exposes `getSectionNavEntries()` which reads `data-section` and `data-section-label` attributes to build the nav dropdown list.
+**useSettingsSearch.ts** — DOM-walker search. Accepts a ref to the scroll container, watches `searchQuery`, walks every `[data-section]` element and toggles `data-section-hidden` on non-matching sections. Also exposes `getSectionNavEntries()` and `getSectionNavTree()` for the sidebar and drawer nav.
 
 **appResetState.ts** — single exported `resetting` ref used to block UI during a reset/reload.
 
+## Setup wizard
+
+**SetupWizard.vue** — full-screen onboarding overlay shown when `settingsStore.setupDone` is false. Steps: welcome, database (hosted only), theme, general, book display. Completion sets `setupDone = true` in IDB.
+
+**SetupWizardStepBookDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepGeneral.vue**, **SetupWizardStepTheme.vue** — individual wizard steps.
+
 ## Adding a new settings section
 
-1. Add a `<div data-section="section-xxx" data-section-label="Hebrew label">` block with the section content in the scroll area of `SettingsPage.vue`.
-2. The sidebar nav, drawer nav, and search filter all pick it up automatically from the DOM — no manual registration needed.
-3. If the section belongs to the advanced group (calendar/db/reset), add it to `SettingsAdvancedPane.vue` instead.
+Wrap the section content in `<div data-section="section-xxx" data-section-label="Hebrew label">` and add it to the appropriate section component (or create a new one if it's a distinct concern). The sidebar nav, drawer nav, and search filter all pick it up automatically from the DOM.
+
+## Global CSS
+
+`[data-section]`, `.section-label`, `.subsection-label`, and `[data-section-hidden]` are all defined as unscoped global styles in `SettingsPage.vue`. Section components rely on these classes being globally available — do not move them to scoped styles.

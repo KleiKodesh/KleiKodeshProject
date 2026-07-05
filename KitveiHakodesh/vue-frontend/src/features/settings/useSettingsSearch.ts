@@ -16,9 +16,9 @@ export interface SettingsNavChildEntry {
  *
  * Each section must be wrapped in a `<div data-section="id" data-section-label="label">`.
  * On every query change the composable waits for the next render tick, then:
- *   1. Finds every `[data-section]` element that is a direct child of the scroll container
- *      (or a direct child of a direct child — to handle fragment-root components like
- *      SettingsAdvancedPane whose sections land as siblings in the scroll container).
+ *   1. Finds every `[data-section]` element anywhere inside the scroll container,
+ *      regardless of nesting depth (section components render their sections as
+ *      siblings in the DOM flow, not direct children of the container).
  *   2. Reads all text nodes inside that element, stopping at nested `[data-section]`
  *      boundaries so sections never bleed into each other.
  *   3. Toggles `data-section-hidden` on sections whose text doesn't match.
