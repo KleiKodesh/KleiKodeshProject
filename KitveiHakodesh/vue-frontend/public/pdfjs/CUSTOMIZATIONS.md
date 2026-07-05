@@ -70,24 +70,26 @@ The page filter (`--pdf-filter-custom`) is applied only when the `data-pdf-filte
 
 ### Uint8Array.prototype.toHex polyfill (old WebView2 compatibility)
 
-PDF.js 5.7.284 calls `.toHex()` on `Uint8Array` values in the `fingerprints` getter (to convert MD5 bytes and PDF trailer ID bytes to hex strings). `Uint8Array.prototype.toHex` was added in Chromium 136; users on WebView2 builds older than that get `"UnknownErrorException: hashOriginal.toHex is not a function"` and the PDF fails to load.
+`Uint8Array.prototype.toHex` was added in Chromium 136. PDF.js calls `.toHex()` on `Uint8Array` values in the `fingerprints` getter (converting MD5 bytes and PDF trailer ID bytes to hex strings). Users on WebView2 builds older than Chromium 136 get `"UnknownErrorException: hashOriginal.toHex is not a function"` and no PDF loads at all.
 
-Search for:
+Insert the polyfill block immediately after the version/build comment at the top of the file (the `pdfjsVersion` / `pdfjsBuild` block). Search for the end of that comment followed by the webpack runtime comment — the exact build hash will differ on upgrade, but the pattern is stable:
+
 ```js
- * pdfjsBuild = 7e5b36c2d
+ * pdfjsBuild = <hash>
  */
 /******/ // The require scope
 ```
 
 Replace with:
+
 ```js
- * pdfjsBuild = 7e5b36c2d
+ * pdfjsBuild = <hash>
  */
 
 // PATCH: Uint8Array.prototype.toHex polyfill for WebView2 builds on Chromium < 136.
-// PDF.js 5.7.284 calls .toHex() on Uint8Array values returned by calculateMD5()
-// and on raw bytes from the PDF trailer ID array. Chromium 136 introduced this
-// method natively; older WebView2 builds don't have it and throw
+// PDF.js calls .toHex() on Uint8Array values returned by calculateMD5() and on raw
+// bytes from the PDF trailer ID array. Chromium 136 introduced this method natively;
+// older WebView2 builds don't have it and throw
 // "UnknownErrorException: hashOriginal.toHex is not a function" when loading any PDF.
 if (typeof Uint8Array.prototype.toHex !== 'function') {
   Uint8Array.prototype.toHex = function () {
@@ -97,6 +99,8 @@ if (typeof Uint8Array.prototype.toHex !== 'function') {
 
 /******/ // The require scope
 ```
+
+If a future PDF.js version removes the `.toHex()` call entirely (because Chromium 136 is no longer a supported baseline), this patch can be dropped.
 
 ---
 

@@ -442,3 +442,36 @@ The full-text search pipeline spans three layers: FtsLib (the custom index engin
 | `searchError` | C# → Vue | Stream error |
 | `ftsIndexProgress` | C# → Vue | Indexing progress tick |
 | `ftsIndexInvalidated` | C# → Vue | Index corrupt or missing; rebuild started automatically |
+
+### DocumentLocator — File System Search Service
+
+`CSharpBackend/DocumentLocator/` is a self-contained Windows Service that indexes the file system via the NTFS MFT and serves search queries over a named pipe. It is a separate product from KitveiHakodesh — any WinForms or desktop application can use it.
+
+#### Dependency rule — read this before touching any of these projects
+
+No host application ever references `DocumentLocator.dll` directly. The only public surface is `DocumentLocator.Client.dll`. The internal library is an implementation detail embedded inside the service exe.
+
+```
+Host app  →  DocumentLocator.Client.dll  →  named pipe  →  DocumentLocator.Service.exe
+                                                               (embeds DocumentLocator.dll)
+```
+
+- `DocumentLocator.Client` — the only project host applications reference. Contains `ServiceBridge` (all pipe communication) and `ExcludedFoldersForm` (the reusable WinForms dialog for managing excluded folders). Adding a UI component that any host needs? It goes here.
+- `DocumentLocator` (library) — Lucene index engine, MFT crawler, pipe protocol, `ExcludedFoldersPersistence`. Internal only. Never referenced directly by host apps. Embedded as a resource inside the service exe.
+- `DocumentLocator.Service` — the Windows Service exe. Embeds `DocumentLocator.dll` and all its Lucene dependencies as resources via `EmbeddedResource` in its csproj, loaded at runtime by an `AssemblyResolve` handler in `Program.cs`. Ships as a single exe with no side-by-side DLLs.
+
+#### Where things live
+
+- Pipe communication (search, status, reindex, get/set excluded folders) → `ServiceBridge.cs` in `DocumentLocator.Client`
+- Reusable UI dialogs for managing service settings → `DocumentLocator.Client` (e.g. `ExcludedFoldersForm.cs`)
+- Index persistence, file format, crawling logic → `DocumentLocator` library
+- Service lifecycle, pipe server, SCM registration → `DocumentLocator.Service`
+
+#### KitveiHakodeshLib integration
+
+`KitveiHakodeshLib/FileSystemSearch/` contains the KitveiHakodesh-specific glue:
+
+- `DocumentLocatorAdapter.cs` — thin wrapper over `ServiceBridge` that translates results into `FileSystemSearchResult` objects. Belongs here because it is KitveiHakodesh-specific (Hebrew progress strings, result type mapping).
+- `FileSystemSearchHandler.cs` — bridge action handler that wires `DocumentLocatorAdapter` and `ExcludedFoldersForm` to the Vue frontend via `WebBridge`.
+
+`KitveiHakodeshLib` references `DocumentLocator.Client` only — never `DocumentLocator` (the library) directly.

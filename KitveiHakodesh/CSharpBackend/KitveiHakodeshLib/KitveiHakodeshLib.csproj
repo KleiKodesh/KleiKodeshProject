@@ -149,7 +149,6 @@
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
     <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
-    <Compile Include="FileSystemSearch\ExcludedFoldersForm.cs" />
     <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />

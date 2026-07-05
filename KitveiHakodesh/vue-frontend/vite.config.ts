@@ -311,9 +311,11 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      // Chromium 138+ (WebView2 1.0.3912 = Chromium 147) ships Temporal natively.
-      // @hebcal/core imports temporal-polyfill/global which adds ~118KB to the bundle.
-      // Stub it out — the native Temporal object is already available.
+      // @hebcal/core (molad.js) imports temporal-polyfill/global as a side-effectful
+      // install of Temporal onto globalThis. Redirect to our conditional stub which
+      // only runs the polyfill when native Temporal is absent (Chromium < 138 /
+      // WebView2 < 1.0.3912). On Chromium 138+ the native implementation is used
+      // as-is, saving the 118KB polyfill from the bundle.
       'temporal-polyfill/global': fileURLToPath(new URL('./src/stubs/temporal-polyfill-stub.ts', import.meta.url)),
     },
   },
