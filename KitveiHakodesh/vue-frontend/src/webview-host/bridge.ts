@@ -353,3 +353,23 @@ export async function pickFolder(): Promise<string | null> {
   if (result.cancelled || result.error || !result.folderPath) return null
   return result.folderPath
 }
+
+/**
+ * Reset the database path to the auto-resolved default (Zayit / Otzaria).
+ * C# reopens the DB at that path and triggers a search index reset if the path changed.
+ * Returns the resolved default path so the frontend can update its display.
+ */
+export async function clearDbPath(): Promise<string | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  const result = await action<{ path?: string; error?: string }>('clearDbPath')
+  if (result.error || !result.path) return null
+  return result.path
+}
+
+/**
+ * Clear the persisted HebrewBooks local folder setting (saves an empty string to the registry).
+ */
+export async function clearHbLocalFolder(): Promise<void> {
+  if (typeof window.__webviewAction !== 'function') return
+  await action('clearHbLocalFolder').catch(() => {})
+}

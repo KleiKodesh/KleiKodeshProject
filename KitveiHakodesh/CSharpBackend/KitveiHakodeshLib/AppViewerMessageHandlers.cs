@@ -48,6 +48,8 @@ namespace KitveiHakodeshLib
                         case "dict-sql": await HandleDictSql(root, id); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
+                        case "clearDbPath": _db.HandleClearDbPath(id); break;
+                        case "clearHbLocalFolder": _db.HandleClearHbLocalFolder(id); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
                         case "pickFile": _localFile.HandlePickFile(id, this); break;
