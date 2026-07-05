@@ -32,12 +32,12 @@ export async function devQueryDict<T = unknown>(sql: string, params: unknown[]):
   return json.rows as T[]
 }
 
-/** Browser file input fallback for pickFile() — accepts PDF only. */
+/** Browser file input fallback for pickFile() — accepts PDF, HTML, and text files. */
 export function devPickPdf(): Promise<LocalFileResult | null> {
   return new Promise((resolve) => {
     const input = Object.assign(document.createElement('input'), {
       type: 'file',
-      accept: '.pdf,.htm,.html',
+      accept: '.pdf,.htm,.html,.txt',
     })
     input.onchange = () => {
       const file = input.files?.[0]

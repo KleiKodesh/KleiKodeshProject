@@ -32,8 +32,9 @@ export function useAppNavigation() {
     // Determine route based on file extension: HTML opens in html-view.
     const fn = result.fileName ?? ''
     const ext = fn.substring(fn.lastIndexOf('.')).toLowerCase()
-    const isHtmlLike = ext === '.htm' || ext === '.html' || ext === '.txt'
-    const route = isHtmlLike ? '/html-view' : '/pdf-view'
+    const isTxt = ext === '.txt'
+    const isHtmlLike = ext === '.htm' || ext === '.html'
+    const route = isTxt ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
     const tabData = {
       route: route as TabRoute,
       title: result.fileName,

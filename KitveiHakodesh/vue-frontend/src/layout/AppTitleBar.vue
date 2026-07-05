@@ -123,12 +123,13 @@ function goHome() {
   }
 }
 
-// Forward Ctrl+key shortcuts from child iframes (HTML/TXT viewer) back into the
+// Forward Ctrl+key shortcuts from child iframes (HTML viewer) back into the
 // top-level keydown pipeline.  When focus is inside an iframe, keyboard events
 // fire on the iframe's window and never reach the listeners below.  The injected
 // IframeScrollScript posts an 'iframeKeydown' message to window.top for every
 // Ctrl+key it sees; we reconstruct a synthetic KeyboardEvent here so all existing
 // shortcut handlers fire normally without any duplication.
+// Note: TxtViewPage renders natively in Vue (no iframe) so this is not needed there.
 useEventListener('message', (e: MessageEvent) => {
   if (!e.data || e.data.type !== 'iframeKeydown') return
   window.dispatchEvent(new KeyboardEvent('keydown', {

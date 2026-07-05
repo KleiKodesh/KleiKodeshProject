@@ -72,6 +72,18 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
 }
 
 /**
+ * Read a .txt file from disk and return its raw UTF-8 content.
+ * Used by TxtViewPage to load content on mount and on session restore.
+ * In dev mode, returns null — the dev file picker provides content directly via blob URL.
+ */
+export async function readTxtFileContent(filePath: string): Promise<string | null> {
+  if (!isHosted) return null
+  const res = await action<{ textContent?: string; error?: string }>('readTxtFileContent', { filePath })
+  if (res.error || !res.textContent) return null
+  return res.textContent
+}
+
+/**
  * Restore a HebrewBooks PDF tab from a persisted book ID.
  * C# checks the local folder first, then the cache; if neither has it, re-downloads.
  * Returns null on failure.

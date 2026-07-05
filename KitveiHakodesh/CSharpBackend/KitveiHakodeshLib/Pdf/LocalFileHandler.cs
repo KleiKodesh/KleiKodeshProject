@@ -5,6 +5,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -65,7 +66,19 @@ namespace KitveiHakodeshLib.LocalFile
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
 
-                if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+                if (ext == ".txt")
+                {
+                    string content = File.ReadAllText(filePath, Encoding.UTF8);
+                    _bridge.PushEvent(new
+                    {
+                        @event = "localFileTxtReady",
+                        textContent = content,
+                        fileName = Path.GetFileName(filePath),
+                        filePath,
+                        openInNewTab = true,
+                    });
+                }
+                else if (ext == ".pdf" || ext == ".htm" || ext == ".html")
                 {
                     string url = RegisterFolder(filePath);
                     _bridge.PushEvent(new
@@ -175,7 +188,13 @@ namespace KitveiHakodeshLib.LocalFile
                         string filePath = dlg.FileName;
                         string ext = Path.GetExtension(filePath).ToLowerInvariant();
 
-                        if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+                        if (ext == ".txt")
+                        {
+                            string content = File.ReadAllText(filePath, Encoding.UTF8);
+                            _bridge.PushEvent(new { @event = "localFileTxtReady", textContent = content, fileName = Path.GetFileName(filePath), filePath, openInNewTab = false });
+                            _bridge.Reply(id, new { cancelled = false });
+                        }
+                        else if (ext == ".pdf" || ext == ".htm" || ext == ".html")
                         {
                             string url = RegisterFolder(filePath);
                             _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
@@ -242,7 +261,13 @@ namespace KitveiHakodeshLib.LocalFile
                 if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
-                if (ext == ".pdf" || ext == ".htm" || ext == ".html" || ext == ".txt")
+                if (ext == ".txt")
+                {
+                    string content = File.ReadAllText(filePath, Encoding.UTF8);
+                    _bridge.Reply(id, new { textContent = content });
+                    return;
+                }
+                if (ext == ".pdf" || ext == ".htm" || ext == ".html")
                 {
                     _bridge.Reply(id, new { url = RegisterFolder(filePath) });
                     return;
@@ -257,6 +282,22 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 _bridge.Reply(id, new { error = ex.Message });
             }
+        }
+
+        public Task HandleReadTxtFileContent(JsonElement root, string id)
+        {
+            try
+            {
+                string filePath = root.GetProperty("filePath").GetString();
+                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return Task.CompletedTask; }
+                string content = File.ReadAllText(filePath, Encoding.UTF8);
+                _bridge.Reply(id, new { textContent = content });
+            }
+            catch (Exception ex)
+            {
+                _bridge.Reply(id, new { error = ex.Message });
+            }
+            return Task.CompletedTask;
         }
 
         public void HandleDisposeLocalFileHost(JsonElement root, string id)
@@ -292,6 +333,7 @@ namespace KitveiHakodeshLib.LocalFile
         private string RegisterFolder(string filePath)
         {
             string folder = Path.GetDirectoryName(filePath);
+            
             if (!_hosts.TryGetValue(folder, out var m))
             {
                 string host = "kitvei-localfile-" + (++_hostCounter);
@@ -302,7 +344,9 @@ namespace KitveiHakodeshLib.LocalFile
             }
             m.RefCount++;
             _hosts[folder] = m;
-            return "http://" + m.HostName + "/" + Path.GetFileName(filePath);
+            
+            string filename = Path.GetFileName(filePath);
+            return "http://" + m.HostName + "/" + filename;
         }
 
         private static async Task<string> ConvertToPdfAsync(string sourceFilePath)
