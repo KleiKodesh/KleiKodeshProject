@@ -1,0 +1,117 @@
+<template>
+  <div class="shortcuts-list">
+    <!-- Tab management -->
+    <div class="shortcuts-group-label">ניהול לשוניות</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>N</kbd></div><span class="shortcut-description">לשונית חדשה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>T</kbd></div><span class="shortcut-description">פתח רשימת לשוניות</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd></div><span class="shortcut-description">לשונית הבאה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd></div><span class="shortcut-description">לשונית הקודמת</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>W</kbd></div><span class="shortcut-description">סגור לשונית</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>X</kbd></div><span class="shortcut-description">סגור את כל הלשוניות</span></div>
+    <!-- Navigation -->
+    <div class="shortcuts-group-label">ניווט</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>G</kbd></div><span class="shortcut-description">עבור לדף הבית</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>M</kbd></div><span class="shortcut-description">פתח תפריט ראשי</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>L</kbd></div><span class="shortcut-description">החלף ערכת נושא</span></div>
+    <!-- Quick navigation -->
+    <div class="shortcuts-group-label">ניווט מהיר</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>1</kbd></div><span class="shortcut-description">ספרים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>2</kbd></div><span class="shortcut-description">חיפוש</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>3</kbd></div><span class="shortcut-description">היברו-בוקס</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>4</kbd></div><span class="shortcut-description">פתח קובץ</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>5</kbd></div><span class="shortcut-description">חיפוש קבצים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>6</kbd></div><span class="shortcut-description">מילון</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>7</kbd></div><span class="shortcut-description">לוח שנה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>8</kbd></div><span class="shortcut-description">מידות ושיעורים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>9</kbd></div><span class="shortcut-description">סביבות עבודה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>F1</kbd></div><span class="shortcut-description">הגדרות</span></div>
+    <!-- Book view -->
+    <div class="shortcuts-group-label">תצוגת ספר</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd></div><span class="shortcut-description">הצג / הסתר מפרשים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>K</kbd></div><span class="shortcut-description">הצג / הסתר תוכן עניינים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd></div><span class="shortcut-description">חיפוש</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>חץ שמאלי</kbd></div><span class="shortcut-description">קטע הבא</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>חץ ימני</kbd></div><span class="shortcut-description">קטע הקודם</span></div>
+    <!-- Display -->
+    <div class="shortcuts-group-label">תצוגה</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>B</kbd></div><span class="shortcut-description">הצג / הסתר סרגל כלים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd></div><span class="shortcut-description">הגדל תצוגה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd></div><span class="shortcut-description">הקטן תצוגה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>0</kbd></div><span class="shortcut-description">אפס גודל תצוגה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>H</kbd></div><span class="shortcut-description">הצג / הסתר סרגל האפליקציה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>F11</kbd></div><span class="shortcut-description">מסך מלא</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>F7</kbd></div><span class="shortcut-description">הפעלת סמן טקסט לניווט ובחירה</span></div>
+  </div>
+</template>
+
+<style scoped>
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.shortcuts-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 0 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  margin-bottom: 4px;
+}
+
+.shortcuts-group-label:first-child {
+  padding-top: 0;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 4px;
+  border-radius: 4px;
+}
+
+.shortcut-keys {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.shortcut-description {
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+  flex: 1;
+}
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 22px;
+  padding: 0 6px;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 1px 0 var(--border-color);
+  white-space: nowrap;
+  direction: ltr;
+}
+
+.kbd-plus {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1;
+}
+</style>
