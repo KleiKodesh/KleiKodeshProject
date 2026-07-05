@@ -17,10 +17,81 @@ const pdfOcrStore = usePdfOcrStore()
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
 
+import { TAB_SWIPE_EVENT, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
+import { useSwipe } from '@vueuse/core'
+import { shallowRef } from 'vue'
+
+// ── Touch swipe relay ────────────────────────────────────────────────────────
+// The PDF.js iframe captures pointer focus, so touch events fire on the
+// iframe's contentWindow and never bubble to the parent document. We set
+// iframeContentWindow to the iframe's contentWindow after load so that
+// useSwipe (VueUse) attaches its listeners there directly — the proper API,
+// not a manual touchstart/touchend hack.
+
+const RELAY_TOUCH_THRESHOLD_PX = 60
+const RELAY_TRACKPAD_DELTA_THRESHOLD = 150
+const RELAY_TRACKPAD_COOLDOWN_MS = 400
+
+const iframeContentWindow = shallowRef<Window | null>(null)
+
+function fireSwipe(direction: 'next' | 'previous') {
+  window.dispatchEvent(
+    new CustomEvent<TabSwipeGestureEventDetail>(TAB_SWIPE_EVENT, {
+      detail: { direction },
+    }),
+  )
+}
+
+useSwipe(iframeContentWindow, {
+  threshold: RELAY_TOUCH_THRESHOLD_PX,
+  onSwipeEnd(_event, direction) {
+    if (direction === 'left') fireSwipe('next')
+    else if (direction === 'right') fireSwipe('previous')
+  },
+})
+
+// Trackpad horizontal scroll — wheel events also stay inside the iframe.
+// useSwipe only handles touch, so we still need a wheel relay.
+let iframeWheelCleanup: (() => void) | null = null
+
+function attachIframeWheelRelay() {
+  detachIframeWheelRelay()
+  const contentWindow = iframeRef.value?.contentWindow
+  if (!contentWindow) return
+
+  let accumulatedDeltaX = 0
+  let lastSwitchTime = 0
+
+  function onWheel(event: WheelEvent) {
+    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
+    const now = Date.now()
+    if (now - lastSwitchTime < RELAY_TRACKPAD_COOLDOWN_MS) {
+      accumulatedDeltaX = 0
+      return
+    }
+    accumulatedDeltaX += event.deltaX
+    if (Math.abs(accumulatedDeltaX) >= RELAY_TRACKPAD_DELTA_THRESHOLD) {
+      fireSwipe(accumulatedDeltaX > 0 ? 'next' : 'previous')
+      accumulatedDeltaX = 0
+      lastSwitchTime = now
+    }
+  }
+
+  contentWindow.addEventListener('wheel', onWheel, { passive: true })
+  iframeWheelCleanup = () => contentWindow.removeEventListener('wheel', onWheel)
+}
+
+function detachIframeWheelRelay() {
+  iframeWheelCleanup?.()
+  iframeWheelCleanup = null
+}
+
 // Aggressively tear down the iframe when this tab unmounts so the PDF.js worker,
 // all rendered canvases, and the WebView2 sub-frame are released immediately
 // rather than waiting for the browser's garbage collector.
 onBeforeUnmount(() => {
+  iframeContentWindow.value = null
+  detachIframeWheelRelay()
   if (iframeRef.value) {
     iframeRef.value.src = 'about:blank'
     iframeRef.value.remove()
@@ -73,6 +144,8 @@ function setPdfToolbarVisible(visible: boolean) {
 }
 
 function onIframeLoad() {
+  iframeContentWindow.value = iframeRef.value?.contentWindow ?? null
+  attachIframeWheelRelay()
   setTimeout(() => {
     syncPdfViewerTheme()
     // Apply toolbar visibility based on current setting
