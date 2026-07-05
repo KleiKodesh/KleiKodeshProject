@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+
+defineOptions({ inheritAttrs: false })
 import FontSelectorCmp from './FontSelector.vue'
 import SliderSetting from './SliderSetting.vue'
 
@@ -40,41 +42,43 @@ function onTextToggle() {
 </script>
 
 <template>
-  <FontSelectorCmp
-    ref="headerFontRef"
-    label="גופן כותרות"
-    hint="הגופן שישמש לכותרות הפרקים והסעיפים"
-    :model-value="headerFont"
-    font-type="sans-serif"
-    @update:model-value="emit('update:headerFont', $event)"
-    @toggle="onHeaderToggle"
-  />
-  <FontSelectorCmp
-    ref="textFontRef"
-    label="גופן טקסט"
-    hint="הגופן שישמש לגוף הטקסט של הספר"
-    :model-value="textFont"
-    font-type="serif"
-    @update:model-value="emit('update:textFont', $event)"
-    @toggle="onTextToggle"
-  />
-  <SliderSetting
-    label="גודל גופן"
-    hint="גודל הטקסט ביחס לברירת המחדל"
-    :model-value="fontSize"
-    :min="50"
-    :max="200"
-    :step="5"
-    suffix="%"
-    @update:model-value="emit('update:fontSize', $event)"
-  />
-  <SliderSetting
-    label="ריווח בין שורות"
-    hint="המרחק האנכי בין שורות הטקסט"
-    :model-value="linePadding"
-    :min="1.2"
-    :max="3.0"
-    :step="0.1"
-    @update:model-value="emit('update:linePadding', $event)"
-  />
+  <div v-bind="$attrs">
+    <FontSelectorCmp
+      ref="headerFontRef"
+      label="גופן כותרות"
+      hint="הגופן שישמש לכותרות הפרקים והסעיפים"
+      :model-value="headerFont"
+      font-type="sans-serif"
+      @update:model-value="emit('update:headerFont', $event)"
+      @toggle="onHeaderToggle"
+    />
+    <FontSelectorCmp
+      ref="textFontRef"
+      label="גופן טקסט"
+      hint="הגופן שישמש לגוף הטקסט של הספר"
+      :model-value="textFont"
+      font-type="serif"
+      @update:model-value="emit('update:textFont', $event)"
+      @toggle="onTextToggle"
+    />
+    <SliderSetting
+      label="גודל גופן"
+      hint="גודל הטקסט ביחס לברירת המחדל"
+      :model-value="fontSize"
+      :min="50"
+      :max="200"
+      :step="5"
+      suffix="%"
+      @update:model-value="emit('update:fontSize', $event)"
+    />
+    <SliderSetting
+      label="ריווח בין שורות"
+      hint="המרחק האנכי בין שורות הטקסט"
+      :model-value="linePadding"
+      :min="1.2"
+      :max="3.0"
+      :step="0.1"
+      @update:model-value="emit('update:linePadding', $event)"
+    />
+  </div>
 </template>

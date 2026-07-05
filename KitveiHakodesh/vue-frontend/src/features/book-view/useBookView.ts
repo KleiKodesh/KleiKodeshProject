@@ -516,32 +516,33 @@ export function useBookView(
   }
 
   // Tracks the lineIndex of the last programmatic section navigation so that
-  // rapid button presses don't re-use a stale currentScrollLineIndex — the
-  // virtualizer fires its scroll event asynchronously after scrollTop is set,
-  // so currentScrollLineIndex can lag behind by one section.
-  let lastSectionNavigationLineIndex: number | null = null
+  // rapid consecutive button presses don't re-use a stale activeTocEntryId —
+  // the scroll sync updates activeTocEntryId asynchronously after scrollTop is set.
+  // Within a short window after a navigation we use the just-navigated entry id
+  // directly; outside that window the scroll sync has caught up so we read
+  // activeTocEntryId as-is.
+  let lastSectionNavigationEntryId: number | null = null
+  let lastSectionNavigationTimestamp = 0
+  const SECTION_NAVIGATION_LAG_WINDOW_MS = 500
 
   function navigateToAdjacentTocSection(direction: 'next' | 'previous') {
     const entries = tocEntries.value
     if (!entries.length) return
 
-    // Use the larger of the two: currentScrollLineIndex (updated by scroll events)
-    // and lastSectionNavigationLineIndex (updated immediately on each button press).
-    // This prevents re-navigating to the same section when the scroll event hasn't
-    // fired yet after the previous programmatic navigation.
-    const effectiveScrollLine = Math.max(
-      currentScrollLineIndex.value,
-      lastSectionNavigationLineIndex ?? 0,
-    )
+    const lagWindowActive = (Date.now() - lastSectionNavigationTimestamp) < SECTION_NAVIGATION_LAG_WINDOW_MS
+    const effectiveEntryId = (lagWindowActive && lastSectionNavigationEntryId != null)
+      ? lastSectionNavigationEntryId
+      : activeTocEntryId.value
 
-    const activeEntry = getActiveTocEntry(effectiveScrollLine)
+    const activeEntry = entries.find((e) => e.id === effectiveEntryId) ?? null
     const currentIndex = activeEntry != null ? entries.indexOf(activeEntry) : -1
 
     if (direction === 'next') {
       for (let i = currentIndex + 1; i < entries.length; i++) {
         const candidate = entries[i]!
         if (candidate.lineId != null && candidate.lineIndex != null) {
-          lastSectionNavigationLineIndex = candidate.lineIndex
+          lastSectionNavigationEntryId = candidate.id
+          lastSectionNavigationTimestamp = Date.now()
           activeTocEntryId.value = candidate.id
           tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
           beginTocScroll(candidate)
@@ -550,9 +551,6 @@ export function useBookView(
         }
       }
     } else {
-      // Walk backwards to the nearest entry whose lineIndex is strictly less than
-      // the start of the current section. This avoids re-navigating within the
-      // same section when multiple entries share the same lineIndex.
       const currentLineIndex = activeEntry?.lineIndex ?? null
       for (let i = currentIndex - 1; i >= 0; i--) {
         const candidate = entries[i]!
@@ -561,7 +559,8 @@ export function useBookView(
           candidate.lineIndex != null &&
           (currentLineIndex == null || candidate.lineIndex < currentLineIndex)
         ) {
-          lastSectionNavigationLineIndex = candidate.lineIndex
+          lastSectionNavigationEntryId = candidate.id
+          lastSectionNavigationTimestamp = Date.now()
           activeTocEntryId.value = candidate.id
           tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
           beginTocScroll(candidate)
