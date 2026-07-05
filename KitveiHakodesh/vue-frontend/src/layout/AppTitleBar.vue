@@ -12,7 +12,8 @@ import {
   IconOptions24Filled,
   IconColor24Regular,
   IconColor24Filled,
-  IconConvertToText24Regular
+  IconConvertToText24Regular,
+  IconSearch24Regular,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 // Both dropdowns are v-if — lazy-load them so their imports (including fluent-color icons)
@@ -193,6 +194,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     if (bookViewStore.isBookViewActive) {
       // Open search bar in book view from anywhere (no focus required)
       bookViewStore.openSearch()
+    } else if (bookViewStore.isTxtViewActive) {
+      bookViewStore.txtViewToggleSearch()
     }
   } else if (e.ctrlKey && e.code === 'KeyP') {
     e.preventDefault()
@@ -265,6 +268,14 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         </button>
       </div>
       <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" />
+      <button
+        v-if="bookViewStore.isTxtViewActive"
+        class="bar-btn"
+        title="חיפוש בטקסט (Ctrl+F)"
+        @click.stop="bookViewStore.txtViewToggleSearch()"
+      >
+        <IconSearch24Regular />
+      </button>
       <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"
