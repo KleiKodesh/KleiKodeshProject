@@ -15,7 +15,7 @@ import {
 import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { showPopOutButton } from '@/webview-host/seforimDb'
+import { showPopOutButton } from '@/webview-host/bridge'
 import { togglePopOut } from '@/webview-host/bridge'
 
 const emit = defineEmits<{ close: [] }>()

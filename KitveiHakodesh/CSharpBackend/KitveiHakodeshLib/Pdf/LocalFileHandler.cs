@@ -1,3 +1,4 @@
+using FolderBrowserEx;
 using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Pdf;
 using Microsoft.Web.WebView2.Core;
@@ -159,16 +160,20 @@ namespace KitveiHakodeshLib.LocalFile
         {
             owner.BeginInvoke(new Action(() =>
             {
-                using (var dlg = new FolderBrowserDialog())
+                var dlg = new FolderBrowserEx.FolderBrowserDialog();
+                try
                 {
-                    dlg.Description = "בחר תיקיית ספרים מקומית";
-                    dlg.ShowNewFolderButton = false;
+                    dlg.Title = "בחר תיקיית ספרים מקומית";
                     if (dlg.ShowDialog() != DialogResult.OK)
                     {
                         _bridge.Reply(id, new { cancelled = true });
                         return;
                     }
-                    _bridge.Reply(id, new { folderPath = dlg.SelectedPath });
+                    _bridge.Reply(id, new { folderPath = dlg.SelectedFolder });
+                }
+                finally
+                {
+                    dlg.Dispose();
                 }
             }));
         }

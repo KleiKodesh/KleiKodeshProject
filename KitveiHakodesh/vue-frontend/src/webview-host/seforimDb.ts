@@ -1,29 +1,8 @@
 import { ref } from 'vue'
 import { devQuery } from './devFallbacks'
 
-declare global {
-  interface Window {
-    __webviewQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
-    __webviewPickDbPath?: () => void
-    __webviewSetDbPath?: (path: string) => Promise<{ path: string }>
-    __webviewAction?: (action: string, args?: object) => Promise<unknown>
-    __webviewDbPath?: string
-    __webviewDbReady?: boolean
-    __webviewShowPopOut?: boolean
-    __webviewHbLocalFolder?: string
-    __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
-  }
-}
-
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
 export const dbReady = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
-
-/**
- * True when C# sets ShowPopOutButton = true on AppViewer (VSTO task-pane context).
- * Controls visibility of the "חלון עצמאי / חלונית" button in the hamburger menu.
- * Defaults to false in all other environments (standalone demo, browser dev).
- */
-export const showPopOutButton = window.__webviewShowPopOut === true
 
 /** True once detected; false means the column doesn't exist or detection hasn't run yet. */
 export let categoryHasOrderIndex = false

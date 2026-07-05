@@ -9,6 +9,34 @@
 import { isHosted } from './seforimDb'
 import { devPickPdf, devFileSystemSearch } from './devFallbacks'
 
+declare global {
+  interface Window {
+    __webviewQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
+    __webviewPickDbPath?: () => void
+    __webviewSetDbPath?: (path: string) => Promise<{ path: string }>
+    __webviewAction?: (action: string, args?: object) => Promise<unknown>
+    __webviewDbPath?: string
+    __webviewDbReady?: boolean
+    __webviewShowPopOut?: boolean
+    __webviewHbLocalFolder?: string
+    __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
+  }
+}
+
+/**
+ * True when C# sets ShowPopOutButton = true on AppViewer (VSTO task-pane context).
+ * Controls visibility of the "חלון עצמאי / חלונית" button in the hamburger menu.
+ * Defaults to false in all other environments (standalone demo, browser dev).
+ */
+export const showPopOutButton = window.__webviewShowPopOut === true
+
+/**
+ * True when running inside the VSTO task-pane context (Word add-in).
+ * Use this to conditionally hide features that don't make sense in the narrow
+ * task-pane environment (e.g. split view).
+ */
+export const isVstoEnvironment = showPopOutButton
+
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
     return Promise.reject(new Error('bridge not available'))
@@ -326,6 +354,22 @@ export function deleteHbLocalFile(
   localFolder: string,
 ): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
   return action<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
+    bookId,
+    localFolder,
+  })
+}
+
+/**
+ * Open Windows Explorer with the book's local PDF file selected and highlighted.
+ * Equivalent to VS Code's "Reveal in File Explorer" — explorer.exe /select,"path".
+ * Returns { ok: true } on success, { notFound: true } if the file is missing,
+ * or { error: "..." } on failure.
+ */
+export function revealHbLocalFile(
+  bookId: string,
+  localFolder: string,
+): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
+  return action<{ ok?: boolean; notFound?: boolean; error?: string }>('revealHbLocalFile', {
     bookId,
     localFolder,
   })

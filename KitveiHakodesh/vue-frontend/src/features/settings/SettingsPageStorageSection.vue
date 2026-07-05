@@ -85,22 +85,6 @@ async function openExcludedFolders() {
     </SettingRow>
     <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
 
-    <!-- חיפוש קבצים -->
-    <div class="subsection-label">חיפוש קבצים</div>
-    <SettingRow
-      label="תיקיות מוחרגות"
-      hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
-    >
-      <button
-        class="manage-btn"
-        :disabled="!isHosted"
-        @click="openExcludedFolders"
-      >
-        ניהול תיקיות מוחרגות
-      </button>
-    </SettingRow>
-    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
-
     <!-- מסד נתונים -->
     <div class="subsection-label">מסד נתונים</div>
     <template v-if="isHosted">
@@ -118,6 +102,22 @@ async function openExcludedFolders() {
       </div>
     </template>
     <p v-else class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
+
+    <!-- חיפוש קבצים -->
+    <div class="subsection-label">חיפוש קבצים</div>
+    <SettingRow
+      label="תיקיות מוחרגות"
+      hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
+    >
+      <button
+        class="manage-btn"
+        :disabled="!isHosted"
+        @click="openExcludedFolders"
+      >
+        ניהול תיקיות מוחרגות
+      </button>
+    </SettingRow>
+    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
   </div>
 </template>
 

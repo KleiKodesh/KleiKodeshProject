@@ -63,6 +63,7 @@ namespace KitveiHakodeshLib
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
                         case "deleteHbLocalFile": _hb.HandleDeleteHbLocalFile(root, id); break;
                         case "checkHbLocalFiles": _hb.HandleCheckHbLocalFiles(root, id); break;
+                        case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
                         case "hbSearch": HandleHebrewBooksSearch(root, id); break;
                         case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;

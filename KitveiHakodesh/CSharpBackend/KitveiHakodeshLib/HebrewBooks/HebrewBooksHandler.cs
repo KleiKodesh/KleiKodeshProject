@@ -4,6 +4,7 @@ using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
@@ -315,6 +316,40 @@ namespace KitveiHakodeshLib.HebrewBooks
                 // Cancel the download rather than leaving state inconsistent
                 try { e.Cancel = true; } catch { }
             }
+        }
+
+        /// <summary>
+        /// Opens Windows Explorer with {bookId}.pdf selected and highlighted —
+        /// identical to VS Code's "Reveal in File Explorer" / "Reveal in Explorer" command.
+        /// Uses explorer.exe /select so the file is scrolled into view and focused.
+        /// </summary>
+        public void HandleRevealHbLocalFile(JsonElement root, string id)
+        {
+            try
+            {
+                string bookId      = root.GetProperty("bookId").GetString();
+                string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+                if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
+
+                if (string.IsNullOrWhiteSpace(localFolder))
+                {
+                    _bridge.Reply(id, new { error = "לא הוגדרה תיקיית שמירה" });
+                    return;
+                }
+
+                string filePath = Path.Combine(localFolder, bookId + ".pdf");
+                if (!File.Exists(filePath))
+                {
+                    _bridge.Reply(id, new { notFound = true });
+                    return;
+                }
+
+                // /select tells Explorer to open the containing folder and pre-select
+                // the file — exactly the same behaviour as VS Code "Reveal in Explorer".
+                Process.Start("explorer.exe", "/select,\"" + filePath + "\"");
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         /// <summary>
