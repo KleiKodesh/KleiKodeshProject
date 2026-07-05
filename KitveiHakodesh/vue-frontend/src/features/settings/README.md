@@ -14,7 +14,7 @@ The section components are independent — each imports the stores it needs dire
 
 **SettingsPageReadingSection.vue** — resume last read, commentary sync default, divine name censoring, book display fonts/sizes/padding, max content width, and commentary display overrides. Calls `useSettings()` to wire the commentary-mirror watcher.
 
-**SettingsPageSystemSection.vue** — calendar city picker, clock toggle, HebrewBooks local folder, and database path.
+**SettingsPageStorageSection.vue** — HebrewBooks local folder, database path picker, and file-system search excluded folders manager (opens the native WinForms dialog via the C# bridge).
 
 **SettingsPageResetSection.vue** — the four reset actions (settings, search index, document locator index, full app reset) with their `ConfirmDialog`. Completely self-contained — no props.
 

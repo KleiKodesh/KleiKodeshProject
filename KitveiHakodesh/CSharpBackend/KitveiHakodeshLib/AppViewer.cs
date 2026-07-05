@@ -441,6 +441,7 @@ namespace KitveiHakodeshLib
             _hebrewBooksDb = HebrewBooksDb.Instance;
             _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
+            _fileSystemSearch.UiControl = this;
             _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
 
             _db.OnDbPathPicked = path =>
