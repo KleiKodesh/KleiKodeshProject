@@ -20,6 +20,10 @@ namespace FtsLib.Search
         ///
         /// Each group is a collection of alternative terms (OR within the group).
         /// Across groups the semantics are AND — every group must be satisfied.
+        ///
+        /// A term that appears in multiple groups (e.g. the query "אין דרך אין תורה"
+        /// has "אין" in group 0 and group 2) maps to all of its group indices so
+        /// every occurrence in the token stream can satisfy any of its owning groups.
         /// </summary>
         /// <returns>
         /// <c>(winStart, winEnd, score)</c> where <c>score = winEnd - winStart</c>.
@@ -33,13 +37,24 @@ namespace FtsLib.Search
             if (queryGroups == null || queryGroups.Count == 0)
                 return (-1, -1, int.MaxValue);
 
-            // Map every term to its group index so we can track coverage.
-            // A term that appears in multiple groups is assigned to the first one.
-            var termToGroup = new Dictionary<string, int>(System.StringComparer.Ordinal);
+            // Map every term to all group indices it belongs to.
+            // A term that appears in multiple groups (e.g. repeated words) must map
+            // to every one of those groups so the sliding window can cover all slots.
+            var termToGroups = new Dictionary<string, List<int>>(System.StringComparer.Ordinal);
             for (int g = 0; g < queryGroups.Count; g++)
+            {
                 foreach (var t in queryGroups[g])
-                    if (!termToGroup.ContainsKey(t))
-                        termToGroup[t] = g;
+                {
+                    List<int> groupIndices;
+                    if (!termToGroups.TryGetValue(t, out groupIndices))
+                    {
+                        groupIndices = new List<int>(1);
+                        termToGroups[t] = groupIndices;
+                    }
+                    if (!groupIndices.Contains(g))
+                        groupIndices.Add(g);
+                }
+            }
 
             // Per-group: how many tokens in the current window satisfy this group.
             var groupCount = new int[queryGroups.Count];
@@ -53,9 +68,11 @@ namespace FtsLib.Search
             {
                 // Expand window to the right.
                 string rt = tokens[R].Normalized;
-                if (termToGroup.TryGetValue(rt, out int rg))
+                List<int> rGroups;
+                if (termToGroups.TryGetValue(rt, out rGroups))
                 {
-                    if (groupCount[rg]++ == 0) covered++;
+                    foreach (int rg in rGroups)
+                        if (groupCount[rg]++ == 0) covered++;
                 }
 
                 // Shrink from the left while all groups are still covered.
@@ -70,9 +87,11 @@ namespace FtsLib.Search
                     }
 
                     string lt = tokens[L].Normalized;
-                    if (termToGroup.TryGetValue(lt, out int lg))
+                    List<int> lGroups;
+                    if (termToGroups.TryGetValue(lt, out lGroups))
                     {
-                        if (--groupCount[lg] == 0) covered--;
+                        foreach (int lg in lGroups)
+                            if (--groupCount[lg] == 0) covered--;
                     }
                     L++;
                 }
