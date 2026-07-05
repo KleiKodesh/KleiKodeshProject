@@ -97,7 +97,7 @@ const {
   restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
-  onLineSelected, onNavigateSection, onCommentaryScroll,
+  onLineSelected, onNavigateSection, navigateToAdjacentTocSection, onCommentaryScroll,
   onCommentaryTreeChanged, openBookInTab,
   openContentSearch, openCommentarySearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
@@ -161,6 +161,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => { toggleTocPanel() })
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
+      @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+      @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
     />
     <!-- Middle row: side toolbar + main area (RTL: first child = physical right) -->
     <div class="body-row">
@@ -186,6 +188,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => { toggleTocPanel() })
         @toggle-search="searchVisible = !searchVisible"
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
+        @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+        @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
       />
 
       <!--
@@ -458,6 +462,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, () => { toggleTocPanel() })
       @toggle-search="searchVisible = !searchVisible"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
+      @navigate-to-next-section="navigateToAdjacentTocSection('next')"
+      @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
     />
   </div>
 </template>

@@ -34,7 +34,7 @@ export type { SearchMode } from './bookViewTypes'
 type ToolbarInstance = { tocBtnRef: HTMLElement | null }
 type LinesContentInstance = {
   scrollToLineId: (lineId: number, lineIndex?: number) => void
-  scrollToLineIndex: (lineIndex: number, occurrence?: number) => void
+  scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void
   focusScroller: () => void
 }
 type SearchBarInstance = { focus: () => void }
@@ -73,7 +73,10 @@ export function useBookView(
     const isZoomIn = event.code === 'Equal' || event.code === 'NumpadAdd'
     const isZoomOut = event.code === 'Minus' || event.code === 'NumpadSubtract'
     const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
-    if (!isZoomIn && !isZoomOut && !isReset) return
+    const isNextSection = event.code === 'ArrowLeft'
+    const isPreviousSection = event.code === 'ArrowRight'
+
+    if (!isZoomIn && !isZoomOut && !isReset && !isNextSection && !isPreviousSection) return
 
     const focused = document.activeElement
     const linesRoot = (linesContentRef() as unknown as { $el?: HTMLElement } | null)?.$el
@@ -81,6 +84,16 @@ export function useBookView(
     const focusInScroller =
       (linesRoot != null && focused != null && linesRoot.contains(focused)) ||
       (commentaryRoot != null && focused != null && commentaryRoot.contains(focused))
+
+    // Section navigation: Ctrl+Left = next, Ctrl+Right = previous (RTL convention).
+    // Only fire when the book view is active and TOC is loaded; prevent default so
+    // the browser doesn't move the caret or scroll the page horizontally.
+    if (isNextSection || isPreviousSection) {
+      if (!hasToc.value) return
+      event.preventDefault()
+      navigateToAdjacentTocSection(isNextSection ? 'next' : 'previous')
+      return
+    }
 
     // If a scroller owns focus, its own useZoomHandler handles this event.
     // We still prevent default here so the browser never zooms the page.
@@ -502,6 +515,63 @@ export function useBookView(
     return navigateSection(direction, commentaryBookId)
   }
 
+  // Tracks the lineIndex of the last programmatic section navigation so that
+  // rapid button presses don't re-use a stale currentScrollLineIndex — the
+  // virtualizer fires its scroll event asynchronously after scrollTop is set,
+  // so currentScrollLineIndex can lag behind by one section.
+  let lastSectionNavigationLineIndex: number | null = null
+
+  function navigateToAdjacentTocSection(direction: 'next' | 'previous') {
+    const entries = tocEntries.value
+    if (!entries.length) return
+
+    // Use the larger of the two: currentScrollLineIndex (updated by scroll events)
+    // and lastSectionNavigationLineIndex (updated immediately on each button press).
+    // This prevents re-navigating to the same section when the scroll event hasn't
+    // fired yet after the previous programmatic navigation.
+    const effectiveScrollLine = Math.max(
+      currentScrollLineIndex.value,
+      lastSectionNavigationLineIndex ?? 0,
+    )
+
+    const activeEntry = getActiveTocEntry(effectiveScrollLine)
+    const currentIndex = activeEntry != null ? entries.indexOf(activeEntry) : -1
+
+    if (direction === 'next') {
+      for (let i = currentIndex + 1; i < entries.length; i++) {
+        const candidate = entries[i]!
+        if (candidate.lineId != null && candidate.lineIndex != null) {
+          lastSectionNavigationLineIndex = candidate.lineIndex
+          activeTocEntryId.value = candidate.id
+          tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
+          beginTocScroll(candidate)
+          linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
+          return
+        }
+      }
+    } else {
+      // Walk backwards to the nearest entry whose lineIndex is strictly less than
+      // the start of the current section. This avoids re-navigating within the
+      // same section when multiple entries share the same lineIndex.
+      const currentLineIndex = activeEntry?.lineIndex ?? null
+      for (let i = currentIndex - 1; i >= 0; i--) {
+        const candidate = entries[i]!
+        if (
+          candidate.lineId != null &&
+          candidate.lineIndex != null &&
+          (currentLineIndex == null || candidate.lineIndex < currentLineIndex)
+        ) {
+          lastSectionNavigationLineIndex = candidate.lineIndex
+          activeTocEntryId.value = candidate.id
+          tabStore.updateActiveTab({ tocPath: getTocPath(candidate) })
+          beginTocScroll(candidate)
+          linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
+          return
+        }
+      }
+    }
+  }
+
   // ── Session restore ───────────────────────────────────────────────────────
 
   const {
@@ -687,7 +757,7 @@ export function useBookView(
     activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,
-    onLineSelected, onNavigateSection, onCommentaryScroll,
+    onLineSelected, onNavigateSection, navigateToAdjacentTocSection, onCommentaryScroll,
     onCommentaryTreeChanged, openBookInTab,
     openContentSearch, openCommentarySearch,
     onQueryChange, onSearchNext, onSearchPrev, onModeChange,

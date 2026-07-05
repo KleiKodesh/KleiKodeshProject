@@ -29,6 +29,8 @@
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>J</kbd><span class="shortcut-description">הצג / הסתר מפרשים (בתצוגת ספר)</span></div>
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>K</kbd><span class="shortcut-description">הצג / הסתר תוכן עניינים (בתצוגת ספר)</span></div>
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>F</kbd><span class="shortcut-description">חיפוש (בתצוגת ספר)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>חץ שמאלי</kbd><span class="shortcut-description">קטע הבא (בתצוגת ספר)</span></div>
+      <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>חץ ימני</kbd><span class="shortcut-description">קטע הקודם (בתצוגת ספר)</span></div>
       <!-- Zoom controls -->
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>+</kbd><span class="shortcut-description">הגדל תצוגה</span></div>
       <div class="shortcut-row"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd><span class="shortcut-description">הקטן תצוגה</span></div>
