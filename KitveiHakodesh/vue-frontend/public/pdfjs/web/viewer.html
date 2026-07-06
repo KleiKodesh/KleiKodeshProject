@@ -35,6 +35,19 @@ See https://github.com/adobe-type-tools/cmap-resources
     <link rel="stylesheet" href="viewer-custom.css" />
 
   <script src="pixel-ratio-override.js"></script>
+  <script>
+    // PATCH: Map.prototype.getOrInsertComputed polyfill for Chromium < 136.
+    // pdf.mjs and viewer.mjs use this Map method extensively on the main thread.
+    // Without it, PDF loading fails entirely on older WebView2 / Chrome builds.
+    if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+      Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+        if (!this.has(key)) {
+          this.set(key, callbackFn(key));
+        }
+        return this.get(key);
+      };
+    }
+  </script>
   <script src="viewer.mjs" type="module"></script>
   </head>
 

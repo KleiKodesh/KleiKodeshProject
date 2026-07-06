@@ -68,6 +68,32 @@ The page filter (`--pdf-filter-custom`) is applied only when the `data-pdf-filte
 
 ## `build/pdf.worker.mjs` — Patches
 
+### Map.prototype.getOrInsertComputed polyfill (old WebView2 compatibility)
+
+`Map.prototype.getOrInsertComputed` was added in Chromium 136. PDF.js uses it heavily throughout `pdf.worker.mjs`, `pdf.mjs`, and `viewer.mjs` — for `intentStates`, `methodPromises`, `_cachedBitmapsMap`, and many more internal maps. Users on WebView2 builds older than Chromium 136 get `"TypeError: this[methodPromises].getOrInsertComputed is not a function"` and no PDF loads at all. A secondary symptom is `"ReferenceError: Cannot access '_firstPagePromise' before initialization"` — that is a consequence of the first crash, not an independent bug.
+
+The polyfill is needed in **two places**:
+
+1. **`build/pdf.worker.mjs`** — covers the Worker thread (`pdf.worker.mjs` runs in a Web Worker, not the main window). Insert immediately after the `Uint8Array.prototype.toHex` polyfill block.
+
+2. **`web/viewer.html`** — covers the main thread (`pdf.mjs` and `viewer.mjs` run in the page window). Add as an inline `<script>` block immediately before `<script src="viewer.mjs" type="module">`.
+
+The polyfill itself:
+```js
+if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+  Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+    if (!this.has(key)) {
+      this.set(key, callbackFn(key));
+    }
+    return this.get(key);
+  };
+}
+```
+
+If a future PDF.js version drops the `.getOrInsertComputed()` calls (because Chromium 136 is no longer a supported baseline), this patch can be dropped from both files.
+
+---
+
 ### Uint8Array.prototype.toHex polyfill (old WebView2 compatibility)
 
 `Uint8Array.prototype.toHex` was added in Chromium 136. PDF.js calls `.toHex()` on `Uint8Array` values in the `fingerprints` getter (converting MD5 bytes and PDF trailer ID bytes to hex strings). Users on WebView2 builds older than Chromium 136 get `"UnknownErrorException: hashOriginal.toHex is not a function"` and no PDF loads at all.
@@ -111,6 +137,24 @@ Add these two lines immediately after `<link rel="stylesheet" href="viewer.css" 
 ```html
 <link rel="stylesheet" href="viewer-custom.css" />
 <script src="pixel-ratio-override.js"></script>
+```
+
+Then add this inline polyfill script immediately before `<script src="viewer.mjs" type="module">`:
+
+```html
+<script>
+  // PATCH: Map.prototype.getOrInsertComputed polyfill for Chromium < 136.
+  // pdf.mjs and viewer.mjs use this Map method extensively on the main thread.
+  // Without it, PDF loading fails entirely on older WebView2 / Chrome builds.
+  if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+    Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+      if (!this.has(key)) {
+        this.set(key, callbackFn(key));
+      }
+      return this.get(key);
+    };
+  }
+</script>
 ```
 
 The `pixel-ratio-override.js` script tag must appear **before** `<script src="viewer.mjs" type="module">`.
