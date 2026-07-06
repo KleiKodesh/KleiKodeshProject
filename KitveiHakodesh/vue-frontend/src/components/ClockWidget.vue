@@ -40,7 +40,7 @@ onBeforeUnmount(() => {
 <style scoped>
 .clock-widget {
   position: fixed;
-  bottom: 16px;
+  bottom: 5px;
   left: 16px;
   z-index: 200;
   font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
