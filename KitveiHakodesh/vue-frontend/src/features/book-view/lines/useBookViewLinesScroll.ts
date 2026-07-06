@@ -267,20 +267,32 @@ export function useBookViewLinesScroll(
   // ── Persist scroll position ─────────────────────────────────────────────────
 
   let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
+  // Last known good filter snapshot — captured whenever visibilityList is non-empty.
+  // Replayed on save when the commentary panel is closed (visibilityList empty), so we
+  // never overwrite a previously valid filter with an empty list.
+  let lastValidFilterState: import('../bookViewTypes').CommentaryTreeState | undefined
 
   function savePos() {
     if (programmaticScrolling) return
     const position = lastKnownPos ?? captureScrollPos()
     if (position) {
-      const filterState = props.commentaryFilterState
-        ? {
-            searchQuery: props.commentaryFilterState.searchQuery,
-            tokens: [...props.commentaryFilterState.tokens],
-            visibilityList: props.commentaryFilterState.visibilityList.map(
-              (item: CommentaryVisibilityItem) => ({ ...item }),
-            ),
-          }
-        : undefined
+      // Snapshot the filter state only when the visibilityList is populated (panel has
+      // been opened and syncVisibilityList has run). Store the snapshot in
+      // lastValidFilterState so we can replay it when the panel is closed.
+      if (
+        props.commentaryFilterState &&
+        props.commentaryFilterState.visibilityList.length > 0
+      ) {
+        lastValidFilterState = {
+          searchQuery: props.commentaryFilterState.searchQuery,
+          tokens: [...props.commentaryFilterState.tokens],
+          visibilityList: props.commentaryFilterState.visibilityList.map(
+            (item: CommentaryVisibilityItem) => ({ ...item }),
+          ),
+        }
+      }
+      // Use the most recent valid snapshot; undefined if the panel was never opened.
+      const filterState = lastValidFilterState
       const pinnedGroup = props.pinnedCommentaryGroup
         ? {
             bookId: props.pinnedCommentaryGroup.bookId,
@@ -316,6 +328,21 @@ export function useBookViewLinesScroll(
       })
     }
   }
+
+  watch(
+    () => props.commentaryFilterState?.visibilityList.length,
+    (length) => {
+      if (length && props.commentaryFilterState) {
+        lastValidFilterState = {
+          searchQuery: props.commentaryFilterState.searchQuery,
+          tokens: [...props.commentaryFilterState.tokens],
+          visibilityList: props.commentaryFilterState.visibilityList.map(
+            (item: CommentaryVisibilityItem) => ({ ...item }),
+          ),
+        }
+      }
+    },
+  )
 
   watch(
     () => props.commentaryVisible,
