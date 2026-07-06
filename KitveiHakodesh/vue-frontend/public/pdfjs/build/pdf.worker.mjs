@@ -36,6 +36,21 @@ if (typeof Uint8Array.prototype.toHex !== 'function') {
   };
 }
 
+// PATCH: Map.prototype.getOrInsertComputed polyfill for WebView2 builds on Chromium < 136.
+// PDF.js 5.7.284 uses Map.prototype.getOrInsertComputed throughout pdf.worker.mjs
+// (intentStates, methodPromises, _cachedBitmapsMap, etc.). Chromium 136 introduced
+// this method natively; older builds throw
+// "TypeError: this[methodPromises].getOrInsertComputed is not a function"
+// which causes the entire PDF document load to fail.
+if (typeof Map.prototype.getOrInsertComputed !== 'function') {
+  Map.prototype.getOrInsertComputed = function (key, callbackFn) {
+    if (!this.has(key)) {
+      this.set(key, callbackFn(key));
+    }
+    return this.get(key);
+  };
+}
+
 /******/ // The require scope
 /******/ var __webpack_require__ = {};
 /******/ 
