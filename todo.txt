@@ -1,7 +1,6 @@
 recent files like in edge
 clock in full scrren needs to be lower down smae hoght as footer in home page
 pdf files toc in title bar
-pdf size incremnt
 
 add optional index drives with index saved on teh drive
 takes time till service starts

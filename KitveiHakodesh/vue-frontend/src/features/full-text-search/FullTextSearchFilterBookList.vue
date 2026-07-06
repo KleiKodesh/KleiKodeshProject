@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
+import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 
@@ -79,7 +79,7 @@ defineExpose({ focusList })
         >
           <span class="check-col">
             <span v-if="checkedBookIds.has(books[vRow.index]!.id)" class="check-mark">✓</span>
-            <IconBook20Filled v-else class="book-icon" />
+            <IconBookRtl20 v-else class="book-icon" />
           </span>
           <span class="item-text">
             <span class="item-title-row">

@@ -20,4 +20,6 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 
 **hebrewBooksHistoryStore** — owns the `app-hb-history` IDB database. Tracks which HebrewBooks PDFs the user has downloaded, LRU-capped at 25 entries. All history reads and writes go through here — do not import from `persistence.ts` for this database anywhere else.
 
+**recentlyOpenedStore** — owns the `app-recently-opened` IDB database. Tracks the last 16 documents opened across /book-view, /pdf-view, /html-view, and /txt-view. LRU with bump-to-front on re-open. Loaded lazily on first access (no boot-time cost). All recently opened reads and writes go through here.
+
 **pdfOcrStore** — Pinia store for PDF OCR state. Manages OCR activation toggle, script selection (Hebrew/Rashi/mixed), and the skip-existing-text flag.

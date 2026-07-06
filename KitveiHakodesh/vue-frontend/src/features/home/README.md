@@ -10,6 +10,8 @@ Home page with navigation tiles.
 
 **dafYomiNavigation.ts** — navigates to the Daf Yomi book and line when the user taps the Daf Yomi entry in the date bar.
 
+**HomePageRecentlyOpened.vue** — no longer exists. Recent tiles are rendered inline in `HomePage.vue`'s grid directly, after the static tiles. No separate component needed.
+
 ## Tile visibility rules
 
 The first two tiles are DB-dependent and swap based on DB state. All other tiles are always visible regardless of DB state.

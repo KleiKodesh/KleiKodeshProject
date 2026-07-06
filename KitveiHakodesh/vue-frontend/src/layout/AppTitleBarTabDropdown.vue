@@ -4,12 +4,12 @@ import {
   IconDismiss20Regular,
   IconHome20Regular,
   IconDocument20Regular,
-  IconBook20Filled,
   IconSearch20Regular,
   IconLibrary20Regular,
   IconDocumentPdf20Regular,
   IconApps20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useListKeys } from '@/composables/useListKeyNav'
 import type { Tab } from '@/stores/tabStore'
@@ -46,9 +46,9 @@ nextTick(() => containerRef.value?.focus())
     <div v-for="(tab, tabIndex) in visibleTabs" :key="tab.id" data-nav-item class="tab-row" :class="{ active: tab.id === activeTabId, focused: focusedIndex === tabIndex }" @click="emit('select', tab.id)">
       <div class="tab-row-start">
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
-        <IconBook20Filled v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />
+        <IconBookRtl20 v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />
         <IconDocumentPdf20Regular v-else-if="tab.route === '/pdf-view'" class="tab-icon" />
-        <IconBook20Filled v-else-if="tab.route === '/hebrewbooks'" class="tab-icon book-icon" />
+        <IconBookRtl20 v-else-if="tab.route === '/hebrewbooks'" class="tab-icon book-icon" />
         <IconSearch20Regular v-else-if="tab.route === '/search'" class="tab-icon" />
         <IconLibrary20Regular v-else-if="tab.route === '/books'" class="tab-icon" />
         <IconApps20Regular v-else-if="tab.route === '/workspaces'" class="tab-icon" />
@@ -113,7 +113,6 @@ nextTick(() => containerRef.value?.focus())
   height: 16px;
 }
 .book-icon {
-  transform: scaleX(-1);
   color: #c1440e;
 }
 .tab-row-title {

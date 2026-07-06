@@ -79,6 +79,7 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in `AppTitleBarNavDropdown.vue` are the two entry points to the same set of destinations — they must always be kept in sync. When adding, removing, or renaming a navigation destination, update both files. The home page uses `navigate()` (navigates in the active tab); the nav dropdown uses `navigateInNewTab()` (always opens a new tab). Neither list is derived from the other — they are maintained in parallel.
 
 - `HomePage.vue`, `HomePageTile.vue`, `useHomeDateInfo.ts`, `useDafYomiNavigation.ts`
+- Recently opened entries are rendered inline in `HomePage.vue`'s tile grid (after the static tiles), loaded async on mount from `recentlyOpenedStore`. No separate component.
 
 ### book-catalog/
 
@@ -284,6 +285,8 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 **searchCacheStore** — LRU cache for FTS search results (capped at 100 entries), stored in `app-search-cache` IDB.
 
 **hebrewBooksHistoryStore** — HebrewBooks download history, stored in `app-hb-history` IDB, LRU-capped at 25 entries.
+
+**recentlyOpenedStore** — recently opened documents, stored in `app-recently-opened` IDB, LRU-capped at 16 entries. Covers /book-view, /pdf-view, /html-view, and /txt-view. Loaded lazily on first access from `HomePageRecentlyOpened`. Recording is triggered automatically by `tabStore.updateActiveTab`, `openTab`, and `updateTab` for all trackable routes.
 
 **pdfOcrStore** — PDF OCR state and results caching.
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IconBook20Filled, IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
+import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
+import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useListKeys } from '@/composables/useListKeyNav'
@@ -50,7 +51,7 @@ function selectItem(index: number) {
       >
         <span class="icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
           <IconFolder20Filled v-if="item.kind === 'folder'" />
-          <IconBook20Filled v-else />
+          <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
       </div>
@@ -100,7 +101,6 @@ function selectItem(index: number) {
 }
 .book-icon svg {
   color: #c1440e;
-  transform: scaleX(-1);
 }
 .title {
   font-size: 14px;

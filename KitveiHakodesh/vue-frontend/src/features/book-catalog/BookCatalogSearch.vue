@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconBook20Filled } from '@iconify-prerendered/vue-fluent'
+import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
@@ -101,7 +101,7 @@ function selectTileItem(i: number) {
           :title="itemTooltip(items[vRow.index]!)"
           @click="selectListItem(vRow.index)"
         >
-          <span v-if="view !== 'tree'" class="icon"><IconBook20Filled /></span>
+          <span v-if="view !== 'tree'" class="icon"><IconBookRtl20 /></span>
           <span class="item-text">
             <span class="item-title-row">
               <span class="item-title">{{ itemTitle(items[vRow.index]!) }}</span>
@@ -127,7 +127,7 @@ function selectTileItem(i: number) {
       :title="itemTooltip(item)"
       @click="selectTileItem(i)"
     >
-      <div class="tile-icon"><IconBook20Filled /></div>
+      <div class="tile-icon"><IconBookRtl20 /></div>
       <span class="tile-label">{{ itemTitle(item) }}</span>
     </div>
   </div>
