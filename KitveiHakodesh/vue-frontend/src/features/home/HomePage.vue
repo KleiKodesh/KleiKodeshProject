@@ -117,7 +117,7 @@ async function onTap(label: string) {
   justify-content: center;
   flex: 1;
   min-height: min-content;
-  padding: 24px 24px 56px;
+  padding: 24px;
 }
 
 .home-grid {
@@ -129,10 +129,8 @@ async function onTap(label: string) {
 
 /* Bottom bar */
 .date-bar {
-  position: absolute;
+  position: sticky;
   bottom: 0;
-  left: 0;
-  right: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
