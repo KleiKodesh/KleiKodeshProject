@@ -249,7 +249,7 @@ pdfjs-find-not-found = הביטוי לא נמצא
 
 pdfjs-page-scale-width = רוחב העמוד
 pdfjs-page-scale-fit = התאמה לעמוד
-pdfjs-page-scale-auto = מרחק מתצוגה אוטומטי
+pdfjs-page-scale-auto = אוטומטי
 pdfjs-page-scale-actual = גודל אמיתי
 # Variables:
 #   $scale (Number) - percent value for page scale

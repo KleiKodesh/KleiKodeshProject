@@ -147,3 +147,54 @@
     display: none;
   }
 }
+
+/* --- Custom zoom input overlay --- */
+/* #zoomInput sits absolutely inside #scaleSelectContainer, covering the text area of the select.
+   It uses the same background as the select so it hides the select's own text.
+   When blurred it mirrors the selected option label; when focused it shows the numeric % for editing. */
+
+#scaleSelectContainer {
+  position: relative;
+}
+
+#zoomInput {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  /* Stop before the ::after dropdown arrow — select has padding-inline-end:38px for it */
+  inset-inline-end: 38px;
+  width: auto;
+  height: 100%;
+  padding-inline: 6px;
+  border: none;
+  border-radius: 0;
+  /* Match the select's own background exactly so it covers the select text */
+  background: var(--dropdown-btn-bg-color);
+  color: var(--main-color, #d4d4d4);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: start;
+  outline: none;
+  box-sizing: border-box;
+  z-index: 1;
+  cursor: default;
+  /* Remove browser spinner arrows (type=number when focused) */
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+#zoomInput::-webkit-outer-spin-button,
+#zoomInput::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+}
+#zoomInput:focus {
+  background: var(--dropdown-btn-bg-color) !important;
+  cursor: text;
+  text-align: center;
+}
+
+/* Hide at the same breakpoint as the container */
+@media (max-width: 420px) {
+  #zoomInput {
+    display: none;
+  }
+}
