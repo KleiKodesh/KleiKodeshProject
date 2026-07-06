@@ -132,21 +132,33 @@ const DEFAULT_SCALE_DELTA = 1.02; // Custom: reduced from 1.1 (10%) to 1.02 (2%)
 
 ## `web/viewer.html` — Added zoom input overlay
 
-### Zoom input wrapper
+### Zoom input
 
-Wrap the existing `<span id="scaleSelectContainer" ...>` in a new `<span id="zoomInputWrapper">` and add a number `<input id="zoomInput">` and a `<span id="zoomInputPercent">%</span>` inside the wrapper, after the scaleSelectContainer span. The select is kept fully intact for PDF.js internals and positioned absolute+opacity:0 inside the wrapper; the visible number input sits on top of it.
+Inside the existing `<span id="scaleSelectContainer" class="dropdownToolbarButton">`, add a sibling `<input id="zoomInput" type="text" readonly>` immediately after the `</select>` closing tag. No wrapper changes needed — the select stays exactly as-is.
 
-The init script (see below) wires the two together.
+The input is positioned absolutely over the text area of the select (covering the select's own rendered text), leaving the right 38px free so the select's native `::after` dropdown arrow remains fully visible and clickable. The select continues to work normally — clicking the arrow opens the dropdown as before.
 
-### Zoom input init script
+Behavior:
+- **Resting:** `type="text"` readonly, shows exactly the text of the currently selected option (mirrors to the letter, including named options like "אוטומטי", "רוחב העמוד", and numeric values like "125%"). Updated by a `MutationObserver` on the select subtree (catches Fluent async text updates) plus `scalechanging` and `change` events.
+- **On focus:** switches to `type="number"`, shows the current scale as a plain integer percentage, selects all text.
+- **On Enter:** applies `PDFViewerApplication.pdfViewer.currentScaleValue = (value / 100).toString()`, blurs.
+- **On Escape or invalid input:** discards, reverts to resting state.
+- **On blur:** applies zoom, reverts to resting state.
+- Polls `waitForApp` until `PDFViewerApplication.pdfViewer` is ready and Fluent has translated the options before showing the first label.
 
-Add a `<script>` block immediately before `</body>`. The script:
+The init script is added as a `<script>` block immediately before `</body>`.
 
-- Listens to `scalechanging` window events and MutationObserver on `customScaleOption[data-l10n-args]` to keep the input value in sync with whatever PDF.js sets (Ctrl+±, zoom buttons, select pick).
-- On `Enter` or blur, reads the input value and sets `PDFViewerApplication.pdfViewer.currentScaleValue` to `(value / 100).toString()`.
-- On `Escape` or invalid input, restores the current scale value.
-- Selects all text on focus so the user can type straight away.
-- Waits for `PDFViewerApplication.pdfViewer` to be ready (polling) before first sync.
+---
+
+## `web/locale/he/viewer.ftl` — Hebrew translation overrides
+
+### Automatic zoom label
+
+The default Hebrew translation for `pdfjs-page-scale-auto` is the verbose "מרחק מתצוגה אוטומטי". Change it to the concise:
+
+```
+pdfjs-page-scale-auto = אוטומטי
+```
 
 ---
 

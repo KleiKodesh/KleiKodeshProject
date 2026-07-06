@@ -1,6 +1,9 @@
 # Developer Preferences
 
-## No Guessing
+## Default Runtime Context
+
+Unless the user explicitly says they are running or testing in C#/WebView2, always assume they are in **browser dev mode** (`npm run dev`). Never assume a bug or behaviour is caused by the C# build pipeline, stale output in `bin/`, or WebView2-specific behaviour unless the user mentions C#, the host app, or the built output specifically. Suggesting a C# rebuild as a fix when the user is in dev mode is always wrong.
+
 
 Never assert facts about the codebase, database, runtime state, or system configuration that you have not directly verified using a tool. If the information is not in a file you have read, a command you have run, or a query result you have seen, say "I don't know — I need to check" and then check. This applies to:
 
