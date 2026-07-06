@@ -341,6 +341,13 @@ See https://github.com/adobe-type-tools/cmap-resources
                     <option value="3" data-l10n-id="pdfjs-page-scale-percent" data-l10n-args='{ "scale": 300 }'></option>
                     <option value="4" data-l10n-id="pdfjs-page-scale-percent" data-l10n-args='{ "scale": 400 }'></option>
                   </select>
+                  <input
+                    id="zoomInput"
+                    type="text"
+                    readonly
+                    title="Zoom — click to enter custom percentage"
+                    aria-label="Zoom percentage"
+                  />
                 </span>
               </div>
               <div id="toolbarViewerRight" class="toolbarHorizontalGroup">
@@ -1206,5 +1213,104 @@ See https://github.com/adobe-type-tools/cmap-resources
     </div>
     <!-- outerContainer -->
     <div id="printContainer"></div>
+    <!-- Custom: zoom input overlay — mirrors the selected option label when blurred, editable % when focused -->
+    <script>
+      (function () {
+        function initZoomInput() {
+          const select = document.getElementById('scaleSelect');
+          const input = document.getElementById('zoomInput');
+          if (!select || !input) return;
+
+          // Mirror exactly what the select currently shows — read the selected option's text node.
+          function mirrorSelect() {
+            if (document.activeElement === input) return;
+            const option = select.options[select.selectedIndex];
+            input.value = option ? option.textContent.trim() : '';
+          }
+
+          function applyZoom() {
+            const app = window.PDFViewerApplication;
+            if (!app || !app.pdfViewer) { mirrorSelect(); return; }
+            const raw = parseInt(input.value, 10);
+            if (!isFinite(raw) || raw < 1 || raw > 2500) {
+              mirrorSelect();
+              return;
+            }
+            app.pdfViewer.currentScaleValue = (raw / 100).toString();
+          }
+
+          // Watch the entire select subtree for any text or attribute changes.
+          // This covers: PDF.js selecting a different option, Fluent updating option text,
+          // customScaleOption getting a new data-l10n-args (and Fluent then updating its text).
+          const observer = new MutationObserver(function () {
+            requestAnimationFrame(mirrorSelect);
+          });
+          observer.observe(select, {
+            subtree: true,
+            characterData: true,
+            childList: true,
+            attributes: true,
+          });
+
+          // Also mirror on the change event (user picks from dropdown).
+          select.addEventListener('change', function () {
+            requestAnimationFrame(mirrorSelect);
+          });
+
+          // Mirror on every scale change PDF.js fires.
+          window.addEventListener('scalechanging', function () {
+            requestAnimationFrame(mirrorSelect);
+          });
+
+          input.addEventListener('focus', function () {
+            // Switch to numeric edit mode.
+            const app = window.PDFViewerApplication;
+            const pct = (app && app.pdfViewer)
+              ? Math.round(app.pdfViewer.currentScale * 100)
+              : '';
+            input.type = 'number';
+            input.readOnly = false;
+            input.value = pct;
+            input.style.cursor = 'text';
+            input.select();
+          });
+
+          input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { applyZoom(); input.blur(); }
+            if (e.key === 'Escape') { input.blur(); }
+          });
+
+          input.addEventListener('blur', function () {
+            applyZoom();
+            input.type = 'text';
+            input.readOnly = true;
+            input.style.cursor = 'default';
+            requestAnimationFrame(mirrorSelect);
+          });
+
+          // Wait for app + Fluent to be ready, then mirror.
+          function waitForApp() {
+            if (window.PDFViewerApplication && window.PDFViewerApplication.pdfViewer) {
+              // Poll until Fluent has translated the options (text will be non-empty).
+              const option = select.options[select.selectedIndex];
+              if (option && option.textContent.trim()) {
+                mirrorSelect();
+              } else {
+                setTimeout(waitForApp, 50);
+              }
+            } else {
+              setTimeout(waitForApp, 100);
+            }
+          }
+          waitForApp();
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initZoomInput);
+        } else {
+          initZoomInput();
+        }
+      })();
+    </script>
   </body>
 </html>

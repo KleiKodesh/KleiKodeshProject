@@ -130,6 +130,26 @@ const DEFAULT_SCALE_DELTA = 1.02; // Custom: reduced from 1.1 (10%) to 1.02 (2%)
 
 ---
 
+## `web/viewer.html` — Added zoom input overlay
+
+### Zoom input wrapper
+
+Wrap the existing `<span id="scaleSelectContainer" ...>` in a new `<span id="zoomInputWrapper">` and add a number `<input id="zoomInput">` and a `<span id="zoomInputPercent">%</span>` inside the wrapper, after the scaleSelectContainer span. The select is kept fully intact for PDF.js internals and positioned absolute+opacity:0 inside the wrapper; the visible number input sits on top of it.
+
+The init script (see below) wires the two together.
+
+### Zoom input init script
+
+Add a `<script>` block immediately before `</body>`. The script:
+
+- Listens to `scalechanging` window events and MutationObserver on `customScaleOption[data-l10n-args]` to keep the input value in sync with whatever PDF.js sets (Ctrl+±, zoom buttons, select pick).
+- On `Enter` or blur, reads the input value and sets `PDFViewerApplication.pdfViewer.currentScaleValue` to `(value / 100).toString()`.
+- On `Escape` or invalid input, restores the current scale value.
+- Selects all text on focus so the user can type straight away.
+- Waits for `PDFViewerApplication.pdfViewer` to be ready (polling) before first sync.
+
+---
+
 ### 0a. Partial render delay (jump performance)
 
 Search for:
