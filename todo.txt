@@ -1,3 +1,8 @@
+recent files like in edge
+clock in full scrren needs to be lower down smae hoght as footer in home page
+pdf files toc in title bar
+pdf size incremnt
+
 add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
@@ -11,25 +16,16 @@ create excluded folders dilgue for the document locator
 add to msword context menu
 
 add some padding at bottom of the ines view
+theme eyboard shortcuts
 
 שורות מיותרות במרכוז שורה אחרונה
 לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
 
 adjust kitvei hakodesh to check for updates too
 
-pdf ehre we are holding
-
-maybe the pdf file memory leak is due to the fact that it defines whole folders as server?
-
 add bookmarks feature
-
-deos webview have a צריכת חשמל mode מצב חיסכון
 
 הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
 but the similar buttons in wzard are working
 
 test if reverted scroll restore in any form
-
-test deletion option for the Hebrew books
-
-when screen is wifde enough no need to use overlay for bookview sidepanel it can show side by side with content
