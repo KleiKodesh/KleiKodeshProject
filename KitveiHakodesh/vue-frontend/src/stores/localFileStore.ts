@@ -305,6 +305,60 @@ export const useLocalFileStore = defineStore('localFile', () => {
     }
   }
 
+  /**
+   * Opens a document from the recently opened history.
+   * Re-registers the virtual host for PDF/HTML files (the previous session's URL is gone),
+   * re-downloads HebrewBooks PDFs if needed, and navigates the active tab to the result.
+   */
+  async function openFromHistory(entry: import('@/stores/recentlyOpenedStore').RecentlyOpenedEntry): Promise<void> {
+    const { route, title, localFilePath, localFileHbBookId, localFileHbBookTitle } = entry
+
+    if (localFileHbBookId) {
+      const localFolder = useSettingsStore().hebrewBooksLocalFolder || undefined
+      tabStore.updateActiveTab({
+        route: '/pdf-view',
+        title,
+        localFileName: title,
+        localFileHbBookId,
+        localFileHbBookTitle,
+        localFileConverting: true,
+        localFileLoadingType: 'downloading',
+        localFileVirtualUrl: undefined,
+      })
+      const tabId = tabStore.activeTabId
+      _converting.add(tabId)
+      const res = await restoreHbPdf(localFileHbBookId, localFileHbBookTitle ?? '', tabId, localFolder)
+      if (!res) {
+        _converting.delete(tabId)
+        tabStore.updateActiveTab({ route: '/', title: 'בית', localFileConverting: false })
+      } else if ('url' in res) {
+        _converting.delete(tabId)
+        tabStore.updateActiveTab({ localFileVirtualUrl: res.url, localFileConverting: false, localFileLoadingType: undefined })
+      }
+      // redownload: true — hbPdfReady push event will finish it
+      return
+    }
+
+    if (localFilePath) {
+      const ext = localFilePath.substring(localFilePath.lastIndexOf('.')).toLowerCase()
+      if (ext === '.txt') {
+        tabStore.updateActiveTab({ route: '/txt-view', title, localFileName: entry.localFileName ?? title, localFilePath })
+        return
+      }
+      const isHtmlLike = ext === '.htm' || ext === '.html'
+      const fileRoute: import('@/stores/tabStore').TabRoute = isHtmlLike ? '/html-view' : '/pdf-view'
+      tabStore.updateActiveTab({ route: fileRoute, title, localFileName: entry.localFileName ?? title, localFilePath, localFileVirtualUrl: undefined, localFileConverting: false })
+      const res = await restoreLocalFile(localFilePath)
+      if (res) {
+        tabStore.updateActiveTab({ localFileVirtualUrl: res.url })
+      }
+      return
+    }
+
+    // Dev mode: no real path, navigate directly (blob URL is gone — file must be re-opened)
+    tabStore.updateActiveTab({ route, title, localFileName: entry.localFileName ?? title })
+  }
+
   return {
     virtualUrl,
     fileName,
@@ -319,5 +373,6 @@ export const useLocalFileStore = defineStore('localFile', () => {
     cancelHbDownload,
     openHbBook,
     restoreTab,
+    openFromHistory,
   }
 })

@@ -35,7 +35,7 @@ export interface RecentlyOpenedEntry {
 
 const RECENTLY_OPENED_DB = 'app-recently-opened'
 const RECENTLY_OPENED_STORE = 'data'
-const RECENTLY_OPENED_MAX = 16
+const RECENTLY_OPENED_MAX = 20
 
 // ── IDB setup ─────────────────────────────────────────────────────────────────
 
@@ -113,6 +113,13 @@ function deriveKey(
   return `${route}:${Date.now()}`
 }
 
+/** Strips the file extension from a title for file-route entries. */
+function stripFileExtension(title: string): string {
+  const dot = title.lastIndexOf('.')
+  if (dot > 0) return title.slice(0, dot)
+  return title
+}
+
 // ── In-memory cache ───────────────────────────────────────────────────────────
 // null means not yet loaded from IDB. Max 16 tiny objects — safe to keep in memory.
 
@@ -166,11 +173,12 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
     localFileName?: string,
   ): void {
     const key = deriveKey(route, bookId, localFilePath, localFileHbBookId, localFileName)
+    const displayTitle = route === '/book-view' ? title : stripFileExtension(title)
 
     const entry: RecentlyOpenedEntry = {
       key,
       route,
-      title,
+      title: displayTitle,
       lastAccessedAt: Date.now(),
       ...(bookId !== undefined ? { bookId } : {}),
       ...(localFilePath ? { localFilePath } : {}),
