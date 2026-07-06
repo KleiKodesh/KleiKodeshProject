@@ -119,6 +119,17 @@ The `pixel-ratio-override.js` script tag must appear **before** `<script src="vi
 
 ## `web/viewer.mjs` — Patches
 
+### 0z. Zoom step
+
+Search for: `const DEFAULT_SCALE_DELTA = 1.1;`
+
+Replace with:
+```js
+const DEFAULT_SCALE_DELTA = 1.02; // Custom: reduced from 1.1 (10%) to 1.02 (2%) per zoom step
+```
+
+---
+
 ### 0a. Partial render delay (jump performance)
 
 Search for:
