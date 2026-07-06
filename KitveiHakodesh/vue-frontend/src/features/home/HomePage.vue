@@ -26,11 +26,17 @@ import { navigateToDafYomi } from './dafYomiNavigation'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
+import { useLocalFileStore } from '@/stores/localFileStore'
+import { useElementSize } from '@vueuse/core'
 import type { Component } from 'vue'
+
+const TILE_WIDTH = 72
+const TILE_GAP = 20
 
 const { navigate } = useAppNavigation()
 const paneNavigation = usePaneNavigation()
 const recentlyOpenedStore = useRecentlyOpenedStore()
+const localFileStore = useLocalFileStore()
 
 const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
 
@@ -40,6 +46,7 @@ const RECENTLY_OPENED_ICON_MAP: Record<string, { icon: Component; color: string 
   '/html-view': { icon: IconDocumentGlobe24Filled, color: '#0097fb' },
   '/txt-view': { icon: IconDocumentText24Filled, color: '#9e9e9e' },
 }
+
 const tiles = computed(() => {
   const dbMissing = isHosted && !dbReady.value
   return [
@@ -61,6 +68,18 @@ const tiles = computed(() => {
 })
 
 const pageRef = ref<HTMLElement | null>(null)
+const innerRef = ref<HTMLElement | null>(null)
+const { width: containerWidth } = useElementSize(innerRef)
+
+const visibleRecentlyOpenedList = computed(() => {
+  if (!recentlyOpenedList.value.length) return []
+  const effectiveWidth = containerWidth.value || 320
+  const tilesPerRow = Math.max(1, Math.floor((effectiveWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)))
+  const staticTailSlots = tiles.value.length % tilesPerRow
+  const freeOnLastRow = staticTailSlots === 0 ? 0 : tilesPerRow - staticTailSlots
+  const count = Math.min(20, freeOnLastRow + tilesPerRow)
+  return recentlyOpenedList.value.slice(0, count)
+})
 
 const { focusedIndex, containerFocused } = useTilesKeys(
   pageRef,
@@ -83,22 +102,13 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
     paneNavigation.updateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId })
     return
   }
-  if (entry.route === '/pdf-view' || entry.route === '/html-view' || entry.route === '/txt-view') {
-    paneNavigation.updateActiveTab({
-      route: entry.route,
-      title: entry.title,
-      localFilePath: entry.localFilePath,
-      localFileName: entry.localFileName ?? entry.title,
-      localFileHbBookId: entry.localFileHbBookId,
-      localFileHbBookTitle: entry.localFileHbBookTitle,
-    })
-  }
+  localFileStore.openFromHistory(entry)
 }
 </script>
 
 <template>
   <div ref="pageRef" class="home-page" tabindex="0">
-    <div class="home-inner">
+    <div ref="innerRef" class="home-inner">
       <div class="home-grid">
         <HomeTile
           v-for="(t, i) in tiles"
@@ -108,7 +118,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
           @tap="onTap(t.label)"
         />
         <HomeTile
-          v-for="entry in recentlyOpenedList"
+          v-for="entry in visibleRecentlyOpenedList"
           :key="entry.key"
           :label="entry.title"
           :icon="RECENTLY_OPENED_ICON_MAP[entry.route]!.icon"

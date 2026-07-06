@@ -1,4 +1,3 @@
-recent files like in edge
 clock in full scrren needs to be lower down smae hoght as footer in home page
 pdf files toc in title bar
 
@@ -24,7 +23,9 @@ adjust kitvei hakodesh to check for updates too
 
 add bookmarks feature
 
-הורד מסד נתונים and התקן מסד נתונים aren't functioning properly
-but the similar buttons in wzard are working
+בגרסאות האחרונות אין את האופציה קשרים על הגמ'  כברירת מחדל, רק מקור ופרשנים
+זה קצת חסר לי, היה לי מאד נח לראות ישר את דברי הטור והב"י על הגמ'
+השאלה אם יש אפשרות להגדיר בהגדרות מה ברצוני שיהיה כברירת מחדל על הגמ'
+
 
 test if reverted scroll restore in any form
