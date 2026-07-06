@@ -5,7 +5,6 @@ defineProps<{
   icon: Component
   color?: string
   isFocused?: boolean
-  flip?: boolean
 }>()
 defineEmits<{ tap: [] }>()
 </script>

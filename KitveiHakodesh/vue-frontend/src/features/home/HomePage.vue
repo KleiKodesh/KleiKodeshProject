@@ -11,8 +11,12 @@ import {
   IconCalendarRtl24Filled,
   IconBookLetter24Filled,
   IconRuler24Filled,
+  IconDocumentPdf24Filled,
+  IconDocumentText24Filled,
+  IconDocumentGlobe24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
+import IconBookRtl24 from '@/components/IconBookRtl24.vue'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { isHosted, dbReady } from '@/webview-host/seforimDb'
 import { useAppNavigation } from '@/composables/useAppNavigation'
@@ -20,10 +24,22 @@ import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { navigateToDafYomi } from './dafYomiNavigation'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
+import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
+import type { Component } from 'vue'
 
 const { navigate } = useAppNavigation()
 const paneNavigation = usePaneNavigation()
+const recentlyOpenedStore = useRecentlyOpenedStore()
 
+const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
+
+const RECENTLY_OPENED_ICON_MAP: Record<string, { icon: Component; color: string }> = {
+  '/book-view': { icon: IconBookRtl24, color: '#c1440e' },
+  '/pdf-view': { icon: IconDocumentPdf24Filled, color: '#F40F02' },
+  '/html-view': { icon: IconDocumentGlobe24Filled, color: '#0097fb' },
+  '/txt-view': { icon: IconDocumentText24Filled, color: '#9e9e9e' },
+}
 const tiles = computed(() => {
   const dbMissing = isHosted && !dbReady.value
   return [
@@ -52,13 +68,31 @@ const { focusedIndex, containerFocused } = useTilesKeys(
   (i) => navigate(tiles.value[i]!.label),
 )
 
-onMounted(() => {
+onMounted(async () => {
   pageRef.value?.focus()
   loadDateInfo()
+  recentlyOpenedList.value = await recentlyOpenedStore.getList()
 })
 
 async function onTap(label: string) {
   await navigate(label)
+}
+
+function openRecentEntry(entry: RecentlyOpenedEntry) {
+  if (entry.route === '/book-view' && entry.bookId !== undefined) {
+    paneNavigation.updateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId })
+    return
+  }
+  if (entry.route === '/pdf-view' || entry.route === '/html-view' || entry.route === '/txt-view') {
+    paneNavigation.updateActiveTab({
+      route: entry.route,
+      title: entry.title,
+      localFilePath: entry.localFilePath,
+      localFileName: entry.localFileName ?? entry.title,
+      localFileHbBookId: entry.localFileHbBookId,
+      localFileHbBookTitle: entry.localFileHbBookTitle,
+    })
+  }
 }
 </script>
 
@@ -72,6 +106,14 @@ async function onTap(label: string) {
           v-bind="t"
           :is-focused="containerFocused && focusedIndex === i"
           @tap="onTap(t.label)"
+        />
+        <HomeTile
+          v-for="entry in recentlyOpenedList"
+          :key="entry.key"
+          :label="entry.title"
+          :icon="RECENTLY_OPENED_ICON_MAP[entry.route]!.icon"
+          :color="RECENTLY_OPENED_ICON_MAP[entry.route]!.color"
+          @tap="openRecentEntry(entry)"
         />
       </div>
     </div>

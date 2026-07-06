@@ -15,6 +15,8 @@ import {
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
 import { disposeLocalFileHost } from '@/webview-host/bridge'
+import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
+import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 
 export type TabRoute =
   | '/'
@@ -190,6 +192,9 @@ export const useTabStore = defineStore('tabs', () => {
     const tab: Tab = { id: String(++nextId), pane: 2, ...partial }
     tabs.value.push(tab)
     pane2ActiveTabId.value = tab.id
+    if (TRACKABLE_ROUTES.has(tab.route)) {
+      trackTabNavigation(tab)
+    }
     return tab
   }
 
@@ -334,12 +339,51 @@ export const useTabStore = defineStore('tabs', () => {
     await idbClearAll()
   }
 
+  // ── Recently opened tracking ──────────────────────────────────────────────
+
+  /**
+   * Records a tab navigation into the recently opened history.
+   * Only called for trackable routes (/book-view, /pdf-view, /html-view, /txt-view).
+   * Skips entries that lack enough identity information to be re-opened later:
+   *   - /book-view requires a bookId
+   *   - file routes require either a localFilePath or a localFileHbBookId
+   * Skips tabs still in a converting/loading state — the final title and URL
+   * are not known yet; the finished state will be tracked when finishLocalFileConversion
+   * (or the hbPdfReady handler) calls updateTab → which goes through updateActiveTab only
+   * when it's the active tab, so for non-active tabs we track via updateTab below.
+   */
+  function trackTabNavigation(tab: Tab) {
+    if (tab.localFileConverting) return
+    if (tab.route === '/book-view' && !tab.bookId) return
+    if (
+      (tab.route === '/pdf-view' || tab.route === '/html-view' || tab.route === '/txt-view') &&
+      !tab.localFilePath &&
+      !tab.localFileHbBookId &&
+      !tab.localFileName
+    ) {
+      return
+    }
+    const recentlyOpenedStore = useRecentlyOpenedStore()
+    recentlyOpenedStore.trackNavigation(
+      tab.route as RecentlyOpenedRoute,
+      tab.title,
+      tab.bookId,
+      tab.localFilePath,
+      tab.localFileHbBookId,
+      tab.localFileHbBookTitle,
+      tab.localFileName,
+    )
+  }
+
   // ── Tab lifecycle ─────────────────────────────────────────────────────────
 
   function openTab(partial: Omit<Tab, 'id'>) {
     const tab: Tab = { id: String(++nextId), ...partial }
     tabs.value.push(tab)
     activeTabId.value = tab.id
+    if (TRACKABLE_ROUTES.has(tab.route)) {
+      trackTabNavigation(tab)
+    }
     return tab
   }
 
@@ -401,12 +445,20 @@ export const useTabStore = defineStore('tabs', () => {
         tabs.value.splice(idx, 1)
         tabs.value.unshift(tab)
       }
+      if (TRACKABLE_ROUTES.has(tab.route)) {
+        trackTabNavigation(tab)
+      }
     }
   }
 
   function updateTab(tabId: string, patch: Partial<Omit<Tab, 'id'>>) {
     const tab = tabs.value.find((t) => t.id === tabId)
-    if (tab) Object.assign(tab, patch)
+    if (tab) {
+      Object.assign(tab, patch)
+      if (TRACKABLE_ROUTES.has(tab.route)) {
+        trackTabNavigation(tab)
+      }
+    }
   }
 
   /** Navigate the active pane-2 tab in place (equivalent of updateActiveTab for pane 2). */
@@ -414,7 +466,12 @@ export const useTabStore = defineStore('tabs', () => {
     const id = pane2ActiveTabId.value
     if (!id) return
     const tab = tabs.value.find((t) => t.id === id && t.pane === 2)
-    if (tab) Object.assign(tab, patch)
+    if (tab) {
+      Object.assign(tab, patch)
+      if (TRACKABLE_ROUTES.has(tab.route)) {
+        trackTabNavigation(tab)
+      }
+    }
   }
 
   function openNewHomeTab() {

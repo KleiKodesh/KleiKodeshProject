@@ -10,6 +10,7 @@
  *   app-hb-history         — HebrewBooks download history
  *   app-search-cache       — full-text search result cache (LRU-capped at 100 queries)
  *   app-catalog-toc-cache  — Book catalog TOC search result cache (LRU-capped at 25 queries)
+ *   app-recently-opened    — recently opened documents (LRU-capped at 16 entries)
  *
  * Reset: clear all localStorage keys + delete all IDB databases.
  */
@@ -135,6 +136,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-search-cache': null,
   'app-dict-cache': null,
   'app-catalog-toc-cache': null,
+  'app-recently-opened': null,
 }
 
 function openDb(name: string): Promise<IDBDatabase> {
@@ -386,13 +388,15 @@ export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
 const RESET_LS_KEY = '__pendingReset'
 
 export async function idbClearAll(): Promise<void> {
-  // Import lazily to avoid circular dependency — dropHbHistoryDb is a plain function
+  // Import lazily to avoid circular dependency — drop* are plain functions
   const { dropHbHistoryDb } = await import('@/stores/hebrewBooksHistoryStore')
+  const { dropRecentlyOpenedDb } = await import('@/stores/recentlyOpenedStore')
   lsClearAll()
   await Promise.all([
     dropDb('app-tabs'),
     dropDb('app-lastread'),
     dropHbHistoryDb(),
+    dropRecentlyOpenedDb(),
     dropDb('app-search-cache'),
     dropDb('app-dict-cache'),
     dropDb('app-catalog-toc-cache'),
