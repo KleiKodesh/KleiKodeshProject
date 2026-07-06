@@ -129,6 +129,8 @@ export const useTabStore = defineStore('tabs', () => {
           openTocLineIndex,
           searchHighlightLineIndex,
           searchHighlightQuery,
+          searchHighlightSnippet,
+          searchHighlightTerms,
           ...t
         }) => t,
       ),
