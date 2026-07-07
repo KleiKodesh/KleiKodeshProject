@@ -6,6 +6,11 @@ import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 import { useSettingsStore } from './settingsStore'
 
+function stripFileExtension(fileName: string): string {
+  const lastDot = fileName.lastIndexOf('.')
+  return lastDot > 0 ? fileName.substring(0, lastDot) : fileName
+}
+
 export const useLocalFileStore = defineStore('localFile', () => {
   const tabStore = useTabStore()
 
@@ -33,7 +38,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       // .txt files are opened in /txt-view — no virtual URL, just the file path for restore
       const tabFields = {
         route: '/txt-view' as TabRoute,
-        title: msg.fileName as string,
+        title: stripFileExtension(msg.fileName as string),
         localFileName: msg.fileName as string,
         localFilePath: msg.filePath as string,
         localFileConverting: false,
@@ -55,7 +60,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const route: TabRoute = isHtmlLike ? '/html-view' : '/pdf-view'
       const tabFields = {
         route,
-        title: msg.fileName as string,
+        title: stripFileExtension(msg.fileName as string),
         localFileName: msg.fileName as string,
         localFilePath: msg.filePath as string,
         localFileVirtualUrl: msg.url as string,
@@ -135,7 +140,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
     const route: TabRoute = '/pdf-view'
     const tabFields = {
       route,
-      title: fileName,
+      title: stripFileExtension(fileName),
       localFileName: fileName,
       localFilePath: filePath,
       localFileConverting: true,
@@ -170,7 +175,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (result) {
       tabStore.updateTab(tabId, {
         route: '/pdf-view',
-        title: result.fileName,
+        title: stripFileExtension(result.fileName),
         localFileVirtualUrl: result.url,
         localFileName: result.fileName,
         localFilePath: result.filePath,
