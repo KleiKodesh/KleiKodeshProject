@@ -275,7 +275,7 @@ defineExpose({ tocBtnRef })
   align-items: center;
   justify-content: center;
   gap: 0;
-  padding: 2px 4px;
+  padding: var(--toolbar-horizontal-padding);
   background: var(--bg-toolbar);
   flex-shrink: 0;
   transition: background 120ms;

@@ -53,11 +53,13 @@ provide(PANE_NAVIGATION_KEY, {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow: visible;
   min-width: 0;
+  position: relative;
 }
 .app-shell-content {
   flex: 1;
   overflow: hidden;
+  min-height: 0;
 }
 </style>
