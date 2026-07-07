@@ -2,7 +2,9 @@ using KitveiHakodeshLib;
 using KitveiHakodeshLib.Settings;
 using System;
 using System.Drawing;
+using System.Threading.Tasks;
 using System.Windows.Forms;
+using UpdateCheckerLib;
 
 namespace KitveiHakodeshDemoApp
 {
@@ -43,17 +45,36 @@ namespace KitveiHakodeshDemoApp
             _viewer.OpenFileFromPath(filePath);
         }
 
+        private bool _updateCheckDone = false;
+
         private void MainForm_Load(object sender, EventArgs e)
         {
             FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
             if (AppSettings.LoadMainWindowMaximized())
                 WindowState = FormWindowState.Maximized;
+
+            if (!_updateCheckDone)
+            {
+                _updateCheckDone = true;
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await UpdateChecker.CheckAndPromptForUpdateAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[MainForm] Update check failed: {ex.Message}");
+                    }
+                });
+            }
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
+            UpdateChecker.RunPendingInstaller();
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)

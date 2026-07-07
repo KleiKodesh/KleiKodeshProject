@@ -51,40 +51,42 @@ namespace UpdateCheckerLib
             string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}{suffix}.exe";
             string tempPath     = Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe");
 
-            DownloadProgressForm form = null;
-            try
+            // Cross-process mutex: prevents simultaneous downloads from VSTO + demo app.
+            // If another process is already downloading, skip silently.
+            bool createdNew;
+            using (var mutex = new Mutex(initiallyOwned: false, "KleiKodesh-UpdateDownload-Mutex", out createdNew))
             {
-                form = DownloadProgressForm.ShowModeless(version);
+                bool acquired = false;
+                try
+                {
+                    acquired = mutex.WaitOne(0); // non-blocking — don't queue up
+                    if (!acquired)
+                    {
+                        Debug.WriteLine("Update download already in progress in another process, skipping.");
+                        return;
+                    }
 
-                await DownloadFileAsync(installerUrl, tempPath, form, form.Cancellation.Token);
+                    // Download silently in background without showing progress form
+                    await DownloadFileAsync(installerUrl, tempPath, CancellationToken.None);
 
-                if (form.IsCancelled) { TryDeleteFile(tempPath); return; }
+                    if (!File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
+                        throw new UpdateException("הורדת הקובץ נכשלה — הקובץ ריק או חסר", installerUrl, attempts: 1);
 
-                if (!File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
-                    throw new UpdateException("הורדת הקובץ נכשלה — הקובץ ריק או חסר", installerUrl, attempts: 1);
-
-                PendingInstallerPath = tempPath;
+                    PendingInstallerPath = tempPath;
+                }
+                catch (OperationCanceledException) { TryDeleteFile(tempPath); }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Silent download failed: {ex.Message}");
+                    TryDeleteFile(tempPath);
+                    // Fail silently - don't show error message to user
+                }
+                finally
+                {
+                    if (acquired)
+                        mutex.ReleaseMutex();
+                }
             }
-            catch (OperationCanceledException) { TryDeleteFile(tempPath); }
-            catch (UpdateException ex)
-            {
-                MessageBox.Show(
-                    $"שגיאה בהורדת העדכון:\n\n{ex.ToUserMessage()}",
-                    "שגיאה - כלי קודש",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error,
-                    MessageBoxDefaultButton.Button1,
-                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(
-                    $"שגיאה בהורדת העדכון:\n\n{ex.Message}\n\nכתובת: {installerUrl}",
-                    "שגיאה - כלי קודש",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error,
-                    MessageBoxDefaultButton.Button1,
-                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
-            }
-            finally { form?.SafeClose(); }
         }
 
         public static void RunPendingInstaller()
@@ -167,7 +169,7 @@ namespace UpdateCheckerLib
         }
 
         private static async Task DownloadFileAsync(
-            string url, string filePath, DownloadProgressForm form, CancellationToken token)
+            string url, string filePath, CancellationToken token)
         {
             const int maxAttempts = 3;
             const int retryDelayMs = 2000;
@@ -186,12 +188,8 @@ namespace UpdateCheckerLib
 
                     if (attempt > 1)
                     {
-                        form.SetIndeterminate($"מנסה שוב... ({attempt}/{maxAttempts})");
+                        Debug.WriteLine($"Retrying download... ({attempt}/{maxAttempts})");
                         await Task.Delay(retryDelayMs, token);
-                    }
-                    else
-                    {
-                        form.SetIndeterminate("מתחבר לשרת...");
                     }
 
                     HttpResponseMessage response = null;
@@ -224,10 +222,9 @@ namespace UpdateCheckerLib
                                 totalRead += read;
 
                                 if (totalBytes > 0)
-                                    form.UpdateProgress((int)(totalRead * 100 / totalBytes),
-                                        $"הורדה: {FormatBytes(totalRead)} מתוך {FormatBytes(totalBytes)}");
+                                    Debug.WriteLine($"Download: {FormatBytes(totalRead)} / {FormatBytes(totalBytes)}");
                                 else
-                                    form.UpdateProgress(0, $"הורדה: {FormatBytes(totalRead)}");
+                                    Debug.WriteLine($"Download: {FormatBytes(totalRead)}");
                             }
                         }
 
