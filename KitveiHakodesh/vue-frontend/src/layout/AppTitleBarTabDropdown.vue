@@ -4,6 +4,7 @@ import {
   IconDismiss20Regular,
   IconHome20Regular,
   IconDocument20Regular,
+  IconDocumentText20Regular,
   IconSearch20Regular,
   IconLibrary20Regular,
   IconDocumentPdf20Regular,
@@ -50,6 +51,8 @@ nextTick(() => containerRef.value?.focus())
         <IconHome20Regular v-if="tab.route === '/'" class="tab-icon" />
         <IconBookRtl20 v-else-if="tab.route === '/book-view'" class="tab-icon book-icon" />
         <IconDocumentPdf20Regular v-else-if="tab.route === '/pdf-view'" class="tab-icon" />
+        <IconDocumentText20Regular v-else-if="tab.route === '/txt-view'" class="tab-icon" />
+        <IconDocument20Regular v-else-if="tab.route === '/html-view'" class="tab-icon" />
         <IconBookRtl20 v-else-if="tab.route === '/hebrewbooks'" class="tab-icon book-icon" />
         <IconSearch20Regular v-else-if="tab.route === '/search'" class="tab-icon" />
         <IconLibrary20Regular v-else-if="tab.route === '/books'" class="tab-icon" />

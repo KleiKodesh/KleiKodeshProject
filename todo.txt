@@ -1,5 +1,3 @@
-pdf files toc in title bar
-
 add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
@@ -23,6 +21,5 @@ add bookmarks feature
 בגרסאות האחרונות אין את האופציה קשרים על הגמ'  כברירת מחדל, רק מקור ופרשנים
 זה קצת חסר לי, היה לי מאד נח לראות ישר את דברי הטור והב"י על הגמ'
 השאלה אם יש אפשרות להגדיר בהגדרות מה ברצוני שיהיה כברירת מחדל על הגמ'
-
 
 test if reverted scroll restore in any form

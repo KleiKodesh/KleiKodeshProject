@@ -40,7 +40,7 @@ export function useAppNavigation() {
     const route = isTxt ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
     const tabData = {
       route: route as TabRoute,
-      title: result.fileName,
+      title: fn.substring(0, fn.lastIndexOf('.') > 0 ? fn.lastIndexOf('.') : fn.length),
       localFileName: result.fileName,
       localFilePath: result.filePath,
       localFileVirtualUrl: result.url,
