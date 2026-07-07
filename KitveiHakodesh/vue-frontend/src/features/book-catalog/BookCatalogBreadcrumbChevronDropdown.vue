@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{ select: [node: CategoryNode] }>()
 
 const isOpen = ref(false)
+const wrapperRef = ref<HTMLElement | null>(null)
 const dropdownRef = ref<HTMLElement | null>(null)
 const toggleButtonRef = ref<HTMLElement | null>(null)
 
@@ -21,8 +22,12 @@ const toggleButtonRef = ref<HTMLElement | null>(null)
 const dropdownTop = ref(0)
 const dropdownLeft = ref(0)
 
-const { justClosed } = useDropdownClose(dropdownRef, () => (isOpen.value = false), {
+// Target is the always-mounted wrapper div so useDropdownClose has a stable element
+// to attach to even when the teleported dropdown is destroyed (v-if false).
+// The teleported dropdown is passed as ignore so clicks inside it don't count as outside.
+const { justClosed } = useDropdownClose(wrapperRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
+  ignore: [dropdownRef],
 })
 
 function onToggle() {
@@ -47,7 +52,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
 </script>
 
 <template>
-  <div v-if="hasChildren" class="chevron-wrapper">
+  <div v-if="hasChildren" class="chevron-wrapper" ref="wrapperRef">
     <button
       ref="toggleButtonRef"
       class="chevron-button"
