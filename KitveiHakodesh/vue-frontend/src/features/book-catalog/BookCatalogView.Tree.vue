@@ -1,13 +1,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { storeToRefs } from 'pinia'
 import TreeView from '@/components/TreeView.vue'
 import type { TreeNodeItem } from '@/components/treeTypes'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 
 const emit = defineEmits<{ selectBook: [BookRow] }>()
 const store = useBooksDataStore()
+const { compactMode } = storeToRefs(useSettingsStore())
 const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
+
+const catalogRowHeight = computed(() => (compactMode.value ? 32 : 38))
 
 interface FlatNode extends TreeNodeItem {
   _book?: BookRow
@@ -70,7 +75,7 @@ defineExpose({ focusContainer, reset })
   <TreeView
     ref="treeViewRef"
     :nodes="flatNodes"
-    :row-height="38"
+    :row-height="catalogRowHeight"
     :sticky-headers="false"
     font-size="14px"
     @select="onSelect"

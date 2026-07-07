@@ -78,7 +78,7 @@ function selectItem(index: number) {
   align-items: center;
   gap: 10px;
   padding: 0 12px;
-  height: 38px;
+  height: var(--catalog-row-height, 38px);
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
