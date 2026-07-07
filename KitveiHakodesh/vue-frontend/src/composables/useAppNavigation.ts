@@ -5,7 +5,7 @@ import type { TabRoute } from '@/stores/tabStore'
 
 /**
  * Central navigation handler for all app destinations.
- * Singletons are routed via navigateToSingleton (enforces one-tab rule + closes current).
+ * Singletons are routed via navigateToSingleton (enforces one-tab rule).
  * Multi-instance pages use updateActiveTab (in-place navigation).
  * Side-effects (file picker, external links) are handled here too.
  *
@@ -82,10 +82,9 @@ export function useAppNavigation() {
   async function navigateInNewTab(label: string): Promise<void> {
     const singleton = SINGLETON_ROUTES[label]
     if (singleton) {
-      // Delegate entirely to navigateToSingleton so the one-tab rule is enforced
-      // correctly in both panes — it closes the current tab and switches to the
-      // existing singleton tab, or replaces in-place if none exists yet.
-      pane.navigateToSingleton(singleton)
+      // openInNewTab=true: opens a new tab unless the current tab is home (/),
+      // in which case it replaces in-place. If a singleton tab already exists, just switch to it.
+      pane.navigateToSingleton(singleton, true)
       return
     }
     if (label === 'חיפוש') {

@@ -11,7 +11,7 @@ import type { Tab } from '@/stores/tabStore'
 export interface PaneNavigation {
   updateActiveTab: (patch: Partial<Omit<Tab, 'id'>>) => void
   openTab: (partial: Omit<Tab, 'id'>) => Tab
-  navigateToSingleton: (route: import('@/stores/tabStore').TabRoute) => void
+  navigateToSingleton: (route: import('@/stores/tabStore').TabRoute, openInNewTab?: boolean) => void
   switchTab: (id: string) => void
   readonly activeTabId: string
   readonly activeTab: Tab

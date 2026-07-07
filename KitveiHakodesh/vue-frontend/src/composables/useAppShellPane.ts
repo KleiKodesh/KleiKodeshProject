@@ -66,8 +66,8 @@ export function useAppShellPane(paneId: 1 | 2) {
     }
   }
 
-  function navigateToSingleton(route: TabRoute) {
-    tabStore.navigateToSingleton(route, paneId)
+  function navigateToSingleton(route: TabRoute, openInNewTab = false) {
+    tabStore.navigateToSingleton(route, paneId, openInNewTab)
   }
 
   const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {

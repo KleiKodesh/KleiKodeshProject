@@ -22,7 +22,9 @@ const { titleBarVisible } = useUiChromeVisibility(paneId)
 const containerRef = ref<HTMLElement | null>(null)
 const visibleTabs = computed(() => {
   const filtered = props.tabs.filter((t) => t.route !== '/settings')
-  // Only hide the active tab if the title bar is visible
+  // When the title bar is visible the active tab is already shown there — no need to
+  // repeat it in the dropdown. When the title bar is hidden the dropdown is the only
+  // place the user can see their full tab list, so include the active tab.
   if (titleBarVisible.value) {
     return filtered.filter((t) => t.id !== props.activeTabId)
   }
@@ -78,12 +80,14 @@ nextTick(() => containerRef.value?.focus())
   z-index: 10000;
   max-height: 50vh;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .tab-row {
   display: flex;
   align-items: center;
-  height: 40px;
+  height: var(--title-bar-height);
   padding: 0 4px;
   cursor: pointer;
   border-top: 1px solid var(--border-color);
@@ -93,8 +97,7 @@ nextTick(() => containerRef.value?.focus())
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .tab-row.active {
-  background: color-mix(in srgb, var(--accent-color) 12%, transparent);
-  border-top-color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 .tab-row.focused {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
@@ -139,20 +142,16 @@ nextTick(() => containerRef.value?.focus())
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 6px;
+  width: var(--title-bar-button-size);
+  height: var(--title-bar-button-size);
   border-radius: 4px;
-  background: transparent;
   color: var(--text-secondary);
-  cursor: pointer;
 }
 .tab-close svg {
   width: 16px;
   height: 16px;
 }
 .tab-close:hover {
-  background: var(--hover-bg);
   color: var(--text-primary);
 }
 </style>

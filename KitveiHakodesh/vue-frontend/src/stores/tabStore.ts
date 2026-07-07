@@ -492,25 +492,36 @@ export const useTabStore = defineStore('tabs', () => {
   // Singleton pages — only one tab per route allowed *within a pane*.
   // Pane 1 and pane 2 each enforce their own singleton independently.
   // These routes are never persisted across sessions — they are always stripped before saving.
+  //
+  // openInNewTab (default false):
+  //   false — replace the current tab in-place (home page tiles, nav dropdown)
+  //   true  — open a new tab, UNLESS the current tab is the home page in which case
+  //           replace in-place (keyboard shortcuts like F1)
+  //
+  // In both modes, if a singleton tab for the route already exists, switch to it
+  // without closing or replacing anything.
 
-  function navigateToSingleton(route: TabRoute, pane: 1 | 2 = 1) {
+  function navigateToSingleton(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
     const paneTabs = pane === 1
       ? tabs.value.filter((t) => !t.pane || t.pane === 1)
       : tabs.value.filter((t) => t.pane === 2)
     const existing = paneTabs.find((t) => t.route === route)
     if (pane === 1) {
       if (existing) {
-        const currentId = activeTabId.value
+        if (existing.id === activeTabId.value) return
         switchTab(existing.id)
-        if (currentId !== existing.id) closeTab(currentId)
+      } else if (openInNewTab && activeTab.value.route !== '/') {
+        openTab({ route, title: SINGLETON_TITLES[route] ?? route })
       } else {
         updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
       }
     } else {
+      const currentPane2Route = tabs.value.find((t) => t.id === pane2ActiveTabId.value)?.route
       if (existing) {
-        const currentId = pane2ActiveTabId.value
+        if (existing.id === pane2ActiveTabId.value) return
         switchPaneTab(existing.id, 2)
-        if (currentId !== existing.id) closePane2Tab(currentId)
+      } else if (openInNewTab && currentPane2Route !== '/') {
+        openPane2Tab({ route, title: SINGLETON_TITLES[route] ?? route })
       } else {
         updatePane2ActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
       }
