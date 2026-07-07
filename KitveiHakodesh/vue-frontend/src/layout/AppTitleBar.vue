@@ -322,8 +322,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </button>
     </div>
 
-    <span class="bar-title" :title="barTitle">
-      {{ activeTab?.title }}
+    <span class="bar-title" dir="rtl" :title="barTitle">
+      <span class="bar-title-name">{{ activeTab?.title }}</span>
       <span v-if="activeTab?.tocPath" class="bar-toc-path"> · {{ activeTab?.tocPath }}</span>
     </span>
 
@@ -414,6 +414,10 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.bar-title-name {
+  unicode-bidi: isolate;
+  direction: ltr;
 }
 .bar-toc-path {
   color: var(--text-secondary);

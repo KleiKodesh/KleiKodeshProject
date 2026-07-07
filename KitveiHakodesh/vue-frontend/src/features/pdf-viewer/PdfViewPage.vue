@@ -10,11 +10,13 @@ import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrSelection } from './usePdfOcrSelection'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
+import { usePdfViewPageTracking } from './usePdfViewPageTracking'
 
 const localFileStore = useLocalFileStore()
 const tabStore = useTabStore()
 const paneNavigation = usePaneNavigation()
 const pdfOcrStore = usePdfOcrStore()
+const pageTracking = usePdfViewPageTracking()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
@@ -94,6 +96,9 @@ function detachIframeWheelRelay() {
 onBeforeUnmount(() => {
   iframeContentWindow.value = null
   detachIframeWheelRelay()
+  pageTracking.detach()
+  // Clear the TOC path so it doesn't bleed into other tabs or after navigation.
+  paneNavigation.updateActiveTab({ tocPath: undefined })
   if (iframeRef.value) {
     iframeRef.value.src = 'about:blank'
     iframeRef.value.remove()
@@ -146,8 +151,10 @@ function setPdfToolbarVisible(visible: boolean) {
 }
 
 function onIframeLoad() {
-  iframeContentWindow.value = iframeRef.value?.contentWindow ?? null
+  const contentWindow = iframeRef.value?.contentWindow ?? null
+  iframeContentWindow.value = contentWindow
   attachIframeWheelRelay()
+  if (contentWindow) pageTracking.attach(contentWindow)
   setTimeout(() => {
     syncPdfViewerTheme()
     // Apply toolbar visibility based on current setting
