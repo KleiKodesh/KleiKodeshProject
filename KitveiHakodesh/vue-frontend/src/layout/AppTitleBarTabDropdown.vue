@@ -11,11 +11,10 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
-import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
 import type { Tab } from '@/stores/tabStore'
 
-const props = defineProps<{ tabs: Tab[]; activeTabId: string; toggleButtonEl?: HTMLElement | null }>()
+const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
 const paneId = inject<1 | 2>('paneId', 1)
@@ -38,10 +37,6 @@ const { focusedIndex } = useListKeys(
     if (tab) emit('select', tab.id)
   },
 )
-
-useDropdownClose(containerRef, () => emit('dismiss'), {
-  toggleButton: computed(() => props.toggleButtonEl ?? null),
-})
 
 nextTick(() => containerRef.value?.focus())
 </script>
@@ -88,7 +83,7 @@ nextTick(() => containerRef.value?.focus())
 .tab-row {
   display: flex;
   align-items: center;
-  height: var(--title-bar-height);
+  height: 40px;
   padding: 0 4px;
   cursor: pointer;
   border-top: 1px solid var(--border-color);
@@ -144,8 +139,8 @@ nextTick(() => containerRef.value?.focus())
   display: flex;
   align-items: center;
   justify-content: center;
-  width: var(--title-bar-button-size);
-  height: var(--title-bar-button-size);
+  width: 32px;
+  height: 32px;
   padding: 6px;
   border-radius: 4px;
   background: transparent;

@@ -85,7 +85,12 @@ const pdfFilterTitle = computed(() =>
   settingsStore.pdfPageFilters ? 'בטל החלת ערכת נושא על דפי PDF' : 'החל ערכת נושא על דפי PDF',
 )
 
+const { justClosed } = useDropdownClose(barRef, () => {
+  dropdownOpen.value = false
+})
+
 function toggleTabDropdown() {
+  if (justClosed.value) return
   dropdownOpen.value = !dropdownOpen.value
 }
 
@@ -353,7 +358,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     v-if="dropdownOpen"
     :tabs="pane.tabs.value"
     :active-tab-id="pane.activeTabId.value"
-    :toggle-button-el="barRef"
     @select="selectTab"
     @close="pane.closeTab"
     @dismiss="dropdownOpen = false"

@@ -402,14 +402,20 @@ export const useTabStore = defineStore('tabs', () => {
 
   function closeAllTabs() {
     const wsId = useWorkspaceStore().activeId
-    for (const tab of tabs.value) {
-        if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
+    const pane1 = tabs.value.filter((t) => !t.pane || t.pane === 1)
+    for (const tab of pane1) {
+      if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       idbTabsDelete(KEYS.tab(wsId, tab.id))
       idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
     }
-    _bookStateCache.clear()
+    // Evict pane-1 book state cache entries only
+    for (const key of _bookStateCache.keys()) {
+      const tabId = key.split(':')[1]
+      if (pane1.some((t) => t.id === tabId)) _bookStateCache.delete(key)
+    }
     const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
-    tabs.value = [home]
+    // Keep pane-2 tabs intact — only replace pane-1 tabs with a single home tab
+    tabs.value = [home, ...tabs.value.filter((t) => t.pane === 2)]
     activeTabId.value = home.id
   }
 
