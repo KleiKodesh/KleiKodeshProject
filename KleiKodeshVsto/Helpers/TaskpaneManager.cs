@@ -148,7 +148,28 @@ namespace KleiKodesh.Helpers
                     {
                         try
                         {
-                            await UpdateChecker.CheckAndPromptForUpdateAsync(() => Globals.ThisAddIn.Application.Quit());
+                            var newVersion = await UpdateChecker.CheckForUpdateAsync();
+                            if (newVersion == null) return;
+
+                            // Marshal the dialog onto a dedicated STA thread so it has a proper
+                            // message pump. IsBackground = false (foreground thread) is critical —
+                            // background threads are killed by the runtime as soon as all foreground
+                            // threads exit, so the dialog would be silently destroyed if Word begins
+                            // shutting down before this thread gets to render.
+                            var thread = new System.Threading.Thread(() =>
+                                MessageBox.Show(
+                                    $"עדכון זמין לגרסה {newVersion}.\nהעדכון יותקן אוטומטית עם סגירת וורד.",
+                                    "עדכון זמין - כלי קודש",
+                                    MessageBoxButtons.OK,
+                                    MessageBoxIcon.Information,
+                                    MessageBoxDefaultButton.Button1,
+                                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign
+                                )
+                            );
+                            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+                            thread.IsBackground = false; // foreground — won't be killed during Word shutdown
+                            thread.Start();
+                            thread.Join();
                         }
                         catch (Exception ex)
                         {

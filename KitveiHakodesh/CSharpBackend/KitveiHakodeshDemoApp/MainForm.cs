@@ -60,7 +60,22 @@ namespace KitveiHakodeshDemoApp
                 {
                     try
                     {
-                        await UpdateChecker.CheckAndPromptForUpdateAsync();
+                        var newVersion = await UpdateChecker.CheckForUpdateAsync();
+                        if (newVersion == null) return;
+
+                        // Marshal the dialog back to the WinForms UI thread so it has a
+                        // proper message pump and appears in front of the main window.
+                        Invoke(new Action(() =>
+                            MessageBox.Show(
+                                this,
+                                $"עדכון זמין לגרסה {newVersion}.\nהעדכון יותקן אוטומטית עם סגירת האפליקציה.",
+                                "עדכון זמין - כתבי הקודש",
+                                MessageBoxButtons.OK,
+                                MessageBoxIcon.Information,
+                                MessageBoxDefaultButton.Button1,
+                                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign
+                            )
+                        ));
                     }
                     catch (Exception ex)
                     {
