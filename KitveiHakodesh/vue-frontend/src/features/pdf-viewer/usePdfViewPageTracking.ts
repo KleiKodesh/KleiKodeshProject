@@ -65,7 +65,7 @@ async function buildOutlineIndex(
   function normalizeOutlineTitle(raw: string): string {
     const trimmed = raw.trim()
     const match = trimmed.match(/^([.,:;!?()\[\]{}"']+)(\p{Script=Hebrew}.*)$/u)
-    return match ? match[2] + match[1] : trimmed
+    return (match && match[1] !== undefined && match[2] !== undefined) ? match[2] + match[1] : trimmed
   }
 
   // Step 1 — flatten the outline tree into a list of { dest, path } synchronously.
@@ -125,19 +125,19 @@ async function buildOutlineIndex(
   const entries: OutlineEntry[] = []
   for (let index = 0; index < flatItems.length; index++) {
     const pageNumber = pageNumbers[index]
-    const path = flatItems[index].path
-    if (pageNumber !== null && path) {
-      entries.push({ pageNumber, path })
+    const flatItem = flatItems[index]
+    if (pageNumber != null && flatItem && flatItem.path) {
+      entries.push({ pageNumber, path: flatItem.path })
     }
   }
 
   // Sort by page ascending. On ties sort by depth ascending so the deepest
   // entry for a given page is last — the backwards lookup returns it first.
-  entries.sort((firstEntry, secondEntry) => {
-    if (firstEntry.pageNumber !== secondEntry.pageNumber) {
-      return firstEntry.pageNumber - secondEntry.pageNumber
+  entries.sort((a: OutlineEntry, b: OutlineEntry) => {
+    if (a.pageNumber !== b.pageNumber) {
+      return a.pageNumber - b.pageNumber
     }
-    return firstEntry.path.split(' · ').length - secondEntry.path.split(' · ').length
+    return a.path.split(' · ').length - b.path.split(' · ').length
   })
   return entries
 }
@@ -153,7 +153,7 @@ function fixSidebarOutlineTitles(contentWindow: Window): void {
   for (const anchor of anchors) {
     const text = anchor.textContent ?? ''
     const match = text.match(/^([.,:;!?()\[\]{}"']+)(\p{Script=Hebrew}.*)$/u)
-    if (match) anchor.textContent = match[2] + match[1]
+    if (match && match[1] !== undefined && match[2] !== undefined) anchor.textContent = match[2] + match[1]
   }
 }
 
@@ -163,8 +163,9 @@ function findActiveOutlineEntry(
 ): OutlineEntry | null {
   // Walk backwards to find the last entry whose page ≤ current page.
   for (let index = entries.length - 1; index >= 0; index--) {
-    if (entries[index].pageNumber <= currentPage) {
-      return entries[index]
+    const entry = entries[index]
+    if (entry !== undefined && entry.pageNumber <= currentPage) {
+      return entry
     }
   }
   return null

@@ -19,7 +19,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v8.4.0";
+        public const string Version         = "v3.0.0";
         public const string InstallFolderName = "KleiKodesh";
         public const string ZipResourceName = "KleiKodesh.zip";
         public const string VstoFileName    = "KleiKodesh.vsto";
@@ -171,6 +171,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             // Bloom filter search index (rebuilt on version mismatch)
             if (normalized.StartsWith("BloomFilters\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // DocumentLocator NTFS index and user exclusion list (excluded_folders.json).
+            // These are runtime-generated files — never overwrite them on update.
+            if (normalized.StartsWith("filesystemindex\\", StringComparison.OrdinalIgnoreCase))
                 return true;
 
             return false;
