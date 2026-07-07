@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { IconChevronLeft16Regular, IconHome16Regular } from '@iconify-prerendered/vue-fluent'
+import { IconHome16Regular } from '@iconify-prerendered/vue-fluent'
+import BookCatalogBreadcrumbChevronDropdown from './BookCatalogBreadcrumbChevronDropdown.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+
 defineProps<{ path: CategoryNode[] }>()
-defineEmits<{ navigate: [number] }>()
+defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: CategoryNode }] }>()
 </script>
 
 <template>
   <nav class="breadcrumb">
+    <!-- Home crumb — its dropdown lists root-level children (path[0].children) -->
     <button
       class="crumb"
       :class="{ active: path.length === 1 }"
@@ -15,8 +18,16 @@ defineEmits<{ navigate: [number] }>()
     >
       <IconHome16Regular />
     </button>
+
+    <!-- Separator after home: lists root children so user can jump sideways from root -->
+    <BookCatalogBreadcrumbChevronDropdown
+      :parent-node="path[0]!"
+      :active-child-id="path.length > 1 ? path[1]!.id : -1"
+      @select="$emit('navigateToSibling', { atIndex: 1, node: $event })"
+    />
+
+    <!-- Remaining crumbs (skip index 0 which is root/home) -->
     <template v-for="(node, i) in path.slice(1)" :key="node.id">
-      <IconChevronLeft16Regular class="sep" />
       <button
         class="crumb"
         :class="{ active: i === path.length - 2 }"
@@ -24,6 +35,14 @@ defineEmits<{ navigate: [number] }>()
       >
         {{ node.title }}
       </button>
+
+      <!-- Separator after each non-last crumb: lists that crumb's children -->
+      <BookCatalogBreadcrumbChevronDropdown
+        v-if="i < path.length - 2"
+        :parent-node="node"
+        :active-child-id="path[i + 2]!.id"
+        @select="$emit('navigateToSibling', { atIndex: i + 2, node: $event })"
+      />
     </template>
   </nav>
 </template>
@@ -55,11 +74,5 @@ defineEmits<{ navigate: [number] }>()
 .crumb.active {
   color: var(--text-primary);
   pointer-events: none;
-}
-.sep {
-  color: var(--text-secondary);
-  opacity: 0.4;
-  flex-shrink: 0;
-  width: 12px;
 }
 </style>

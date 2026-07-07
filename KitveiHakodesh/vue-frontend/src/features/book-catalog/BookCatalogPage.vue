@@ -31,6 +31,7 @@ const {
   load,
   enter,
   navigateTo,
+  navigateToSibling,
 } = useBookCatalog()
 
 const view = ref<'list' | 'tiles' | 'tree'>('list')
@@ -150,6 +151,7 @@ function onSearchEnter() {
       :is-searching="isSearching"
       @set-view="setView"
       @navigate="navigateTo"
+      @navigate-to-sibling="navigateToSibling($event.atIndex, $event.node)"
       @reset="activeViewRef?.reset?.()"
     />
     <div class="books-content">
