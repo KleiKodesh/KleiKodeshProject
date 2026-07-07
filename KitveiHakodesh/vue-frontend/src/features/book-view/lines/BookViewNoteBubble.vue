@@ -35,13 +35,15 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const noteText = ref(props.note.note)
 const isDeleting = ref(false)
 
-// Position the bubble below (or above) the anchor marker
-const style = computed(() => {
+// Resolved position — updated after mount with real bubble dimensions
+const resolvedTop = ref<number | null>(null)
+const resolvedLeft = ref<number | null>(null)
+const resolvedWidth = ref<number | null>(null)
+
+function computePosition() {
   const MARGIN = 8
   const MAX_WIDTH = 360
-  const BUBBLE_HEIGHT = 280 // approximate for vertical flip check
 
-  // Available width between left edge and right viewport edge
   const availableWidth = window.innerWidth - MARGIN * 2
   const bubbleWidth = Math.min(MAX_WIDTH, availableWidth)
 
@@ -53,16 +55,40 @@ const style = computed(() => {
     left = Math.max(MARGIN, window.innerWidth - bubbleWidth - MARGIN)
   }
 
+  // Use real bubble height when available, fall back to a safe estimate
+  const bubbleHeight = bubbleRef.value?.offsetHeight ?? 320
+
   // Flip vertically if too close to bottom
-  if (top + BUBBLE_HEIGHT > window.innerHeight - MARGIN) {
-    top = props.anchorRect.top - BUBBLE_HEIGHT - MARGIN
+  if (top + bubbleHeight > window.innerHeight - MARGIN) {
+    top = props.anchorRect.top - bubbleHeight - MARGIN
   }
 
+  // Clamp top so bubble never goes above the viewport
+  top = Math.max(MARGIN, top)
+
+  resolvedTop.value = top
+  resolvedLeft.value = left
+  resolvedWidth.value = bubbleWidth
+}
+
+// Initial style — rendered off-screen so we can measure before showing
+const style = computed(() => {
+  if (resolvedTop.value === null) {
+    // Not yet measured: render invisible so layout can be measured on mount
+    return {
+      position: 'fixed' as const,
+      top: '-9999px',
+      left: '-9999px',
+      width: `${Math.min(360, window.innerWidth - 16)}px`,
+      zIndex: '9998',
+      visibility: 'hidden' as const,
+    }
+  }
   return {
     position: 'fixed' as const,
-    left: `${left}px`,
-    top: `${top}px`,
-    width: `${bubbleWidth}px`,
+    top: `${resolvedTop.value}px`,
+    left: `${resolvedLeft.value}px`,
+    width: `${resolvedWidth.value}px`,
     zIndex: '9998',
   }
 })
@@ -83,7 +109,11 @@ useDropdownClose(bubbleRef, () => {
 })
 
 onMounted(() => {
-  nextTick(() => textareaRef.value?.focus())
+  nextTick(() => {
+    // Measure real bubble height then resolve position so it's never clipped
+    computePosition()
+    textareaRef.value?.focus()
+  })
 })
 
 onBeforeUnmount(async () => {

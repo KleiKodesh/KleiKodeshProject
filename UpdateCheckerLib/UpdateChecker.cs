@@ -80,46 +80,76 @@ namespace UpdateCheckerLib
             return result;
         }
 
-        public static async Task CheckAndPromptForUpdateAsync(Action closeApplicationAction = null)
+        /// <summary>
+        /// Checks for an update and downloads it silently if one is available.
+        /// Returns the new version tag (e.g. "v3.1.0") when a download succeeded,
+        /// or null when there is nothing to do (no update, no internet, download failed).
+        /// Does NOT show any UI — callers are responsible for marshalling back to the UI
+        /// thread and showing the notification dialog.
+        /// </summary>
+        public static async Task<string> CheckForUpdateAsync()
         {
             try
             {
                 var currentVersion = GetCurrentVersionFromRegistry();
-                if (string.IsNullOrEmpty(currentVersion)) return;
+                if (string.IsNullOrEmpty(currentVersion)) return null;
 
                 var release = await GetLatestReleaseAsync();
-                if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0) 
-                    return;
+                if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0)
+                    return null;
 
                 // Download silently in background
                 await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
 
-                // Only notify after successful download
-                if (!string.IsNullOrEmpty(DownloadManager.PendingInstallerPath))
-                {
-                    ShowHebrewMessageBox(
-                        $"עדכון זמין לגרסה {release.TagName}.\nהעדכון יותקן אוטומטית עם סגירת וורד.",
-                        "עדכון זמין - כלי קודש",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
-                    );
-                }
+                // Return the version tag only if the download succeeded
+                return string.IsNullOrEmpty(DownloadManager.PendingInstallerPath) ? null : release.TagName;
             }
             catch (UpdateCheckException ex)
             {
                 Debug.WriteLine($"Update check failed: {ex.Message} — {ex.InnerException?.Message}");
-
-                // No internet connection — cancel silently, don't bother the user.
-                if (IsNoConnectivityException(ex.InnerException))
-                    return;
-
-                // Don't show error messages for failed update checks - fail silently
-                Debug.WriteLine($"Update check error: {ex.ToUserMessage()}");
+                return null;
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"Update check failed: {ex.Message}");
+                return null;
             }
+        }
+
+        /// <summary>
+        /// Legacy helper kept for call sites that need the old fire-and-forget behaviour.
+        /// Prefer <see cref="CheckForUpdateAsync"/> so callers can marshal the dialog
+        /// to the UI thread themselves.
+        /// </summary>
+        public static async Task CheckAndPromptForUpdateAsync(Action closeApplicationAction = null)
+        {
+            var newVersion = await CheckForUpdateAsync();
+            if (newVersion == null) return;
+
+            // We are still on the Task.Run threadpool thread here.
+            // Show the MessageBox on a dedicated STA thread so it has a proper message pump.
+            ShowOnStaThread(() =>
+                ShowHebrewMessageBox(
+                    $"עדכון זמין לגרסה {newVersion}.\nהעדכון יותקן אוטומטית עם סגירת וורד.",
+                    "עדכון זמין - כלי קודש",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                )
+            );
+        }
+
+        /// <summary>
+        /// Runs <paramref name="action"/> on a fresh STA thread so that WinForms
+        /// MessageBox (and any other COM/UI calls) have a proper message pump.
+        /// Blocks the calling thread until the STA thread finishes.
+        /// </summary>
+        private static void ShowOnStaThread(Action action)
+        {
+            var thread = new System.Threading.Thread(() => action());
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.IsBackground = true;
+            thread.Start();
+            thread.Join();
         }
 
         public static async Task<bool> IsUpdateAvailableAsync()
