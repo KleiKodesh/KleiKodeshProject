@@ -62,8 +62,8 @@ function resolveTocSegments(
 
   for (let segmentIndex = 0; segmentIndex < labels.length; segmentIndex++) {
     const label = labels[segmentIndex]!
-    const siblings = childrenByParentId.get(currentParentId) ?? []
-    const matched = siblings.find((entry) => entry.text === label) ?? null
+    const siblings: TocEntry[] = childrenByParentId.get(currentParentId) ?? []
+    const matched: TocEntry | null = siblings.find((entry: TocEntry) => entry.text === label) ?? null
     const children = matched ? (childrenByParentId.get(matched.id) ?? []) : []
 
     segments.push({
