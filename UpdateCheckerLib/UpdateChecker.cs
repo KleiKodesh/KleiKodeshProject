@@ -91,15 +91,19 @@ namespace UpdateCheckerLib
                 if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0) 
                     return;
 
-                var result = ShowHebrewMessageBox(
-                    $"גרסה חדשה זמינה: {release.TagName}\nהגרסה הנוכחית שלך: {currentVersion}\n\nהאם ברצונך להוריד ולהתקין את הגרסה החדשה?",
-                    "עדכון זמין - כלי קודש",
-                    MessageBoxButtons.YesNo,
-                    MessageBoxIcon.Question
-                );
+                // Download silently in background
+                await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
 
-                if (result == DialogResult.Yes)
-                    await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
+                // Only notify after successful download
+                if (!string.IsNullOrEmpty(DownloadManager.PendingInstallerPath))
+                {
+                    ShowHebrewMessageBox(
+                        $"עדכון זמין לגרסה {release.TagName}.\nהעדכון יותקן אוטומטית עם סגירת וורד.",
+                        "עדכון זמין - כלי קודש",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Information
+                    );
+                }
             }
             catch (UpdateCheckException ex)
             {
@@ -109,12 +113,8 @@ namespace UpdateCheckerLib
                 if (IsNoConnectivityException(ex.InnerException))
                     return;
 
-                ShowHebrewMessageBox(
-                    $"בדיקת עדכונים נכשלה.\n\n{ex.ToUserMessage()}",
-                    "שגיאה - כלי קודש",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning
-                );
+                // Don't show error messages for failed update checks - fail silently
+                Debug.WriteLine($"Update check error: {ex.ToUserMessage()}");
             }
             catch (Exception ex)
             {
