@@ -98,6 +98,11 @@ function onSelect(segment: BreadcrumbSegment, item: { id: number; text: string }
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* direction: ltr makes ellipsis appear at the start (right side in RTL).
+     unicode-bidi: plaintext prevents bidi reordering so Hebrew + punctuation
+     renders in natural order rather than being forced LTR. */
+  direction: ltr;
+  unicode-bidi: plaintext;
   opacity: 0.7;
   white-space: nowrap;
 }
