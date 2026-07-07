@@ -209,3 +209,38 @@
   direction: rtl;
   unicode-bidi: embed;
 }
+
+/* --- Page count floating badge ---
+   Visible only when the toolbar is too narrow to show #numPages (≤580px).
+   Fades in on page change and fades out after 2s of inactivity.
+   Positioned at the physical bottom-right corner (inline-start in RTL). */
+#pageCountBadge {
+  display: none;
+  position: fixed;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 1px 5px;
+  background: light-dark(rgba(255, 255, 255, 0.65), rgba(30, 30, 30, 0.65));
+  color: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.6));
+  backdrop-filter: blur(4px);
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1.4;
+  font-family: inherit;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+#pageCountBadge.visible {
+  opacity: 1;
+}
+
+@media (max-width: 580px) {
+  #pageCountBadge:not(:empty) {
+    display: block;
+  }
+}

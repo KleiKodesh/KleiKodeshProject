@@ -1326,5 +1326,62 @@ See https://github.com/adobe-type-tools/cmap-resources
         }
       })();
     </script>
+
+    <!-- Page count floating badge — shown at bottom-right when #numPages is hidden by compact toolbar -->
+    <div id="pageCountBadge"></div>
+
+    <script>
+      // Custom: floating page count badge.
+      // Fades in briefly on page change / document load, then fades out after 2s.
+      // Only shown at ≤580px where #numPages is hidden by the compact toolbar.
+      (function () {
+        function initPageCountBadge() {
+          var badge = document.getElementById('pageCountBadge');
+          if (!badge) return;
+
+          var fadeTimer = null;
+
+          function showBadge(currentPage, totalPages) {
+            if (!totalPages) return;
+            badge.textContent = currentPage + ' / ' + totalPages;
+            // Restart fade-in.
+            badge.classList.add('visible');
+            if (fadeTimer) clearTimeout(fadeTimer);
+            fadeTimer = setTimeout(function () {
+              badge.classList.remove('visible');
+              fadeTimer = null;
+            }, 2000);
+          }
+
+          function waitForApp() {
+            var app = window.PDFViewerApplication;
+            if (!app || !app.eventBus) {
+              setTimeout(waitForApp, 100);
+              return;
+            }
+
+            app.eventBus._on('documentloaded', function () {
+              showBadge(app.page, app.pagesCount);
+            });
+
+            app.eventBus._on('pagechanging', function (data) {
+              showBadge(data.pageNumber, app.pagesCount);
+            });
+
+            if (app.pdfDocument) {
+              showBadge(app.page, app.pagesCount);
+            }
+          }
+
+          waitForApp();
+        }
+
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initPageCountBadge);
+        } else {
+          initPageCountBadge();
+        }
+      })();
+    </script>
   </body>
 </html>

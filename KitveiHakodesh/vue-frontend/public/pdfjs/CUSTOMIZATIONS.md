@@ -510,6 +510,79 @@ These three remain `false` intentionally:
 
 ---
 
+## `web/viewer.html` — Page count floating badge
+
+### Element
+
+Add a `<div id="pageCountBadge"></div>` immediately before `</body>`.
+
+### Init script
+
+Add this `<script>` block immediately after the page count badge `<div>` (before `</body>`). It listens to the PDF.js internal `documentloaded` and `pagechanging` events via `PDFViewerApplication.eventBus` and updates the badge text to `"currentPage / totalPages"`. The badge starts empty and is only shown by CSS when it has content.
+
+```js
+(function () {
+  function initPageCountBadge() {
+    var badge = document.getElementById('pageCountBadge');
+    if (!badge) return;
+
+    function updateBadge(currentPage, totalPages) {
+      if (!totalPages) { badge.textContent = ''; return; }
+      badge.textContent = currentPage + ' / ' + totalPages;
+    }
+
+    function waitForApp() {
+      var app = window.PDFViewerApplication;
+      if (!app || !app.eventBus) { setTimeout(waitForApp, 100); return; }
+      app.eventBus._on('documentloaded', function () { updateBadge(app.page, app.pagesCount); });
+      app.eventBus._on('pagechanging', function (data) { updateBadge(data.pageNumber, app.pagesCount); });
+      if (app.pdfDocument) { updateBadge(app.page, app.pagesCount); }
+    }
+    waitForApp();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initPageCountBadge);
+  } else {
+    initPageCountBadge();
+  }
+})();
+```
+
+### CSS (`viewer-custom.css`)
+
+The badge is hidden by default and shown only when the toolbar is in compact mode (≤580px — same breakpoint where `#numPages` is hidden), and only when it has content. It fades in on page change and fades out after 2 seconds via a `setTimeout` that removes the `.visible` class. Deliberately unthemed (semi-transparent black/white) so it sits lightly on top of any PDF content.
+
+```css
+#pageCountBadge {
+  display: none;
+  position: fixed;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  padding: 1px 5px;
+  background: light-dark(rgba(255, 255, 255, 0.65), rgba(30, 30, 30, 0.65));
+  color: light-dark(rgba(0, 0, 0, 0.6), rgba(255, 255, 255, 0.6));
+  backdrop-filter: blur(4px);
+  border-radius: 2px;
+  font-size: 9px;
+  line-height: 1.4;
+  pointer-events: none;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 300ms ease;
+}
+
+#pageCountBadge.visible { opacity: 1; }
+
+@media (max-width: 580px) {
+  #pageCountBadge:not(:empty) { display: block; }
+}
+```
+
+---
+
 ## Vue App Integration (no changes needed on upgrade)
 
 These live in the Vue app and do not need to be re-applied to PDF.js:
