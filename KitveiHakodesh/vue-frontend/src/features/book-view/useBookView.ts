@@ -331,7 +331,18 @@ export function useBookView(
     if (result?.pinnedCommentaryGroup != null) restorePin(result.pinnedCommentaryGroup)
   })
 
-  onBeforeUnmount(() => paneNavigation.updateActiveTab({ tocPath: undefined }))
+  // Register the TOC bridge synchronously at setup so the title bar breadcrumb
+  // can read tocEntries immediately when the tab becomes active, without waiting
+  // for onMounted (which runs after an async restoreSession await).
+  bookViewStore.registerTocBridge(tabId, {
+    get tocEntries() { return tocEntries.value },
+    navigateToEntry: (entry) => onTocSelect(entry),
+  })
+
+  onBeforeUnmount(() => {
+    paneNavigation.updateActiveTab({ tocPath: undefined })
+    bookViewStore.unregisterTocBridge(tabId)
+  })
 
   watch(searchPanel.searchVisible, (visible) => {
     if (!visible) { contentSearch.clear(); commentarySearch.clear() }
