@@ -24,6 +24,9 @@ import ThemeToggle from '@/theme/ThemeToggle.vue'
 // don't add to the cold-start parse cost. They load on first open, which is imperceptible.
 const AppTitleBarTabDropdown = defineAsyncComponent(() => import('./AppTitleBarTabDropdown.vue'))
 const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarNavDropdown.vue'))
+import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
+import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
+import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
@@ -45,6 +48,24 @@ const { width: windowWidth } = useWindowSize()
 // Split view requires enough horizontal space for two usable panes.
 const SPLIT_VIEW_MIN_WIDTH = 768
 const isSplitViewAvailable = computed(() => !isVsto && windowWidth.value >= SPLIT_VIEW_MIN_WIDTH)
+
+// ── TOC breadcrumb ────────────────────────────────────────────────────────────
+
+const { segments: tocBreadcrumbSegments } = useAppTitleBarTocBreadcrumb(
+  () => activeTab.value?.route,
+  () => activeTab.value?.tocPath,
+  () => pane.activeTabId.value,
+  (tabId) => bookViewStore.getTocBridge(tabId),
+  (tabId) => bookViewStore.getPdfBridge(tabId),
+)
+
+function onNavigateToBreadcrumbEntry(entry: import('@/features/book-view/toc/useBookViewToc').TocEntry) {
+  bookViewStore.getTocBridge(pane.activeTabId.value)?.navigateToEntry(entry)
+}
+
+function onNavigateToPdfBreadcrumbEntry(entry: import('@/stores/bookViewStore').PdfOutlineEntry) {
+  bookViewStore.getPdfBridge(pane.activeTabId.value)?.navigateToEntry(entry)
+}
 
 // ── Button visibility helpers ─────────────────────────────────────────────────
 
@@ -323,8 +344,24 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     </div>
 
     <span class="bar-title" dir="rtl" :title="barTitle">
-      <span class="bar-title-name">{{ activeTab?.title }}</span>
-      <span v-if="activeTab?.tocPath" class="bar-toc-path"> · {{ activeTab?.tocPath }}</span>
+      <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
+      <AppTitleBarTocBreadcrumb
+        v-if="tocBreadcrumbSegments.length > 0"
+        :book-title="activeTab?.title ?? ''"
+        :segments="tocBreadcrumbSegments"
+        @navigate-to-toc-entry="onNavigateToBreadcrumbEntry"
+        @navigate-to-pdf-entry="onNavigateToPdfBreadcrumbEntry"
+      />
+      <!-- Plain title + toc path for all other routes -->
+      <template v-else>
+        <span class="bar-title-name">{{ activeTab?.title }}</span>
+        <template v-if="activeTab?.tocPath">
+          <template v-for="segment in activeTab.tocPath.split(' · ')" :key="segment">
+            <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
+            <span class="bar-toc-segment">{{ segment }}</span>
+          </template>
+        </template>
+      </template>
     </span>
 
     <div class="bar-end">
@@ -375,6 +412,25 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 </template>
 
 <style scoped>
+/* ── Title bar layout — Flexbox centering trick (DO NOT CHANGE) ────────────────
+ * Three-zone layout: left buttons | centered title | right buttons.
+ * The title is truly centered relative to the bar (not just between the buttons)
+ * and uses maximum available space without ever overlapping the button groups.
+ *
+ * How it works (from tchumim.com):
+ *   - .bar-start and .bar-end both get flex: 1 → each grows to fill half the
+ *     leftover space, keeping the center perfectly symmetric.
+ *   - .bar-title gets flex: 0 1 auto → does NOT grow (won't steal from sides),
+ *     CAN shrink when space is tight, sizes to content by default.
+ *   - min-width: 0 + overflow: hidden on .bar-title → allows shrinking below
+ *     natural content width, which triggers text-overflow: ellipsis on children.
+ *   - justify-content: flex-end on .bar-end → buttons stick to the right edge,
+ *     leaving the gap between the sides free for the centered title.
+ *
+ * Breaking this means either: title drifts off-center, title overlaps buttons,
+ * or ellipsis stops working. Do not add flex-grow to .bar-title or remove
+ * flex: 1 from the sides.
+ * ──────────────────────────────────────────────────────────────────────────── */
 .title-bar-container {
   position: relative;
 }
@@ -408,12 +464,27 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   flex: 1;
 }
 .bar-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
   font-weight: 400;
   font-size: 0.82rem;
   color: var(--text-secondary);
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
+  padding-inline: 4px;
+  flex: 0 1 auto;
+}
+/* Block pointer events on text spans so clicks bubble to the header toggle,
+   but leave buttons (chevrons) fully interactive. */
+.bar-title .breadcrumb-title-name,
+.bar-title .bar-title-name,
+.bar-title .bar-toc-segment,
+.bar-title .bar-toc-path,
+.bar-title .breadcrumb-segment {
+  pointer-events: none;
 }
 .bar-title-name {
   unicode-bidi: isolate;
@@ -422,6 +493,16 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 .bar-toc-path {
   color: var(--text-secondary);
   opacity: 0.7;
+}
+.bar-toc-segment {
+  color: var(--text-secondary);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+  min-width: 0;
+  margin-inline-end: 2px;
 }
 .bar-btn {
   display: flex;

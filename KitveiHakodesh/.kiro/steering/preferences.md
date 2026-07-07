@@ -122,7 +122,15 @@ The one legitimate exception is pinch-to-zoom: detecting the distance between tw
 - No code samples in steering files — describe rules and patterns in plain prose only
 - Whenever the architecture changes — new components, composables, stores, routes, or feature folders added or removed — update `architecture.md` to reflect the change
 
-## Navigation Controls (RTL)
+## Title Bar Center Layout
+
+The title bar uses a three-zone flexbox layout for true centering with ellipsis support. The rules are in `AppTitleBar.vue` — read the CSS comment block before touching `.bar-start`, `.bar-end`, or `.bar-title`. The short version:
+
+- `.bar-start` and `.bar-end`: `flex: 1` — symmetric growth keeps the center mathematically centered
+- `.bar-title`: `flex: 0 1 auto`, `min-width: 0`, `overflow: hidden` — shrinks when needed, never grows into the sides, ellipsis works on its children
+- `.bar-end`: `justify-content: flex-end` — buttons anchor right, leaving the middle free
+
+Never use `position: absolute`, `grid`, or add `flex-grow` to `.bar-title`. Never remove `flex: 1` from the sides. This is the tchumim.com solution for centering with unequal sides.
 
 In RTL layout, the leftmost button is always the "next/advance" button. For prev/next navigation pairs, always use `IconChevronLeft` for next (advance) and `IconChevronRight` for prev (back). The correct button order reading left→right on screen is: `<` (next) · `>` (prev) · home · toggle. Never reverse this — the chevron icon direction matches the reading direction, not the semantic direction.
 

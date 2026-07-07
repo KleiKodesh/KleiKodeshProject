@@ -15,6 +15,8 @@
  */
 import { onBeforeUnmount } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useBookViewStore } from '@/stores/bookViewStore'
+import type { PdfOutlineEntry } from '@/stores/bookViewStore'
 
 // PDF.js types — just enough for what we access at runtime.
 interface PdfDestinationRef {
@@ -173,13 +175,40 @@ function findActiveOutlineEntry(
 
 export function usePdfViewPageTracking() {
   const paneNavigation = usePaneNavigation()
+  const bookViewStore = useBookViewStore()
 
   let contentWindowRef: Window | null = null
   let outlineEntries: OutlineEntry[] = []
+  let pdfOutlineEntries: PdfOutlineEntry[] = []
+  let tabId: string | null = null
   let pendingPage: { pageNumber: number } | null = null
   let pagechangingHandler: ((data: unknown) => void) | null = null
   let documentloadedHandler: ((data: unknown) => void) | null = null
   let sidebarViewChangedHandler: ((data: unknown) => void) | null = null
+  let applicationRef: PdfViewerApplication | null = null
+
+  function buildPdfOutlineEntries(entries: OutlineEntry[]): PdfOutlineEntry[] {
+    // Deduplicate by path — keep first occurrence (lowest page number due to sort order).
+    const seen = new Set<string>()
+    const result: PdfOutlineEntry[] = []
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index]!
+      if (seen.has(entry.path)) continue
+      seen.add(entry.path)
+      const segments = entry.path.split(' · ')
+      const text = segments[segments.length - 1] ?? entry.path
+      const parentPath = segments.length > 1 ? segments.slice(0, -1).join(' · ') : ''
+      result.push({ id: index, text, fullPath: entry.path, parentPath })
+    }
+    return result
+  }
+
+  function navigateToPdfEntry(entry: PdfOutlineEntry) {
+    // Find the first flat outline entry with this path and jump to its page.
+    const flat = outlineEntries.find((e) => e.path === entry.fullPath)
+    if (!flat || !applicationRef) return
+    applicationRef.page = flat.pageNumber
+  }
 
   // Remove debug logging now that we have the answer
   function writeTocPath(currentPage: number) {
@@ -198,6 +227,14 @@ export function usePdfViewPageTracking() {
     if (!pdfDocument) return
 
     outlineEntries = await buildOutlineIndex(pdfDocument)
+    pdfOutlineEntries = buildPdfOutlineEntries(outlineEntries)
+
+    if (tabId) {
+      bookViewStore.registerPdfBridge(tabId, {
+        get outlineEntries() { return pdfOutlineEntries },
+        navigateToEntry: navigateToPdfEntry,
+      })
+    }
 
     // Apply any page change that arrived while the index was being built.
     const pending = pendingPage
@@ -209,11 +246,13 @@ export function usePdfViewPageTracking() {
   function attach(contentWindow: Window) {
     detach()
     contentWindowRef = contentWindow
+    tabId = paneNavigation.activeTabId
 
     const application = (contentWindow as unknown as { PDFViewerApplication: PdfViewerApplication })
       .PDFViewerApplication
 
     if (!application) return
+    applicationRef = application
 
     // pagechanging is only dispatched on the internal eventBus — never on the
     // DOM window. Subscribe via eventBus directly.
@@ -248,6 +287,10 @@ export function usePdfViewPageTracking() {
   }
 
   function detach() {
+    if (tabId) {
+      bookViewStore.unregisterPdfBridge(tabId)
+    }
+
     if (contentWindowRef) {
       const application = (
         contentWindowRef as unknown as { PDFViewerApplication: PdfViewerApplication }
@@ -261,11 +304,14 @@ export function usePdfViewPageTracking() {
     }
 
     contentWindowRef = null
+    applicationRef = null
+    tabId = null
     pagechangingHandler = null
     documentloadedHandler = null
     sidebarViewChangedHandler = null
     pendingPage = null
     outlineEntries = []
+    pdfOutlineEntries = []
   }
 
   onBeforeUnmount(() => {

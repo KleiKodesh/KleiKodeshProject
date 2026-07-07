@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, reactive, computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
 import { lsGet, lsSet, KEYS } from '@/utils/persistence'
@@ -9,7 +9,40 @@ import {
   zoomOut as zoomOutUtil,
   resetZoom as resetZoomUtil,
 } from '@/composables/useZoom'
+import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
+
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
+
+/**
+ * Bridge registered by each mounted book-view tab so the title bar can read
+ * the TOC entry tree and navigate to a TOC entry without querying the database.
+ * Never persisted — in-memory only; cleaned up on unmount.
+ */
+export interface TocBridge {
+  tocEntries: TocEntry[]
+  navigateToEntry: (entry: TocEntry) => void
+}
+
+/**
+ * A single entry in the PDF outline, shaped for breadcrumb navigation.
+ * Derived from the flat OutlineEntry list in usePdfViewPageTracking.
+ */
+export interface PdfOutlineEntry {
+  id: number        // index in the flat outline list — stable unique key
+  text: string      // the last path segment (leaf label)
+  fullPath: string  // the full " · "-joined path, used to match the active tocPath
+  parentPath: string // all segments except the last, or "" for root entries
+}
+
+/**
+ * Bridge registered by each mounted PDF-view tab so the title bar can read
+ * the outline tree and navigate to a page without querying the iframe directly.
+ * Never persisted — in-memory only; cleaned up on unmount.
+ */
+export interface PdfBridge {
+  outlineEntries: PdfOutlineEntry[]
+  navigateToEntry: (entry: PdfOutlineEntry) => void
+}
 
 export const useBookViewStore = defineStore('bookView', () => {
   const tabStore = useTabStore()
@@ -210,6 +243,39 @@ export const useBookViewStore = defineStore('bookView', () => {
     commentaryZoom.value = resetZoomUtil()
   }
 
+  // ── TOC bridge — per-tab registration for title bar navigation ────────────
+  // Uses a reactive Map so insertions/deletions trigger computed re-evaluation.
+
+  const tocBridgeByTabId = reactive(new Map<string, TocBridge>())
+
+  function registerTocBridge(tabId: string, bridge: TocBridge) {
+    tocBridgeByTabId.set(tabId, bridge)
+  }
+
+  function unregisterTocBridge(tabId: string) {
+    tocBridgeByTabId.delete(tabId)
+  }
+
+  function getTocBridge(tabId: string): TocBridge | null {
+    return tocBridgeByTabId.get(tabId) ?? null
+  }
+
+  // ── PDF bridge — per-tab registration for PDF outline breadcrumb navigation
+
+  const pdfBridgeByTabId = reactive(new Map<string, PdfBridge>())
+
+  function registerPdfBridge(tabId: string, bridge: PdfBridge) {
+    pdfBridgeByTabId.set(tabId, bridge)
+  }
+
+  function unregisterPdfBridge(tabId: string) {
+    pdfBridgeByTabId.delete(tabId)
+  }
+
+  function getPdfBridge(tabId: string): PdfBridge | null {
+    return pdfBridgeByTabId.get(tabId) ?? null
+  }
+
   return {
     toolbarVisible,
     toolbarPosition,
@@ -249,5 +315,11 @@ export const useBookViewStore = defineStore('bookView', () => {
     zoomIn,
     zoomOut,
     resetZoom,
+    registerTocBridge,
+    unregisterTocBridge,
+    getTocBridge,
+    registerPdfBridge,
+    unregisterPdfBridge,
+    getPdfBridge,
   }
 })

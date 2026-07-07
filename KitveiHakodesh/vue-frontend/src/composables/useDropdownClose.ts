@@ -67,7 +67,16 @@ export function useDropdownClose(
     useEventListener(window, 'blur', (e: FocusEvent) => {
       // Use setTimeout so document.activeElement settles before we check focus.
       setTimeout(() => {
-        if (toValue(target) && !document.hasFocus()) close(e)
+        if (!toValue(target)) return
+        // document.hasFocus() returns true when focus is inside a child iframe
+        // (the top-level document is still considered focused). We must also
+        // close when focus has moved into an iframe — detect that by checking
+        // whether document.activeElement is an iframe or object element.
+        const activeElement = document.activeElement
+        const focusMovedIntoFrame =
+          activeElement instanceof HTMLIFrameElement ||
+          activeElement instanceof HTMLObjectElement
+        if (!document.hasFocus() || focusMovedIntoFrame) close(e)
       }, 0)
     })
   }
