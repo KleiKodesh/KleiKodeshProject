@@ -47,6 +47,7 @@ export function useBookViewSearchPanel(
   linesContentRef: () => LinesContentInstance | null,
   commentaryViewRef: () => CommentaryViewInstance | null,
   searchBarRef: () => { focus: () => void } | null,
+  clearFullTextSearchHighlights: () => void,
 ) {
   const searchVisible = ref(false)
   const searchMode = ref<SearchMode>('content')
@@ -111,6 +112,9 @@ export function useBookViewSearchPanel(
   }
 
   function onQueryChange(query: string) {
+    if (query.trim()) {
+      clearFullTextSearchHighlights()
+    }
     activeSearch.value.query.value = query
     searchNavigationState[searchMode.value] = false
   }

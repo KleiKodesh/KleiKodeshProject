@@ -210,6 +210,14 @@ export function useBookView(
   const searchPanel = useBookViewSearchPanel(
     contentSearch, commentarySearch,
     linesContentRef, commentaryViewRef, searchBarRef,
+    () => {
+      paneNavigation.updateActiveTab({
+        searchHighlightLineIndex: undefined,
+        searchHighlightQuery: undefined,
+        searchHighlightSnippet: undefined,
+        searchHighlightTerms: undefined,
+      })
+    },
   )
 
   // ── Side panel + commentary panel ─────────────────────────────────────────
