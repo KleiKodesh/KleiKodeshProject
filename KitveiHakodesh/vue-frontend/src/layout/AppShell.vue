@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import AppTitleBar from './AppTitleBar.vue'
 import AppPageView from './AppPageView.vue'
 import { provide } from 'vue'
@@ -53,13 +53,11 @@ provide(PANE_NAVIGATION_KEY, {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: visible;
+  overflow: hidden;
   min-width: 0;
-  position: relative;
 }
 .app-shell-content {
   flex: 1;
   overflow: hidden;
-  min-height: 0;
 }
 </style>
