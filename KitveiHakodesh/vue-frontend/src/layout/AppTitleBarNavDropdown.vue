@@ -39,7 +39,6 @@ const tiles = [
   { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32', shortcut: 'Ctrl+7' },
   { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914', shortcut: 'Ctrl+8' },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4', shortcut: 'Ctrl+9' },
-  { label: 'הגדרות', icon: IconSettings24, color: undefined, shortcut: 'F1' },
 ]
 
 async function onTap(label: string) {
@@ -56,10 +55,9 @@ function onPopOut() {
 <template>
   <div ref="menuRef" class="nav-dropdown" @click.stop>
     <button
-      v-for="(tile, index) in tiles"
+      v-for="tile in tiles"
       :key="tile.label"
       class="nav-row"
-      :class="{ 'nav-row-separator': index === tiles.length - 1 }"
       :title="`${tile.label} (${tile.shortcut})`"
       @click="onTap(tile.label)"
     >
@@ -68,6 +66,12 @@ function onPopOut() {
       </span>
       <span class="nav-label">{{ tile.label }}</span>
       <span class="nav-shortcut">{{ tile.shortcut }}</span>
+    </button>
+    <hr class="nav-divider" />
+    <button class="nav-row" title="הגדרות (F1)" @click="onTap('הגדרות')">
+      <span class="nav-icon"><IconSettings24 /></span>
+      <span class="nav-label">הגדרות</span>
+      <span class="nav-shortcut">F1</span>
     </button>
     <button
       v-if="showPopOutButton"
@@ -104,7 +108,7 @@ function onPopOut() {
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 36px;
+  height: 32px;
   padding: 0 10px;
   background: none;
   border: none;
@@ -148,10 +152,9 @@ function onPopOut() {
   margin-inline-start: auto;
 }
 
-.nav-row-separator {
+.nav-divider {
+  border: none;
   border-top: 1px solid var(--border-color);
-  margin-top: 3px;
-  padding-top: 3px;
-  height: 39px;
+  margin: 0;
 }
 </style>
