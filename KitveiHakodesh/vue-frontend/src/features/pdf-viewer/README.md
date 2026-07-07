@@ -13,6 +13,9 @@ PDF viewing with OCR-based text extraction and script recognition.
 - `pdfOcrInjectedScript.ts` — script injected into the PDF.js iframe; handles rectangle selection, text layer extraction, and canvas capture
 - `pdfViewerTypes.ts` — TypeScript types: `OcrScript` (`'hebrew' | 'rashi' | 'mixed'`), `OcrSelectionResult`
 
+**Page Tracking:**
+- `usePdfViewPageTracking.ts` — composable; reads the PDF's built-in outline (TOC) via `PDFViewerApplication.pdfDocument.getOutline()` and resolves each entry's destination to a 1-based page number. On every `pagechanging` event it finds the deepest outline entry whose page ≤ the current page and writes the full ancestor breadcrumb (e.g. "פרק א · סימן ב") as `tocPath` on the active tab. Falls back to "עמוד X מתוך Y" when the PDF has no outline. `AppTitleBar` renders `tocPath` the same way it renders the book view TOC breadcrumb. Call `attach(contentWindow)` after iframe load and `detach()` before tear-down.
+
 **Store:**
 - `pdfOcrStore.ts` (in `src/stores/`) — OCR UI state: active flag, script selection, skip-existing-text flag
 

@@ -1,11 +1,8 @@
-clock in full scrren needs to be lower down smae hoght as footer in home page
 pdf files toc in title bar
 
 add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
-
-תצוגה מפוצלת
 
 ספרים קרובים update for book with source
 

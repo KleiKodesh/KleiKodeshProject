@@ -198,3 +198,14 @@
     display: none;
   }
 }
+
+/* --- Hebrew RTL outline (TOC) sidebar ---
+   The viewer HTML root is dir="ltr". Hebrew titles that end with punctuation
+   like ":" or "." are rendered incorrectly by the bidi algorithm — the weak
+   punctuation character attaches to the LTR context and jumps to the wrong end.
+   Setting direction:rtl on the anchor element gives each title its own RTL
+   base direction so punctuation stays anchored to the Hebrew text. */
+.treeItem > a {
+  direction: rtl;
+  unicode-bidi: embed;
+}
