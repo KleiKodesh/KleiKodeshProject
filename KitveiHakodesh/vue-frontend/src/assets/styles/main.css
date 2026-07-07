@@ -26,6 +26,7 @@ body {
   --toolbar-horizontal-padding: 2px 4px;
   --toolbar-vertical-padding: 2px 2px;
   --toolbar-button-size: 28px;
+  --catalog-row-height: 32px;
 }
 
 html[data-density="normal"] {
@@ -37,6 +38,7 @@ html[data-density="normal"] {
   --toolbar-horizontal-padding: 2px 4px;
   --toolbar-vertical-padding: 4px 2px;
   --toolbar-button-size: 32px;
+  --catalog-row-height: 38px;
 }
 
 /* Global icon-button defaults — applies to all toolbar/bar buttons app-wide */
