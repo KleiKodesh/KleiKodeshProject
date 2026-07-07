@@ -257,6 +257,7 @@ export const KEYS = {
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
   SETTINGS_SPLIT_VIEW: 'splitView.enabled',
   SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
+  SETTINGS_COMPACT_MODE: 'compactMode',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

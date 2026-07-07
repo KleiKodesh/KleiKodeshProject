@@ -384,8 +384,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 .title-bar {
   display: flex;
   align-items: center;
-  height: 40px;
-  padding: 0 4px;
+  height: var(--title-bar-height);
+  padding: var(--title-bar-padding);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   position: relative;
@@ -427,8 +427,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--title-bar-button-size);
+  height: var(--title-bar-button-size);
   padding: 6px;
   border-radius: 4px;
 }

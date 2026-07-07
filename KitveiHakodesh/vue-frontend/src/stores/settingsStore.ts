@@ -43,6 +43,7 @@ const DEFAULTS = {
   linesContentMaxWidth: 0,
   commentaryMaxWidth: 0,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
+  compactMode: true,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -80,6 +81,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
+  const compactMode = ref(DEFAULTS.compactMode)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -118,6 +120,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const effectiveCommentaryMaxWidth = useSeparateCommentarySettings.value ? commentaryMaxWidth.value : linesContentMaxWidth.value
     style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
+    document.documentElement.setAttribute('data-density', compactMode.value ? 'compact' : 'normal')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
@@ -166,6 +169,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
+    loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
     applyCSSVariables()
   }
 
@@ -203,6 +207,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
+  persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -272,6 +277,7 @@ export const useSettingsStore = defineStore('settings', () => {
     linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
+    compactMode.value = DEFAULTS.compactMode
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -291,6 +297,7 @@ export const useSettingsStore = defineStore('settings', () => {
     linesContentMaxWidth,
     commentaryMaxWidth,
     titleBarHiddenButtons,
+    compactMode,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

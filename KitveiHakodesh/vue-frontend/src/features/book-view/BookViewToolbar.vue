@@ -285,16 +285,16 @@ defineExpose({ tocBtnRef })
 .toolbar-top,
 .toolbar-bottom {
   flex-direction: row;
-  height: 32px;
+  height: var(--toolbar-horizontal-height);
   justify-content: center;
 }
 .toolbar-left,
 .toolbar-right {
   flex-direction: column;
   justify-content: flex-start;
-  width: 40px;
+  width: var(--toolbar-vertical-width);
   height: auto;
-  padding: 4px 2px;
+  padding: var(--toolbar-vertical-padding);
 }
 
 /* ── Borders ── */
@@ -316,8 +316,8 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--toolbar-button-size);
+  height: var(--toolbar-button-size);
   padding: 6px;
   border-radius: 4px;
   flex-shrink: 0;
