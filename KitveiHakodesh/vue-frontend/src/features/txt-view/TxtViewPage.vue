@@ -35,10 +35,13 @@ const virtualUrl = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
 
 const { titleBarVisible } = useUiChromeVisibility(paneId)
-const APP_TITLE_BAR_HEIGHT = 40
-const searchBarStyle = computed(() => ({
-  top: `${(titleBarVisible.value ? APP_TITLE_BAR_HEIGHT : 0) + 4}px`,
-}))
+const searchBarStyle = computed(() => {
+  const titleBarHeight = getComputedStyle(document.documentElement)
+    .getPropertyValue('--title-bar-height')
+    .trim()
+  const offset = titleBarVisible.value ? parseInt(titleBarHeight) : 0
+  return { top: `${offset + 4}px` }
+})
 
 const rawContent = ref<string | null>(null)
 const loading = ref(false)
@@ -172,9 +175,11 @@ function scrollToCurrentMatch() {
   element.scrollIntoView({ behavior: 'instant', block: 'nearest' })
 
   // Then check if the element is hidden behind the search bar and nudge down
-  const APP_TITLE_BAR_HEIGHT = 40
+  const titleBarHeight = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue('--title-bar-height').trim()
+  )
   const SEARCH_BAR_HEIGHT = 36
-  const topClearance = (titleBarVisible.value ? APP_TITLE_BAR_HEIGHT : 0) + SEARCH_BAR_HEIGHT + 8
+  const topClearance = (titleBarVisible.value ? titleBarHeight : 0) + SEARCH_BAR_HEIGHT + 8
 
   const containerRect = container.getBoundingClientRect()
   const elementTop = element.getBoundingClientRect().top - containerRect.top

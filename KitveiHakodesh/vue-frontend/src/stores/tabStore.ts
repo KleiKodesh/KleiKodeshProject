@@ -445,7 +445,8 @@ export const useTabStore = defineStore('tabs', () => {
         tabs.value.splice(idx, 1)
         tabs.value.unshift(tab)
       }
-      if (TRACKABLE_ROUTES.has(tab.route)) {
+      // Only track navigation when the route or bookId/file identity changes — not on every tocPath update.
+      if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)
       }
     }
@@ -455,7 +456,8 @@ export const useTabStore = defineStore('tabs', () => {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (tab) {
       Object.assign(tab, patch)
-      if (TRACKABLE_ROUTES.has(tab.route)) {
+      // Only track navigation when the route or bookId/file identity changes — not on every tocPath update.
+      if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)
       }
     }
@@ -468,7 +470,8 @@ export const useTabStore = defineStore('tabs', () => {
     const tab = tabs.value.find((t) => t.id === id && t.pane === 2)
     if (tab) {
       Object.assign(tab, patch)
-      if (TRACKABLE_ROUTES.has(tab.route)) {
+      // Only track navigation when the route or bookId/file identity changes — not on every tocPath update.
+      if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)
       }
     }

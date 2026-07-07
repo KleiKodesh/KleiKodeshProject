@@ -44,21 +44,25 @@ watch(() => props.commentaryVisible, (v) => {
   if (!v && searchMode.value === 'commentary') searchMode.value = 'content'
 })
 
-const APP_TITLE_BAR = 40
-const BOOK_TOOLBAR = 32
-
 const paneId = inject<1 | 2>('paneId', 1)
 const { titleBarVisible } = useUiChromeVisibility(paneId)
 
 const isBottomAnchored = computed(() => props.toolbarPosition === 'bottom')
 
 const panelStyle = computed(() => {
+  const titleBarHeight = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue('--title-bar-height').trim()
+  )
+  const toolbarHeight = parseInt(
+    getComputedStyle(document.documentElement).getPropertyValue('--toolbar-horizontal-height').trim()
+  )
+
   if (isBottomAnchored.value) {
-    const toolbarOffset = props.toolbarVisible ? BOOK_TOOLBAR : 0
+    const toolbarOffset = props.toolbarVisible ? toolbarHeight : 0
     return { bottom: `${toolbarOffset + 4}px` }
   }
-  const titleBarOffset = titleBarVisible.value ? APP_TITLE_BAR : 0
-  const toolbarOffset = props.toolbarVisible && props.toolbarPosition === 'top' ? BOOK_TOOLBAR : 0
+  const titleBarOffset = titleBarVisible.value ? titleBarHeight : 0
+  const toolbarOffset = props.toolbarVisible && props.toolbarPosition === 'top' ? toolbarHeight : 0
   return { top: `${titleBarOffset + toolbarOffset + 4}px` }
 })
 
