@@ -8,7 +8,12 @@ import {
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 defineProps<{ view: 'list' | 'tiles' | 'tree'; path: CategoryNode[]; isSearching: boolean }>()
-defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [] }>()
+defineEmits<{
+  setView: ['list' | 'tiles' | 'tree']
+  navigate: [number]
+  navigateToSibling: [{ atIndex: number; node: CategoryNode }]
+  reset: []
+}>()
 </script>
 
 <template>
@@ -17,6 +22,7 @@ defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [
       v-if="view !== 'tree' || isSearching"
       :path="path"
       @navigate="$emit('navigate', $event)"
+      @navigate-to-sibling="$emit('navigateToSibling', $event)"
     />
     <button v-else class="home-btn" title="איפוס" @click="$emit('reset')">
       <IconHome16Regular />
@@ -54,6 +60,8 @@ defineEmits<{ setView: ['list' | 'tiles' | 'tree']; navigate: [number]; reset: [
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-toolbar);
   min-height: 32px;
+  position: relative;
+  z-index: 10;
 }
 .home-btn {
   display: inline-flex;

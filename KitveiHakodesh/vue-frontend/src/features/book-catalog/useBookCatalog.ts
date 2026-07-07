@@ -46,6 +46,11 @@ export function useBookCatalog() {
     path.value = path.value.slice(0, index + 1)
     searchQuery.value = ''
   }
+  /** Navigate to a sibling of the node at `index`, replacing everything from that index onward. */
+  function navigateToSibling(index: number, node: CategoryNode) {
+    path.value = [...path.value.slice(0, index), node]
+    searchQuery.value = ''
+  }
 
   return {
     loading,
@@ -59,5 +64,6 @@ export function useBookCatalog() {
     load: store.ensureLoaded,
     enter,
     navigateTo,
+    navigateToSibling,
   }
 }
