@@ -61,6 +61,19 @@ export function useBookViewScrollSync(
     }
   }
 
+  /**
+   * Forces a one-time TOC path sync for a known line index without waiting for
+   * a scroll event. Used by session restore so the breadcrumb is populated
+   * immediately when a book reloads to its saved position.
+   */
+  function syncTocPathForLineIndex(lineIndex: number) {
+    const entry = getActiveTocEntry(lineIndex)
+    if (entry) {
+      activeTocEntryId.value = entry.id
+      paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
+    }
+  }
+
   watch(autoSelectTopLine, (enabled) => {
     if (!enabled && autoSelectCommentaryTimer) {
       clearTimeout(autoSelectCommentaryTimer)
@@ -68,5 +81,5 @@ export function useBookViewScrollSync(
     }
   })
 
-  return { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled }
+  return { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled, syncTocPathForLineIndex }
 }
