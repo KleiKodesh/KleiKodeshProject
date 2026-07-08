@@ -44,6 +44,7 @@ const DEFAULTS = {
   commentaryMaxWidth: 0,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   compactMode: true,
+  showRecentlyOpened: true,
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -82,6 +83,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const compactMode = ref(DEFAULTS.compactMode)
+  const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -170,6 +172,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
+    loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     applyCSSVariables()
   }
 
@@ -208,6 +211,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
+  persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -278,6 +282,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     compactMode.value = DEFAULTS.compactMode
+    showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     lsClearSettingsOnly()
     applyCSSVariables()
   }
@@ -298,6 +303,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth,
     titleBarHiddenButtons,
     compactMode,
+    showRecentlyOpened,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })
