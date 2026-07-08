@@ -236,10 +236,12 @@ export async function toggleFullscreen(): Promise<void> {
 export function hbSearch(
   query: string,
   localFolder?: string,
+  limit?: number,
 ): Promise<{ books?: unknown[]; error?: string }> {
   return action<{ books?: unknown[]; error?: string }>('hbSearch', {
     query,
     localFolder: localFolder || '',
+    ...(limit !== undefined ? { limit } : {}),
   })
 }
 

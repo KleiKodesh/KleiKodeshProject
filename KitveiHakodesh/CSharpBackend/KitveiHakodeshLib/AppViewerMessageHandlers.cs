@@ -237,10 +237,13 @@ namespace KitveiHakodeshLib
             }
             string query = root.TryGetProperty("query", out var q) ? (q.GetString() ?? "") : "";
             string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
+            int limit = root.TryGetProperty("limit", out var lim) && lim.TryGetInt32(out int limVal)
+                ? limVal
+                : HebrewBooksDb.DefaultSearchResultLimit;
             if (string.IsNullOrWhiteSpace(localFolder)) localFolder = KitveiHakodeshLib.Settings.AppSettings.LoadHbLocalFolder();
             try
             {
-                var results = _hebrewBooksDb.Search(query, localFolder);
+                var results = _hebrewBooksDb.Search(query, localFolder, limit);
                 _bridge.Reply(id, new { books = results });
             }
             catch (Exception ex)

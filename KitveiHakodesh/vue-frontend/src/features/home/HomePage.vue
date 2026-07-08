@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import HomeTile from './HomePageTile.vue'
+import HomeSearchDropdown from './HomeSearchDropdown.vue'
+import { useHomeSearch } from './useHomeSearch'
+import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { restoreLocalFile } from '@/webview-host/bridge'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
   IconLibrary24Filled,
   IconFolder24Filled,
@@ -73,6 +78,87 @@ const tiles = computed(() => {
 
 const pageRef = ref<HTMLElement | null>(null)
 const innerRef = ref<HTMLElement | null>(null)
+const homeSearchQuery = ref('')
+const searchBarRef = ref<HTMLElement | null>(null)
+const searchBarInputRef = ref<HTMLInputElement | null>(null)
+const isSearchDropdownOpen = ref(false)
+
+const {
+  catalogResults,
+  hebrewBooksResults,
+  fileResults,
+  isLoadingHebrewBooks,
+  isLoadingFiles,
+  hasAnyResults,
+  clearResults,
+} = useHomeSearch(homeSearchQuery)
+
+useDropdownClose(searchBarRef, () => { isSearchDropdownOpen.value = false })
+
+// Open the dropdown when async sources resolve results after the debounce
+watch([hebrewBooksResults, fileResults], () => {
+  if ((homeSearchQuery.value ?? '').trim().length >= 2 && hasAnyResults()) {
+    isSearchDropdownOpen.value = true
+  }
+})
+
+function onSearchBarFocus() {
+  if (hasAnyResults()) isSearchDropdownOpen.value = true
+}
+
+function onSearchBarInput() {
+  const hasQuery = (homeSearchQuery.value ?? '').trim().length >= 2
+  isSearchDropdownOpen.value = hasQuery
+}
+
+function closeSearchDropdown() {
+  isSearchDropdownOpen.value = false
+  clearResults()
+  homeSearchQuery.value = ''
+}
+
+function onSelectCatalogBook(bookId: number, bookTitle: string) {
+  closeSearchDropdown()
+  paneNavigation.updateActiveTab({ route: '/book-view', title: bookTitle, bookId })
+}
+
+function onSelectHebrewBook(bookId: number, bookTitle: string) {
+  closeSearchDropdown()
+  // Navigate to the HebrewBooks page — the user can open the specific book from there.
+  // Direct open would require triggering the download flow which belongs to useHebrewBooks.
+  paneNavigation.navigateToSingleton('/hebrewbooks')
+}
+
+async function onSelectFile(fullPath: string, fileName: string) {
+  closeSearchDropdown()
+  if (!isHosted) return
+
+  const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
+
+  if (extension === '.txt') {
+    paneNavigation.updateActiveTab({
+      route: '/txt-view',
+      title: fileName,
+      localFileName: fileName,
+      localFilePath: fullPath,
+      localFileVirtualUrl: undefined,
+    })
+    return
+  }
+
+  const isHtmlLike = extension === '.htm' || extension === '.html'
+  const route = isHtmlLike ? '/html-view' : '/pdf-view'
+  const restored = await restoreLocalFile(fullPath)
+  if (!restored?.url) return
+
+  paneNavigation.updateActiveTab({
+    route,
+    title: fileName,
+    localFileName: fileName,
+    localFilePath: fullPath,
+    localFileVirtualUrl: restored.url,
+  })
+}
 const { width: containerWidth } = useElementSize(innerRef)
 
 const visibleRecentlyOpenedList = computed(() => {
@@ -114,6 +200,32 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
 <template>
   <div ref="pageRef" class="home-page" tabindex="0">
     <div ref="innerRef" class="home-inner">
+      <div ref="searchBarRef" class="home-search-bar-wrapper">
+        <div class="home-search-bar">
+          <input
+            ref="searchBarInputRef"
+            v-model="homeSearchQuery"
+            class="home-search-bar__field"
+            type="search"
+            placeholder="חיפוש מהיר..."
+            autocomplete="off"
+            @focus="onSearchBarFocus"
+            @input="onSearchBarInput"
+          />
+          <IconSearch20Regular class="home-search-bar__icon" />
+        </div>
+        <HomeSearchDropdown
+          v-if="isSearchDropdownOpen"
+          :catalog-results="catalogResults"
+          :hebrew-books-results="hebrewBooksResults"
+          :file-results="fileResults"
+          :is-loading-hebrew-books="isLoadingHebrewBooks"
+          :is-loading-files="isLoadingFiles"
+          @select-catalog-book="onSelectCatalogBook"
+          @select-hebrew-book="onSelectHebrewBook"
+          @select-file="onSelectFile"
+        />
+      </div>
       <div class="home-grid">
         <HomeTile
           v-for="(t, i) in tiles"
@@ -165,6 +277,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   scrollbar-color: var(--border-color) transparent;
   outline: none;
   position: relative;
+  container-type: inline-size;
 }
 
 .home-inner {
@@ -182,6 +295,59 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   flex-wrap: wrap;
   justify-content: center;
   gap: 20px;
+}
+
+/* Wide-screen search bar — hidden by default, shown when there is enough room */
+.home-search-bar-wrapper {
+  display: none;
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+  margin-bottom: 24px;
+}
+
+.home-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 38px;
+  padding: 0 14px;
+  background: var(--bg-primary);
+  border: 1px solid transparent;
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
+  transition: box-shadow 150ms;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.home-search-bar:focus-within {
+  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.14);
+}
+
+.home-search-bar__field {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 14px;
+  color: var(--text-primary);
+  direction: rtl;
+}
+
+.home-search-bar__icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  opacity: 0.7;
+}
+
+@container (min-width: 600px) {
+  .home-search-bar-wrapper {
+    display: block;
+  }
 }
 
 /* Bottom bar */

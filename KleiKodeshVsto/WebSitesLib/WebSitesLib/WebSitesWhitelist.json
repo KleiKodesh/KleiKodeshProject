@@ -48,6 +48,12 @@
     "IsVisible": true
   },
   {
+    "Name": "ארון הספרים הדיגיטלי",
+    "Description": "מאגר הספרים של היברו בוקס בצורה נגישה",
+    "Url": "https://hebrewbooks.pages.dev",
+    "IsVisible": true
+  },
+  {
     "Name": "המכלול",
     "Description": "האינצקלופדיה היהודית",
     "Url": "https://www.hamichlol.org.il/",
