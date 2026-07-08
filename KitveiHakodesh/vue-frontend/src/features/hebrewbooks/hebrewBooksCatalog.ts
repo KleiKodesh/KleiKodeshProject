@@ -23,9 +23,9 @@ export function getHbPdfUrl(bookId: number): string {
  * If localFolder is provided, C# stamps hasLocalFile on each result with no extra round-trip.
  * Returns up to 200 results sorted by title.
  */
-export async function searchHbCatalog(term: string, localFolder?: string): Promise<HebrewBook[]> {
+export async function searchHbCatalog(term: string, localFolder?: string, limit?: number): Promise<HebrewBook[]> {
   try {
-    const result = await hbSearch(term, localFolder)
+    const result = await hbSearch(term, localFolder, limit)
     if (result.error) {
       console.error('Hebrew Books search error:', result.error)
       return []

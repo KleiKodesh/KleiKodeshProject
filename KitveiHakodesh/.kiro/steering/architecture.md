@@ -80,6 +80,8 @@ Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in
 
 - `HomePage.vue`, `HomePageTile.vue`, `useHomeDateInfo.ts`, `useDafYomiNavigation.ts`
 - Recently opened entries are rendered inline in `HomePage.vue`'s tile grid (after the static tiles), loaded async on mount from `recentlyOpenedStore`. No separate component.
+- `useHomeSearch.ts` — unified quick-search composable; fans the query out across book catalog (instant, title-only), HebrewBooks catalog (debounced, hosted-only), and Document Locator file search (debounced, hosted-only). Each source writes to its own result ref.
+- `HomeSearchDropdown.vue` — results dropdown for the hero search bar; grouped by source (ספרים / היברו-בוקס / קבצים) with per-section loading spinners.
 
 ### book-catalog/
 

@@ -132,17 +132,17 @@ namespace KitveiHakodeshLib.HebrewBooks
             SELECT id, title, author, placeOfPublication, year, pageCount, categories
             FROM hebrewBooks";
 
-        private const int SearchResultLimit = 200;
+        public const int DefaultSearchResultLimit = 200;
 
         /// <summary>
         /// Search for books whose title, author, or categories contain all of the query words.
         /// Each word is pushed into SQLite as a LIKE clause against the concatenated search text,
         /// so no rows are loaded into memory unless they match.
-        /// Returns up to <see cref="SearchResultLimit"/> results sorted by title.
+        /// Returns up to <paramref name="limit"/> results sorted by title.
         /// If <paramref name="localFolder"/> is non-empty, each result is stamped with
         /// <see cref="HebrewBookInfo.HasLocalFile"/> = true when {localFolder}\{id}.pdf exists.
         /// </summary>
-        public List<HebrewBookInfo> Search(string query, string localFolder = null)
+        public List<HebrewBookInfo> Search(string query, string localFolder = null, int limit = DefaultSearchResultLimit)
         {
             if (!IsInitialized) return new List<HebrewBookInfo>();
             if (string.IsNullOrWhiteSpace(query)) return new List<HebrewBookInfo>();
@@ -179,7 +179,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string sql = SelectColumns
                     + " WHERE " + string.Join(" AND ", whereParts)
                     + " ORDER BY title"
-                    + " LIMIT " + SearchResultLimit;
+                    + " LIMIT " + limit;
 
                 List<HbRow> rows;
                 lock (_connection)

@@ -197,6 +197,7 @@ async function navigateToSection(sectionId: string) {
 
 .search-input {
   flex: 1;
+  min-width: 0;
   height: 100%;
   background: none;
   border: none;
