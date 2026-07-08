@@ -258,6 +258,7 @@ export const KEYS = {
   SETTINGS_SPLIT_VIEW: 'splitView.enabled',
   SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
   SETTINGS_COMPACT_MODE: 'compactMode',
+  SETTINGS_SHOW_RECENTLY_OPENED: 'showRecentlyOpened',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

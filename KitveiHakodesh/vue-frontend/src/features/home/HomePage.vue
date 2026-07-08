@@ -27,6 +27,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useElementSize } from '@vueuse/core'
 import type { Component } from 'vue'
 
@@ -37,6 +38,7 @@ const { navigate } = useAppNavigation()
 const paneNavigation = usePaneNavigation()
 const recentlyOpenedStore = useRecentlyOpenedStore()
 const localFileStore = useLocalFileStore()
+const settingsStore = useSettingsStore()
 
 const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
 
@@ -72,6 +74,7 @@ const innerRef = ref<HTMLElement | null>(null)
 const { width: containerWidth } = useElementSize(innerRef)
 
 const visibleRecentlyOpenedList = computed(() => {
+  if (!settingsStore.showRecentlyOpened) return []
   if (!recentlyOpenedList.value.length) return []
   const effectiveWidth = containerWidth.value || 320
   const tilesPerRow = Math.max(1, Math.floor((effectiveWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)))

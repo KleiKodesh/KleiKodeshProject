@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettings } from './useSettingsPage'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
@@ -27,6 +28,9 @@ const {
 } = storeToRefs(settings)
 
 useSettings() // wires the commentary-mirror watcher
+
+const bookViewStore = useBookViewStore()
+const { toolbarPosition } = storeToRefs(bookViewStore)
 
 const bookDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
 const commentaryDisplayRef = ref<InstanceType<typeof FontDisplaySettings> | null>(null)
@@ -103,6 +107,19 @@ const commentaryMaxWidthSlider = computed({
   <!-- ── תצוגת ספר + תצוגת פירושים ── -->
   <div data-section="section-book-display" data-section-label="תצוגת ספר">
     <div id="section-book-display" class="section-label">תצוגת ספר</div>
+
+    <SettingRow id="nav-toolbar-position" data-nav-label="מיקום סרגל הכלים" label="מיקום סרגל הכלים בתצוגת ספר" wrap>
+      <ToggleGroup
+        v-model="toolbarPosition"
+        :options="[
+          { label: 'למעלה', value: 'top' },
+          { label: 'למטה', value: 'bottom' },
+          { label: 'שמאל', value: 'left' },
+          { label: 'ימין', value: 'right' },
+        ]"
+        @update:model-value="bookViewStore.setToolbarPosition($event)"
+      />
+    </SettingRow>
 
     <FontDisplaySettings
       id="nav-book-font-display"

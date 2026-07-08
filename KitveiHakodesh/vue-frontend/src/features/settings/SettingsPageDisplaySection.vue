@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import { useThemeStore } from '@/theme/themeStore'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
@@ -10,7 +9,7 @@ import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
 
 const settings = useSettingsStore()
-const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode } = storeToRefs(settings)
+const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode, showRecentlyOpened } = storeToRefs(settings)
 
 const themeStore = useThemeStore()
 const { themePreset } = storeToRefs(themeStore)
@@ -24,9 +23,6 @@ function applyDarkMode(value: boolean) {
 function applyPdfPageFilters(value: boolean) {
   if (value !== pdfPageFilters.value) settings.togglePdfPageFilters()
 }
-
-const bookViewStore = useBookViewStore()
-const { toolbarPosition } = storeToRefs(bookViewStore)
 
 const TITLE_BAR_BUTTONS = [
   { id: 'hamburger',      label: 'תפריט' },
@@ -92,11 +88,6 @@ function toggleTitleBarButton(buttonId: string) {
         ]"
       />
     </SettingRow>
-  </div>
-
-  <!-- ── אפליקציה ── -->
-  <div data-section="section-app" data-section-label="אפליקציה">
-    <div id="section-app" class="section-label">אפליקציה</div>
 
     <SliderSetting
       id="nav-app-zoom"
@@ -108,19 +99,11 @@ function toggleTitleBarButton(buttonId: string) {
       :step="0.05"
       hint="משנה את גודל כל ממשק האפליקציה"
     />
+  </div>
 
-    <SettingRow id="nav-toolbar-position" data-nav-label="מיקום סרגל הכלים" label="מיקום סרגל הכלים בתצוגת ספר" wrap>
-      <ToggleGroup
-        v-model="toolbarPosition"
-        :options="[
-          { label: 'למעלה', value: 'top' },
-          { label: 'למטה', value: 'bottom' },
-          { label: 'שמאל', value: 'left' },
-          { label: 'ימין', value: 'right' },
-        ]"
-        @update:model-value="bookViewStore.setToolbarPosition($event)"
-      />
-    </SettingRow>
+  <!-- ── אפליקציה ── -->
+  <div data-section="section-app" data-section-label="אפליקציה">
+    <div id="section-app" class="section-label">אפליקציה</div>
 
     <SettingRow id="nav-new-tab-page" data-nav-label="פתח טאב חדש אל" label="פתח טאב חדש אל" hint="הדף שיפתח בלחיצה על טאב חדש" wrap>
       <ToggleGroup
@@ -134,8 +117,17 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <div id="section-title-bar-buttons" class="subsection-label">כפתורי סרגל הכלים</div>
-    <SettingRow id="nav-title-bar-buttons" data-nav-label="הצג / הסתר כפתורים" label="הצג / הסתר כפתורים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
+    <SettingRow id="nav-show-recently-opened" data-nav-label="הצג פתוחים לאחרונה" label="הצג מסמכים שנפתחו לאחרונה בדף הבית" hint="מציג אריחי קיצור דרך לקבצים שנפתחו לאחרונה בתחתית דף הבית">
+      <ToggleGroup
+        v-model="showRecentlyOpened"
+        :options="[
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
+        ]"
+      />
+    </SettingRow>
+
+    <SettingRow id="nav-title-bar-buttons" data-nav-label="הצג / הסתר כפתורים בסרגל הכלים" label="הצג / הסתר כפתורים בסרגל הכלים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
       <div class="title-bar-chips">
         <button
           v-for="button in TITLE_BAR_BUTTONS"
