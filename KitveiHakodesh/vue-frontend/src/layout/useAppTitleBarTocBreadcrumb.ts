@@ -122,13 +122,22 @@ function resolvePdfSegments(
   return segments
 }
 
+export interface TocRootEntry {
+  id: number
+  text: string
+}
+
 export function useAppTitleBarTocBreadcrumb(
   activeTabRoute: () => string | undefined,
   activeTabTocPath: () => string | undefined,
   activeTabId: () => string,
   getTocBridge: (tabId: string) => TocBridge | null,
   getPdfBridge: (tabId: string) => PdfBridge | null,
-): { segments: ComputedRef<BreadcrumbSegment[]> } {
+): {
+  segments: ComputedRef<BreadcrumbSegment[]>
+  rootTocEntries: ComputedRef<TocEntry[]>
+  rootPdfEntries: ComputedRef<PdfOutlineEntry[]>
+} {
   const segments = computed<BreadcrumbSegment[]>(() => {
     const route = activeTabRoute()
     const tocPath = activeTabTocPath()
@@ -153,5 +162,29 @@ export function useAppTitleBarTocBreadcrumb(
     return []
   })
 
-  return { segments }
+  /**
+   * First-tier TocEntry items for the book-title dropdown on book-view tabs.
+   * Empty when no bridge is registered or the TOC has no entries.
+   */
+  const rootTocEntries = computed<TocEntry[]>(() => {
+    const route = activeTabRoute()
+    if (route !== '/book-view') return []
+    const bridge = getTocBridge(activeTabId())
+    if (!bridge || !bridge.tocEntries.length) return []
+    return bridge.tocEntries.filter((entry) => entry.parentId == null)
+  })
+
+  /**
+   * First-tier PdfOutlineEntry items for the book-title dropdown on pdf-view tabs.
+   * Empty when no bridge is registered or the outline has no entries.
+   */
+  const rootPdfEntries = computed<PdfOutlineEntry[]>(() => {
+    const route = activeTabRoute()
+    if (route !== '/pdf-view') return []
+    const bridge = getPdfBridge(activeTabId())
+    if (!bridge || !bridge.outlineEntries.length) return []
+    return bridge.outlineEntries.filter((entry) => entry.parentPath === '')
+  })
+
+  return { segments, rootTocEntries, rootPdfEntries }
 }

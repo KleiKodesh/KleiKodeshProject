@@ -5,9 +5,13 @@ import { isTocBreadcrumbSegment } from './useAppTitleBarTocBreadcrumb'
 import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
 import type { PdfOutlineEntry } from '@/stores/bookViewStore'
 
-defineProps<{
+const props = defineProps<{
   bookTitle: string
   segments: BreadcrumbSegment[]
+  /** First-tier TOC entries for the book-title dropdown (book-view). Empty = no dropdown. */
+  rootTocEntries: TocEntry[]
+  /** First-tier PDF outline entries for the book-title dropdown (pdf-view). Empty = no dropdown. */
+  rootPdfEntries: PdfOutlineEntry[]
 }>()
 
 const emit = defineEmits<{
@@ -36,10 +40,33 @@ function onSelect(segment: BreadcrumbSegment, item: { id: number; text: string }
     const entry = pool.find((s) => s.id === item.id)
     if (entry) emit('navigateToTocEntry', entry)
   } else {
-    const pool = fromChildren ? (segment as PdfBreadcrumbSegment).children : (segment as PdfBreadcrumbSegment).siblings
+    const pool = fromChildren
+      ? (segment as PdfBreadcrumbSegment).children
+      : (segment as PdfBreadcrumbSegment).siblings
     const entry = pool.find((s) => s.id === item.id)
     if (entry) emit('navigateToPdfEntry', entry)
   }
+}
+
+/**
+ * The active root entry id = the matched entry of the first breadcrumb segment,
+ * so the dropdown highlights the currently open top-level section.
+ */
+function activeRootEntryId(): number | null {
+  if (!props.segments.length) return null
+  const first = props.segments[0]!
+  if (isTocBreadcrumbSegment(first)) return first.tocEntry?.id ?? null
+  return (first as PdfBreadcrumbSegment).outlineEntry?.id ?? null
+}
+
+function onSelectRootTocEntry(item: { id: number; text: string }) {
+  const entry = props.rootTocEntries.find((e) => e.id === item.id)
+  if (entry) emit('navigateToTocEntry', entry)
+}
+
+function onSelectRootPdfEntry(item: { id: number; text: string }) {
+  const entry = props.rootPdfEntries.find((e) => e.id === item.id)
+  if (entry) emit('navigateToPdfEntry', entry)
 }
 </script>
 
@@ -47,10 +74,28 @@ function onSelect(segment: BreadcrumbSegment, item: { id: number; text: string }
   <span class="toc-breadcrumb" dir="rtl">
     <span class="breadcrumb-title-name">{{ bookTitle }}</span>
 
+    <!-- Dropdown on the book title showing all first-tier TOC entries.
+         Only rendered when the bridge is registered and TOC has entries. -->
+    <AppTitleBarBreadcrumbChevronDropdown
+      v-if="rootTocEntries.length > 0"
+      :siblings="rootTocEntries"
+      :active-sibling-id="activeRootEntryId()"
+      @select="onSelectRootTocEntry"
+    />
+    <AppTitleBarBreadcrumbChevronDropdown
+      v-else-if="rootPdfEntries.length > 0"
+      :siblings="rootPdfEntries"
+      :active-sibling-id="activeRootEntryId()"
+      @select="onSelectRootPdfEntry"
+    />
+
     <template v-if="segments.length > 0">
       <template v-for="(segment, index) in segments" :key="index">
-        <!-- Chevron before every segment listing that segment's siblings -->
+        <!-- Chevron before every segment listing that segment's siblings.
+             Skip index 0 when the title already has a root dropdown — they list
+             the same entries and showing both creates a duplicate chevron. -->
         <AppTitleBarBreadcrumbChevronDropdown
+          v-if="index > 0 || (rootTocEntries.length === 0 && rootPdfEntries.length === 0)"
           :siblings="siblingItems(segment)"
           :active-sibling-id="activeSiblingId(segment)"
           @select="onSelect(segment, $event)"

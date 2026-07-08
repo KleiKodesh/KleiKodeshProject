@@ -51,7 +51,11 @@ const isSplitViewAvailable = computed(() => !isVsto && windowWidth.value >= SPLI
 
 // ── TOC breadcrumb ────────────────────────────────────────────────────────────
 
-const { segments: tocBreadcrumbSegments } = useAppTitleBarTocBreadcrumb(
+const {
+  segments: tocBreadcrumbSegments,
+  rootTocEntries: tocBreadcrumbRootTocEntries,
+  rootPdfEntries: tocBreadcrumbRootPdfEntries,
+} = useAppTitleBarTocBreadcrumb(
   () => activeTab.value?.route,
   () => activeTab.value?.tocPath,
   () => pane.activeTabId.value,
@@ -346,9 +350,11 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     <span class="bar-title" dir="rtl" :title="barTitle">
       <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
       <AppTitleBarTocBreadcrumb
-        v-if="tocBreadcrumbSegments.length > 0"
+        v-if="tocBreadcrumbSegments.length > 0 || tocBreadcrumbRootTocEntries.length > 0 || tocBreadcrumbRootPdfEntries.length > 0"
         :book-title="activeTab?.title ?? ''"
         :segments="tocBreadcrumbSegments"
+        :root-toc-entries="tocBreadcrumbRootTocEntries"
+        :root-pdf-entries="tocBreadcrumbRootPdfEntries"
         @navigate-to-toc-entry="onNavigateToBreadcrumbEntry"
         @navigate-to-pdf-entry="onNavigateToPdfBreadcrumbEntry"
       />

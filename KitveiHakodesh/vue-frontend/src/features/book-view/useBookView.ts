@@ -172,7 +172,7 @@ export function useBookView(
 
   watch(pinnedCommentaryGroup, (group) => { pinnedCommentaryGroupForDisplay.value = group }, { immediate: true })
 
-  const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled } = useBookViewScrollSync(
+  const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled, syncTocPathForLineIndex } = useBookViewScrollSync(
     () => lines.value,
     activeTocEntryId,
     selectedLineId,
@@ -329,6 +329,27 @@ export function useBookView(
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
     if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction
     if (result?.pinnedCommentaryGroup != null) restorePin(result.pinnedCommentaryGroup)
+
+    // After session restore, the virtualizer has scrolled to the saved line index
+    // but onLinesScrolled has not fired yet, so tocPath is empty and the breadcrumb
+    // shows nothing. Sync it now using the restored scroll index.
+    // If TOC entries are already loaded (common case), this is synchronous.
+    // If not, watch for them to arrive (they load in parallel with session restore).
+    const restoredLineIndex = initialScrollTop.value
+    if (restoredLineIndex != null) {
+      if (tocEntries.value.length > 0) {
+        syncTocPathForLineIndex(restoredLineIndex)
+      } else {
+        const stopWatch = watch(
+          () => tocEntries.value.length,
+          (count) => {
+            if (count === 0) return
+            stopWatch()
+            syncTocPathForLineIndex(restoredLineIndex)
+          },
+        )
+      }
+    }
   })
 
   // Register the TOC bridge synchronously at setup so the title bar breadcrumb
