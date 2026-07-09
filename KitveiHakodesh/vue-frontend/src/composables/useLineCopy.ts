@@ -57,15 +57,35 @@ export function execCopyHtmlToClipboard(html: string): void {
 }
 
 /**
+ * Callback registered by the current copy action handler. When set, useScopedCopy
+ * calls this after writing to the clipboard — used by onPasteIntoWord to fire the
+ * bridge action only after the clipboard write is confirmed complete.
+ */
+let _afterCopyCallback: (() => void) | null = null
+
+/**
+ * Triggers document.execCommand('copy') so that useScopedCopy intercepts the copy
+ * event and writes the formatted HTML to the clipboard. If afterCopy is provided,
+ * it is called once inside the copy event handler after the clipboard write, before
+ * the event handler returns — guaranteeing the clipboard is set before the callback runs.
+ */
+export function triggerCopy(afterCopy?: () => void): void {
+  _afterCopyCallback = afterCopy ?? null
+  document.execCommand('copy')
+}
+
+/**
  * Intercepts the native browser copy event on a scroller element and applies the
  * active copy format settings via buildFormattedHtml.
  *
  * Flow for all copy paths (menu, Ctrl+C):
- *   1. Copy action fires document.execCommand('copy')
+ *   1. Copy action fires document.execCommand('copy') via triggerCopy()
  *   2. Browser dispatches copy event on the focused element
  *   3. This handler intercepts it, calls buildFormattedHtml to apply all active flags
  *      (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText)
  *   4. Writes the result to event.clipboardData and calls event.preventDefault()
+ *   5. If an afterCopy callback was registered via triggerCopy(), calls it now —
+ *      the clipboard is guaranteed to be set at this point.
  *
  * Programmatic copies from execCopyHtmlToClipboard are skipped via _isProgrammaticCopy.
  * When buildFormattedHtml returns null (no selection), the event is not intercepted.
@@ -86,6 +106,10 @@ export function useScopedCopy(
     event.clipboardData?.setData('text/html', wrapRtlHtml(formatted))
     event.clipboardData?.setData('text/plain', htmlToPlainText(formatted))
     event.preventDefault()
+
+    const callback = _afterCopyCallback
+    _afterCopyCallback = null
+    callback?.()
   })
 
   useEventListener(scrollerEl, 'dragstart', (event: DragEvent) => {
