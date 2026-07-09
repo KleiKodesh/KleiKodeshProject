@@ -50,10 +50,12 @@ namespace UpdateCheckerLib
         {
             try
             {
+                // No registry = portable install, skip all update logic
+                var registryVersion = GetCurrentVersionFromRegistry();
+                if (string.IsNullOrEmpty(registryVersion)) return null;
+
                 var fileVersion = DownloadManager.GetInstallerFileVersion();
                 if (fileVersion == null) return null;
-
-                var registryVersion = GetCurrentVersionFromRegistry();
 
                 if (CompareVersions(fileVersion, registryVersion) > 0)
                 {
