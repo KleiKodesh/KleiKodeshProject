@@ -137,52 +137,37 @@ namespace KleiKodesh.Helpers
         {
             try
             {
-                // Check for updates on first taskpane open with Hebrew prompt
                 bool turnedOff = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
-                if (!_updateCheckDone && !turnedOff)
+                if (_updateCheckDone || turnedOff) return;
+                _updateCheckDone = true;
+
+                // ── Step 1: sync disk check — no network, no threading ──────────────
+                // Reads %TEMP%\KleiKodeshSetup.exe version and compares to registry.
+                // Arms RunPendingInstaller() and returns the version if newer.
+                // Deletes the file if it's stale or already installed.
+                var readyVersion = UpdateChecker.GetReadyUpdateVersion();
+                if (readyVersion != null)
                 {
-                    _updateCheckDone = true;
-
-                    // Run update check asynchronously without blocking UI
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var newVersion = await UpdateChecker.CheckForUpdateAsync();
-                            if (newVersion == null) return;
-
-                            // Marshal the dialog onto a dedicated STA thread so it has a proper
-                            // message pump. IsBackground = false (foreground thread) is critical —
-                            // background threads are killed by the runtime as soon as all foreground
-                            // threads exit, so the dialog would be silently destroyed if Word begins
-                            // shutting down before this thread gets to render.
-                            var thread = new System.Threading.Thread(() =>
-                                MessageBox.Show(
-                                    $"עדכון זמין לגרסה {newVersion}.\nהעדכון יותקן אוטומטית עם סגירת וורד.",
-                                    "עדכון זמין - כלי קודש",
-                                    MessageBoxButtons.OK,
-                                    MessageBoxIcon.Information,
-                                    MessageBoxDefaultButton.Button1,
-                                    MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign
-                                )
-                            );
-                            thread.SetApartmentState(System.Threading.ApartmentState.STA);
-                            thread.IsBackground = false; // foreground — won't be killed during Word shutdown
-                            thread.Start();
-                            thread.Join();
-                        }
-                        catch (Exception ex)
-                        {
-                            // Log silently instead of showing MessageBox to avoid blocking UI
-                            System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
-                        }
-                    });
+                    UpdateNotificationForm.Show(
+                        $"עדכון זמין לגרסה {readyVersion}.\nהעדכון יותקן אוטומטית עם סגירת וורד."
+                    );
                 }
+
+                // ── Step 2: async GitHub check — always runs regardless of Step 1 ──
+                // Downloads a newer installer silently if one exists.
+                // No UI. PendingInstallerPath is never touched here.
+                _ = Task.Run(async () =>
+                {
+                    try { await UpdateChecker.CheckForUpdateAsync(); }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
+                    }
+                });
             }
             catch (Exception ex)
             {
-                // Log silently instead of showing MessageBox to avoid blocking UI
-                System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] CheckForUpdates failed: {ex.Message}");
             }
         }
 

@@ -1,11 +1,11 @@
 using Microsoft.Win32;
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
-using System.Windows.Forms;
 
 namespace UpdateCheckerLib
 {
@@ -31,6 +31,49 @@ namespace UpdateCheckerLib
                     return key?.GetValue("Version")?.ToString();
             }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// Synchronous disk-only check — no network, no async, no threading concerns.
+        /// Reads %TEMP%\KleiKodeshSetup.exe's embedded ProductVersion and compares it
+        /// against the installed version in the registry.
+        ///
+        /// Returns the version string (e.g. "v8.6.0") and arms RunPendingInstaller()
+        /// when a newer installer is already downloaded and waiting.
+        ///
+        /// Side effects:
+        ///   file > registry  → sets PendingInstallerPath, returns version
+        ///   file <= registry → deletes the stale/already-installed file, returns null
+        ///   no file          → returns null
+        /// </summary>
+        public static string GetReadyUpdateVersion()
+        {
+            try
+            {
+                var fileVersion = DownloadManager.GetInstallerFileVersion();
+                if (fileVersion == null) return null;
+
+                var registryVersion = GetCurrentVersionFromRegistry();
+
+                if (CompareVersions(fileVersion, registryVersion) > 0)
+                {
+                    // Newer installer on disk — arm the launcher
+                    DownloadManager.PendingInstallerPath =
+                        Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe");
+                    return fileVersion;
+                }
+                else
+                {
+                    // File is same version or older — already installed or stale. Clean up.
+                    DownloadManager.DeleteInstallerFile();
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[UpdateChecker] GetReadyUpdateVersion failed: {ex.Message}");
+                return null;
+            }
         }
 
         public static async Task<GitHubRelease> GetLatestReleaseAsync()
@@ -81,93 +124,46 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
-        /// Checks for an update and downloads it silently if one is available.
-        /// Returns the new version tag (e.g. "v3.1.0") when a newer version exists on GitHub,
-        /// or null when there is nothing to do (no update, no internet).
-        /// The download is attempted in the background but its success does NOT gate the return value —
-        /// callers always receive the tag so they can show the notification dialog.
-        /// If the download failed, RunPendingInstaller() on close is a silent no-op.
-        /// Does NOT show any UI — callers are responsible for marshalling back to the UI
-        /// thread and showing the notification dialog.
+        /// Background-only task: hits the GitHub API and silently downloads a newer
+        /// installer to %TEMP%\KleiKodeshSetup.exe if one is available.
+        /// Never shows any UI. Never sets PendingInstallerPath.
+        /// The downloaded file will be picked up by GetReadyUpdateVersion() on the
+        /// next session's sync check.
+        ///
+        /// Also skips the download if %TEMP%\KleiKodeshSetup.exe already contains
+        /// the latest version (e.g. a previous download succeeded but the user hasn't
+        /// closed the app yet).
         /// </summary>
-        public static async Task<string> CheckForUpdateAsync()
+        public static async Task CheckForUpdateAsync()
         {
             try
             {
                 var currentVersion = GetCurrentVersionFromRegistry();
-                if (string.IsNullOrEmpty(currentVersion)) return null;
+                if (string.IsNullOrEmpty(currentVersion)) return;
 
                 var release = await GetLatestReleaseAsync();
                 if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0)
-                    return null;
+                    return;
 
-                // Download silently in background — failure is swallowed inside DownloadManager.
-                // We start the download but do NOT gate the notification on its success.
+                // Check if the file already on disk is already this version — no need to re-download
+                var existingFileVersion = DownloadManager.GetInstallerFileVersion();
+                if (existingFileVersion != null &&
+                    CompareVersions(existingFileVersion, release.TagName) >= 0)
+                {
+                    Debug.WriteLine($"[UpdateChecker] {release.TagName} already downloaded, skipping.");
+                    return;
+                }
+
                 await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
-
-                // Always notify the user that an update exists, even if the download failed.
-                // If the download did succeed, RunPendingInstaller() on close will launch it.
-                return release.TagName;
             }
             catch (UpdateCheckException ex)
             {
-                Debug.WriteLine($"Update check failed: {ex.Message} — {ex.InnerException?.Message}");
-                return null;
+                Debug.WriteLine($"[UpdateChecker] Update check failed: {ex.Message} — {ex.InnerException?.Message}");
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"Update check failed: {ex.Message}");
-                return null;
+                Debug.WriteLine($"[UpdateChecker] Update check failed: {ex.Message}");
             }
-        }
-
-        /// <summary>
-        /// Legacy helper kept for call sites that need the old fire-and-forget behaviour.
-        /// Prefer <see cref="CheckForUpdateAsync"/> so callers can marshal the dialog
-        /// to the UI thread themselves.
-        /// </summary>
-        public static async Task CheckAndPromptForUpdateAsync(Action closeApplicationAction = null)
-        {
-            var newVersion = await CheckForUpdateAsync();
-            if (newVersion == null) return;
-
-            // We are still on the Task.Run threadpool thread here.
-            // Show the MessageBox on a dedicated STA thread so it has a proper message pump.
-            ShowOnStaThread(() =>
-                ShowHebrewMessageBox(
-                    $"עדכון זמין לגרסה {newVersion}.\nהעדכון יותקן אוטומטית עם סגירת וורד.",
-                    "עדכון זמין - כלי קודש",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information
-                )
-            );
-        }
-
-        /// <summary>
-        /// Runs <paramref name="action"/> on a fresh STA thread so that WinForms
-        /// MessageBox (and any other COM/UI calls) have a proper message pump.
-        /// Blocks the calling thread until the STA thread finishes.
-        /// </summary>
-        private static void ShowOnStaThread(Action action)
-        {
-            var thread = new System.Threading.Thread(() => action());
-            thread.SetApartmentState(System.Threading.ApartmentState.STA);
-            thread.IsBackground = true;
-            thread.Start();
-            thread.Join();
-        }
-
-        public static async Task<bool> IsUpdateAvailableAsync()
-        {
-            try
-            {
-                var currentVersion = GetCurrentVersionFromRegistry();
-                if (string.IsNullOrEmpty(currentVersion)) return false;
-
-                var release = await GetLatestReleaseAsync();
-                return release?.TagName != null && CompareVersions(release.TagName, currentVersion) > 0;
-            }
-            catch { return false; }
         }
 
         /// <summary>
@@ -224,9 +220,5 @@ namespace UpdateCheckerLib
 
             return false;
         }
-
-        private static DialogResult ShowHebrewMessageBox(string text, string caption, MessageBoxButtons buttons, MessageBoxIcon icon) =>
-            MessageBox.Show(text, caption, buttons, icon, MessageBoxDefaultButton.Button1,
-                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign);
     }
 }

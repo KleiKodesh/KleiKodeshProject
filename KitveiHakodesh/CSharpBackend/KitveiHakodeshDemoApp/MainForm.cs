@@ -53,36 +53,32 @@ namespace KitveiHakodeshDemoApp
             if (AppSettings.LoadMainWindowMaximized())
                 WindowState = FormWindowState.Maximized;
 
-            if (!_updateCheckDone)
-            {
-                _updateCheckDone = true;
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        var newVersion = await UpdateChecker.CheckForUpdateAsync();
-                        if (newVersion == null) return;
+            if (_updateCheckDone) return;
+            _updateCheckDone = true;
 
-                        // Marshal the dialog back to the WinForms UI thread so it has a
-                        // proper message pump and appears in front of the main window.
-                        Invoke(new Action(() =>
-                            MessageBox.Show(
-                                this,
-                                $"עדכון זמין לגרסה {newVersion}.\nהעדכון יותקן אוטומטית עם סגירת האפליקציה.",
-                                "עדכון זמין - כתבי הקודש",
-                                MessageBoxButtons.OK,
-                                MessageBoxIcon.Information,
-                                MessageBoxDefaultButton.Button1,
-                                MessageBoxOptions.RtlReading | MessageBoxOptions.RightAlign
-                            )
-                        ));
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[MainForm] Update check failed: {ex.Message}");
-                    }
-                });
+            // ── Step 1: sync disk check — no network, instant ────────────────────
+            // Reads %TEMP%\KleiKodeshSetup.exe version and compares to registry.
+            // Arms RunPendingInstaller() and returns the version if newer.
+            // Deletes the file if it's stale or already installed.
+            var readyVersion = UpdateChecker.GetReadyUpdateVersion();
+            if (readyVersion != null)
+            {
+                UpdateNotificationForm.Show(
+                    $"עדכון זמין לגרסה {readyVersion}.\nהעדכון יותקן אוטומטית עם סגירת האפליקציה."
+                );
             }
+
+            // ── Step 2: async GitHub check — always runs regardless of Step 1 ────
+            // Downloads a newer installer silently if one exists.
+            // No UI. PendingInstallerPath is never touched here.
+            _ = Task.Run(async () =>
+            {
+                try { await UpdateChecker.CheckForUpdateAsync(); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[MainForm] Update check failed: {ex.Message}");
+                }
+            });
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
