@@ -69,6 +69,35 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const isLoadingHebrewBooks = ref(false)
   const isLoadingFiles = ref(false)
 
+  // When the dropdown has keyboard focus the user is scrolling through results.
+  // Applying new results at that point resets scrollTop. Pause updates until
+  // the dropdown loses focus.
+  const isPaused = ref(false)
+  let pendingCatalog: CatalogSearchResult[] | null = null
+  let pendingHebrewBooks: HebrewBooksSearchResult[] | null = null
+  let pendingFiles: FileSearchResult[] | null = null
+
+  function pause() {
+    isPaused.value = true
+  }
+
+  function resume() {
+    isPaused.value = false
+    if (pendingCatalog !== null) { catalogResults.value = pendingCatalog; pendingCatalog = null }
+    if (pendingHebrewBooks !== null) { hebrewBooksResults.value = pendingHebrewBooks; pendingHebrewBooks = null }
+    if (pendingFiles !== null) { fileResults.value = pendingFiles; pendingFiles = null }
+  }
+
+  function setCatalog(results: CatalogSearchResult[]) {
+    if (isPaused.value) { pendingCatalog = results } else { catalogResults.value = results }
+  }
+  function setHebrewBooks(results: HebrewBooksSearchResult[]) {
+    if (isPaused.value) { pendingHebrewBooks = results } else { hebrewBooksResults.value = results }
+  }
+  function setFiles(results: FileSearchResult[]) {
+    if (isPaused.value) { pendingFiles = results } else { fileResults.value = results }
+  }
+
   // Track async generation so stale responses are discarded
   let asyncGeneration = 0
 
@@ -81,18 +110,18 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
     (rawQuery) => {
       const trimmed = (rawQuery ?? '').trim()
       if (trimmed.length < MIN_QUERY_LENGTH || !dbReady.value) {
-        catalogResults.value = []
+        setCatalog([])
         return
       }
       const words = toQueryWords(trimmed)
       if (!words.length) {
-        catalogResults.value = []
+        setCatalog([])
         return
       }
-      catalogResults.value = filterBooksByWords(booksDataStore.allBooks, words).slice(0, 50).map((book) => ({
+      setCatalog(filterBooksByWords(booksDataStore.allBooks, words).slice(0, 50).map((book) => ({
         source: 'catalog' as const,
         book,
-      }))
+      })))
     },
     { immediate: true },
   )
@@ -106,57 +135,47 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
       const trimmed = (rawQuery ?? '').trim()
 
       if (trimmed.length < MIN_QUERY_LENGTH || !isHosted) {
-        hebrewBooksResults.value = []
-        fileResults.value = []
+        setHebrewBooks([])
+        setFiles([])
         isLoadingHebrewBooks.value = false
         isLoadingFiles.value = false
         return
       }
 
-      // Fire both in parallel
       isLoadingHebrewBooks.value = true
       isLoadingFiles.value = true
 
       const localFolder = settingsStore.hebrewBooksLocalFolder || undefined
 
-      // 50-result cap for the home search dropdown — passed through to the SQLite
-      // LIMIT clause in HebrewBooksDb.Search() so SQLite stops scanning early.
-      // The full HebrewBooks page passes no limit (defaults to 200 server-side).
       const hbPromise = searchHbCatalog(trimmed, localFolder, 50)
         .then((books) => {
           if (generation !== asyncGeneration) return
-          hebrewBooksResults.value = books.map((book) => ({
-            source: 'hebrewbooks' as const,
-            book,
-          }))
+          setHebrewBooks(books.map((book) => ({ source: 'hebrewbooks' as const, book })))
         })
         .catch(() => {
           if (generation !== asyncGeneration) return
-          hebrewBooksResults.value = []
+          setHebrewBooks([])
         })
         .finally(() => {
           if (generation === asyncGeneration) isLoadingHebrewBooks.value = false
         })
 
-      // 50-result cap for the home search dropdown — this limit is passed to the
-      // DocumentLocator service and enforced by Lucene server-side (early exit),
-      // not a cosmetic slice. The full file-search page uses 5000.
       const filePromise = fileSystemSearch(trimmed, 50)
         .then((response) => {
           if (generation !== asyncGeneration) return
           if (response.error || !response.results) {
-            fileResults.value = []
+            setFiles([])
             return
           }
-          fileResults.value = response.results.map((item) => ({
+          setFiles(response.results.map((item) => ({
             source: 'files' as const,
             fileName: item.fileName,
             fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
-          }))
+          })))
         })
         .catch(() => {
           if (generation !== asyncGeneration) return
-          fileResults.value = []
+          setFiles([])
         })
         .finally(() => {
           if (generation === asyncGeneration) isLoadingFiles.value = false
@@ -169,6 +188,9 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   function clearResults() {
     asyncGeneration++
+    pendingCatalog = null
+    pendingHebrewBooks = null
+    pendingFiles = null
     catalogResults.value = []
     hebrewBooksResults.value = []
     fileResults.value = []
@@ -192,5 +214,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
     hasAnyResults,
     isLoadingAny,
     clearResults,
+    pause,
+    resume,
   }
 }

@@ -1,108 +1,212 @@
 <script setup lang="ts">
+import { ref, computed, onMounted } from 'vue'
 import {
-  IconBookOpen20Regular,
-  IconDocument20Regular,
-  IconFolder20Regular,
+  IconLibrary20Filled,
+  IconBookOpen20Filled,
   IconArrowSync20Regular,
+  IconDocument20Filled,
+  IconDocumentPdf20Filled,
+  IconDocumentText20Filled,
+  IconDocumentGlobe20Filled,
 } from '@iconify-prerendered/vue-fluent'
+import { useListKeys } from '@/composables/useListKeyNav'
 import type {
   CatalogSearchResult,
   HebrewBooksSearchResult,
   FileSearchResult,
 } from './useHomeSearch'
 
-defineProps<{
+const props = defineProps<{
   catalogResults: CatalogSearchResult[]
   hebrewBooksResults: HebrewBooksSearchResult[]
   fileResults: FileSearchResult[]
   isLoadingHebrewBooks: boolean
   isLoadingFiles: boolean
+  // Position and size passed from parent via getBoundingClientRect
+  anchorTop: number
+  anchorLeft: number
+  anchorRight: number
+  maxHeight: number
 }>()
 
 const emit = defineEmits<{
   selectCatalogBook: [bookId: number, bookTitle: string]
   selectHebrewBook: [bookId: number, bookTitle: string]
   selectFile: [fullPath: string, fileName: string]
+  dropdownFocused: []
+  dropdownBlurred: []
 }>()
+
+const dropdownRef = ref<HTMLElement | null>(null)
+
+const allItems = computed(() => [
+  ...props.catalogResults.map((item) => ({
+    kind: 'catalog' as const,
+    bookId: item.book.id,
+    title: item.book.title,
+  })),
+  ...props.hebrewBooksResults.map((item) => ({
+    kind: 'hebrewBooks' as const,
+    bookId: item.book.id,
+    title: item.book.title,
+  })),
+  ...props.fileResults.map((item) => ({
+    kind: 'file' as const,
+    fullPath: item.fullPath,
+    fileName: item.fileName,
+  })),
+])
+
+function activateItem(index: number) {
+  const item = allItems.value[index]
+  if (!item) return
+  if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title)
+  else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.bookId, item.title)
+  else emit('selectFile', item.fullPath, item.fileName)
+}
+
+const { focusedIndex, containerFocused } = useListKeys(
+  dropdownRef,
+  () => allItems.value.length,
+  activateItem,
+)
+
+onMounted(() => {
+  if (dropdownRef.value) {
+    dropdownRef.value.style.maxHeight = props.maxHeight + 'px'
+  }
+})
+
+defineExpose({
+  focus: () => dropdownRef.value?.focus(),
+  element: dropdownRef,
+})
+
+function onDropdownBlur(e: FocusEvent) {
+  if (e.relatedTarget !== null && !dropdownRef.value?.contains(e.relatedTarget as Node)) {
+    emit('dropdownBlurred')
+  }
+}
+
+type FileIconInfo = { component: unknown; color: string }
+
+function getFileIcon(fileName: string): FileIconInfo {
+  const extension = fileName.toLowerCase().split('.').pop()
+  switch (extension) {
+    case 'pdf':
+      return { component: IconDocumentPdf20Filled, color: '#F40F02' }
+    case 'html':
+    case 'htm':
+    case 'mht':
+    case 'mhtml':
+      return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
+    case 'txt':
+      return { component: IconDocumentText20Filled, color: '#9e9e9e' }
+    default:
+      return { component: IconDocument20Filled, color: '#3478f6' }
+  }
+}
 </script>
 
 <template>
-  <div class="home-search-dropdown">
+  <Teleport to="body">
+    <div
+      ref="dropdownRef"
+      class="home-search-dropdown"
+      tabindex="0"
+      :style="{
+        top: anchorTop + 'px',
+        left: anchorLeft + 'px',
+        right: anchorRight + 'px',
+        maxHeight: maxHeight + 'px',
+      }"
+      @click.stop
+      @focus="focusedIndex < 0 && (focusedIndex = 0); emit('dropdownFocused')"
+      @blur="onDropdownBlur"
+    >
+      <!-- ── Book catalog section ── -->
+      <template v-if="catalogResults.length > 0">
+        <div class="home-search-dropdown__section-header">ספרים</div>
+        <div
+          v-for="(item, sectionIndex) in catalogResults"
+          :key="item.book.id"
+          role="option"
+          class="home-search-dropdown__item"
+          :class="{ 'is-focused': containerFocused && focusedIndex === sectionIndex }"
+          data-nav-item
+          @click="emit('selectCatalogBook', item.book.id, item.book.title)"
+        >
+          <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
+          <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
+          <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
+            {{ item.book.parentPath }}
+          </span>
+        </div>
+      </template>
 
-    <!-- ── Book catalog section ── -->
-    <template v-if="catalogResults.length > 0">
-      <div class="home-search-dropdown__section-header">ספרים</div>
-      <button
-        v-for="item in catalogResults"
-        :key="item.book.id"
-        class="home-search-dropdown__item"
-        @click="emit('selectCatalogBook', item.book.id, item.book.title)"
-      >
-        <IconBookOpen20Regular class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
-        <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
-        <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
-          {{ item.book.parentPath }}
-        </span>
-      </button>
-    </template>
+      <!-- ── HebrewBooks section ── -->
+      <template v-if="hebrewBooksResults.length > 0 || isLoadingHebrewBooks">
+        <div class="home-search-dropdown__section-header">
+          היברו-בוקס
+          <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="home-search-dropdown__spinner" />
+        </div>
+        <div
+          v-for="(item, sectionIndex) in hebrewBooksResults"
+          :key="item.book.id"
+          role="option"
+          class="home-search-dropdown__item"
+          :class="{ 'is-focused': containerFocused && focusedIndex === catalogResults.length + sectionIndex }"
+          data-nav-item
+          @click="emit('selectHebrewBook', item.book.id, item.book.title)"
+        >
+          <IconBookOpen20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
+          <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
+          <span v-if="item.book.author" class="home-search-dropdown__item-path">
+            {{ item.book.author }}
+          </span>
+        </div>
+      </template>
 
-    <!-- ── HebrewBooks section ── -->
-    <template v-if="hebrewBooksResults.length > 0 || isLoadingHebrewBooks">
-      <div class="home-search-dropdown__section-header">
-        היברו-בוקס
-        <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="home-search-dropdown__spinner" />
-      </div>
-      <button
-        v-for="item in hebrewBooksResults"
-        :key="item.book.id"
-        class="home-search-dropdown__item"
-        @click="emit('selectHebrewBook', item.book.id, item.book.title)"
-      >
-        <IconDocument20Regular class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
-        <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
-        <span v-if="item.book.author" class="home-search-dropdown__item-path">
-          {{ item.book.author }}
-        </span>
-      </button>
-    </template>
-
-    <!-- ── File search section ── -->
-    <template v-if="fileResults.length > 0 || isLoadingFiles">
-      <div class="home-search-dropdown__section-header">
-        קבצים
-        <IconArrowSync20Regular v-if="isLoadingFiles" class="home-search-dropdown__spinner" />
-      </div>
-      <button
-        v-for="item in fileResults"
-        :key="item.fullPath"
-        class="home-search-dropdown__item"
-        @click="emit('selectFile', item.fullPath, item.fileName)"
-      >
-        <IconFolder20Regular class="home-search-dropdown__item-icon home-search-dropdown__item-icon--files" />
-        <span class="home-search-dropdown__item-title">{{ item.fileName }}</span>
-        <span class="home-search-dropdown__item-path">{{ item.fullPath }}</span>
-      </button>
-    </template>
-
-  </div>
+      <!-- ── File search section ── -->
+      <template v-if="fileResults.length > 0 || isLoadingFiles">
+        <div class="home-search-dropdown__section-header">
+          קבצים
+          <IconArrowSync20Regular v-if="isLoadingFiles" class="home-search-dropdown__spinner" />
+        </div>
+        <div
+          v-for="(item, sectionIndex) in fileResults"
+          :key="item.fullPath"
+          role="option"
+          class="home-search-dropdown__item"
+          :class="{ 'is-focused': containerFocused && focusedIndex === catalogResults.length + hebrewBooksResults.length + sectionIndex }"
+          data-nav-item
+          @click="emit('selectFile', item.fullPath, item.fileName)"
+        >
+          <component
+            :is="getFileIcon(item.fileName).component"
+            class="home-search-dropdown__item-icon"
+            :style="{ color: getFileIcon(item.fileName).color }"
+          />
+          <span class="home-search-dropdown__item-title">{{ item.fileName }}</span>
+          <span class="home-search-dropdown__item-path">{{ item.fullPath }}</span>
+        </div>
+      </template>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
 .home-search-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  left: 0;
+  position: fixed;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25), 0 1px 4px rgba(0, 0, 0, 0.12);
-  overflow: hidden;
-  max-height: 420px;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  z-index: 100;
+  z-index: 1000;
+  outline: none;
 }
 
 .home-search-dropdown__section-header {
@@ -137,17 +241,18 @@ const emit = defineEmits<{
   padding: 0 12px;
   text-align: right;
   background: transparent;
-  border: none;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   cursor: pointer;
   overflow: hidden;
+  box-sizing: border-box;
 }
 
 .home-search-dropdown__item:last-child {
   border-bottom: none;
 }
 
-.home-search-dropdown__item:hover {
+.home-search-dropdown__item:hover,
+.home-search-dropdown__item.is-focused {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
@@ -165,10 +270,6 @@ const emit = defineEmits<{
 
 .home-search-dropdown__item-icon--hebrewbooks {
   color: #d94f1e;
-}
-
-.home-search-dropdown__item-icon--files {
-  color: #f0a500;
 }
 
 .home-search-dropdown__item-title {

@@ -32,8 +32,11 @@ export function useTilesKeys(
     scrollItemIntoView(clamped)
   }
 
-  useEventListener(containerEl, 'focusin', () => {
-    containerFocused.value = true
+  useEventListener(containerEl, 'focusin', (e: FocusEvent) => {
+    const target = e.target as HTMLElement | null
+    if (target?.closest('[data-nav-item]')) {
+      containerFocused.value = true
+    }
   })
 
   useEventListener(containerEl, 'focusout', (e: FocusEvent) => {

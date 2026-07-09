@@ -1,6 +1,7 @@
 using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
+using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.Helpers;
 using Microsoft.Web.WebView2.Core;
 using System;

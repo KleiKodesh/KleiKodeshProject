@@ -251,3 +251,7 @@ This applies to `FullTextSearchResultsList.vue` and any future virtual scroller 
 ## No Browser Dialogs
 
 Never use `window.alert`, `window.confirm`, or `window.prompt` anywhere in the app. These are blocking browser dialogs that look out of place in a native WebView2 host and cannot be styled. For error messages, use a reactive ref in the relevant store and display the message inline in the page — either as a dismissible banner, an inline error state, or within the existing page error UI. For confirmation, use `ConfirmDialog.vue`.
+
+## Button Elements
+
+Only use `<button>` when the element genuinely needs button semantics — i.e. it submits a form, triggers a top-level action (open dialog, toggle panel, run a command), or is a standalone interactive control with no surrounding context. Do not use `<button>` for list items, dropdown options, rows in a list, or any element that is one of many selectable items inside a container. For those cases use `<div role="option">` or the appropriate ARIA role. Browsers give `<button>` elements built-in focus and scroll-into-view behaviour that fires on DOM patches (e.g. class changes during Vue re-renders) and will fight programmatic scroll management.
