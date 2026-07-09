@@ -302,6 +302,7 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
 .scroller {
   height: 100%;
   overflow-y: auto;
+  padding-block-end: 24px;
 }
 .line {
   padding-inline: 12px;
