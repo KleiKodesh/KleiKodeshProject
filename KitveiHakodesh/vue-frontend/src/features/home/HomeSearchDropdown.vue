@@ -14,12 +14,14 @@ import type {
   CatalogSearchResult,
   HebrewBooksSearchResult,
   FileSearchResult,
+  SearchSourcePriority,
 } from './useHomeSearch'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
   hebrewBooksResults: HebrewBooksSearchResult[]
   fileResults: FileSearchResult[]
+  sourcePriority: SearchSourcePriority
   isLoadingHebrewBooks: boolean
   isLoadingFiles: boolean
   // Position and size passed from parent via getBoundingClientRect
@@ -39,23 +41,37 @@ const emit = defineEmits<{
 
 const dropdownRef = ref<HTMLElement | null>(null)
 
-const allItems = computed(() => [
-  ...props.catalogResults.map((item) => ({
-    kind: 'catalog' as const,
-    bookId: item.book.id,
-    title: item.book.title,
-  })),
-  ...props.hebrewBooksResults.map((item) => ({
-    kind: 'hebrewBooks' as const,
-    bookId: item.book.id,
-    title: item.book.title,
-  })),
-  ...props.fileResults.map((item) => ({
-    kind: 'file' as const,
-    fullPath: item.fullPath,
-    fileName: item.fileName,
-  })),
-])
+// The three sections in priority order. The prioritized source comes first;
+// the other two follow in their natural default order.
+const sectionOrder = computed<SearchSourcePriority[]>(() => {
+  const priority = props.sourcePriority
+  const all: SearchSourcePriority[] = ['catalog', 'hebrewbooks', 'files']
+  return [priority, ...all.filter((source) => source !== priority)]
+})
+
+const allItems = computed(() => {
+  const items: Array<
+    | { kind: 'catalog'; bookId: number; title: string }
+    | { kind: 'hebrewBooks'; bookId: number; title: string }
+    | { kind: 'file'; fullPath: string; fileName: string }
+  > = []
+  for (const source of sectionOrder.value) {
+    if (source === 'catalog') {
+      for (const item of props.catalogResults) {
+        items.push({ kind: 'catalog', bookId: item.book.id, title: item.book.title })
+      }
+    } else if (source === 'hebrewbooks') {
+      for (const item of props.hebrewBooksResults) {
+        items.push({ kind: 'hebrewBooks', bookId: item.book.id, title: item.book.title })
+      }
+    } else {
+      for (const item of props.fileResults) {
+        items.push({ kind: 'file', fullPath: item.fullPath, fileName: item.fileName })
+      }
+    }
+  }
+  return items
+})
 
 function activateItem(index: number) {
   const item = allItems.value[index]
@@ -123,72 +139,76 @@ function getFileIcon(fileName: string): FileIconInfo {
       @focus="onDropdownFocus"
       @blur="onDropdownBlur"
     >
-      <!-- ── Book catalog section ── -->
-      <template v-if="catalogResults.length > 0">
-        <div class="home-search-dropdown__section-header">ספרים</div>
-        <div
-          v-for="(item, sectionIndex) in catalogResults"
-          :key="item.book.id"
-          role="option"
-          class="home-search-dropdown__item"
-          :class="{ 'is-focused': containerFocused && focusedIndex === sectionIndex }"
-          data-nav-item
-          @click="emit('selectCatalogBook', item.book.id, item.book.title)"
-        >
-          <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
-          <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
-          <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
-            {{ item.book.parentPath }}
-          </span>
-        </div>
-      </template>
+      <template v-for="source in sectionOrder" :key="source">
 
-      <!-- ── HebrewBooks section ── -->
-      <template v-if="hebrewBooksResults.length > 0 || isLoadingHebrewBooks">
-        <div class="home-search-dropdown__section-header">
-          היברו-בוקס
-          <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="home-search-dropdown__spinner" />
-        </div>
-        <div
-          v-for="(item, sectionIndex) in hebrewBooksResults"
-          :key="item.book.id"
-          role="option"
-          class="home-search-dropdown__item"
-          :class="{ 'is-focused': containerFocused && focusedIndex === catalogResults.length + sectionIndex }"
-          data-nav-item
-          @click="emit('selectHebrewBook', item.book.id, item.book.title)"
-        >
-          <IconBookOpen20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
-          <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
-          <span v-if="item.book.author" class="home-search-dropdown__item-path">
-            {{ item.book.author }}
-          </span>
-        </div>
-      </template>
+        <!-- ── Book catalog section ── -->
+        <template v-if="source === 'catalog' && catalogResults.length > 0">
+          <div class="home-search-dropdown__section-header">ספרים</div>
+          <div
+            v-for="item in catalogResults"
+            :key="item.book.id"
+            role="option"
+            class="home-search-dropdown__item"
+            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalog' && i.bookId === item.book.id) }"
+            data-nav-item
+            @click="emit('selectCatalogBook', item.book.id, item.book.title)"
+          >
+            <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
+            <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
+            <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
+              {{ item.book.parentPath }}
+            </span>
+          </div>
+        </template>
 
-      <!-- ── File search section ── -->
-      <template v-if="fileResults.length > 0 || isLoadingFiles">
-        <div class="home-search-dropdown__section-header">
-          קבצים
-          <IconArrowSync20Regular v-if="isLoadingFiles" class="home-search-dropdown__spinner" />
-        </div>
-        <div
-          v-for="(item, sectionIndex) in fileResults"
-          :key="item.fullPath"
-          role="option"
-          class="home-search-dropdown__item"
-          :class="{ 'is-focused': containerFocused && focusedIndex === catalogResults.length + hebrewBooksResults.length + sectionIndex }"
-          data-nav-item
-          @click="emit('selectFile', item.fullPath, item.fileName)"
-        >
-          <component
-            :is="getFileIcon(item.fileName).component"
-            class="home-search-dropdown__item-icon"
-            :style="{ color: getFileIcon(item.fileName).color }"
-          />
-          <span class="home-search-dropdown__item-title">{{ item.fileName }}</span>
-          <span class="home-search-dropdown__item-path">{{ item.fullPath }}</span>
-        </div>
+        <!-- ── HebrewBooks section ── -->
+        <template v-if="source === 'hebrewbooks' && (hebrewBooksResults.length > 0 || isLoadingHebrewBooks)">
+          <div class="home-search-dropdown__section-header">
+            היברו-בוקס
+            <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="home-search-dropdown__spinner" />
+          </div>
+          <div
+            v-for="item in hebrewBooksResults"
+            :key="item.book.id"
+            role="option"
+            class="home-search-dropdown__item"
+            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.bookId === item.book.id) }"
+            data-nav-item
+            @click="emit('selectHebrewBook', item.book.id, item.book.title)"
+          >
+            <IconBookOpen20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
+            <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
+            <span v-if="item.book.author" class="home-search-dropdown__item-path">
+              {{ item.book.author }}
+            </span>
+          </div>
+        </template>
+
+        <!-- ── File search section ── -->
+        <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles)">
+          <div class="home-search-dropdown__section-header">
+            קבצים
+            <IconArrowSync20Regular v-if="isLoadingFiles" class="home-search-dropdown__spinner" />
+          </div>
+          <div
+            v-for="item in fileResults"
+            :key="item.fullPath"
+            role="option"
+            class="home-search-dropdown__item"
+            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'file' && i.fullPath === item.fullPath) }"
+            data-nav-item
+            @click="emit('selectFile', item.fullPath, item.fileName)"
+          >
+            <component
+              :is="getFileIcon(item.fileName).component"
+              class="home-search-dropdown__item-icon"
+              :style="{ color: getFileIcon(item.fileName).color }"
+            />
+            <span class="home-search-dropdown__item-title">{{ item.fileName }}</span>
+            <span class="home-search-dropdown__item-path">{{ item.fullPath }}</span>
+          </div>
+        </template>
+
       </template>
     </div>
   </Teleport>

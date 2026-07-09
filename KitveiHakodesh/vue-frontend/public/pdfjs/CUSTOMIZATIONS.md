@@ -163,6 +163,151 @@ The `pixel-ratio-override.js` script tag must appear **before** `<script src="vi
 
 ## `web/viewer.mjs` — Patches
 
+### Spread modes in presentation mode
+
+By default PDF.js forces `SpreadMode.NONE` when entering presentation mode and only restores the previous spread if pages had unequal sizes. This blocks the user from changing spread modes while in presentation mode.
+
+Three changes remove this restriction:
+
+**1. `request()` — always save spreadMode in `#args`**
+
+Search for:
+```
+    this.#args = {
+      pageNumber: pdfViewer.currentPageNumber,
+      scaleValue: pdfViewer.currentScaleValue,
+      scrollMode: pdfViewer.scrollMode,
+      spreadMode: null,
+      annotationEditorMode: null
+    };
+    if (pdfViewer.spreadMode !== SpreadMode.NONE && !(pdfViewer.pageViewsReady && pdfViewer.hasEqualPageSizes)) {
+      console.warn("Ignoring Spread modes when entering PresentationMode, " + "since the document may contain varying page sizes.");
+      this.#args.spreadMode = pdfViewer.spreadMode;
+    }
+```
+Replace with:
+```
+    this.#args = {
+      pageNumber: pdfViewer.currentPageNumber,
+      scaleValue: pdfViewer.currentScaleValue,
+      scrollMode: pdfViewer.scrollMode,
+      // PATCH: always save spreadMode so it can be restored on exit, regardless of page sizes
+      spreadMode: pdfViewer.spreadMode,
+      annotationEditorMode: null
+    };
+    if (pdfViewer.spreadMode !== SpreadMode.NONE && !(pdfViewer.pageViewsReady && pdfViewer.hasEqualPageSizes)) {
+      // PATCH: removed the hard reset to SpreadMode.NONE — we now allow spread modes in presentation mode.
+      console.warn("Spread modes are active in PresentationMode. " + "Document may contain varying page sizes — layout may be imperfect.");
+    }
+```
+
+**2. `#enter()` — remove the forced reset to `SpreadMode.NONE`**
+
+Search for:
+```
+      this.pdfViewer.scrollMode = ScrollMode.PAGE;
+      if (this.#args.spreadMode !== null) {
+        this.pdfViewer.spreadMode = SpreadMode.NONE;
+      }
+      this.pdfViewer.currentPageNumber = this.#args.pageNumber;
+```
+Replace with:
+```
+      this.pdfViewer.scrollMode = ScrollMode.PAGE;
+      // PATCH: removed forced SpreadMode.NONE — spread modes are now allowed in presentation mode
+      this.pdfViewer.currentPageNumber = this.#args.pageNumber;
+```
+
+**3. `#exit()` — always restore spreadMode (it is now always saved)**
+
+Search for:
+```
+      this.pdfViewer.scrollMode = this.#args.scrollMode;
+      if (this.#args.spreadMode !== null) {
+        this.pdfViewer.spreadMode = this.#args.spreadMode;
+      }
+      this.pdfViewer.currentScaleValue = this.#args.scaleValue;
+```
+Replace with:
+```
+      this.pdfViewer.scrollMode = this.#args.scrollMode;
+      // PATCH: always restore spreadMode (it is now always saved in #args)
+      this.pdfViewer.spreadMode = this.#args.spreadMode;
+      this.pdfViewer.currentScaleValue = this.#args.scaleValue;
+```
+
+---
+
+### Presentation mode zoom (Ctrl+scroll, pinch, keyboard)
+
+By default PDF.js blocks all zoom in presentation mode. These four changes re-enable it.
+
+**1. `#mouseWheel` in `PDFPresentationMode`** — the presentation mode wheel listener calls `evt.preventDefault()` on every wheel event, consuming it before the main `onWheel` handler can see it. Add an early return for `Ctrl`/`Meta` so those events are not consumed here and fall through to the zoom handler.
+
+Search for:
+```
+  #mouseWheel(evt) {
+    if (!this.active) {
+      return;
+    }
+    evt.preventDefault();
+    const delta = normalizeWheelEventDelta(evt);
+```
+Replace with:
+```
+  #mouseWheel(evt) {
+    if (!this.active) {
+      return;
+    }
+    // PATCH: allow Ctrl+wheel to pass through for zoom — do not intercept it here.
+    if (evt.ctrlKey || evt.metaKey) {
+      return;
+    }
+    evt.preventDefault();
+    const delta = normalizeWheelEventDelta(evt);
+```
+
+**2. `onWheel` function** — remove the early return that skips all wheel handling when in presentation mode. Search for (inside `function onWheel`, before `const deltaMode`):
+```
+  if (pdfViewer.isInPresentationMode) {
+    return;
+  }
+  const deltaMode = evt.deltaMode;
+```
+Replace with:
+```
+  // PATCH: removed early return for isInPresentationMode — allow Ctrl+scroll zoom in presentation mode
+  const deltaMode = evt.deltaMode;
+```
+
+**3. `updateZoom`** — remove the guard that blocks all zoom calls when in presentation mode:
+```
+  updateZoom(steps, scaleFactor, origin) {
+    if (this.pdfViewer.isInPresentationMode) {
+      return;
+    }
+    this.pdfViewer.updateScale({
+```
+Replace with:
+```
+  updateZoom(steps, scaleFactor, origin) {
+    // PATCH: removed isInPresentationMode guard — allow zoom in presentation mode
+    this.pdfViewer.updateScale({
+```
+
+**4. `isPinchingDisabled`** — remove the presentation mode check that disables pinch-to-zoom:
+```
+      isPinchingDisabled: () => pdfViewer.isInPresentationMode,
+```
+Replace with:
+```
+      isPinchingDisabled: () => false, // PATCH: allow pinch zoom in presentation mode
+```
+
+Keyboard zoom (`Ctrl++`/`Ctrl+-`) needs no change — those keycodes call `zoomIn()`/`zoomOut()` without a presentation mode guard; once `updateZoom` is unblocked they work automatically.
+
+---
+
 ### 0z. Zoom step
 
 Search for: `const DEFAULT_SCALE_DELTA = 1.1;`

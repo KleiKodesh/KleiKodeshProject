@@ -8595,12 +8595,14 @@ class PDFPresentationMode {
       pageNumber: pdfViewer.currentPageNumber,
       scaleValue: pdfViewer.currentScaleValue,
       scrollMode: pdfViewer.scrollMode,
-      spreadMode: null,
+      // PATCH: always save spreadMode so it can be restored on exit, regardless of page sizes
+      spreadMode: pdfViewer.spreadMode,
       annotationEditorMode: null
     };
     if (pdfViewer.spreadMode !== SpreadMode.NONE && !(pdfViewer.pageViewsReady && pdfViewer.hasEqualPageSizes)) {
-      console.warn("Ignoring Spread modes when entering PresentationMode, " + "since the document may contain varying page sizes.");
-      this.#args.spreadMode = pdfViewer.spreadMode;
+      // PATCH: removed the hard reset to SpreadMode.NONE — we now allow spread modes in presentation mode.
+      // The original warning about varying page sizes is kept as a console note only.
+      console.warn("Spread modes are active in PresentationMode. " + "Document may contain varying page sizes — layout may be imperfect.");
     }
     if (pdfViewer.annotationEditorMode !== AnnotationEditorType.DISABLE) {
       this.#args.annotationEditorMode = pdfViewer.annotationEditorMode;
@@ -8620,6 +8622,12 @@ class PDFPresentationMode {
   }
   #mouseWheel(evt) {
     if (!this.active) {
+      return;
+    }
+    // PATCH: allow Ctrl+wheel to pass through for zoom — do not intercept it here.
+    // The main onWheel handler (outside presentation mode) handles Ctrl+scroll zoom.
+    // Without this, evt.preventDefault() consumes the event before onWheel sees it.
+    if (evt.ctrlKey || evt.metaKey) {
       return;
     }
     evt.preventDefault();
@@ -8654,9 +8662,7 @@ class PDFPresentationMode {
     this.container.classList.add(ACTIVE_SELECTOR);
     setTimeout(() => {
       this.pdfViewer.scrollMode = ScrollMode.PAGE;
-      if (this.#args.spreadMode !== null) {
-        this.pdfViewer.spreadMode = SpreadMode.NONE;
-      }
+      // PATCH: removed forced SpreadMode.NONE — spread modes are now allowed in presentation mode
       this.pdfViewer.currentPageNumber = this.#args.pageNumber;
       this.pdfViewer.currentScaleValue = "page-fit";
       if (this.#args.annotationEditorMode !== null) {
@@ -8677,9 +8683,8 @@ class PDFPresentationMode {
       this.#removeFullscreenChangeListeners();
       this.#notifyStateChange(PresentationModeState.NORMAL);
       this.pdfViewer.scrollMode = this.#args.scrollMode;
-      if (this.#args.spreadMode !== null) {
-        this.pdfViewer.spreadMode = this.#args.spreadMode;
-      }
+      // PATCH: always restore spreadMode (it is now always saved in #args)
+      this.pdfViewer.spreadMode = this.#args.spreadMode;
       this.pdfViewer.currentScaleValue = this.#args.scaleValue;
       this.pdfViewer.currentPageNumber = pageNumber;
       if (this.#args.annotationEditorMode !== null) {
@@ -18529,9 +18534,7 @@ const PDFViewerApplication = {
     return this._initializedCapability.promise;
   },
   updateZoom(steps, scaleFactor, origin) {
-    if (this.pdfViewer.isInPresentationMode) {
-      return;
-    }
+    // PATCH: removed isInPresentationMode guard — allow zoom in presentation mode
     this.pdfViewer.updateScale({
       drawingDelay: AppOptions.get("defaultZoomDelay"),
       steps,
@@ -19368,7 +19371,7 @@ const PDFViewerApplication = {
     } = this;
     this._touchManager = new TouchManager({
       container: window,
-      isPinchingDisabled: () => pdfViewer.isInPresentationMode,
+      isPinchingDisabled: () => false, // PATCH: allow pinch zoom in presentation mode
       isPinchingStopped: () => this.overlayManager?.active,
       onPinching: this.touchPinchCallback.bind(this),
       onPinchEnd: this.touchPinchEndCallback.bind(this),
@@ -19812,9 +19815,7 @@ function onWheel(evt) {
     supportsMouseWheelZoomMetaKey,
     supportsPinchToZoom
   } = this;
-  if (pdfViewer.isInPresentationMode) {
-    return;
-  }
+  // PATCH: removed early return for isInPresentationMode — allow Ctrl+scroll zoom in presentation mode
   const deltaMode = evt.deltaMode;
   let scaleFactor = Math.exp(-evt.deltaY / 100);
   const isBuiltInMac = false;

@@ -37,12 +37,14 @@ async function onOpenFile(item: LocalFileSearchResult) {
 
   try {
     const extension = item.fileName.substring(item.fileName.lastIndexOf('.')).toLowerCase()
+    const dotIndex = item.fileName.lastIndexOf('.')
+    const titleWithoutExtension = dotIndex > 0 ? item.fileName.substring(0, dotIndex) : item.fileName
 
     if (extension === '.txt') {
       // .txt files are rendered natively by TxtViewPage — no virtual host needed
       paneNavigation.updateActiveTab({
         route: '/txt-view',
-        title: item.fileName,
+        title: titleWithoutExtension,
         localFileName: item.fileName,
         localFilePath: item.fullPath,
         localFileVirtualUrl: undefined,
@@ -58,7 +60,7 @@ async function onOpenFile(item: LocalFileSearchResult) {
 
     paneNavigation.updateActiveTab({
       route,
-      title: item.fileName,
+      title: titleWithoutExtension,
       localFileName: item.fileName,
       localFilePath: item.fullPath,
       localFileVirtualUrl: restored.url,
@@ -124,7 +126,7 @@ async function onOpenFile(item: LocalFileSearchResult) {
         v-model="searchQuery"
         type="search"
         class="search-input"
-        placeholder="חפש קבצים..."
+        placeholder="חפש קבצים לפי שם או לפי תיקייה..."
         spellcheck="false"
         autocomplete="off"
         @keydown.up.prevent="focusResults"
