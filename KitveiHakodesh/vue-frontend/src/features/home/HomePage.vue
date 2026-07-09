@@ -325,10 +325,6 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   container-type: inline-size;
 }
 
-.home-page--dropdown-open {
-  overflow-y: hidden;
-}
-
 .home-inner {
   display: flex;
   flex-direction: column;
