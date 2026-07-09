@@ -130,6 +130,7 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
+  isLoadingAny,
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
@@ -139,8 +140,12 @@ useDropdownClose(searchBarRef, () => { isSearchDropdownOpen.value = false }, { i
 
 // Open the dropdown when async sources resolve results after the debounce
 watch([hebrewBooksResults, fileResults], () => {
-  if ((homeSearchQuery.value ?? '').trim().length >= 2 && hasAnyResults()) {
-    isSearchDropdownOpen.value = true
+  if ((homeSearchQuery.value ?? '').trim().length >= 2) {
+    if (hasAnyResults()) {
+      isSearchDropdownOpen.value = true
+    } else if (!isLoadingAny()) {
+      isSearchDropdownOpen.value = false
+    }
   }
 })
 
@@ -167,7 +172,7 @@ function onSearchInputKeydown(e: KeyboardEvent) {
 function onSearchBarInput() {
   const hasQuery = (homeSearchQuery.value ?? '').trim().length >= 2
   if (hasQuery) computeDropdownAnchor()
-  isSearchDropdownOpen.value = hasQuery
+  isSearchDropdownOpen.value = hasQuery && (hasAnyResults() || isLoadingAny())
 }
 
 function closeSearchDropdown() {
