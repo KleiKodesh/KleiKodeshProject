@@ -303,16 +303,18 @@ useEventListener('keydown', (e: KeyboardEvent) => {
           v-if="isTitleBarButtonVisible('hamburger')"
           ref="navBtnRef"
           class="bar-btn"
+          tabindex="-1"
           title="תפריט (Ctrl+M)"
           @click.stop="toggleNavDropdown"
         >
           <IconLineHorizontal320Regular />
         </button>
       </div>
-      <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" />
+      <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" tabindex="-1" />
       <button
         v-if="isTxtViewActive"
         class="bar-btn"
+        tabindex="-1"
         title="חיפוש בטקסט (Ctrl+F)"
         @click.stop="bookViewStore.txtViewToggleSearch(props.paneId)"
       >
@@ -321,6 +323,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"
+        tabindex="-1"
         :title="pdfFilterTitle"
         @click.stop="settingsStore.togglePdfPageFilters()"
       >
@@ -330,6 +333,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       <button
         v-if="isTitleBarButtonVisible('toolbar-toggle') && (isBookViewActive || activeTab?.route === '/pdf-view')"
         class="bar-btn"
+        tabindex="-1"
         :title="toolbarTitle"
         @click.stop="isBookViewActive ? bookViewStore.toggleToolbar(props.paneId) : pane.togglePdfViewerTitleBar()"
       >
@@ -339,6 +343,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       <button
         v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable"
         class="bar-btn"
+        tabindex="-1"
         :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"
         @click.stop="bookViewStore.toggleSplitView()"
       >
@@ -374,19 +379,21 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       <button
         v-if="isTitleBarButtonVisible('ocr') && activeTab?.route === '/pdf-view'"
         class="bar-btn"
+        tabindex="-1"
         :class="{ active: pdfOcrStore.isActive }"
         title="בחירת טקסט באזור (OCR)"
         @click.stop="pdfOcrStore.toggle()"
       >
         <IconConvertToText24Regular />
       </button>
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
-      <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" title="לשונית חדשה (Ctrl+N)" @click.stop="pane.openNewTab()">
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" tabindex="-1" title="לשונית חדשה (Ctrl+N)" @click.stop="pane.openNewTab()">
         <IconAdd20Regular />
       </button>
       <button
         v-if="isTitleBarButtonVisible('close-tab')"
         class="bar-btn"
+        tabindex="-1"
         title="סגור לשונית (Ctrl+W)"
         @click.stop="pane.closeTab(pane.activeTabId.value)"
       >

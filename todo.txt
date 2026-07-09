@@ -2,9 +2,6 @@ add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
-make sure the uda6etr has the logic to download teh correct installer based on whatebver version teh user i susing
-make sure that if no version stamp eixts in the comuter then that means useris using protable version and dont notufy of updates
-
 everything icon in home page needs to grow larger
 the icons need to grow a tiny bit more on hover 
 
