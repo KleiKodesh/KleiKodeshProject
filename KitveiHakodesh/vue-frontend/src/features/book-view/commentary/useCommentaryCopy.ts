@@ -233,6 +233,39 @@ export function useCommentaryCopy(
       }
     }
 
+    // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
+    // Produces a single line: (מקור) "ציטוט"
+    // Always collects full line blocks (blob-style) and joins them into one inline
+    // paragraph regardless of the copyAsBlob setting.
+    // Mutually exclusive with copySourcePosition — checked via the onChange handler.
+    if (settingsStore.copyAsSourceWithQuotation) {
+      const activeGroup = getActiveGroup()
+      const source = activeGroup
+        ? buildCommentarySource(activeGroup.bookTitle, getTocPath(activeGroup.bookId))
+        : ''
+      // Collect full line content. If copyAsBlob already ran, html has block-wrapped
+      // lines — strip note markers, div tags, then join. Otherwise re-collect from the DOM.
+      let inlineText: string
+      if (settingsStore.copyAsBlob) {
+        inlineText = stripNoteMarkers(html).replace(/<\/?div>/gi, ' ').replace(/\s+/g, ' ').trim()
+      } else {
+        // Re-collect from blob lines for complete line content
+        const scroller = scrollerEl.value
+        const sel = window.getSelection()
+        if (scroller && sel && sel.rangeCount > 0) {
+          const range = sel.getRangeAt(0)
+          const blobLines = Array.from(scroller.querySelectorAll('.line'))
+            .filter((el) => range.intersectsNode(el))
+            .map((el) => (el as HTMLElement).innerHTML)
+          inlineText = stripNoteMarkers(blobLines.join(' ')).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+        } else {
+          inlineText = stripNoteMarkers(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+        }
+      }
+      if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
+      return `(${source}) "${inlineText}"`
+    }
+
     return html + endnotesHtml
   }
 
@@ -292,7 +325,10 @@ export function useCommentaryCopy(
       type: 'checkbox',
       label: 'העתק עם מקור בהתחלה',
       get checked() { return settingsStore.copySourcePosition === 'start' },
-      onChange: (value: boolean) => { settingsStore.copySourcePosition = value ? 'start' : null },
+      onChange: (value: boolean) => {
+        settingsStore.copySourcePosition = value ? 'start' : null
+        if (value) settingsStore.copyAsSourceWithQuotation = false
+      },
     },
     {
       type: 'checkbox',
@@ -300,6 +336,17 @@ export function useCommentaryCopy(
       get checked() { return settingsStore.copySourcePosition === 'end' },
       onChange: (value: boolean) => {
         settingsStore.copySourcePosition = value ? 'end' : null
+        if (value) settingsStore.copyWithNotes = false
+        if (value) settingsStore.copyAsSourceWithQuotation = false
+      },
+    },
+    {
+      type: 'checkbox',
+      label: 'העתק מקור עם ציטוט',
+      get checked() { return settingsStore.copyAsSourceWithQuotation },
+      onChange: (value: boolean) => {
+        settingsStore.copyAsSourceWithQuotation = value
+        if (value) settingsStore.copySourcePosition = null
         if (value) settingsStore.copyWithNotes = false
       },
     },
@@ -311,6 +358,7 @@ export function useCommentaryCopy(
       onChange: (value: boolean) => {
         settingsStore.copyWithNotes = value
         if (value && settingsStore.copySourcePosition === 'end') settingsStore.copySourcePosition = null
+        if (value) settingsStore.copyAsSourceWithQuotation = false
       },
     },
     {

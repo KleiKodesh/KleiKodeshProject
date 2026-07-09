@@ -311,6 +311,27 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       html = `${html} (${source})`
     }
 
+    // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
+    // Produces a single line: (מקור) "ציטוט"
+    // Always collects full line blocks (blob-style) and joins them into one inline
+    // paragraph regardless of the copyAsBlob setting.
+    // Mutually exclusive with copySourcePosition — checked via the onChange handler.
+    if (settingsStore.copyAsSourceWithQuotation) {
+      const source = buildSource(firstLineIndex, true)
+      // Collect full line content. If copyAsBlob already ran, html has block-wrapped
+      // lines — strip note markers, div tags, then join. Otherwise re-collect via extractSelection.
+      let inlineText: string
+      if (settingsStore.copyAsBlob) {
+        inlineText = stripNoteMarkers(html).replace(/<\/?div>/gi, ' ').replace(/\s+/g, ' ').trim()
+      } else {
+        const blobResult = extractSelection(scrollerEl.value, lines(), isSelectAll.value, options.getRenderedLineContent)
+        const blobHtml = blobResult ? blobResult.joined : html
+        inlineText = stripNoteMarkers(blobHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
+      }
+      if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
+      return `(${source}) "${inlineText}"`
+    }
+
     return html + endnotesHtml
   }
 
@@ -369,7 +390,10 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         type: 'checkbox',
         label: 'העתק עם מקור בהתחלה',
         get checked() { return settingsStore.copySourcePosition === 'start' },
-        onChange: (value: boolean) => { settingsStore.copySourcePosition = value ? 'start' : null },
+        onChange: (value: boolean) => {
+          settingsStore.copySourcePosition = value ? 'start' : null
+          if (value) settingsStore.copyAsSourceWithQuotation = false
+        },
       },
       {
         type: 'checkbox',
@@ -378,6 +402,17 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         onChange: (value: boolean) => {
           settingsStore.copySourcePosition = value ? 'end' : null
           // מקור בסוף is incompatible with הערות — clear notes when end-source is enabled
+          if (value) settingsStore.copyWithNotes = false
+          if (value) settingsStore.copyAsSourceWithQuotation = false
+        },
+      },
+      {
+        type: 'checkbox',
+        label: 'העתק מקור עם ציטוט',
+        get checked() { return settingsStore.copyAsSourceWithQuotation },
+        onChange: (value: boolean) => {
+          settingsStore.copyAsSourceWithQuotation = value
+          if (value) settingsStore.copySourcePosition = null
           if (value) settingsStore.copyWithNotes = false
         },
       },
@@ -390,6 +425,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
           settingsStore.copyWithNotes = value
           // הערות is incompatible with מקור בסוף — clear end-source when notes are enabled
           if (value && settingsStore.copySourcePosition === 'end') settingsStore.copySourcePosition = null
+          if (value) settingsStore.copyAsSourceWithQuotation = false
         },
       },
       {
