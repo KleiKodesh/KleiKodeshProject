@@ -73,6 +73,13 @@ namespace UpdateCheckerLib
             return "";
         }
 
+        /// <summary>
+        /// Downloads the installer for <paramref name="version"/> silently to
+        /// <see cref="InstallerTempPath"/> (%TEMP%\KleiKodeshSetup.exe).
+        /// Pure fire-and-forget: no UI, no side effects on program state.
+        /// <see cref="UpdateChecker.GetReadyUpdateVersion"/> will pick up the file
+        /// on the next session's sync disk check and arm <see cref="RunPendingInstaller"/>.
+        /// </summary>
         public static async Task DownloadAndScheduleInstallerAsync(string version)
         {
             string suffix       = GetInstallerSuffix();
@@ -118,6 +125,13 @@ namespace UpdateCheckerLib
             }
         }
 
+        /// <summary>
+        /// Launches the installer at <see cref="PendingInstallerPath"/> (set by
+        /// <see cref="UpdateChecker.GetReadyUpdateVersion"/>) and clears the path.
+        /// Called on app/Word close. No-op if PendingInstallerPath is not set.
+        /// Uses Verb="runas" to hand off to the Windows AIS service so the process
+        /// survives Word/app shutdown. No UAC prompt — NSIS has RequestExecutionLevel=user.
+        /// </summary>
         public static void RunPendingInstaller()
         {
             if (string.IsNullOrEmpty(PendingInstallerPath))
