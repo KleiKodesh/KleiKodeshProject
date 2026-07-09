@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useListKeys } from '@/composables/useListKeyNav'
 import {
   IconLibrary24Filled,
   IconFolder24Filled,
@@ -17,6 +18,7 @@ import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fl
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { showPopOutButton } from '@/webview-host/bridge'
 import { togglePopOut } from '@/webview-host/bridge'
+import { useEventListener } from '@vueuse/core'
 
 const emit = defineEmits<{ close: [] }>()
 
@@ -29,6 +31,7 @@ useDropdownClose(menuRef, () => emit('close'), {
   toggleButton: computed(() => props.toggleButtonEl ?? null),
 })
 
+// All nav items in order — tiles + settings + (conditionally) pop-out
 const tiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B', shortcut: 'Ctrl+1' },
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined, shortcut: 'Ctrl+2' },
@@ -40,6 +43,35 @@ const tiles = [
   { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914', shortcut: 'Ctrl+8' },
   { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4', shortcut: 'Ctrl+9' },
 ]
+
+// Count includes tiles + settings row + optional pop-out row
+const itemCount = computed(() => tiles.length + 1 + (showPopOutButton ? 1 : 0))
+
+const { focusedIndex } = useListKeys(menuRef, () => itemCount.value, (index) => {
+  activateIndex(index)
+})
+
+function activateIndex(index: number) {
+  if (index < tiles.length) {
+    onTap(tiles[index]!.label)
+  } else if (index === tiles.length) {
+    onTap('הגדרות')
+  } else {
+    onPopOut()
+  }
+}
+
+// Close on Escape
+useEventListener(menuRef, 'keydown', (e: KeyboardEvent) => {
+  if (e.code === 'Escape') {
+    e.preventDefault()
+    e.stopPropagation()
+    emit('close')
+  }
+})
+
+// Focus the dropdown on mount so keyboard nav works immediately
+onMounted(() => nextTick(() => menuRef.value?.focus()))
 
 async function onTap(label: string) {
   await navigateInNewTab(label)
@@ -53,11 +85,13 @@ function onPopOut() {
 </script>
 
 <template>
-  <div ref="menuRef" class="nav-dropdown" @click.stop>
+  <div ref="menuRef" class="nav-dropdown" tabindex="0" @click.stop>
     <button
-      v-for="tile in tiles"
+      v-for="(tile, index) in tiles"
       :key="tile.label"
       class="nav-row"
+      :class="{ 'nav-row--focused': focusedIndex === index }"
+      data-nav-item
       :title="`${tile.label} (${tile.shortcut})`"
       @click="onTap(tile.label)"
     >
@@ -68,7 +102,13 @@ function onPopOut() {
       <span class="nav-shortcut">{{ tile.shortcut }}</span>
     </button>
     <hr class="nav-divider" />
-    <button class="nav-row" title="הגדרות (F1)" @click="onTap('הגדרות')">
+    <button
+      class="nav-row"
+      :class="{ 'nav-row--focused': focusedIndex === tiles.length }"
+      data-nav-item
+      title="הגדרות (F1)"
+      @click="onTap('הגדרות')"
+    >
       <span class="nav-icon"><IconSettings24 /></span>
       <span class="nav-label">הגדרות</span>
       <span class="nav-shortcut">F1</span>
@@ -76,6 +116,8 @@ function onPopOut() {
     <button
       v-if="showPopOutButton"
       class="nav-row"
+      :class="{ 'nav-row--focused': focusedIndex === tiles.length + 1 }"
+      data-nav-item
       title="פתח בחלון עצמאי או החזר לחלונית"
       @click="onPopOut"
     >
@@ -101,6 +143,7 @@ function onPopOut() {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+  outline: none;
 }
 
 .nav-row {
@@ -116,7 +159,8 @@ function onPopOut() {
   cursor: pointer;
   text-align: right;
 }
-.nav-row:hover {
+.nav-row:hover,
+.nav-row--focused {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .nav-row:active {

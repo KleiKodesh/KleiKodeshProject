@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import HomeTile from './HomePageTile.vue'
 import HomeSearchDropdown from './HomeSearchDropdown.vue'
 import { useHomeSearch } from './useHomeSearch'
@@ -82,6 +82,8 @@ const homeSearchQuery = ref('')
 const searchBarRef = ref<HTMLElement | null>(null)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const isSearchDropdownOpen = ref(false)
+const searchDropdownRef = ref<InstanceType<typeof HomeSearchDropdown> | null>(null)
+const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
 
 const {
   catalogResults,
@@ -91,9 +93,11 @@ const {
   isLoadingFiles,
   hasAnyResults,
   clearResults,
+  pause: pauseSearch,
+  resume: resumeSearch,
 } = useHomeSearch(homeSearchQuery)
 
-useDropdownClose(searchBarRef, () => { isSearchDropdownOpen.value = false })
+useDropdownClose(searchBarRef, () => { isSearchDropdownOpen.value = false }, { ignore: [searchDropdownEl] })
 
 // Open the dropdown when async sources resolve results after the debounce
 watch([hebrewBooksResults, fileResults], () => {
@@ -103,11 +107,28 @@ watch([hebrewBooksResults, fileResults], () => {
 })
 
 function onSearchBarFocus() {
-  if (hasAnyResults()) isSearchDropdownOpen.value = true
+  if (hasAnyResults()) {
+    computeDropdownAnchor()
+    isSearchDropdownOpen.value = true
+  }
+}
+
+function onSearchInputKeydown(e: KeyboardEvent) {
+  if (!isSearchDropdownOpen.value) return
+  if (e.code === 'Escape') {
+    e.preventDefault()
+    closeSearchDropdown()
+    return
+  }
+  if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
+    e.preventDefault()
+    searchDropdownRef.value?.focus()
+  }
 }
 
 function onSearchBarInput() {
   const hasQuery = (homeSearchQuery.value ?? '').trim().length >= 2
+  if (hasQuery) computeDropdownAnchor()
   isSearchDropdownOpen.value = hasQuery
 }
 
@@ -161,6 +182,22 @@ async function onSelectFile(fullPath: string, fileName: string) {
 }
 const { width: containerWidth } = useElementSize(innerRef)
 
+// Compute dropdown position once when it opens — not reactively,
+// because reactive position tracking would update on every scroll and fight scrollTop.
+function computeDropdownAnchor() {
+  if (!searchBarRef.value) return
+  const rect = searchBarRef.value.getBoundingClientRect()
+  dropdownAnchorTop.value = rect.bottom + 6
+  dropdownAnchorLeft.value = rect.left
+  dropdownAnchorRight.value = window.innerWidth - rect.right
+  dropdownMaxHeight.value = Math.max(120, window.innerHeight - rect.bottom - 12)
+}
+
+const dropdownAnchorTop = ref(0)
+const dropdownAnchorLeft = ref(0)
+const dropdownAnchorRight = ref(0)
+const dropdownMaxHeight = ref(300)
+
 const visibleRecentlyOpenedList = computed(() => {
   if (!showRecentlyOpened.value) return []
   if (!recentlyOpenedList.value.length) return []
@@ -179,9 +216,9 @@ const { focusedIndex, containerFocused } = useTilesKeys(
 )
 
 onMounted(async () => {
-  pageRef.value?.focus()
   loadDateInfo()
   recentlyOpenedList.value = await recentlyOpenedStore.getList()
+  nextTick(() => searchBarInputRef.value?.focus())
 })
 
 async function onTap(label: string) {
@@ -211,19 +248,27 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
             autocomplete="off"
             @focus="onSearchBarFocus"
             @input="onSearchBarInput"
+            @keydown="onSearchInputKeydown"
           />
           <IconSearch20Regular class="home-search-bar__icon" />
         </div>
         <HomeSearchDropdown
           v-if="isSearchDropdownOpen"
+          ref="searchDropdownRef"
           :catalog-results="catalogResults"
           :hebrew-books-results="hebrewBooksResults"
           :file-results="fileResults"
           :is-loading-hebrew-books="isLoadingHebrewBooks"
           :is-loading-files="isLoadingFiles"
+          :anchor-top="dropdownAnchorTop"
+          :anchor-left="dropdownAnchorLeft"
+          :anchor-right="dropdownAnchorRight"
+          :max-height="dropdownMaxHeight"
           @select-catalog-book="onSelectCatalogBook"
           @select-hebrew-book="onSelectHebrewBook"
           @select-file="onSelectFile"
+          @dropdown-focused="pauseSearch"
+          @dropdown-blurred="resumeSearch"
         />
       </div>
       <div class="home-grid">
@@ -280,6 +325,10 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   container-type: inline-size;
 }
 
+.home-page--dropdown-open {
+  overflow-y: hidden;
+}
+
 .home-inner {
   display: flex;
   flex-direction: column;
@@ -295,11 +344,12 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   flex-wrap: wrap;
   justify-content: center;
   gap: 20px;
+  max-width: 920px;
 }
 
-/* Wide-screen search bar — hidden by default, shown when there is enough room */
+/* Wide-screen search bar — always visible */
 .home-search-bar-wrapper {
-  display: none;
+  display: block;
   position: relative;
   width: 100%;
   max-width: 560px;
@@ -344,11 +394,6 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   opacity: 0.7;
 }
 
-@container (min-width: 600px) {
-  .home-search-bar-wrapper {
-    display: block;
-  }
-}
 
 /* Bottom bar */
 .date-bar {
