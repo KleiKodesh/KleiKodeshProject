@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
@@ -71,16 +71,15 @@ const { focusedIndex, containerFocused } = useListKeys(
   activateItem,
 )
 
-onMounted(() => {
-  if (dropdownRef.value) {
-    dropdownRef.value.style.maxHeight = props.maxHeight + 'px'
-  }
-})
-
 defineExpose({
   focus: () => dropdownRef.value?.focus(),
   element: dropdownRef,
 })
+
+function onDropdownFocus() {
+  if (focusedIndex.value < 0) focusedIndex.value = 0
+  emit('dropdownFocused')
+}
 
 function onDropdownBlur(e: FocusEvent) {
   if (e.relatedTarget !== null && !dropdownRef.value?.contains(e.relatedTarget as Node)) {
@@ -121,7 +120,7 @@ function getFileIcon(fileName: string): FileIconInfo {
         maxHeight: maxHeight + 'px',
       }"
       @click.stop
-      @focus="focusedIndex < 0 && (focusedIndex = 0); emit('dropdownFocused')"
+      @focus="onDropdownFocus"
       @blur="onDropdownBlur"
     >
       <!-- ── Book catalog section ── -->

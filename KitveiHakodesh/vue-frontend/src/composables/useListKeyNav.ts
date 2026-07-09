@@ -2,6 +2,17 @@ import { ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
 
+// SCROLL DEBUGGING NOTE (HomeSearchDropdown, 2026):
+// If scrollIntoView stops working past a certain item in a scrollable list,
+// the cause is likely the container sitting inside a scrollable page ancestor.
+// scrollIntoView({ block: 'nearest' }) walks up the DOM and may scroll the
+// *page* instead of the container, which then gets its scrollTop reset by
+// the page's own scroll management (frame=1 in rAF polling).
+// The fix: render the dropdown via <Teleport to="body"> with position:fixed,
+// so the only scrollable ancestor is the container itself.
+// This issue only affects dropdowns rendered inside a scrollable page — plain
+// list components on their own page are not affected.
+
 export function useListKeys(
   containerEl: Ref<HTMLElement | null>,
   getCount: () => number,
