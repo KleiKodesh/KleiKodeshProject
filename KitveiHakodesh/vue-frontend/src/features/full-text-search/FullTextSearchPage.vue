@@ -149,6 +149,10 @@ function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
   lastScrollOffset = pos.scrollOffset
 }
 
+function onNavigateToBook(bookId: number) {
+  resultsListRef.value?.scrollToBook(bookId)
+}
+
 async function saveFilterState() {
   const captured = resultsListRef.value?.captureScrollPos()
   if (captured) {
@@ -237,21 +241,43 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="search-page">
-    <FullTextSearchResultsList
-      ref="resultsListRef"
-      :results="filteredResults"
-      :total-results="results.length"
-      :search-query="executedQuery"
-      :is-searching="isSearching"
-      :has-searched="hasSearched"
-      :search-error="searchError"
-      :db-not-found="indexingState.dbNotFound"
-      :initial-scroll-index="initialScrollIndex"
-      :initial-scroll-offset="initialScrollOffset"
-      :zoom="zoom"
-      @result-click="handleResultClick"
-      @save-scroll="onSaveScroll"
-    />
+    <div class="results-area">
+      <div class="results-list-wrap">
+        <FullTextSearchResultsList
+          ref="resultsListRef"
+          :results="filteredResults"
+          :total-results="results.length"
+          :search-query="executedQuery"
+          :is-searching="isSearching"
+          :has-searched="hasSearched"
+          :search-error="searchError"
+          :db-not-found="indexingState.dbNotFound"
+          :initial-scroll-index="initialScrollIndex"
+          :initial-scroll-offset="initialScrollOffset"
+          :zoom="zoom"
+          @result-click="handleResultClick"
+          @save-scroll="onSaveScroll"
+        />
+      </div>
+
+      <div v-if="isFilterOpen" class="filter-shell" @click.self="isFilterOpen = false">
+        <FullTextSearchFilterPanel
+          ref="filterPanelRef"
+          :checked-book-ids="checkedBookIds"
+          :result-counts="resultCounts"
+          :has-searched="hasSearched"
+          :at-filters="atFilters"
+          @toggle-book="toggleBook"
+          @toggle-category="toggleCategory"
+          @check-all="checkAll"
+          @uncheck-all="uncheckAll"
+          @check-visible="checkVisible"
+          @close="isFilterOpen = false"
+          @update:at-filters="setAtFilters"
+          @navigate-to-book="onNavigateToBook"
+        />
+      </div>
+    </div>
 
     <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />
 
@@ -286,22 +312,6 @@ onBeforeUnmount(() => {
       @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
       @clear="onClearSearch"
     />
-
-    <FullTextSearchFilterPanel
-      v-if="isFilterOpen"
-      ref="filterPanelRef"
-      :checked-book-ids="checkedBookIds"
-      :result-counts="resultCounts"
-      :has-searched="hasSearched"
-      :at-filters="atFilters"
-      @toggle-book="toggleBook"
-      @toggle-category="toggleCategory"
-      @check-all="checkAll"
-      @uncheck-all="uncheckAll"
-      @check-visible="checkVisible"
-      @close="isFilterOpen = false"
-      @update:at-filters="setAtFilters"
-    />
   </div>
 </template>
 
@@ -312,5 +322,46 @@ onBeforeUnmount(() => {
   height: 100%;
   position: relative;
   background: var(--bg-primary);
+}
+.results-area {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.results-list-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* Narrow overlay mode: shell covers the results area with a semitransparent backdrop */
+.filter-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+/* Wide mode: shell is a transparent flex child; panel sits beside the results */
+@media (min-width: 520px) {
+  .results-area {
+    flex-direction: row-reverse;
+  }
+  .results-list-wrap {
+    min-width: 0;
+  }
+  .filter-shell {
+    position: static;
+    background: none;
+    height: 100%;
+    flex-shrink: 0;
+  }
+  .results-area :deep(.panel) {
+    position: static;
+    height: 100%;
+    flex-shrink: 0;
+  }
 }
 </style>
