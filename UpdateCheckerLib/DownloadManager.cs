@@ -13,7 +13,35 @@ namespace UpdateCheckerLib
 {
     internal static class DownloadManager
     {
-        public static string PendingInstallerPath { get; private set; }
+        public static string PendingInstallerPath { get; set; }
+
+        private static readonly string InstallerTempPath =
+            Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe");
+
+        /// <summary>
+        /// Reads the ProductVersion embedded in %TEMP%\KleiKodeshSetup.exe (if it exists).
+        /// Returns e.g. "v8.6.0" or null if the file is missing or has no version info.
+        /// Pure sync — just a file stat + PE header read, no network.
+        /// </summary>
+        public static string GetInstallerFileVersion()
+        {
+            try
+            {
+                if (!File.Exists(InstallerTempPath)) return null;
+                var version = FileVersionInfo.GetVersionInfo(InstallerTempPath).ProductVersion;
+                return string.IsNullOrWhiteSpace(version) ? null : version.Trim();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Deletes %TEMP%\KleiKodeshSetup.exe silently. Used to clean up after a
+        /// successful install or when a stale/outdated installer is found on disk.
+        /// </summary>
+        public static void DeleteInstallerFile() => TryDeleteFile(InstallerTempPath);
 
         /// <summary>
         /// Returns the installer variant stored in the registry ("x64", "x86", or "AnyCPU").
@@ -49,7 +77,6 @@ namespace UpdateCheckerLib
         {
             string suffix       = GetInstallerSuffix();
             string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}{suffix}.exe";
-            string tempPath     = Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe");
 
             // Cross-process mutex: prevents simultaneous downloads from VSTO + demo app.
             // If another process is already downloading, skip silently.
@@ -67,18 +94,20 @@ namespace UpdateCheckerLib
                     }
 
                     // Download silently in background without showing progress form
-                    await DownloadFileAsync(installerUrl, tempPath, CancellationToken.None);
+                    await DownloadFileAsync(installerUrl, InstallerTempPath, CancellationToken.None);
 
-                    if (!File.Exists(tempPath) || new FileInfo(tempPath).Length == 0)
+                    if (!File.Exists(InstallerTempPath) || new FileInfo(InstallerTempPath).Length == 0)
                         throw new UpdateException("הורדת הקובץ נכשלה — הקובץ ריק או חסר", installerUrl, attempts: 1);
 
-                    PendingInstallerPath = tempPath;
+                    // Download complete. PendingInstallerPath is NOT set here —
+                    // it is set by UpdateChecker.GetReadyUpdateVersion() on the next
+                    // session when the sync disk check sees the file is newer than registry.
                 }
-                catch (OperationCanceledException) { TryDeleteFile(tempPath); }
+                catch (OperationCanceledException) { TryDeleteFile(InstallerTempPath); }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Silent download failed: {ex.Message}");
-                    TryDeleteFile(tempPath);
+                    TryDeleteFile(InstallerTempPath);
                     // Fail silently - don't show error message to user
                 }
                 finally
@@ -102,7 +131,6 @@ namespace UpdateCheckerLib
 
             var pathToLaunch = PendingInstallerPath;
             PendingInstallerPath = null;
-
             try
             {
                 LaunchInstaller(pathToLaunch);

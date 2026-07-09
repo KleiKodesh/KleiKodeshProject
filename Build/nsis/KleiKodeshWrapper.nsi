@@ -12,7 +12,20 @@
 !ifndef PRODUCT_VERSION
   !define PRODUCT_VERSION "v1.0.0"  ; Fallback version if not provided
 !endif
+!ifndef PRODUCT_VERSION_NUMERIC
+  !define PRODUCT_VERSION_NUMERIC "1.0.0"  ; Fallback (no "v" prefix, for VIProductVersion)
+!endif
 !define PRODUCT_PUBLISHER "צוות כלי קודש"
+
+; Embed version info into the exe's PE header so FileVersionInfo can read it
+; VIProductVersion requires exactly X.Y.Z.W (four numeric parts)
+VIProductVersion "${PRODUCT_VERSION_NUMERIC}.0"
+VIAddVersionKey "ProductName"     "${PRODUCT_NAME}"
+VIAddVersionKey "ProductVersion"  "${PRODUCT_VERSION}"
+VIAddVersionKey "FileVersion"     "${PRODUCT_VERSION_NUMERIC}.0"
+VIAddVersionKey "FileDescription" "מתקין כלי קודש"
+VIAddVersionKey "CompanyName"     "${PRODUCT_PUBLISHER}"
+VIAddVersionKey "LegalCopyright"  "© צוות כלי קודש"
 !define PRODUCT_UNINST_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\KleiKodesh"
 !define PRODUCT_UNINST_ROOT_KEY "HKCU"
 !define DOTNET_FRAMEWORK_VERSION "4.8"

@@ -146,8 +146,10 @@ function Build-Variant {
     $outFile = Join-Path $ReleasesDir "KleiKodeshSetup-${version}${Suffix}.exe"
 
     Write-Host "Building NSIS wrapper ($version$Suffix)..." -ForegroundColor Yellow
+    $versionNumeric = $version.TrimStart('v')   # "v8.6.0" → "8.6.0" for VIProductVersion
     & $nsisExe `
         "/DPRODUCT_VERSION=$version" `
+        "/DPRODUCT_VERSION_NUMERIC=$versionNumeric" `
         "/DOUTPUT_DIR=$ReleasesDir" `
         "/DOUTPUT_SUFFIX=$Suffix" `
         "/DWPF_EXE_PATH=$wpfExePath" `
