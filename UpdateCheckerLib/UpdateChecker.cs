@@ -82,8 +82,11 @@ namespace UpdateCheckerLib
 
         /// <summary>
         /// Checks for an update and downloads it silently if one is available.
-        /// Returns the new version tag (e.g. "v3.1.0") when a download succeeded,
-        /// or null when there is nothing to do (no update, no internet, download failed).
+        /// Returns the new version tag (e.g. "v3.1.0") when a newer version exists on GitHub,
+        /// or null when there is nothing to do (no update, no internet).
+        /// The download is attempted in the background but its success does NOT gate the return value —
+        /// callers always receive the tag so they can show the notification dialog.
+        /// If the download failed, RunPendingInstaller() on close is a silent no-op.
         /// Does NOT show any UI — callers are responsible for marshalling back to the UI
         /// thread and showing the notification dialog.
         /// </summary>
@@ -98,11 +101,13 @@ namespace UpdateCheckerLib
                 if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0)
                     return null;
 
-                // Download silently in background
+                // Download silently in background — failure is swallowed inside DownloadManager.
+                // We start the download but do NOT gate the notification on its success.
                 await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
 
-                // Return the version tag only if the download succeeded
-                return string.IsNullOrEmpty(DownloadManager.PendingInstallerPath) ? null : release.TagName;
+                // Always notify the user that an update exists, even if the download failed.
+                // If the download did succeed, RunPendingInstaller() on close will launch it.
+                return release.TagName;
             }
             catch (UpdateCheckException ex)
             {

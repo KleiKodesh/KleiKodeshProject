@@ -23,20 +23,24 @@ defineEmits<{ tap: [] }>()
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   width: 72px;
   padding: 6px 4px;
   background: none;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
+  transition: background 120ms;
 }
 .tile:focus-visible {
   outline: none;
 }
 .tile.is-focused {
   background: var(--hover-bg);
+}
+.tile:active {
+  background: var(--active-bg);
 }
 .tile:hover .tile-icon {
   transform: scale(1.08);
@@ -51,10 +55,10 @@ defineEmits<{ tap: [] }>()
   justify-content: center;
   width: 48px;
   height: 48px;
-  border-radius: 12px;
-  background: var(--bg-secondary);
-  font-size: 24px;
-  transition: transform 0.15s;
+  border-radius: 6px;
+  background: none;
+  font-size: 28px;
+  transition: transform 0.15s ease;
 }
 
 .tile-label {
@@ -62,7 +66,7 @@ defineEmits<{ tap: [] }>()
   color: var(--text-primary);
   text-align: center;
   line-height: 1.3;
-  max-width: 66px;
+  max-width: 68px;
   overflow: hidden;
   white-space: normal;
   word-break: break-word;
