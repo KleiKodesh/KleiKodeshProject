@@ -40,7 +40,7 @@ import { storeToRefs } from 'pinia'
 import type { Component } from 'vue'
 
 const TILE_WIDTH = 72
-const TILE_GAP = 20
+const TILE_GAP = 16
 
 const { navigate } = useAppNavigation()
 const paneNavigation = usePaneNavigation()
@@ -374,44 +374,42 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   justify-content: center;
   flex: 1;
   min-height: min-content;
-  padding: 24px;
+  padding: 16px 24px;
 }
 
 .home-grid {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 20px;
+  gap: 4px 8px;
   max-width: 920px;
 }
 
-/* Wide-screen search bar — always visible */
+/* Search bar — uses the same .search-inner pattern as the rest of the app */
 .home-search-bar-wrapper {
   display: block;
   position: relative;
   width: 100%;
   max-width: 560px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .home-search-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  height: 38px;
-  padding: 0 14px;
-  background: var(--bg-primary);
-  border: 1px solid transparent;
+  padding: 5px 10px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
   border-radius: 999px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18), 0 1px 3px rgba(0, 0, 0, 0.12);
-  transition: box-shadow 150ms;
+  transition: background 150ms;
   overflow: hidden;
   min-width: 0;
 }
 
 .home-search-bar:focus-within {
-  box-shadow: 0 3px 16px rgba(0, 0, 0, 0.22), 0 1px 4px rgba(0, 0, 0, 0.14);
+  background: var(--input-bg-focus);
 }
 
 .home-search-bar__field {
@@ -421,31 +419,33 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   background: none;
   border: none;
   outline: none;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-primary);
   direction: rtl;
+}
+
+.home-search-bar__field::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.7;
 }
 
 .home-search-bar__icon {
   flex-shrink: 0;
   color: var(--text-secondary);
-  opacity: 0.7;
+  opacity: 0.6;
 }
 
-
-/* Bottom bar */
+/* Date bar */
 .date-bar {
-  position: sticky;
-  bottom: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--bg-secondary);
+  font-size: 11.5px;
+  color: var(--text-secondary);
   border-top: 1px solid var(--border-color);
-  font-size: 11px;
 }
 .date-hebrew {
   font-weight: 600;
@@ -466,7 +466,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
 }
 .bar-sep {
   color: var(--text-secondary);
-  opacity: 0.4;
+  opacity: 0.3;
 }
 .bar-item {
   color: var(--text-secondary);
@@ -475,6 +475,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
 .bar-lbl {
   font-weight: 600;
   color: var(--text-primary);
+  opacity: 0.7;
 }
 .bar-item--btn {
   background: none;
@@ -491,5 +492,6 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
 }
 .bar-item--btn:hover .bar-lbl {
   color: inherit;
+  opacity: 1;
 }
 </style>
