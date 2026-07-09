@@ -9,6 +9,11 @@
  *
  * Min query length: 2 chars. Debounce: 300ms for the two async sources.
  * Each source is capped at MAX_RESULTS_PER_SOURCE items in the dropdown.
+ *
+ * Source-priority prefixes (stripped before searching):
+ *   HebrewBooks first: היברו, היברובוקס, היברו בוקס
+ *   Files first:       מחשב, קובץ
+ *   Default (no prefix): catalog first
  */
 
 import { ref, watch } from 'vue'
@@ -43,10 +48,47 @@ export interface FileSearchResult {
 
 export type HomeSearchResult = CatalogSearchResult | HebrewBooksSearchResult | FileSearchResult
 
+export type SearchSourcePriority = 'catalog' | 'hebrewbooks' | 'files'
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MIN_QUERY_LENGTH = 2
 const DEBOUNCE_MS = 300
+
+// Prefixes that shift which source appears first in the dropdown.
+// Matched against the beginning of the normalized query (after stripping spaces).
+const HEBREWBOOKS_PREFIXES = ['היברו בוקס', 'היברובוקס', 'היברו']
+const FILES_PREFIXES = ['מחשב', 'קובץ']
+
+// ─── Prefix detection ────────────────────────────────────────────────────────
+
+interface ParsedQuery {
+  priority: SearchSourcePriority
+  /** The query after the prefix has been removed, trimmed. */
+  effectiveQuery: string
+}
+
+function stripPrefixFromQuery(trimmed: string, prefix: string): string {
+  const afterPrefix = trimmed.slice(prefix.length)
+  // Allow an optional colon (with surrounding spaces) after the prefix
+  return afterPrefix.replace(/^\s*:\s*/, '').trim()
+}
+
+function parseQueryPrefix(rawQuery: string): ParsedQuery {
+  const trimmed = rawQuery.trim()
+
+  for (const prefix of HEBREWBOOKS_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      return { priority: 'hebrewbooks', effectiveQuery: stripPrefixFromQuery(trimmed, prefix) }
+    }
+  }
+  for (const prefix of FILES_PREFIXES) {
+    if (trimmed.startsWith(prefix)) {
+      return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, prefix) }
+    }
+  }
+  return { priority: 'catalog', effectiveQuery: trimmed }
+}
 
 // ─── Query normalization ──────────────────────────────────────────────────────
 
@@ -65,6 +107,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const catalogResults = ref<CatalogSearchResult[]>([])
   const hebrewBooksResults = ref<HebrewBooksSearchResult[]>([])
   const fileResults = ref<FileSearchResult[]>([])
+  const sourcePriority = ref<SearchSourcePriority>('catalog')
 
   const isLoadingHebrewBooks = ref(false)
   const isLoadingFiles = ref(false)
@@ -108,12 +151,14 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
   watch(
     searchQuery,
     (rawQuery) => {
-      const trimmed = (rawQuery ?? '').trim()
-      if (trimmed.length < MIN_QUERY_LENGTH || !dbReady.value) {
+      const { priority, effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
+      sourcePriority.value = priority
+
+      if (effectiveQuery.length < MIN_QUERY_LENGTH || !dbReady.value) {
         setCatalog([])
         return
       }
-      const words = toQueryWords(trimmed)
+      const words = toQueryWords(effectiveQuery)
       if (!words.length) {
         setCatalog([])
         return
@@ -132,9 +177,9 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
     debouncedQuery,
     async (rawQuery) => {
       const generation = ++asyncGeneration
-      const trimmed = (rawQuery ?? '').trim()
+      const { effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
 
-      if (trimmed.length < MIN_QUERY_LENGTH || !isHosted) {
+      if (effectiveQuery.length < MIN_QUERY_LENGTH || !isHosted) {
         setHebrewBooks([])
         setFiles([])
         isLoadingHebrewBooks.value = false
@@ -147,7 +192,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
       const localFolder = settingsStore.hebrewBooksLocalFolder || undefined
 
-      const hbPromise = searchHbCatalog(trimmed, localFolder, 50)
+      const hbPromise = searchHbCatalog(effectiveQuery, localFolder, 50)
         .then((books) => {
           if (generation !== asyncGeneration) return
           setHebrewBooks(books.map((book) => ({ source: 'hebrewbooks' as const, book })))
@@ -160,7 +205,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
           if (generation === asyncGeneration) isLoadingHebrewBooks.value = false
         })
 
-      const filePromise = fileSystemSearch(trimmed, 50)
+      const filePromise = fileSystemSearch(effectiveQuery, 50)
         .then((response) => {
           if (generation !== asyncGeneration) return
           if (response.error || !response.results) {
@@ -196,6 +241,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
     fileResults.value = []
     isLoadingHebrewBooks.value = false
     isLoadingFiles.value = false
+    sourcePriority.value = 'catalog'
   }
 
   const hasAnyResults = () =>
@@ -209,6 +255,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
     catalogResults,
     hebrewBooksResults,
     fileResults,
+    sourcePriority,
     isLoadingHebrewBooks,
     isLoadingFiles,
     hasAnyResults,

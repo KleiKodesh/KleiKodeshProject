@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useIntervalFn } from '@vueuse/core'
 import HomeTile from './HomePageTile.vue'
 import HomeSearchDropdown from './HomeSearchDropdown.vue'
 import { useHomeSearch } from './useHomeSearch'
@@ -85,10 +86,38 @@ const isSearchDropdownOpen = ref(false)
 const searchDropdownRef = ref<InstanceType<typeof HomeSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
 
+// ── Animated placeholder ──────────────────────────────────────────────────────
+
+const SEARCH_PLACEHOLDERS = [
+  'חיפוש מהיר בכל המאגרים...',
+  'כדי למיין תוצאות כתוב',
+  'היברו בוקס: שבת',
+  'או היברו: שבת',
+  'קובץ: ברכות',
+  'או מחשב: ברכות'
+]
+const searchPlaceholder = ref(SEARCH_PLACEHOLDERS[0]!)
+let placeholderPhraseIndex = 0, placeholderCharIndex = 0, placeholderPauseTicks = 0
+
+const { pause: pausePlaceholderTyping, resume: resumePlaceholderTyping } = useIntervalFn(() => {
+  if (placeholderPauseTicks > 0) { placeholderPauseTicks--; return }
+  const target = SEARCH_PLACEHOLDERS[placeholderPhraseIndex]!
+  if (placeholderCharIndex < target.length) {
+    searchPlaceholder.value = target.slice(0, ++placeholderCharIndex)
+  } else {
+    placeholderPauseTicks = 12
+    placeholderPhraseIndex = (placeholderPhraseIndex + 1) % SEARCH_PLACEHOLDERS.length
+    placeholderCharIndex = 0
+  }
+}, 80)
+
+watch(homeSearchQuery, (value) => (value ? pausePlaceholderTyping() : resumePlaceholderTyping()))
+
 const {
   catalogResults,
   hebrewBooksResults,
   fileResults,
+  sourcePriority,
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
@@ -155,11 +184,13 @@ async function onSelectFile(fullPath: string, fileName: string) {
   if (!isHosted) return
 
   const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
+  const dotIndex = fileName.lastIndexOf('.')
+  const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
 
   if (extension === '.txt') {
     paneNavigation.updateActiveTab({
       route: '/txt-view',
-      title: fileName,
+      title: titleWithoutExtension,
       localFileName: fileName,
       localFilePath: fullPath,
       localFileVirtualUrl: undefined,
@@ -174,7 +205,7 @@ async function onSelectFile(fullPath: string, fileName: string) {
 
   paneNavigation.updateActiveTab({
     route,
-    title: fileName,
+    title: titleWithoutExtension,
     localFileName: fileName,
     localFilePath: fullPath,
     localFileVirtualUrl: restored.url,
@@ -244,7 +275,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
             v-model="homeSearchQuery"
             class="home-search-bar__field"
             type="search"
-            placeholder="חיפוש מהיר..."
+            :placeholder="searchPlaceholder"
             autocomplete="off"
             @focus="onSearchBarFocus"
             @input="onSearchBarInput"
@@ -258,6 +289,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
           :catalog-results="catalogResults"
           :hebrew-books-results="hebrewBooksResults"
           :file-results="fileResults"
+          :source-priority="sourcePriority"
           :is-loading-hebrew-books="isLoadingHebrewBooks"
           :is-loading-files="isLoadingFiles"
           :anchor-top="dropdownAnchorTop"

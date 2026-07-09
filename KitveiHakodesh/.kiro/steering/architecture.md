@@ -214,6 +214,23 @@ PDF viewer with OCR support. Embeds a PDF.js iframe and provides OCR text extrac
 - `usePdfOcrSelection.ts` — OCR selection and text extraction
 - `pdfOcrInjectedScript.ts` — script injected into PDF.js iframe
 
+## PDF.js Viewer
+
+The PDF.js viewer files live at `vue-frontend/public/pdfjs/`. This is a static folder served as-is; it is not processed by Vite.
+
+Key files:
+
+- `web/viewer.html` — the iframe document loaded by `PdfViewPage.vue`
+- `web/viewer.mjs` — the main PDF.js application bundle; all viewer behaviour patches go here
+- `web/viewer.css` — PDF.js default styles
+- `web/viewer-custom.css` — custom theme variable hooks and page filter support (added file, not in vanilla PDF.js)
+- `web/pixel-ratio-override.js` — forces minimum `devicePixelRatio` of 1.5 for sharp rendering (added file)
+- `build/pdf.worker.mjs` — the PDF.js Web Worker bundle; polyfills for old WebView2 go here
+- `web/locale/he/viewer.ftl` — Hebrew translation overrides
+- `CUSTOMIZATIONS.md` — the authoritative record of every patch applied to this PDF.js build; read this before touching any file in `public/pdfjs/`
+
+When modifying PDF.js behaviour — adding a feature, fixing a bug, adjusting presentation mode — always edit the files in `vue-frontend/public/pdfjs/web/` or `vue-frontend/public/pdfjs/build/` directly. After making any patch, document it in `CUSTOMIZATIONS.md` following the same format as the existing entries.
+
 ### html-view/
 
 HTML file viewer for local HTML documents.
