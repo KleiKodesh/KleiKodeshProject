@@ -41,9 +41,6 @@ defineEmits<{ tap: [] }>()
 .tile:focus-visible .tile-icon {
   transform: scale(1.25);
 }
-.tile:active {
-  background: var(--active-bg);
-}
 .tile:hover .tile-icon {
   transform: scale(1.15);
 }

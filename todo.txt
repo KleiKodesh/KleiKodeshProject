@@ -2,8 +2,8 @@ add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
-everything icon in home page needs to grow larger
-the icons need to grow a tiny bit more on hover 
+only show hom epage dropdown if there are results
+מיון בחיפוש בקבצים
 
 ספרים קרובים update for book with source
 

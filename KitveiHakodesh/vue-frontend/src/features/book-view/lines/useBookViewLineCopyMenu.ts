@@ -9,7 +9,7 @@ import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
-import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
+import { triggerCopy } from '@/composables/useLineCopy'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -317,15 +317,14 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   function onCopy(): void {
     // Fire the native copy event — useScopedCopy intercepts it and applies all
     // active flags (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText).
-    document.execCommand('copy')
+    triggerCopy()
   }
 
-  // Sets clipboard via execCopyHtmlToClipboard, then tells C# to open Word and call Selection.Paste().
+  // Uses the same copy path as onCopy — triggerCopy fires the copy event so useScopedCopy
+  // writes the formatted HTML to the clipboard — then calls pasteIntoWord() from inside
+  // the copy event handler, after the clipboard write is guaranteed complete.
   function onPasteIntoWord(): void {
-    const html = buildFormattedHtml()
-    if (html === null) return
-    execCopyHtmlToClipboard(html)
-    pasteIntoWord().catch(() => {})
+    triggerCopy(() => pasteIntoWord().catch(() => {}))
   }
 
   function onSearchInRepository(): void {
