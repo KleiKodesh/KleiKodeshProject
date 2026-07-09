@@ -4,56 +4,87 @@ Library for checking and downloading app updates from GitHub releases.
 
 ## What It Does
 
-Monitors GitHub releases for new versions of KleiKodesh and automatically downloads and installs them.
+Monitors GitHub releases for new versions of KleiKodesh and automatically downloads and installs them. The update flow is split into two completely independent concerns:
 
-- **UpdateChecker.cs** — Main service that fetches the latest release from GitHub, compares against the installed version (read from the Windows registry), and triggers download if a newer version exists.
-- **DownloadManager.cs** — Handles downloading the installer `.exe` file to a temp location and launching it (with UAC handling via `runas` verb).
-- **DownloadProgressForm.cs** — WinForms progress form showing download progress and cancellation option.
-- **GithubRelease.cs** — Data model for GitHub release JSON (version tag, download URL, etc.).
+1. **Sync disk check** — instant, no network. Reads the version embedded in a previously downloaded installer file and compares it to the installed version.
+2. **Async GitHub check** — background network call. Downloads a newer installer silently if one is available.
+
+This separation means the user notification is never blocked by a network request, and there are no threading concerns around showing the dialog.
+
+## Files
+
+- **UpdateChecker.cs** — Public API. `GetReadyUpdateVersion()` (sync disk check) and `CheckForUpdateAsync()` (background download).
+- **DownloadManager.cs** — Internal. Handles file version reading, downloading, cleanup, and launching the installer on close.
+- **UpdateNotificationForm.cs** — Minimal topmost WinForms dialog. `TopMost = true` ensures the user never misses it behind other windows.
+- **DownloadProgressForm.cs** — WinForms progress form (used if a visible download is ever needed in future).
+- **GithubRelease.cs** — Data model for GitHub release JSON (version tag, assets, etc.).
+- **UpdateException.cs** — Structured exception for download/check failures.
+
+## Update Flow
+
+### Session startup (VSTO: first task pane open / Demo app: form load)
+
+```
+Step 1 — sync, on calling thread, instant:
+  GetReadyUpdateVersion()
+    no file in %TEMP%          → null
+    file version <= registry   → delete file (clean up) → null
+    file version > registry    → set PendingInstallerPath → return version
+
+  version returned → UpdateNotificationForm.Show(...)   ← topmost dialog
+
+Step 2 — async, fire-and-forget Task.Run, always runs:
+  CheckForUpdateAsync()
+    hit GitHub API
+    not newer than registry    → done
+    file already that version  → done (skip re-download)
+    download to %TEMP%\KleiKodeshSetup.exe
+    (no UI, no state changes)
+```
+
+### On close (Word shutdown / form closing)
+
+```
+RunPendingInstaller()
+  PendingInstallerPath set? → launch installer with runas verb → done
+  not set?                  → nothing
+```
+
+### Version embedded in the NSIS exe
+
+The NSIS build script passes `VIProductVersion` and `VIAddVersionKey` directives so the downloaded `KleiKodeshSetup.exe` carries its version in the PE header. `FileVersionInfo.GetVersionInfo(path).ProductVersion` returns e.g. `"v8.6.0"` — the same format used everywhere.
+
+### Cleanup
+
+`GetReadyUpdateVersion()` deletes `%TEMP%\KleiKodeshSetup.exe` when its version equals or is older than the installed version. This means:
+- After a successful install, the next session silently cleans up the file.
+- Stale files from failed/partial downloads are also cleaned up automatically.
 
 ## Integration
 
-Called from `KleiKodeshVsto/Helpers/TaskpaneManager.cs` on first taskpane open (unless the user disabled auto-update checks in settings).
+| Caller | Where called | Thread |
+|---|---|---|
+| `KleiKodeshVsto/Helpers/TaskpaneManager.cs` | First task pane open | VSTO UI thread |
+| `KitveiHakodeshDemoApp/MainForm.cs` | `MainForm_Load` | WinForms UI thread |
 
-The installer being downloaded is the **NSIS wrapper** (`KleiKodeshSetup-vX.Y.Z.exe`), not the raw WPF installer. The NSIS wrapper checks OS prerequisites (Windows 10+, .NET Framework 4.7.2+, VSTO runtime) before handing off to the WPF installer.
-
-## Version Flow
-
-```
-UpdateChecker.GetCurrentVersionFromRegistry()
-  → reads HKCU\SOFTWARE\KleiKodesh\Version (e.g. "v8.2.1")
-  ↓
-Fetches https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest
-  ↓
-Compares versions (semantic versioning)
-  ↓
-If newer available:
-  → DownloadManager.DownloadAsync() fetches KleiKodeshSetup-vX.Y.Z.exe to %TEMP%
-  → DownloadManager.LaunchInstaller() runs it with verb="runas" (UAC + AIS handoff)
-  → NSIS wrapper runs → WPF installer → SaveVersion() updates registry
-```
-
-For full version management details, see `.kiro/steering/version-management.md`.
+Both callers own the notification message text (Hebrew, context-appropriate). The library provides no hardcoded message strings.
 
 ## Folder Structure
 
 ```
 UpdateCheckerLib/
-├── UpdateChecker.cs           — Main service
-├── DownloadManager.cs         — Download + install launcher
-├── DownloadProgressForm.cs      — Progress UI (WinForms)
-├── DownloadProgressWindow.xaml.cs
-├── GithubRelease.cs           — API model
-├── UpdateCheckerLib.csproj    — Must define Release|x64, Release|x86, Release|AnyCPU output paths
-└── packages.config            — NuGet dependencies
+├── UpdateChecker.cs           — Public API: GetReadyUpdateVersion, CheckForUpdateAsync
+├── DownloadManager.cs         — Internal: file version, download, cleanup, launch
+├── UpdateNotificationForm.cs  — Topmost "update ready" dialog (code-only, no designer)
+├── DownloadProgressForm.cs    — Progress UI (for visible downloads if needed)
+├── GithubRelease.cs           — GitHub API response model
+├── UpdateException.cs         — Structured exception types
+├── UpdateCheckerLib.csproj
+└── packages.config
 ```
 
 ## Build Configuration
 
-Part of the three-variant build pipeline (x64, x86, AnyCPU). The `.csproj` must define `OutputPath` for each platform variant. See `.kiro/steering/build-variants.md`.
+Part of the three-variant build pipeline (x64, x86, AnyCPU). See `.kiro/steering/build-variants.md`.
 
-## Dependencies
-
-- System.Net.Http (for GitHub API requests)
-- System.Windows (WPF for progress window)
-- Newtonsoft.Json (for GitHub release JSON parsing)
+For full version management details, see `.kiro/steering/version-management.md`.
