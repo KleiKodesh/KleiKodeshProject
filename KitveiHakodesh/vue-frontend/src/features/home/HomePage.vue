@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { useIntervalFn, useElementSize } from '@vueuse/core'
 import HomeTile from './HomePageTile.vue'
 import HomeSearchDropdown from './HomeSearchDropdown.vue'
 import { useHomeSearch } from './useHomeSearch'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
-import { restoreLocalFile } from '@/webview-host/bridge'
+import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import {
   IconLibrary24Filled,
@@ -34,8 +34,9 @@ import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
+import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import { storeToRefs } from 'pinia'
-import { useElementSize } from '@vueuse/core'
 import type { Component } from 'vue'
 
 const TILE_WIDTH = 72
@@ -46,6 +47,7 @@ const paneNavigation = usePaneNavigation()
 const recentlyOpenedStore = useRecentlyOpenedStore()
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
+const hebrewBooksHistoryStore = useHebrewBooksHistoryStore()
 const { showRecentlyOpened } = storeToRefs(settingsStore)
 
 const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
@@ -172,11 +174,19 @@ function onSelectCatalogBook(bookId: number, bookTitle: string) {
   paneNavigation.updateActiveTab({ route: '/book-view', title: bookTitle, bookId })
 }
 
-function onSelectHebrewBook(bookId: number, bookTitle: string) {
+function onSelectHebrewBook(book: HebrewBook) {
   closeSearchDropdown()
-  // Navigate to the HebrewBooks page — the user can open the specific book from there.
-  // Direct open would require triggering the download flow which belongs to useHebrewBooks.
-  paneNavigation.navigateToSingleton('/hebrewbooks')
+  hebrewBooksHistoryStore.trackAccess(book)
+  const tabId = paneNavigation.activeTabId
+  localFileStore.startHbDownload(book.title, tabId)
+  triggerHbDownload(
+    String(book.id),
+    book.title,
+    getHbPdfUrl(book.id),
+    tabId,
+    settingsStore.hebrewBooksLocalFolder || undefined,
+    navigator.onLine,
+  ).catch(() => {})
 }
 
 async function onSelectFile(fullPath: string, fileName: string) {

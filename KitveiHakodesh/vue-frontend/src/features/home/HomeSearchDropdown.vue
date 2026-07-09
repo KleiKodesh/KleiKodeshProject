@@ -16,6 +16,7 @@ import type {
   FileSearchResult,
   SearchSourcePriority,
 } from './useHomeSearch'
+import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
@@ -33,7 +34,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectCatalogBook: [bookId: number, bookTitle: string]
-  selectHebrewBook: [bookId: number, bookTitle: string]
+  selectHebrewBook: [book: HebrewBook]
   selectFile: [fullPath: string, fileName: string]
   dropdownFocused: []
   dropdownBlurred: []
@@ -52,7 +53,7 @@ const sectionOrder = computed<SearchSourcePriority[]>(() => {
 const allItems = computed(() => {
   const items: Array<
     | { kind: 'catalog'; bookId: number; title: string }
-    | { kind: 'hebrewBooks'; bookId: number; title: string }
+    | { kind: 'hebrewBooks'; book: HebrewBook }
     | { kind: 'file'; fullPath: string; fileName: string }
   > = []
   for (const source of sectionOrder.value) {
@@ -62,7 +63,7 @@ const allItems = computed(() => {
       }
     } else if (source === 'hebrewbooks') {
       for (const item of props.hebrewBooksResults) {
-        items.push({ kind: 'hebrewBooks', bookId: item.book.id, title: item.book.title })
+        items.push({ kind: 'hebrewBooks', book: item.book })
       }
     } else {
       for (const item of props.fileResults) {
@@ -77,7 +78,7 @@ function activateItem(index: number) {
   const item = allItems.value[index]
   if (!item) return
   if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title)
-  else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.bookId, item.title)
+  else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book)
   else emit('selectFile', item.fullPath, item.fileName)
 }
 
@@ -172,9 +173,9 @@ function getFileIcon(fileName: string): FileIconInfo {
             :key="item.book.id"
             role="option"
             class="home-search-dropdown__item"
-            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.bookId === item.book.id) }"
+            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.book.id === item.book.id) }"
             data-nav-item
-            @click="emit('selectHebrewBook', item.book.id, item.book.title)"
+            @click="emit('selectHebrewBook', item.book)"
           >
             <IconBookOpen20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
             <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
