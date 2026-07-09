@@ -24,6 +24,7 @@ const emit = defineEmits<{
   uncheckAll: []
   close: []
   'update:atFilters': [string[]]
+  navigateToBook: [number]
 }>()
 
 const booksStore = useBooksDataStore()
@@ -186,6 +187,7 @@ function onInputKeydown(e: KeyboardEvent) {
           :result-counts="resultCounts"
           :has-searched="hasSearched"
           @toggle-book="emit('toggleBook', $event)"
+          @navigate-to-book="emit('navigateToBook', $event)"
         />
         <div v-else class="tree-scroll">
           <FullTextSearchFilterNode
@@ -197,6 +199,7 @@ function onInputKeydown(e: KeyboardEvent) {
             :has-searched="hasSearched"
             @toggle-book="emit('toggleBook', $event)"
             @toggle-category="(c, v) => emit('toggleCategory', c, v)"
+            @navigate-to-book="emit('navigateToBook', $event)"
           />
         </div>
       </template>

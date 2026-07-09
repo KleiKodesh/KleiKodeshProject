@@ -1,6 +1,9 @@
-title needs after breadcrimb
 .pdf still showing in the title (when opening through the docuent locator page)
-recent files in home page - optional
+
+
+nned to adjust filter to be like bookview side panel
+need to add padding at bottom of the lines view
+
 
 add optional index drives with index saved on teh drive
 takes time till service starts

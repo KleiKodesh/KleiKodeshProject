@@ -12,7 +12,7 @@ const props = defineProps<{
   hasSearched?: boolean
 }>()
 
-const emit = defineEmits<{ toggleBook: [number] }>()
+const emit = defineEmits<{ toggleBook: [number]; navigateToBook: [number] }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
 
@@ -39,10 +39,16 @@ const { focusedIndex, containerFocused } = useVirtualListKeys(
 // Reset focus when the book list changes (new search query)
 watch(() => props.books, () => { focusedIndex.value = -1 })
 
-function onBookRowClick(index: number) {
+function onBookRowCheckClick(index: number) {
   focusedIndex.value = index
   const book = props.books[index]
   if (book) emit('toggleBook', book.id)
+}
+
+function onBookRowTitleClick(index: number) {
+  focusedIndex.value = index
+  const book = props.books[index]
+  if (book) emit('navigateToBook', book.id)
 }
 
 function focusList() {
@@ -75,24 +81,23 @@ defineExpose({ focusList })
             checked: checkedBookIds.has(books[vRow.index]!.id),
             focused: containerFocused && focusedIndex === vRow.index,
           }"
-          @click="onBookRowClick(vRow.index)"
         >
-          <span class="check-col">
+          <button class="checkbox-col" @click.stop="onBookRowCheckClick(vRow.index)">
             <span v-if="checkedBookIds.has(books[vRow.index]!.id)" class="check-mark">✓</span>
             <IconBookRtl20 v-else class="book-icon" />
-          </span>
-          <span class="item-text">
-            <span class="item-title-row">
-              <span class="item-title">{{ books[vRow.index]!.title }}</span>
+          </button>
+          <button class="book-title" title="גלול לתוצאה הראשונה" @click.stop="onBookRowTitleClick(vRow.index)">
+            <span class="title-line">
+              <span class="title-text">{{ books[vRow.index]!.title }}</span>
               <span
                 v-if="hasSearched && resultCounts.get(books[vRow.index]!.id)"
                 class="count"
               >({{ resultCounts.get(books[vRow.index]!.id) }})</span>
             </span>
-            <span v-if="books[vRow.index]!.parentPath" class="item-path">
+            <span v-if="books[vRow.index]!.parentPath" class="path-text">
               {{ books[vRow.index]!.parentPath }}
             </span>
-          </span>
+          </button>
         </div>
       </div>
     </div>
@@ -110,52 +115,74 @@ defineExpose({ focusList })
 }
 .book-row {
   display: flex;
-  align-items: center;
-  gap: 8px;
+  align-items: stretch;
   min-height: 40px;
-  padding: 4px 10px;
-  cursor: pointer;
-  box-sizing: border-box;
   user-select: none;
-}
-.book-row:hover {
-  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-.book-row:active {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 .book-row.focused {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
-.check-col {
-  width: 20px;
+
+/* Checkbox button — fixed width, toggles inclusion */
+.checkbox-col {
+  width: 36px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 11px;
   color: var(--accent-color);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
 }
+.checkbox-col:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.checkbox-col:active { transform: none !important; }
+
 .book-icon {
   width: 16px;
   height: 16px;
   color: #c1440e;
   opacity: 0.5;
 }
-.item-text {
+.check-mark { font-size: 11px; }
+
+/* Title button — fills the rest, clicking navigates to first result */
+.book-title {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
   gap: 1px;
-  min-width: 0;
-  flex: 1;
+  padding: 4px 8px 4px 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  border-radius: 0;
+  text-align: right;
 }
-.item-title-row {
+.book-title:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.book-title:active {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.title-line {
   display: flex;
   align-items: baseline;
   gap: 5px;
   min-width: 0;
+  width: 100%;
 }
-.item-title {
+.title-text {
   font-size: 12px;
   color: var(--text-primary);
   line-height: 1.3;
@@ -165,7 +192,7 @@ defineExpose({ focusList })
   min-width: 0;
   flex-shrink: 1;
 }
-.item-path {
+.path-text {
   font-size: 10px;
   color: var(--text-secondary);
   opacity: 0.7;
@@ -173,6 +200,8 @@ defineExpose({ focusList })
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.3;
+  width: 100%;
+  text-align: right;
 }
 .count {
   font-size: 10px;

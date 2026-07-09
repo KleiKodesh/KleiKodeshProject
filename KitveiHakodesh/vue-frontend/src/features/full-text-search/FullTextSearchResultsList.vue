@@ -137,9 +137,30 @@ useVirtualScrollerKeys(
   () => props.results.length,
 )
 
+function scrollToBook(bookId: number) {
+  const index = props.results.findIndex((r) => r.bookId === bookId)
+  if (index < 0) return
+  programmaticScrolling = true
+  virtualizer.value.scrollToIndex(index, { align: 'start' })
+  let attempts = 0
+  function applyOffset() {
+    const item = virtualizer.value.measurementsCache.find((m) => m.index === index)
+    if (item && scrollEl.value) {
+      scrollEl.value.scrollTop = item.start
+      requestAnimationFrame(() => { programmaticScrolling = false })
+    } else if (++attempts < 10) {
+      virtualizer.value.scrollToIndex(index, { align: 'start' })
+      setTimeout(() => requestAnimationFrame(applyOffset), 100)
+    } else {
+      programmaticScrolling = false
+    }
+  }
+  requestAnimationFrame(applyOffset)
+}
+
 function onScroll() {}
 
-defineExpose({ captureScrollPos })
+defineExpose({ captureScrollPos, scrollToBook })
 </script>
 
 <template>

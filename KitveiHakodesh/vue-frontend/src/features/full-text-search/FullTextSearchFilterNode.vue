@@ -14,7 +14,11 @@ const props = withDefaults(
   { depth: 0, hasSearched: false },
 )
 
-const emit = defineEmits<{ toggleBook: [number]; toggleCategory: [CategoryNode, boolean] }>()
+const emit = defineEmits<{
+  toggleBook: [number]
+  toggleCategory: [CategoryNode, boolean]
+  navigateToBook: [number]
+}>()
 
 const expanded = ref(false)
 
@@ -36,6 +40,23 @@ const isIndet = computed(() => {
 const hasChildren = computed(
   () => props.category.children.length > 0 || props.category.books.length > 0,
 )
+
+function firstNavigableBookId(cat: CategoryNode): number | null {
+  // Prefer a book that has results (when search has run), otherwise first book
+  for (const book of cat.books) {
+    if (!props.hasSearched || props.resultCounts.get(book.id)) return book.id
+  }
+  for (const child of cat.children) {
+    const found = firstNavigableBookId(child)
+    if (found != null) return found
+  }
+  return null
+}
+
+function navigateToCategory() {
+  const id = firstNavigableBookId(props.category)
+  if (id != null) emit('navigateToBook', id)
+}
 </script>
 
 <template>
@@ -54,16 +75,14 @@ const hasChildren = computed(
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
       <span v-else class="expander-placeholder" />
-      <div class="row-body" @click="emit('toggleCategory', category, !isChecked)">
-        <span class="check-col">
-          <span class="check-mark">✓</span>
-          <span class="dash-mark">–</span>
-        </span>
-        <span class="row-label">
-          {{ category.title }}
-          <span v-if="totalResults > 0" class="count">({{ totalResults }})</span>
-        </span>
-      </div>
+      <button class="row-title" title="גלול לתוצאה הראשונה" @click.stop="navigateToCategory">
+        {{ category.title }}
+        <span v-if="totalResults > 0" class="count">({{ totalResults }})</span>
+      </button>
+      <button class="checkbox-col" @click.stop="emit('toggleCategory', category, !isChecked)">
+        <span class="check-mark">✓</span>
+        <span class="dash-mark">–</span>
+      </button>
     </div>
     <template v-if="expanded">
       <FullTextSearchFilterNode
@@ -76,6 +95,7 @@ const hasChildren = computed(
         :has-searched="hasSearched"
         @toggle-book="emit('toggleBook', $event)"
         @toggle-category="(c, v) => emit('toggleCategory', c, v)"
+        @navigate-to-book="emit('navigateToBook', $event)"
       />
       <template v-for="book in category.books" :key="book.id">
         <div
@@ -84,18 +104,18 @@ const hasChildren = computed(
           :class="{ checked: checkedBookIds.has(book.id) }"
           :style="{ paddingInlineStart: `${(depth + 1) * 14}px` }"
         >
-          <span class="expander-placeholder" />
-          <div class="row-body" @click="emit('toggleBook', book.id)">
-            <span class="check-col">
-              <span class="check-mark">✓</span>
-            </span>
-            <span class="row-label" :class="{ dimmed: !checkedBookIds.has(book.id) }">
-              {{ book.title }}
-              <span v-if="resultCounts.get(book.id)" class="count"
-                >({{ resultCounts.get(book.id) }})</span
-              >
-            </span>
-          </div>
+          <button
+            class="row-title"
+            :class="{ dimmed: !checkedBookIds.has(book.id) }"
+            title="גלול לתוצאה הראשונה"
+            @click.stop="emit('navigateToBook', book.id)"
+          >
+            {{ book.title }}
+            <span v-if="resultCounts.get(book.id)" class="count">({{ resultCounts.get(book.id) }})</span>
+          </button>
+          <button class="checkbox-col" @click.stop="emit('toggleBook', book.id)">
+            <span class="check-mark">✓</span>
+          </button>
         </div>
       </template>
     </template>
@@ -105,20 +125,11 @@ const hasChildren = computed(
 <style scoped>
 .row {
   display: flex;
+  flex-direction: row-reverse;
   align-items: stretch;
   height: 26px;
   white-space: nowrap;
   user-select: none;
-}
-.row-body {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  min-width: 0;
-}
-.row-body:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 .cat-row {
   font-size: 12px;
@@ -130,7 +141,32 @@ const hasChildren = computed(
   color: var(--text-secondary);
 }
 
-.check-col {
+/* Title button — fills the middle, clicking navigates for books or toggles for categories */
+.row-title {
+  flex: 1;
+  min-width: 0;
+  text-align: right;
+  padding-inline-end: 8px;
+  padding-inline-start: 8px;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 0;
+}
+.row-title:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.dimmed { opacity: 0.4; }
+
+/* Checkbox button — right side in RTL (first in DOM, last visually due to row-reverse) */
+.checkbox-col {
   width: 28px;
   flex-shrink: 0;
   display: flex;
@@ -138,37 +174,30 @@ const hasChildren = computed(
   justify-content: center;
   font-size: 11px;
   color: var(--accent-color);
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 0;
 }
-.check-mark {
-  display: none;
+.checkbox-col:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
-.dash-mark {
-  display: none;
-}
-.cat-row.checked .check-mark {
-  display: block;
-}
-.cat-row.indet .dash-mark {
-  display: block;
-}
-.book-row.checked .check-mark {
-  display: block;
-}
+.checkbox-col:active { transform: none !important; }
 
-.row-label {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.dimmed {
-  opacity: 0.4;
-}
+.check-mark { display: none; }
+.dash-mark  { display: none; }
+.cat-row.checked  .checkbox-col .check-mark { display: block; }
+.cat-row.indet    .checkbox-col .dash-mark  { display: block; }
+.book-row.checked .checkbox-col .check-mark { display: block; }
+
 .count {
   font-size: 10px;
   color: var(--text-secondary);
   margin-inline-start: 3px;
 }
 
+/* Expander — left side in RTL (last in DOM, first visually due to row-reverse) */
 .expander {
   display: flex;
   align-items: center;
@@ -184,20 +213,13 @@ const hasChildren = computed(
 .expander:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
-.expander:active {
-  transform: none !important;
-}
+.expander:active { transform: none !important; }
 .expander-icon {
   display: flex;
   transition: transform 200ms ease;
 }
-.expander.open .expander-icon {
-  transform: rotate(180deg);
-}
-.expander :deep(svg) {
-  width: 12px;
-  height: 12px;
-}
+.expander.open .expander-icon { transform: rotate(180deg); }
+.expander :deep(svg) { width: 12px; height: 12px; }
 .expander-placeholder {
   width: 26px;
   flex-shrink: 0;
