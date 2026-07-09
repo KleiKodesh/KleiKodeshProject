@@ -251,6 +251,7 @@ export const KEYS = {
   SETTINGS_COPY_AS_BLOB: 'copyAsBlob',
   SETTINGS_COPY_SOURCE_POSITION: 'copySourcePosition',
   SETTINGS_COPY_WITH_NOTES: 'copyWithNotes',
+  SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION: 'copyAsSourceWithQuotation',
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'linesContentMaxWidth',
   SETTINGS_COMMENTARY_MAX_WIDTH: 'commentaryMaxWidth',

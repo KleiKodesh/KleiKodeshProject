@@ -39,6 +39,7 @@ const DEFAULTS = {
   copyAsBlob: false,
   copySourcePosition: null as 'end' | 'start' | null,
   copyWithNotes: false,
+  copyAsSourceWithQuotation: false,
   hebrewBooksLocalFolder: '',
   linesContentMaxWidth: 0,
   commentaryMaxWidth: 0,
@@ -78,6 +79,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const copyAsBlob = ref(DEFAULTS.copyAsBlob)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
   const copyWithNotes = ref(DEFAULTS.copyWithNotes)
+  const copyAsSourceWithQuotation = ref(DEFAULTS.copyAsSourceWithQuotation)
   const hebrewBooksLocalFolder = ref(DEFAULTS.hebrewBooksLocalFolder)
   const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
@@ -162,6 +164,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COPY_AS_BLOB, copyAsBlob)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
     loadSetting(KEYS.SETTINGS_COPY_WITH_NOTES, copyWithNotes)
+    loadSetting(KEYS.SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION, copyAsSourceWithQuotation)
     loadSetting(KEYS.SETTINGS_HB_LOCAL_FOLDER, hebrewBooksLocalFolder)
     // If the WPF installer configured a local folder but localStorage has nothing yet,
     // seed it from the injected value so the settings page reflects it immediately.
@@ -206,6 +209,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(copyAsBlob, KEYS.SETTINGS_COPY_AS_BLOB)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
   persistSetting(copyWithNotes, KEYS.SETTINGS_COPY_WITH_NOTES)
+  persistSetting(copyAsSourceWithQuotation, KEYS.SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION)
   persistSetting(hebrewBooksLocalFolder, KEYS.SETTINGS_HB_LOCAL_FOLDER)
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
@@ -277,6 +281,7 @@ export const useSettingsStore = defineStore('settings', () => {
     copyAsBlob.value = DEFAULTS.copyAsBlob
     copySourcePosition.value = DEFAULTS.copySourcePosition
     copyWithNotes.value = DEFAULTS.copyWithNotes
+    copyAsSourceWithQuotation.value = DEFAULTS.copyAsSourceWithQuotation
     hebrewBooksLocalFolder.value = DEFAULTS.hebrewBooksLocalFolder
     linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
@@ -298,6 +303,7 @@ export const useSettingsStore = defineStore('settings', () => {
     copyAsBlob,
     copySourcePosition,
     copyWithNotes,
+    copyAsSourceWithQuotation,
     hebrewBooksLocalFolder,
     linesContentMaxWidth,
     commentaryMaxWidth,
