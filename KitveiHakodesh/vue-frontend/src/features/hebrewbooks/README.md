@@ -11,11 +11,26 @@ Browse and download Hebrew books from the HebrewBooks.org catalog with support f
 
 ## How Books Open
 
-When a user clicks a book:
+### Click event chain
 
-1. **Frontend** — `openBook()` immediately shows a `/pdf-view` placeholder with a downloading spinner
-2. **Bridge** — calls C# action `triggerHbDownload` with the book ID, title, URL, and user's configured local folder path (if set)
-3. **C# resolution** — tries three paths in order:
+`HebrewBooksListItem` emits `book-clicked` → `HebrewBooksPage.onBookClicked` → `useHebrewBooks.openBook(book)`.
+
+`openBook` (in `useHebrewBooks.ts`) runs four steps in sequence:
+
+1. `trackAccess(book)` — records the book in `hebrewBooksHistoryStore` (IDB LRU)
+2. Gets the current tab ID from `paneNavigation.activeTabId`
+3. `localFileStore.startHbDownload(book.title, tabId)` — sets download-in-progress state on the store, which shows a `/pdf-view` placeholder with a downloading spinner
+4. `triggerHbDownload(bookId, title, url, tabId, localFolder, onLine)` — bridge call to C# that downloads the PDF via WebView2's browser engine and eventually pushes `hbPdfReady` back to the frontend
+
+The `hbPdfReady` push event is handled in `localFileStore`, which navigates to `/pdf-view` with the cached file URL and the tab ID.
+
+The download URL is built by `getHbPdfUrl(book.id)` in `hebrewBooksCatalog.ts`: `https://download.hebrewbooks.org/downloadhandler.ashx?req={bookId}`.
+
+The dedicated download button (`download-clicked`) calls `triggerHbSaveAs` instead — shows a native SaveFileDialog and does not open the PDF viewer.
+
+### C# resolution (after the bridge call)
+
+C# tries three paths in order:
    - **Local folder** — if `hebrewBooksLocalFolder` is set in settings, checks `{localFolder}/{bookId}.pdf`. If found, opens immediately (no download) via a WebView2 virtual host. The hostname is allocated in a process-global map shared across all AppViewer instances, so the same folder always maps to the same stable hostname (e.g. `kitvei-hb-local-1`). Each AppViewer's WebView2 registers the mapping independently on first use and reuses it for all subsequent opens. I/O errors (e.g. disconnected drive, permissions, invalid path) are logged to the WebView debug console with the error message and folder path, then fall through to the next path.
    - **Download cache** — checks `bin/.../KitveiHakodesh/cache/hebrewbooks/{bookId}.pdf`. If found, opens immediately. Cache files are named by book ID only.
    - **Download** — navigates the WebView2 browser to `https://download.hebrewbooks.org/downloadhandler.ashx?req={bookId}`. The download destination depends on whether a local folder is configured: if yes, the file goes to `{localFolder}/{bookId}.pdf` and LRU eviction is skipped; if no, the file goes to the app cache dir as `{bookId}.pdf` and LRU eviction runs (max 10 PDFs kept by last-access time).
