@@ -188,11 +188,19 @@ namespace UpdateCheckerLib
                 // NativeErrorCode 0 = ERROR_SUCCESS: Windows threw despite a successful launch.
                 // Treat this as success and do nothing.
             }
+            catch (Win32Exception win32ex) when (win32ex.NativeErrorCode == 1223)
+            {
+                // ERROR_CANCELLED (1223): user clicked "No" on the UAC prompt.
+                // Respect the user's choice — don't retry, don't show an error.
+                Debug.WriteLine("[UpdateChecker] User cancelled UAC prompt, skipping install.");
+            }
             catch
             {
-                // Fallback: retry without "runas". The NSIS installer has RequestExecutionLevel=user
-                // so it doesn't need elevation — "runas" is only used to escape Word's process tree.
-                // If the retry also throws, let the exception propagate to the caller.
+                // Any other failure: retry without "runas".
+                // runas is only used to escape Word's process tree via the AIS service —
+                // the NSIS wrapper has RequestExecutionLevel=user so no elevation is needed.
+                // If the retry also throws, let the exception propagate to RunPendingInstaller's
+                // catch block which will show the error with the path for manual launch.
                 var fallback = new ProcessStartInfo
                 {
                     FileName         = installerPath,
