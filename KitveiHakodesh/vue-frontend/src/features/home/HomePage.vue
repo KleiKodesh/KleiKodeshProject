@@ -26,7 +26,6 @@ import IconBookRtl24 from '@/components/IconBookRtl24.vue'
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import { isHosted, dbReady } from '@/webview-host/seforimDb'
 import { useAppNavigation } from '@/composables/useAppNavigation'
-import { useTilesKeys } from '@/composables/useTileGridKeys'
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { navigateToDafYomi } from './dafYomiNavigation'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -70,7 +69,7 @@ const tiles = computed(() => {
       : { label: 'חיפוש', icon: IconSearchSparkle24 },
     { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
     { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
-    { label: 'חיפוש קבצים', icon: IconEverythingSearch },
+    { label: 'חיפוש קבצים', icon: IconEverythingSearch, iconScale: 0.93 },
     { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
     { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
     { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
@@ -79,7 +78,15 @@ const tiles = computed(() => {
   ]
 })
 
-const pageRef = ref<HTMLElement | null>(null)
+function onTileKeydown(e: KeyboardEvent, index: number) {
+  const totalTiles = tiles.value.length + visibleRecentlyOpenedList.value.length
+  const isLastTile = index === totalTiles - 1
+  if (e.code === 'Tab' && !e.shiftKey && isLastTile) {
+    e.preventDefault()
+    searchBarInputRef.value?.focus()
+  }
+}
+
 const innerRef = ref<HTMLElement | null>(null)
 const homeSearchQuery = ref('')
 const searchBarRef = ref<HTMLElement | null>(null)
@@ -250,11 +257,6 @@ const visibleRecentlyOpenedList = computed(() => {
   return recentlyOpenedList.value.slice(0, count)
 })
 
-const { focusedIndex, containerFocused } = useTilesKeys(
-  pageRef,
-  () => tiles.value.length,
-  (i) => navigate(tiles.value[i]!.label),
-)
 
 onMounted(async () => {
   loadDateInfo()
@@ -276,7 +278,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
 </script>
 
 <template>
-  <div ref="pageRef" class="home-page" tabindex="0">
+  <div class="home-page">
     <div ref="innerRef" class="home-inner">
       <div ref="searchBarRef" class="home-search-bar-wrapper">
         <div class="home-search-bar">
@@ -318,16 +320,17 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
           v-for="(t, i) in tiles"
           :key="t.label"
           v-bind="t"
-          :is-focused="containerFocused && focusedIndex === i"
           @tap="onTap(t.label)"
+          @keydown="onTileKeydown($event, i)"
         />
         <HomeTile
-          v-for="entry in visibleRecentlyOpenedList"
+          v-for="(entry, i) in visibleRecentlyOpenedList"
           :key="entry.key"
           :label="entry.title"
           :icon="RECENTLY_OPENED_ICON_MAP[entry.route]!.icon"
           :color="RECENTLY_OPENED_ICON_MAP[entry.route]!.color"
           @tap="openRecentEntry(entry)"
+          @keydown="onTileKeydown($event, tiles.length + i)"
         />
       </div>
     </div>

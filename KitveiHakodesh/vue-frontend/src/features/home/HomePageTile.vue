@@ -4,15 +4,18 @@ defineProps<{
   label: string
   icon: Component
   color?: string
-  isFocused?: boolean
+  iconScale?: number
 }>()
 defineEmits<{ tap: [] }>()
 </script>
 
 <template>
-  <button class="tile" data-nav-item :class="{ 'is-focused': isFocused }" @click="$emit('tap')">
+  <button class="tile" data-nav-item title="לחץ Tab למעבר בין האפשרויות, Enter לפתיחה" @click="$emit('tap')">
     <div class="tile-icon">
-      <component :is="icon" :style="color ? { color } : {}" />
+      <component
+        :is="icon"
+        :style="{ ...(color ? { color } : {}), ...(iconScale !== undefined ? { fontSize: iconScale + 'em' } : {}) }"
+      />
     </div>
     <span class="tile-label">{{ label }}</span>
   </button>
@@ -31,19 +34,18 @@ defineEmits<{ tap: [] }>()
   border-radius: 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  transition: background 120ms;
 }
 .tile:focus-visible {
   outline: none;
 }
-.tile.is-focused {
-  background: var(--hover-bg);
+.tile:focus-visible .tile-icon {
+  transform: scale(1.25);
 }
 .tile:active {
   background: var(--active-bg);
 }
 .tile:hover .tile-icon {
-  transform: scale(1.08);
+  transform: scale(1.15);
 }
 .tile:active .tile-icon {
   transform: scale(0.95);
