@@ -198,14 +198,29 @@ function devSqlitePlugin() {
                                 reply = { error: pipeResponse.message || 'Search error' };
                             }
                             else if (pipeResponse.status === 'ok') {
-                                // Convert pipe response to C# format: { results: [{fileName, path}, ...], total }
+                                // Convert pipe response to C# format: { results: [{fileName, path, modifiedDate}, ...], total }
                                 const paths = pipeResponse.paths || [];
-                                const results = paths.map((fullPath) => {
+                                // Extract entries with date if the new format is present
+                                const entries = pipeResponse.entries;
+                                const fs = require('node:fs');
+                                const nodePath = require('node:path');
+                                const results = (entries ?? paths.map((p) => ({ path: p, date: 0 }))).map((entry) => {
+                                    const fullPath = entry.path;
                                     const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'));
-                                    return {
-                                        fileName: lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath,
-                                        path: lastSep >= 0 ? fullPath.slice(0, lastSep) : '',
-                                    };
+                                    const fileName = lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath;
+                                    const dir = lastSep >= 0 ? fullPath.slice(0, lastSep) : '';
+                                    // Use date from index if present; fall back to stat
+                                    let modifiedDate = entry.date || 0;
+                                    if (!modifiedDate) {
+                                        try {
+                                            const stat = fs.statSync(fullPath);
+                                            modifiedDate = stat.mtimeMs;
+                                        }
+                                        catch {
+                                            modifiedDate = 0;
+                                        }
+                                    }
+                                    return { fileName, path: dir, modifiedDate };
                                 });
                                 reply = { results, total: pipeResponse.total || 0 };
                             }

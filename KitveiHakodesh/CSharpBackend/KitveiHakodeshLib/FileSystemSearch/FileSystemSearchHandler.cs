@@ -107,7 +107,7 @@ namespace KitveiHakodeshLib.FileSystemSearch
 
                     var reply = new System.Collections.Generic.List<object>(results.Count);
                     foreach (var r in results)
-                        reply.Add(new { fileName = r.FileName, path = r.Path });
+                        reply.Add(new { fileName = r.FileName, path = r.Path, modifiedDate = r.ModifiedDate });
 
                     _bridge.Reply(id, new { results = reply, total });
                 }

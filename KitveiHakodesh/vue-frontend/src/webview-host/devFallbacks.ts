@@ -61,7 +61,7 @@ export async function devFileSystemSearch(
   query: string,
   max = 200,
 ): Promise<{
-  results?: Array<{ fileName: string; path: string }>
+  results?: Array<{ fileName: string; path: string; modifiedDate?: number }>
   total?: number
   error?: string
 }> {
@@ -75,7 +75,7 @@ export async function devFileSystemSearch(
 
     if ('results' in response) {
       return {
-        results: response.results as Array<{ fileName: string; path: string }>,
+        results: response.results as Array<{ fileName: string; path: string; modifiedDate?: number }>,
         total: (response.total as number) || 0,
       }
     }

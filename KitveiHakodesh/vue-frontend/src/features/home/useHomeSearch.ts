@@ -11,8 +11,8 @@
  * Each source is capped at MAX_RESULTS_PER_SOURCE items in the dropdown.
  *
  * Source-priority prefixes (stripped before searching):
- *   HebrewBooks first: היברו, היברובוקס, היברו בוקס
- *   Files first:       מחשב, קובץ
+ *   HebrewBooks first: היברו, היברובוקס, היברו בוקס, \ (single backslash)
+ *   Files first:       מחשב, קובץ, \\ (double backslash)
  *   Default (no prefix): catalog first
  */
 
@@ -57,8 +57,12 @@ const DEBOUNCE_MS = 300
 
 // Prefixes that shift which source appears first in the dropdown.
 // Matched against the beginning of the normalized query (after stripping spaces).
+// The backslash shorthands (\\ for files, \ for HebrewBooks) are checked before
+// the Hebrew word prefixes so the longer one (\\) is matched first.
 const HEBREWBOOKS_PREFIXES = ['היברו בוקס', 'היברובוקס', 'היברו']
 const FILES_PREFIXES = ['מחשב', 'קובץ']
+const HEBREWBOOKS_SHORTHAND = '\\'
+const FILES_SHORTHAND = '\\\\'
 
 // ─── Prefix detection ────────────────────────────────────────────────────────
 
@@ -76,6 +80,15 @@ function stripPrefixFromQuery(trimmed: string, prefix: string): string {
 
 function parseQueryPrefix(rawQuery: string): ParsedQuery {
   const trimmed = rawQuery.trim()
+
+  // Check shorthand prefixes first — \\ (files) before \ (HebrewBooks) so the
+  // longer match wins when the user types two backslashes.
+  if (trimmed.startsWith(FILES_SHORTHAND)) {
+    return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, FILES_SHORTHAND) }
+  }
+  if (trimmed.startsWith(HEBREWBOOKS_SHORTHAND)) {
+    return { priority: 'hebrewbooks', effectiveQuery: stripPrefixFromQuery(trimmed, HEBREWBOOKS_SHORTHAND) }
+  }
 
   for (const prefix of HEBREWBOOKS_PREFIXES) {
     if (trimmed.startsWith(prefix)) {

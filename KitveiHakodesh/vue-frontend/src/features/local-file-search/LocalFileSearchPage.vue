@@ -1,26 +1,70 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue'
-import { IconSearch20Regular, IconWarning20Regular } from '@iconify-prerendered/vue-fluent'
+import {
+  IconSearch20Regular,
+  IconWarning20Regular,
+  IconArrowSort20Regular,
+  IconCheckmark20Regular,
+} from '@iconify-prerendered/vue-fluent'
+import { storeToRefs } from 'pinia'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
 import { useLocalFileSearch } from './useLocalFileSearch'
+import type { LocalFileSearchSortOrder, LocalFileSearchResult } from './useLocalFileSearch'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { restoreLocalFile } from '@/webview-host/bridge'
 import { isHosted } from '@/webview-host/seforimDb'
-import type { LocalFileSearchResult } from './useLocalFileSearch'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { storeToRefs } from 'pinia'
 
 const paneNavigation = usePaneNavigation()
 
 const searchQuery = ref('')
+const settingsStore = useSettingsStore()
+const { fileSearchSortOrder: sortOrder } = storeToRefs(settingsStore)
+
 const {
   results, searching, showLoadingAnimation,
   totalCount, errorMessage,
-} = useLocalFileSearch(searchQuery)
+} = useLocalFileSearch(searchQuery, sortOrder)
 
 const searchInputElement = ref<HTMLInputElement | null>(null)
 const resultsListElement = ref<InstanceType<typeof LocalFileSearchResultsList> | null>(null)
 const openingFile = ref(false)
+
+// ── Sort dropdown ─────────────────────────────────────────────────────────────
+
+const isSortDropdownOpen = ref(false)
+const sortToggleButtonElement = ref<HTMLElement | null>(null)
+const sortControlElement = ref<HTMLElement | null>(null)
+
+const { justClosed } = useDropdownClose(
+  sortControlElement,
+  () => { isSortDropdownOpen.value = false },
+  { toggleButton: sortToggleButtonElement },
+)
+
+function toggleSortDropdown() {
+  if (justClosed.value) return
+  isSortDropdownOpen.value = !isSortDropdownOpen.value
+}
+
+const SORT_OPTIONS: { value: LocalFileSearchSortOrder; label: string }[] = [
+  { value: 'relevance', label: 'ללא מיון' },
+  { value: 'fileName',  label: 'שם קובץ' },
+  { value: 'fileType',  label: 'סוג קובץ' },
+  { value: 'fullPath',  label: 'נתיב מלא' },
+  { value: 'date',      label: 'תאריך (חדש ראשון)' },
+]
+
+function selectSortOrder(value: LocalFileSearchSortOrder) {
+  sortOrder.value = value
+  isSortDropdownOpen.value = false
+}
+
+// ── Mount / navigation ────────────────────────────────────────────────────────
 
 onMounted(() => {
   nextTick(() => searchInputElement.value?.focus())
@@ -41,7 +85,6 @@ async function onOpenFile(item: LocalFileSearchResult) {
     const titleWithoutExtension = dotIndex > 0 ? item.fileName.substring(0, dotIndex) : item.fileName
 
     if (extension === '.txt') {
-      // .txt files are rendered natively by TxtViewPage — no virtual host needed
       paneNavigation.updateActiveTab({
         route: '/txt-view',
         title: titleWithoutExtension,
@@ -102,7 +145,7 @@ async function onOpenFile(item: LocalFileSearchResult) {
           @open-file="onOpenFile"
         />
 
-        <!-- Opening overlay — shown immediately on click so the user knows something is happening -->
+        <!-- Opening overlay -->
         <div v-if="openingFile" class="opening-overlay">
           <div class="opening-card">
             <div class="opening-spinner" />
@@ -119,7 +162,36 @@ async function onOpenFile(item: LocalFileSearchResult) {
 
     <BottomSearchBar>
       <template #left>
-        <IconSearch20Regular class="search-icon" />
+        <!-- Sort toggle button -->
+        <div ref="sortControlElement" class="sort-control">
+          <button
+            ref="sortToggleButtonElement"
+            class="sort-toggle-button"
+            :class="{ 'is-active': sortOrder !== 'relevance' }"
+            :title="'מיון: ' + SORT_OPTIONS.find((o) => o.value === sortOrder)!.label"
+            @click="toggleSortDropdown"
+          >
+            <IconArrowSort20Regular />
+          </button>
+
+          <!-- Sort dropdown -->
+          <div v-if="isSortDropdownOpen" class="sort-dropdown">
+            <div
+              v-for="option in SORT_OPTIONS"
+              :key="option.value"
+              role="option"
+              class="sort-dropdown__item"
+              :class="{ 'is-selected': sortOrder === option.value }"
+              @click="selectSortOrder(option.value)"
+            >
+              <IconCheckmark20Regular
+                class="sort-dropdown__checkmark"
+                :class="{ 'is-visible': sortOrder === option.value }"
+              />
+              <span>{{ option.label }}</span>
+            </div>
+          </div>
+        </div>
       </template>
       <input
         ref="searchInputElement"
@@ -133,6 +205,9 @@ async function onOpenFile(item: LocalFileSearchResult) {
         @keydown.down.prevent="focusResults"
         @keydown.tab.prevent="focusResults"
       />
+      <template #right>
+        <IconSearch20Regular class="search-icon" />
+      </template>
     </BottomSearchBar>
   </div>
 </template>
@@ -188,7 +263,6 @@ async function onOpenFile(item: LocalFileSearchResult) {
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
-
 .error-banner {
   color: #ff3b30;
   background: color-mix(in srgb, #ff3b30 8%, transparent);
@@ -279,5 +353,76 @@ async function onOpenFile(item: LocalFileSearchResult) {
   border-top: 1px solid var(--border-color);
   text-align: center;
   flex-shrink: 0;
+}
+
+/* Sort control */
+.sort-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.sort-toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  padding: 0;
+}
+
+.sort-toggle-button.is-active {
+  color: var(--accent-color, #0078d4);
+}
+
+.sort-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  z-index: 100;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+}
+
+.sort-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.sort-dropdown__item:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+
+.sort-dropdown__item:active {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+.sort-dropdown__item.is-selected {
+  color: var(--accent-color, #0078d4);
+}
+
+.sort-dropdown__checkmark {
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--accent-color, #0078d4);
+}
+
+.sort-dropdown__checkmark.is-visible {
+  opacity: 1;
 }
 </style>

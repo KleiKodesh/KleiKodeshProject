@@ -114,13 +114,14 @@ namespace KitveiHakodeshLib.FileSystemSearch
             if (result.Status != "ok")
                 return (new List<FileSystemSearchResult>(), 0);
 
-            var list = new List<FileSystemSearchResult>(result.Paths.Count);
-            foreach (string path in result.Paths)
+            var list = new List<FileSystemSearchResult>(result.Entries.Count);
+            foreach (var entry in result.Entries)
             {
                 ct.ThrowIfCancellationRequested();
                 list.Add(new FileSystemSearchResult(
-                    System.IO.Path.GetFileName(path),
-                    System.IO.Path.GetDirectoryName(path) ?? path));
+                    System.IO.Path.GetFileName(entry.Path),
+                    System.IO.Path.GetDirectoryName(entry.Path) ?? entry.Path,
+                    entry.DateMs));
             }
 
             return (list, result.Total);
@@ -136,9 +137,11 @@ namespace KitveiHakodeshLib.FileSystemSearch
 
     public sealed class FileSystemSearchResult
     {
-        public string FileName { get; }
-        public string Path     { get; }
-        public FileSystemSearchResult(string fileName, string path)
-        { FileName = fileName; Path = path; }
+        public string FileName    { get; }
+        public string Path        { get; }
+        /// <summary>Last-write time as Unix milliseconds. 0 if not available.</summary>
+        public long   ModifiedDate { get; }
+        public FileSystemSearchResult(string fileName, string path, long modifiedDate = 0)
+        { FileName = fileName; Path = path; ModifiedDate = modifiedDate; }
     }
 }
