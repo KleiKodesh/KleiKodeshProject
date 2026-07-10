@@ -99,6 +99,8 @@ const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null
 
 const SEARCH_PLACEHOLDERS = [
   'חיפוש מהיר בכל המאגרים...',
+  'לחץ אנטר לחיפוש תוכן במאגר'
+  'הקלד חופשי לחיפוש ספר או קובץ'
   'כדי להקדים תוצאות מהיברו בוקס כתוב',
   'היברו בוקס: שבת',
   'או היברו: שבת',
@@ -107,7 +109,6 @@ const SEARCH_PLACEHOLDERS = [
   'קובץ: ברכות',
   'או מחשב: ברכות',
   'או: \\\\ ברכות',
-  'לחץ אנטר לחיפוש תוכן במאגר'
 ]
 const searchPlaceholder = ref(SEARCH_PLACEHOLDERS[0]!)
 let placeholderPhraseIndex = 0, placeholderCharIndex = 0, placeholderPauseTicks = 0
