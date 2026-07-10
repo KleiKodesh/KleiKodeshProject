@@ -102,11 +102,12 @@ const SEARCH_PLACEHOLDERS = [
   'כדי להקדים תוצאות מהיברו בוקס כתוב',
   'היברו בוקס: שבת',
   'או היברו: שבת',
-  'או: \ שבת',
+  'או: \\ שבת',
   'כדי להקדים תוצאות מהמחשב כתוב',
   'קובץ: ברכות',
   'או מחשב: ברכות',
-  'או: \\ ברכות'
+  'או: \\\\ ברכות',
+  'לחץ אנטר לחיפוש תוכן במאגר'
 ]
 const searchPlaceholder = ref(SEARCH_PLACEHOLDERS[0]!)
 let placeholderPhraseIndex = 0, placeholderCharIndex = 0, placeholderPauseTicks = 0
@@ -159,13 +160,25 @@ function onSearchBarFocus() {
   }
 }
 
+function launchFullTextSearch() {
+  const query = homeSearchQuery.value.trim()
+  if (!query) return
+  closeSearchDropdown()
+  paneNavigation.updateActiveTab({ route: '/search', title: `חיפוש: ${query}`, searchQuery: query })
+}
+
 function onSearchInputKeydown(e: KeyboardEvent) {
-  if (!isSearchDropdownOpen.value) return
+  if (e.code === 'Enter') {
+    e.preventDefault()
+    launchFullTextSearch()
+    return
+  }
   if (e.code === 'Escape') {
     e.preventDefault()
     closeSearchDropdown()
     return
   }
+  if (!isSearchDropdownOpen.value) return
   if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
     e.preventDefault()
     searchDropdownRef.value?.focus()
@@ -301,7 +314,9 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
             @input="onSearchBarInput"
             @keydown="onSearchInputKeydown"
           />
-          <IconSearch20Regular class="home-search-bar__icon" />
+          <button class="home-search-bar__search-button" tabindex="-1" title="הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ" @click="launchFullTextSearch">
+            <IconSearch20Regular />
+          </button>
         </div>
         <HomeSearchDropdown
           v-if="isSearchDropdownOpen"
@@ -440,10 +455,22 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   opacity: 0.7;
 }
 
-.home-search-bar__icon {
+.home-search-bar__search-button {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 4px;
   color: var(--text-secondary);
   opacity: 0.6;
+}
+
+.home-search-bar__search-button:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
 /* Date bar */
