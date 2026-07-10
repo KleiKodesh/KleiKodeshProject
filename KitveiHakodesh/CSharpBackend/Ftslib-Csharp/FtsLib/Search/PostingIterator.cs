@@ -63,23 +63,30 @@ namespace FtsLib.Search
 
             if (_skip != null)
             {
-                int  bestOffset      = -1;
-                uint bestPrevEncoded = 0;
-
-                for (int i = 0; i < _skipLen; i += 3)
+                // Binary search for the rightmost skip entry whose docId < target.
+                // Skip entries are stored in ascending docId order (triplets: docId, byteOffset, prevEncoded),
+                // so we can find the floor entry in O(log k) rather than scanning all k entries.
+                int lo = 0, hi = _skipLen / 3 - 1, best = -1;
+                while (lo <= hi)
                 {
-                    if (_skip[i] >= target) break;
-                    if (_skip[i + 1] > _pos)
+                    int mid    = (lo + hi) >> 1;
+                    int midDoc = _skip[mid * 3];
+                    if (midDoc < target)
                     {
-                        bestOffset      = _skip[i + 1];
-                        bestPrevEncoded = (uint)_skip[i + 2];
+                        best = mid;
+                        lo   = mid + 1;
+                    }
+                    else
+                    {
+                        hi = mid - 1;
                     }
                 }
 
-                if (bestOffset > _pos)
+                // Use the found entry only if it is ahead of the current read position.
+                if (best >= 0 && _skip[best * 3 + 1] > _pos)
                 {
-                    _pos     = bestOffset;
-                    _encoded = bestPrevEncoded;
+                    _pos     = _skip[best * 3 + 1];
+                    _encoded = (uint)_skip[best * 3 + 2];
                     _encoded += ReadVarInt();
                     Current  = Decode(_encoded);
                     if (Current >= target) return true;
