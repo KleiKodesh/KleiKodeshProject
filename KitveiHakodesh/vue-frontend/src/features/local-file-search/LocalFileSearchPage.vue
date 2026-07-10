@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import {
   IconSearch20Regular,
   IconWarning20Regular,
@@ -17,9 +17,13 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { restoreLocalFile } from '@/webview-host/bridge'
 import { isHosted } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { storeToRefs } from 'pinia'
+import { useTabStore } from '@/stores/tabStore'
 
 const paneNavigation = usePaneNavigation()
+const tabStore = useTabStore()
+
+// Capture this tab's id at mount time (singleton — stable for component lifetime)
+const fileSearchTabId = paneNavigation.activeTabId
 
 const searchQuery = ref('')
 const settingsStore = useSettingsStore()
@@ -64,11 +68,24 @@ function selectSortOrder(value: LocalFileSearchSortOrder) {
   isSortDropdownOpen.value = false
 }
 
-// ── Mount / navigation ────────────────────────────────────────────────────────
+// ── Query persistence across tab switches ─────────────────────────────────────
 
+// Restore from the tab object on mount (singleton route — mounted once)
 onMounted(() => {
+  const savedQuery = paneNavigation.activeTab.searchQuery
+  if (savedQuery) searchQuery.value = savedQuery
   nextTick(() => searchInputElement.value?.focus())
 })
+
+// Save to the tab when the user switches away — fires once per tab switch, not per keystroke
+watch(
+  () => tabStore.activeTabId,
+  (newTabId) => {
+    if (newTabId !== fileSearchTabId) {
+      tabStore.updateTab(fileSearchTabId, { searchQuery: searchQuery.value || undefined })
+    }
+  },
+)
 
 function focusResults() {
   resultsListElement.value?.focusContainer()
