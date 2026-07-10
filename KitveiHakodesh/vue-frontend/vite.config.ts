@@ -231,15 +231,29 @@ function devSqlitePlugin(): Plugin {
                 if (pipeResponse.status === 'error') {
                   reply = { error: (pipeResponse.message as string) || 'Search error' }
                 } else if (pipeResponse.status === 'ok') {
-                  // Convert pipe response to C# format: { results: [{fileName, path}, ...], total }
+                  // Convert pipe response to C# format: { results: [{fileName, path, modifiedDate}, ...], total }
                   const paths = (pipeResponse.paths as string[]) || []
-                  const results = paths.map((fullPath) => {
-                    const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'))
-                    return {
-                      fileName: lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath,
-                      path: lastSep >= 0 ? fullPath.slice(0, lastSep) : '',
-                    }
-                  })
+                  // Extract entries with date if the new format is present
+                  const entries = (pipeResponse.entries as Array<{ path: string; date: number }> | undefined)
+                  const fs = require('node:fs') as typeof import('node:fs')
+                  const nodePath = require('node:path') as typeof import('node:path')
+                  const results = (entries ?? paths.map((p) => ({ path: p, date: 0 }))).map(
+                    (entry: { path: string; date: number }) => {
+                      const fullPath = entry.path
+                      const lastSep = Math.max(fullPath.lastIndexOf('\\'), fullPath.lastIndexOf('/'))
+                      const fileName = lastSep >= 0 ? fullPath.slice(lastSep + 1) : fullPath
+                      const dir = lastSep >= 0 ? fullPath.slice(0, lastSep) : ''
+                      // Use date from index if present; fall back to stat
+                      let modifiedDate: number = entry.date || 0
+                      if (!modifiedDate) {
+                        try {
+                          const stat = fs.statSync(fullPath)
+                          modifiedDate = stat.mtimeMs
+                        } catch { modifiedDate = 0 }
+                      }
+                      return { fileName, path: dir, modifiedDate }
+                    },
+                  )
                   reply = { results, total: (pipeResponse.total as number) || 0 }
                 } else {
                   reply = { error: 'Unexpected response from DocumentLocator service' }

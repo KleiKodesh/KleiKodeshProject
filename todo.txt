@@ -2,7 +2,6 @@ add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
-only show hom epage dropdown if there are results
 מיון בחיפוש בקבצים
 
 ספרים קרובים update for book with source

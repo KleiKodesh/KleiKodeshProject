@@ -64,6 +64,12 @@ function getFileIcon(fileName: string): FileIconInfo {
   }
 }
 
+function formatDate(unixMs: number): string {
+  if (!unixMs) return ''
+  const date = new Date(unixMs)
+  return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
+}
+
 defineExpose({
   focusContainer: () => scrollElement.value?.focus(),
 })
@@ -99,7 +105,13 @@ defineExpose({
             <span class="item-title-row">
               <span class="item-title">{{ items[virtualRow.index]!.fileName }}</span>
             </span>
-            <span class="item-path" dir="ltr">{{ items[virtualRow.index]!.path }}</span>
+            <span class="item-path-row">
+              <span class="item-path" dir="ltr">{{ items[virtualRow.index]!.path }}</span>
+              <span
+                v-if="items[virtualRow.index]!.modifiedDate"
+                class="item-date-pill"
+              >{{ formatDate(items[virtualRow.index]!.modifiedDate) }}</span>
+            </span>
           </span>
         </div>
       </div>
@@ -148,6 +160,7 @@ defineExpose({
   flex-direction: column;
   gap: 2px;
   min-width: 0;
+  flex: 1;
 }
 .item-title-row {
   display: flex;
@@ -165,7 +178,14 @@ defineExpose({
   min-width: 0;
   flex-shrink: 1;
 }
+/* Path row: relative container so the pill can anchor to its left edge */
+.item-path-row {
+  position: relative;
+  overflow: hidden;
+  line-height: 1.3;
+}
 .item-path {
+  display: block;
   font-size: 11px;
   color: var(--text-secondary);
   line-height: 1.3;
@@ -174,5 +194,22 @@ defineExpose({
   text-overflow: ellipsis;
   direction: ltr;
   text-align: right;
+  /* Leave room at the physical left end so the pill never overlaps the path text */
+  padding-inline-end: 70px;
+}
+/* Pill anchored to the physical left edge of the path row */
+.item-date-pill {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  padding: 0 6px;
+  line-height: 1.5;
+  white-space: nowrap;
 }
 </style>

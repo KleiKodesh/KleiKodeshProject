@@ -272,7 +272,7 @@ export function fileSystemSearch(
   query: string,
   max = 200,
 ): Promise<{
-  results?: Array<{ fileName: string; path: string }>
+  results?: Array<{ fileName: string; path: string; modifiedDate?: number }>
   total?: number
   error?: string
 }> {

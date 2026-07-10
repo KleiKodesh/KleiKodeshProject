@@ -86,6 +86,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const compactMode = ref(DEFAULTS.compactMode)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
+  const fileSearchSortOrder = ref<import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder>('relevance')
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -176,6 +177,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
+    loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     applyCSSVariables()
   }
 
@@ -216,6 +218,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
+  persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
 
   // ── Actions ───────────────────────────────────────────────────────────────
 
@@ -310,6 +313,7 @@ export const useSettingsStore = defineStore('settings', () => {
     titleBarHiddenButtons,
     compactMode,
     showRecentlyOpened,
+    fileSearchSortOrder,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

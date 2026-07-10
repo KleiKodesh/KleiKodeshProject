@@ -11,7 +11,7 @@
  * separate indexing state.
  */
 
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, watch, computed, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchWarmup } from '@/webview-host/bridge'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -20,14 +20,20 @@ export interface LocalFileSearchResult {
   fileName: string
   path: string
   fullPath: string
+  modifiedDate: number
 }
+
+export type LocalFileSearchSortOrder = 'relevance' | 'fileName' | 'fullPath' | 'date' | 'fileType'
 
 const DEBOUNCE_MS = 200
 const MAX_RESULTS = 5000
 const LOADING_ANIMATION_DELAY_MS = 200
 
-export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) {
-  const results = ref<LocalFileSearchResult[]>([])
+export function useLocalFileSearch(
+  searchQuery: ReturnType<typeof ref<string>>,
+  sortOrder: ReturnType<typeof ref<LocalFileSearchSortOrder>>,
+) {
+  const rawResults = ref<LocalFileSearchResult[]>([])
   const searching = ref(false)
   const showLoadingAnimation = ref(false)
   const totalCount = ref(0)
@@ -53,12 +59,12 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
   onUnmounted(() => cancelLoadingAnimationTimer())
 
   // Warm up the service every time the user navigates to this page — fire-and-forget.
-  // The component is a singleton (not keyed), so onMounted only fires once. Watching
-  // the active route fires on first mount and on every subsequent navigation back here.
   const paneNavigation = usePaneNavigation()
   watch(
     () => paneNavigation.activeTab.route,
-    (route) => { if (route === '/file-search') fileSystemSearchWarmup() },
+    (route) => {
+      if (route === '/file-search') fileSystemSearchWarmup()
+    },
     { immediate: true },
   )
 
@@ -71,7 +77,7 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
     const trimmed = (rawQuery ?? '').trim()
     if (!trimmed) {
-      results.value = []
+      rawResults.value = []
       totalCount.value = 0
       searching.value = false
       return
@@ -86,21 +92,22 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
 
       if (response.error) {
         errorMessage.value = response.error
-        results.value = []
+        rawResults.value = []
         totalCount.value = 0
         return
       }
 
       totalCount.value = response.total ?? 0
-      results.value = (response.results ?? []).map((item) => ({
+      rawResults.value = (response.results ?? []).map((item) => ({
         fileName: item.fileName,
         path: item.path,
         fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
+        modifiedDate: item.modifiedDate ?? 0,
       }))
     } catch (error) {
       if (thisGeneration !== generation) return
       errorMessage.value = error instanceof Error ? error.message : 'שגיאה בחיפוש'
-      results.value = []
+      rawResults.value = []
       totalCount.value = 0
     } finally {
       if (thisGeneration === generation) {
@@ -111,6 +118,36 @@ export function useLocalFileSearch(searchQuery: ReturnType<typeof ref<string>>) 
   }
 
   watch(debouncedQuery, (rawQuery) => runSearch(rawQuery ?? ''), { immediate: true })
+
+  // Sort the raw results according to the chosen sort order.
+  // "relevance" preserves the original index order (Lucene's natural order).
+  const results = computed<LocalFileSearchResult[]>(() => {
+    const order = sortOrder.value
+    if (order === 'relevance') return rawResults.value
+
+    const copy = rawResults.value.slice()
+    if (order === 'fileName') {
+      copy.sort((firstItem, secondItem) =>
+        firstItem.fileName.localeCompare(secondItem.fileName, 'he'),
+      )
+    } else if (order === 'fullPath') {
+      copy.sort((firstItem, secondItem) =>
+        firstItem.fullPath.localeCompare(secondItem.fullPath, 'he'),
+      )
+    } else if (order === 'date') {
+      // Most recent first
+      copy.sort((firstItem, secondItem) => secondItem.modifiedDate - firstItem.modifiedDate)
+    } else if (order === 'fileType') {
+      copy.sort((firstItem, secondItem) => {
+        const extensionOfFirst = firstItem.fileName.split('.').pop()?.toLowerCase() ?? ''
+        const extensionOfSecond = secondItem.fileName.split('.').pop()?.toLowerCase() ?? ''
+        const extensionComparison = extensionOfFirst.localeCompare(extensionOfSecond)
+        if (extensionComparison !== 0) return extensionComparison
+        return firstItem.fileName.localeCompare(secondItem.fileName, 'he')
+      })
+    }
+    return copy
+  })
 
   return {
     results,
