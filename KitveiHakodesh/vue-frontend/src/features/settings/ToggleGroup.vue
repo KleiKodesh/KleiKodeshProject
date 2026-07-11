@@ -9,6 +9,7 @@ defineEmits<{ 'update:modelValue': [T] }>()
       v-for="opt in options"
       :key="String(opt.value)"
       :class="['toggle-btn', { active: modelValue === opt.value }]"
+      :title="opt.label"
       @click="$emit('update:modelValue', opt.value)"
     >
       {{ opt.label }}
@@ -19,8 +20,7 @@ defineEmits<{ 'update:modelValue': [T] }>()
 <style scoped>
 .toggle-group {
   display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: 1fr;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 4px;
   width: 100%;
 }
@@ -33,8 +33,10 @@ defineEmits<{ 'update:modelValue': [T] }>()
   color: var(--text-primary);
   cursor: pointer;
   font-size: 12px;
-  white-space: nowrap;
   border-radius: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .toggle-btn:hover {
   background: var(--hover-bg);

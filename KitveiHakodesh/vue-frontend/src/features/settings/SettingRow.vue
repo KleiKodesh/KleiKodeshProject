@@ -19,7 +19,7 @@ defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
   display: flex;
   flex-direction: column;
   gap: 4px;
-  margin-bottom: 10px;
+  margin-bottom: 16px;
 }
 .setting-label {
   font-size: 11px;

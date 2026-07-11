@@ -4,12 +4,12 @@ import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerender
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useSettingsSearch, type SettingsNavEntry } from './useSettingsSearch'
 import SettingsPageSideNav from './SettingsPageSideNav.vue'
-import SettingsPageDisplaySection from './SettingsPageDisplaySection.vue'
-import SettingsPageReadingSection from './SettingsPageReadingSection.vue'
+import SettingsPageThemeAndApplicationSection from './SettingsPageThemeAndApplicationSection.vue'
+import SettingsPageReadingAndBookDisplaySection from './SettingsPageReadingAndBookDisplaySection.vue'
 import SettingsPageCalendarSection from './SettingsPageCalendarSection.vue'
-import SettingsPageStorageSection from './SettingsPageStorageSection.vue'
+import SettingsPageAdvancedSection from './SettingsPageAdvancedSection.vue'
 import SettingsPageResetSection from './SettingsPageResetSection.vue'
-import SettingsPageShortcutsSection from './SettingsPageShortcutsSection.vue'
+import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcutsSection.vue'
 
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
@@ -120,12 +120,12 @@ async function navigateToSection(sectionId: string) {
           </div>
         </div>
 
-        <SettingsPageDisplaySection />
-        <SettingsPageReadingSection />
+        <SettingsPageThemeAndApplicationSection />
+        <SettingsPageReadingAndBookDisplaySection />
         <SettingsPageCalendarSection />
-        <SettingsPageStorageSection />
+        <SettingsPageAdvancedSection />
         <SettingsPageResetSection />
-        <SettingsPageShortcutsSection />
+        <SettingsPageKeyboardShortcutsSection />
 
       </div>
     </div>
