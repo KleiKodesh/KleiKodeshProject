@@ -12,7 +12,7 @@ import type { CommentaryTreeState, PinnedCommentaryGroup } from '../bookViewType
 import ContextMenu from '@/components/ContextMenu.vue'
 import { onLongPress } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
-import { useScopedCopy } from '@/composables/useLineCopy'
+import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useZoomHandler } from '@/composables/useZoom'
 import { useBookViewLineRenderer, setCurrentMark } from './useBookViewLineRenderer'
@@ -21,6 +21,7 @@ import { useBookViewAnnotations } from './useBookViewAnnotations'
 import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
 import BookViewNoteBubble from './BookViewNoteBubble.vue'
+import { pasteIntoWord } from '@/webview-host/bridge'
 
 const emit = defineEmits<{
   scrolled: [number, number]
@@ -81,6 +82,7 @@ const scrollerEl = ref<HTMLElement | null>(null)
 useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
+  onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
 })
 
 const virtualizer = useVirtualizer(
@@ -158,7 +160,7 @@ watch(
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const { items: contextMenuItems, buildFormattedHtml } = useBookViewLineCopyMenu({
+const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
   isSelectAll,

@@ -2,7 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue'
 import { onLongPress } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
-import { useScopedCopy } from '@/composables/useLineCopy'
+import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -21,6 +21,7 @@ import { useCommentaryCopy } from './useCommentaryCopy'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
+import { pasteIntoWord } from '@/webview-host/bridge'
 
 const props = defineProps<{
   selectedLineId: number | null
@@ -137,6 +138,7 @@ const flatItems = computed<FlatItem[]>(() => {
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
+  onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
 })
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)

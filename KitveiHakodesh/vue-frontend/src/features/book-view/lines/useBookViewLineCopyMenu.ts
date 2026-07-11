@@ -200,7 +200,7 @@ export function buildBookExportHtml(
 //   OFF: leave text as-is
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null } {
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onPasteIntoWord: () => void } {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
 
@@ -438,5 +438,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       annotationRow,
     ],
     buildFormattedHtml,
+    onPasteIntoWord,
   }
 }
