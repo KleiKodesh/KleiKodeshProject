@@ -39,8 +39,17 @@ namespace FtsLibTest
         // ── Text helpers ──────────────────────────────────────────────
 
         /// <summary>
-        /// Strips HTML tags and Hebrew diacritics so the validator sees the
-        /// same normalised text the tokenizer produces.
+        /// Strips HTML tags, Hebrew diacritics, and intra-word quote characters so
+        /// the validator sees the same normalised text the tokenizer produces.
+        ///
+        /// The indexer's HtmlWordScanner treats these four characters as transparent
+        /// intra-word connectors (e.g. אברה"ם is indexed as אברהם):
+        ///   U+0022  ASCII quotation mark  "
+        ///   U+05F4  Hebrew gershayim      ״
+        ///   U+0027  ASCII apostrophe      '
+        ///   U+05F3  Hebrew geresh         ׳
+        /// The validator must strip them too, or it will fail to find e.g. אברהם
+        /// as a substring inside אברה"ם and incorrectly mark the result as bogus.
         /// </summary>
         public static string StripHtmlAndDiacritics(string s)
         {
@@ -52,6 +61,8 @@ namespace FtsLibTest
                 if (c == '>') { inTag = false; continue; }
                 if (inTag) continue;
                 if (c >= '\u0591' && c <= '\u05C7') continue;
+                // Strip intra-word quote characters that the indexer treats as transparent.
+                if (c == '\u0022' || c == '\u05F4' || c == '\u0027' || c == '\u05F3') continue;
                 sb.Append(c);
             }
             return sb.ToString();

@@ -81,10 +81,13 @@ namespace FtsLibTest
 
             // ── Fuzzy ─────────────────────────────────────────────────
             // יצחק~ must find ביצחק — the original UnionIterator bug regression
+            // IDs 144129 and 144175 removed: neither line contains the standalone word כי
+            // (144129 has כי only as a substring inside longer words like יוכיח;
+            //  144175 has no כי at all), so the AND intersection correctly excludes them.
             new QueryCase("כי יצחק~",
                 QueryKind.Fuzzy,
                 minResults: 1,
-                requiredIds: new[] { 548, 144129, 144175, 136954 }),
+                requiredIds: new[] { 548, 136954 }),
 
             new QueryCase("תארה~ מצוה",
                 QueryKind.Fuzzy,

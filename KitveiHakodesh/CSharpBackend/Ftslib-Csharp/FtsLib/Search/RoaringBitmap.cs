@@ -172,6 +172,73 @@ namespace FtsLib.Search
             }
         }
 
+        /// <summary>
+        /// Enumerates all doc IDs that are &gt;= <paramref name="fromValueInclusive"/>,
+        /// in ascending order.
+        ///
+        /// This is the primitive used by <see cref="RoaringBitmapIterator.SkipTo"/> for
+        /// far-away targets (different 64K block).  It binary-searches _keys to find
+        /// the starting block in O(log blocks), then within that block binary-searches
+        /// (ArrayContainer) or scans from the appropriate word (BitmapContainer) to
+        /// find the floor value, then yields sequentially from there.
+        ///
+        /// Complexity: O(log blocks + per-container floor) for the first value,
+        /// O(1) amortised for every subsequent value — identical to GetValues() once
+        /// the start position is found.
+        /// </summary>
+        public IEnumerable<int> GetValuesFrom(int fromValueInclusive)
+        {
+            ushort startHigh = (ushort)((uint)fromValueInclusive >> 16);
+            ushort startLow  = (ushort)((uint)fromValueInclusive & 0xFFFF);
+
+            // Binary-search for the block whose key >= startHigh.
+            int blockIndex = FindKeyFloor(startHigh);
+
+            for (int b = blockIndex; b < _keys.Count; b++)
+            {
+                ushort blockKey   = _keys[b];
+                int    baseValue  = blockKey << 16;
+
+                if (blockKey == startHigh)
+                {
+                    // First block: need to skip to startLow within this container.
+                    foreach (int low in _containers[b].GetValuesFrom(startLow))
+                        yield return baseValue | low;
+                }
+                else
+                {
+                    // Subsequent blocks are entirely >= fromValueInclusive.
+                    foreach (int low in _containers[b].GetValues())
+                        yield return baseValue | low;
+                }
+            }
+        }
+
+        /// <summary>
+        /// Returns the index of the first block whose key &gt;= <paramref name="key"/>,
+        /// or <see cref="_keys"/>.Count if no such block exists.
+        /// </summary>
+        private int FindKeyFloor(ushort key)
+        {
+            int lo = 0, hi = _keys.Count - 1;
+            int result = _keys.Count; // default: past end
+            while (lo <= hi)
+            {
+                int    mid    = (lo + hi) >> 1;
+                ushort midKey = _keys[mid];
+                if (midKey >= key)
+                {
+                    result = mid;
+                    hi     = mid - 1;
+                }
+                else
+                {
+                    lo = mid + 1;
+                }
+            }
+            return result;
+        }
+
         // ── Binary search over sorted key list ────────────────────────
 
         private int FindKey(ushort key)
@@ -195,6 +262,12 @@ namespace FtsLib.Search
             public abstract int  Cardinality { get; }
             public abstract bool Add(ushort value);
             public abstract IEnumerable<int> GetValues();
+            /// <summary>
+            /// Enumerates values >= <paramref name="fromLow"/> (a low-16 value, 0–65535).
+            /// Used by <see cref="RoaringBitmap.GetValuesFrom"/> to avoid scanning from
+            /// the start of the container on a far-away skip.
+            /// </summary>
+            public abstract IEnumerable<int> GetValuesFrom(ushort fromLow);
             public abstract Container Clone();
         }
 
@@ -231,6 +304,31 @@ namespace FtsLib.Search
             public override IEnumerable<int> GetValues()
             {
                 for (int i = 0; i < _count; i++)
+                    yield return _values[i];
+            }
+
+            /// <summary>
+            /// Binary-searches the sorted array for the first value >= <paramref name="fromLow"/>
+            /// then yields sequentially from there.  O(log n) to find the start, O(1) per step.
+            /// </summary>
+            public override IEnumerable<int> GetValuesFrom(ushort fromLow)
+            {
+                // Binary search for the first index with value >= fromLow.
+                int lo = 0, hi = _count - 1, start = _count;
+                while (lo <= hi)
+                {
+                    int mid = (lo + hi) >> 1;
+                    if (_values[mid] >= fromLow)
+                    {
+                        start = mid;
+                        hi    = mid - 1;
+                    }
+                    else
+                    {
+                        lo = mid + 1;
+                    }
+                }
+                for (int i = start; i < _count; i++)
                     yield return _values[i];
             }
 
@@ -330,6 +428,84 @@ namespace FtsLib.Search
             /// at a time for all-zero; only non-zero words enter the per-bit De Bruijn
             /// loop.  On a sparse bitmap this skips large zero runs in one comparison.
             /// </summary>
+            public override IEnumerable<int> GetValuesFrom(ushort fromLow)
+            {
+                // Find the word that contains fromLow and mask off bits below it.
+                int startWord = fromLow >> 6;
+                int startBit  = fromLow & 63;
+
+                // First word: mask off bits strictly below fromLow.
+                ulong firstWord = _bits[startWord] >> startBit << startBit;
+                if (firstWord != 0)
+                {
+                    int basePos = startWord << 6;
+                    ulong bits  = firstWord;
+                    while (bits != 0)
+                    {
+                        ulong lsb = bits & (ulong)(-(long)bits);
+                        yield return basePos + TrailingZeroCount64(lsb);
+                        bits ^= lsb;
+                    }
+                }
+
+                // Remaining words: full iteration from startWord+1 onward.
+                // Reuse the SIMD-accelerated path for the tail.
+                int vLen = Vector<ulong>.Count;
+                var zero = Vector<ulong>.Zero;
+                int word = startWord + 1;
+
+                if (Vector.IsHardwareAccelerated)
+                {
+                    // Align to next vector boundary.
+                    int alignedStart = ((word + vLen - 1) / vLen) * vLen;
+                    // Scalar until aligned.
+                    for (; word < alignedStart && word < 1024; word++)
+                    {
+                        ulong bits = _bits[word];
+                        if (bits == 0) continue;
+                        int basePos = word << 6;
+                        while (bits != 0)
+                        {
+                            ulong lsb = bits & (ulong)(-(long)bits);
+                            yield return basePos + TrailingZeroCount64(lsb);
+                            bits ^= lsb;
+                        }
+                    }
+                    // SIMD vector chunks.
+                    for (; word <= 1024 - vLen; word += vLen)
+                    {
+                        var v = new Vector<ulong>(_bits, word);
+                        if (v == zero) continue;
+                        for (int w = word; w < word + vLen; w++)
+                        {
+                            ulong bits = _bits[w];
+                            if (bits == 0) continue;
+                            int basePos = w << 6;
+                            while (bits != 0)
+                            {
+                                ulong lsb = bits & (ulong)(-(long)bits);
+                                yield return basePos + TrailingZeroCount64(lsb);
+                                bits ^= lsb;
+                            }
+                        }
+                    }
+                }
+
+                // Scalar tail (or full tail when SIMD not available).
+                for (; word < 1024; word++)
+                {
+                    ulong bits = _bits[word];
+                    if (bits == 0) continue;
+                    int basePos2 = word << 6;
+                    while (bits != 0)
+                    {
+                        ulong lsb = bits & (ulong)(-(long)bits);
+                        yield return basePos2 + TrailingZeroCount64(lsb);
+                        bits ^= lsb;
+                    }
+                }
+            }
+
             public override IEnumerable<int> GetValues()
             {
                 int vLen = Vector<ulong>.Count;
