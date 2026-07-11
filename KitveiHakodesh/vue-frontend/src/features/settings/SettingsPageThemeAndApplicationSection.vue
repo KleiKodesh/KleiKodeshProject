@@ -28,7 +28,7 @@ const TITLE_BAR_BUTTONS = [
   { id: 'hamburger',      label: 'תפריט' },
   { id: 'theme-toggle',   label: 'ערכת נושא' },
   { id: 'toolbar-toggle', label: 'סרגל כלים' },
-  { id: 'pdf-filter',     label: 'ערכת נושא ל-PDF' },
+  { id: 'pdf-filter',     label: 'ערכת נושא ב-PDF' },
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: 'בית' },
   { id: 'new-tab',        label: 'לשונית חדשה' },
@@ -134,6 +134,7 @@ function toggleTitleBarButton(buttonId: string) {
           :key="button.id"
           class="title-bar-chip"
           :class="{ active: isTitleBarButtonEnabled(button.id) }"
+          :title="button.label"
           @click="toggleTitleBarButton(button.id)"
         >{{ button.label }}</button>
       </div>
@@ -144,7 +145,7 @@ function toggleTitleBarButton(buttonId: string) {
 <style scoped>
 .title-bar-chips {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 4px;
   width: 100%;
 }
@@ -157,8 +158,10 @@ function toggleTitleBarButton(buttonId: string) {
   color: var(--text-primary);
   cursor: pointer;
   font-size: 12px;
-  white-space: nowrap;
   border-radius: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .title-bar-chip:hover {

@@ -143,13 +143,17 @@ async function openExcludedFolders() {
 }
 
 .manage-btn {
-  height: 32px;
-  padding: 0 14px;
-  font-size: 13px;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-primary);
   border-radius: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .manage-btn:hover:not(:disabled) {

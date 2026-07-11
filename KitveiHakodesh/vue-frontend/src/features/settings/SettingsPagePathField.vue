@@ -87,7 +87,7 @@ function cancelEdit() {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 32px;
+  height: 28px;
   border: 1px solid var(--border-color);
   border-radius: 6px;
   background: var(--bg-secondary);
@@ -105,8 +105,8 @@ function cancelEdit() {
 
 .folder-btn {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   padding: 0;
   display: flex;
   align-items: center;
@@ -171,7 +171,7 @@ function cancelEdit() {
 .clear-btn {
   flex-shrink: 0;
   width: 28px;
-  height: 32px;
+  height: 28px;
   padding: 0;
   display: flex;
   align-items: center;

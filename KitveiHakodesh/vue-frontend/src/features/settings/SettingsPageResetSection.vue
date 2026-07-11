@@ -70,27 +70,30 @@ function confirmResetAll() {
   <div data-section="section-reset" data-section-label="איפוס">
     <div id="section-reset" class="section-label">איפוס</div>
 
-    <p class="reset-description" data-search-ignore>
-      מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים הפתוחים נשמרים.
-    </p>
-    <button class="reset-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
-
-    <p class="reset-description" data-search-ignore>
-      מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
-    </p>
-    <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
-
-    <p class="reset-description" data-search-ignore>
-      מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס החיפוש. לא ניתן לבטל פעולה זו.
-    </p>
-    <button class="reset-btn" @click="confirmResetAll">איפוס האפליקציה</button>
-
-    <p class="reset-description" data-search-ignore>
-      מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
-    </p>
-    <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">
-      בנייה מחדש של אינדקס חיפוש קבצים
-    </button>
+    <div class="reset-group">
+      <button class="reset-btn" @click="confirmResetSettings">איפוס ההגדרות</button>
+      <p class="reset-description" data-search-ignore>
+        מאפס רק את הגדרות התצוגה והקריאה לברירות המחדל. מסד הנתונים, היסטוריית הקריאה, והטאבים הפתוחים נשמרים.
+      </p>
+    </div>
+    <div class="reset-group">
+      <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
+      <p class="reset-description" data-search-ignore>
+        מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
+      </p>
+    </div>
+    <div class="reset-group">
+      <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">בנייה מחדש של אינדקס חיפוש קבצים</button>
+      <p class="reset-description" data-search-ignore>
+        מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
+      </p>
+    </div>
+    <div class="reset-group">
+      <button class="reset-btn" @click="confirmResetAll">איפוס האפליקציה</button>
+      <p class="reset-description" data-search-ignore>
+        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס החיפוש. לא ניתן לבטל פעולה זו.
+      </p>
+    </div>
   </div>
 
   <ConfirmDialog
@@ -107,19 +110,29 @@ function confirmResetAll() {
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.5;
-  margin: 0 0 8px;
+  margin: 4px 0 0;
+}
+
+.reset-group {
+  padding: 6px 0;
+}
+
+.reset-group + .reset-group {
+  margin-top: 8px;
 }
 
 .reset-btn {
-  width: fit-content;
-  min-width: 140px;
-  height: 32px;
-  padding: 0 12px;
-  font-size: 13px;
+  width: 100%;
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
   color: #e53e3e;
   border: 1px solid color-mix(in srgb, #e53e3e 40%, transparent);
   background: color-mix(in srgb, #e53e3e 8%, transparent);
-  margin-bottom: 12px;
+  border-radius: 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .reset-btn:hover {
