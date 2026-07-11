@@ -49,6 +49,6 @@ namespace FtsLib.Indexing
         // ── Mixed AND/OR ─────────────────────────────────────────────
 
         public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups) =>
-            PostingIntersector.MixedSearch(groups, GetIterator);
+            PostingIntersector.MixedSearch(groups, GetIterator, GetCount);
     }
 }

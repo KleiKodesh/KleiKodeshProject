@@ -197,6 +197,8 @@ export function useBookView(
     () => lines.value,
     bookTitle,
     settingsStore,
+    tabId,
+    bookId ?? undefined,
   )
 
   // ── Search panel ──────────────────────────────────────────────────────────

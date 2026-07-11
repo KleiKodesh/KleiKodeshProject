@@ -7,6 +7,7 @@
  * and caches survive the panel being unmounted and remounted.
  */
 import { computed } from 'vue'
+import { useBookViewStore } from '@/stores/bookViewStore'
 import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
 import { useCommentaryNotes } from './commentary/useCommentaryNotes'
 import { useCommentaryRender } from './commentary/useCommentaryRender'
@@ -24,7 +25,10 @@ export function useBookViewCommentaryAnnotations(
   lines: () => Line[],
   bookTitle: string | undefined,
   settings: ReturnType<typeof useSettingsStore>,
+  tabId: string,
+  bookId: number | undefined,
 ) {
+  const bookViewStore = useBookViewStore()
   const diacriticsStateForExport = computed(() => settings.diacriticsState)
 
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
@@ -33,8 +37,14 @@ export function useBookViewCommentaryAnnotations(
   const { getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote } =
     useCommentaryNotes(groupsForDisplay)
 
+  // Use a pane-scoped zoom getter so split view pane 2 reads its own zoom
+  // rather than the store-level computed (which always resolves to the active tab).
+  const getCommentaryZoom = () =>
+    bookId != null ? bookViewStore.getCommentaryZoom(tabId, bookId) : 100
+
   const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
     groupsForDisplay,
+    getCommentaryZoom,
     getHighlightsForLine,
     getNotesForLine,
   )
