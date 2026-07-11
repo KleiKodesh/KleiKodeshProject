@@ -2,7 +2,7 @@ add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
 
-מיון בחיפוש בקבצים
+why is wildcard search so much slower?
 
 ספרים קרובים update for book with source
 
