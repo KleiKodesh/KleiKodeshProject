@@ -34,6 +34,22 @@ namespace FtsLib.Search
         /// per doc) starts to exceed the bitmap setup cost.
         /// </summary>
         internal const int RoaringOrThreshold = 20;
+
+        /// <summary>
+        /// When one group's total doc count exceeds this multiple of the other
+        /// group's total doc count, skip materialising the large group into a
+        /// RoaringBitmap and instead use the probe-intersect strategy: iterate
+        /// the small group with a UnionIterator and for each candidate call
+        /// SkipTo on each term of the large group until one hits.
+        ///
+        /// Rationale: building a RoaringBitmap for a large group costs
+        /// O(total_docs_in_group) in decompression + insertion work regardless of
+        /// how few docs the other group has.  If the other group is tiny, almost
+        /// all of that work produces doc IDs that are immediately discarded by the
+        /// AND.  The probe strategy decodes only the posting lists that actually
+        /// match, costing O(small_side_results * log(large_side_per_term)) instead.
+        /// </summary>
+        internal const int ProbeIntersectRatioThreshold = 10;
         // ── AND ──────────────────────────────────────────────────────
 
         public static IEnumerable<int> AndSearch(
@@ -79,23 +95,68 @@ namespace FtsLib.Search
         public static IEnumerable<int> MixedSearch(
             IEnumerable<IEnumerable<string>> groups,
             Func<string, PostingIterator>    resolve,
+            Func<string, int>                getCount,
             CancellationToken                ct = default)
         {
-            var groupIters = new List<PostingIterator>();
+            // Materialise groups into term lists so we can inspect counts before
+            // deciding which execution strategy to use.
+            var groupTerms = new List<IReadOnlyList<string>>();
             foreach (var group in groups)
             {
                 var termList = group as IReadOnlyList<string> ?? new List<string>(group);
                 if (termList.Count == 0) return Enumerable.Empty<int>();
+                groupTerms.Add(termList);
+            }
 
+            if (groupTerms.Count == 0) return Enumerable.Empty<int>();
+
+            // ── Two-group special case: probe-intersect when one side is huge ──
+            //
+            // If we have exactly two groups and one has vastly more total docs than
+            // the other, materialising the large group into a RoaringBitmap wastes
+            // time decoding docs that will immediately be discarded.
+            //
+            // Instead: resolve both groups to iterators without materialising the
+            // large one.  Use a UnionIterator (heap) for the large group — it only
+            // decodes values on demand as the AND intersection calls SkipTo, so we
+            // only pay for the docs that survive the intersection.
+            //
+            // This is safe only when both groups are large enough for a heap
+            // (>= RoaringOrThreshold terms on the large side), because otherwise
+            // the bitmap path was already fast (small number of terms to drain).
+            if (groupTerms.Count == 2)
+            {
+                int count0 = TotalGroupCount(groupTerms[0], getCount);
+                int count1 = TotalGroupCount(groupTerms[1], getCount);
+
+                // Determine large and small.
+                int largeIdx = count0 >= count1 ? 0 : 1;
+                int smallIdx = 1 - largeIdx;
+                int largeCount = largeIdx == 0 ? count0 : count1;
+                int smallCount = largeIdx == 0 ? count1 : count0;
+
+                // Only apply when the large group has enough terms to matter AND
+                // the imbalance is significant enough.
+                if (groupTerms[largeIdx].Count >= RoaringOrThreshold &&
+                    smallCount > 0 &&
+                    largeCount / smallCount >= ProbeIntersectRatioThreshold)
+                {
+                    return ProbeIntersect(
+                        groupTerms[smallIdx], groupTerms[largeIdx],
+                        resolve, getCount, ct);
+                }
+            }
+
+            // ── General path (original logic) ────────────────────────
+            var groupIters = new List<PostingIterator>();
+            foreach (var termList in groupTerms)
+            {
                 PostingIterator groupIter;
 
                 if (termList.Count >= RoaringOrThreshold)
                 {
-                    // Large OR group — materialise into a Roaring bitmap.
                     groupIter = BuildRoaringIterator(termList, resolve, ct);
                     if (groupIter.IsDone) return Enumerable.Empty<int>();
-                    // RoaringBitmapIterator requires an explicit MoveNext before use
-                    // in PostingMatcher.Intersect (pre-advanced contract).
                     if (!groupIter.MoveNext()) return Enumerable.Empty<int>();
                 }
                 else
@@ -104,16 +165,12 @@ namespace FtsLib.Search
                     if (started.Count == 0) return Enumerable.Empty<int>();
                     if (started.Count == 1)
                     {
-                        groupIter = started[0]; // already pre-advanced by StartedIterators
+                        groupIter = started[0];
                     }
                     else
                     {
-                        // UnionIterator is not pre-advanced — advance it now so it is
-                        // consistent with the single-iterator case and with the
-                        // pre-advanced contract expected by PostingMatcher.Intersect
-                        // and DrainStarted.
                         var union = new UnionIterator(started.ToArray());
-                        if (!union.MoveNext()) continue; // all sub-iterators exhausted
+                        if (!union.MoveNext()) continue;
                         groupIter = union;
                     }
                 }
@@ -127,6 +184,99 @@ namespace FtsLib.Search
         }
 
         // ── Helpers ──────────────────────────────────────────────────
+
+        /// <summary>
+        /// Probe-intersect strategy for asymmetric two-group AND queries.
+        ///
+        /// Iterates the small group (via a heap UnionIterator or single iterator)
+        /// and for each candidate doc ID checks whether it exists in the large
+        /// group by calling SkipTo on each large-group term's PostingIterator.
+        ///
+        /// This avoids materialising the large group into a RoaringBitmap entirely.
+        /// Cost: O(small_docs * large_terms_per_hit * log(large_term_posting_size))
+        /// in the best case, which is much cheaper than O(large_total_docs) when
+        /// small_docs << large_total_docs.
+        ///
+        /// The large group uses a UnionIterator so SkipTo propagates via the heap,
+        /// advancing only the iterators that need to move — the skip-list
+        /// acceleration in PostingIterator keeps each SkipTo at O(log df).
+        /// </summary>
+        private static IEnumerable<int> ProbeIntersect(
+            IReadOnlyList<string>         smallTerms,
+            IReadOnlyList<string>         largeTerms,
+            Func<string, PostingIterator> resolve,
+            Func<string, int>             getCount,
+            CancellationToken             ct)
+        {
+            // Build the small-side iterator (pre-advanced).
+            PostingIterator smallIter;
+            {
+                var started = StartedIterators(smallTerms, resolve, skipMissing: true);
+                if (started.Count == 0) yield break;
+                if (started.Count == 1)
+                {
+                    smallIter = started[0];
+                }
+                else
+                {
+                    var union = new UnionIterator(started.ToArray());
+                    if (!union.MoveNext()) yield break;
+                    smallIter = union;
+                }
+            }
+
+            // Build the large-side iterator as a lazy UnionIterator — NOT materialised
+            // into a bitmap.  SkipTo on UnionIterator propagates to only the iterators
+            // that need to advance, so we only decode posting data for docs that survive.
+            PostingIterator largeIter;
+            {
+                var started = StartedIterators(largeTerms, resolve, skipMissing: true);
+                if (started.Count == 0) yield break;
+                if (started.Count == 1)
+                {
+                    largeIter = started[0];
+                }
+                else
+                {
+                    var union = new UnionIterator(started.ToArray());
+                    if (!union.MoveNext()) yield break;
+                    largeIter = union;
+                }
+            }
+
+            // Leapfrog: for each doc on the small side, seek the large side to it.
+            do
+            {
+                ct.ThrowIfCancellationRequested();
+                int candidate = smallIter.Current;
+
+                if (!largeIter.SkipTo(candidate)) yield break;
+
+                if (largeIter.Current == candidate)
+                    yield return candidate;
+                // else: large jumped past candidate — loop advances small side next
+            }
+            while (smallIter.MoveNext());
+        }
+
+        /// <summary>
+        /// Returns the total number of doc IDs across all terms in a group.
+        /// Used to decide which group is "small" vs "large" for probe-intersect.
+        /// </summary>
+        private static int TotalGroupCount(
+            IReadOnlyList<string> terms,
+            Func<string, int>     getCount)
+        {
+            int total = 0;
+            foreach (var term in terms)
+            {
+                int c = getCount(term);
+                total += c;
+                // Cap to avoid int overflow on huge wildcard groups.
+                if (total < 0) return int.MaxValue;
+            }
+            return total;
+        }
 
         /// <summary>
         /// Drains all posting lists for <paramref name="terms"/> into a

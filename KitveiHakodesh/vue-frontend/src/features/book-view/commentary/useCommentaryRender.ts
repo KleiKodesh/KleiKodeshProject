@@ -1,7 +1,5 @@
 import { computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useBookViewStore } from '@/stores/bookViewStore'
-import { storeToRefs } from 'pinia'
 import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
@@ -13,22 +11,25 @@ import type { Note } from '../lines/useBookViewNotes'
  * Manages content rendering for commentary lines: diacritics filtering, divine name censoring,
  * user highlights, search highlighting, and render caching to avoid re-running expensive DOM
  * operations on every render cycle for unchanged commentary lines.
+ *
+ * `getCommentaryZoom` must be a pane-scoped getter — never pass the store-level
+ * `commentaryZoom` computed here, as that always reads the globally active tab and
+ * will cross-contaminate pane 2's render cycle when split view is active.
  */
 export function useCommentaryRender(
   groups: () => any[],
+  getCommentaryZoom: () => number,
   getHighlightsForLine?: (lineId: number) => Highlight[],
   getNotesForLine?: (lineId: number) => Note[],
 ) {
   const settingsStore = useSettingsStore()
-  const bookViewStore = useBookViewStore()
-  const { commentaryZoom } = storeToRefs(bookViewStore)
 
   const diacriticsState = computed(() => settingsStore.diacriticsState)
   const commentaryFontPx = computed(() => {
     const effectiveFontSize = settingsStore.useSeparateCommentarySettings
       ? settingsStore.commentaryFontSize
       : settingsStore.fontSize
-    return (commentaryZoom.value / 100) * (effectiveFontSize / 100) * 15
+    return (getCommentaryZoom() / 100) * (effectiveFontSize / 100) * 15
   })
 
   // Two-tier cache — same pattern as useBookViewLineRenderer:

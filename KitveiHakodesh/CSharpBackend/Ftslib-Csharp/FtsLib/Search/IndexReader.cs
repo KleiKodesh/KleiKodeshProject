@@ -144,7 +144,7 @@ namespace FtsLib.Search
         public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups, CancellationToken ct = default)
         {
             if (_segments.Count == 0) return Enumerable.Empty<int>();
-            return PostingIntersector.MixedSearch(groups, ResolveIterator, ct);
+            return PostingIntersector.MixedSearch(groups, ResolveIterator, GetTermCount, ct);
         }
 
         // ── Term count ───────────────────────────────────────────────
