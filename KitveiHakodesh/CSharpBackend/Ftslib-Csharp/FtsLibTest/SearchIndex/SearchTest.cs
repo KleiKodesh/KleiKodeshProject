@@ -107,6 +107,27 @@ namespace FtsLibTest
                 QueryKind.Fuzzy,
                 minResults: 1,
                 requiredIds: new[] { 548 }),
+
+            // ── Wildcard intersection stress queries ──────────────────
+            // These combine a high-frequency wildcard (large OR expansion) with
+            // another term, stressing the RoaringBitmapIterator.SkipTo path.
+            // Added 2026-07-12 to verify the hybrid block-jump optimisation
+            // produces correct results on asymmetric AND queries.
+
+            new QueryCase("כי *יצח*",
+                QueryKind.Wildcard,
+                minResults: 1,
+                requiredIds: new[] { 548 }),          // ביצחק contains יצח — must appear
+
+            new QueryCase("*כי* ביצחק",
+                QueryKind.Wildcard,
+                minResults: 1,
+                requiredIds: new[] { 548 }),          // line 548 has both כי and ביצחק
+
+            new QueryCase("*כי* *יצח*",
+                QueryKind.Wildcard,
+                minResults: 1,
+                requiredIds: new[] { 548 }),          // line 548 satisfies both groups
         };
 
         // Max acceptable false-positive rate across ALL results.

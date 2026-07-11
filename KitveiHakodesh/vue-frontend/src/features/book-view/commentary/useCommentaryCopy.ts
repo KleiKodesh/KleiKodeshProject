@@ -374,5 +374,6 @@ export function useCommentaryCopy(
   return {
     contextMenuItems,
     buildFormattedHtml,
+    onPasteIntoWord,
   }
 }
