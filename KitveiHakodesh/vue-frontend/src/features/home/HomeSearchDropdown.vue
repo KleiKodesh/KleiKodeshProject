@@ -16,13 +16,17 @@ import type {
   FileSearchResult,
   SearchSourcePriority,
 } from './useHomeSearch'
+import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
+  /** TOC heuristics fallback results — only present when catalogResults is empty */
+  catalogTocResults: TocFsItem[]
   hebrewBooksResults: HebrewBooksSearchResult[]
   fileResults: FileSearchResult[]
   sourcePriority: SearchSourcePriority
+  isLoadingCatalogToc: boolean
   isLoadingHebrewBooks: boolean
   isLoadingFiles: boolean
   // Position and size passed from parent via getBoundingClientRect
@@ -34,6 +38,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   selectCatalogBook: [bookId: number, bookTitle: string]
+  selectCatalogToc: [item: TocFsItem]
   selectHebrewBook: [book: HebrewBook]
   selectFile: [fullPath: string, fileName: string]
   dropdownFocused: []
@@ -53,6 +58,7 @@ const sectionOrder = computed<SearchSourcePriority[]>(() => {
 const allItems = computed(() => {
   const items: Array<
     | { kind: 'catalog'; bookId: number; title: string }
+    | { kind: 'catalogToc'; item: TocFsItem }
     | { kind: 'hebrewBooks'; book: HebrewBook }
     | { kind: 'file'; fullPath: string; fileName: string }
   > = []
@@ -60,6 +66,9 @@ const allItems = computed(() => {
     if (source === 'catalog') {
       for (const item of props.catalogResults) {
         items.push({ kind: 'catalog', bookId: item.book.id, title: item.book.title })
+      }
+      for (const item of props.catalogTocResults) {
+        items.push({ kind: 'catalogToc', item })
       }
     } else if (source === 'hebrewbooks') {
       for (const item of props.hebrewBooksResults) {
@@ -78,6 +87,7 @@ function activateItem(index: number) {
   const item = allItems.value[index]
   if (!item) return
   if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title)
+  else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item)
   else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book)
   else emit('selectFile', item.fullPath, item.fileName)
 }
@@ -143,8 +153,11 @@ function getFileIcon(fileName: string): FileIconInfo {
       <template v-for="source in sectionOrder" :key="source">
 
         <!-- ── Book catalog section ── -->
-        <template v-if="source === 'catalog' && catalogResults.length > 0">
-          <div class="home-search-dropdown__section-header">ספרים</div>
+        <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc)">
+          <div class="home-search-dropdown__section-header">
+            ספרים
+            <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="home-search-dropdown__spinner" />
+          </div>
           <div
             v-for="item in catalogResults"
             :key="item.book.id"
@@ -156,6 +169,22 @@ function getFileIcon(fileName: string): FileIconInfo {
           >
             <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
             <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
+            <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
+              {{ item.book.parentPath }}
+            </span>
+          </div>
+          <!-- TOC heuristics fallback results (only present when no title matched) -->
+          <div
+            v-for="item in catalogTocResults"
+            :key="item.uid"
+            role="option"
+            class="home-search-dropdown__item"
+            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
+            data-nav-item
+            @click="emit('selectCatalogToc', item)"
+          >
+            <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
+            <span class="home-search-dropdown__item-title">{{ item.book.title }} {{ item.tocPath }}</span>
             <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
               {{ item.book.parentPath }}
             </span>

@@ -1,13 +1,17 @@
 /**
  * Unified home-page search across three sources:
- *   1. Book catalog — title-only, instant (in-memory inverted index)
+ *   1. Book catalog — title-only, instant (in-memory inverted index).
+ *      When the title search finds nothing, falls back to the TOC heuristics
+ *      (debounced) exactly like the catalog page: "בראשית פרק ד" splits into
+ *      book="בראשית" and toc="פרק ד" and searches the TOC entries of the
+ *      matching books. Results share the catalog page's IDB LRU cache.
  *   2. HebrewBooks  — async, only when isHosted
  *   3. Document Locator (file system) — async, only when isHosted
  *
  * Each source resolves independently and writes to its own ref so the
  * dropdown can render partial results as they arrive.
  *
- * Min query length: 2 chars. Debounce: 300ms for the two async sources.
+ * Min query length: 2 chars. Debounce: 300ms for the async sources.
  * Each source is capped at MAX_RESULTS_PER_SOURCE items in the dropdown.
  *
  * Source-priority prefixes (stripped before searching):
@@ -21,12 +25,18 @@ import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '@/features/book-catalog/bookCatalogSearchNormalizer'
 import { filterBooksByWords } from '@/features/book-catalog/bookCatalogSearch'
+import { runTocHeuristics } from '@/features/book-catalog/bookCatalogSearchTocHeuristics'
+import {
+  getCatalogTocCache,
+  setCatalogTocCache,
+} from '@/features/book-catalog/bookCatalogTocSearchCache'
 import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import { fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { isHosted, dbReady } from '@/webview-host/seforimDb'
 import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
+import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +64,7 @@ export type SearchSourcePriority = 'catalog' | 'hebrewbooks' | 'files'
 
 const MIN_QUERY_LENGTH = 2
 const DEBOUNCE_MS = 300
+const MAX_RESULTS_PER_SOURCE = 50
 
 // Prefixes that shift which source appears first in the dropdown.
 // Matched against the beginning of the normalized query (after stripping spaces).
@@ -118,10 +129,12 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const settingsStore = useSettingsStore()
 
   const catalogResults = ref<CatalogSearchResult[]>([])
+  const catalogTocResults = ref<TocFsItem[]>([])
   const hebrewBooksResults = ref<HebrewBooksSearchResult[]>([])
   const fileResults = ref<FileSearchResult[]>([])
   const sourcePriority = ref<SearchSourcePriority>('catalog')
 
+  const isLoadingCatalogToc = ref(false)
   const isLoadingHebrewBooks = ref(false)
   const isLoadingFiles = ref(false)
 
@@ -130,6 +143,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
   // the dropdown loses focus.
   const isPaused = ref(false)
   let pendingCatalog: CatalogSearchResult[] | null = null
+  let pendingCatalogToc: TocFsItem[] | null = null
   let pendingHebrewBooks: HebrewBooksSearchResult[] | null = null
   let pendingFiles: FileSearchResult[] | null = null
 
@@ -140,12 +154,16 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
   function resume() {
     isPaused.value = false
     if (pendingCatalog !== null) { catalogResults.value = pendingCatalog; pendingCatalog = null }
+    if (pendingCatalogToc !== null) { catalogTocResults.value = pendingCatalogToc; pendingCatalogToc = null }
     if (pendingHebrewBooks !== null) { hebrewBooksResults.value = pendingHebrewBooks; pendingHebrewBooks = null }
     if (pendingFiles !== null) { fileResults.value = pendingFiles; pendingFiles = null }
   }
 
   function setCatalog(results: CatalogSearchResult[]) {
     if (isPaused.value) { pendingCatalog = results } else { catalogResults.value = results }
+  }
+  function setCatalogToc(results: TocFsItem[]) {
+    if (isPaused.value) { pendingCatalogToc = results } else { catalogTocResults.value = results }
   }
   function setHebrewBooks(results: HebrewBooksSearchResult[]) {
     if (isPaused.value) { pendingHebrewBooks = results } else { hebrewBooksResults.value = results }
@@ -156,6 +174,10 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   // Track async generation so stale responses are discarded
   let asyncGeneration = 0
+  // Separate counter for the TOC heuristics fallback — the HB/files watcher
+  // increments asyncGeneration on the same debounced query, so sharing one
+  // counter would make each watcher cancel the other.
+  let tocGeneration = 0
 
   const debouncedQuery = refDebounced(searchQuery, DEBOUNCE_MS)
 
@@ -167,19 +189,86 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
       const { priority, effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
       sourcePriority.value = priority
 
+      // Cancel any in-flight TOC heuristics — the query has changed
+      tocGeneration++
+
       if (effectiveQuery.length < MIN_QUERY_LENGTH || !dbReady.value) {
         setCatalog([])
+        setCatalogToc([])
+        isLoadingCatalogToc.value = false
         return
       }
       const words = toQueryWords(effectiveQuery)
       if (!words.length) {
         setCatalog([])
+        setCatalogToc([])
+        isLoadingCatalogToc.value = false
         return
       }
-      setCatalog(filterBooksByWords(booksDataStore.allBooks, words).slice(0, 50).map((book) => ({
+      const matched = filterBooksByWords(booksDataStore.allBooks, words)
+      setCatalog(matched.slice(0, MAX_RESULTS_PER_SOURCE).map((book) => ({
         source: 'catalog' as const,
         book,
       })))
+      // Title search found books — the TOC fallback doesn't apply
+      if (matched.length > 0) {
+        setCatalogToc([])
+        isLoadingCatalogToc.value = false
+      }
+    },
+    { immediate: true },
+  )
+
+  // ── Catalog TOC heuristics — debounced fallback when titles match nothing ──
+  //
+  // Same flow as useBookCatalogSearch Phase 2: check the shared IDB result
+  // cache first, otherwise run the heuristics pipeline against the DB. A
+  // generation counter discards stale responses; the instant watcher above
+  // bumps it on every keystroke.
+
+  watch(
+    debouncedQuery,
+    async (rawQuery) => {
+      const generation = ++tocGeneration
+      const { effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
+
+      if (effectiveQuery.length < MIN_QUERY_LENGTH || !dbReady.value) return
+      const words = toQueryWords(effectiveQuery)
+      if (!words.length) return
+
+      // Only when the plain title search finds nothing
+      if (filterBooksByWords(booksDataStore.allBooks, words).length > 0) return
+
+      // Check the shared disk cache before hitting the DB
+      const normalizedQuery = words.join(' ')
+      const cached = await getCatalogTocCache(normalizedQuery)
+      if (generation !== tocGeneration) return
+      if (cached) {
+        setCatalogToc(cached.items.slice(0, MAX_RESULTS_PER_SOURCE))
+        isLoadingCatalogToc.value = false
+        return
+      }
+
+      isLoadingCatalogToc.value = true
+
+      try {
+        const { items } = await runTocHeuristics(
+          words,
+          (bookWords) => filterBooksByWords(booksDataStore.allBooks, bookWords),
+          () => generation !== tocGeneration,
+        )
+
+        if (generation !== tocGeneration) return
+
+        setCatalogToc(items.slice(0, MAX_RESULTS_PER_SOURCE))
+
+        // Persist the full result set to the shared cache (fire-and-forget)
+        if (items.length > 0) setCatalogTocCache(normalizedQuery, items)
+      } catch {
+        if (generation === tocGeneration) setCatalogToc([])
+      } finally {
+        if (generation === tocGeneration) isLoadingCatalogToc.value = false
+      }
     },
     { immediate: true },
   )
@@ -246,12 +335,16 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   function clearResults() {
     asyncGeneration++
+    tocGeneration++
     pendingCatalog = null
+    pendingCatalogToc = null
     pendingHebrewBooks = null
     pendingFiles = null
     catalogResults.value = []
+    catalogTocResults.value = []
     hebrewBooksResults.value = []
     fileResults.value = []
+    isLoadingCatalogToc.value = false
     isLoadingHebrewBooks.value = false
     isLoadingFiles.value = false
     sourcePriority.value = 'catalog'
@@ -259,16 +352,20 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   const hasAnyResults = () =>
     catalogResults.value.length > 0 ||
+    catalogTocResults.value.length > 0 ||
     hebrewBooksResults.value.length > 0 ||
     fileResults.value.length > 0
 
-  const isLoadingAny = () => isLoadingHebrewBooks.value || isLoadingFiles.value
+  const isLoadingAny = () =>
+    isLoadingCatalogToc.value || isLoadingHebrewBooks.value || isLoadingFiles.value
 
   return {
     catalogResults,
+    catalogTocResults,
     hebrewBooksResults,
     fileResults,
     sourcePriority,
+    isLoadingCatalogToc,
     isLoadingHebrewBooks,
     isLoadingFiles,
     hasAnyResults,
