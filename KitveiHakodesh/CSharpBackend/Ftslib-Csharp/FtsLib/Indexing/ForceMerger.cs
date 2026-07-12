@@ -26,8 +26,11 @@ namespace FtsLib.Indexing
     ///   merging any remaining levels.
     ///
     /// Concurrency:
-    ///   The write lock on _searchMergeLock is held for the entire duration —
-    ///   all flushes, background merges, and searches block until done.
+    ///   Searches run concurrently with the force merge. Each level merge takes
+    ///   the search/merge write lock only around its own commit step (inside
+    ///   SegmentMerger.MergeLevel), so searches block only for those instants.
+    ///   Flushes cannot race: the flush pipeline is drained before Run is called
+    ///   and the IndexWriteLock excludes concurrent builds.
     /// </summary>
     internal sealed class ForceMerger
     {
@@ -41,9 +44,9 @@ namespace FtsLib.Indexing
         // ── Public entry point ────────────────────────────────────────
 
         /// <summary>
-        /// Runs a full force merge: acquires the write lock, writes WAL markers,
-        /// incrementally merges all levels bottom-up, then clears the WAL.
-        /// Blocks all searches and background flushes for the full duration.
+        /// Runs a full force merge: writes WAL markers, incrementally merges all
+        /// levels bottom-up, then clears the WAL. Searches run concurrently —
+        /// each level merge locks only its own commit step.
         /// The WAL must already be open before calling this.
         /// </summary>
         internal void Run()
@@ -56,9 +59,6 @@ namespace FtsLib.Indexing
             _store.Wal.BeginForceMerge();
             FtsLog.Write("ForceMerger.Run", "WAL BEGIN_FORCE_MERGE written");
 
-            _store.SearchMergeLock.EnterWriteLock();
-            FtsLog.Write("ForceMerger.Run",
-                "write lock acquired — all flushes and searches blocked");
             try
             {
                 MergeLevelsIncremental();
@@ -68,9 +68,8 @@ namespace FtsLib.Indexing
             }
             finally
             {
-                _store.SearchMergeLock.ExitWriteLock();
                 FtsLog.Write("ForceMerger.Run",
-                    $"write lock released — totalLiveSegs={_store.Live.TotalLiveSegs()}");
+                    $"force merge finished — totalLiveSegs={_store.Live.TotalLiveSegs()}");
                 _store.Wal.Clear();
                 FtsLog.Write("ForceMerger.Run", "WAL cleared — force merge complete");
             }
@@ -101,17 +100,7 @@ namespace FtsLib.Indexing
 
             try
             {
-                _store.SearchMergeLock.EnterWriteLock();
-                FtsLog.Write("ForceMerger.ResumeForceMerge", "write lock acquired");
-                try
-                {
-                    MergeLevelsIncremental();
-                }
-                finally
-                {
-                    _store.SearchMergeLock.ExitWriteLock();
-                    FtsLog.Write("ForceMerger.ResumeForceMerge", "write lock released");
-                }
+                MergeLevelsIncremental();
 
                 _store.Wal.EndForceMerge();
                 FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL END_FORCE_MERGE written");
@@ -142,7 +131,8 @@ namespace FtsLib.Indexing
         /// processed in the correct order even if a merge at level N creates
         /// a new overflow at level N+1.
         ///
-        /// Must be called while the write lock is held and the WAL is open.
+        /// Must be called while the WAL is open. Locking is handled per-commit
+        /// inside SegmentMerger.MergeLevel.
         /// </summary>
         internal void MergeLevelsIncremental()
         {
@@ -151,6 +141,17 @@ namespace FtsLib.Indexing
             do
             {
                 anyProgress = false;
+
+                // Shutdown requested — stop between level merges. Every completed
+                // pass is fully committed, so stopping here leaves a valid
+                // (just not fully collapsed) index.
+                if (_store.MergeAbortToken.IsCancellationRequested)
+                {
+                    FtsLog.Write("ForceMerger.MergeLevelsIncremental",
+                        "merge abort requested — stopping force merge between passes");
+                    break;
+                }
+
                 var levels = _store.Live.GetLevelsWithMultiple();
                 if (levels.Count == 0) break;
 

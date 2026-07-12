@@ -79,13 +79,14 @@ namespace FtsLib.Search
         /// Returns an empty list when the anchor is too short, the '?' count
         /// exceeds <see cref="MaxOptionalChars"/>, or nothing survives the filter.
         /// </summary>
-        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments)
+        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments,
+                                          TermChunkCache cache = null)
         {
             bool hasOptional = pattern.IndexOf('?') >= 0;
             bool hasStar     = pattern.IndexOf('*') >= 0;
 
             if (!hasOptional)
-                return ExpandStar(pattern, segments);   // fast path — original behaviour
+                return ExpandStar(pattern, segments, cache);   // fast path — original behaviour
 
             // Count '?' operators (after normalising away no-op ones).
             // We count positions where '?' has a real preceding letter.
@@ -105,9 +106,9 @@ namespace FtsLib.Search
             {
                 List<string> expanded;
                 if (sub.IndexOf('*') >= 0)
-                    expanded = ExpandStar(sub, segments);
+                    expanded = ExpandStar(sub, segments, cache);
                 else
-                    expanded = LookupLiteral(sub, segments);
+                    expanded = LookupLiteral(sub, segments, cache);
 
                 foreach (var term in expanded)
                     if (seen.Add(term))
@@ -127,7 +128,8 @@ namespace FtsLib.Search
         /// Returns an empty list when the anchor is too short or nothing survives
         /// the filter.
         /// </summary>
-        public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments)
+        public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments,
+                                              TermChunkCache cache = null)
         {
             int anchorLen = AnchorLength(pattern);
 
@@ -135,20 +137,49 @@ namespace FtsLib.Search
             if (anchorLen < MinAnchorLength)
                 return new List<string>();
 
-            string likePattern = ToLikePattern(pattern);
+            // F06: pure prefix patterns (abc*) whose semantics a binary range can
+            // reproduce exactly are served via idx_term instead of a full LIKE
+            // table scan (LIKE never uses the index — measured 75-120x slower).
+            // Ineligible patterns keep the LIKE path, byte-identical to before.
+            bool useRange = TryGetPrefixRange(pattern, out string rangeLo, out string rangeHi);
+
+            string likePattern = useRange ? null : ToLikePattern(pattern);
             var    raw         = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var seg in segments)
             {
                 using (var cmd = seg.Conn.CreateCommand())
                 {
-                    cmd.CommandText =
-                        "SELECT term FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                    cmd.Parameters.Add("@p", System.Data.DbType.String).Value = likePattern;
+                    // The scan piggybacks the chunk metadata so resolve never has to
+                    // re-fetch these rows with per-term point SELECTs (F01).
+                    if (useRange)
+                    {
+                        cmd.CommandText =
+                            "SELECT term, skip_offset, skip_count, offset, length, count " +
+                            "FROM term_index WHERE term >= @lo AND term < @hi";
+                        cmd.Parameters.Add("@lo", System.Data.DbType.String).Value = rangeLo;
+                        cmd.Parameters.Add("@hi", System.Data.DbType.String).Value = rangeHi;
+                    }
+                    else
+                    {
+                        cmd.CommandText =
+                            "SELECT term, skip_offset, skip_count, offset, length, count " +
+                            "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
+                        cmd.Parameters.Add("@p", System.Data.DbType.String).Value = likePattern;
+                    }
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
-                            raw.Add(reader.GetString(0));
+                        {
+                            string term = reader.GetString(0);
+                            raw.Add(term);
+                            cache?.Add(term, new SegmentChunk(seg,
+                                reader.GetInt64(1),   // skip_offset
+                                reader.GetInt32(2),   // skip_count
+                                reader.GetInt64(3),   // offset
+                                reader.GetInt32(4),   // length
+                                reader.GetInt32(5))); // count
+                        }
                 }
             }
 
@@ -271,24 +302,96 @@ namespace FtsLib.Search
         /// <summary>
         /// Looks up an exact term across all segments.
         /// Returns a single-element list if found, empty list otherwise.
+        /// Probes EVERY segment (no early exit) so the cached chunk list is
+        /// complete — a cache entry missing a segment would silently drop that
+        /// segment's postings at resolve time.
         /// </summary>
-        private static List<string> LookupLiteral(string term, IReadOnlyList<SegmentHandle> segments)
+        private static List<string> LookupLiteral(string term, IReadOnlyList<SegmentHandle> segments,
+                                                  TermChunkCache cache = null)
         {
             if (AnchorLength(term) < MinAnchorLength)
                 return new List<string>();
 
+            bool found = false;
             foreach (var seg in segments)
             {
                 using (var cmd = seg.Conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT 1 FROM term_index WHERE term = @t LIMIT 1";
+                    cmd.CommandText =
+                        "SELECT skip_offset, skip_count, offset, length, count " +
+                        "FROM term_index WHERE term = @t";
                     cmd.Parameters.Add("@t", System.Data.DbType.String).Value = term;
-                    var scalar = cmd.ExecuteScalar();
-                    if (scalar != null)
-                        return new List<string> { term };
+                    using (var reader = cmd.ExecuteReader())
+                        if (reader.Read())
+                        {
+                            found = true;
+                            cache?.Add(term, new SegmentChunk(seg,
+                                reader.GetInt64(0),
+                                reader.GetInt32(1),
+                                reader.GetInt64(2),
+                                reader.GetInt32(3),
+                                reader.GetInt32(4)));
+                        }
                 }
             }
-            return new List<string>();
+            return found ? new List<string> { term } : new List<string>();
+        }
+
+        // ── Prefix range scan (F06) ───────────────────────────────────
+
+        /// <summary>
+        /// Decides whether <paramref name="pattern"/> can be served by an indexed
+        /// binary range scan (<c>term &gt;= lo AND term &lt; hi</c>) with results
+        /// EXACTLY equal to the LIKE scan it replaces, and computes the bounds.
+        ///
+        /// Eligible: a pure prefix pattern — exactly one '*', at the very end,
+        /// no '?' — whose anchor contains no ASCII letters. The ASCII-letter
+        /// restriction is what guarantees equality: SQLite's LIKE is
+        /// case-insensitive for A-Z/a-z only, and a case-insensitive prefix cannot
+        /// be expressed as one contiguous BINARY-collation range. Hebrew, digits,
+        /// and punctuation have no case folding, so for them
+        /// <c>LIKE 'anchor%'</c> ≡ <c>term &gt;= anchor AND term &lt; successor</c>
+        /// under SQLite's default BINARY (UTF-8 memcmp) collation, because UTF-8
+        /// byte order equals code-point order.
+        ///
+        /// The upper bound is the anchor with its last char incremented. If the
+        /// incremented char would land in the surrogate range (invalid to encode)
+        /// or overflow, the pattern is declared ineligible and LIKE is used.
+        /// </summary>
+        internal static bool TryGetPrefixRange(string pattern, out string lo, out string hi)
+        {
+            lo = null;
+            hi = null;
+
+            // Exactly one '*', at the end, and no '?' (ExpandStar only ever sees
+            // '?'-free patterns, but guard anyway so the helper is safe on its own).
+            int star = pattern.IndexOf('*');
+            if (star < 0 || star != pattern.Length - 1) return false;
+            if (pattern.IndexOf('?') >= 0) return false;
+
+            string anchor = pattern.Substring(0, pattern.Length - 1);
+            if (anchor.Length == 0) return false;
+
+            foreach (char c in anchor)
+            {
+                // ASCII letters would engage LIKE's case folding — not range-safe.
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) return false;
+                // LIKE treats '%' and '_' as (escaped) literals; range comparison
+                // treats them literally too, so they are fine to allow.
+            }
+
+            char last = anchor[anchor.Length - 1];
+            char next = (char)(last + 1);
+            // Successor must be a directly encodable BMP code point: no overflow,
+            // no landing in the surrogate block, and the anchor itself must not
+            // end mid surrogate pair.
+            if (last >= 0xFFFF) return false;
+            if (last >= 0xD800 && last <= 0xDFFF) return false;
+            if (next >= 0xD800 && next <= 0xDFFF) return false;
+
+            lo = anchor;
+            hi = anchor.Substring(0, anchor.Length - 1) + next;
+            return true;
         }
 
         // ── Pattern translation ───────────────────────────────────────

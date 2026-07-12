@@ -42,6 +42,20 @@ namespace FtsLib.Search
             return false;
         }
 
+        public override void DrainInto(RoaringBitmap bitmap)
+        {
+            // Deletes must be tested per doc, so this cannot use the inner tight
+            // loop — but delete sets are empty in the common case, where
+            // IndexReader skips this wrapper entirely.
+            while (_inner.MoveNext())
+            {
+                int c = _inner.Current;
+                if (!_deletes.Contains(c))
+                    bitmap.Add(c);
+            }
+            _done = true;
+        }
+
         public override bool SkipTo(int target)
         {
             if (_done) return false;
