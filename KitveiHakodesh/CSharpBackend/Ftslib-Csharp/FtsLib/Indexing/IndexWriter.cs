@@ -2,6 +2,7 @@ using FtsLib.Search;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 
 namespace FtsLib.Indexing
 {
@@ -50,6 +51,34 @@ namespace FtsLib.Indexing
         /// </summary>
         public int LastFlushedLineId =>
             _store != null ? _store.LastFlushedLineId : int.MinValue;
+
+        /// <summary>
+        /// First exception thrown by a background segment write, or null if the
+        /// pipeline is healthy. When non-null, some lines the caller handed in were
+        /// never written to disk — the build must not be stamped complete, and the
+        /// final progress file must not advance past <see cref="LastFlushedLineId"/>.
+        /// </summary>
+        public Exception PipelineFault => _store?.PipelineFault;
+
+        private CancellationToken _mergeAbortToken = CancellationToken.None;
+
+        /// <summary>
+        /// Token observed by long-running LSM merges. When cancelled, an in-flight
+        /// merge aborts within a fraction of a second instead of running for minutes.
+        /// Aborting is always safe: no source segment is ever deleted before the
+        /// merged target is fully committed, so an abort leaves only .tmp garbage.
+        /// Set this to the build's CancellationToken so app shutdown never blocks
+        /// behind a merge.
+        /// </summary>
+        public CancellationToken MergeAbortToken
+        {
+            get { return _mergeAbortToken; }
+            set
+            {
+                _mergeAbortToken = value;
+                if (_store != null) _store.MergeAbortToken = value;
+            }
+        }
 
         /// <summary>
         /// Returns a consistent snapshot of all live segment paths at the moment of
@@ -180,7 +209,10 @@ namespace FtsLib.Indexing
             FlushRam();
 
             if (_store == null)
+            {
                 _store = new SegmentStore(IndexPath);
+                _store.MergeAbortToken = _mergeAbortToken;
+            }
 
             // Drain any in-flight flush before starting the purge merge so the
             // delete set is applied to all segments.
@@ -203,14 +235,26 @@ namespace FtsLib.Indexing
             {
                 FtsLog.Write("IndexWriter.Dispose", "flushing remaining RAM index and draining pipeline...");
                 FlushRam();
-                // Drain the entire background pipeline (flush write + any triggered
-                // LSM merge) before exiting.
-                _store?.WaitForMerge();
-                FtsLog.Write("IndexWriter.Dispose", "pipeline drained — all segments on disk");
             }
             catch (Exception ex)
             {
-                FtsLog.Write("IndexWriter.Dispose", "exception during drain: " + ex.Message);
+                FtsLog.Write("IndexWriter.Dispose", "exception during final flush: " + ex.Message);
+            }
+            finally
+            {
+                // Drain the entire background pipeline (flush write + any triggered
+                // LSM merge) even if the final flush failed — the caller may wipe or
+                // rebuild the directory right after Dispose returns, so no background
+                // task may still be touching it.
+                try
+                {
+                    _store?.WaitForMerge();
+                    FtsLog.Write("IndexWriter.Dispose", "pipeline drained — all segments on disk");
+                }
+                catch (Exception ex)
+                {
+                    FtsLog.Write("IndexWriter.Dispose", "exception during drain: " + ex.Message);
+                }
             }
             Console.WriteLine("[IndexWriter] Done.");
         }
@@ -222,7 +266,10 @@ namespace FtsLib.Indexing
             if (_ramIndex.Count == 0) return;
 
             if (_store == null)
+            {
                 _store = new SegmentStore(IndexPath);
+                _store.MergeAbortToken = _mergeAbortToken;
+            }
 
             Console.WriteLine($"[IndexWriter] Scheduling flush of {_ramIndex.Count:N0} terms...");
 

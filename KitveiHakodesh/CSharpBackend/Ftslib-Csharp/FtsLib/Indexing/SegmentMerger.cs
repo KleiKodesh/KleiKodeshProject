@@ -24,6 +24,16 @@ namespace FtsLib.Indexing
 
         public void MergeIfNeeded(int level)
         {
+            // Shutdown requested — do not start a new (potentially minutes-long)
+            // merge. Whatever is on disk is already consistent; the merge will
+            // simply re-trigger next session when the level is still over fanout.
+            if (_store.MergeAbortToken.IsCancellationRequested)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"MergeIfNeeded(L{level}): merge abort requested — skipping");
+                return;
+            }
+
             int count = _store.Live.LiveSegCount(level);
             FtsLog.Write("SegmentMerger",
                 $"MergeIfNeeded(L{level}): {count} segment(s), fanout={SegmentStore.Fanout}");
@@ -111,6 +121,13 @@ namespace FtsLib.Indexing
                     $"WriteMergedDat complete: {entries.Count:N0} terms in {sw.ElapsedMilliseconds}ms " +
                     $"tmpDat size={( File.Exists(tmpDat) ? new System.IO.FileInfo(tmpDat).Length.ToString("N0") + "B" : "MISSING")}");
             }
+            catch (OperationCanceledException)
+            {
+                FtsLog.Write("SegmentMerger",
+                    "merge ABORTED during WriteMergedDat (shutdown requested) — cleaning up");
+                AbortCleanup(tmpDat, tmpDb, level, newSegId);
+                throw;
+            }
             catch (Exception ex)
             {
                 FtsLog.Write("SegmentMerger",
@@ -120,6 +137,17 @@ namespace FtsLib.Indexing
             finally
             {
                 if (readers != null) CloseReaders(readers);
+            }
+
+            // Last abort window before the meta DB write. Past this point the merge
+            // runs to completion — the commit sequence (rename → delete sources →
+            // END_MERGE) is fast and must not be interrupted voluntarily.
+            if (_store.MergeAbortToken.IsCancellationRequested)
+            {
+                FtsLog.Write("SegmentMerger",
+                    "merge ABORTED before WriteMetaDb (shutdown requested) — cleaning up");
+                AbortCleanup(tmpDat, tmpDb, level, newSegId);
+                throw new OperationCanceledException("Merge aborted by shutdown request.");
             }
 
             try
@@ -212,6 +240,32 @@ namespace FtsLib.Indexing
             LogDirState("after MergeLevel L" + level + "→L" + nextLevel);
         }
 
+        /// <summary>
+        /// Cleanup after a voluntary merge abort: delete the .tmp outputs and record
+        /// ABORT_MERGE so recovery knows there is nothing pending. Runs strictly
+        /// before any commit step, so all source segments are untouched. Best-effort:
+        /// if any of this fails, the BEGIN_MERGE record stays pending and normal
+        /// crash recovery re-runs the merge from the (intact) sources at next startup.
+        /// </summary>
+        private void AbortCleanup(string tmpDat, string tmpDb, int level, int targetSegId)
+        {
+            try
+            {
+                DeleteIfExists(tmpDat);
+                DeleteIfExists(tmpDb);
+                DeleteIfExists(tmpDb + "-shm");
+                DeleteIfExists(tmpDb + "-wal");
+                _store.Wal.AbortMerge(level, targetSegId);
+                FtsLog.Write("SegmentMerger",
+                    $"ABORT_MERGE recorded for L{level} target={targetSegId} — sources untouched");
+            }
+            catch (Exception ex)
+            {
+                FtsLog.Write("SegmentMerger",
+                    "abort cleanup failed (recovery handles leftovers at next startup): " + ex.Message);
+            }
+        }
+
         private void LogDirState(string label)
         {
             try
@@ -246,6 +300,14 @@ namespace FtsLib.Indexing
             {
                 while (true)
                 {
+                    // Abort check every 4096 terms — keeps shutdown latency well
+                    // under a second even on multi-million-term merges, at zero
+                    // measurable cost. Aborting here is always safe: nothing has
+                    // been renamed or deleted yet, only the .tmp file is dirty.
+                    if ((written & 4095) == 0 &&
+                        _store.MergeAbortToken.IsCancellationRequested)
+                        throw new OperationCanceledException("Merge aborted by shutdown request.");
+
                     string minTerm = FindMinTerm(readers);
                     if (minTerm == null) break;
 

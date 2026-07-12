@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -71,6 +72,20 @@ namespace FtsLib.Indexing
         // Written by the background flush task after the segment is fully on disk.
         // Read by the indexing thread — volatile for safe cross-thread visibility.
         internal volatile int LastFlushedLineId = int.MinValue;
+
+        // Observed by long-running LSM merges. When cancelled, an in-flight merge
+        // aborts within a fraction of a second. Aborting is always safe: no source
+        // segment is ever deleted before the merged target is fully committed, so
+        // an abort leaves only .tmp garbage plus an ABORT_MERGE WAL record.
+        // Set by IndexWriter from the build's CancellationToken.
+        internal CancellationToken MergeAbortToken = CancellationToken.None;
+
+        // First exception thrown by a background flush write (not merge aborts).
+        // Once set, the next Flush() call rethrows on the indexing thread so the
+        // build fails fast instead of silently skipping a batch of lines while
+        // later flushes keep advancing LastFlushedLineId past the gap.
+        private volatile Exception _pipelineFault;
+        internal Exception PipelineFault => _pipelineFault;
 
         // Set to true when WipeIndexDirectory() is called during recovery.
         // SeforimIndex checks this after BuildIndex to know whether to reset the store.
@@ -156,18 +171,7 @@ namespace FtsLib.Indexing
             // Step 1: Scan all segment files (including .tmp) AND the WAL to find
             // the highest segment ID ever allocated, so _nextSegId is set correctly
             // even if a .tmp file or a WAL-mentioned segment is about to be deleted.
-            int maxSegId = -1;
-            foreach (var file in Directory.GetFiles(_dir, "seg_*.*"))
-            {
-                string name  = Path.GetFileNameWithoutExtension(file);
-                // Handle both "seg_0_5.dat" and "seg_0_5.dat.tmp"
-                if (name.EndsWith(".dat")) name = name.Substring(0, name.Length - 4);
-                var parts = name.Split('_');
-                if (parts.Length == 3 && int.TryParse(parts[2], out int segId))
-                {
-                    if (segId > maxSegId) maxSegId = segId;
-                }
-            }
+            int maxSegId = ScanMaxSegId();
 
             // Also scan the WAL for any target segment IDs mentioned in BEGIN_MERGE
             // entries — these may be higher than any file on disk if a merge was
@@ -251,38 +255,57 @@ namespace FtsLib.Indexing
             string targetDb  = Live.SegDbPath(op.Level + 1, op.Target);
 
             // Determine how far the merge got before the crash.
-            // Deletion order: sources are deleted BEFORE END_MERGE is written.
-            // So a PendingMerge entry in the WAL means BEGIN_MERGE was written
-            // but END_MERGE was not yet written — the merge was interrupted before
-            // it fully committed.
+            // The commit order in SegmentMerger.MergeLevel is strict:
+            //   step 1: rename BOTH .tmp files → final names
+            //   step 2: delete source segments (one by one)
+            //   step 3: write END_MERGE
             //
-            // Possible crash states:
-            //   A) Target exists, sources exist  → crash during write or before sources
-            //                                      were deleted; delete target, re-run merge
-            //   B) Target exists, sources gone   → crash after sources deleted but before
-            //                                      END_MERGE was written; target is complete
-            //                                      — register it and clear WAL
-            //   C) Target missing, sources exist → crash before File.Move; re-run merge
-            //   D) Target missing, sources gone  → unrecoverable; wipe and rebuild
-            bool targetExists  = File.Exists(targetDat) && File.Exists(targetDb);
-            bool sourcesExist  = false;
-            foreach (int sid in op.Sources)
-            {
-                string srcDat = Live.SegDatPath(op.Level, sid);
-                if (File.Exists(srcDat))
-                {
-                    sourcesExist = true;
-                    break;
-                }
-            }
+            // Therefore: if both target files exist at their FINAL names and pass
+            // full validation, step 1 completed and the target contains ALL data
+            // from every source — regardless of how many sources step 2 already
+            // deleted. Trust the target (generalized Case B).
+            //
+            // The old logic only trusted the target when every source was gone.
+            // A kill landing mid-step-2 (some sources deleted, some not) deleted
+            // the complete target and re-merged only the surviving sources —
+            // permanently losing the deleted sources' data ("results from early
+            // segments disappear").
+            //
+            // Remaining cases:
+            //   - target missing/invalid, ALL sources present → step 1 never
+            //     completed, nothing was deleted; delete partial target, re-run.
+            //   - target missing/invalid, ANY source missing  → unrecoverable;
+            //     wipe and rebuild.
+            bool targetExists   = File.Exists(targetDat) && File.Exists(targetDb);
+            bool targetComplete = targetExists && ValidateSegmentFully(targetDat, targetDb);
 
-            if (targetExists && !sourcesExist)
-            {
-                // Case B: sources already deleted, target is complete — register it.
-                Console.WriteLine($"[Recovery] Merge was complete (sources gone, target exists) — registering target and clearing WAL");
+            if (targetExists && !targetComplete)
                 FtsLog.Write("SegmentStore.Recover",
-                    $"Case B: sources gone, target seg_{op.Level+1}_{op.Target} exists — registering as live");
+                    $"target seg_{op.Level + 1}_{op.Target} exists at final path but FAILED full validation — treating as partial");
+
+            if (targetComplete)
+            {
+                // Generalized Case B: the target is fully committed. Register it,
+                // then finish step 2 by deleting whatever sources remain. Deleting
+                // sources BEFORE writing END_MERGE keeps this idempotent: a crash
+                // mid-cleanup lands back here on the next startup.
+                Console.WriteLine($"[Recovery] Merge target is complete — registering target and removing leftover sources");
+                FtsLog.Write("SegmentStore.Recover",
+                    $"Generalized Case B: target seg_{op.Level + 1}_{op.Target} validated — registering as live, deleting leftover sources");
                 Live.AddToLive(op.Level + 1, op.Target);
+                foreach (int sid in op.Sources)
+                {
+                    string srcDat = Live.SegDatPath(op.Level, sid);
+                    string srcDb  = Live.SegDbPath(op.Level, sid);
+                    if (File.Exists(srcDat) || File.Exists(srcDb))
+                        FtsLog.Write("SegmentStore.Recover",
+                            $"  deleting leftover source seg_{op.Level}_{sid}");
+                    DeleteIfExists(srcDat);
+                    DeleteIfExists(srcDb);
+                    DeleteIfExists(srcDb + "-shm");
+                    DeleteIfExists(srcDb + "-wal");
+                    Live.RemoveFromLive(op.Level, sid);
+                }
                 // Write END_MERGE so the WAL is well-formed, then clear it entirely
                 // so the next startup does not re-enter recovery unnecessarily.
                 Wal.Open();
@@ -300,8 +323,8 @@ namespace FtsLib.Indexing
                 return;
             }
 
-            // Sources still exist (or target is missing/partial) — delete any partial
-            // target and re-run the merge from the source segments.
+            // Target missing or invalid — it contributed nothing durable and step 2
+            // (source deletion) cannot have started. Delete any partial target files.
             DeleteIfExists(targetDat);
             DeleteIfExists(targetDb);
             // Also delete SQLite's WAL files
@@ -309,21 +332,36 @@ namespace FtsLib.Indexing
             DeleteIfExists(targetDb + "-wal");
             Live.RemoveFromLive(op.Level + 1, op.Target);
 
+            // A re-run only reproduces the full target if EVERY source survived.
+            bool allSourcesExist = true;
             foreach (int sid in op.Sources)
-                if (File.Exists(Live.SegDatPath(op.Level, sid)))
-                    Live.AddToLive(op.Level, sid);
-            if (!sourcesExist)
             {
-                // Neither target nor sources exist — the index is unrecoverable.
-                Console.WriteLine("[Recovery] Neither merge target nor source segments exist — wiping index for rebuild");
+                if (!File.Exists(Live.SegDatPath(op.Level, sid)) ||
+                    !File.Exists(Live.SegDbPath(op.Level, sid)))
+                {
+                    allSourcesExist = false;
+                    FtsLog.Write("SegmentStore.Recover",
+                        $"source seg_{op.Level}_{sid} is missing (dat or db)");
+                    break;
+                }
+            }
+
+            if (!allSourcesExist)
+            {
+                // Some source data survives neither in a source file nor in a
+                // complete target — the index is unrecoverable without data loss.
+                Console.WriteLine("[Recovery] Merge target incomplete and source segments missing — wiping index for rebuild");
                 FtsLog.Write("SegmentStore.Recover",
-                    "Case D: BOTH target and sources missing — wiping directory and throwing CorruptIndexException");
+                    "Case D: target incomplete AND sources missing — wiping directory and throwing CorruptIndexException");
                 WipeIndexDirectory();
                 throw new CorruptIndexException("Merge source segments missing and target incomplete — index wiped for rebuild.", null);
             }
 
+            foreach (int sid in op.Sources)
+                Live.AddToLive(op.Level, sid);
+
             FtsLog.Write("SegmentStore.Recover",
-                $"Case A/C: re-running merge from sources — targetExists={targetExists} sourcesExist={sourcesExist}");
+                $"Case A/C: re-running merge from sources — targetExists={targetExists} allSourcesExist={allSourcesExist}");
 
             Wal.Open();
             try
@@ -354,6 +392,95 @@ namespace FtsLib.Indexing
                 FtsLog.Write("SegmentStore.Recover",
                     "Case A/C + PendingForceMerge — resuming remaining levels");
                 _forceMerger.ResumeForceMerge();
+            }
+        }
+
+        /// <summary>
+        /// Rebuilds the live segment state from the files on disk WITHOUT mutating
+        /// anything — no .tmp cleanup, no WAL replay, no deletions, no merge re-run.
+        /// Used when another process holds the index write lock: this process can
+        /// still search whatever is currently on disk, and full recovery runs later
+        /// under the lock (next BuildIndex, or the next SeforimIndex construction
+        /// after the other process finishes).
+        /// </summary>
+        public void RecoverReadOnly()
+        {
+            FtsLog.Write("SegmentStore.RecoverReadOnly",
+                "read-only live-state rebuild (write lock held elsewhere) in " + _dir);
+            Live.RebuildFromDisk(ScanMaxSegId());
+        }
+
+        /// <summary>
+        /// Scans all segment files (including .tmp) for the highest segment ID ever
+        /// allocated, so _nextSegId never reuses an ID even after .tmp cleanup.
+        /// </summary>
+        private int ScanMaxSegId()
+        {
+            int maxSegId = -1;
+            foreach (var file in Directory.GetFiles(_dir, "seg_*.*"))
+            {
+                string name = Path.GetFileNameWithoutExtension(file);
+                // Handle both "seg_0_5.dat" and "seg_0_5.dat.tmp"
+                if (name.EndsWith(".dat")) name = name.Substring(0, name.Length - 4);
+                var parts = name.Split('_');
+                if (parts.Length == 3 && int.TryParse(parts[2], out int segId))
+                {
+                    if (segId > maxSegId) maxSegId = segId;
+                }
+            }
+            return maxSegId;
+        }
+
+        /// <summary>
+        /// Full structural validation of a segment pair. Scans every record of the
+        /// .dat file to its end and cross-checks the .db term index (row count must
+        /// match the term count, and the maximum posting extent must fit inside the
+        /// .dat file). Used by merge recovery before trusting a target segment that
+        /// has no END_MERGE record — a rename can land before the data is durable
+        /// (e.g. power loss), so existence at the final path alone is not proof.
+        /// </summary>
+        private static bool ValidateSegmentFully(string datPath, string dbPath)
+        {
+            try
+            {
+                long datLen = new FileInfo(datPath).Length;
+                if (datLen == 0) return false;
+
+                // Note: a truncated final record does not throw — BinaryReader
+                // returns short reads. The .db row-count cross-check below catches
+                // that case because the truncated record is not counted.
+                long termCount = 0;
+                using (var reader = new SegmentReader(datPath))
+                    while (reader.MoveNext()) termCount++;
+                if (termCount == 0) return false;
+
+                using (var conn = new SQLiteConnection(
+                    $"Data Source={dbPath};Version=3;Read Only=True;FailIfMissing=True;"))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        cmd.CommandText =
+                            "SELECT COUNT(*), COALESCE(MAX(offset + length), 0) FROM term_index";
+                        using (var r = cmd.ExecuteReader())
+                        {
+                            if (!r.Read()) return false;
+                            long rows   = r.GetInt64(0);
+                            long maxEnd = r.GetInt64(1);
+                            if (rows != termCount) return false;
+                            if (maxEnd > datLen) return false;
+                        }
+                    }
+                }
+                FtsLog.Write("SegmentStore.ValidateSegmentFully",
+                    $"{Path.GetFileName(datPath)} OK — {termCount:N0} terms, {datLen:N0}B");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                FtsLog.Write("SegmentStore.ValidateSegmentFully",
+                    $"{Path.GetFileName(datPath)} FAILED: {ex.GetType().Name}: {ex.Message}");
+                return false;
             }
         }
 
@@ -435,6 +562,20 @@ namespace FtsLib.Indexing
             // Back-pressure: block until the previous flush+merge cycle is free.
             _flushSlot.Wait();
 
+            // Fail fast: if a previous background segment write failed, those lines
+            // never reached disk. Continuing would let later flushes advance
+            // LastFlushedLineId past the gap, so the progress file would claim
+            // lines that were never indexed. Abort the build instead — the progress
+            // file still points at the last segment that truly completed.
+            Exception fault = _pipelineFault;
+            if (fault != null)
+            {
+                _flushSlot.Release();
+                throw new IOException(
+                    "A previous background segment write failed — aborting build. " +
+                    "Resume will continue from the last fully flushed segment.", fault);
+            }
+
             int    segId   = Live.NextSegId();
             string datPath = Live.SegDatPath(0, segId);
             string dbPath  = Live.SegDbPath(0, segId);
@@ -477,6 +618,15 @@ namespace FtsLib.Indexing
                             {
                                 _merger.MergeIfNeeded(0);
                             }
+                            catch (OperationCanceledException)
+                            {
+                                // Shutdown requested mid-merge. The merge already
+                                // cleaned up its .tmp files and recorded ABORT_MERGE;
+                                // no source segment was touched. The flushed segment
+                                // itself is complete, so this is NOT a pipeline fault.
+                                FtsLog.Write("SegmentStore.Flush.BgTask",
+                                    "merge aborted by shutdown request — flushed segment is intact");
+                            }
                             finally
                             {
                                 _searchMergeLock.ExitWriteLock();
@@ -490,6 +640,16 @@ namespace FtsLib.Indexing
                         }
                         FtsLog.Write("SegmentStore.Flush.BgTask",
                             $"flush+merge cycle done for seg_0_{segId} — totalLiveSegs={Live.TotalLiveSegs()}");
+                    }
+                    catch (Exception ex)
+                    {
+                        // Segment write (or merge) failed. Record the fault so the
+                        // next Flush() aborts the build on the indexing thread and
+                        // WaitForMerge() knows not to clear the WAL.
+                        _pipelineFault = ex;
+                        FtsLog.Write("SegmentStore.Flush.BgTask",
+                            $"PIPELINE FAULT for seg_0_{segId}: {ex.GetType().Name}: {ex.Message}");
+                        throw;
                     }
                     finally
                     {
@@ -519,8 +679,19 @@ namespace FtsLib.Indexing
             try { task.Wait(); }
             catch (AggregateException ae)
             {
-                Console.WriteLine("[SegmentStore] Pipeline exception (non-fatal): " + ae.InnerException?.Message);
+                Console.WriteLine("[SegmentStore] Pipeline exception: " + ae.InnerException?.Message);
                 // Do not clear the WAL if the pipeline faulted — we may need it for recovery.
+                return;
+            }
+
+            // A fault in an EARLIER task of the chain does not fault the tail task,
+            // so task.Wait() above succeeds even when a mid-build flush failed.
+            // Check the recorded fault explicitly before declaring the drain clean.
+            if (_pipelineFault != null)
+            {
+                Console.WriteLine("[SegmentStore] Pipeline previously faulted: " + _pipelineFault.Message);
+                FtsLog.Write("SegmentStore.WaitForMerge",
+                    "pipeline drained but a flush previously FAULTED — WAL preserved: " + _pipelineFault.Message);
                 return;
             }
 

@@ -151,6 +151,17 @@ namespace FtsLib.Indexing
             do
             {
                 anyProgress = false;
+
+                // Shutdown requested — stop between level merges. Every completed
+                // pass is fully committed, so stopping here leaves a valid
+                // (just not fully collapsed) index.
+                if (_store.MergeAbortToken.IsCancellationRequested)
+                {
+                    FtsLog.Write("ForceMerger.MergeLevelsIncremental",
+                        "merge abort requested — stopping force merge between passes");
+                    break;
+                }
+
                 var levels = _store.Live.GetLevelsWithMultiple();
                 if (levels.Count == 0) break;
 

@@ -1,61 +1,56 @@
-﻿using FtsLib.Indexing;
+using FtsLib.Indexing;
 using FtsLib.SeforimDb;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace FtsLibTest
 {
     /// <summary>
-    /// Harsh crash-recovery test for force merge.
+    /// Harsh crash-recovery test for merges.
     ///
-    /// Uses index_full_backup_before_merge (4 segments, pre-merge) as the
-    /// stable source. For every crash scenario it:
-    ///   1. Copies the backup into a fresh work directory.
-    ///   2. Manually mutilates the directory to simulate the exact crash state.
+    /// Uses index_full_backup_before_merge (3× L1 segments + 1× L2 segment,
+    /// pre-merge) as the stable source. For every crash scenario it:
+    ///   1. Copies the backup into a fresh per-scenario work directory.
+    ///   2. Recreates the exact crash state. Where the scenario involves a merge
+    ///      target at its FINAL path, the target is produced by a REAL merge of
+    ///      the real sources (via internal SegmentStore/SegmentMerger access) —
+    ///      never by planting a copied file — so the recovery invariants match
+    ///      what a genuine crash produces.
     ///   3. Constructs a new SeforimIndex (triggers Recover()).
-    ///   4. Runs the probe search — must find id=548 in results for "כי ביצחק".
+    ///   4. Verifies the FULL result-ID set of every probe query against the
+    ///      pristine backup — a single missing line ID anywhere in the doc-ID
+    ///      space fails the scenario. (The old single-ID probe could not detect
+    ///      loss of an entire source segment.)
     ///   5. Reports PASS / FAIL.
     ///
-    /// Crash scenarios tested (all phases of the commit sequence):
-    ///   A  — killed before merge starts (no WAL, no tmp)
-    ///   B  — killed after WAL BEGIN_MERGE, before any file written
-    ///   C  — killed while writing .dat.tmp (partial/truncated file)
-    ///   D  — killed after .dat.tmp complete, before .db.tmp written
-    ///   E  — killed after .db.tmp complete, before File.Move
-    ///   F  — killed after .dat renamed to final, before .db renamed
-    ///   G  — killed after both renamed, before any source deleted
-    ///   H  — killed after first source deleted, rest remain
-    ///   I  — killed after ALL sources deleted, before END_MERGE  (Case B)
-    ///   J  — Pass 1 fully complete, killed before Pass 2 writes anything
-    ///   K  — Pass 1 complete, killed mid-Pass-2 .dat.tmp write
-    ///   L  — Pass 1 complete, Pass 2 Case B (sources gone, target exists, no END_MERGE)
-    ///   M  — WAL truncated mid-line (partial write)
-    ///   N  — WAL has BEGIN_MERGE but target AND sources both missing (Case D — must wipe+rebuild)
-    ///   O  — Stale -shm/-wal sidecar files next to existing segments
-    ///   P  — Multiple stacked BEGIN_MERGE without END_MERGE (old-format WAL)
+    /// Scenarios run in PARALLEL (each in its own work directory).
     ///
     /// Usage:
-    ///   FtsLibTest.exe crashmergetest
+    ///   FtsLibTest.exe crashmergetest [--seq] [--dop N]
     /// </summary>
     internal static class CrashMergeTest
     {
-        private const string ProbeQuery      = "כי ביצחק";
-        private const int    ProbeRequiredId = 548;
+        // Probe queries whose full result-ID sets are compared against the backup.
+        //   "כי ביצחק" — the historical regression probe (multi-term AND, id 548)
+        //   "אמר"      — ubiquitous single term: hits every doc-ID range, so the
+        //                loss of ANY source segment shows up as missing IDs.
+        private static readonly string[] ProbeQueries = { "כי ביצחק", "אמר" };
 
-        // The stable source index — 4 segments, pre-merge state
+        // The stable source index — 3× L1 + 1× L2 segments, pre-merge state
         private static string BackupDir =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
                 "index_full_backup_before_merge");
 
-        // Working directory — wiped and recreated for every scenario
-        private static string WorkDir =>
+        // Per-scenario working directories — wiped and recreated for every run
+        private static string WorkDirRoot =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
                 "index_crashtest_work");
 
-        // Log directory
         private static string LogDir =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
                 "merge_test_logs");
@@ -63,6 +58,14 @@ namespace FtsLibTest
         public static void Run(string[] args)
         {
             Console.OutputEncoding = Encoding.UTF8;
+
+            bool sequential = Array.Exists(args, a => a.Equals("--seq", StringComparison.OrdinalIgnoreCase));
+            int  dop        = 4;
+            for (int i = 0; i < args.Length - 1; i++)
+                if (args[i].Equals("--dop", StringComparison.OrdinalIgnoreCase) &&
+                    int.TryParse(args[i + 1], out int d) && d > 0)
+                    dop = d;
+            if (sequential) dop = 1;
 
             if (!Directory.Exists(BackupDir) ||
                 Directory.GetFiles(BackupDir, "seg_*.dat").Length == 0)
@@ -81,50 +84,85 @@ namespace FtsLibTest
 
             Console.WriteLine();
             Console.WriteLine("╔══ CRASH MERGE TEST ════════════════════════════════════════════════");
-            Console.WriteLine($"║  Source  : {BackupDir}");
-            Console.WriteLine($"║  Work    : {WorkDir}");
-            Console.WriteLine($"║  DB      : {dbPath}");
-            Console.WriteLine($"║  Log     : {logPath}");
+            Console.WriteLine($"║  Source   : {BackupDir}");
+            Console.WriteLine($"║  Work     : {WorkDirRoot}_<scenario>");
+            Console.WriteLine($"║  DB       : {dbPath}");
+            Console.WriteLine($"║  Log      : {logPath}");
+            Console.WriteLine($"║  Parallel : {dop} scenario(s) at a time");
             Console.WriteLine("╠════════════════════════════════════════════════════════════════════");
 
             FtsLog.Separator("CRASH MERGE TEST START");
 
-            var scenarios = BuildScenarios();
-            int passed = 0, failed = 0;
-            var failures = new List<string>();
-
-            foreach (var sc in scenarios)
+            // ── Expected result sets from the pristine backup ─────────────────────
+            Console.WriteLine("║  Computing expected result sets from backup...");
+            var expected = new Dictionary<string, HashSet<int>>();
             {
-                Console.WriteLine($"║");
-                Console.WriteLine($"║  ── Scenario {sc.Id}: {sc.Name}");
-                FtsLog.Separator($"SCENARIO {sc.Id}: {sc.Name}");
-
-                bool ok = RunScenario(sc, dbPath);
-                if (ok)
+                var backupIndex = new SeforimIndex(BackupDir, dbPath);
+                foreach (var q in ProbeQueries)
                 {
-                    passed++;
-                    Console.WriteLine($"║     ✓ PASS");
-                    FtsLog.Write("CrashMergeTest", $"Scenario {sc.Id} PASS");
-                }
-                else
-                {
-                    failed++;
-                    failures.Add($"{sc.Id}: {sc.Name}");
-                    Console.WriteLine($"║     ✗ FAIL  ← CORRUPTION / WRONG RESULT");
-                    FtsLog.Write("CrashMergeTest", $"Scenario {sc.Id} FAIL");
+                    var sw = Stopwatch.StartNew();
+                    var set = new HashSet<int>(backupIndex.SearchIds(q));
+                    sw.Stop();
+                    expected[q] = set;
+                    Console.WriteLine($"║    \"{q}\" → {set.Count:N0} ids  ({sw.ElapsedMilliseconds}ms)");
+                    FtsLog.Write("CrashMergeTest", $"expected[{q}] = {set.Count:N0} ids");
+                    if (set.Count == 0)
+                    {
+                        Console.WriteLine($"║  ABORT: probe \"{q}\" returned 0 results on the backup — backup is unusable.");
+                        return;
+                    }
                 }
             }
 
-            // Clean up work dir on full pass
-            if (failed == 0)
-                try { Directory.Delete(WorkDir, recursive: true); } catch { }
+            var scenarios = BuildScenarios();
+            var results   = new List<(Scenario sc, bool ok, string output)>();
+            var resultsLock = new object();
+
+            var swAll = Stopwatch.StartNew();
+            Parallel.ForEach(
+                scenarios,
+                new ParallelOptions { MaxDegreeOfParallelism = dop },
+                sc =>
+                {
+                    var buf = new StringBuilder();
+                    bool ok;
+                    try
+                    {
+                        ok = RunScenario(sc, dbPath, expected, buf);
+                    }
+                    catch (Exception ex)
+                    {
+                        buf.AppendLine($"║     scenario runner threw: {ex.GetType().Name}: {ex.Message}");
+                        ok = false;
+                    }
+                    lock (resultsLock)
+                    {
+                        results.Add((sc, ok, buf.ToString()));
+                        Console.WriteLine($"║  [{results.Count,2}/{scenarios.Count}] {(ok ? "✓ PASS" : "✗ FAIL")}  {sc.Id}: {sc.Name}");
+                    }
+                });
+            swAll.Stop();
+
+            // ── Detailed per-scenario output, in scenario order ───────────────────
+            results.Sort((a, b) => string.CompareOrdinal(a.sc.Id, b.sc.Id));
+            Console.WriteLine("║");
+            Console.WriteLine("╠══ DETAILS ═════════════════════════════════════════════════════════");
+            int passed = 0, failed = 0;
+            var failures = new List<string>();
+            foreach (var (sc, ok, output) in results)
+            {
+                Console.WriteLine($"║  ── Scenario {sc.Id}: {sc.Name}  →  {(ok ? "✓ PASS" : "✗ FAIL")}");
+                if (output.Length > 0) Console.Write(output);
+                if (ok) passed++;
+                else { failed++; failures.Add($"{sc.Id}: {sc.Name}"); }
+            }
 
             Console.WriteLine("║");
             Console.WriteLine("╠══ SUMMARY ═════════════════════════════════════════════════════════");
-            Console.WriteLine($"║  {scenarios.Count} scenarios: {passed} passed, {failed} FAILED");
+            Console.WriteLine($"║  {scenarios.Count} scenarios: {passed} passed, {failed} FAILED  ({TestHelpers.FormatElapsed(swAll.Elapsed)})");
             if (failures.Count > 0)
             {
-                Console.WriteLine("║  Failed scenarios:");
+                Console.WriteLine("║  Failed scenarios (work dirs preserved for inspection):");
                 foreach (var f in failures)
                     Console.WriteLine($"║    ✗ {f}");
             }
@@ -136,23 +174,27 @@ namespace FtsLibTest
 
         // ── Scenario runner ───────────────────────────────────────────────────
 
-        private static bool RunScenario(Scenario sc, string dbPath)
+        private static bool RunScenario(Scenario sc, string dbPath,
+            Dictionary<string, HashSet<int>> expected, StringBuilder buf)
         {
-            // 1. Start from clean backup copy
-            PrepareWorkDir();
-            FtsLog.Write("CrashMergeTest", $"work dir prepared from backup");
+            string workDir = WorkDirRoot + "_" + sc.Id;
+            FtsLog.Separator($"SCENARIO {sc.Id}: {sc.Name}");
 
-            // 2. Mutilate to simulate crash state
+            // 1. Start from a clean backup copy
+            PrepareWorkDir(workDir);
+            FtsLog.Write("CrashMergeTest", $"[{sc.Id}] work dir prepared from backup");
+
+            // 2. Recreate the crash state
             try
             {
-                sc.Setup(WorkDir, dbPath);
-                FtsLog.Write("CrashMergeTest", $"setup complete");
-                LogDirState("after setup");
+                sc.Setup(workDir, dbPath);
+                FtsLog.Write("CrashMergeTest", $"[{sc.Id}] setup complete");
+                LogDirState(sc.Id, workDir, "after setup");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"║     Setup threw: {ex.Message}");
-                FtsLog.Write("CrashMergeTest", $"setup EXCEPTION: {ex.Message}");
+                buf.AppendLine($"║     Setup threw: {ex.Message}");
+                FtsLog.Write("CrashMergeTest", $"[{sc.Id}] setup EXCEPTION: {ex}");
                 return false;
             }
 
@@ -160,106 +202,181 @@ namespace FtsLibTest
             SeforimIndex index;
             try
             {
-                index = new SeforimIndex(WorkDir, dbPath);
-                FtsLog.Write("CrashMergeTest", "SeforimIndex constructed OK");
-                LogDirState("after recovery");
+                index = new SeforimIndex(workDir, dbPath);
+                FtsLog.Write("CrashMergeTest", $"[{sc.Id}] SeforimIndex constructed OK");
+                LogDirState(sc.Id, workDir, "after recovery");
             }
             catch (Exception ex)
             {
-                // CorruptIndexException with wipe is only acceptable for Case D
-                if (sc.ExpectWipe && ex is FtsLib.Indexing.CorruptIndexException)
-                {
-                    FtsLog.Write("CrashMergeTest", $"got expected CorruptIndexException (Case D wipe): {ex.Message}");
-                    Console.WriteLine($"║     Expected wipe (Case D): {ex.Message.Split('\n')[0]}");
-                    return true; // wipe is the correct behaviour for this scenario
-                }
-                Console.WriteLine($"║     SeforimIndex threw: {ex.GetType().Name}: {ex.Message}");
-                FtsLog.Write("CrashMergeTest", $"SeforimIndex EXCEPTION: {ex.GetType().Name}: {ex.Message}");
+                buf.AppendLine($"║     SeforimIndex threw: {ex.GetType().Name}: {ex.Message}");
+                FtsLog.Write("CrashMergeTest", $"[{sc.Id}] SeforimIndex EXCEPTION: {ex.GetType().Name}: {ex.Message}");
                 return false;
             }
 
-            // If we expected a wipe but didn't get one, that's a fail
-            if (sc.ExpectWipe)
-            {
-                Console.WriteLine("║     Expected CorruptIndexException (wipe) but none thrown");
-                FtsLog.Write("CrashMergeTest", "expected wipe but SeforimIndex succeeded — FAIL");
-                return false;
-            }
-
-            // 4. Verify WAL is gone after recovery
-            string walPath = Path.Combine(WorkDir, "wal.log");
+            // 4. WAL must be gone (or empty) after recovery
+            string walPath = Path.Combine(workDir, "wal.log");
             if (File.Exists(walPath))
             {
                 string content = File.ReadAllText(walPath);
-                // WAL must be empty or absent after clean recovery
                 if (!string.IsNullOrWhiteSpace(content))
                 {
-                    Console.WriteLine($"║     WAL not cleared after recovery! Content: {content.Substring(0, Math.Min(100, content.Length))}");
-                    FtsLog.Write("CrashMergeTest", $"WAL still has content after recovery: {content}");
+                    buf.AppendLine($"║     WAL not cleared after recovery! Content: {content.Substring(0, Math.Min(100, content.Length))}");
+                    FtsLog.Write("CrashMergeTest", $"[{sc.Id}] WAL still has content after recovery: {content}");
                     return false;
                 }
             }
 
-            // 5. Probe search
-            return RunProbe(index, sc.Id, sc.AllowEmpty);
+            // 5. Full result-set verification against the backup
+            bool ok = VerifyFullResults(index, sc, expected, buf);
+
+            // 6. Clean up the work dir on pass; preserve it on failure
+            if (ok)
+                try { Directory.Delete(workDir, recursive: true); } catch { }
+            else
+                buf.AppendLine($"║     work dir preserved: {workDir}");
+
+            return ok;
         }
 
-        private static bool RunProbe(SeforimIndex index, string scenarioId, bool allowEmpty = false)
+        private static bool VerifyFullResults(SeforimIndex index, Scenario sc,
+            Dictionary<string, HashSet<int>> expected, StringBuilder buf)
         {
-            int  count = 0;
-            bool found = false;
-            var  sw    = Stopwatch.StartNew();
+            foreach (var q in ProbeQueries)
+            {
+                HashSet<int> got;
+                var sw = Stopwatch.StartNew();
+                try
+                {
+                    got = new HashSet<int>(index.SearchIds(q));
+                }
+                catch (Exception ex)
+                {
+                    buf.AppendLine($"║     search \"{q}\" threw: {ex.GetType().Name}: {ex.Message}");
+                    FtsLog.Write("CrashMergeTest", $"[{sc.Id}] search EXCEPTION: {ex.Message}");
+                    return false;
+                }
+                sw.Stop();
+
+                if (sc.AllowEmpty && got.Count == 0)
+                {
+                    buf.AppendLine($"║     \"{q}\": 0 results (index wiped — expected) ✓ ({sw.ElapsedMilliseconds}ms)");
+                    continue;
+                }
+
+                var exp = expected[q];
+                if (!got.SetEquals(exp))
+                {
+                    int missing = exp.Count(id => !got.Contains(id));
+                    int extra   = got.Count(id => !exp.Contains(id));
+                    var sampleMissing = exp.Where(id => !got.Contains(id)).Take(5).ToArray();
+                    buf.AppendLine($"║     \"{q}\": MISMATCH — {missing:N0} missing, {extra:N0} extra " +
+                                   $"(expected {exp.Count:N0}, got {got.Count:N0})  ({sw.ElapsedMilliseconds}ms)");
+                    if (sampleMissing.Length > 0)
+                        buf.AppendLine($"║       first missing ids: {string.Join(", ", sampleMissing)}");
+                    FtsLog.Write("CrashMergeTest",
+                        $"[{sc.Id}] \"{q}\" MISMATCH missing={missing} extra={extra} expected={exp.Count} got={got.Count}");
+                    return false;
+                }
+
+                buf.AppendLine($"║     \"{q}\": {got.Count:N0} ids — exact match ✓ ({sw.ElapsedMilliseconds}ms)");
+                FtsLog.Write("CrashMergeTest", $"[{sc.Id}] \"{q}\" exact match ({got.Count:N0} ids)");
+            }
+            return true;
+        }
+
+        // ── Real-merge helpers (via InternalsVisibleTo) ───────────────────────
+
+        /// <summary>
+        /// Runs a REAL level merge to full completion (BEGIN_MERGE, k-way merge,
+        /// rename, source deletion, END_MERGE) and clears the WAL — exactly what
+        /// the production pipeline does. Crash states are then reconstructed by
+        /// restoring stashed source files and rewriting the WAL.
+        /// </summary>
+        private static void RunRealMergeLevel(string dir, int level, int targetSegId)
+        {
+            var store = new SegmentStore(dir);
+            store.RecoverReadOnly(); // rebuild live state from disk, no mutations
+            store.Wal.Open();
             try
             {
-                foreach (var r in index.Search(ProbeQuery))
+                store.Merger.MergeLevel(level, targetSegId);
+            }
+            finally
+            {
+                store.Wal.Clear();
+            }
+        }
+
+        /// <summary>Copies all segment files of a level to a stash directory (outside the work dir).</summary>
+        private static string StashLevel(string dir, int level)
+        {
+            string stash = dir + "_stash_L" + level;
+            if (Directory.Exists(stash)) Directory.Delete(stash, recursive: true);
+            Directory.CreateDirectory(stash);
+            foreach (var f in Directory.GetFiles(dir, $"seg_{level}_*.*"))
+                File.Copy(f, Path.Combine(stash, Path.GetFileName(f)));
+            return stash;
+        }
+
+        /// <summary>Restores selected segment IDs of a level from the stash into the work dir.</summary>
+        private static void RestoreFromStash(string stash, string dir, int level, IEnumerable<int> segIds)
+        {
+            foreach (int sid in segIds)
+            {
+                foreach (var ext in new[] { ".dat", ".db" })
                 {
-                    count++;
-                    if (r.LineId == ProbeRequiredId) found = true;
+                    string src = Path.Combine(stash, $"seg_{level}_{sid}{ext}");
+                    if (File.Exists(src))
+                        File.Copy(src, Path.Combine(dir, $"seg_{level}_{sid}{ext}"), overwrite: true);
                 }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"║     Search threw: {ex.GetType().Name}: {ex.Message}");
-                FtsLog.Write("CrashMergeTest", $"[{scenarioId}] search EXCEPTION: {ex.Message}");
-                return false;
-            }
-            sw.Stop();
+        }
 
-            FtsLog.Write("CrashMergeTest",
-                $"[{scenarioId}] probe: count={count} found={found} allowEmpty={allowEmpty} ms={sw.ElapsedMilliseconds}");
+        private static void DeleteStash(string stash)
+        {
+            try { if (Directory.Exists(stash)) Directory.Delete(stash, recursive: true); } catch { }
+        }
 
-            if (allowEmpty && count == 0)
+        /// <summary>
+        /// Produces the canonical "killed during commit step 2" state:
+        /// a REAL merged target at its final path, WAL showing BEGIN_MERGE without
+        /// END_MERGE, and the given subset of source segments restored on disk.
+        /// </summary>
+        private static void SetupRealMidCommitState(
+            string dir, int level, int targetSegId, Func<List<int>, IEnumerable<int>> survivorsOf)
+        {
+            var srcIds = AllSegments(dir, level).ConvertAll(s => s.Id);
+            string stash = StashLevel(dir, level);
+            try
             {
-                Console.WriteLine($"║     count=0 (index wiped — expected) ✓ ({sw.ElapsedMilliseconds}ms)");
-                return true;
+                RunRealMergeLevel(dir, level, targetSegId); // sources now deleted, target committed
+                RestoreFromStash(stash, dir, level, survivorsOf(srcIds));
+                WriteWal(dir,
+                    $"BEGIN_MERGE level={level} sources={string.Join(",", srcIds)} target={targetSegId}\n");
             }
-
-            if (!found)
+            finally
             {
-                Console.WriteLine($"║     count={count}, id={ProbeRequiredId} MISSING ({sw.ElapsedMilliseconds}ms)");
-                return false;
+                DeleteStash(stash);
             }
-            Console.WriteLine($"║     count={count}, id={ProbeRequiredId} ✓ ({sw.ElapsedMilliseconds}ms)");
-            return true;
         }
 
         // ── Work dir helpers ──────────────────────────────────────────────────
 
-        private static void PrepareWorkDir()
+        private static void PrepareWorkDir(string workDir)
         {
-            if (Directory.Exists(WorkDir))
-                Directory.Delete(WorkDir, recursive: true);
-            Directory.CreateDirectory(WorkDir);
+            if (Directory.Exists(workDir))
+                Directory.Delete(workDir, recursive: true);
+            Directory.CreateDirectory(workDir);
             foreach (var file in Directory.GetFiles(BackupDir))
-                File.Copy(file, Path.Combine(WorkDir, Path.GetFileName(file)));
+                File.Copy(file, Path.Combine(workDir, Path.GetFileName(file)));
         }
 
-        private static void LogDirState(string label)
+        private static void LogDirState(string scenarioId, string workDir, string label)
         {
             try
             {
-                var files = Directory.GetFiles(WorkDir);
-                FtsLog.Write($"CrashMergeTest.DirState[{label}]",
+                var files = Directory.GetFiles(workDir);
+                FtsLog.Write($"CrashMergeTest.DirState[{scenarioId}:{label}]",
                     $"{files.Length} file(s): " +
                     string.Join(", ", Array.ConvertAll(files, Path.GetFileName)));
             }
@@ -283,6 +400,14 @@ namespace FtsLibTest
                 fs.Write(src, 0, keep);
         }
 
+        /// <summary>Truncate an existing file in place to the given fraction.</summary>
+        private static void TruncateInPlace(string path, double fraction)
+        {
+            long len = new FileInfo(path).Length;
+            using (var fs = new FileStream(path, FileMode.Open, FileAccess.ReadWrite))
+                fs.SetLength(Math.Max(1, (long)(len * fraction)));
+        }
+
         private sealed class SegInfo
         {
             public readonly string Dat;
@@ -291,18 +416,6 @@ namespace FtsLibTest
             public readonly int    Id;
             public SegInfo(string dat, string db, int level, int id)
             { Dat = dat; Db = db; Level = level; Id = id; }
-        }
-
-        private static SegInfo FirstSegment(string dir, int level)
-        {
-            foreach (var f in Directory.GetFiles(dir, $"seg_{level}_*.dat"))
-            {
-                var parts = Path.GetFileNameWithoutExtension(f).Split('_');
-                int id    = int.Parse(parts[2]);
-                string db = f.Replace(".dat", ".db");
-                return new SegInfo(f, db, level, id);
-            }
-            throw new InvalidOperationException($"No L{level} segment found in {dir}");
         }
 
         private static List<SegInfo> AllSegments(string dir, int level)
@@ -325,7 +438,7 @@ namespace FtsLibTest
         {
             return new List<Scenario>
             {
-                // ── A: No crash at all — clean state, no WAL ─────────────────
+                // ── A: No crash at all — clean state, run ForceMerge normally ──
                 new Scenario("A", "Clean state — no WAL, run ForceMerge normally", (dir, db) =>
                 {
                     var index = new SeforimIndex(dir, db);
@@ -333,12 +446,11 @@ namespace FtsLibTest
                 }),
 
                 // ── B: WAL exists with only BEGIN_MERGE, target not started ──
-                new Scenario("B", "WAL has BEGIN_MERGE, no target, sources intact (Case A/C)", dir =>
+                new Scenario("B", "WAL has BEGIN_MERGE, no target, sources intact (re-run)", dir =>
                 {
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
                     WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    // No target file created — pure Case C
                 }),
 
                 // ── C: WAL + partial .dat.tmp (truncated mid-write) ──────────
@@ -347,7 +459,6 @@ namespace FtsLibTest
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
                     WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    // Write a heavily truncated .dat.tmp (first 512 bytes only)
                     WriteTruncated(segs[0].Dat,
                         Path.Combine(dir, "seg_2_99.dat.tmp"), fraction: 0.001);
                 }),
@@ -358,9 +469,7 @@ namespace FtsLibTest
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
                     WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    // Copy first source dat as a plausible (wrong) .dat.tmp
                     File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat.tmp"));
-                    // No .db.tmp
                 }),
 
                 // ── E: WAL + both .tmp files complete, before rename ─────────
@@ -373,84 +482,74 @@ namespace FtsLibTest
                     File.Copy(segs[0].Db,  Path.Combine(dir, "seg_2_99.db.tmp"));
                 }),
 
-                // ── F: .dat renamed to final, .db still .tmp ────────────────
-                new Scenario("F", "WAL + .dat final, .db still .tmp (killed between renames)", dir =>
+                // ── F: .dat final, .db still .tmp (killed between the two renames)
+                // Target is REAL (a genuine merge product) but only half-renamed:
+                // recovery must treat it as incomplete and re-run from the intact sources.
+                new Scenario("F", "REAL target: .dat final, .db still .tmp (killed between renames)", dir =>
                 {
-                    var segs = AllSegments(dir, 1);
-                    var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    // .dat is in its final position; .db is still .tmp
-                    File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(segs[0].Db,  Path.Combine(dir, "seg_2_99.db.tmp"));
-                    // Sources still exist
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99, survivorsOf: ids => ids);
+                    // Demote the .db back to .tmp — as if its rename never happened.
+                    File.Move(Path.Combine(dir, "seg_2_99.db"), Path.Combine(dir, "seg_2_99.db.tmp"));
                 }),
 
-                // ── G: Both renamed final, all sources still exist ────────────
-                new Scenario("G", "WAL + target final, all sources intact (killed before source deletion)", dir =>
+                // ── G: REAL target committed, killed before ANY source deleted ──
+                new Scenario("G", "REAL target final, all sources intact (killed before source deletion)", dir =>
                 {
-                    var segs = AllSegments(dir, 1);
-                    var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    // All sources still exist — Case A
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99, survivorsOf: ids => ids);
                 }),
 
-                // ── H: Target final, first source deleted, rest remain ────────
-                new Scenario("H", "WAL + target final, first source deleted, rest remain", dir =>
+                // ── H: REAL target committed, killed mid-source-deletion ─────
+                // THE historical data-loss bug: the old recovery deleted the complete
+                // target and re-merged only the survivors, losing the first source.
+                new Scenario("H", "REAL target final, FIRST source deleted, rest remain (mid-step-2 kill)", dir =>
                 {
-                    var segs = AllSegments(dir, 1);
-                    var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    // Delete only the first source
-                    File.Delete(segs[0].Dat);
-                    File.Delete(segs[0].Db);
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99,
+                        survivorsOf: ids => ids.Skip(1));
                 }),
 
-                // ── I: Target final, ALL sources deleted, no END_MERGE (Case B)
-                new Scenario("I", "WAL + target final, all sources deleted, no END_MERGE (Case B)", dir =>
+                // ── H2: REAL target committed, only the LAST source remains ──
+                // Old code: MergeLevel saw a single source, silently skipped the
+                // re-run AND cleared the WAL — silent loss of every deleted source.
+                new Scenario("H2", "REAL target final, only LAST source remains (late step-2 kill)", dir =>
                 {
-                    var segs = AllSegments(dir, 1);
-                    var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    // Delete ALL L1 sources — only target and L2 remain
-                    foreach (var s in segs)
-                    {
-                        File.Delete(s.Dat);
-                        File.Delete(s.Db);
-                    }
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99,
+                        survivorsOf: ids => ids.Skip(ids.Count - 1));
                 }),
+
+                // ── I: REAL target committed, ALL sources deleted, no END_MERGE ──
+                new Scenario("I", "REAL target final, all sources deleted, no END_MERGE (classic Case B)", dir =>
+                {
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99,
+                        survivorsOf: ids => new int[0]);
+                }),
+
+                // ── I2: torn target write — final path but truncated content ──
+                // Rename landed but data did not (power loss). All sources intact:
+                // full validation must reject the target and re-run the merge.
+                new Scenario("I2", "Torn REAL target (.dat truncated) at final path, all sources intact", dir =>
+                {
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99, survivorsOf: ids => ids);
+                    TruncateInPlace(Path.Combine(dir, "seg_2_99.dat"), 0.3);
+                }),
+
+                // ── I3: torn target AND a missing source — unrecoverable ─────
+                new Scenario("I3", "Torn REAL target + first source missing — must wipe (unrecoverable)", dir =>
+                {
+                    SetupRealMidCommitState(dir, level: 1, targetSegId: 99,
+                        survivorsOf: ids => ids.Skip(1));
+                    TruncateInPlace(Path.Combine(dir, "seg_2_99.dat"), 0.3);
+                }, allowEmpty: true),
 
                 // ── J: Pass 1 fully committed, killed before Pass 2 ──────────
-                // WAL has BEGIN+END for pass 1, no entry for pass 2 yet
-                // (i.e. WAL was cleared between passes — clean state mid-merge)
-                new Scenario("J", "Pass 1 fully committed, no WAL for Pass 2 (killed between passes)", dir =>
+                new Scenario("J", "REAL pass-1 merge committed, no WAL (killed between passes)", dir =>
                 {
-                    // Simulate: L1 segs merged into a new L2 seg, sources deleted, WAL clear
-                    // The L2 seg from backup (seg_2_20) is still there.
-                    // We also copy one of the L1 segs as a second L2 seg — now L2 has 2 segs.
-                    var l1segs = AllSegments(dir, 1);
-                    // Copy first L1 as a second L2 segment (id=99)
-                    File.Copy(l1segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(l1segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    // Delete all L1 sources (simulating completed pass 1)
-                    foreach (var s in l1segs) { File.Delete(s.Dat); File.Delete(s.Db); }
-                    // No WAL — clean state between passes
+                    RunRealMergeLevel(dir, 1, 99);
                 }),
 
                 // ── K: Pass 1 done, killed mid-Pass-2 .dat.tmp write ─────────
-                new Scenario("K", "Pass 1 done, Pass 2 killed mid-.dat.tmp write", dir =>
+                new Scenario("K", "REAL pass 1 done, Pass 2 killed mid-.dat.tmp write", dir =>
                 {
-                    var l1segs = AllSegments(dir, 1);
-                    // Promote L1 into a second L2 segment
-                    File.Copy(l1segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(l1segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    foreach (var s in l1segs) { File.Delete(s.Dat); File.Delete(s.Db); }
-                    // Now WAL has a BEGIN_MERGE for the L2 merge, with a partial .tmp
+                    RunRealMergeLevel(dir, 1, 99);
                     var l2segs = AllSegments(dir, 2);
                     var ids    = string.Join(",", l2segs.ConvertAll(s => s.Id.ToString()));
                     WriteWal(dir, $"BEGIN_MERGE level=2 sources={ids} target=100\n");
@@ -458,21 +557,14 @@ namespace FtsLibTest
                         Path.Combine(dir, "seg_3_100.dat.tmp"), fraction: 0.002);
                 }),
 
-                // ── L: Pass 1 done, Pass 2 Case B (sources gone, target exists, no END_MERGE)
-                new Scenario("L", "Pass 1 done, Pass 2 Case B (all L2 sources gone, target exists, no END_MERGE)", dir =>
+                // ── L: Pass 1 done, Pass 2 fully committed except END_MERGE ──
+                new Scenario("L", "REAL pass 1 + REAL pass 2 target, L2 sources gone, no END_MERGE", dir =>
                 {
-                    var l1segs = AllSegments(dir, 1);
-                    File.Copy(l1segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(l1segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    foreach (var s in l1segs) { File.Delete(s.Dat); File.Delete(s.Db); }
-                    var l2segs = AllSegments(dir, 2);
-                    var ids    = string.Join(",", l2segs.ConvertAll(s => s.Id.ToString()));
-                    WriteWal(dir, $"BEGIN_MERGE level=2 sources={ids} target=100\n");
-                    // Target exists
-                    File.Copy(l2segs[0].Dat, Path.Combine(dir, "seg_3_100.dat"));
-                    File.Copy(l2segs[0].Db,  Path.Combine(dir, "seg_3_100.db"));
-                    // All L2 sources deleted
-                    foreach (var s in l2segs) { File.Delete(s.Dat); File.Delete(s.Db); }
+                    RunRealMergeLevel(dir, 1, 99);
+                    var l2ids = AllSegments(dir, 2).ConvertAll(s => s.Id);
+                    RunRealMergeLevel(dir, 2, 100);
+                    WriteWal(dir,
+                        $"BEGIN_MERGE level=2 sources={string.Join(",", l2ids)} target=100\n");
                 }),
 
                 // ── M: WAL truncated mid-line ────────────────────────────────
@@ -480,39 +572,29 @@ namespace FtsLibTest
                 {
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    // Write a BEGIN_MERGE line that is cut off halfway
                     string full = $"BEGIN_MERGE level=1 sources={ids} target=99\n";
-                    string half = full.Substring(0, full.Length / 2);
-                    WriteWal(dir, half);
+                    WriteWal(dir, full.Substring(0, full.Length / 2));
                 }),
 
-                // ── N: WAL says BEGIN_MERGE but BOTH target and sources missing (Case D)
-                new Scenario("N", "Case D — WAL has BEGIN_MERGE, target AND sources both missing (wipe + empty index)", dir =>
+                // ── N: BEGIN_MERGE but target AND sources both missing ───────
+                new Scenario("N", "WAL has BEGIN_MERGE, target AND sources both missing (wipe + empty index)", dir =>
                 {
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
                     WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    // Delete all L1 sources AND no target — truly unrecoverable
                     foreach (var s in segs) { File.Delete(s.Dat); File.Delete(s.Db); }
-                    // No target file either — recovery must wipe and produce an empty store
-                    // The only live segment left is the L2 one; but the WAL targets L1 sources
-                    // that don't exist. Recovery wipes everything.
-                    // NOTE: EnsureStore catches CorruptIndexException internally and resets to
-                    // a fresh empty store — so the SeforimIndex constructor succeeds but the
-                    // index is now empty. That is correct behaviour; a fresh build is needed.
-                    // The test verifies this by checking 0 results (index is empty).
+                    // Recovery wipes; EnsureStore catches CorruptIndexException and
+                    // resets to an empty store — constructor succeeds, index is empty.
                 }, allowEmpty: true),
 
-                // ── O: Stale -shm/-wal sidecars next to live segments ─────────
+                // ── O: Stale -shm/-wal sidecars next to live segments ────────
                 new Scenario("O", "Stale .db-shm/.db-wal sidecar files next to live segments", dir =>
                 {
                     var segs = AllSegments(dir, 1);
-                    // Drop phantom sidecar files next to the first two L1 segments
                     File.WriteAllText(segs[0].Db + "-shm", "stale shm data");
                     File.WriteAllText(segs[0].Db + "-wal", "stale wal data");
                     File.WriteAllText(segs[1].Db + "-shm", "stale shm data");
-                    // Also one for the L2 segment
-                    var l2 = FirstSegment(dir, 2);
+                    var l2 = AllSegments(dir, 2)[0];
                     File.WriteAllText(l2.Db + "-wal", "stale wal data");
                 }),
 
@@ -521,36 +603,41 @@ namespace FtsLibTest
                 {
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    // Two BEGIN_MERGEs with no ENDs — last one wins per Analyze() logic
-                    string wal =
-                        $"BEGIN_MERGE level=1 sources=25,30 target=88\n" +
-                        $"BEGIN_MERGE level=1 sources={ids} target=99\n";
-                    WriteWal(dir, wal);
-                    // No target file, sources intact — should re-run merge
+                    WriteWal(dir,
+                        "BEGIN_MERGE level=1 sources=25,30 target=88\n" +
+                        $"BEGIN_MERGE level=1 sources={ids} target=99\n");
                 }),
 
-                // ── Q: WAL with completed merge + new BEGIN (stale END then new BEGIN) ──
+                // ── Q: WAL with completed merge + new orphaned BEGIN ─────────
                 new Scenario("Q", "WAL has old BEGIN+END then a new orphaned BEGIN", dir =>
                 {
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
-                    string wal =
-                        $"BEGIN_MERGE level=1 sources=25,30 target=88\n" +
-                        $"END_MERGE level=1 target=88\n" +
-                        $"BEGIN_MERGE level=1 sources={ids} target=99\n";
-                    WriteWal(dir, wal);
-                    // sources still intact, no target — Case C
+                    WriteWal(dir,
+                        "BEGIN_MERGE level=1 sources=25,30 target=88\n" +
+                        "END_MERGE level=1 target=88\n" +
+                        $"BEGIN_MERGE level=1 sources={ids} target=99\n");
                 }),
 
-                // ── R: Target .dat exists but .db is completely missing ───────
-                new Scenario("R", "Target .dat exists but .db missing — partial rename (dat done, db failed)", dir =>
+                // ── Q2: aborted merge (shutdown) — BEGIN + ABORT_MERGE ───────
+                new Scenario("Q2", "WAL has BEGIN_MERGE + ABORT_MERGE (merge aborted by shutdown)", dir =>
+                {
+                    var segs = AllSegments(dir, 1);
+                    var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
+                    WriteWal(dir,
+                        $"BEGIN_MERGE level=1 sources={ids} target=99\n" +
+                        "ABORT_MERGE level=1 target=99\n");
+                }),
+
+                // ── R: Target .dat exists (fake copy) but .db missing ────────
+                // A copied .dat alone can never be mistaken for a committed target
+                // because targetExists requires BOTH final files.
+                new Scenario("R", "Target .dat exists but .db missing — partial rename", dir =>
                 {
                     var segs = AllSegments(dir, 1);
                     var ids  = string.Join(",", segs.ConvertAll(s => s.Id.ToString()));
                     WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
-                    // Only .dat renamed, .db never got there
                     File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    // No seg_2_99.db — sources intact
                 }),
 
                 // ── S: Sidecar files next to the .tmp target ─────────────────
@@ -561,13 +648,12 @@ namespace FtsLibTest
                     WriteWal(dir, $"BEGIN_MERGE level=1 sources={ids} target=99\n");
                     File.Copy(segs[0].Dat, Path.Combine(dir, "seg_2_99.dat.tmp"));
                     File.Copy(segs[0].Db,  Path.Combine(dir, "seg_2_99.db.tmp"));
-                    // Sidecar files alongside the .db.tmp
                     File.WriteAllText(Path.Combine(dir, "seg_2_99.db.tmp-shm"), "sidecar");
                     File.WriteAllText(Path.Combine(dir, "seg_2_99.db.tmp-wal"), "sidecar");
                 }),
 
-                // ── T: ForceMerge then search on the merged result ────────────
-                new Scenario("T", "Normal ForceMerge + probe on merged single-segment result", (dir, db) =>
+                // ── T: ForceMerge then verify single merged segment ──────────
+                new Scenario("T", "Normal ForceMerge + verify on merged single-segment result", (dir, db) =>
                 {
                     var index = new SeforimIndex(dir, db);
                     index.ForceMerge();
@@ -603,33 +689,22 @@ namespace FtsLibTest
                     WriteWal(dir, "BEGIN_FORCE_MERGE\n");
                 }),
 
-                // ── Y: BEGIN_FORCE_MERGE + pass 1 fully committed, killed between passes ──
-                new Scenario("Y", "BEGIN_FORCE_MERGE + pass 1 END_MERGE, killed between passes", dir =>
+                // ── Y: force merge: REAL pass 1 committed, killed between passes ──
+                new Scenario("Y", "BEGIN_FORCE_MERGE + REAL pass-1 END_MERGE, killed between passes", dir =>
                 {
-                    var l1segs = AllSegments(dir, 1);
-                    File.Copy(l1segs[0].Dat, Path.Combine(dir, "seg_2_99.dat"));
-                    File.Copy(l1segs[0].Db,  Path.Combine(dir, "seg_2_99.db"));
-                    foreach (var s in l1segs) { File.Delete(s.Dat); File.Delete(s.Db); }
-                    var ids = string.Join(",", l1segs.ConvertAll(s => s.Id.ToString()));
+                    var l1ids = AllSegments(dir, 1).ConvertAll(s => s.Id);
+                    RunRealMergeLevel(dir, 1, 99);
                     WriteWal(dir,
                         "BEGIN_FORCE_MERGE\n" +
-                        $"BEGIN_MERGE level=1 sources={ids} target=99\n" +
+                        $"BEGIN_MERGE level=1 sources={string.Join(",", l1ids)} target=99\n" +
                         "END_MERGE level=1 target=99\n");
-                    // L2 now has 2 segs (original + seg_2_99) — resume should merge them
                 }),
 
-                // ── Z: All merges done, END_FORCE_MERGE missing (killed at the very end) ──
-                // The correct way to simulate this: actually run ForceMerge to produce a real
-                // fully-merged segment, then rewrite the WAL to look like END_FORCE_MERGE was
-                // never written. Recovery must find PendingForceMerge=true, PendingMerge=null,
-                // call ResumeForceMerge, find nothing left to merge, and clean up correctly.
+                // ── Z: All merges done, END_FORCE_MERGE missing ──────────────
                 new Scenario("Z", "All level merges committed, END_FORCE_MERGE missing", (dir, db) =>
                 {
-                    // Step 1: actually run ForceMerge so the single segment on disk is real
                     var index = new SeforimIndex(dir, db);
                     index.ForceMerge();
-                    // Step 2: rewrite the WAL to simulate the crash — force merge done but
-                    // END_FORCE_MERGE not written yet
                     var dats  = Directory.GetFiles(dir, "seg_*.dat");
                     var parts = Path.GetFileNameWithoutExtension(dats[0]).Split('_');
                     int level = int.Parse(parts[1]);
@@ -646,26 +721,23 @@ namespace FtsLibTest
 
         private sealed class Scenario
         {
-            public readonly string              Id;
-            public readonly string              Name;
+            public readonly string                 Id;
+            public readonly string                 Name;
             public readonly Action<string, string> Setup;  // (dir, dbPath)
-            public readonly bool                ExpectWipe;
-            public readonly bool                AllowEmpty;  // 0 results is acceptable (wiped index)
+            public readonly bool                   AllowEmpty;  // 0 results acceptable (wiped index)
 
             public Scenario(string id, string name, Action<string, string> setup,
-                            bool expectWipe = false, bool allowEmpty = false)
+                            bool allowEmpty = false)
             {
                 Id         = id;
                 Name       = name;
                 Setup      = setup;
-                ExpectWipe = expectWipe;
                 AllowEmpty = allowEmpty;
             }
 
-            // Convenience ctor for scenarios that don't need dbPath
             public Scenario(string id, string name, Action<string> setup,
-                            bool expectWipe = false, bool allowEmpty = false)
-                : this(id, name, (dir, _) => setup(dir), expectWipe, allowEmpty) { }
+                            bool allowEmpty = false)
+                : this(id, name, (dir, _) => setup(dir), allowEmpty) { }
         }
     }
 }
