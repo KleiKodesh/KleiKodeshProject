@@ -5,6 +5,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 export interface ContextMenuTextItem {
   type?: 'text'
   label: string
+  shortcut?: string
   action: () => void
 }
 
@@ -121,7 +122,8 @@ defineExpose({ show, showAtPosition, hide })
           <span>{{ (item as ContextMenuCheckboxItem).label }}</span>
         </div>
         <div v-else class="context-menu-item" @click="runItem(item as ContextMenuTextItem)">
-          {{ (item as ContextMenuTextItem).label }}
+          <span class="item-label">{{ (item as ContextMenuTextItem).label }}</span>
+          <span v-if="(item as ContextMenuTextItem).shortcut" class="item-shortcut">{{ (item as ContextMenuTextItem).shortcut }}</span>
         </div>
       </template>
     </div>
@@ -152,10 +154,22 @@ defineExpose({ show, showAtPosition, hide })
   height: 26px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
   text-align: right;
+}
+.item-label {
+  flex: 1;
+}
+.item-shortcut {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-secondary);
+  opacity: 0.7;
+  direction: ltr;
 }
 .context-menu-item:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
