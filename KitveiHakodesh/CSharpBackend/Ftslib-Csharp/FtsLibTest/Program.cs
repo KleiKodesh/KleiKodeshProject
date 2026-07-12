@@ -153,6 +153,10 @@ namespace FtsLibTest
                     DumpIds.Run(args);
                     return;
 
+                case "verifyprefix":
+                    VerifyPrefixScan.Run(args);
+                    return;
+
                 case "fstsize":
                     FstSizeDiag.Run(args);
                     return;

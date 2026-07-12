@@ -137,7 +137,13 @@ namespace FtsLib.Search
             if (anchorLen < MinAnchorLength)
                 return new List<string>();
 
-            string likePattern = ToLikePattern(pattern);
+            // F06: pure prefix patterns (abc*) whose semantics a binary range can
+            // reproduce exactly are served via idx_term instead of a full LIKE
+            // table scan (LIKE never uses the index — measured 75-120x slower).
+            // Ineligible patterns keep the LIKE path, byte-identical to before.
+            bool useRange = TryGetPrefixRange(pattern, out string rangeLo, out string rangeHi);
+
+            string likePattern = useRange ? null : ToLikePattern(pattern);
             var    raw         = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (var seg in segments)
@@ -146,10 +152,21 @@ namespace FtsLib.Search
                 {
                     // The scan piggybacks the chunk metadata so resolve never has to
                     // re-fetch these rows with per-term point SELECTs (F01).
-                    cmd.CommandText =
-                        "SELECT term, skip_offset, skip_count, offset, length, count " +
-                        "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                    cmd.Parameters.Add("@p", System.Data.DbType.String).Value = likePattern;
+                    if (useRange)
+                    {
+                        cmd.CommandText =
+                            "SELECT term, skip_offset, skip_count, offset, length, count " +
+                            "FROM term_index WHERE term >= @lo AND term < @hi";
+                        cmd.Parameters.Add("@lo", System.Data.DbType.String).Value = rangeLo;
+                        cmd.Parameters.Add("@hi", System.Data.DbType.String).Value = rangeHi;
+                    }
+                    else
+                    {
+                        cmd.CommandText =
+                            "SELECT term, skip_offset, skip_count, offset, length, count " +
+                            "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
+                        cmd.Parameters.Add("@p", System.Data.DbType.String).Value = likePattern;
+                    }
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
@@ -318,6 +335,63 @@ namespace FtsLib.Search
                 }
             }
             return found ? new List<string> { term } : new List<string>();
+        }
+
+        // ── Prefix range scan (F06) ───────────────────────────────────
+
+        /// <summary>
+        /// Decides whether <paramref name="pattern"/> can be served by an indexed
+        /// binary range scan (<c>term &gt;= lo AND term &lt; hi</c>) with results
+        /// EXACTLY equal to the LIKE scan it replaces, and computes the bounds.
+        ///
+        /// Eligible: a pure prefix pattern — exactly one '*', at the very end,
+        /// no '?' — whose anchor contains no ASCII letters. The ASCII-letter
+        /// restriction is what guarantees equality: SQLite's LIKE is
+        /// case-insensitive for A-Z/a-z only, and a case-insensitive prefix cannot
+        /// be expressed as one contiguous BINARY-collation range. Hebrew, digits,
+        /// and punctuation have no case folding, so for them
+        /// <c>LIKE 'anchor%'</c> ≡ <c>term &gt;= anchor AND term &lt; successor</c>
+        /// under SQLite's default BINARY (UTF-8 memcmp) collation, because UTF-8
+        /// byte order equals code-point order.
+        ///
+        /// The upper bound is the anchor with its last char incremented. If the
+        /// incremented char would land in the surrogate range (invalid to encode)
+        /// or overflow, the pattern is declared ineligible and LIKE is used.
+        /// </summary>
+        internal static bool TryGetPrefixRange(string pattern, out string lo, out string hi)
+        {
+            lo = null;
+            hi = null;
+
+            // Exactly one '*', at the end, and no '?' (ExpandStar only ever sees
+            // '?'-free patterns, but guard anyway so the helper is safe on its own).
+            int star = pattern.IndexOf('*');
+            if (star < 0 || star != pattern.Length - 1) return false;
+            if (pattern.IndexOf('?') >= 0) return false;
+
+            string anchor = pattern.Substring(0, pattern.Length - 1);
+            if (anchor.Length == 0) return false;
+
+            foreach (char c in anchor)
+            {
+                // ASCII letters would engage LIKE's case folding — not range-safe.
+                if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) return false;
+                // LIKE treats '%' and '_' as (escaped) literals; range comparison
+                // treats them literally too, so they are fine to allow.
+            }
+
+            char last = anchor[anchor.Length - 1];
+            char next = (char)(last + 1);
+            // Successor must be a directly encodable BMP code point: no overflow,
+            // no landing in the surrogate block, and the anchor itself must not
+            // end mid surrogate pair.
+            if (last >= 0xFFFF) return false;
+            if (last >= 0xD800 && last <= 0xDFFF) return false;
+            if (next >= 0xD800 && next <= 0xDFFF) return false;
+
+            lo = anchor;
+            hi = anchor.Substring(0, anchor.Length - 1) + next;
+            return true;
         }
 
         // ── Pattern translation ───────────────────────────────────────
