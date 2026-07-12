@@ -79,13 +79,14 @@ namespace FtsLib.Search
         /// Returns an empty list when the anchor is too short, the '?' count
         /// exceeds <see cref="MaxOptionalChars"/>, or nothing survives the filter.
         /// </summary>
-        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments)
+        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments,
+                                          TermChunkCache cache = null)
         {
             bool hasOptional = pattern.IndexOf('?') >= 0;
             bool hasStar     = pattern.IndexOf('*') >= 0;
 
             if (!hasOptional)
-                return ExpandStar(pattern, segments);   // fast path — original behaviour
+                return ExpandStar(pattern, segments, cache);   // fast path — original behaviour
 
             // Count '?' operators (after normalising away no-op ones).
             // We count positions where '?' has a real preceding letter.
@@ -105,9 +106,9 @@ namespace FtsLib.Search
             {
                 List<string> expanded;
                 if (sub.IndexOf('*') >= 0)
-                    expanded = ExpandStar(sub, segments);
+                    expanded = ExpandStar(sub, segments, cache);
                 else
-                    expanded = LookupLiteral(sub, segments);
+                    expanded = LookupLiteral(sub, segments, cache);
 
                 foreach (var term in expanded)
                     if (seen.Add(term))
@@ -127,7 +128,8 @@ namespace FtsLib.Search
         /// Returns an empty list when the anchor is too short or nothing survives
         /// the filter.
         /// </summary>
-        public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments)
+        public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments,
+                                              TermChunkCache cache = null)
         {
             int anchorLen = AnchorLength(pattern);
 
@@ -142,13 +144,25 @@ namespace FtsLib.Search
             {
                 using (var cmd = seg.Conn.CreateCommand())
                 {
+                    // The scan piggybacks the chunk metadata so resolve never has to
+                    // re-fetch these rows with per-term point SELECTs (F01).
                     cmd.CommandText =
-                        "SELECT term FROM term_index WHERE term LIKE @p ESCAPE '\\'";
+                        "SELECT term, skip_offset, skip_count, offset, length, count " +
+                        "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
                     cmd.Parameters.Add("@p", System.Data.DbType.String).Value = likePattern;
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
-                            raw.Add(reader.GetString(0));
+                        {
+                            string term = reader.GetString(0);
+                            raw.Add(term);
+                            cache?.Add(term, new SegmentChunk(seg,
+                                reader.GetInt64(1),   // skip_offset
+                                reader.GetInt32(2),   // skip_count
+                                reader.GetInt64(3),   // offset
+                                reader.GetInt32(4),   // length
+                                reader.GetInt32(5))); // count
+                        }
                 }
             }
 
@@ -271,24 +285,39 @@ namespace FtsLib.Search
         /// <summary>
         /// Looks up an exact term across all segments.
         /// Returns a single-element list if found, empty list otherwise.
+        /// Probes EVERY segment (no early exit) so the cached chunk list is
+        /// complete — a cache entry missing a segment would silently drop that
+        /// segment's postings at resolve time.
         /// </summary>
-        private static List<string> LookupLiteral(string term, IReadOnlyList<SegmentHandle> segments)
+        private static List<string> LookupLiteral(string term, IReadOnlyList<SegmentHandle> segments,
+                                                  TermChunkCache cache = null)
         {
             if (AnchorLength(term) < MinAnchorLength)
                 return new List<string>();
 
+            bool found = false;
             foreach (var seg in segments)
             {
                 using (var cmd = seg.Conn.CreateCommand())
                 {
-                    cmd.CommandText = "SELECT 1 FROM term_index WHERE term = @t LIMIT 1";
+                    cmd.CommandText =
+                        "SELECT skip_offset, skip_count, offset, length, count " +
+                        "FROM term_index WHERE term = @t";
                     cmd.Parameters.Add("@t", System.Data.DbType.String).Value = term;
-                    var scalar = cmd.ExecuteScalar();
-                    if (scalar != null)
-                        return new List<string> { term };
+                    using (var reader = cmd.ExecuteReader())
+                        if (reader.Read())
+                        {
+                            found = true;
+                            cache?.Add(term, new SegmentChunk(seg,
+                                reader.GetInt64(0),
+                                reader.GetInt32(1),
+                                reader.GetInt64(2),
+                                reader.GetInt32(3),
+                                reader.GetInt32(4)));
+                        }
                 }
             }
-            return new List<string>();
+            return found ? new List<string> { term } : new List<string>();
         }
 
         // ── Pattern translation ───────────────────────────────────────

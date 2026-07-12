@@ -149,6 +149,10 @@ namespace FtsLibTest
                     SearchDuringMergeTest.Run(args);
                     return;
 
+                case "dumpids":
+                    DumpIds.Run(args);
+                    return;
+
                 case "fstsize":
                     FstSizeDiag.Run(args);
                     return;

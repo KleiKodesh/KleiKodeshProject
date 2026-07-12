@@ -23,6 +23,11 @@ namespace FtsLib.Search
         private readonly SearchLease         _lease;   // held for our lifetime; null when no store
         private bool _disposed;
 
+        // F01: chunk metadata piggybacked from expansion scans, so LookupTerm
+        // skips its per-term-per-segment point SELECT for every expanded term.
+        // Lives exactly as long as this reader's immutable segment snapshot.
+        private readonly TermChunkCache _chunkCache = new TermChunkCache();
+
         /// <summary>
         /// Opens an IndexReader using an explicit snapshot of live segment paths,
         /// holding a <see cref="SearchLease"/> for the reader's entire lifetime.
@@ -98,7 +103,7 @@ namespace FtsLib.Search
         /// Returns an empty list when nothing matches.
         /// </summary>
         public List<string> ExpandWildcard(string pattern)
-            => HebrewWildcardExpander.Expand(pattern, _segments);
+            => HebrewWildcardExpander.Expand(pattern, _segments, _chunkCache);
 
         // ── Grammar expansion ─────────────────────────────────────────
 
@@ -108,7 +113,7 @@ namespace FtsLib.Search
         /// Returns an empty list when nothing matches.
         /// </summary>
         public List<string> ExpandGrammar(string word, bool expandPrefixes, bool expandSuffixes)
-            => GrammarExpander.Expand(word, expandPrefixes, expandSuffixes, _segments);
+            => GrammarExpander.Expand(word, expandPrefixes, expandSuffixes, _segments, _chunkCache);
 
         // ── Fuzzy expansion ───────────────────────────────────────────
 
@@ -121,7 +126,7 @@ namespace FtsLib.Search
         /// Returns an empty list when nothing matches.
         /// </summary>
         public List<string> ExpandFuzzy(string term, int maxDistance = 1)
-            => FuzzyExpander.Expand(term, maxDistance, _segments);
+            => FuzzyExpander.Expand(term, maxDistance, _segments, _chunkCache);
 
         // ── AND search ───────────────────────────────────────────────
 
@@ -163,6 +168,11 @@ namespace FtsLib.Search
 
         private List<SegmentChunk> LookupTerm(string term)
         {
+            // F01: expansion scans already recorded this term's chunks (complete
+            // across all segments, in segment order) — skip the point SELECTs.
+            if (_chunkCache.TryGet(term, out var cached))
+                return cached;
+
             var result = new List<SegmentChunk>();
             foreach (var seg in _segments)
             {
