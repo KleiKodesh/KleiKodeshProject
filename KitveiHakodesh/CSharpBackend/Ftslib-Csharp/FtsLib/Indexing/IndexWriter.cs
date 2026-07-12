@@ -220,7 +220,7 @@ namespace FtsLib.Indexing
 
             Console.WriteLine($"[IndexWriter] Purging {_deletes.Count:N0} deleted doc(s)...");
             _store.SetDeleteSet(_deletes);
-            _store.MergeAllUnderWriteLock();
+            _store.MergeAll();
             _deletes.Clear();
             _deletes.Save(DeletesFile); // removes the file
             _store.SetDeleteSet(null);

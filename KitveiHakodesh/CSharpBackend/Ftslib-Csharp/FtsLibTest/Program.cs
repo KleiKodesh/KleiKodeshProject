@@ -145,6 +145,10 @@ namespace FtsLibTest
                     CrashMergeTest.Run(args);
                     return;
 
+                case "searchduringmerge":
+                    SearchDuringMergeTest.Run(args);
+                    return;
+
                 case "fstsize":
                     FstSizeDiag.Run(args);
                     return;

@@ -179,7 +179,7 @@ namespace FtsLib.SeforimDb
                     FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
                         "forceMergeOnComplete=true — starting force merge");
                     Console.WriteLine("[SeforimIndex] Build complete — starting force merge...");
-                    _store.MergeAllUnderWriteLock();
+                    _store.MergeAll();
                     if (_store.IsWiped)
                     {
                         FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
@@ -206,7 +206,8 @@ namespace FtsLib.SeforimDb
         /// This is an expensive operation — it rewrites every segment file. Call it
         /// after a full build is complete to produce a single-segment index.
         ///
-        /// Acquires the write lock so no concurrent search can run during the merge.
+        /// Searches run concurrently: each level merge blocks them only for its
+        /// millisecond commit step, never for the merge write itself.
         /// </summary>
         public void ForceMerge()
         {
@@ -220,9 +221,10 @@ namespace FtsLib.SeforimDb
             {
                 FtsLib.Indexing.FtsLog.Write("SeforimIndex.ForceMerge", "IndexWriteLock acquired");
 
-                // MergeAllUnderWriteLock drains the flush pipeline internally
-                // before acquiring the write lock — no flush or search can race.
-                _store.MergeAllUnderWriteLock();
+                // MergeAll drains the flush pipeline internally before merging —
+                // no flush can race. Searches proceed concurrently; each level
+                // merge locks only its own commit step.
+                _store.MergeAll();
 
                 if (_store.IsWiped)
                 {

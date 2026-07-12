@@ -26,13 +26,18 @@ namespace FtsLib.Indexing
     ///   only when a level reaches the fanout threshold (4 segments).
     ///   WaitForMerge() drains the entire pipeline.
     ///
-    /// Search / merge exclusion:
-    ///   A ReaderWriterLockSlim (_searchMergeLock) ensures that no search can read
-    ///   the live segment list while a merge is rewriting it.  GetLiveSegmentPaths()
-    ///   acquires the read lock; MergeIfNeeded holds the write lock for the duration
-    ///   of the merge.  Flush writes (segment writes that do not trigger a merge) do
-    ///   not need the lock — they only add a new segment to the live set, which is
-    ///   safe to observe mid-search.
+    /// Search / merge exclusion (Lucene-style commit locking):
+    ///   A ReaderWriterLockSlim (_searchMergeLock) protects only the merge COMMIT —
+    ///   the rename/delete/live-swap step at the end of SegmentMerger.MergeLevel,
+    ///   which takes milliseconds. The long k-way merge write runs WITHOUT the lock:
+    ///   it only reads source segments and writes .tmp files, both safe under
+    ///   concurrent readers. Searches therefore proceed freely during merges.
+    ///   GetLiveSegmentPaths()/AcquireSearchLease() take the read lock (blocking
+    ///   briefly if a commit is in flight); a SearchLease keeps it held for the
+    ///   reader's lifetime so a commit can never delete files under an open reader.
+    ///   Flush writes (segment writes that do not trigger a merge) do not need the
+    ///   lock — they only add a new segment to the live set, which is safe to
+    ///   observe mid-search.
     /// </summary>
     internal sealed class SegmentStore
     {
@@ -50,8 +55,11 @@ namespace FtsLib.Indexing
         internal SegmentMerger        Merger          => _merger;
 
         // Excludes searches from observing a partially-merged live set.
-        // Write lock: held for the entire duration of any merge (MergeIfNeeded).
-        // Read lock: held while snapshotting live segment paths for a search.
+        // Write lock: held only for the brief merge COMMIT (rename + source
+        //             deletion + live-state swap) inside SegmentMerger.MergeLevel.
+        // Read lock: held while snapshotting live segment paths for a search, and
+        //            for the whole search via SearchLease so the commit's source
+        //            deletion waits until no reader has the files open.
         //
         // SupportsRecursion is required because Task continuations in the flush
         // pipeline can be inlined onto a thread pool thread that already holds a
@@ -108,16 +116,21 @@ namespace FtsLib.Indexing
 
         // ── Live segment paths (used by IndexReader) ──────────────────
 
+        // Merges hold the write lock only for their millisecond commit step, so a
+        // read acquisition normally succeeds instantly. The timeout is a deadlock
+        // backstop (e.g. a leaked SearchLease) — searches then fail with an
+        // actionable error instead of hanging forever.
+        private const int ReadLockTimeoutMs = 60_000;
+
         /// <summary>
         /// Returns a consistent snapshot of all live segment paths.
-        /// Throws <see cref="IndexMergingException"/> if a merge is currently in
-        /// progress — the caller should surface this to the user rather than blocking.
+        /// Blocks briefly if a merge commit is in flight. Throws
+        /// <see cref="IndexMergingException"/> only if the lock cannot be acquired
+        /// within the backstop timeout.
         /// </summary>
         public List<(string dat, string db)> GetLiveSegmentPaths()
         {
-            // Non-blocking: if the write lock is held (merge in progress), fail fast
-            // so the search returns an actionable error instead of silently stalling.
-            if (!_searchMergeLock.TryEnterReadLock(0))
+            if (!_searchMergeLock.TryEnterReadLock(ReadLockTimeoutMs))
                 throw new IndexMergingException();
             try
             {
@@ -135,17 +148,17 @@ namespace FtsLib.Indexing
         ///
         /// The caller MUST dispose the returned <see cref="SearchLease"/> when the
         /// search is complete (i.e. when the <see cref="IndexReader"/> is disposed).
-        /// While the lease is held, any merge that needs to delete source segment
-        /// files will block on the write lock — guaranteeing that no file the reader
-        /// has open is deleted from under it.
+        /// While the lease is held, any merge commit that needs to delete source
+        /// segment files will block on the write lock — guaranteeing that no file
+        /// the reader has open is deleted from under it.
         ///
-        /// Throws <see cref="IndexMergingException"/> if a merge is currently in
-        /// progress — the caller should surface this to the user rather than blocking.
+        /// Blocks briefly if a merge commit is in flight. Throws
+        /// <see cref="IndexMergingException"/> only if the lock cannot be acquired
+        /// within the backstop timeout.
         /// </summary>
         public SearchLease AcquireSearchLease(out List<(string dat, string db)> livePaths)
         {
-            // Non-blocking: if the write lock is held (merge in progress), fail fast.
-            if (!_searchMergeLock.TryEnterReadLock(0))
+            if (!_searchMergeLock.TryEnterReadLock(ReadLockTimeoutMs))
                 throw new IndexMergingException();
 
             // Read lock is now held. Snapshot the live paths while holding it.
@@ -609,11 +622,11 @@ namespace FtsLib.Indexing
                         Wal.Open();
                         try
                         {
+                            // No write lock here: the long merge write runs
+                            // concurrently with searches. MergeLevel takes the
+                            // write lock itself, only around its commit step.
                             FtsLog.Write("SegmentStore.Flush.BgTask",
-                                $"acquiring write lock for MergeIfNeeded after seg_0_{segId} — L0 has {Live.LiveSegCount(0)} seg(s)");
-                            _searchMergeLock.EnterWriteLock();
-                            FtsLog.Write("SegmentStore.Flush.BgTask",
-                                $"write lock acquired — running MergeIfNeeded(0)");
+                                $"running MergeIfNeeded(0) after seg_0_{segId} — L0 has {Live.LiveSegCount(0)} seg(s)");
                             try
                             {
                                 _merger.MergeIfNeeded(0);
@@ -626,12 +639,6 @@ namespace FtsLib.Indexing
                                 // itself is complete, so this is NOT a pipeline fault.
                                 FtsLog.Write("SegmentStore.Flush.BgTask",
                                     "merge aborted by shutdown request — flushed segment is intact");
-                            }
-                            finally
-                            {
-                                _searchMergeLock.ExitWriteLock();
-                                FtsLog.Write("SegmentStore.Flush.BgTask",
-                                    $"write lock released after MergeIfNeeded");
                             }
                         }
                         finally
@@ -712,19 +719,19 @@ namespace FtsLib.Indexing
 
         /// <summary>
         /// Incrementally merges all levels of the LSM tree bottom-up until every
-        /// level has at most one segment. Holds the write lock throughout so all
-        /// flushes and searches block for the full duration.
+        /// level has at most one segment. Searches run concurrently — each level
+        /// merge takes the write lock only for its own commit step.
         ///
         /// Drains the background flush/merge pipeline first so no in-flight
         /// segment write or automatic LSM merge can race with the force merge.
         /// See <see cref="ForceMerger"/> for the full protocol.
         /// </summary>
-        internal void MergeAllUnderWriteLock()
+        internal void MergeAll()
         {
             // Drain any in-flight background flush+merge tasks before opening
-            // the WAL or acquiring the write lock. This guarantees that every
-            // segment produced by the build pipeline is on disk and the automatic
-            // LSM merges have all completed before the force merge starts.
+            // the WAL. This guarantees that every segment produced by the build
+            // pipeline is on disk and the automatic LSM merges have all completed
+            // before the force merge starts.
             // clearWal:false — ForceMerger manages the WAL itself.
             WaitForMerge(clearWal: false);
 
