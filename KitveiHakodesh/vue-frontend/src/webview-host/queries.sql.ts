@@ -286,6 +286,28 @@ export const SQL = {
   `,
 
   /**
+   * Links-only variant of GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE — no content column
+   * and no JOIN. A section click can match thousands of commentary lines; shipping their
+   * full text in one payload (measured ~10MB for one chumash chapter) delayed first render
+   * by ~1s, and joining `line` for each hit costs thousands of random point-reads on a
+   * multi-GB table (measured 147ms warm / 1.4s cold vs 16ms without the JOIN).
+   * `link.targetLineIndex` is denormalized and verified identical to `line.lineIndex`.
+   * The commentary loader renders group structure from this query and backfills content
+   * with GET_LINE_CONTENTS afterwards.
+   */
+  GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE: (count: number) => `
+    SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
+           l.targetLineIndex AS lineIndex
+    FROM link l
+    WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
+  `,
+
+  /** Content backfill for a batch of line ids (commentary lazy-content second phase). */
+  GET_LINE_CONTENTS: (count: number) => `
+    SELECT id, content FROM line WHERE id IN (${Array(count).fill('?').join(',')})
+  `,
+
+  /**
    * Reverse source lookup (single line): find lines in source books that link TO the
    * given target line via a commentary-type connection. Used instead of the unreliable
    * SOURCE connection type — the source text is discovered by reversing the commentary link.

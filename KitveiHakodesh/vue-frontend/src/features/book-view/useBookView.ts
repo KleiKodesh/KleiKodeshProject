@@ -150,7 +150,7 @@ export function useBookView(
 
   // ── Commentary data ───────────────────────────────────────────────────────
 
-  const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded } = useCommentary(
+  const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, requestContentPriority } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
@@ -398,7 +398,7 @@ export function useBookView(
     // data
     bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
+    groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, requestContentPriority,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation & render (hoisted — survive v-if toggle)

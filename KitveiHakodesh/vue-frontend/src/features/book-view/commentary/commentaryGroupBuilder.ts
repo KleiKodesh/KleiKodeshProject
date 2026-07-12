@@ -140,7 +140,9 @@ export async function buildCommentaryGroupsFromCombined(
     targetLineId: number
     connectionTypeId: number
     lineIndex: number
-    content: string
+    // Absent when the caller used the links-only range query — content is
+    // backfilled afterwards via GET_LINE_CONTENTS (lines start as '').
+    content?: string
   }>,
   sourceEntries: CommentaryBookEntry[],
   targumEntries: CommentaryBookEntry[],
@@ -149,7 +151,7 @@ export async function buildCommentaryGroupsFromCombined(
   // ensureConnectionTypeNamesLoaded is guaranteed by the caller (load() in useCommentary)
   // before this function is called — no need to await it again here.
   const byBookConnection: ByBookConnectionMap = new Map()
-  const lineData = new Map<number, { lineIndex: number; content: string }>()
+  const lineData = new Map<number, { lineIndex: number; content: string | undefined }>()
 
   for (const row of rows) {
     const rawConnectionTypeName = getConnectionTypeName(row.connectionTypeId)

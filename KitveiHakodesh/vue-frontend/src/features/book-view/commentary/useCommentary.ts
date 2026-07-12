@@ -128,12 +128,103 @@ export function useCommentary(
   let loadedForLineId: number | null = null
   let loadUsedSectionRange = false
 
+  // Content backfill batch sizes. The first batch covers roughly what fits on
+  // screen so text paints as fast as possible after the structure; later batches
+  // are large so a full chumash-chapter section (~8k lines) completes in a
+  // handful of round trips.
+  const CONTENT_FIRST_BATCH = 100
+  const CONTENT_BACKFILL_BATCH = 1500
+
+  // lineIds whose content fetch is done or in flight for the CURRENT selection —
+  // shared bookkeeping between the display-order backfill and the viewport-driven
+  // priority fetch so no line is ever requested twice. Reset on every load().
+  const contentRequested = new Set<number>()
+
+  /** Lines from the links-only query that still need their text, in display order. */
+  function collectPendingLines(builtGroups: CommentaryGroup[]): CommentaryLine[] {
+    const pending: CommentaryLine[] = []
+    const seen = new Set<number>()
+    for (const group of builtGroups) {
+      for (const line of group.lines) {
+        if (line.lineId > 0 && line.content === '' && !seen.has(line.lineId)) {
+          seen.add(line.lineId)
+          pending.push(line)
+        }
+      }
+    }
+    return pending
+  }
+
+  /** Fetches content for one batch of lines and writes it into every matching line object. */
+  async function fetchContentsInto(builtGroups: CommentaryGroup[], batch: CommentaryLine[]) {
+    for (const line of batch) contentRequested.add(line.lineId)
+    const rows = await query<{ id: number; content: string }>(
+      SQL.GET_LINE_CONTENTS(batch.length),
+      batch.map((line) => line.lineId),
+    )
+    const contentById = new Map(rows.map((row) => [row.id, row.content ?? '']))
+    for (const group of builtGroups) {
+      for (const line of group.lines) {
+        const content = contentById.get(line.lineId)
+        if (content !== undefined && line.content === '') line.content = content
+      }
+    }
+  }
+
+  /**
+   * Viewport-driven priority fetch: called by CommentaryView whenever virtual items
+   * render lines whose content is still pending (scroll restore, fast scroll ahead
+   * of the backfill, jump-to-group). Fetches exactly those lines immediately so the
+   * viewport never waits for the display-order backfill to reach it.
+   */
+  function requestContentPriority(lineIds: number[]) {
+    const currentGroups = groups.value
+    if (!currentGroups.length) return
+    const wanted = new Set(lineIds.filter((id) => id > 0 && !contentRequested.has(id)))
+    if (!wanted.size) return
+    const batch: CommentaryLine[] = []
+    for (const group of currentGroups) {
+      for (const line of group.lines) {
+        if (wanted.has(line.lineId) && line.content === '') {
+          wanted.delete(line.lineId)
+          batch.push(line)
+        }
+      }
+    }
+    if (batch.length) void fetchContentsInto(currentGroups, batch).catch(() => {})
+  }
+
+  /**
+   * Fills line.content for groups built from the links-only range query.
+   * Batches run sequentially in display order so the top of the panel fills first
+   * and the bridge is never flooded. Mutates the (reactive) line objects in place —
+   * safe if the selection changes mid-flight because stale groups are not displayed.
+   */
+  async function backfillLineContents(builtGroups: CommentaryGroup[], forLineId: number) {
+    const pending = collectPendingLines(builtGroups)
+    for (let i = 0; i < pending.length; i += CONTENT_BACKFILL_BATCH) {
+      // Stop early if the user has moved on to a different selection.
+      if (loadedForLineId !== forLineId) return
+      // Skip lines a viewport-priority fetch already covered in the meantime.
+      const batch = pending
+        .slice(i, i + CONTENT_BACKFILL_BATCH)
+        .filter((line) => !contentRequested.has(line.lineId))
+      if (!batch.length) continue
+      try {
+        await fetchContentsInto(builtGroups, batch)
+      } catch {
+        return // DB error — leave remaining lines empty rather than retry-looping
+      }
+    }
+  }
+
   async function load(lineId: number) {
     loadedForLineId = lineId
     const multiIds = selectedLineIds()
     const isMulti = multiIds != null && multiIds.length > 0
     loadUsedSectionRange = isMulti
     groups.value = []
+    contentRequested.clear()
     loading.value = true
     try {
       // Fire all pre-flight work in parallel:
@@ -142,18 +233,21 @@ export function useCommentary(
       // - the forward commentary query (needs no ID table — pure SQL with a fixed line param)
       // The reverse queries depend on connection type IDs so they start after that resolves,
       // but they run concurrently with each other and with the catalog awaits.
-      const sql = isMulti
-        ? SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE(multiIds.length)
-        : SQL.GET_COMMENTARY_DATA_FOR_SOURCE_LINE
-      const params = isMulti ? multiIds : [lineId]
-      const lineIdsForReverse = isMulti ? multiIds : [lineId]
+      // Two-phase load for both single-line and section clicks: the links-only,
+      // JOIN-free query returns in milliseconds even for thousands of hits (the old
+      // content-joining query cost 150ms-1.4s and up to 10MB per click), so group
+      // structure renders immediately. Line text is backfilled below.
+      const queryLineIds = isMulti ? multiIds : [lineId]
+      const sql = SQL.GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE(queryLineIds.length)
+      const params = queryLineIds
+      const lineIdsForReverse = queryLineIds
 
       const forwardQueryPromise = query<{
         targetBookId: number
         targetLineId: number
         connectionTypeId: number
         lineIndex: number
-        content: string
+        content?: string
       }>(sql, params)
 
       const [rows, sourceEntries, targumEntries] = await Promise.all([
@@ -176,12 +270,32 @@ export function useCommentary(
 
       if (!rows.length && !sourceEntries.length && !targumEntries.length) return
 
-      groups.value = await buildCommentaryGroupsFromCombined(
+      const built = await buildCommentaryGroupsFromCombined(
         rows,
         sourceEntries,
         targumEntries,
         booksDataStore.allBooksMap,
       )
+
+      // Fetch the first screenful of text BEFORE revealing the panel — one small
+      // query — so the panel appears once, with readable text, instead of showing
+      // empty rows that fill in later (the reveal also triggers highlights/notes/
+      // toc-path queries, and the first content batch would otherwise queue behind
+      // them). The rest backfills in display order after the reveal.
+      const pendingLines = collectPendingLines(built)
+      if (pendingLines.length) {
+        try {
+          await fetchContentsInto(built, pendingLines.slice(0, CONTENT_FIRST_BATCH))
+        } catch { /* reveal with empty text rather than blocking the panel */ }
+      }
+      if (loadedForLineId !== lineId) return
+
+      groups.value = built
+
+      // Second phase: fill in the remaining text in display order, fire-and-forget.
+      // IMPORTANT: mutate through groups.value (the reactive proxy), not `built` —
+      // writes to the raw array would not trigger a re-render of already-built rows.
+      if (pendingLines.length > CONTENT_FIRST_BATCH) void backfillLineContents(groups.value, lineId)
 
       const pinned = pinnedBookId()
       if (pinned != null && !groups.value.some((g) => g.bookId === pinned)) {
@@ -347,5 +461,6 @@ export function useCommentary(
     loading,
     staticFilterGroupsLoaded,
     ensureStaticFilterGroupsLoaded,
+    requestContentPriority,
   }
 }

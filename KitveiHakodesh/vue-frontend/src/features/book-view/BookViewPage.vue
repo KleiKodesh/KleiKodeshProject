@@ -93,7 +93,7 @@ const {
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
   bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
-  groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading,
+  groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, requestContentPriority,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
@@ -268,6 +268,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :clear-highlight="clearHighlight"
                 :get-notes-for-line="getNotesForLine"
                 :schedule-notes-load="scheduleNotesLoad"
+                :request-content-priority="requestContentPriority"
+                :has-saved-scroll-pos="commentaryScrollIndex != null"
                 :create-note="createNote"
                 :update-note="updateNote"
                 :delete-note="deleteNote"
@@ -380,6 +382,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :clear-highlight="clearHighlight"
                 :get-notes-for-line="getNotesForLine"
                 :schedule-notes-load="scheduleNotesLoad"
+                :request-content-priority="requestContentPriority"
+                :has-saved-scroll-pos="commentaryScrollIndex != null"
                 :create-note="createNote"
                 :update-note="updateNote"
                 :delete-note="deleteNote"

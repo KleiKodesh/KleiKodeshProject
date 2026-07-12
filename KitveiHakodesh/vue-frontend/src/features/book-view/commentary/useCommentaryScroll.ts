@@ -81,51 +81,54 @@ export function useCommentaryScroll(
     // Step 1 — bring the target into the rendered range.
     virtualizer().scrollToIndex(idx, { align: 'start' })
 
-    // Step 2 — as soon as the virtualizer measures the target item (which happens
-    // when it renders the item into the DOM), read the exact position and apply it.
-    // MutationObserver fires synchronously after each DOM mutation, so we correct
-    // as soon as measurements land — no rAF polling loop needed.
+    // Step 2 — correct to the header's measured position, and KEEP correcting for a
+    // bounded window: the two-phase commentary loader backfills line content into
+    // already-rendered items, so measurements above the header keep changing for a
+    // short while after groups render. A one-shot correction lands wrong if a
+    // content batch arrives right after it. MutationObserver fires after each DOM
+    // mutation so corrections land as soon as measurements do. Cancelled by a newer
+    // scrollToGroup/restore (token) or by the user scrolling (wheel/touch/pointer).
     const elCaptured = el
-    let applied = false
+    const CORRECTION_WINDOW_MS = 800
+    const startedAt = performance.now()
+    let done = false
+    let observer: MutationObserver | null = null
 
-    function tryApply(): boolean {
-      if (token !== scrollToGroupToken) return true // cancelled — treat as done
-      const currentIdx = resolveIndex()
-      if (currentIdx < 0) return false
-      const m = virtualizer().measurementsCache.find((c: any) => c.index === currentIdx)
-      if (!m) return false
-      const targetScrollTop = Math.max(0, m.start)
-      elCaptured.scrollTop = targetScrollTop
-      scrollTop.value = targetScrollTop
-      return true
+    function finish() {
+      if (done) return
+      done = true
+      observer?.disconnect()
+      elCaptured.removeEventListener('wheel', finish)
+      elCaptured.removeEventListener('touchstart', finish)
+      elCaptured.removeEventListener('pointerdown', finish)
     }
 
-    // Fast path — item already measured (e.g. already in the rendered window).
-    requestAnimationFrame(() => {
-      if (applied) return
-      if (tryApply()) {
-        applied = true
-        return
+    function correct(): void {
+      if (done) return
+      if (token !== scrollToGroupToken) { finish(); return }
+      if (performance.now() - startedAt > CORRECTION_WINDOW_MS) { finish(); return }
+      const currentIdx = resolveIndex()
+      if (currentIdx < 0) return
+      const m = virtualizer().measurementsCache.find((c: any) => c.index === currentIdx)
+      if (!m) return
+      const targetScrollTop = Math.max(0, m.start)
+      if (Math.abs(elCaptured.scrollTop - targetScrollTop) > 2) {
+        elCaptured.scrollTop = targetScrollTop
+        scrollTop.value = targetScrollTop
       }
+    }
 
-      // Slow path — item not yet measured. Watch DOM mutations and apply the moment
-      // the measurement lands in the cache.
-      const observer = new MutationObserver(() => {
-        if (applied) return
-        if (tryApply()) {
-          applied = true
-          observer.disconnect()
-        }
-      })
+    elCaptured.addEventListener('wheel', finish, { passive: true })
+    elCaptured.addEventListener('touchstart', finish, { passive: true })
+    elCaptured.addEventListener('pointerdown', finish, { passive: true })
+
+    requestAnimationFrame(() => {
+      if (done) return
+      correct()
+      if (done) return
+      observer = new MutationObserver(() => correct())
       observer.observe(elCaptured, { childList: true, subtree: true, attributes: false })
-
-      // Safety timeout.
-      setTimeout(() => {
-        if (!applied) {
-          applied = true
-          observer.disconnect()
-        }
-      }, 500)
+      setTimeout(finish, CORRECTION_WINDOW_MS + 50)
     })
   }
 
@@ -290,7 +293,7 @@ export function useCommentaryScroll(
     scrollToGroupToken++
     return new Promise<void>((resolve) => {
       let attempts = 0
-      const MAX_ATTEMPTS = 20
+      const MAX_ATTEMPTS = 40
 
       function startRestore() {
         const el = scrollerEl()
@@ -322,6 +325,22 @@ export function useCommentaryScroll(
             }
 
             resolve()
+            return
+          }
+
+          // Two-phase loader: the target item may be rendered but still awaiting its
+          // text (content === ''). Its measured height is a near-empty stub, so
+          // applying a pixel offset within it would land in the wrong group. Wait
+          // (bounded by MAX_ATTEMPTS) for the viewport-priority fetch to fill it.
+          const flatItem = flatItems()[scrollIndex]
+          const contentPending =
+            scrollOffset > 0 &&
+            flatItem?.type === 'line' &&
+            flatItem.lineId > 0 &&
+            flatItem.content === ''
+          if (contentPending && attempts < MAX_ATTEMPTS) {
+            attempts++
+            nextTick(() => requestAnimationFrame(tryApplyScroll))
             return
           }
 
@@ -378,13 +397,20 @@ export function useCommentaryScroll(
     groups: () => any[],
     pinnedGroup: () => any,
     isLoading: () => boolean,
+    hasSavedScrollPos: () => boolean = () => false,
   ) {
     let isFirstLoad = true
     let scrollGeneration = 0
     watch(
       groups,
       async (newGroups) => {
-        if (isFirstLoad) { isFirstLoad = false; return }
+        if (isFirstLoad) {
+          isFirstLoad = false
+          // Blank slate (no saved scroll position): nobody else positions the panel
+          // on the very first groups load, so scroll to the pinned/default group.
+          // With a saved position, the restore path owns first positioning — skip.
+          if (hasSavedScrollPos()) return
+        }
         if (!newGroups.length) return
         // Skip partial loads — only scroll when loading is fully complete.
         if (isLoading()) return

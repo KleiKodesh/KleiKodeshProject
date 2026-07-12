@@ -37,6 +37,10 @@ export function useCommentaryRender(
   //   perLineAnnotationKey — highlights+notes per lineId; evicts only that entry.
   const renderCache = new Map<number, string>()
   const perLineAnnotationKey = new Map<number, string>()
+  // Source content that produced each cached entry — section clicks render group
+  // structure first and backfill line text in place, so a slot's content can
+  // change without the groups array identity changing.
+  const renderSource = new Map<number, string>()
   let globalCacheKey = ''
 
   function getGlobalKey(searchQuery: string | undefined): string {
@@ -150,6 +154,11 @@ export function useCommentaryRender(
       }
     }
 
+    if (renderSource.get(flatIndex) !== content) {
+      renderCache.delete(flatIndex)
+      renderSource.set(flatIndex, content)
+    }
+
     const cached = renderCache.get(flatIndex)
     if (cached !== undefined) return cached
 
@@ -181,6 +190,7 @@ export function useCommentaryRender(
     () => {
       renderCache.clear()
       perLineAnnotationKey.clear()
+      renderSource.clear()
       globalCacheKey = ''
     },
     { flush: 'sync' },

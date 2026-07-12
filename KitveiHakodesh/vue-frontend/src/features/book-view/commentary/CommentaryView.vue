@@ -34,6 +34,9 @@ const props = defineProps<{
   clearHighlight: (lineId: number, startOffset: number, endOffset: number) => void
   getNotesForLine: (lineId: number) => Note[]
   scheduleNotesLoad: (lineIds: number[]) => void
+  // Viewport-driven content priority for the two-phase commentary loader —
+  // lines can render before their text arrives; visible ones are fetched first.
+  requestContentPriority?: (lineIds: number[]) => void
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
@@ -46,6 +49,9 @@ const props = defineProps<{
   currentMatchOccurrence?: number
   pinnedGroup?: PinnedCommentaryGroup | null
   filterVisible?: boolean
+  // True when a saved scroll position exists for this panel — the restore path
+  // then owns first positioning and the first-load pin scroll must not fire.
+  hasSavedScrollPos?: boolean
 }>()
 const emit = defineEmits<{
   close: []
@@ -176,14 +182,18 @@ const totalSize = computed(() => virtualizer.value.getTotalSize())
 watch(
   virtualItems,
   (items) => {
-    const lineIds = items
+    const lineItems = items
       .map((v) => flatItems.value[v.index])
       .filter((item): item is { type: 'line'; content: string; lineId: number } =>
         item?.type === 'line',
       )
-      .map((item) => item.lineId)
-      .filter((id) => id > 0)
-    props.scheduleNotesLoad(lineIds)
+      .filter((item) => item.lineId > 0)
+    props.scheduleNotesLoad(lineItems.map((item) => item.lineId))
+    // Two-phase loader: lines in the viewport whose text hasn't arrived yet get
+    // priority over the display-order backfill (scroll restore, jump-to-group,
+    // fast scroll ahead of the backfill).
+    const missingContent = lineItems.filter((item) => item.content === '').map((item) => item.lineId)
+    if (missingContent.length) props.requestContentPriority?.(missingContent)
   },
   { immediate: true },
 )
@@ -226,6 +236,7 @@ setupGroupReloadScroll(
   () => props.groups,
   () => props.pinnedGroup,
   () => props.loading,
+  () => props.hasSavedScrollPos ?? false,
 )
 
 useVirtualScrollerKeys(
