@@ -139,6 +139,7 @@ const flatItems = computed<FlatItem[]>(() => {
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
   onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
+  onCtrlShiftC: () => onCommentarySearchInRepository(),
 })
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -236,7 +237,7 @@ useVirtualScrollerKeys(
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
-const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml } = useCommentaryCopy(
+const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
     return pinned

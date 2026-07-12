@@ -83,6 +83,7 @@ useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
   onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
+  onCtrlShiftC: () => onSearchInRepository(),
 })
 
 const virtualizer = useVirtualizer(
@@ -160,7 +161,7 @@ watch(
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord } = useBookViewLineCopyMenu({
+const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord, onSearchInRepository } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
   isSelectAll,

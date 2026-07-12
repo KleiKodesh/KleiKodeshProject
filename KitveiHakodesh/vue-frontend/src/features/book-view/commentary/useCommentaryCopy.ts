@@ -308,9 +308,9 @@ export function useCommentaryCopy(
   }
 
   const contextMenuItems: ContextMenuItem[] = [
-    { label: 'העתק', action: onCopy },
-    { label: 'העתק לתוך וורד', action: onPasteIntoWord },
-    { label: 'העתק לחיפוש במאגר', action: onSearchInRepository },
+    { label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' },
+    { label: 'העתק לתוך וורד', action: onPasteIntoWord, shortcut: 'Ctrl+V' },
+    { label: 'העתק לחיפוש במאגר', action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
     { label: 'בחר הכל', action: selectAllInContainer },
     { type: 'separator' },
     // Independent checkboxes — all can be active simultaneously
@@ -375,5 +375,6 @@ export function useCommentaryCopy(
     contextMenuItems,
     buildFormattedHtml,
     onPasteIntoWord,
+    onSearchInRepository,
   }
 }

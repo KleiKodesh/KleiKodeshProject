@@ -200,7 +200,7 @@ export function buildBookExportHtml(
 //   OFF: leave text as-is
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onPasteIntoWord: () => void } {
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onPasteIntoWord: () => void, onSearchInRepository: () => void } {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
 
@@ -373,9 +373,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
   return {
     items: [
-      { label: 'העתק', action: onCopy },
-      { label: 'העתק לתוך וורד', action: onPasteIntoWord },
-      { label: 'העתק לחיפוש במאגר', action: onSearchInRepository },
+      { label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' },
+      { label: 'העתק לתוך וורד', action: onPasteIntoWord, shortcut: 'Ctrl+V' },
+      { label: 'העתק לחיפוש במאגר', action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: 'בחר הכל', action: selectAllInContainer },
       { type: 'separator' },
       // Independent checkboxes — all can be active simultaneously
@@ -439,5 +439,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     ],
     buildFormattedHtml,
     onPasteIntoWord,
+    onSearchInRepository,
   }
 }
