@@ -1,22 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
 import type { CommentaryTreeNode } from './commentaryTreeTypes'
 import { isTreeNode } from './commentaryTreeTypes'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { isCommentaryNodeExpanded, setCommentaryNodeExpanded } from './uncheckedCommentaryBooks'
 
 const props = defineProps<{
   node: CommentaryTreeNode
   depth?: number
 }>()
 
+const tabId = usePaneNavigation().activeTabId
+
 const emit = defineEmits<{
   'toggle-item': [item: CommentaryVisibilityItem]
   'toggle-node': [payload: { sectionLabel: string; subSectionLabel: string | null; shouldCheck: boolean }]
   'navigate-to-book': [bookId: number]
 }>()
-
-const expanded = ref(false)
 
 function collectLeafItems(node: CommentaryTreeNode): CommentaryVisibilityItem[] {
   const result: CommentaryVisibilityItem[] = []
@@ -34,6 +36,20 @@ function childKey(child: CommentaryTreeNode | CommentaryVisibilityItem): string 
 }
 
 const leafItems = computed(() => collectLeafItems(props.node))
+
+// Stable key for this node in the store, derived from its first leaf's path —
+// section (depth 0) → sectionLabel, subsection (depth ≥ 1) → 'section::sub'.
+// Persisted so expand/collapse survives line changes and tab switches.
+const nodeKey = computed(() => {
+  const first = leafItems.value[0]
+  if (!first) return props.node.label
+  return (props.depth ?? 0) >= 1 ? `${first.sectionLabel}::${first.subSectionLabel}` : first.sectionLabel
+})
+
+const expanded = computed({
+  get: () => isCommentaryNodeExpanded(tabId, nodeKey.value),
+  set: (value: boolean) => setCommentaryNodeExpanded(tabId, nodeKey.value, value),
+})
 
 const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
   if (!leafItems.value.length) return 'checked'

@@ -154,12 +154,11 @@ defineExpose({ show, showAtPosition, hide })
   height: 26px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  gap: 6px;
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  text-align: right;
+  white-space: nowrap;
 }
 .item-label {
   flex: 1;
@@ -170,6 +169,7 @@ defineExpose({ show, showAtPosition, hide })
   color: var(--text-secondary);
   opacity: 0.7;
   direction: ltr;
+  margin-inline-start: 10px;
 }
 .context-menu-item:hover {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
