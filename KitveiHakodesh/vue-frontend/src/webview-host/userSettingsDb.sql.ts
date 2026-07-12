@@ -13,6 +13,13 @@ export const USER_SETTINGS_SQL = {
     ORDER BY lineId, startOffset
   `,
 
+  GET_HIGHLIGHTS_FOR_BOOKS: (count: number) => `
+    SELECT id, bookId, lineId, startOffset, endOffset, colorArgb, createdAt
+    FROM user_highlights
+    WHERE bookId IN (${Array(count).fill('?').join(',')})
+    ORDER BY lineId, startOffset
+  `,
+
   INSERT_HIGHLIGHT: `
     INSERT INTO user_highlights (bookId, lineId, startOffset, endOffset, colorArgb, createdAt)
     VALUES (?, ?, ?, ?, ?, ?)

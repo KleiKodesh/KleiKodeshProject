@@ -35,9 +35,10 @@ export function useCommentaryHighlights(getGroups: () => CommentaryGroup[]) {
 
   // ── Load ──────────────────────────────────────────────────────────────────
 
-  async function loadHighlightsForBook(commentaryBookId: number): Promise<void> {
-    if (loadedBookIds.has(commentaryBookId)) return
-    loadedBookIds.add(commentaryBookId)
+  async function loadHighlightsForBooks(commentaryBookIds: number[]): Promise<void> {
+    const newIds = commentaryBookIds.filter((id) => !loadedBookIds.has(id))
+    if (!newIds.length) return
+    for (const id of newIds) loadedBookIds.add(id)
     try {
       const rows = await queryUserSettings<{
         id: number
@@ -47,7 +48,7 @@ export function useCommentaryHighlights(getGroups: () => CommentaryGroup[]) {
         endOffset: number
         colorArgb: number
         createdAt: number
-      }>(USER_SETTINGS_SQL.GET_HIGHLIGHTS_FOR_BOOK, [commentaryBookId])
+      }>(USER_SETTINGS_SQL.GET_HIGHLIGHTS_FOR_BOOKS(newIds.length), newIds)
 
       for (const row of rows) {
         const highlight: Highlight = {
@@ -63,24 +64,29 @@ export function useCommentaryHighlights(getGroups: () => CommentaryGroup[]) {
       }
     } catch {
       // DB not ready — silently skip; the watch below will re-run when groups change
-      loadedBookIds.delete(commentaryBookId)
+      for (const id of newIds) loadedBookIds.delete(id)
     }
   }
 
-  // When the visible groups change, load highlights for any newly seen commentary books
+  // When the visible groups change, load highlights for any newly seen commentary books.
+  // All new bookIds from one groups update are batched into a single IN(...) query —
+  // a section click can surface hundreds of commentary books at once, and one query
+  // per book previously flooded the bridge with hundreds of concurrent requests.
   watch(
     getGroups,
     (groups) => {
+      const newBookIds: number[] = []
       for (const group of groups) {
         // Register lineIds for this group so applyHighlight knows the bookId even
         // before the async load completes, then kick off the load if not yet done.
         for (const line of group.lines) {
           if (line.lineId > 0) lineIdToBookId.set(line.lineId, group.bookId)
         }
-        if (group.bookId > 0 && !loadedBookIds.has(group.bookId)) {
-          void loadHighlightsForBook(group.bookId)
+        if (group.bookId > 0 && !loadedBookIds.has(group.bookId) && !newBookIds.includes(group.bookId)) {
+          newBookIds.push(group.bookId)
         }
       }
+      if (newBookIds.length) void loadHighlightsForBooks(newBookIds)
     },
     { immediate: true },
   )
