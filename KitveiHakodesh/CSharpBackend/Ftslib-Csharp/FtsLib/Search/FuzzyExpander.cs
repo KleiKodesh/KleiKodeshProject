@@ -39,7 +39,8 @@ namespace FtsLib.Search
         public static List<string> Expand(
             string                       term,
             int                          maxDistance,
-            IReadOnlyList<SegmentHandle> segments)
+            IReadOnlyList<SegmentHandle> segments,
+            TermChunkCache               cache = null)
         {
             if (maxDistance > MaxAllowedDistance) maxDistance = MaxAllowedDistance;
             if (maxDistance < 1)                  maxDistance = 1;
@@ -50,19 +51,19 @@ namespace FtsLib.Search
             {
                 // Standard trigram filter
                 var ngrams = BuildNgrams(term, 3);
-                candidates = QueryByNgrams(ngrams, segments);
+                candidates = QueryByNgrams(ngrams, segments, cache);
             }
             else if (term.Length == 3)
             {
                 // Bigram filter: a 3-char word has only one trigram (itself), which
                 // misses 1-edit neighbours. Bigrams give much better recall.
                 var ngrams = BuildNgrams(term, 2);
-                candidates = QueryByNgrams(ngrams, segments);
+                candidates = QueryByNgrams(ngrams, segments, cache);
             }
             else
             {
                 // ≤ 2 chars: no n-grams possible, fall back to infix LIKE scan.
-                candidates = QueryBySubstring(term, segments);
+                candidates = QueryBySubstring(term, segments, cache);
             }
 
             // Phase 2: Levenshtein confirmation
@@ -103,12 +104,15 @@ namespace FtsLib.Search
         /// </summary>
         private static HashSet<string> QueryByNgrams(
             List<string>                 ngrams,
-            IReadOnlyList<SegmentHandle> segments)
+            IReadOnlyList<SegmentHandle> segments,
+            TermChunkCache               cache)
         {
             var results = new HashSet<string>(System.StringComparer.Ordinal);
 
             // Build SQL once — parameter names match list indices exactly.
-            var sb = new StringBuilder("SELECT term FROM term_index WHERE ");
+            // Chunk metadata is piggybacked so resolve skips its point SELECTs (F01).
+            var sb = new StringBuilder(
+                "SELECT term, skip_offset, skip_count, offset, length, count FROM term_index WHERE ");
             for (int i = 0; i < ngrams.Count; i++)
             {
                 if (i > 0) sb.Append(" OR ");
@@ -128,7 +132,16 @@ namespace FtsLib.Search
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
-                            results.Add(reader.GetString(0));
+                        {
+                            string t = reader.GetString(0);
+                            results.Add(t);
+                            cache?.Add(t, new SegmentChunk(seg,
+                                reader.GetInt64(1),
+                                reader.GetInt32(2),
+                                reader.GetInt64(3),
+                                reader.GetInt32(4),
+                                reader.GetInt32(5)));
+                        }
                 }
             }
 
@@ -140,7 +153,8 @@ namespace FtsLib.Search
         /// </summary>
         private static HashSet<string> QueryBySubstring(
             string                       term,
-            IReadOnlyList<SegmentHandle> segments)
+            IReadOnlyList<SegmentHandle> segments,
+            TermChunkCache               cache)
         {
             var results = new HashSet<string>(System.StringComparer.Ordinal);
             string pattern = "%" + EscapeLike(term) + "%";
@@ -150,12 +164,22 @@ namespace FtsLib.Search
                 using (var cmd = seg.Conn.CreateCommand())
                 {
                     cmd.CommandText =
-                        "SELECT term FROM term_index WHERE term LIKE @p ESCAPE '\\'";
+                        "SELECT term, skip_offset, skip_count, offset, length, count " +
+                        "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
                     cmd.Parameters.Add("@p", System.Data.DbType.String).Value = pattern;
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
-                            results.Add(reader.GetString(0));
+                        {
+                            string t = reader.GetString(0);
+                            results.Add(t);
+                            cache?.Add(t, new SegmentChunk(seg,
+                                reader.GetInt64(1),
+                                reader.GetInt32(2),
+                                reader.GetInt64(3),
+                                reader.GetInt32(4),
+                                reader.GetInt32(5)));
+                        }
                 }
             }
 

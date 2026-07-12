@@ -137,6 +137,7 @@
     <Compile Include="Search\FilteringIterator.cs" />
     <Compile Include="Search\FuzzyExpander.cs" />
     <Compile Include="Search\IndexReader.cs" />
+    <Compile Include="Search\TermChunkCache.cs" />
     <Compile Include="Search\Levenshtein.cs" />
     <Compile Include="Search\PostingIntersector.cs" />
     <Compile Include="Search\PostingIterator.cs" />
