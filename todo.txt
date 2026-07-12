@@ -1,3 +1,21 @@
+in hom epage search if no results then move to toc heuristics
+
+pin recent items in home page
+allow user to choose more history items to be show
+add to msword context menu (keyboard shrotcuts?)
+
+make sure all vsto isnatnce of appviewer share same webcach
+add setting to choose desktop use same webcach
+
+bookview toolbar is specific to lines view?....
+
+typo reporting
+
+when selecting text it changes the line detect txt selction it doesn't change selected line
+
+when swtchin commtry to side view pos in the linesview jumps
+
+
 add optional index drives with index saved on teh drive
 takes time till service starts
 fetch surrounding lines for context for very short lines - willr equire paying more attention during navigating to result?
@@ -6,12 +24,7 @@ why is wildcard search so much slower?
 
 ספרים קרובים update for book with source
 
-add focused search to fts thi si seasy because it can be itegrated in te galloping 
-create excluded folders dilgue for the document locator
-add to msword context menu
-
-add some padding at bottom of the ines view
-theme eyboard shortcuts
+add focused search to fts thi si seasy because it can be itegrated in te galloping
 
 שורות מיותרות במרכוז שורה אחרונה
 לפעם הבאה, תחפש טאב מעבר פיסקה, ותחליף לעיצוב בגודל 1, שים לב שגם המעבר פיסקה יקבל את הגודל 1, כדי שבאמת יוקטן הרווח המיותר.
