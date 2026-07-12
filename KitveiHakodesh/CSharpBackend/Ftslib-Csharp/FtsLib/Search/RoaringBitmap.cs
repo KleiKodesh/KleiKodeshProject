@@ -51,6 +51,14 @@ namespace FtsLib.Search
         private readonly List<ushort>    _keys       = new List<ushort>();
         private readonly List<Container> _containers = new List<Container>();
 
+        // Last-touched block cache (F05). Posting lists are ascending, so during a
+        // union drain consecutive doc IDs almost always land in the block that was
+        // just binary-searched — the cache turns that FindKey into one compare.
+        // Refreshed on every Add, so it stays valid across list inserts (which
+        // shift indices) because it always points at the block just touched.
+        private ushort _lastKey = 0;
+        private int    _lastIdx = -1;
+
         /// <summary>Total number of doc IDs stored across all containers.</summary>
         public int Count { get; private set; }
 
@@ -66,16 +74,28 @@ namespace FtsLib.Search
             ushort high = (ushort)((uint)docId >> 16);
             ushort low  = (ushort)((uint)docId & 0xFFFF);
 
-            int idx = FindKey(high);
-            if (idx < 0)
+            int idx;
+            if (_lastIdx >= 0 && _lastKey == high)
             {
-                idx = ~idx;
-                _keys.Insert(idx, high);
-                var container = new ArrayContainer();
-                container.Add(low);
-                _containers.Insert(idx, container);
-                Count++;
-                return;
+                idx = _lastIdx;
+            }
+            else
+            {
+                idx = FindKey(high);
+                if (idx < 0)
+                {
+                    idx = ~idx;
+                    _keys.Insert(idx, high);
+                    var container = new ArrayContainer();
+                    container.Add(low);
+                    _containers.Insert(idx, container);
+                    Count++;
+                    _lastKey = high;
+                    _lastIdx = idx;
+                    return;
+                }
+                _lastKey = high;
+                _lastIdx = idx;
             }
 
             var existing = _containers[idx];
@@ -107,6 +127,10 @@ namespace FtsLib.Search
         /// </summary>
         public void Or(RoaringBitmap other)
         {
+            // Or() inserts blocks without refreshing the last-touched cache; a
+            // stale index after a list shift would route Adds to the wrong block.
+            _lastIdx = -1;
+
             for (int ob = 0; ob < other._keys.Count; ob++)
             {
                 ushort key      = other._keys[ob];
@@ -285,6 +309,15 @@ namespace FtsLib.Search
 
             public override bool Add(ushort value)
             {
+                // Append fast-path (F05): ascending drains append at the tail —
+                // skip the binary search and the (no-op) shift entirely.
+                if (_count == 0 || value > _values[_count - 1])
+                {
+                    EnsureCapacity();
+                    _values[_count++] = value;
+                    return true;
+                }
+
                 int lo = 0, hi = _count - 1;
                 while (lo <= hi)
                 {

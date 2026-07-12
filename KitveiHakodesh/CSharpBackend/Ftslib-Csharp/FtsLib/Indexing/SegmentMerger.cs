@@ -24,6 +24,16 @@ namespace FtsLib.Indexing
 
         public void MergeIfNeeded(int level)
         {
+            // Shutdown requested — do not start a new (potentially minutes-long)
+            // merge. Whatever is on disk is already consistent; the merge will
+            // simply re-trigger next session when the level is still over fanout.
+            if (_store.MergeAbortToken.IsCancellationRequested)
+            {
+                FtsLog.Write("SegmentMerger",
+                    $"MergeIfNeeded(L{level}): merge abort requested — skipping");
+                return;
+            }
+
             int count = _store.Live.LiveSegCount(level);
             FtsLog.Write("SegmentMerger",
                 $"MergeIfNeeded(L{level}): {count} segment(s), fanout={SegmentStore.Fanout}");
@@ -111,6 +121,13 @@ namespace FtsLib.Indexing
                     $"WriteMergedDat complete: {entries.Count:N0} terms in {sw.ElapsedMilliseconds}ms " +
                     $"tmpDat size={( File.Exists(tmpDat) ? new System.IO.FileInfo(tmpDat).Length.ToString("N0") + "B" : "MISSING")}");
             }
+            catch (OperationCanceledException)
+            {
+                FtsLog.Write("SegmentMerger",
+                    "merge ABORTED during WriteMergedDat (shutdown requested) — cleaning up");
+                AbortCleanup(tmpDat, tmpDb, level, newSegId);
+                throw;
+            }
             catch (Exception ex)
             {
                 FtsLog.Write("SegmentMerger",
@@ -120,6 +137,17 @@ namespace FtsLib.Indexing
             finally
             {
                 if (readers != null) CloseReaders(readers);
+            }
+
+            // Last abort window before the meta DB write. Past this point the merge
+            // runs to completion — the commit sequence (rename → delete sources →
+            // END_MERGE) is fast and must not be interrupted voluntarily.
+            if (_store.MergeAbortToken.IsCancellationRequested)
+            {
+                FtsLog.Write("SegmentMerger",
+                    "merge ABORTED before WriteMetaDb (shutdown requested) — cleaning up");
+                AbortCleanup(tmpDat, tmpDb, level, newSegId);
+                throw new OperationCanceledException("Merge aborted by shutdown request.");
             }
 
             try
@@ -144,63 +172,80 @@ namespace FtsLib.Indexing
             }
 
             // ── Crash-safe commit sequence ────────────────────────────────────────────
-            // Step 1: rename .tmp files to final names
+            // The write lock is held ONLY here — the k-way merge write above ran
+            // concurrently with searches. Acquisition waits for active SearchLeases
+            // to drain, so no source file is deleted while a reader has it open.
+            // New searches queue behind the pending writer and resume within
+            // milliseconds once the commit finishes.
             FtsLog.Write("SegmentMerger",
-                "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
+                "COMMIT: acquiring write lock (waits for active search leases)");
+            _store.SearchMergeLock.EnterWriteLock();
             try
             {
-                File.Move(tmpDat, outDat);
-                FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
-                File.Move(tmpDb, outDb);
-                FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
-            }
-            catch (Exception ex)
-            {
+                // Step 1: rename .tmp files to final names
                 FtsLog.Write("SegmentMerger",
-                    $"EXCEPTION during File.Move (tmp→final): {ex.GetType().Name}: {ex.Message}");
-                throw;
-            }
-            FtsLog.Write("SegmentMerger",
-                "COMMIT step 1 complete: target files renamed to final paths");
-
-            // Step 2: delete source segments
-            // If we crash between step 1 and step 3 (before END_MERGE), recovery
-            // sees BEGIN_MERGE with sources gone + target exists → Case B: correct.
-            FtsLog.Write("SegmentMerger",
-                $"COMMIT step 2: deleting {segIds.Count} source segment(s) — crash point C: if crash here, Case B recovery will handle it");
-            foreach (int sid in segIds)
-            {
-                string srcDat = _store.Live.SegDatPath(level, sid);
-                string srcDb  = _store.Live.SegDbPath(level, sid);
-                bool datExists = File.Exists(srcDat);
-                bool dbExists  = File.Exists(srcDb);
-                FtsLog.Write("SegmentMerger",
-                    $"  deleting seg_{level}_{sid}: dat={datExists} db={dbExists}");
+                    "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
                 try
                 {
-                    DeleteIfExists(srcDat);
-                    DeleteIfExists(srcDb);
-                    DeleteIfExists(srcDb + "-shm");
-                    DeleteIfExists(srcDb + "-wal");
-                    FtsLog.Write("SegmentMerger", $"  seg_{level}_{sid} deleted OK");
+                    File.Move(tmpDat, outDat);
+                    FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
+                    File.Move(tmpDb, outDb);
+                    FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
                 }
                 catch (Exception ex)
                 {
                     FtsLog.Write("SegmentMerger",
-                        $"  EXCEPTION deleting seg_{level}_{sid}: {ex.GetType().Name}: {ex.Message}");
+                        $"EXCEPTION during File.Move (tmp→final): {ex.GetType().Name}: {ex.Message}");
                     throw;
                 }
+                FtsLog.Write("SegmentMerger",
+                    "COMMIT step 1 complete: target files renamed to final paths");
+
+                // Step 2: delete source segments
+                // If we crash between step 1 and step 3 (before END_MERGE), recovery
+                // sees BEGIN_MERGE with a complete final-path target → generalized
+                // Case B: registers the target and removes leftover sources.
+                FtsLog.Write("SegmentMerger",
+                    $"COMMIT step 2: deleting {segIds.Count} source segment(s) — crash point C: Case B recovery handles a kill here");
+                foreach (int sid in segIds)
+                {
+                    string srcDat = _store.Live.SegDatPath(level, sid);
+                    string srcDb  = _store.Live.SegDbPath(level, sid);
+                    bool datExists = File.Exists(srcDat);
+                    bool dbExists  = File.Exists(srcDb);
+                    FtsLog.Write("SegmentMerger",
+                        $"  deleting seg_{level}_{sid}: dat={datExists} db={dbExists}");
+                    try
+                    {
+                        DeleteIfExists(srcDat);
+                        DeleteIfExists(srcDb);
+                        DeleteIfExists(srcDb + "-shm");
+                        DeleteIfExists(srcDb + "-wal");
+                        FtsLog.Write("SegmentMerger", $"  seg_{level}_{sid} deleted OK");
+                    }
+                    catch (Exception ex)
+                    {
+                        FtsLog.Write("SegmentMerger",
+                            $"  EXCEPTION deleting seg_{level}_{sid}: {ex.GetType().Name}: {ex.Message}");
+                        throw;
+                    }
+                }
+                FtsLog.Write("SegmentMerger", "COMMIT step 2 complete: all source segments deleted");
+
+                // Step 3: write END_MERGE to WAL
+                FtsLog.Write("SegmentMerger",
+                    "COMMIT step 3: writing WAL END_MERGE — crash point D: if crash here, RebuildFromDisk finds only target (correct)");
+                _store.Wal.EndMerge(level, newSegId);
+                FtsLog.Write("SegmentMerger", "WAL END_MERGE written");
+
+                // Step 4: update live state in memory
+                _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
             }
-            FtsLog.Write("SegmentMerger", "COMMIT step 2 complete: all source segments deleted");
-
-            // Step 3: write END_MERGE to WAL
-            FtsLog.Write("SegmentMerger",
-                "COMMIT step 3: writing WAL END_MERGE — crash point D: if crash here, RebuildFromDisk finds only target (correct)");
-            _store.Wal.EndMerge(level, newSegId);
-            FtsLog.Write("SegmentMerger", "WAL END_MERGE written");
-
-            // Step 4: update live state in memory
-            _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
+            finally
+            {
+                _store.SearchMergeLock.ExitWriteLock();
+                FtsLog.Write("SegmentMerger", "COMMIT: write lock released");
+            }
 
             // Log final state
             int totalSegs = _store.Live.TotalLiveSegs();
@@ -210,6 +255,32 @@ namespace FtsLib.Indexing
 
             // Log current directory state after merge
             LogDirState("after MergeLevel L" + level + "→L" + nextLevel);
+        }
+
+        /// <summary>
+        /// Cleanup after a voluntary merge abort: delete the .tmp outputs and record
+        /// ABORT_MERGE so recovery knows there is nothing pending. Runs strictly
+        /// before any commit step, so all source segments are untouched. Best-effort:
+        /// if any of this fails, the BEGIN_MERGE record stays pending and normal
+        /// crash recovery re-runs the merge from the (intact) sources at next startup.
+        /// </summary>
+        private void AbortCleanup(string tmpDat, string tmpDb, int level, int targetSegId)
+        {
+            try
+            {
+                DeleteIfExists(tmpDat);
+                DeleteIfExists(tmpDb);
+                DeleteIfExists(tmpDb + "-shm");
+                DeleteIfExists(tmpDb + "-wal");
+                _store.Wal.AbortMerge(level, targetSegId);
+                FtsLog.Write("SegmentMerger",
+                    $"ABORT_MERGE recorded for L{level} target={targetSegId} — sources untouched");
+            }
+            catch (Exception ex)
+            {
+                FtsLog.Write("SegmentMerger",
+                    "abort cleanup failed (recovery handles leftovers at next startup): " + ex.Message);
+            }
         }
 
         private void LogDirState(string label)
@@ -246,6 +317,14 @@ namespace FtsLib.Indexing
             {
                 while (true)
                 {
+                    // Abort check every 4096 terms — keeps shutdown latency well
+                    // under a second even on multi-million-term merges, at zero
+                    // measurable cost. Aborting here is always safe: nothing has
+                    // been renamed or deleted yet, only the .tmp file is dirty.
+                    if ((written & 4095) == 0 &&
+                        _store.MergeAbortToken.IsCancellationRequested)
+                        throw new OperationCanceledException("Merge aborted by shutdown request.");
+
                     string minTerm = FindMinTerm(readers);
                     if (minTerm == null) break;
 

@@ -55,6 +55,38 @@ namespace FtsLib.Search
             return true;
         }
 
+        /// <summary>
+        /// Drains every REMAINING posting into <paramref name="bitmap"/> — exactly
+        /// the values a <c>while (MoveNext()) bitmap.Add(Current)</c> loop would
+        /// insert from the same state, but decoded in one tight non-virtual loop
+        /// (F05: the layered per-doc path costs ~30–60ns/posting in virtual calls
+        /// and redundant block searches; the raw decode is ~100× cheaper).
+        /// The iterator is exhausted afterwards.
+        /// </summary>
+        public virtual void DrainInto(RoaringBitmap bitmap)
+        {
+            if (_done) return;
+
+            // Locals for the hot loop. For an unstarted iterator _encoded is 0, so
+            // the first "+= delta" produces the absolute first value — the same
+            // arithmetic MoveNext performs.
+            var  buf     = _buf;
+            int  len     = _len;
+            int  pos     = _pos;
+            uint encoded = _encoded;
+
+            while (pos < len)
+            {
+                encoded += VarInt.Read(buf, ref pos, len);
+                bitmap.Add((int)((long)encoded + int.MinValue));
+            }
+
+            _pos     = pos;
+            _encoded = encoded;
+            _started = true;
+            _done    = true;
+        }
+
         public virtual bool SkipTo(int target)
         {
             if (_done) return false;

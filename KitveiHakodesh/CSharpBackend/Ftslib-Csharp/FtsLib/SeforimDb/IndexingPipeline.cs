@@ -247,6 +247,12 @@ namespace FtsLib.SeforimDb
                 writer = new IndexWriter(indexPath);
             }
 
+            // Long-running merges observe the build's cancellation token: on
+            // shutdown an in-flight merge aborts within a fraction of a second
+            // (leaving only .tmp garbage — never touching source segments), so
+            // Dispose/StopAll never blocks for minutes behind a merge.
+            writer.MergeAbortToken = ct;
+
             // Initialize progress tracking after the catch block so they reflect
             // the correct resumeLineId (0 if we wiped the index, or the original
             // value if recovery succeeded).
@@ -261,6 +267,8 @@ namespace FtsLib.SeforimDb
             if (resumeLineId != 0)
                 Console.WriteLine($"[IndexingPipeline] Writer ready — LastFlushedLineId={writer.LastFlushedLineId}, resumeLineId={resumeLineId}");
 
+            bool cancelled = false;
+
             using (var db = new ZayitDb(dbPath))
             using (writer)
             {
@@ -268,51 +276,84 @@ namespace FtsLib.SeforimDb
                     ? db.ReadLinesFrom(resumeLineId, limit, ct)
                     : db.ReadLines(limit, ct);
 
-                foreach (var (id, content) in lineSource)
+                try
                 {
-                    ct.ThrowIfCancellationRequested();
-                    anyLinesProcessed = true;
-
-                    foreach (var term in tokenizer.Extract(content))
-                        writer.Add(id, term);
-
-                    lastWrittenLineId = id;
-                    n++;
-                    onProgress?.Invoke(n);
-
-                    // Force a flush on the interval boundary so a segment is written
-                    // even if the term-count threshold has not been reached yet.
-                    if (n % ForceFlushLineInterval == 0)
-                        writer.ForceFlush();
-
-                    // Update the progress file only when a flush has actually completed.
-                    // LastFlushedLineId is written by the background flush task after
-                    // the segment is fully on disk — it lags behind lastWrittenLineId.
-                    int flushed = writer.LastFlushedLineId;
-                    if (flushed > lastProgressLineId)
+                    foreach (var (id, content) in lineSource)
                     {
-                        WriteProgressFile(indexPath, flushed, effectiveTotalLines, effectiveResumeOffset + n);
-                        Console.WriteLine($"[IndexingPipeline] Progress file updated: lineId={flushed} (written={lastWrittenLineId}, n={n})");
-                        FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
-                            $"flush detected: flushed={flushed} written={lastWrittenLineId} n={n}");
-                        lastProgressLineId = flushed;
-                        onFlush?.Invoke();
-                    }                }
+                        ct.ThrowIfCancellationRequested();
+                        anyLinesProcessed = true;
+
+                        foreach (var term in tokenizer.Extract(content))
+                            writer.Add(id, term);
+
+                        lastWrittenLineId = id;
+                        n++;
+                        onProgress?.Invoke(n);
+
+                        // Force a flush on the interval boundary so a segment is written
+                        // even if the term-count threshold has not been reached yet.
+                        if (n % ForceFlushLineInterval == 0)
+                            writer.ForceFlush();
+
+                        // Update the progress file only when a flush has actually completed.
+                        // LastFlushedLineId is written by the background flush task after
+                        // the segment is fully on disk — it lags behind lastWrittenLineId.
+                        int flushed = writer.LastFlushedLineId;
+                        if (flushed > lastProgressLineId)
+                        {
+                            WriteProgressFile(indexPath, flushed, effectiveTotalLines, effectiveResumeOffset + n);
+                            Console.WriteLine($"[IndexingPipeline] Progress file updated: lineId={flushed} (written={lastWrittenLineId}, n={n})");
+                            FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                                $"flush detected: flushed={flushed} written={lastWrittenLineId} n={n}");
+                            lastProgressLineId = flushed;
+                            onFlush?.Invoke();
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Cancelled (app shutdown / StopAll). Do NOT rethrow yet: the
+                    // using-block disposal below flushes the tail RAM batch and
+                    // drains the pipeline (in-flight merges abort quickly via
+                    // MergeAbortToken), after which every line up to
+                    // lastWrittenLineId is durably on disk — so the final progress
+                    // file can record it and resume re-indexes nothing.
+                    cancelled = true;
+                    FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                        $"BUILD CANCELLED at written={lastWrittenLineId} n={n} — flushing tail batch and draining pipeline");
+                }
 
                 // Dispose() (called by the using block) flushes the remaining RAM index
                 // and waits for all background flush tasks to complete. By the time we
                 // exit the using block, every line up to lastWrittenLineId is on disk.
             }
 
+            // If a background segment write failed, some lines never reached disk.
+            // The in-loop progress updates only ever recorded completed flushes, so
+            // the progress file is still correct — but the final progress write with
+            // lastWrittenLineId below would claim the missing lines. Skip it and
+            // surface the failure.
+            Exception pipelineFault = writer.PipelineFault;
+            if (pipelineFault != null)
+            {
+                Console.WriteLine("[IndexingPipeline] BUILD FAILED — background segment write faulted: " + pipelineFault.Message);
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                    $"BUILD FAILED — pipeline fault: {pipelineFault.GetType().Name}: {pipelineFault.Message} " +
+                    $"(progress file stays at last completed flush)");
+                if (cancelled) throw new OperationCanceledException(ct);
+                throw new IOException("Index build failed: a background segment write faulted.", pipelineFault);
+            }
+
             // All flushes are complete. Write the final progress file with the true
             // last line ID on disk. This is safe because Dispose() has already drained
-            // the entire flush pipeline via WaitForMerge().
+            // the entire flush pipeline via WaitForMerge() — and it is correct on
+            // cancellation too, because the tail batch was flushed during Dispose.
             if (anyLinesProcessed)
             {
                 WriteProgressFile(indexPath, lastWrittenLineId, effectiveTotalLines, effectiveResumeOffset + n);
-                Console.WriteLine($"[IndexingPipeline] Build complete — final progress lineId={lastWrittenLineId}");
+                Console.WriteLine($"[IndexingPipeline] {(cancelled ? "Build cancelled" : "Build complete")} — final progress lineId={lastWrittenLineId}");
                 FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
-                    $"BUILD COMPLETE — final progress lineId={lastWrittenLineId} n={n}");
+                    $"{(cancelled ? "BUILD CANCELLED" : "BUILD COMPLETE")} — final progress lineId={lastWrittenLineId} n={n}");
             }
             else
             {
@@ -335,6 +376,12 @@ namespace FtsLib.SeforimDb
             catch { }
 
             FtsLib.Indexing.FtsLog.Separator("IndexingPipeline.Build END");
+
+            // Preserve the outward cancellation contract AFTER the progress file is
+            // current: callers (FtsIndexBuilder) treat OperationCanceledException as
+            // "not completed" and skip the version stamp.
+            if (cancelled)
+                throw new OperationCanceledException(ct);
 
             // Return true only when lines were actually processed — this distinguishes
             // a real completed build from a no-op (WAL recovery only, or empty DB).

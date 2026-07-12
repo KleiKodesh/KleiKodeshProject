@@ -47,6 +47,14 @@ namespace FtsLib.Search
             return false;
         }
 
+        public override void DrainInto(RoaringBitmap bitmap)
+        {
+            if (_exhausted) return;
+            for (; _idx < _iters.Length; _idx++)
+                _iters[_idx].DrainInto(bitmap);
+            _exhausted = true;
+        }
+
         public override IEnumerable<int> AsEnumerable()
         {
             while (MoveNext()) yield return Current;

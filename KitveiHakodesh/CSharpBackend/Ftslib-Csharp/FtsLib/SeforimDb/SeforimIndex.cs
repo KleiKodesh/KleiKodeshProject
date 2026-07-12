@@ -76,13 +76,31 @@ namespace FtsLib.SeforimDb
                 return;
             }
 
-            Console.WriteLine("[SeforimIndex] Segments found — running crash recovery...");
-            FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "segments or WAL found — running recovery");
+            // Crash recovery MUTATES the index directory: it deletes .tmp files and
+            // may re-run or finalize an interrupted merge. Running it while another
+            // process is actively building/merging the same directory would destroy
+            // that process's in-flight work — so recovery only runs under the
+            // exclusive write lock. If the lock is busy, skip recovery: rebuild the
+            // live segment state read-only so searches still work, and let full
+            // recovery run later under the lock (the next BuildIndex, or the next
+            // SeforimIndex construction after the other process finishes).
             try
             {
-                _store.Recover();
-                Console.WriteLine("[SeforimIndex] Recovery complete.");
-                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "recovery complete");
+                using (new IndexWriteLock(_indexPath))
+                {
+                    Console.WriteLine("[SeforimIndex] Segments found — running crash recovery...");
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "segments or WAL found — running recovery under write lock");
+                    _store.Recover();
+                    Console.WriteLine("[SeforimIndex] Recovery complete.");
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "recovery complete");
+                }
+            }
+            catch (IndexWriteLockException)
+            {
+                Console.WriteLine("[SeforimIndex] Another process is writing to the index — skipping recovery (read-only open).");
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore",
+                    "write lock busy — another process is building; skipping recovery, rebuilding live state read-only");
+                _store.RecoverReadOnly();
             }
             catch (CorruptIndexException ex)
             {
@@ -161,7 +179,7 @@ namespace FtsLib.SeforimDb
                     FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
                         "forceMergeOnComplete=true — starting force merge");
                     Console.WriteLine("[SeforimIndex] Build complete — starting force merge...");
-                    _store.MergeAllUnderWriteLock();
+                    _store.MergeAll();
                     if (_store.IsWiped)
                     {
                         FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
@@ -188,7 +206,8 @@ namespace FtsLib.SeforimDb
         /// This is an expensive operation — it rewrites every segment file. Call it
         /// after a full build is complete to produce a single-segment index.
         ///
-        /// Acquires the write lock so no concurrent search can run during the merge.
+        /// Searches run concurrently: each level merge blocks them only for its
+        /// millisecond commit step, never for the merge write itself.
         /// </summary>
         public void ForceMerge()
         {
@@ -202,9 +221,10 @@ namespace FtsLib.SeforimDb
             {
                 FtsLib.Indexing.FtsLog.Write("SeforimIndex.ForceMerge", "IndexWriteLock acquired");
 
-                // MergeAllUnderWriteLock drains the flush pipeline internally
-                // before acquiring the write lock — no flush or search can race.
-                _store.MergeAllUnderWriteLock();
+                // MergeAll drains the flush pipeline internally before merging —
+                // no flush can race. Searches proceed concurrently; each level
+                // merge locks only its own commit step.
+                _store.MergeAll();
 
                 if (_store.IsWiped)
                 {
