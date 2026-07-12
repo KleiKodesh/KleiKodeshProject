@@ -12,6 +12,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'toggle-item': [item: CommentaryVisibilityItem]
+  'toggle-node': [payload: { sectionLabel: string; subSectionLabel: string | null; shouldCheck: boolean }]
   'navigate-to-book': [bookId: number]
 }>()
 
@@ -45,7 +46,16 @@ const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
 function toggleCheckbox(event: MouseEvent) {
   event.stopPropagation()
   const shouldCheck = sectionState.value !== 'checked'
-  leafItems.value.forEach((item) => { item.isChecked = shouldCheck })
+  const first = leafItems.value[0]
+  if (!first) return
+  // A node's leaves all share the same sectionLabel; depth-1 nodes also share
+  // the subSectionLabel. The panel's handler applies the node-level rule so the
+  // uncheck covers FUTURE children of this category too, not just current ones.
+  emit('toggle-node', {
+    sectionLabel: first.sectionLabel,
+    subSectionLabel: (props.depth ?? 0) >= 1 ? first.subSectionLabel : null,
+    shouldCheck,
+  })
 }
 
 function navigateToFirstBook() {
@@ -79,6 +89,7 @@ function navigateToFirstBook() {
           :node="child"
           :depth="(depth ?? 0) + 1"
           @toggle-item="emit('toggle-item', $event)"
+          @toggle-node="emit('toggle-node', $event)"
           @navigate-to-book="emit('navigate-to-book', $event)"
         />
         <div

@@ -10,11 +10,11 @@ import { useZoomHandler } from '@/composables/useZoom'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
-import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import type { CommentaryGroup } from './useCommentary'
 import type { CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
 import { isCommentaryItemVisible } from '../bookViewTypes'
+import { isCommentaryBookUnchecked } from './uncheckedCommentaryBooks'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
@@ -110,13 +110,20 @@ const _commentaryZoom = computed({
 useZoomHandler({ zoom: _commentaryZoom, target: scrollerEl, keyboard: true })
 
 const visibleGroups = computed(() => {
-  if (!props.visibilityList.length) return props.groups
+  // This tab's unchecked books/categories are excluded unconditionally —
+  // applies even when the filter tree was never opened in this tab, and
+  // section/subsection rules cover books first appearing on new lines.
+  const base = props.groups.filter(
+    (group) =>
+      !isCommentaryBookUnchecked(_tabId, group.sectionLabel ?? '', group.subSectionLabel ?? '', group.bookId),
+  )
+  if (!props.visibilityList.length) return base
   const visibleKeys = new Set(
     props.visibilityList
       .filter(isCommentaryItemVisible)
       .map((item) => `${item.bookId}::${item.sectionLabel}::${item.subSectionLabel}`),
   )
-  return props.groups.filter((group) =>
+  return base.filter((group) =>
     visibleKeys.has(`${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`),
   )
 })
@@ -350,7 +357,7 @@ const activeTocPath = computed(() =>
           @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
           @close="emit('close')"
         />
-        <div v-if="props.loading" class="state-overlay"><LoadingAnimation /></div>
+        <div v-if="props.loading" class="loading-hint">בטעינה...</div>
         <div v-else-if="!flatItems.length" class="state-overlay">
           <div class="hint-container">
             <div class="hint-title">{{
@@ -443,6 +450,16 @@ const activeTocPath = computed(() =>
   display: flex;
   align-items: center;
   justify-content: center;
+}
+.loading-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 300;
+  color: var(--text-secondary);
+  opacity: 0.55;
 }
 .hint {
   font-size: 13px;
