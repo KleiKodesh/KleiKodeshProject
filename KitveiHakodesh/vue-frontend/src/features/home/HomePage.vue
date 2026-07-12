@@ -35,6 +35,7 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
+import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import { storeToRefs } from 'pinia'
 import type { Component } from 'vue'
 
@@ -129,9 +130,11 @@ watch(homeSearchQuery, (value) => (value ? pausePlaceholderTyping() : resumePlac
 
 const {
   catalogResults,
+  catalogTocResults,
   hebrewBooksResults,
   fileResults,
   sourcePriority,
+  isLoadingCatalogToc,
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
@@ -144,7 +147,7 @@ const {
 useDropdownClose(searchBarRef, () => { isSearchDropdownOpen.value = false }, { ignore: [searchDropdownEl] })
 
 // Open the dropdown when async sources resolve results after the debounce
-watch([hebrewBooksResults, fileResults], () => {
+watch([catalogTocResults, hebrewBooksResults, fileResults], () => {
   if ((homeSearchQuery.value ?? '').trim().length >= 2) {
     if (hasAnyResults()) {
       isSearchDropdownOpen.value = true
@@ -201,6 +204,17 @@ function closeSearchDropdown() {
 function onSelectCatalogBook(bookId: number, bookTitle: string) {
   closeSearchDropdown()
   paneNavigation.updateActiveTab({ route: '/book-view', title: bookTitle, bookId })
+}
+
+function onSelectCatalogToc(item: TocFsItem) {
+  closeSearchDropdown()
+  paneNavigation.updateActiveTab({
+    route: '/book-view',
+    title: item.book.title,
+    bookId: item.book.id,
+    openTocEntryId: item.tocEntryId,
+    openTocLineIndex: item.tocLineIndex ?? undefined,
+  })
 }
 
 function onSelectHebrewBook(book: HebrewBook) {
@@ -323,9 +337,11 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
           v-if="isSearchDropdownOpen"
           ref="searchDropdownRef"
           :catalog-results="catalogResults"
+          :catalog-toc-results="catalogTocResults"
           :hebrew-books-results="hebrewBooksResults"
           :file-results="fileResults"
           :source-priority="sourcePriority"
+          :is-loading-catalog-toc="isLoadingCatalogToc"
           :is-loading-hebrew-books="isLoadingHebrewBooks"
           :is-loading-files="isLoadingFiles"
           :anchor-top="dropdownAnchorTop"
@@ -333,6 +349,7 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
           :anchor-right="dropdownAnchorRight"
           :max-height="dropdownMaxHeight"
           @select-catalog-book="onSelectCatalogBook"
+          @select-catalog-toc="onSelectCatalogToc"
           @select-hebrew-book="onSelectHebrewBook"
           @select-file="onSelectFile"
           @dropdown-focused="pauseSearch"
