@@ -69,6 +69,14 @@ namespace FtsLib.Indexing
         public void EndMerge(int level, int target) =>
             _writer.WriteLine($"END_MERGE level={level} target={target}");
 
+        /// <summary>
+        /// Records that a merge was aborted before any commit step ran (no rename,
+        /// no source deletion). Recovery treats this like END_MERGE — there is
+        /// nothing to redo or undo; only .tmp garbage may remain.
+        /// </summary>
+        public void AbortMerge(int level, int target) =>
+            _writer.WriteLine($"ABORT_MERGE level={level} target={target}");
+
         // ── Analyze ───────────────────────────────────────────────────
 
         public RecoveryState Analyze()
@@ -124,6 +132,11 @@ namespace FtsLib.Indexing
                 }
                 else if (line.StartsWith("END_MERGE "))
                 {
+                    state.PendingMerge = null;
+                }
+                else if (line.StartsWith("ABORT_MERGE "))
+                {
+                    // Merge aborted before any commit step — nothing pending.
                     state.PendingMerge = null;
                 }
                 // Legacy entries from old format — ignore safely

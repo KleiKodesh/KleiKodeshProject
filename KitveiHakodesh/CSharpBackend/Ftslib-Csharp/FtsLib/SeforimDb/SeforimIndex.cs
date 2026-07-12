@@ -76,13 +76,31 @@ namespace FtsLib.SeforimDb
                 return;
             }
 
-            Console.WriteLine("[SeforimIndex] Segments found — running crash recovery...");
-            FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "segments or WAL found — running recovery");
+            // Crash recovery MUTATES the index directory: it deletes .tmp files and
+            // may re-run or finalize an interrupted merge. Running it while another
+            // process is actively building/merging the same directory would destroy
+            // that process's in-flight work — so recovery only runs under the
+            // exclusive write lock. If the lock is busy, skip recovery: rebuild the
+            // live segment state read-only so searches still work, and let full
+            // recovery run later under the lock (the next BuildIndex, or the next
+            // SeforimIndex construction after the other process finishes).
             try
             {
-                _store.Recover();
-                Console.WriteLine("[SeforimIndex] Recovery complete.");
-                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "recovery complete");
+                using (new IndexWriteLock(_indexPath))
+                {
+                    Console.WriteLine("[SeforimIndex] Segments found — running crash recovery...");
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "segments or WAL found — running recovery under write lock");
+                    _store.Recover();
+                    Console.WriteLine("[SeforimIndex] Recovery complete.");
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "recovery complete");
+                }
+            }
+            catch (IndexWriteLockException)
+            {
+                Console.WriteLine("[SeforimIndex] Another process is writing to the index — skipping recovery (read-only open).");
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore",
+                    "write lock busy — another process is building; skipping recovery, rebuilding live state read-only");
+                _store.RecoverReadOnly();
             }
             catch (CorruptIndexException ex)
             {
