@@ -73,7 +73,7 @@ namespace FtsLib.Indexing
 
         /// <summary>
         /// Returns all level numbers that currently have more than one live segment.
-        /// Used by MergeAllUnderWriteLock to drive the purge merge pass.
+        /// Used by MergeAll to drive the purge merge pass.
         /// </summary>
         internal List<int> GetLevelsWithMultiple()
         {

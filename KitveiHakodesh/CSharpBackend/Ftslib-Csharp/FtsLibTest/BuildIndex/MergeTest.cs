@@ -195,7 +195,7 @@ namespace FtsLibTest
 
             // ── Step 4: Force merge ───────────────────────────────────────────────
             Console.WriteLine("║");
-            Console.WriteLine("║  ── STEP 4: Force merge (MergeAllUnderWriteLock)...");
+            Console.WriteLine("║  ── STEP 4: Force merge (MergeAll)...");
             FtsLog.Separator("STEP 4: FORCE MERGE");
             LogSegmentState("before ForceMerge", indexDir);
 

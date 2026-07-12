@@ -172,63 +172,80 @@ namespace FtsLib.Indexing
             }
 
             // ── Crash-safe commit sequence ────────────────────────────────────────────
-            // Step 1: rename .tmp files to final names
+            // The write lock is held ONLY here — the k-way merge write above ran
+            // concurrently with searches. Acquisition waits for active SearchLeases
+            // to drain, so no source file is deleted while a reader has it open.
+            // New searches queue behind the pending writer and resume within
+            // milliseconds once the commit finishes.
             FtsLog.Write("SegmentMerger",
-                "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
+                "COMMIT: acquiring write lock (waits for active search leases)");
+            _store.SearchMergeLock.EnterWriteLock();
             try
             {
-                File.Move(tmpDat, outDat);
-                FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
-                File.Move(tmpDb, outDb);
-                FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
-            }
-            catch (Exception ex)
-            {
+                // Step 1: rename .tmp files to final names
                 FtsLog.Write("SegmentMerger",
-                    $"EXCEPTION during File.Move (tmp→final): {ex.GetType().Name}: {ex.Message}");
-                throw;
-            }
-            FtsLog.Write("SegmentMerger",
-                "COMMIT step 1 complete: target files renamed to final paths");
-
-            // Step 2: delete source segments
-            // If we crash between step 1 and step 3 (before END_MERGE), recovery
-            // sees BEGIN_MERGE with sources gone + target exists → Case B: correct.
-            FtsLog.Write("SegmentMerger",
-                $"COMMIT step 2: deleting {segIds.Count} source segment(s) — crash point C: if crash here, Case B recovery will handle it");
-            foreach (int sid in segIds)
-            {
-                string srcDat = _store.Live.SegDatPath(level, sid);
-                string srcDb  = _store.Live.SegDbPath(level, sid);
-                bool datExists = File.Exists(srcDat);
-                bool dbExists  = File.Exists(srcDb);
-                FtsLog.Write("SegmentMerger",
-                    $"  deleting seg_{level}_{sid}: dat={datExists} db={dbExists}");
+                    "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
                 try
                 {
-                    DeleteIfExists(srcDat);
-                    DeleteIfExists(srcDb);
-                    DeleteIfExists(srcDb + "-shm");
-                    DeleteIfExists(srcDb + "-wal");
-                    FtsLog.Write("SegmentMerger", $"  seg_{level}_{sid} deleted OK");
+                    File.Move(tmpDat, outDat);
+                    FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
+                    File.Move(tmpDb, outDb);
+                    FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
                 }
                 catch (Exception ex)
                 {
                     FtsLog.Write("SegmentMerger",
-                        $"  EXCEPTION deleting seg_{level}_{sid}: {ex.GetType().Name}: {ex.Message}");
+                        $"EXCEPTION during File.Move (tmp→final): {ex.GetType().Name}: {ex.Message}");
                     throw;
                 }
+                FtsLog.Write("SegmentMerger",
+                    "COMMIT step 1 complete: target files renamed to final paths");
+
+                // Step 2: delete source segments
+                // If we crash between step 1 and step 3 (before END_MERGE), recovery
+                // sees BEGIN_MERGE with a complete final-path target → generalized
+                // Case B: registers the target and removes leftover sources.
+                FtsLog.Write("SegmentMerger",
+                    $"COMMIT step 2: deleting {segIds.Count} source segment(s) — crash point C: Case B recovery handles a kill here");
+                foreach (int sid in segIds)
+                {
+                    string srcDat = _store.Live.SegDatPath(level, sid);
+                    string srcDb  = _store.Live.SegDbPath(level, sid);
+                    bool datExists = File.Exists(srcDat);
+                    bool dbExists  = File.Exists(srcDb);
+                    FtsLog.Write("SegmentMerger",
+                        $"  deleting seg_{level}_{sid}: dat={datExists} db={dbExists}");
+                    try
+                    {
+                        DeleteIfExists(srcDat);
+                        DeleteIfExists(srcDb);
+                        DeleteIfExists(srcDb + "-shm");
+                        DeleteIfExists(srcDb + "-wal");
+                        FtsLog.Write("SegmentMerger", $"  seg_{level}_{sid} deleted OK");
+                    }
+                    catch (Exception ex)
+                    {
+                        FtsLog.Write("SegmentMerger",
+                            $"  EXCEPTION deleting seg_{level}_{sid}: {ex.GetType().Name}: {ex.Message}");
+                        throw;
+                    }
+                }
+                FtsLog.Write("SegmentMerger", "COMMIT step 2 complete: all source segments deleted");
+
+                // Step 3: write END_MERGE to WAL
+                FtsLog.Write("SegmentMerger",
+                    "COMMIT step 3: writing WAL END_MERGE — crash point D: if crash here, RebuildFromDisk finds only target (correct)");
+                _store.Wal.EndMerge(level, newSegId);
+                FtsLog.Write("SegmentMerger", "WAL END_MERGE written");
+
+                // Step 4: update live state in memory
+                _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
             }
-            FtsLog.Write("SegmentMerger", "COMMIT step 2 complete: all source segments deleted");
-
-            // Step 3: write END_MERGE to WAL
-            FtsLog.Write("SegmentMerger",
-                "COMMIT step 3: writing WAL END_MERGE — crash point D: if crash here, RebuildFromDisk finds only target (correct)");
-            _store.Wal.EndMerge(level, newSegId);
-            FtsLog.Write("SegmentMerger", "WAL END_MERGE written");
-
-            // Step 4: update live state in memory
-            _store.Live.PromoteSegment(level, segIds, nextLevel, newSegId);
+            finally
+            {
+                _store.SearchMergeLock.ExitWriteLock();
+                FtsLog.Write("SegmentMerger", "COMMIT: write lock released");
+            }
 
             // Log final state
             int totalSegs = _store.Live.TotalLiveSegs();
