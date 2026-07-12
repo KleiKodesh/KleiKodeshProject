@@ -65,6 +65,7 @@
     <!-- SearchIndex -->
     <Compile Include="SearchIndex\ProbeSearch.cs" />
     <Compile Include="SearchIndex\DumpIds.cs" />
+    <Compile Include="SearchIndex\VerifyPrefixScan.cs" />
     <Compile Include="SearchIndex\SearchTest.cs" />
     <Compile Include="SearchIndex\QueryTest.cs" />
     <Compile Include="SearchIndex\QueryParserTest.cs" />
