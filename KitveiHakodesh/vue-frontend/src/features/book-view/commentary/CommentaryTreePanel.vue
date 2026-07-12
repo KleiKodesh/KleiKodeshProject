@@ -6,6 +6,14 @@ import { useIntervalFn } from '@vueuse/core'
 import type { CommentaryGroup } from './useCommentary'
 import type { CommentaryTreeState, CommentaryVisibilityItem } from '../bookViewTypes'
 import { useCommentaryTreeSearch } from './useCommentaryTreeSearch'
+import {
+  setCommentaryBookChecked,
+  setCommentaryNodeChecked,
+  isCommentaryBookUnchecked,
+  isCoveredByParentRule,
+  demoteParentRules,
+} from './uncheckedCommentaryBooks'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
 const props = defineProps<{
   groups: CommentaryGroup[]
@@ -42,8 +50,9 @@ watch(
 )
 
 // ── Search / tree logic ───────────────────────────────────────────────────────
+const tabId = usePaneNavigation().activeTabId
 const { syncVisibilityList, applyFilter, isSearching, tree, searchResults } =
-  useCommentaryTreeSearch(() => props.groups, props.treeState)
+  useCommentaryTreeSearch(() => props.groups, props.treeState, tabId)
 
 watch(() => props.groups, syncVisibilityList, { immediate: true })
 watch(() => props.treeState.visibilityList, () => { if (isSearching.value) applyFilter() })
@@ -92,11 +101,57 @@ const allState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
 
 function toggleAll() {
   const shouldCheck = allState.value !== 'checked'
-  scopedItems.value.forEach((item) => { item.isChecked = shouldCheck })
+  if (isSearching.value) {
+    // Search mode scopes "הצג הכל" to the matched books only — book-level ops.
+    scopedItems.value.forEach((item) => {
+      if (item.isChecked !== shouldCheck) toggleItem(item)
+    })
+    return
+  }
+  // Normal mode: apply a rule per section — covers future children too, and
+  // clears every child entry (one rule instead of N book ids).
+  const sections = new Set(props.treeState.visibilityList.map((item) => item.sectionLabel))
+  for (const sectionLabel of sections) {
+    setCommentaryNodeChecked(tabId, sectionLabel, null, shouldCheck)
+  }
+  props.treeState.visibilityList.forEach((item) => { item.isChecked = shouldCheck })
+}
+
+function toggleNode(payload: { sectionLabel: string; subSectionLabel: string | null; shouldCheck: boolean }) {
+  // Parents control children totally: one section/subsection rule replaces all
+  // individual entries under it, and applies to books that only appear on
+  // other lines too.
+  setCommentaryNodeChecked(tabId, payload.sectionLabel, payload.subSectionLabel, payload.shouldCheck)
+  for (const item of props.treeState.visibilityList) {
+    if (item.sectionLabel !== payload.sectionLabel) continue
+    if (payload.subSectionLabel != null && item.subSectionLabel !== payload.subSectionLabel) continue
+    item.isChecked = payload.shouldCheck
+  }
 }
 
 function toggleItem(item: CommentaryVisibilityItem) {
-  item.isChecked = !item.isChecked
+  const checked = !item.isChecked
+  if (checked && isCoveredByParentRule(tabId, item.sectionLabel, item.subSectionLabel)) {
+    // The uncheck comes from a section/subsection rule. Checking one book under
+    // it demotes the rule into explicit unchecks of its current siblings, so
+    // only this book becomes checked.
+    demoteParentRules(
+      tabId,
+      item.sectionLabel,
+      item.subSectionLabel,
+      props.treeState.visibilityList.filter((other) => other.bookId !== item.bookId),
+    )
+  }
+  // Write through to this tab's rules (survives tab switches, not app
+  // restarts), and re-derive every visibility item of the same book from the
+  // store — a book can appear in more than one section (e.g. מפרשים and
+  // ציונים), and a rule on the other section may still cover it there.
+  setCommentaryBookChecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId, checked)
+  for (const other of props.treeState.visibilityList) {
+    if (other.bookId === item.bookId) {
+      other.isChecked = !isCommentaryBookUnchecked(tabId, other.sectionLabel, other.subSectionLabel, other.bookId)
+    }
+  }
 }
 </script>
 
@@ -122,6 +177,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           :key="node.label"
           :node="node"
           @toggle-item="toggleItem"
+          @toggle-node="toggleNode"
           @navigate-to-book="scrollToBook"
         />
       </template>

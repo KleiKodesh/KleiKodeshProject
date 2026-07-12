@@ -12,6 +12,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { Ref } from 'vue'
 import type { CommentaryTreeState } from './bookViewTypes'
+import { isCommentaryBookUnchecked } from './commentary/uncheckedCommentaryBooks'
 
 interface CommentaryViewRef {
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
@@ -90,7 +91,13 @@ export function useBookViewSessionRestore(
     if (savedFilter) {
       commentaryTreeState.searchQuery = savedFilter.searchQuery
       commentaryTreeState.tokens = savedFilter.tokens ?? []
-      commentaryTreeState.visibilityList = savedFilter.visibilityList
+      // isChecked is per-tab and session-scoped (uncheckedCommentaryBooks.ts):
+      // re-derive it instead of trusting the persisted value, so unchecked books
+      // survive tab switches but reset on a fresh app start.
+      commentaryTreeState.visibilityList = savedFilter.visibilityList.map((item) => ({
+        ...item,
+        isChecked: !isCommentaryBookUnchecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId),
+      }))
     }
 
     if (openTocLineIndex == null) {

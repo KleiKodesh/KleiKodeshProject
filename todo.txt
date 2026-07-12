@@ -5,6 +5,8 @@ likewise איפוס אינדקס החיפוש ut can stay on teh search page and
 
 האם בקורא קבצי הPDF שבכתבי הקודש יש אפשרות להעתיק מקובץ PDF כתמונה (ע"מ שאפשר יהיה לשתול אותו כתמונה בתוך קובץ וורד).
 
+optimize catlog search 
+laos add dfined huristic by keywords
 
 pin recent items in home page
 allow user to choose more history items to be show

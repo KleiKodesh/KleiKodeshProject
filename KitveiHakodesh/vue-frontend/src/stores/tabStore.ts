@@ -17,6 +17,10 @@ import { useWorkspaceStore } from './workspaceStore'
 import { disposeLocalFileHost } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
+import {
+  dropUncheckedCommentaryForTab,
+  pruneUncheckedCommentary,
+} from '@/features/book-view/commentary/uncheckedCommentaryBooks'
 
 export type TabRoute =
   | '/'
@@ -221,6 +225,7 @@ export const useTabStore = defineStore('tabs', () => {
     for (const key of _bookStateCache.keys()) {
       if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
     }
+    dropUncheckedCommentaryForTab(id)
     tabs.value.splice(idx, 1)
     // Update pane2ActiveTabId if the closed tab was active
     if (pane2ActiveTabId.value === id) {
@@ -417,6 +422,7 @@ export const useTabStore = defineStore('tabs', () => {
     // Keep pane-2 tabs intact — only replace pane-1 tabs with a single home tab
     tabs.value = [home, ...tabs.value.filter((t) => t.pane === 2)]
     activeTabId.value = home.id
+    pruneUncheckedCommentary(tabs.value.map((t) => t.id))
   }
 
   function closeTab(id: string) {
@@ -431,6 +437,7 @@ export const useTabStore = defineStore('tabs', () => {
     for (const key of _bookStateCache.keys()) {
       if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
     }
+    dropUncheckedCommentaryForTab(id)
     tabs.value.splice(idx, 1)
     if (tabs.value.length === 0) {
       const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
