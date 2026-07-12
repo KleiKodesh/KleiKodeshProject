@@ -61,10 +61,16 @@ namespace FtsLibTest
 
             bool sequential = Array.Exists(args, a => a.Equals("--seq", StringComparison.OrdinalIgnoreCase));
             int  dop        = 4;
+            HashSet<string> only = null;
             for (int i = 0; i < args.Length - 1; i++)
+            {
                 if (args[i].Equals("--dop", StringComparison.OrdinalIgnoreCase) &&
                     int.TryParse(args[i + 1], out int d) && d > 0)
                     dop = d;
+                if (args[i].Equals("--only", StringComparison.OrdinalIgnoreCase))
+                    only = new HashSet<string>(
+                        args[i + 1].Split(','), StringComparer.OrdinalIgnoreCase);
+            }
             if (sequential) dop = 1;
 
             if (!Directory.Exists(BackupDir) ||
@@ -115,6 +121,8 @@ namespace FtsLibTest
             }
 
             var scenarios = BuildScenarios();
+            if (only != null)
+                scenarios = scenarios.FindAll(s => only.Contains(s.Id));
             var results   = new List<(Scenario sc, bool ok, string output)>();
             var resultsLock = new object();
 
