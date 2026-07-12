@@ -435,9 +435,9 @@ namespace FtsLib.Search
                     continue;
                 }
 
-                // General path: drain the posting list one doc at a time.
-                while (it.MoveNext())
-                    bitmap.Add(it.Current);
+                // General path: bulk-drain the posting list (F05) — one tight
+                // decode loop instead of two virtual calls per posting.
+                it.DrainInto(bitmap);
             }
             return new RoaringBitmapIterator(bitmap);
         }
