@@ -57,6 +57,36 @@ export const SQL = {
     ORDER BY te.id
   `,
 
+  /**
+   * Prefiltered variant of GET_TOC_TITLES_FOR_BOOKS for the TOC search fallback:
+   * only entries whose text contains the filter word (LIKE, \-escaped, appended
+   * as the last parameter after the book ids) plus ALL their ancestors — the
+   * ancestors are required so segment chains and display paths stay complete.
+   * Substring LIKE is a strict superset of the scorer's token-prefix match, so
+   * scoring this subset yields identical results to scoring all rows (any node
+   * matching only through its ancestors is suppressed by that ancestor anyway).
+   */
+  GET_TOC_TITLES_MATCHING_FOR_BOOKS: (count: number) => `
+    WITH RECURSIVE matched(id, parentId) AS (
+      SELECT te.id, te.parentId
+      FROM tocEntry te
+      JOIN tocText tt ON tt.id = te.textId
+      WHERE te.bookId IN (${Array(count).fill('?').join(', ')})
+        AND tt.text LIKE '%' || ? || '%' ESCAPE '\\'
+    ),
+    anc(id) AS (
+      SELECT parentId FROM matched WHERE parentId IS NOT NULL
+      UNION
+      SELECT te.parentId FROM tocEntry te JOIN anc ON te.id = anc.id WHERE te.parentId IS NOT NULL
+    )
+    SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
+    FROM tocEntry te
+    JOIN tocText tt ON tt.id = te.textId
+    LEFT JOIN line l ON l.id = te.lineId
+    WHERE te.id IN (SELECT id FROM matched UNION SELECT id FROM anc)
+    ORDER BY te.id
+  `,
+
   /** All alt_toc structures for a book */
   GET_ALT_TOC_STRUCTURES: `
     SELECT id, key, title, heTitle

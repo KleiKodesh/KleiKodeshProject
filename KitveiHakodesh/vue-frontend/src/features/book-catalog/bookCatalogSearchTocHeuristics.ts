@@ -11,8 +11,9 @@
  *             Finds the longest book-matching prefix of the query words.
  *
  *   Stage 2 — fetchTocRowsForBooks
- *             Loads all TOC entries for the candidate books from the DB in
- *             parallel batches, stripping redundant root entries.
+ *             Loads the scoring-relevant TOC entries for the candidate books
+ *             (prefiltered inside SQLite by the last TOC word + ancestors),
+ *             stripping redundant root entries.
  *
  *   Stage 3 — searchTocRows
  *             Runs the SearchableTree scorer against the TOC words portion.
@@ -105,17 +106,42 @@ function splitIntoBatches(ids: number[]): number[][] {
   return batches
 }
 
+// ─── SQL prefilter guard ──────────────────────────────────────────────────────
+//
+// The prefiltered query matches TOC texts with a substring LIKE on the last
+// TOC word. That is a strict superset of the scorer's token-prefix match
+// (tokens are contiguous substrings of the raw text) — provided LIKE's
+// case-insensitivity covers the tokenizer's toLowerCase. SQLite's LIKE is
+// case-insensitive for ASCII only, so the prefilter is used only when the
+// word consists of ASCII + Hebrew-block characters (Hebrew has no case).
+// Any other character (e.g. accented Latin) falls back to the full fetch.
+const LIKE_SAFE_WORD_RE = /^[ -~֐-׿]+$/
+
+/** Escape LIKE wildcards so the word is matched literally (ESCAPE '\'). */
+function escapeLikeWord(word: string): string {
+  return word.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+}
+
 /**
  * Stage 2 — fetchTocRowsForBooks
  *
- * Loads all TOC entries for the given books, strips redundant root entries
- * (entries whose text duplicates the book title), and returns the rows ordered
- * by book tree order (te.id order within each book) — the same order the
- * old sequential per-batch implementation produced.
+ * Loads the TOC entries of the given books that can participate in scoring,
+ * strips redundant root entries (entries whose text duplicates the book
+ * title), and returns the rows ordered by book tree order (te.id order within
+ * each book) — the same order the old sequential per-batch implementation
+ * produced.
  *
- * The batches are independent, so they are issued together and awaited with
- * Promise.all — the DB round-trips overlap instead of paying each one's
- * latency in sequence. Nothing is retained after the search completes.
+ * When `lastTocWord` is given (and LIKE-safe, see above), the filtering runs
+ * inside SQLite: only entries containing the word plus all their ancestors are
+ * fetched. This is result-identical to fetching everything — a node can only
+ * survive the scorer's ancestry dedup (Pass 3) if its own text matches the
+ * last query word, and every node's full ancestor chain is included so
+ * segment chains, display paths, bond detection, and root-stripping behave
+ * exactly as with the full row set. Everything else (scoring, ranking,
+ * filtering) is untouched.
+ *
+ * Without `lastTocWord`, all rows are fetched in parallel batches (fallback
+ * path, also used for non-ASCII/non-Hebrew words).
  *
  * The `isCancelled` callback is checked after the fetches complete — if it
  * returns true the function returns null (a newer search has superseded this
@@ -126,6 +152,7 @@ function splitIntoBatches(ids: number[]): number[][] {
 export async function fetchTocRowsForBooks(
   candidateBooks: BookRow[],
   isCancelled: () => boolean,
+  lastTocWord?: string,
 ): Promise<TocRow[] | null> {
   const bookTitles = new Map(candidateBooks.map((book) => [book.id, book.title]))
   const bookIds = candidateBooks
@@ -133,11 +160,21 @@ export async function fetchTocRowsForBooks(
     .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
     .map((book) => book.id)
 
-  const batchResults = await Promise.all(
-    splitIntoBatches(bookIds).map((batch) =>
-      query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
-    ),
-  )
+  const filterWord = lastTocWord?.toLowerCase() ?? ''
+  const usePrefilter = filterWord.length > 0 && LIKE_SAFE_WORD_RE.test(filterWord)
+
+  const batchResults = usePrefilter
+    ? [
+        await query<TocRow>(SQL.GET_TOC_TITLES_MATCHING_FOR_BOOKS(bookIds.length), [
+          ...bookIds,
+          escapeLikeWord(filterWord),
+        ]),
+      ]
+    : await Promise.all(
+        splitIntoBatches(bookIds).map((batch) =>
+          query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
+        ),
+      )
   if (isCancelled()) return null
 
   // Group rows per book, then strip redundant roots per book.
@@ -255,8 +292,15 @@ export async function runTocHeuristics(
 
   const bookMap = new Map(candidateBooks.map((book) => [book.id, book]))
 
-  // Stage 2: fetch TOC rows from the database
-  const allRows = await fetchTocRowsForBooks(candidateBooks, isCancelled)
+  // Stage 2: fetch TOC rows from the database, prefiltered inside SQLite by the
+  // last TOC word (the scorer requires it to match a node's own text — see
+  // fetchTocRowsForBooks). tree.search lowercases query words, so pass the
+  // word the same way it will be matched.
+  const allRows = await fetchTocRowsForBooks(
+    candidateBooks,
+    isCancelled,
+    tocWords[tocWords.length - 1],
+  )
   if (allRows === null) return { items: [], splitFound: true } // cancelled
 
   // Stage 3: score and rank TOC entries
