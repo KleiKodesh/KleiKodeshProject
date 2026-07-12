@@ -83,12 +83,26 @@ namespace FtsLib.Search
             Func<string, int>                getCount,
             CancellationToken                ct = default)
         {
-            var groupIters = new List<PostingIterator>();
+            var termLists = new List<IReadOnlyList<string>>();
             foreach (var group in groups)
             {
-                var termList = group as IReadOnlyList<string> ?? new List<string>(group);
-                if (termList.Count == 0) return Enumerable.Empty<int>();
+                var tl = group as IReadOnlyList<string> ?? new List<string>(group);
+                if (tl.Count == 0) return Enumerable.Empty<int>();
+                termLists.Add(tl);
+            }
+            if (termLists.Count == 0) return Enumerable.Empty<int>();
 
+            // F03: {small group} AND {huge OR group} — drive the intersection from
+            // the small side's candidates instead of materializing the huge union.
+            if (termLists.Count >= 2)
+            {
+                var candidateDriven = TryCandidateDrivenSearch(termLists, resolve, getCount, ct);
+                if (candidateDriven != null) return candidateDriven;
+            }
+
+            var groupIters = new List<PostingIterator>();
+            foreach (var termList in termLists)
+            {
                 PostingIterator groupIter;
 
                 if (termList.Count >= RoaringOrThreshold)
@@ -126,6 +140,262 @@ namespace FtsLib.Search
             if (groupIters.Count == 0) return Enumerable.Empty<int>();
             if (groupIters.Count == 1) return DrainStarted(groupIters[0], ct);
             return PostingMatcher.Intersect(groupIters.ToArray(), ct);
+        }
+
+        // ── Candidate-driven AND (F03) ───────────────────────────────
+
+        /// <summary>
+        /// The small side's estimated union must be at least this many times
+        /// smaller than the biggest huge group's estimate for the candidate-driven
+        /// path to engage. Probing costs roughly one skip-jump per (term, candidate)
+        /// while draining costs ~one decode per posting, so a wide margin keeps the
+        /// path strictly cheaper even when the early exit never fires.
+        /// </summary>
+        internal const int SmallSideRatio = 64;
+
+        /// <summary>
+        /// The huge group's estimated union must also clear this absolute floor.
+        /// Probing pays a fixed per-term overhead (iterator setup, chunk load,
+        /// skip re-entry) across a possibly full tail walk; that only amortizes
+        /// when the drain being avoided is multi-million postings with fat head
+        /// terms whose skip tables get leveraged. Measured: below ~1M the drain
+        /// is already tens of ms and probing shows a small net tax.
+        /// </summary>
+        internal const long MinUnionEstimateForProbing = 1_000_000;
+
+        /// <summary>
+        /// Candidate-driven mixed AND (F03): when one group is tiny and another is
+        /// a huge OR expansion (e.g. <c>*כי* ביצחק</c> — 2.6k docs vs a 27.5k-term
+        /// union of millions of postings), materializing the huge union just to
+        /// intersect it away is almost all waste. Instead: materialize the SMALL
+        /// group as a sorted candidate array, then filter the candidates through
+        /// every other group — probing huge groups term-by-term (highest doc-count
+        /// first) and stopping the moment every candidate is confirmed.
+        ///
+        /// Semantics are exact: a candidate passes a group iff it appears in at
+        /// least one of the group's terms, and a group's terms are consulted until
+        /// every candidate is matched or no terms remain — candidates are never
+        /// excluded early. Results stay ascending because the candidate array is.
+        ///
+        /// Returns null when the shape does not apply (no huge group, or the
+        /// smallest group is not decisively small) — the caller falls through to
+        /// the standard materialization path.
+        /// </summary>
+        private static IEnumerable<int> TryCandidateDrivenSearch(
+            List<IReadOnlyList<string>>   groups,
+            Func<string, PostingIterator> resolve,
+            Func<string, int>             getCount,
+            CancellationToken             ct)
+        {
+            // Estimated union size per group: sum of term doc-counts (an upper
+            // bound; overlap only shrinks the true union). With the F01 chunk
+            // cache these lookups are dictionary hits, not SQLite queries.
+            var  est        = new long[groups.Count];
+            int  smallest   = -1;
+            long maxHugeEst = 0;
+            bool anyHuge    = false;
+
+            for (int i = 0; i < groups.Count; i++)
+            {
+                long sum = 0;
+                foreach (var term in groups[i]) sum += getCount(term);
+                est[i] = sum;
+                if (smallest < 0 || sum < est[smallest]) smallest = i;
+                if (groups[i].Count >= RoaringOrThreshold)
+                {
+                    anyHuge = true;
+                    if (sum > maxHugeEst) maxHugeEst = sum;
+                }
+            }
+
+            if (!anyHuge) return null;
+            if (maxHugeEst < MinUnionEstimateForProbing) return null;
+            // The candidate side must itself be cheap to materialize.
+            if (groups[smallest].Count >= RoaringOrThreshold) return null;
+            // Every term of the smallest group is missing → empty intersection
+            // (same outcome the standard path produces via StartedIterators).
+            if (est[smallest] == 0) return Enumerable.Empty<int>();
+            if (est[smallest] * SmallSideRatio > maxHugeEst) return null;
+
+            return CandidateDrivenSearch(groups, est, smallest, resolve, getCount, ct);
+        }
+
+        private static IEnumerable<int> CandidateDrivenSearch(
+            List<IReadOnlyList<string>>   groups,
+            long[]                        est,
+            int                           smallest,
+            Func<string, PostingIterator> resolve,
+            Func<string, int>             getCount,
+            CancellationToken             ct)
+        {
+            int[] candidates = MaterializeGroup(groups[smallest], resolve, ct);
+            int   count      = candidates.Length;
+            if (count == 0) yield break;
+
+            // Filter through the remaining groups, cheapest first so the candidate
+            // set is smallest by the time the expensive probes run.
+            var order = new List<int>();
+            for (int i = 0; i < groups.Count; i++)
+                if (i != smallest) order.Add(i);
+            order.Sort((a, b) => est[a].CompareTo(est[b]));
+
+            foreach (int gi in order)
+            {
+                count = groups[gi].Count >= RoaringOrThreshold
+                    ? FilterByTermProbing(groups[gi], candidates, count, resolve, getCount, ct)
+                    : FilterByGroupIterator(groups[gi], candidates, count, resolve, ct);
+                if (count == 0) yield break;
+            }
+
+            for (int i = 0; i < count; i++)
+                yield return candidates[i];
+        }
+
+        /// <summary>
+        /// Drains one group's full union into a sorted, distinct doc-ID array,
+        /// using the same per-group construction as the standard MixedSearch path.
+        /// </summary>
+        private static int[] MaterializeGroup(
+            IReadOnlyList<string>         termList,
+            Func<string, PostingIterator> resolve,
+            CancellationToken             ct)
+        {
+            PostingIterator it;
+            if (termList.Count >= RoaringOrThreshold)
+            {
+                it = BuildRoaringIterator(termList, resolve, ct);
+                if (!it.MoveNext()) return new int[0];
+            }
+            else
+            {
+                var started = StartedIterators(termList, resolve, skipMissing: true);
+                if (started.Count == 0) return new int[0];
+                if (started.Count == 1)
+                {
+                    it = started[0];
+                }
+                else
+                {
+                    var union = new UnionIterator(started.ToArray());
+                    if (!union.MoveNext()) return new int[0];
+                    it = union;
+                }
+            }
+
+            // Iterator is pre-advanced (Current valid). Streams are ascending;
+            // duplicates across a union's sub-iterators are removed here.
+            var list = new List<int>();
+            int last = int.MinValue;
+            do
+            {
+                ct.ThrowIfCancellationRequested();
+                int v = it.Current;
+                if (v != last || list.Count == 0) { list.Add(v); last = v; }
+            }
+            while (it.MoveNext());
+            return list.ToArray();
+        }
+
+        /// <summary>
+        /// Keeps only the candidates present in the group's union, by one forward
+        /// SkipTo pass over the group iterator (both sides ascending).
+        /// Compacts the candidate array in place; returns the surviving count.
+        /// </summary>
+        private static int FilterByGroupIterator(
+            IReadOnlyList<string>         termList,
+            int[]                         candidates,
+            int                           count,
+            Func<string, PostingIterator> resolve,
+            CancellationToken             ct)
+        {
+            PostingIterator it;
+            var started = StartedIterators(termList, resolve, skipMissing: true);
+            if (started.Count == 0) return 0;
+            if (started.Count == 1) it = started[0];
+            else
+            {
+                var union = new UnionIterator(started.ToArray());
+                if (!union.MoveNext()) return 0;
+                it = union;
+            }
+
+            int w = 0;
+            for (int i = 0; i < count; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+                int c = candidates[i];
+                // SkipTo is a no-op when Current >= c already (returns true).
+                if (!it.SkipTo(c)) break;         // group exhausted — rest all fail
+                if (it.Current == c) candidates[w++] = c;
+            }
+            return w;
+        }
+
+        /// <summary>
+        /// Keeps only the candidates present in at least one of the group's terms.
+        /// Probes term-by-term, highest doc-count first (high-df terms confirm most
+        /// candidates immediately), and stops consuming terms as soon as every
+        /// candidate is matched. A candidate matching no term forces all terms to
+        /// be consulted — correctness requires it; the probe cost per term is
+        /// bounded by min(term postings, remaining candidates) skip-jumps, so even
+        /// that worst case never exceeds the cost of draining the full union.
+        /// Compacts the candidate array in place; returns the surviving count.
+        /// </summary>
+        private static int FilterByTermProbing(
+            IReadOnlyList<string>         termList,
+            int[]                         candidates,
+            int                           count,
+            Func<string, PostingIterator> resolve,
+            Func<string, int>             getCount,
+            CancellationToken             ct)
+        {
+            // Precompute counts once. Calling getCount inside the sort comparator
+            // would cost O(n log n) delegate calls — ~800k for a 27.5k-term group.
+            var sorted = new (string term, int count)[termList.Count];
+            for (int i = 0; i < termList.Count; i++)
+                sorted[i] = (termList[i], getCount(termList[i]));
+            Array.Sort(sorted, (a, b) => b.count.CompareTo(a.count));
+
+            // pending = indices of candidates not yet matched, ascending. Each term
+            // probes only these, and the list compacts as candidates confirm — after
+            // the first high-df terms it is typically tiny, so walking a long tail
+            // of rare terms costs one chunk load each, not an O(count) scan each.
+            var matched      = new bool[count];
+            var pending      = new int[count];
+            int pendingCount = count;
+            for (int i = 0; i < count; i++) pending[i] = i;
+
+            foreach (var (term, termCount) in sorted)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (termCount == 0) break;        // sorted desc — only missing terms remain
+                var it = resolve(term);
+                if (it.IsDone) continue;
+
+                int keep = 0;
+                for (int j = 0; j < pendingCount; j++)
+                {
+                    int idx = pending[j];
+                    int c   = candidates[idx];
+                    if (!it.SkipTo(c))
+                    {
+                        // Term exhausted — every later candidate stays pending.
+                        Array.Copy(pending, j, pending, keep, pendingCount - j);
+                        keep += pendingCount - j;
+                        break;
+                    }
+                    if (it.Current == c) matched[idx] = true;
+                    else                 pending[keep++] = idx;
+                }
+                pendingCount = keep;
+
+                if (pendingCount == 0) break;     // all candidates confirmed — early exit
+            }
+
+            int w = 0;
+            for (int i = 0; i < count; i++)
+                if (matched[i]) candidates[w++] = candidates[i];
+            return w;
         }
 
         // ── Helpers ──────────────────────────────────────────────────
