@@ -106,37 +106,20 @@ function splitIntoBatches(ids: number[]): number[][] {
 }
 
 /**
- * Removes root TOC entries whose text is a title variant of the book title,
- * grouped per book so each book's root is evaluated against its own title.
- */
-function stripRedundantRootEntriesPerBook(
-  rows: TocRow[],
-  bookTitles: Map<number, string>,
-): TocRow[] {
-  const rowsByBook = new Map<number, TocRow[]>()
-  for (const row of rows) {
-    const group = rowsByBook.get(row.bookId) ?? []
-    group.push(row)
-    rowsByBook.set(row.bookId, group)
-  }
-
-  const stripped: TocRow[] = []
-  for (const [bookId, group] of rowsByBook) {
-    const title = bookTitles.get(bookId) ?? ''
-    stripped.push(...stripTocTitleRoots(group, title, { bookId }))
-  }
-  return stripped
-}
-
-/**
  * Stage 2 — fetchTocRowsForBooks
  *
- * Loads all TOC entries for the given books from the database in batches.
- * Strips redundant root entries (entries whose text duplicates the book title).
- * Yields control between batches so the UI stays responsive.
+ * Loads all TOC entries for the given books, strips redundant root entries
+ * (entries whose text duplicates the book title), and returns the rows ordered
+ * by book tree order (te.id order within each book) — the same order the
+ * old sequential per-batch implementation produced.
  *
- * The `isCancelled` callback is checked after every batch — if it returns true
- * the function returns null immediately (a newer search has superseded this one).
+ * The batches are independent, so they are issued together and awaited with
+ * Promise.all — the DB round-trips overlap instead of paying each one's
+ * latency in sequence. Nothing is retained after the search completes.
+ *
+ * The `isCancelled` callback is checked after the fetches complete — if it
+ * returns true the function returns null (a newer search has superseded this
+ * one).
  *
  * Returns the full flat list of TocRow objects, or null if cancelled.
  */
@@ -150,26 +133,31 @@ export async function fetchTocRowsForBooks(
     .sort((a, b) => (a.treeOrder ?? 0) - (b.treeOrder ?? 0))
     .map((book) => book.id)
 
+  const batchResults = await Promise.all(
+    splitIntoBatches(bookIds).map((batch) =>
+      query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
+    ),
+  )
+  if (isCancelled()) return null
+
+  // Group rows per book, then strip redundant roots per book.
+  const rowsByBook = new Map<number, TocRow[]>()
+  for (const rows of batchResults) {
+    for (const row of rows) {
+      const group = rowsByBook.get(row.bookId)
+      if (group) group.push(row)
+      else rowsByBook.set(row.bookId, [row])
+    }
+  }
+
+  // Assemble in book tree order — identical ordering to the old sequential
+  // implementation (batch order followed tree order, stable-sorted per batch).
   const allRows: TocRow[] = []
-
-  for (const batch of splitIntoBatches(bookIds)) {
-    const rows = await query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch)
-    if (isCancelled()) return null
-
-    const strippedRows = stripRedundantRootEntriesPerBook(rows, bookTitles)
-
-    // Sort within batch by book tree order so results appear in catalog order
-    strippedRows.sort(
-      (a, b) =>
-        (bookTitles.has(a.bookId) ? bookIds.indexOf(a.bookId) : Infinity) -
-        (bookTitles.has(b.bookId) ? bookIds.indexOf(b.bookId) : Infinity),
-    )
-
-    allRows.push(...strippedRows)
-
-    // Yield between batches to keep the UI responsive
-    await Promise.resolve()
-    if (isCancelled()) return null
+  for (const id of bookIds) {
+    const group = rowsByBook.get(id)
+    if (!group) continue
+    const stripped = stripTocTitleRoots(group, bookTitles.get(id) ?? '', { bookId: id })
+    for (const row of stripped) allRows.push(row)
   }
 
   return allRows

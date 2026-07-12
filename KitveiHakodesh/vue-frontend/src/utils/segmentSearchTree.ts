@@ -69,6 +69,92 @@ export interface SearchableNode {
   hasChildren: number | boolean
 }
 
+// ─── Tokenizer ────────────────────────────────────────────────────────────────
+
+/** Memoized \p{L}\p{N} classification for non-ASCII BMP code units. */
+const _wordCharMemo = new Map<number, boolean>()
+const _WORD_CHAR_RE = /[\p{L}\p{N}]/u
+
+/**
+ * Tokenize one node's text into lowercase tokens.
+ * Keeps "." and ":" attached to a preceding letter/digit so Talmud page
+ * references like "דף י." and "דף י:" survive as single tokens.
+ *
+ * Single-pass scanner equivalent to:
+ *   text.toLowerCase()
+ *     .replace(/([^\p{L}\p{N}])/gu, (ch, _m, offset, str) =>
+ *       (ch === '.' || ch === ':') && offset > 0 && /[\p{L}\p{N}]/u.test(str[offset - 1]) ? ch : ' ')
+ *     .split(/\s+/)
+ *     .filter((t) => t.length > 0)
+ * but without the per-character regex callback (this runs on every TOC row of
+ * every candidate book during catalog search, so it is hot).
+ * Exported for the equivalence test harness.
+ */
+export function tokenizeSegmentText(text: string): string[] {
+  const s = text.toLowerCase()
+  const tokens: string[] = []
+  let token = ''
+  let prevIsWord = false
+  let i = 0
+  while (i < s.length) {
+    const code = s.charCodeAt(i)
+
+    // Surrogate pair (high surrogate followed by a low surrogate) — classify
+    // the full code point, like the /u regex did. A "." after the pair saw a
+    // lone low surrogate as its previous char in the regex version (never a
+    // word char), so prevIsWord stays false. A lone high surrogate falls
+    // through to the single-unit path below (never a word char there either).
+    if (
+      code >= 0xd800 &&
+      code <= 0xdbff &&
+      i + 1 < s.length &&
+      s.charCodeAt(i + 1) >= 0xdc00 &&
+      s.charCodeAt(i + 1) <= 0xdfff
+    ) {
+      const pair = s.slice(i, i + 2)
+      if (_WORD_CHAR_RE.test(pair)) {
+        token += pair
+      } else if (token) {
+        tokens.push(token)
+        token = ''
+      }
+      prevIsWord = false
+      i += 2
+      continue
+    }
+
+    let isWord: boolean
+    if (
+      (code >= 0x05d0 && code <= 0x05ea) || // Hebrew letters (incl. finals)
+      (code >= 48 && code <= 57) || // 0-9
+      (code >= 97 && code <= 122) || // a-z
+      (code >= 65 && code <= 90) // A-Z (defensive — input is lowercased)
+    ) {
+      isWord = true
+    } else if (code < 0x80) {
+      isWord = false
+    } else {
+      let memo = _wordCharMemo.get(code)
+      if (memo === undefined) {
+        memo = _WORD_CHAR_RE.test(s[i]!)
+        _wordCharMemo.set(code, memo)
+      }
+      isWord = memo
+    }
+
+    if (isWord || ((code === 46 || code === 58) && prevIsWord)) {
+      token += s[i]
+    } else if (token) {
+      tokens.push(token)
+      token = ''
+    }
+    prevIsWord = isWord
+    i++
+  }
+  if (token) tokens.push(token)
+  return tokens
+}
+
 export class SegmentSearchTree {
   /**
    * segments[nodeId] = array of segments, root→leaf.
@@ -97,21 +183,7 @@ export class SegmentSearchTree {
     const segCache = new Map<number, string[][]>()
     const displayCache = new Map<number, string>()
 
-    /**
-     * Tokenize one node's text into lowercase tokens.
-     * Keeps "." and ":" attached to a preceding letter/digit so Talmud page
-     * references like "דף י." and "דף י:" survive as single tokens.
-     */
-    const tokenize = (text: string): string[] =>
-      text
-        .toLowerCase()
-        .replace(/([^\p{L}\p{N}])/gu, (ch, _m, offset, str) => {
-          if ((ch === '.' || ch === ':') && offset > 0 && /[\p{L}\p{N}]/u.test(str[offset - 1]!))
-            return ch
-          return ' '
-        })
-        .split(/\s+/)
-        .filter((t) => t.length > 0)
+    const tokenize = tokenizeSegmentText
 
     /** Recursively build the segment chain for a node (memoized). */
     const getSegments = (id: number): string[][] => {
