@@ -9,9 +9,8 @@ import { useCommentaryTreeSearch } from './useCommentaryTreeSearch'
 import {
   setCommentaryBookChecked,
   setCommentaryNodeChecked,
+  setCommentaryAllChecked,
   isCommentaryBookUnchecked,
-  isCoveredByParentRule,
-  demoteParentRules,
 } from './uncheckedCommentaryBooks'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
@@ -99,6 +98,14 @@ const allState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
   return 'indeterminate'
 })
 
+// After any store write, re-derive isChecked for the current visibility list
+// so the tree reflects the virtual check-tree (defaults + overrides).
+function syncCheckedFromStore() {
+  for (const item of props.treeState.visibilityList) {
+    item.isChecked = !isCommentaryBookUnchecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId)
+  }
+}
+
 function toggleAll() {
   const shouldCheck = allState.value !== 'checked'
   if (isSearching.value) {
@@ -108,50 +115,21 @@ function toggleAll() {
     })
     return
   }
-  // Normal mode: apply a rule per section — covers future children too, and
-  // clears every child entry (one rule instead of N book ids).
-  const sections = new Set(props.treeState.visibilityList.map((item) => item.sectionLabel))
-  for (const sectionLabel of sections) {
-    setCommentaryNodeChecked(tabId, sectionLabel, null, shouldCheck)
-  }
-  props.treeState.visibilityList.forEach((item) => { item.isChecked = shouldCheck })
+  setCommentaryAllChecked(tabId, shouldCheck)
+  syncCheckedFromStore()
 }
 
 function toggleNode(payload: { sectionLabel: string; subSectionLabel: string | null; shouldCheck: boolean }) {
-  // Parents control children totally: one section/subsection rule replaces all
-  // individual entries under it, and applies to books that only appear on
-  // other lines too.
+  // Toggling a category cascades to all its children — present and future.
   setCommentaryNodeChecked(tabId, payload.sectionLabel, payload.subSectionLabel, payload.shouldCheck)
-  for (const item of props.treeState.visibilityList) {
-    if (item.sectionLabel !== payload.sectionLabel) continue
-    if (payload.subSectionLabel != null && item.subSectionLabel !== payload.subSectionLabel) continue
-    item.isChecked = payload.shouldCheck
-  }
+  syncCheckedFromStore()
 }
 
 function toggleItem(item: CommentaryVisibilityItem) {
-  const checked = !item.isChecked
-  if (checked && isCoveredByParentRule(tabId, item.sectionLabel, item.subSectionLabel)) {
-    // The uncheck comes from a section/subsection rule. Checking one book under
-    // it demotes the rule into explicit unchecks of its current siblings, so
-    // only this book becomes checked.
-    demoteParentRules(
-      tabId,
-      item.sectionLabel,
-      item.subSectionLabel,
-      props.treeState.visibilityList.filter((other) => other.bookId !== item.bookId),
-    )
-  }
-  // Write through to this tab's rules (survives tab switches, not app
-  // restarts), and re-derive every visibility item of the same book from the
-  // store — a book can appear in more than one section (e.g. מפרשים and
-  // ציונים), and a rule on the other section may still cover it there.
-  setCommentaryBookChecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId, checked)
-  for (const other of props.treeState.visibilityList) {
-    if (other.bookId === item.bookId) {
-      other.isChecked = !isCommentaryBookUnchecked(tabId, other.sectionLabel, other.subSectionLabel, other.bookId)
-    }
-  }
+  // A book override persists across lines regardless of its parent's state —
+  // e.g. re-checking one book inside an unchecked category keeps it visible.
+  setCommentaryBookChecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId, !item.isChecked)
+  syncCheckedFromStore()
 }
 </script>
 
