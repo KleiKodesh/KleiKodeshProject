@@ -37,6 +37,8 @@ namespace FtsLib.SeforimDb
         /// <param name="indexPath">Directory containing the segment files.</param>
         /// <param name="dbPath">Path to the seforim SQLite database.</param>
         /// <param name="cap">Maximum results to return. 0 = no cap.</param>
+        /// <param name="filterIds">Optional line-ID keep-set: only these IDs can be
+        /// returned. Null = no filtering; an empty collection matches nothing.</param>
         /// <param name="ct">Cancellation token — checked during expansion, intersection, and DB fetch.</param>
         internal static IEnumerable<SearchResult> Search(
             string            query,
@@ -46,6 +48,7 @@ namespace FtsLib.SeforimDb
             SearchLease       lease,
             int               cap = 0,
             bool              expandKetiv = false,
+            IEnumerable<int>  filterIds = null,
             CancellationToken ct  = default)
         {
             var parsed = QueryParser.Parse(query);
@@ -54,6 +57,8 @@ namespace FtsLib.SeforimDb
                 lease?.Dispose();
                 yield break;
             }
+
+            var filter = BuildFilter(filterIds);
 
             // Phase 1 — under the search lease: everything that touches segment
             // files (expansion + intersection). The matching IDs are materialized
@@ -85,7 +90,7 @@ namespace FtsLib.SeforimDb
 
                 matchedGroups = expandedGroups;
 
-                foreach (var id in reader.Search(groups, ct))
+                foreach (var id in reader.Search(groups, filter, ct))
                 {
                     ct.ThrowIfCancellationRequested();
                     ids.Add(id);
@@ -132,6 +137,7 @@ namespace FtsLib.SeforimDb
             List<(string dat, string db)> livePaths,
             SearchLease       lease,
             bool              expandKetiv = false,
+            IEnumerable<int>  filterIds = null,
             CancellationToken ct = default)
         {
             var parsed = QueryParser.Parse(query);
@@ -140,6 +146,8 @@ namespace FtsLib.SeforimDb
                 lease?.Dispose();
                 yield break;
             }
+
+            var filter = BuildFilter(filterIds);
 
             // Materialize under the lease, yield after releasing it — a slow
             // consumer of this enumerable must not keep segment files leased
@@ -161,7 +169,7 @@ namespace FtsLib.SeforimDb
 
                 if (groups.Count == 0) yield break;
 
-                foreach (var id in reader.Search(groups, ct))
+                foreach (var id in reader.Search(groups, filter, ct))
                 {
                     ct.ThrowIfCancellationRequested();
                     ids.Add(id);
@@ -170,6 +178,29 @@ namespace FtsLib.SeforimDb
 
             foreach (var id in ids)
                 yield return id;
+        }
+
+        // ── Filter construction ───────────────────────────────────────
+
+        /// <summary>
+        /// Materializes caller-supplied line IDs into a <see cref="RoaringBitmap"/>
+        /// keep-set. Null in → null out (no filtering). IDs may arrive in any
+        /// order and contain duplicates. An empty collection yields an empty
+        /// bitmap, which matches nothing.
+        ///
+        /// Negative IDs are dropped: no indexed line ever has one, and
+        /// RoaringBitmap orders values as unsigned — a negative ID would sort
+        /// AFTER every real ID, breaking the ascending-order contract the
+        /// intersection leap-frog depends on (it would spin forever).
+        /// </summary>
+        private static RoaringBitmap BuildFilter(IEnumerable<int> filterIds)
+        {
+            if (filterIds == null) return null;
+            var bitmap = new RoaringBitmap();
+            foreach (var id in filterIds)
+                if (id >= 0)
+                    bitmap.Add(id);
+            return bitmap;
         }
 
         // ── Group expansion ───────────────────────────────────────────

@@ -146,10 +146,15 @@ namespace FtsLib.Search
 
         // ── Mixed AND/OR search ──────────────────────────────────────
 
-        public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups, CancellationToken ct = default)
+        /// <param name="filter">Optional doc-ID keep-set. When non-null, only IDs
+        /// present in the set are returned; a small set drives the intersection
+        /// (candidate-driven path) instead of merely trimming its output.</param>
+        public IEnumerable<int> Search(IEnumerable<IEnumerable<string>> groups,
+                                       RoaringBitmap filter = null,
+                                       CancellationToken ct = default)
         {
             if (_segments.Count == 0) return Enumerable.Empty<int>();
-            return PostingIntersector.MixedSearch(groups, ResolveIterator, GetTermCount, ct);
+            return PostingIntersector.MixedSearch(groups, ResolveIterator, GetTermCount, filter, ct);
         }
 
         // ── Term count ───────────────────────────────────────────────

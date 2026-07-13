@@ -240,16 +240,24 @@ namespace FtsLib.SeforimDb
 
         // ── Search ────────────────────────────────────────────────────
 
-        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false, CancellationToken ct = default)
+        /// <param name="filterIds">Optional line-ID keep-set: when non-null, only
+        /// results whose line ID is in this set are returned. A small set also
+        /// speeds up heavy queries — it drives the posting intersection instead
+        /// of merely trimming its output. Null = search everything; an empty
+        /// collection matches nothing.</param>
+        public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
+            IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
             var lease = AcquireSearchLease(out var livePaths);
-            return SearchPipeline.Search(query, _indexPath, _dbPath, livePaths, lease, cap, expandKetiv, ct);
+            return SearchPipeline.Search(query, _indexPath, _dbPath, livePaths, lease, cap, expandKetiv, filterIds, ct);
         }
 
-        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false, CancellationToken ct = default)
+        /// <param name="filterIds">Optional line-ID keep-set — see <see cref="Search"/>.</param>
+        public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
+            IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
             var lease = AcquireSearchLease(out var livePaths);
-            return SearchPipeline.SearchIds(query, _indexPath, livePaths, lease, expandKetiv, ct);
+            return SearchPipeline.SearchIds(query, _indexPath, livePaths, lease, expandKetiv, filterIds, ct);
         }
 
         // ── Snippets ──────────────────────────────────────────────────

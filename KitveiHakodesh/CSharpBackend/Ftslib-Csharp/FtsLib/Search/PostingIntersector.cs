@@ -81,6 +81,7 @@ namespace FtsLib.Search
             IEnumerable<IEnumerable<string>> groups,
             Func<string, PostingIterator>    resolve,
             Func<string, int>                getCount,
+            RoaringBitmap                    filter = null,
             CancellationToken                ct = default)
         {
             var termLists = new List<IReadOnlyList<string>>();
@@ -92,11 +93,30 @@ namespace FtsLib.Search
             }
             if (termLists.Count == 0) return Enumerable.Empty<int>();
 
-            // F03: {small group} AND {huge OR group} — drive the intersection from
-            // the small side's candidates instead of materializing the huge union.
-            if (termLists.Count >= 2)
+            // An empty (non-null) filter matches nothing — same semantics as
+            // Lucene's TermInSetQuery over an empty set.
+            if (filter != null && filter.Count == 0) return Enumerable.Empty<int>();
+
+            // Estimated union size per group: sum of term doc-counts (an upper
+            // bound; overlap only shrinks the true union). With the F01 chunk
+            // cache these lookups are dictionary hits, not SQLite queries.
+            // Needed by the candidate-driven path and by filter placement below.
+            long[] est = null;
+            if (termLists.Count >= 2 || filter != null)
             {
-                var candidateDriven = TryCandidateDrivenSearch(termLists, resolve, getCount, ct);
+                est = new long[termLists.Count];
+                for (int i = 0; i < termLists.Count; i++)
+                {
+                    long sum = 0;
+                    foreach (var term in termLists[i]) sum += getCount(term);
+                    est[i] = sum;
+                }
+
+                // F03: {small side} AND {huge OR group} — drive the intersection
+                // from the small side's candidates instead of materializing the
+                // huge union. With a filter, the filter itself is a candidate
+                // source contender (its count is exact, not an upper bound).
+                var candidateDriven = TryCandidateDrivenSearch(termLists, est, filter, resolve, getCount, ct);
                 if (candidateDriven != null) return candidateDriven;
             }
 
@@ -138,6 +158,24 @@ namespace FtsLib.Search
             }
 
             if (groupIters.Count == 0) return Enumerable.Empty<int>();
+
+            // The filter joins the intersection as one more AND clause (Lucene's
+            // Occur.FILTER). Placement matters for speed, not correctness:
+            // PostingMatcher.Intersect drives from iters[0], so a filter smaller
+            // than every group leads the leap-frog and the group posting lists
+            // get skip-jumped instead of fully decoded.
+            if (filter != null)
+            {
+                var fIter = new RoaringBitmapIterator(filter);
+                if (!fIter.MoveNext()) return Enumerable.Empty<int>();
+
+                long minEst = long.MaxValue;
+                foreach (var e in est) if (e < minEst) minEst = e;
+
+                if (filter.Count <= minEst) groupIters.Insert(0, fIter);
+                else                        groupIters.Add(fIter);
+            }
+
             if (groupIters.Count == 1) return DrainStarted(groupIters[0], ct);
             return PostingMatcher.Intersect(groupIters.ToArray(), ct);
         }
@@ -164,13 +202,28 @@ namespace FtsLib.Search
         internal const long MinUnionEstimateForProbing = 1_000_000;
 
         /// <summary>
-        /// Candidate-driven mixed AND (F03): when one group is tiny and another is
+        /// Lower floor used when the candidate source is a caller-supplied ID
+        /// filter. Unlike a query group, the filter's candidates cost nothing to
+        /// materialize (no segment IO, no union drain), so the break-even point
+        /// sits far lower: the probe only has to beat draining the huge group's
+        /// union, not also pay for building its own candidate set.
+        /// </summary>
+        internal const long MinUnionEstimateForFilterProbing = 100_000;
+
+        /// <summary>
+        /// Candidate-driven mixed AND (F03): when one side is tiny and another is
         /// a huge OR expansion (e.g. <c>*כי* ביצחק</c> — 2.6k docs vs a 27.5k-term
         /// union of millions of postings), materializing the huge union just to
         /// intersect it away is almost all waste. Instead: materialize the SMALL
-        /// group as a sorted candidate array, then filter the candidates through
+        /// side as a sorted candidate array, then filter the candidates through
         /// every other group — probing huge groups term-by-term (highest doc-count
         /// first) and stopping the moment every candidate is confirmed.
+        ///
+        /// The small side is either the smallest query group or, when present and
+        /// smaller, the caller-supplied ID <paramref name="filter"/> — whose count
+        /// is exact rather than an upper bound, and whose candidates cost nothing
+        /// to materialize (no segment IO). A small filter therefore engages this
+        /// path even for a single-group query.
         ///
         /// Semantics are exact: a candidate passes a group iff it appears in at
         /// least one of the group's terms, and a group's terms are consulted until
@@ -178,65 +231,95 @@ namespace FtsLib.Search
         /// excluded early. Results stay ascending because the candidate array is.
         ///
         /// Returns null when the shape does not apply (no huge group, or the
-        /// smallest group is not decisively small) — the caller falls through to
+        /// small side is not decisively small) — the caller falls through to
         /// the standard materialization path.
         /// </summary>
         private static IEnumerable<int> TryCandidateDrivenSearch(
             List<IReadOnlyList<string>>   groups,
+            long[]                        est,
+            RoaringBitmap                 filter,
             Func<string, PostingIterator> resolve,
             Func<string, int>             getCount,
             CancellationToken             ct)
         {
-            // Estimated union size per group: sum of term doc-counts (an upper
-            // bound; overlap only shrinks the true union). With the F01 chunk
-            // cache these lookups are dictionary hits, not SQLite queries.
-            var  est        = new long[groups.Count];
             int  smallest   = -1;
             long maxHugeEst = 0;
             bool anyHuge    = false;
 
             for (int i = 0; i < groups.Count; i++)
             {
-                long sum = 0;
-                foreach (var term in groups[i]) sum += getCount(term);
-                est[i] = sum;
-                if (smallest < 0 || sum < est[smallest]) smallest = i;
+                if (smallest < 0 || est[i] < est[smallest]) smallest = i;
                 if (groups[i].Count >= RoaringOrThreshold)
                 {
                     anyHuge = true;
-                    if (sum > maxHugeEst) maxHugeEst = sum;
+                    if (est[i] > maxHugeEst) maxHugeEst = est[i];
                 }
             }
 
             if (!anyHuge) return null;
-            if (maxHugeEst < MinUnionEstimateForProbing) return null;
-            // The candidate side must itself be cheap to materialize.
-            if (groups[smallest].Count >= RoaringOrThreshold) return null;
             // Every term of the smallest group is missing → empty intersection
             // (same outcome the standard path produces via StartedIterators).
             if (est[smallest] == 0) return Enumerable.Empty<int>();
+
+            // Prefer the filter as candidate source when it is at least as small
+            // as the smallest group's estimate — its candidates are free.
+            if (filter != null && filter.Count <= est[smallest] &&
+                maxHugeEst >= MinUnionEstimateForFilterProbing &&
+                (long)filter.Count * SmallSideRatio <= maxHugeEst)
+            {
+                return CandidateDrivenSearch(groups, est, -1, filter, resolve, getCount, ct);
+            }
+
+            // Group-sourced path (original F03 rules).
+            if (maxHugeEst < MinUnionEstimateForProbing) return null;
+            // The candidate side must itself be cheap to materialize.
+            if (groups[smallest].Count >= RoaringOrThreshold) return null;
             if (est[smallest] * SmallSideRatio > maxHugeEst) return null;
 
-            return CandidateDrivenSearch(groups, est, smallest, resolve, getCount, ct);
+            return CandidateDrivenSearch(groups, est, smallest, filter, resolve, getCount, ct);
         }
 
         private static IEnumerable<int> CandidateDrivenSearch(
             List<IReadOnlyList<string>>   groups,
             long[]                        est,
-            int                           smallest,
+            int                           sourceGroup, // -1 = candidates come from the filter
+            RoaringBitmap                 filter,
             Func<string, PostingIterator> resolve,
             Func<string, int>             getCount,
             CancellationToken             ct)
         {
-            int[] candidates = MaterializeGroup(groups[smallest], resolve, ct);
-            int   count      = candidates.Length;
+            int[] candidates;
+            int   count;
+
+            if (sourceGroup < 0)
+            {
+                // Filter-sourced: the bitmap already holds the sorted candidate set.
+                candidates = new int[filter.Count];
+                count      = 0;
+                foreach (var v in filter.GetValues()) candidates[count++] = v;
+            }
+            else
+            {
+                candidates = MaterializeGroup(groups[sourceGroup], resolve, ct);
+                count      = candidates.Length;
+
+                // Apply the filter first — it is pure in-memory work, so shrinking
+                // the candidate set here makes every segment probe below cheaper.
+                if (count > 0 && filter != null)
+                {
+                    var fIter = new RoaringBitmapIterator(filter);
+                    count = fIter.MoveNext()
+                        ? FilterByIterator(fIter, candidates, count, ct)
+                        : 0;
+                }
+            }
             if (count == 0) yield break;
 
             // Filter through the remaining groups, cheapest first so the candidate
             // set is smallest by the time the expensive probes run.
             var order = new List<int>();
             for (int i = 0; i < groups.Count; i++)
-                if (i != smallest) order.Add(i);
+                if (i != sourceGroup) order.Add(i);
             order.Sort((a, b) => est[a].CompareTo(est[b]));
 
             foreach (int gi in order)
@@ -319,13 +402,27 @@ namespace FtsLib.Search
                 it = union;
             }
 
+            return FilterByIterator(it, candidates, count, ct);
+        }
+
+        /// <summary>
+        /// Keeps only the candidates present in <paramref name="it"/> (pre-advanced,
+        /// ascending), by one forward SkipTo pass — both sides ascending.
+        /// Compacts the candidate array in place; returns the surviving count.
+        /// </summary>
+        private static int FilterByIterator(
+            PostingIterator   it,
+            int[]             candidates,
+            int               count,
+            CancellationToken ct)
+        {
             int w = 0;
             for (int i = 0; i < count; i++)
             {
                 ct.ThrowIfCancellationRequested();
                 int c = candidates[i];
                 // SkipTo is a no-op when Current >= c already (returns true).
-                if (!it.SkipTo(c)) break;         // group exhausted — rest all fail
+                if (!it.SkipTo(c)) break;         // iterator exhausted — rest all fail
                 if (it.Current == c) candidates[w++] = c;
             }
             return w;
