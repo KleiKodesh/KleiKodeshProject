@@ -83,6 +83,10 @@ namespace FtsLibTest
                     SpeedTest.Run(args);
                     return;
 
+                case "filtertest":
+                    FilterTest.Run(args);
+                    return;
+
                 case "perf":
                     PerformanceTest.Run(args);
                     return;
