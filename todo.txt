@@ -13,6 +13,7 @@ when selecting text it changes the line detect txt selction it doesn't change se
 
 when swtchin commtry to side view pos in the linesview jumps
 
+show next relvant time in teh homepage
 
 add optional index drives with index saved on teh drive
 takes time till service starts
