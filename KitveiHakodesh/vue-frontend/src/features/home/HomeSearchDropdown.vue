@@ -21,7 +21,10 @@ import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
-  /** TOC heuristics fallback results — only present when catalogResults is empty */
+  /**
+   * TOC heuristics results — from the zero-results fallback (books empty) or
+   * the additive keyword trigger (shown below the book results).
+   */
   catalogTocResults: TocFsItem[]
   hebrewBooksResults: HebrewBooksSearchResult[]
   fileResults: FileSearchResult[]

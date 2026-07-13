@@ -281,14 +281,27 @@ export async function runTocHeuristics(
   const split = splitQueryIntoBookAndTocParts(queryWords, (words) => filterBooks(words).length > 0)
   if (!split) return { items: [], splitFound: false }
 
+  const items = await runTocStagesForSplit(split, filterBooks, isCancelled)
+  return { items: items ?? [], splitFound: true }
+}
+
+/**
+ * Runs stages 2–4 for an already-decided book/toc split.
+ * Returns the TOC result items, or null when cancelled.
+ */
+async function runTocStagesForSplit(
+  split: { bookWords: string[]; tocWords: string[] },
+  filterBooks: (words: string[]) => BookRow[],
+  isCancelled: () => boolean,
+): Promise<TocFsItem[] | null> {
   const { bookWords, tocWords } = split
-  if (!tocWords.length) return { items: [], splitFound: true }
+  if (!tocWords.length) return []
 
   // Cap candidate books so a broad prefix doesn't trigger hundreds of DB fetches.
   // filterBooks already returns books sorted by tree order, so slicing keeps the
   // most prominent catalog entries and drops the tail.
   const candidateBooks = filterBooks(bookWords).slice(0, MAX_TOC_CANDIDATE_BOOKS)
-  if (!candidateBooks.length) return { items: [], splitFound: true }
+  if (!candidateBooks.length) return []
 
   const bookMap = new Map(candidateBooks.map((book) => [book.id, book]))
 
@@ -301,14 +314,67 @@ export async function runTocHeuristics(
     isCancelled,
     tocWords[tocWords.length - 1],
   )
-  if (allRows === null) return { items: [], splitFound: true } // cancelled
+  if (allRows === null) return null // cancelled
 
   // Stage 3: score and rank TOC entries
   const { matchedNodes, tree } = searchTocRows(allRows, tocWords)
-  if (isCancelled()) return { items: [], splitFound: true }
+  if (isCancelled()) return null
 
   // Stage 4: convert to UI items
-  const items = buildTocResultItems(matchedNodes, bookMap, tree)
+  return buildTocResultItems(matchedNodes, bookMap, tree)
+}
 
-  return { items, splitFound: true }
+// ─── Keyword-triggered pipeline (additive) ────────────────────────────────────
+
+/**
+ * Alternative Stage 1 for the keyword trigger: split at the first structural
+ * TOC keyword whose preceding words match at least one book.
+ *
+ * Example: ["משנה", "תורה", "הלכות", "שבת"] with keyword "הלכות"
+ *   → bookWords=["משנה", "תורה"], tocWords=["הלכות", "שבת"]
+ *
+ * The keyword must not be the first word (there must be a book part before
+ * it). If the words before a keyword match no book, later keyword occurrences
+ * are tried ("שער הכוונות שער א" splits at the second שער).
+ *
+ * Returns null when no keyword occurrence yields a book-matching prefix.
+ */
+export function splitQueryAtTocKeyword(
+  words: string[],
+  isKeyword: (word: string) => boolean,
+  matchesAnyBook: (words: string[]) => boolean,
+): { bookWords: string[]; tocWords: string[] } | null {
+  for (let i = 1; i < words.length; i++) {
+    if (!isKeyword(words[i]!)) continue
+    const bookWords = words.slice(0, i)
+    if (matchesAnyBook(bookWords)) {
+      return { bookWords, tocWords: words.slice(i) }
+    }
+  }
+  return null
+}
+
+/**
+ * runTocKeywordHeuristics — the ADDITIVE trigger.
+ *
+ * Call this when the book-title search DID find results but the query contains
+ * a structural TOC keyword ("משנה תורה הלכות שבת"). Splits at the keyword and
+ * runs the same stages 2–4 as runTocHeuristics; the caller appends the items
+ * below the book results. Does not touch or replace the zero-results flow.
+ */
+export async function runTocKeywordHeuristics(
+  queryWords: string[],
+  filterBooks: (words: string[]) => BookRow[],
+  isKeyword: (word: string) => boolean,
+  isCancelled: () => boolean,
+): Promise<TocHeuristicsResult> {
+  const split = splitQueryAtTocKeyword(
+    queryWords,
+    isKeyword,
+    (words) => filterBooks(words).length > 0,
+  )
+  if (!split) return { items: [], splitFound: false }
+
+  const items = await runTocStagesForSplit(split, filterBooks, isCancelled)
+  return { items: items ?? [], splitFound: true }
 }
