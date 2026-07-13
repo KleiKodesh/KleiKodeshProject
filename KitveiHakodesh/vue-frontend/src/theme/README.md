@@ -22,7 +22,7 @@ State: `themePreset` ref (default `'default-light'`) and `readingBackground` ref
 
 Watcher: any change to `themePreset` or `readingBackground` → persist to localStorage → `apply()` → call `setTheme(isDark)` on the C# bridge to update the WinForms title bar.
 
-**themes.ts** — theme loading (`applyTheme`, `toggleThemeMode`) and the PDF theme observer that keeps the PDF.js iframe in sync with the app theme. Call `initPdfThemeObserver()` once at app boot.
+**themes.ts** — theme apply logic and lookups. `applyTheme(preset)` sets the `data-theme-preset` attribute on `document.documentElement`, toggles the `.dark` class from the preset's `isDark`, writes all `--*-custom` UI vars and the `--reading-*` vars onto `documentElement.style`, and computes the derived vars `--accent-bg` / `--accent-bg-light` (from the accent color) and `--ui-reading-bg` (lighten/darken of the background). `toggleThemeMode(current)` computes the sibling preset as `` `${family}-${isDark ? 'light' : 'dark'}` ``. Also exports `getTheme`, `getAllThemes`, `getThemeFamilies`, and `isDarkTheme()` (reads the `.dark` class). `syncPdfViewerTheme()` and `initPdfThemeObserver()` push theme vars plus a computed `--pdf-filter-custom` (`calcPdfFilter`) into PDF.js viewer iframes — call `initPdfThemeObserver()` once at app boot.
 
 **ThemePicker.vue** — custom theme-selection dropdown (not a native `<select>`). Reads `themePreset` from `themeStore` via `storeToRefs`. Renders a grid: rows are theme families, columns are Light and Dark variants. Each cell shows a mini swatch (background, accent, text). Theme family/variant data is grouped from `themes.json` at component initialization. The dropdown is teleported to `<body>` with `position: fixed` and opens up or down based on available space (max-height 320px). Uses `useDropdownClose` with `ignore: [boxRef]`; the toggle is handled manually by checking `isOpen` in the `toggle()` function rather than passing a `toggleButton` option.
 
@@ -30,10 +30,12 @@ Watcher: any change to `themePreset` or `readingBackground` → persist to local
 
 **themeTypes.ts** — TypeScript types for theme presets and theme objects. Import types from here.
 
-**themeColorUtils.ts** — color manipulation utilities used when computing PDF filters.
+**themeColorUtils.ts** — color manipulation utilities (`lighten`, `darken`, `hexToRgb`, `hexToRgbObj`) used by the apply logic and PDF filter math.
 
-**themes.json** — built-in theme preset definitions. Add new built-in themes here. Default theme is `vscode-dark`.
+**themes.json** — built-in theme preset definitions: 106 presets across 53 families, each family with a `-light` and a `-dark` variant (e.g. `default-light`/`default-dark`, `vscode-light`/`vscode-dark`). Each preset is `{ name, family, isDark, reading: ThemeColors, ui: ThemeColors, pdfFilter? }` — every theme carries two color sets, `ui` for the app chrome and `reading` for the book text area. `ThemeColors` (see `themeTypes.ts`) is `bgPrimary`, `bgSecondary`, `bgTertiary?`, `textPrimary`, `textSecondary`, `borderColor`, `accentColor`, `hoverBg`, `activeBg`. Preset values win over the hardcoded fallbacks in `theme.css` at runtime. Add new built-in themes here. The app default preset is `default-light` (set in `themeStore`).
 
 ## Dark Mode Toggle Flow
 
-`ThemeToggle.vue` (or `Ctrl+L` in `AppTitleBar.vue`) → `themeStore.toggleDarkMode()` → `toggleThemeMode(themePreset)` in `themes.ts` → swaps the preset (e.g. `'vscode-dark'` ↔ `'vscode-light'`) → the watcher in `themeStore` fires → `apply()` sets `--*-custom` properties on `:root` and adds/removes the `.dark` class on `document.documentElement` → CSS variables cascade throughout the app → `setTheme(isDark)` notifies C# to update the WinForms title bar.
+`ThemeToggle.vue` (or `Ctrl+L` in `AppTitleBar.vue`) → `themeStore.toggleDarkMode()` → `toggleThemeMode(themePreset)` in `themes.ts` → swaps the preset (e.g. `'vscode-dark'` ↔ `'vscode-light'`) → the watcher in `themeStore` fires → `apply()` sets `--*-custom` properties on `:root` and adds/removes the `.dark` class on `document.documentElement` → CSS variables cascade throughout the app → `setTheme(isDark)` notifies C# to update the WinForms title bar (applied host-side via DarkNet in `AppViewerTheme.cs`).
+
+There is no internal event bus for theme changes — propagation inside the app is purely the CSS-variable cascade off `document.documentElement`.
