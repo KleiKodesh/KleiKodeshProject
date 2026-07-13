@@ -33,6 +33,10 @@ export const useThemeStore = defineStore('theme', () => {
     }
 
     apply()
+    // Always send the theme (with the chrome-strip color) once on startup — the
+    // watch below only fires on changes, and the native tab strip needs the color
+    // even when the persisted preset already matches the host's dark flag.
+    syncHostTheme()
   }
 
   function apply() {
@@ -54,6 +58,15 @@ export const useThemeStore = defineStore('theme', () => {
     themePreset.value = toggleThemeMode(themePreset.value)
   }
 
+  // Notify the C# host so it can update the WinForms title bar (DarkNet) and the
+  // native chrome tab strip. The strip derives its palette from the theme's
+  // title-bar background (ui.bgSecondary — the same color the Vue title bar uses);
+  // the accent drives the active-tab indicator in the native tab-list dropdown.
+  function syncHostTheme() {
+    const ui = getTheme(themePreset.value)?.ui
+    setTheme(themePreset.value.includes('-dark'), ui?.bgSecondary, ui?.accentColor)
+  }
+
   // Apply defaults immediately (before async init) so the UI doesn't flash
   apply()
 
@@ -63,8 +76,7 @@ export const useThemeStore = defineStore('theme', () => {
       readingBackground: readingBackground.value,
     })
     apply()
-    // Notify the C# host so it can update the WinForms title bar via DarkNet.
-    setTheme(themePreset.value.includes('-dark'))
+    syncHostTheme()
   })
 
   return { themePreset, readingBackground, toggleDarkMode, init }
