@@ -4,7 +4,10 @@
  *      When the title search finds nothing, falls back to the TOC heuristics
  *      (debounced) exactly like the catalog page: "בראשית פרק ד" splits into
  *      book="בראשית" and toc="פרק ד" and searches the TOC entries of the
- *      matching books. Results share the catalog page's IDB LRU cache.
+ *      matching books. When the title search DID find books but the query
+ *      contains a structural TOC keyword ("משנה תורה הלכות שבת"), the TOC
+ *      results are additionally shown below the book results. Results share
+ *      the catalog page's IDB LRU cache.
  *   2. HebrewBooks  — async, only when isHosted
  *   3. Document Locator (file system) — async, only when isHosted
  *
@@ -25,7 +28,12 @@ import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '@/features/book-catalog/bookCatalogSearchNormalizer'
 import { filterBooksByWords } from '@/features/book-catalog/bookCatalogSearch'
-import { runTocHeuristics } from '@/features/book-catalog/bookCatalogSearchTocHeuristics'
+import {
+  runTocHeuristics,
+  runTocKeywordHeuristics,
+  splitQueryAtTocKeyword,
+} from '@/features/book-catalog/bookCatalogSearchTocHeuristics'
+import { isTocKeyword } from '@/features/book-catalog/bookCatalogTocKeywords'
 import {
   getCatalogTocCache,
   setCatalogTocCache,
@@ -219,12 +227,17 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
     { immediate: true },
   )
 
-  // ── Catalog TOC heuristics — debounced fallback when titles match nothing ──
+  // ── Catalog TOC heuristics — debounced, two triggers ────────────────────────
   //
-  // Same flow as useBookCatalogSearch Phase 2: check the shared IDB result
-  // cache first, otherwise run the heuristics pipeline against the DB. A
-  // generation counter discards stale responses; the instant watcher above
-  // bumps it on every keystroke.
+  // a) Fallback: the title search found nothing — same flow as
+  //    useBookCatalogSearch Phase 2 (longest book-matching prefix split).
+  // b) Keyword (additive): the title search DID find books but the query
+  //    contains a structural TOC keyword — TOC results are shown below the
+  //    book results in the dropdown's catalog section.
+  //
+  // Both check the shared IDB result cache first, otherwise run the heuristics
+  // pipeline against the DB. A generation counter discards stale responses;
+  // the instant watcher above bumps it on every keystroke.
 
   watch(
     debouncedQuery,
@@ -236,8 +249,19 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
       const words = toQueryWords(effectiveQuery)
       if (!words.length) return
 
-      // Only when the plain title search finds nothing
-      if (filterBooksByWords(booksDataStore.allBooks, words).length > 0) return
+      const filterBooks = (bookWords: string[]) =>
+        filterBooksByWords(booksDataStore.allBooks, bookWords)
+
+      // Keyword trigger only applies when the title search found books AND the
+      // query has a keyword split; pure book queries are done — Phase 1
+      // already rendered them (and the instant watcher cleared old TOC items).
+      const isKeywordTrigger = filterBooks(words).length > 0
+      if (
+        isKeywordTrigger &&
+        !splitQueryAtTocKeyword(words, isTocKeyword, (ws) => filterBooks(ws).length > 0)
+      ) {
+        return
+      }
 
       // Check the shared disk cache before hitting the DB
       const normalizedQuery = words.join(' ')
@@ -252,11 +276,14 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
       isLoadingCatalogToc.value = true
 
       try {
-        const { items } = await runTocHeuristics(
-          words,
-          (bookWords) => filterBooksByWords(booksDataStore.allBooks, bookWords),
-          () => generation !== tocGeneration,
-        )
+        const { items } = isKeywordTrigger
+          ? await runTocKeywordHeuristics(
+              words,
+              filterBooks,
+              isTocKeyword,
+              () => generation !== tocGeneration,
+            )
+          : await runTocHeuristics(words, filterBooks, () => generation !== tocGeneration)
 
         if (generation !== tocGeneration) return
 

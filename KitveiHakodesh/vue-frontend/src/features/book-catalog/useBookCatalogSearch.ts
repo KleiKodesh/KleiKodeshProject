@@ -8,15 +8,19 @@
  *             Results appear immediately with no loading state.
  *             Also cancels any in-flight Phase 2 search.
  *
- *   Phase 2 — TOC heuristics fallback (debounced 300ms, async)
- *             When Phase 1 finds nothing, delegates to bookCatalogTocHeuristics
- *             which splits the query into "<book words> <toc words>" and
- *             searches the TOC entries of the matching books.
+ *   Phase 2 — TOC heuristics (debounced 300ms, async), two triggers:
+ *             a) Fallback — when Phase 1 finds nothing, splits the query into
+ *                "<book words> <toc words>" (longest book-matching prefix) and
+ *                searches the TOC entries of the matching books.
+ *             b) Keyword (additive) — when Phase 1 DID find books but the query
+ *                contains a structural TOC keyword (פרק, סימן, הלכות …), splits
+ *                at the keyword and APPENDS the TOC results below the books.
  *             Results are cached in app-catalog-toc-cache IDB (LRU, 25 entries)
  *             so repeated queries skip the DB round-trips entirely.
- *             Shows a loading spinner only on a cache miss while the DB fetch
- *             is in progress. Capped at MAX_TOC_CANDIDATE_BOOKS so a broad
- *             prefix like "ראש" doesn't trigger a fetch for hundreds of books.
+ *             Shows a loading spinner only on a fallback-trigger cache miss
+ *             while the DB fetch is in progress. Capped at
+ *             MAX_TOC_CANDIDATE_BOOKS so a broad prefix like "ראש" doesn't
+ *             trigger a fetch for hundreds of books.
  */
 
 import { ref, watch } from 'vue'
@@ -24,7 +28,12 @@ import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from './bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { runTocHeuristics } from './bookCatalogSearchTocHeuristics'
+import {
+  runTocHeuristics,
+  runTocKeywordHeuristics,
+  splitQueryAtTocKeyword,
+} from './bookCatalogSearchTocHeuristics'
+import { isTocKeyword } from './bookCatalogTocKeywords'
 import { filterBooksByWords } from './bookCatalogSearch'
 import { getCatalogTocCache, setCatalogTocCache } from './bookCatalogTocSearchCache'
 import type { BookRow } from './bookCatalogTree'
@@ -102,37 +111,69 @@ export function useBookCatalogSearch(searchQuery: ReturnType<typeof ref<string>>
         return
       }
 
-      if (filterBooksByWords(store.allBooks, words).length > 0) return
+      const filterBooks = (bookWords: string[]) => filterBooksByWords(store.allBooks, bookWords)
+      const matchedBooks = filterBooks(words)
+
+      // Keyword trigger (additive): Phase 1 found books, but the query contains
+      // a structural TOC keyword with a book-matching prefix before it — append
+      // TOC results below the book results. Pure book queries (no valid keyword
+      // split) are done right here — Phase 1 already rendered them.
+      const isKeywordTrigger = matchedBooks.length > 0
+      if (
+        isKeywordTrigger &&
+        !splitQueryAtTocKeyword(words, isTocKeyword, (ws) => filterBooks(ws).length > 0)
+      ) {
+        return
+      }
+
+      const bookItems: SearchFsItem[] = isKeywordTrigger
+        ? matchedBooks.map((book) => ({ uid: `b-${book.id}`, kind: 'book' as const, book }))
+        : []
+
+      const applyItems = (tocItems: TocFsItem[]) => {
+        results.value = isKeywordTrigger ? [...bookItems, ...tocItems] : tocItems
+      }
 
       // Check the disk cache before hitting the DB
       const normalizedQuery = words.join(' ')
       const cached = await getCatalogTocCache(normalizedQuery)
       if (generation !== searchGeneration) return
       if (cached) {
-        results.value = cached.items
+        applyItems(cached.items)
         return
       }
 
-      searching.value = true
-      results.value = []
+      // Only the fallback trigger blanks the list while searching — the keyword
+      // trigger keeps the already-visible book results on screen.
+      if (!isKeywordTrigger) {
+        searching.value = true
+        results.value = []
+      }
 
       try {
-        const { items } = await runTocHeuristics(
-          words,
-          (bookWords) => filterBooksByWords(store.allBooks, bookWords),
-          () => generation !== searchGeneration,
-        )
+        const { items } = isKeywordTrigger
+          ? await runTocKeywordHeuristics(
+              words,
+              filterBooks,
+              isTocKeyword,
+              () => generation !== searchGeneration,
+            )
+          : await runTocHeuristics(words, filterBooks, () => generation !== searchGeneration)
 
         if (generation !== searchGeneration) return
 
-        results.value = items
+        // Keyword trigger with no keyword split (or no items): leave the book
+        // results exactly as Phase 1 rendered them.
+        if (isKeywordTrigger && !items.length) return
+
+        applyItems(items)
 
         // Persist to disk cache (fire-and-forget — UI is already updated)
         if (items.length > 0) setCatalogTocCache(normalizedQuery, items)
       } catch {
-        if (generation === searchGeneration) results.value = []
+        if (generation === searchGeneration && !isKeywordTrigger) results.value = []
       } finally {
-        if (generation === searchGeneration) searching.value = false
+        if (generation === searchGeneration && !isKeywordTrigger) searching.value = false
       }
     },
     { immediate: true },
