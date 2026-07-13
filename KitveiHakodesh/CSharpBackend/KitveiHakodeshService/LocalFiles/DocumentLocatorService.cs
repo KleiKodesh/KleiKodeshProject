@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace KitveiHakodeshService.KitvieHakosesh
+namespace KitveiHakodeshService.LocalFiles
 {
-    internal class Updater
+    internal class DocumentLocatorService
     {
     }
 }

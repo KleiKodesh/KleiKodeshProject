@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace KitveiHakodeshService.KitvieHakosesh
+namespace KitveiHakodeshService.KitvieHakodesh
 {
-    internal class UpdaterService
+    internal class Updater
     {
     }
 }
