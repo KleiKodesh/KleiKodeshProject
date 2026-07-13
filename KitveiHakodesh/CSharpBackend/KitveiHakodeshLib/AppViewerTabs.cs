@@ -27,15 +27,48 @@ namespace KitveiHakodeshLib
         public TabsStateChangedEventArgs(
             IReadOnlyList<MirroredTabInfo> tabs,
             string activeTabId,
+            string pane2ActiveTabId,
+            bool splitView,
+            int focusedPane,
+            double splitFraction,
+            int dividerLeftPx,
+            int dividerWidthPx,
             IReadOnlyList<MirroredRecentInfo> recentItems)
         {
             Tabs = tabs;
             ActiveTabId = activeTabId;
+            Pane2ActiveTabId = pane2ActiveTabId;
+            SplitView = splitView;
+            FocusedPane = focusedPane;
+            SplitFraction = splitFraction;
+            DividerLeftPx = dividerLeftPx;
+            DividerWidthPx = dividerWidthPx;
             RecentItems = recentItems;
         }
 
         public IReadOnlyList<MirroredTabInfo> Tabs { get; }
+
+        /// <summary>Pane 1's active tab id.</summary>
         public string ActiveTabId { get; }
+
+        /// <summary>Pane 2's active tab id; empty/null when split view is off.</summary>
+        public string Pane2ActiveTabId { get; }
+
+        /// <summary>Whether Vue's split view is open (drives the split tab strip).</summary>
+        public bool SplitView { get; }
+
+        /// <summary>Which pane has focus (1 or 2); 1 when split view is off.</summary>
+        public int FocusedPane { get; }
+
+        /// <summary>Pane 2's share of the window width (Vue's splitViewFraction, 0.15–0.85).</summary>
+        public double SplitFraction { get; }
+
+        /// <summary>
+        /// Exact device pixels of the rendered Vue split divider, measured from the
+        /// webview's viewport left edge. -1/0 when not measured (fall back to fraction).
+        /// </summary>
+        public int DividerLeftPx { get; }
+        public int DividerWidthPx { get; }
 
         /// <summary>Recently opened documents for the tab-list dropdown's extra section.</summary>
         public IReadOnlyList<MirroredRecentInfo> RecentItems { get; }
@@ -89,7 +122,23 @@ namespace KitveiHakodeshLib
             }
 
             string activeTabId = root.TryGetProperty("activeTabId", out var a) ? a.GetString() : null;
-            TabsStateChanged?.Invoke(this, new TabsStateChangedEventArgs(tabs, activeTabId, recent));
+            string pane2ActiveTabId = root.TryGetProperty("pane2ActiveTabId", out var a2) ? a2.GetString() : null;
+            bool splitView = root.TryGetProperty("splitView", out var sv) && sv.ValueKind == JsonValueKind.True;
+            int focusedPane = root.TryGetProperty("focusedPane", out var fp) && fp.TryGetInt32(out int fpv) ? fpv : 1;
+            double splitFraction = root.TryGetProperty("splitFraction", out var sf) && sf.TryGetDouble(out double sfv)
+                ? sfv
+                : 0.5;
+            int dividerLeftPx = root.TryGetProperty("splitDividerLeftPx", out var dl) && dl.TryGetInt32(out int dlv)
+                ? dlv
+                : -1;
+            int dividerWidthPx = root.TryGetProperty("splitDividerWidthPx", out var dw) && dw.TryGetInt32(out int dwv)
+                ? dwv
+                : 0;
+
+            TabsStateChanged?.Invoke(this,
+                new TabsStateChangedEventArgs(
+                    tabs, activeTabId, pane2ActiveTabId, splitView, focusedPane, splitFraction,
+                    dividerLeftPx, dividerWidthPx, recent));
         }
 
         /// <summary>Forwards a native tab-strip selection to Vue.</summary>
@@ -100,12 +149,16 @@ namespace KitveiHakodeshLib
         public void NotifyChromeTabCloseRequested(string tabId)
             => _bridge?.PushEvent(new { @event = "chromeTabCloseRequested", tabId });
 
-        /// <summary>Forwards the native "+" / Ctrl+T gesture to Vue.</summary>
-        public void NotifyChromeNewTabRequested()
-            => _bridge?.PushEvent(new { @event = "chromeTabNewRequested" });
+        /// <summary>Forwards the native "+" / Ctrl+T gesture to Vue, with the target pane (1 or 2).</summary>
+        public void NotifyChromeNewTabRequested(int pane = 1)
+            => _bridge?.PushEvent(new { @event = "chromeTabNewRequested", pane });
 
         /// <summary>Forwards a recently-opened-document activation from the tab-list dropdown to Vue.</summary>
         public void NotifyChromeRecentActivated(string key)
             => _bridge?.PushEvent(new { @event = "chromeRecentActivated", key });
+
+        /// <summary>Forwards a live drag of the native split divider to Vue (pane 2's width share).</summary>
+        public void NotifyChromeSplitFractionChanged(double fraction)
+            => _bridge?.PushEvent(new { @event = "chromeSplitFractionChanged", fraction });
     }
 }

@@ -136,6 +136,17 @@ namespace KitveiHakodeshLib.Settings
         {
             return Interaction.GetSetting("KitveiHakodesh", "Appearance", "AccentColor", "");
         }
+
+        /// <summary>Vue theme border color (hex) — used by the native strip's split divider.</summary>
+        public static void SaveBorderColor(string hex)
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "Appearance", "BorderColor", hex ?? "");
+        }
+
+        public static string LoadBorderColor()
+        {
+            return Interaction.GetSetting("KitveiHakodesh", "Appearance", "BorderColor", "");
+        }
     }
 }
 

@@ -8,7 +8,7 @@ import { onWebviewEvent, isHosted } from './seforimDb'
 import {
   activateTabAnyPane,
   closeTabAnyPane,
-  openNewTabPane1,
+  openNewTabInPane,
 } from '@/composables/useCrossPaneTabActions'
 import type { Tab } from '@/stores/tabStore'
 import type { MirroredTab, MirroredRecentItem } from './bridge'
@@ -18,10 +18,13 @@ import type { MirroredTab, MirroredRecentItem } from './bridge'
  * hosted by C#) and applies native strip gestures back onto the store.
  *
  * Vue is the source of truth:
- *  - Outbound: any change to tab membership, titles, or the focused pane's active
- *    tab sends a full snapshot via the 'tabsChanged' bridge action, including the
+ *  - Outbound: any change to pane-1 tab membership, titles, or the active tab
+ *    sends a full snapshot via the 'tabsChanged' bridge action, including the
  *    recently-opened documents that are NOT currently open (for the native
- *    tab-list dropdown's "נסגרו לאחרונה" section).
+ *    tab-list dropdown's "נסגרו לאחרונה" section). The strip mirrors pane 1's
+ *    view of the world (tabStore.pane1Tabs): its own tabs, plus pane-2 orphans
+ *    adopted while split view is off. Orphans activate in pane 1 — never
+ *    reopening the split shell — and return to pane 2 when it reopens.
  *  - Inbound: strip gestures arrive as push events and are applied to the store,
  *    which in turn produces the next snapshot:
  *      chromeTabActivated      { tabId } — user clicked a strip tab
@@ -70,32 +73,79 @@ export function initTabMirror(): void {
     })
   }
 
-  // Sorted by id so Vue's MRU move-to-front reordering doesn't produce spurious
-  // snapshots — the strip keeps its own stable visual order and only needs
-  // membership, titles, and the active tab.
-  const snapshot = computed(() => ({
-    tabs: [...tabStore.tabs]
-      .sort((a, b) => Number(a.id) - Number(b.id))
-      .map((t): MirroredTab => ({ id: t.id, title: t.title, pane: t.pane === 2 ? 2 : 1 })),
-    activeTabId:
-      bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId === 2
-        ? tabStore.pane2ActiveTabId
-        : tabStore.activeTabId,
-    recent: recentItems.value,
-  }))
+  // Both panes' visible tabs (pane1Tabs is split-aware: it includes adopted
+  // orphans while split view is off; pane2Tabs is empty then). Sorted by id so
+  // Vue's MRU move-to-front reordering doesn't produce spurious snapshots — the
+  // strip keeps its own stable visual order and only needs membership, titles,
+  // split state, and the per-pane active tabs.
+  // Window resizes move the rendered divider without touching any store state —
+  // bump a tick so the snapshot recomputes and the divider is re-measured.
+  const resizeTick = ref(0)
+  window.addEventListener('resize', () => {
+    resizeTick.value++
+  })
+
+  const snapshot = computed(() => {
+    void resizeTick.value
+    const splitOn = bookViewStore.splitViewEnabled
+    return {
+      tabs: [...tabStore.pane1Tabs, ...tabStore.pane2Tabs]
+        .sort((a, b) => Number(a.id) - Number(b.id))
+        .map((t): MirroredTab => ({ id: t.id, title: t.title, pane: t.pane === 2 ? 2 : 1 })),
+      activeTabId: tabStore.activeTabId,
+      pane2ActiveTabId: splitOn ? tabStore.pane2ActiveTabId : '',
+      splitView: splitOn,
+      focusedPane: (splitOn ? bookViewStore.focusedPaneId : 1) as 1 | 2,
+      // Raw store fraction as the reactive dependency; the watcher replaces it with
+      // the MEASURED divider center before sending (see dividerCenterFraction).
+      splitFraction: bookViewStore.splitViewFraction,
+      recent: recentItems.value,
+    }
+  })
+
+  // The strip divider aligns to the DEVICE PIXELS the browser actually rendered
+  // for .split-divider — no fraction×width rounding, so alignment holds at every
+  // window width. getBoundingClientRect × devicePixelRatio recovers the snapped
+  // pixel bounds (the webview's device width equals the form's client width).
+  // lastDividerDelta converts the strip's center-fraction drag reports back to
+  // the store fraction.
+  let lastDividerDelta = 0
+  function measureDividerDevice(storeFraction: number): { left: number; width: number } {
+    const el = document.querySelector('.split-divider')
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      if (rect.width > 0) {
+        lastDividerDelta = (rect.left + rect.width / 2) / window.innerWidth - storeFraction
+        const dpr = window.devicePixelRatio
+        const left = Math.round(rect.left * dpr)
+        return { left, width: Math.max(1, Math.round(rect.right * dpr) - left) }
+      }
+    }
+    lastDividerDelta = 2 / window.innerWidth
+    return { left: -1, width: 0 }
+  }
 
   let lastSent = ''
   watch(
     snapshot,
     (snap) => {
-      const json = JSON.stringify(snap)
+      // flush: 'post' — the DOM has re-rendered, so the divider element measures true
+      const divider = snap.splitView
+        ? measureDividerDevice(snap.splitFraction)
+        : { left: -1, width: 0 }
+      const payload = {
+        ...snap,
+        splitDividerLeftPx: divider.left,
+        splitDividerWidthPx: divider.width,
+      }
+      const json = JSON.stringify(payload)
       if (json !== lastSent) {
         lastSent = json
-        notifyTabsChanged(snap.tabs, snap.activeTabId, snap.recent)
+        notifyTabsChanged(payload)
       }
       refreshRecent()
     },
-    { immediate: true },
+    { immediate: true, flush: 'post' },
   )
 
   async function openRecent(key: string) {
@@ -121,11 +171,22 @@ export function initTabMirror(): void {
         closeTabAnyPane(String(msg.tabId))
         break
       case 'chromeTabNewRequested':
-        openNewTabPane1()
+        openNewTabInPane(msg.pane === 2 ? 2 : 1)
         break
       case 'chromeRecentActivated':
         void openRecent(String(msg.key))
         break
+      case 'chromeSplitFractionChanged': {
+        // Live drag of the native strip divider — resize the split panes in tandem.
+        // The strip reports the divider CENTER; convert back to the store fraction
+        // using the same center↔fraction delta the outbound snapshot measured,
+        // and clamp like the Vue divider's own drag.
+        const fraction = Number(msg.fraction) - lastDividerDelta
+        if (Number.isFinite(fraction)) {
+          bookViewStore.setSplitViewFraction(Math.min(0.85, Math.max(0.15, fraction)))
+        }
+        break
+      }
     }
   })
 }
