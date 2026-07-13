@@ -110,6 +110,32 @@ namespace KitveiHakodeshLib.Settings
         {
             return Interaction.GetSetting("KitveiHakodesh", "Appearance", "DarkMode", "0") == "1";
         }
+
+        /// <summary>
+        /// Persists the Vue theme's title-bar background color (hex, e.g. "#2d2d2d") so the
+        /// native chrome tab strip can be themed correctly before the Vue app loads and
+        /// sends its first setTheme message. Empty when no theme was ever sent.
+        /// </summary>
+        public static void SaveChromeColor(string hex)
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "Appearance", "ChromeColor", hex ?? "");
+        }
+
+        public static string LoadChromeColor()
+        {
+            return Interaction.GetSetting("KitveiHakodesh", "Appearance", "ChromeColor", "");
+        }
+
+        /// <summary>Vue theme accent color (hex) — used by the native tab-list dropdown's active indicator.</summary>
+        public static void SaveAccentColor(string hex)
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "Appearance", "AccentColor", hex ?? "");
+        }
+
+        public static string LoadAccentColor()
+        {
+            return Interaction.GetSetting("KitveiHakodesh", "Appearance", "AccentColor", "");
+        }
     }
 }
 

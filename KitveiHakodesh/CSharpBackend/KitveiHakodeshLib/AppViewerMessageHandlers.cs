@@ -86,6 +86,7 @@ namespace KitveiHakodeshLib
                         case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
                         case "setTheme": HandleSetTheme(root, id); break;
+                        case "tabsChanged": HandleTabsChanged(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }
@@ -172,16 +173,27 @@ namespace KitveiHakodeshLib
             }
 
             // Already in a floating window — just toggle fullscreen, never touch popout.
+            var chromeTabsForm = hostForm as FluentChromeTabs.FluentChromeTabsForm;
+
             if (hostForm.FormBorderStyle == FormBorderStyle.None && hostForm.WindowState == FormWindowState.Maximized)
             {
                 // Exit fullscreen — restore to whatever state we were in before entering.
                 hostForm.FormBorderStyle = FormBorderStyle.Sizable;
                 hostForm.WindowState = _preFullscreenWindowState;
+
+                // Bring the native tab strip back once the frame is restored.
+                if (chromeTabsForm != null)
+                    chromeTabsForm.StripVisible = true;
             }
             else
             {
                 // Save the current state before entering fullscreen so we can restore it on exit.
                 _preFullscreenWindowState = hostForm.WindowState;
+
+                // Fullscreen means no chrome at all — hide the native tab strip so the
+                // WebView2 content fills the entire screen.
+                if (chromeTabsForm != null)
+                    chromeTabsForm.StripVisible = false;
 
                 // Enter fullscreen — must be Normal before removing the border,
                 // otherwise setting Maximized again does nothing and chrome doesn't get removed.

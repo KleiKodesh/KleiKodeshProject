@@ -5,11 +5,35 @@ using System.Windows.Forms;
 
 namespace KitveiHakodeshLib
 {
+    /// <summary>
+    /// Theme details sent by Vue via the 'setTheme' bridge action.
+    /// ChromeColor is the Vue theme's title-bar background (hex), used to derive
+    /// the native chrome-tab-strip palette; null when Vue sent no color.
+    /// </summary>
+    public class ChromeThemeChangedEventArgs : EventArgs
+    {
+        public ChromeThemeChangedEventArgs(bool isDark, string chromeColor, string accentColor)
+        {
+            IsDark = isDark;
+            ChromeColor = chromeColor;
+            AccentColor = accentColor;
+        }
+
+        public bool IsDark { get; }
+        public string ChromeColor { get; }
+
+        /// <summary>The Vue theme's accent color (hex), for the tab-list active indicator; null when not sent.</summary>
+        public string AccentColor { get; }
+    }
+
     // Title-bar theme (DarkNet) wiring for AppViewer.
     // Owns: OnParentChanged, OnHostFormHandleCreated, ApplyTitleBarTheme,
     //       ApplyTitleBarThemeToForm, HandleSetTheme, _extraThemeForm.
     public partial class AppViewer
     {
+        /// <summary>Raised when Vue reports a theme change, carrying the chrome-strip color.</summary>
+        public event EventHandler<ChromeThemeChangedEventArgs> ChromeThemeChanged;
+
         // Extra form to keep in sync with theme toggles (used by VSTO popout).
         private Form _extraThemeForm;
 
@@ -84,8 +108,18 @@ namespace KitveiHakodeshLib
             _bridge.Reply(id, new { });
 
             bool isDark = root.TryGetProperty("isDark", out var v) && v.GetBoolean();
+            string chromeColor = root.TryGetProperty("chromeColor", out var c) &&
+                                 c.ValueKind == System.Text.Json.JsonValueKind.String
+                ? c.GetString()
+                : null;
+            string accentColor = root.TryGetProperty("accentColor", out var ac) &&
+                                 ac.ValueKind == System.Text.Json.JsonValueKind.String
+                ? ac.GetString()
+                : null;
 
             AppSettings.SaveDarkMode(isDark);
+            if (chromeColor != null) AppSettings.SaveChromeColor(chromeColor);
+            if (accentColor != null) AppSettings.SaveAccentColor(accentColor);
 
             if (InvokeRequired)
                 Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
@@ -101,6 +135,9 @@ namespace KitveiHakodeshLib
             }
 
             ApplySplashTheme(isDark);
+
+            // Let a native chrome-tabs host (ChromeTabsMirror) re-derive its strip palette.
+            ChromeThemeChanged?.Invoke(this, new ChromeThemeChangedEventArgs(isDark, chromeColor, accentColor));
         }
     }
 }
