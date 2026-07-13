@@ -5,6 +5,7 @@ import { SQL } from '@/webview-host/queries.sql'
 import {
   buildTree,
   assignFullPaths,
+  assignSubtreeBookIds,
   findCategoryMeta,
 } from '../features/book-catalog/bookCatalogTree'
 import { buildSearchIndex } from '../features/book-catalog/bookCatalogSearch'
@@ -54,6 +55,7 @@ export const useBooksDataStore = defineStore('booksData', () => {
         }
 
         const children = buildTree(categories, books)
+        assignSubtreeBookIds(children)
         const orderedBooks = assignFullPaths(children)
 
         ROOT.value = { ...ROOT.value, children }

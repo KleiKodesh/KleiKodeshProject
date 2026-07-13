@@ -1,4 +1,4 @@
-import { ref, toValue } from 'vue'
+import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { onClickOutside, useEventListener, type MaybeElementRef } from '@vueuse/core'
 
 type MaybeElement = HTMLElement | null | undefined
@@ -24,6 +24,8 @@ type MaybeElement = HTMLElement | null | undefined
  * @param options.toggleButton - The button that opens/closes the dropdown;
  *                               clicks on it suppress the handler so the
  *                               button's own click can handle the close
+ * @param options.enabled - When it resolves to `false`, neither the outside
+ *                          click nor the blur close fires. Defaults to enabled.
  */
 export function useDropdownClose(
   target: MaybeElementRef<MaybeElement>,
@@ -32,9 +34,11 @@ export function useDropdownClose(
     ignore?: MaybeElementRef<MaybeElement>[]
     toggleButton?: MaybeElementRef<MaybeElement>
     closeOnBlur?: boolean
+    enabled?: MaybeRefOrGetter<boolean>
   },
 ) {
   const justClosed = ref(false)
+  const isEnabled = () => toValue(options?.enabled) !== false
 
   function close(e?: Parameters<typeof handler>[0]) {
     handler(e)
@@ -50,6 +54,7 @@ export function useDropdownClose(
   onClickOutside(
     target,
     (e) => {
+      if (!isEnabled()) return
       const btn = toValue(options?.toggleButton)
       if (btn && btn.contains(e.target as Node)) {
         justClosed.value = true
@@ -67,6 +72,7 @@ export function useDropdownClose(
     useEventListener(window, 'blur', (e: FocusEvent) => {
       // Use setTimeout so document.activeElement settles before we check focus.
       setTimeout(() => {
+        if (!isEnabled()) return
         if (!toValue(target)) return
         // document.hasFocus() returns true when focus is inside a child iframe
         // (the top-level document is still considered focused). We must also

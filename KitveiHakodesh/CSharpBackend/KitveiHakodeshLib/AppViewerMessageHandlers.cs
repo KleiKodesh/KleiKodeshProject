@@ -84,6 +84,7 @@ namespace KitveiHakodeshLib
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         case "exportToWord": HandleExportToWord(root, id); break;
                         case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
+                        case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
                         case "setTheme": HandleSetTheme(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
@@ -227,6 +228,63 @@ namespace KitveiHakodeshLib
         {
             _bridge.Reply(id, new { ok = true });
             _ = WordExporter.PasteAtCursorAsync();
+        }
+
+        /// <summary>
+        /// Places a PNG image (sent as a data: URL from the frontend) on the Windows
+        /// clipboard. Used by the PDF viewer's "copy page as image" — the browser's
+        /// navigator.clipboard.write() for images is unreliable inside WebView2, so we
+        /// set it host-side where System.Windows.Forms.Clipboard just works.
+        /// </summary>
+        private void HandleCopyImageToClipboard(JsonElement root, string id)
+        {
+            string dataUrl = root.TryGetProperty("dataUrl", out var d) ? d.GetString() ?? "" : "";
+            bool ok = SetClipboardImageFromDataUrl(dataUrl);
+            _bridge.Reply(id, new { ok });
+        }
+
+        // Clipboard access requires an STA thread; the WebView2 message pump may run
+        // this handler on a thread that isn't STA, so do the work on a dedicated one.
+        private static bool SetClipboardImageFromDataUrl(string dataUrl)
+        {
+            byte[] bytes;
+            try
+            {
+                if (string.IsNullOrEmpty(dataUrl)) return false;
+                int comma = dataUrl.IndexOf(',');
+                string b64 = comma >= 0 ? dataUrl.Substring(comma + 1) : dataUrl;
+                bytes = Convert.FromBase64String(b64);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("[Clipboard] bad data URL: " + ex.Message);
+                return false;
+            }
+
+            bool ok = false;
+            var thread = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    using (var ms = new System.IO.MemoryStream(bytes))
+                    using (var source = System.Drawing.Image.FromStream(ms))
+                    // Copy into a standalone bitmap so the image survives the stream being disposed.
+                    using (var bmp = new System.Drawing.Bitmap(source))
+                    {
+                        // SetImage flushes to the OLE clipboard (persists after the bitmap is freed).
+                        Clipboard.SetImage(bmp);
+                        ok = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine("[Clipboard] SetImage failed: " + ex.Message);
+                }
+            });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.Start();
+            thread.Join();
+            return ok;
         }
 
         private void HandleHebrewBooksSearch(JsonElement root, string id)

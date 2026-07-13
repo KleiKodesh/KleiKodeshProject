@@ -18,6 +18,13 @@ export interface CategoryRow {
 export interface CategoryNode extends CategoryRow {
   children: CategoryNode[]
   books: BookRow[]
+  /**
+   * Ids of every book in this node's whole subtree, precomputed once at load.
+   * The filter tree reads this for its checked/indeterminate/count state; without
+   * it each node would re-flatten its subtree on every render, which is O(N·depth)
+   * across the tree and froze the UI when "expand all" mounted every node at once.
+   */
+  subtreeBookIds?: number[]
 }
 
 /** Custom (user-defined) entries have negative IDs and always sort after DB entries. */
@@ -62,6 +69,22 @@ export function buildTree(categories: CategoryRow[], books: BookRow[]): Category
   }
 
   return roots
+}
+
+/**
+ * Bottom-up pass that fills `subtreeBookIds` on every node so the filter tree
+ * never has to recursively flatten a subtree at render time. Returns the ids so
+ * callers can reuse the top-level result if needed.
+ */
+export function assignSubtreeBookIds(nodes: CategoryNode[]): void {
+  for (const node of nodes) {
+    assignSubtreeBookIds(node.children)
+    const ids: number[] = node.books.map((b) => b.id)
+    for (const child of node.children) {
+      if (child.subtreeBookIds) ids.push(...child.subtreeBookIds)
+    }
+    node.subtreeBookIds = ids
+  }
 }
 
 export function assignFullPaths(

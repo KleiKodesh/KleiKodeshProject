@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppShell from '@/layout/AppShell.vue'
 import ClockWidget from '@/components/ClockWidget.vue'
+import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import { ref, computed, defineAsyncComponent, onMounted, watch } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import { resetting } from '@/features/settings/appResetState'
@@ -103,6 +104,7 @@ function onPointerUp() {
 
     <ClockWidget v-if="showClock" />
     <SetupWizard v-if="!setupDone" />
+    <GlobalContextMenu />
     <div v-if="resetting" class="reset-overlay" />
   </div>
 </template>

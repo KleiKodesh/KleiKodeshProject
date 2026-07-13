@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, nextTick, watch } from 'vue'
+import { computed, ref, reactive, provide, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useDebounceFn, useIntervalFn } from '@vueuse/core'
-import { IconMinimize20Regular, IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
+import {
+  IconMinimize20Regular,
+  IconDismiss12Regular,
+  IconChevronDoubleDown20Regular,
+  IconChevronDoubleUp20Regular,
+} from '@iconify-prerendered/vue-fluent'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '@/features/book-catalog/bookCatalogSearchNormalizer'
@@ -9,6 +14,7 @@ import { filterBooksByWords } from '@/features/book-catalog/bookCatalogSearch'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import FullTextSearchFilterNode from './FullTextSearchFilterNode.vue'
 import FullTextSearchFilterBookList from './FullTextSearchFilterBookList.vue'
+import { FILTER_EXPANSION_KEY } from './fullTextSearchFilterExpansion'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 const props = defineProps<{
   checkedBookIds: Set<number>
@@ -35,6 +41,69 @@ const inputText = ref('')
 const filteredBooks = ref<BookRow[]>([])
 
 onMounted(() => nextTick(() => searchInputRef.value?.focus()))
+
+// ── Expand / collapse all ─────────────────────────────────────────────────────
+// Expansion is owned here as one reactive Set and shared with every node via
+// provide/inject. Nodes render children only when their id is in the set, so
+// "expand all" can grow the tree gradually rather than in one blocking frame.
+const expandedIds = reactive(new Set<number>())
+const allExpanded = ref(false)
+
+provide(FILTER_EXPANSION_KEY, {
+  isExpanded: (id: number) => expandedIds.has(id),
+  toggle: (id: number) => {
+    if (expandedIds.has(id)) expandedIds.delete(id)
+    else expandedIds.add(id)
+  },
+})
+
+// Pre-order list of every category that has something to reveal. Pre-order means
+// a parent always precedes its descendants, so revealing ids in order fills the
+// tree top-down.
+function collectExpandableIds(nodes: CategoryNode[], out: number[]): number[] {
+  for (const node of nodes) {
+    if (node.children.length || node.books.length) out.push(node.id)
+    collectExpandableIds(node.children, out)
+  }
+  return out
+}
+
+let expandRaf: number | null = null
+function stopExpanding() {
+  if (expandRaf !== null) {
+    cancelAnimationFrame(expandRaf)
+    expandRaf = null
+  }
+}
+
+// Reveal ids in rAF-batched chunks so the browser paints between batches and the
+// UI stays responsive even for a catalog with thousands of entries.
+function expandAll() {
+  stopExpanding()
+  allExpanded.value = true
+  const ids = collectExpandableIds(booksStore.ROOT.children, [])
+  let i = 0
+  const BATCH = 150
+  const step = () => {
+    const end = Math.min(i + BATCH, ids.length)
+    for (; i < end; i++) expandedIds.add(ids[i]!)
+    expandRaf = i < ids.length ? requestAnimationFrame(step) : null
+  }
+  expandRaf = requestAnimationFrame(step)
+}
+
+function collapseAll() {
+  stopExpanding()
+  expandedIds.clear()
+  allExpanded.value = false
+}
+
+function toggleExpandAll() {
+  if (allExpanded.value) collapseAll()
+  else expandAll()
+}
+
+onBeforeUnmount(stopExpanding)
 
 function onSelectAllClick() {
   if (isAllChecked.value) {
@@ -171,6 +240,15 @@ function onInputKeydown(e: KeyboardEvent) {
         </span>
         <span class="panel-title">בחר הכל</span>
       </div>
+      <button
+        v-if="!isSearching && !booksStore.loading"
+        class="expand-all-btn c-pointer hover-bg"
+        :title="allExpanded ? 'כווץ הכל' : 'הרחב הכל'"
+        @click.stop="toggleExpandAll"
+      >
+        <IconChevronDoubleUp20Regular v-if="allExpanded" />
+        <IconChevronDoubleDown20Regular v-else />
+      </button>
       <button class="close-btn c-pointer hover-bg" title="סגור" @click.stop="emit('close')">
         <IconMinimize20Regular />
       </button>
@@ -280,7 +358,8 @@ function onInputKeydown(e: KeyboardEvent) {
 .header-check.checked .check-mark { display: block; }
 .header-check.indet   .dash-mark  { display: block; }
 .panel-title { flex: 1; }
-.close-btn {
+.close-btn,
+.expand-all-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -289,6 +368,16 @@ function onInputKeydown(e: KeyboardEvent) {
   flex-shrink: 0;
   border-radius: 0;
   color: var(--text-secondary);
+}
+.expand-all-btn {
+  opacity: 0.55;
+}
+.expand-all-btn:hover {
+  opacity: 1;
+}
+.expand-all-btn :deep(svg) {
+  width: 14px;
+  height: 14px;
 }
 .panel-body {
   flex: 1;
