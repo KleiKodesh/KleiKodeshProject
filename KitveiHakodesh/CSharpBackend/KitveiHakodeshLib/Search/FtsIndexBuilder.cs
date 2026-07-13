@@ -177,6 +177,25 @@ namespace KitveiHakodeshLib.Search
             FtsIndexState.WriteVersionStamp(!string.IsNullOrEmpty(version) ? version : "unversioned");
             index.DeleteBuildProgressFile();
 
+            // Collapse the freshly built index into a single segment (perf audit
+            // F04): every term lookup and vocabulary scan afterwards touches one
+            // segment instead of four. Searches keep running during the merge
+            // (commit-only locking) and shutdown aborts it in under a second via
+            // the build token. This runs AFTER the version stamp on purpose: an
+            // interruption leaves a complete, stamped, multi-segment index — a
+            // performance difference only — and WAL recovery settles any partial
+            // merge at the next start.
+            try
+            {
+                Console.WriteLine("[SearchHandler] FTS post-build force merge starting...");
+                index.ForceMerge();
+                Console.WriteLine("[SearchHandler] FTS post-build force merge complete.");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[SearchHandler] FTS post-build force merge skipped: " + ex.Message);
+            }
+
             if (!_state.TryMarkReady(cts))
             {
                 // A concurrent StopAll already reset state — don't push ready.
