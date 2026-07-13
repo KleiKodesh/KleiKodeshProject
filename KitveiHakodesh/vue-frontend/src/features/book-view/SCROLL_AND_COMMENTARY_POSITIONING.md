@@ -115,6 +115,25 @@ correction must stay active (bounded, cancellable by a newer scroll request via 
 token) until the target's position is stable — a single one-shot correction lands
 wrong if a batch arrives right after it.
 
+## E. Lines pane keeps its position across layout-mode switches
+
+Switching commentary layout bottom ↔ side swaps template branches in BookViewPage
+(SplitPane vs .side-by-side), which unmounts and **remounts BookViewLinesContent**.
+The remounted instance re-runs its initial-scroll restore from
+`initialLineIndex`/`initialScrollTop`/`initialScrollOffset` — refs frozen at
+session-restore time — so without intervention it jumps to the stale position (or
+the top when nothing was saved). A pre-flush `watch(sideBySide)` in BookViewPage
+captures the live position (`linesContentRef.captureScrollPos()`, old instance
+still mounted at pre-flush time) and writes it into those same refs, clearing
+`initialLineIndex` so the captured index wins over a TOC-open index. Dragging the
+divider does not remount anything and needs no handling.
+
+Known limitation: the restore is (index, offset)-based, and the two modes have
+different lines-pane widths, so line heights differ — the same line is kept at
+the top, but the sub-line pixel offset may land slightly differently. A
+no-remount single-container layout was tried (2026-07-13) and reverted at the
+product owner's request.
+
 ## Interaction rules / gotchas (learned the hard way)
 
 - **Restore wins over pin-scroll**: `restoreCommentaryScrollPos` sets

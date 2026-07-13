@@ -67,11 +67,13 @@ Three files handle all query logic:
 
 `src/webview-host/dictionaryDb.sql.ts` — all SQL strings for the dictionary DB. No inline SQL anywhere else in the dictionary layer.
 
-`src/webview-host/dictionaryDb.ts` — dictionary DB query functions (`dictLinks`, `dictSynonyms`, `dictVariants`, `dictSpellCandidates`, `abbrevLookup`, `dictAbbrevSenses`) and the main entry point `combinedLookup`. Routes through `__webviewDictQuery` (C# host) or the `/query-dict` Vite dev middleware. `dictAbbrevSenses` is the dictionary-only lookup (exact → `%term%` LIKE, no seforim DB) used by the book-view abbreviation tooltip.
+`src/webview-host/dictionaryDb.ts` — dictionary DB query functions (`dictLinks`, `dictSynonyms`, `dictVariants`, `dictSpellCandidates`, `abbrevLookup`, `dictAbbrevSenses`) and the main entry point `combinedLookup`. Routes through `__webviewDictQuery` (C# host) or the `/query-dict` Vite dev middleware. `dictAbbrevSenses` is the dictionary-only lookup (candidate list, all exacts → `%candidate%` LIKE fallbacks, no seforim DB) used by the book-view abbreviation tooltip.
 
 `src/webview-host/dictionarySeforimDb.ts` — seforim DB queries for מצודת ציון, מלבי"ם, and מחברת מנחם. Exports `boldExact`, `boldPrefix`, `boldContains`, `getMetzudatBookIds`, `getMalbimBookIds`, and `menchemLookup`. Uses the same seforim DB transport as the rest of the app.
 
 ## Rebuild
 
 `Misc/scripts/dictionary/import_radak_definitions.py` — imports clean definitions from ספר השרשים לרד"ק. Re-runnable.
+
+`scripts/AddOtzariaAcronymsToDictionary.py` (repo root) — imports ראשי תיבות from the Otzaria app's `Acronyms.json` asset as source `אוצריא - ראשי תיבות`, deduped against the existing ראשי תיבות sources. Re-runnable.
 `Misc/scripts/dictionary/import_radak_roots.py` — imports 2,048 roots into a standalone `root_form` table (not used by the app directly).

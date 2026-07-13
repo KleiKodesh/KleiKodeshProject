@@ -1,15 +1,3 @@
-בנייה מחדש של אינדקס חיפוש קבצים shouldn't navigate to the חיפוש קבצים page
-likewise איפוס אינדקס החיפוש ut can stay on teh search page and highlight the clicked button for a moment with wpf continuos progress bar style background for a moment
-
-unify the html of context menu
-context menu for search page?
-egeneric context manu)?
-
-האם בקורא קבצי הPDF שבכתבי הקודש יש אפשרות להעתיק מקובץ PDF כתמונה (ע"מ שאפשר יהיה לשתול אותו כתמונה בתוך קובץ וורד).
-
-optimize catlog search 
-laos add dfined huristic by keywords
-
 pin recent items in home page
 allow user to choose more history items to be show
 add to msword context menu (keyboard shrotcuts?)

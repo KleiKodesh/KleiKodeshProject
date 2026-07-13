@@ -3,20 +3,19 @@
  * Compact abbreviation-expansion tooltip, anchored to the current text selection.
  *
  * Shows all dictionary senses for the selected abbreviation on one wrapped
- * line, divider-separated. When a sense came from the LIKE fallback its
- * headword may differ from the selected term — then the headword is shown
- * as a prefix so the user knows which entry matched.
+ * line, divider-separated. Sense labels arrive display-ready from the
+ * composable (headword-prefixed when a fallback matched a different entry).
  *
  * Positioning follows the BookViewNoteBubble pattern: Teleported to body,
  * rendered hidden first so real dimensions can be measured, then fixed above
  * the selection (flipped below when clipped by the viewport top).
  *
- * The parent keys this component by term so a new lookup remounts and
+ * The parent keys this component by lookup id so a new lookup remounts and
  * re-measures. mousedown is prevented so clicking the tooltip doesn't
  * collapse the selection (which would immediately dismiss it).
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
-import type { AbbrevTooltipData, AbbrevSense } from './useBookViewAbbrevTooltip'
+import type { AbbrevTooltipData } from './useBookViewAbbrevTooltip'
 
 const props = defineProps<{ data: AbbrevTooltipData }>()
 
@@ -65,10 +64,6 @@ const style = computed(() => {
   }
 })
 
-function senseLabel(sense: AbbrevSense): string {
-  return sense.headword === props.data.term ? sense.text : `${sense.headword} — ${sense.text}`
-}
-
 onMounted(() => {
   nextTick(computePosition)
 })
@@ -77,10 +72,9 @@ onMounted(() => {
 <template>
   <Teleport to="body">
     <div ref="tooltipRef" class="abbrev-tooltip" :style="style" dir="rtl" @mousedown.prevent>
-      <strong class="abbrev-term">{{ data.term }}</strong>
       <template v-for="(sense, senseIndex) in data.senses" :key="senseIndex">
         <span v-if="senseIndex > 0" class="abbrev-divider">|</span>
-        <span class="abbrev-sense">{{ senseLabel(sense) }}</span>
+        <span class="abbrev-sense">{{ sense }}</span>
       </template>
     </div>
   </Teleport>
@@ -103,11 +97,6 @@ onMounted(() => {
   max-height: 40vh;
   overflow-y: auto;
   user-select: none;
-}
-
-.abbrev-term {
-  color: var(--accent-color);
-  margin-inline-end: 8px;
 }
 
 .abbrev-divider {

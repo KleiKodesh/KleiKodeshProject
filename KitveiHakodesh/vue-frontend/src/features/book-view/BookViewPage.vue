@@ -127,6 +127,20 @@ async function onExportToWord() {
   await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
 }
 
+// Switching between the stacked (SplitPane) and side-by-side layouts swaps template
+// branches, which unmounts and remounts BookViewLinesContent. The remounted instance
+// re-runs its initial-scroll restore using initialLineIndex/initialScrollTop — values
+// frozen at session-restore time — so it would jump back to the stale position (or to
+// the top when nothing was saved). Capture the live position before the swap (pre-flush,
+// old instance still mounted) and feed it through the same initial-scroll props.
+watch(sideBySide, () => {
+  const pos = linesContentRef.value?.captureScrollPos?.()
+  if (!pos) return
+  initialLineIndex.value = undefined
+  initialScrollTop.value = pos.scrollIndex
+  initialScrollOffset.value = pos.scrollOffset
+})
+
 watch(commentaryMode, (mode) => { commentaryVisible.value = mode !== 'off' })
 watch(commentaryVisible, (v) => { if (!v) commentaryMode.value = 'off' })
 watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
