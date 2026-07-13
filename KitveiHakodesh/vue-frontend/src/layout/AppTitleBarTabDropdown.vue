@@ -9,7 +9,6 @@ import {
   IconLibrary20Regular,
   IconDocumentPdf20Regular,
   IconApps20Regular,
-  IconSplitVertical20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
@@ -59,12 +58,6 @@ nextTick(() => containerRef.value?.focus())
         <IconLibrary20Regular v-else-if="tab.route === '/books'" class="tab-icon" />
         <IconApps20Regular v-else-if="tab.route === '/workspaces'" class="tab-icon" />
         <IconDocument20Regular v-else class="tab-icon" />
-        <!-- Pane-1 dropdown lists all tabs — mark the ones living in the split pane -->
-        <IconSplitVertical20Regular
-          v-if="paneId === 1 && tab.pane === 2"
-          class="tab-icon tab-pane2-icon"
-          title="לשונית בתצוגה מפוצלת"
-        />
       </div>
       <span class="tab-row-title">
         {{ tab.title }}
@@ -127,10 +120,6 @@ nextTick(() => containerRef.value?.focus())
 }
 .book-icon {
   color: #c1440e;
-}
-.tab-pane2-icon {
-  margin-inline-start: 4px;
-  opacity: 0.6;
 }
 .tab-row-title {
   font-weight: 400;

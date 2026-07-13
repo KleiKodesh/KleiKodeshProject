@@ -14,6 +14,7 @@ import {
 } from '@/utils/persistence'
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
+import { useBookViewStore } from './bookViewStore'
 import { disposeLocalFileHost } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
@@ -171,11 +172,25 @@ export const useTabStore = defineStore('tabs', () => {
     (): Tab => tabs.value.find((t) => t.id === activeTabId.value) ?? tabs.value[0]!,
   )
 
-  /** All tabs belonging to pane 1 (default) — tabs without a pane field or pane === 1. */
-  const pane1Tabs = computed(() => tabs.value.filter((t) => !t.pane || t.pane === 1))
+  // Orphan adoption: while split view is CLOSED, pane 1 displays and navigates the
+  // pane-2 tabs too (they keep their pane: 2 identity so they return to pane 2 the
+  // moment split view reopens). useBookViewStore() is called lazily inside the
+  // computed bodies — never at store setup — to keep the module cycle harmless.
 
-  /** All tabs belonging to pane 2. */
-  const pane2Tabs = computed(() => tabs.value.filter((t) => t.pane === 2))
+  /**
+   * Pane 1's visible tabs: its own tabs, plus pane-2 "orphans" adopted while
+   * split view is off.
+   */
+  const pane1Tabs = computed(() => {
+    if (!useBookViewStore().splitViewEnabled) return tabs.value
+    return tabs.value.filter((t) => !t.pane || t.pane === 1)
+  })
+
+  /** Pane 2's visible tabs — empty while split view is off (pane 1 adopts them). */
+  const pane2Tabs = computed(() => {
+    if (!useBookViewStore().splitViewEnabled) return []
+    return tabs.value.filter((t) => t.pane === 2)
+  })
 
   /** Active tab for the given pane number. */
   function activeTabForPane(pane: 1 | 2): Tab {
@@ -240,6 +255,25 @@ export const useTabStore = defineStore('tabs', () => {
         tabs.value.push(home)
         pane2ActiveTabId.value = home.id
       }
+    }
+  }
+
+  /**
+   * Called when split view re-opens: pane 2 takes its orphaned tabs back, so pane 1
+   * must stop displaying one if the user was reading it. The orphan becomes pane 2's
+   * active tab (it stays front-of-mind, just in its own shell again).
+   */
+  function reclaimPane1ActiveForSplit() {
+    const active = tabs.value.find((t) => t.id === activeTabId.value)
+    if (!active || active.pane !== 2) return
+    pane2ActiveTabId.value = active.id
+    const own = tabs.value.filter((t) => !t.pane || t.pane === 1)
+    if (own.length > 0) {
+      activeTabId.value = own[0]!.id
+    } else {
+      const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+      tabs.value.push(home)
+      activeTabId.value = home.id
     }
   }
 
@@ -407,20 +441,23 @@ export const useTabStore = defineStore('tabs', () => {
 
   function closeAllTabs() {
     const wsId = useWorkspaceStore().activeId
-    const pane1 = tabs.value.filter((t) => !t.pane || t.pane === 1)
-    for (const tab of pane1) {
+    // While split view is off, pane 1 also owns the pane-2 orphans it adopted —
+    // "close all" closes everything the user sees, orphans included.
+    const splitOn = useBookViewStore().splitViewEnabled
+    const closing = splitOn ? tabs.value.filter((t) => !t.pane || t.pane === 1) : [...tabs.value]
+    for (const tab of closing) {
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       idbTabsDelete(KEYS.tab(wsId, tab.id))
       idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
     }
-    // Evict pane-1 book state cache entries only
+    // Evict the closed tabs' book state cache entries only
     for (const key of _bookStateCache.keys()) {
       const tabId = key.split(':')[1]
-      if (pane1.some((t) => t.id === tabId)) _bookStateCache.delete(key)
+      if (closing.some((t) => t.id === tabId)) _bookStateCache.delete(key)
     }
     const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
-    // Keep pane-2 tabs intact — only replace pane-1 tabs with a single home tab
-    tabs.value = [home, ...tabs.value.filter((t) => t.pane === 2)]
+    // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
+    tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
     pruneUncheckedCommentary(tabs.value.map((t) => t.id))
   }
@@ -491,7 +528,9 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function openNewHomeTab() {
-    const existing = tabs.value.find((t) => t.route === '/')
+    // Only consider tabs pane 1 can display (its own + adopted orphans) — never
+    // steal a home tab that lives in the open split pane.
+    const existing = pane1Tabs.value.find((t) => t.route === '/')
     if (existing) switchTab(existing.id)
     else openTab({ title: 'בית', route: '/' })
   }
@@ -509,8 +548,10 @@ export const useTabStore = defineStore('tabs', () => {
   // without closing or replacing anything.
 
   function navigateToSingleton(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
+    // pane1Tabs is split-aware: while split view is off it includes adopted orphans,
+    // so an orphaned singleton (e.g. settings opened in pane 2) is reused, not duplicated.
     const paneTabs = pane === 1
-      ? tabs.value.filter((t) => !t.pane || t.pane === 1)
+      ? pane1Tabs.value
       : tabs.value.filter((t) => t.pane === 2)
     const existing = paneTabs.find((t) => t.route === route)
     if (pane === 1) {
@@ -556,6 +597,7 @@ export const useTabStore = defineStore('tabs', () => {
     switchPaneTab,
     closePane2Tab,
     ensurePane2HasTab,
+    reclaimPane1ActiveForSplit,
     updatePane2ActiveTab,
     init,
     openTab,
