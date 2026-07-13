@@ -55,6 +55,16 @@ namespace FtsLib.SeforimDb
                 yield break;
             }
 
+            // Phase 1 — under the search lease: everything that touches segment
+            // files (expansion + intersection). The matching IDs are materialized
+            // so the lease is released BEFORE the DB content fetch below. Holding
+            // it across the fetch (minutes for broad queries) would let a queued
+            // merge commit block every new search behind the write lock for the
+            // whole stream — the lease must only live for milliseconds-to-seconds.
+            var ids = new List<int>();
+            IReadOnlyList<IReadOnlyCollection<string>> matchedGroups;
+            int originalGroupCount = parsed.Groups.Count;
+
             using (var reader = new IndexReader(indexPath, livePaths, lease))
             {
                 var groups         = new List<IEnumerable<string>>(parsed.Groups.Count);
@@ -73,19 +83,25 @@ namespace FtsLib.SeforimDb
 
                 if (groups.Count == 0) yield break;
 
-                IReadOnlyList<IReadOnlyCollection<string>> matchedGroups = expandedGroups;
-                int originalGroupCount = parsed.Groups.Count;
+                matchedGroups = expandedGroups;
 
-                int yielded = 0;
-                using (var db = new ZayitDb(dbPath))
+                foreach (var id in reader.Search(groups, ct))
                 {
-                    foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(reader.Search(groups, ct)))
-                    {
-                        ct.ThrowIfCancellationRequested();
-                        yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount);
-                        yielded++;
-                        if (cap > 0 && yielded >= cap) yield break;
-                    }
+                    ct.ThrowIfCancellationRequested();
+                    ids.Add(id);
+                    if (cap > 0 && ids.Count >= cap) break;
+                }
+            }
+
+            if (ids.Count == 0) yield break;
+
+            // Phase 2 — lease released: stream content rows from the DB.
+            using (var db = new ZayitDb(dbPath))
+            {
+                foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(ids))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount);
                 }
             }
         }
@@ -125,6 +141,10 @@ namespace FtsLib.SeforimDb
                 yield break;
             }
 
+            // Materialize under the lease, yield after releasing it — a slow
+            // consumer of this enumerable must not keep segment files leased
+            // (see Search for the full rationale).
+            var ids = new List<int>();
             using (var reader = new IndexReader(indexPath, livePaths, lease))
             {
                 var groups = new List<IEnumerable<string>>(parsed.Groups.Count);
@@ -142,8 +162,14 @@ namespace FtsLib.SeforimDb
                 if (groups.Count == 0) yield break;
 
                 foreach (var id in reader.Search(groups, ct))
-                    yield return id;
+                {
+                    ct.ThrowIfCancellationRequested();
+                    ids.Add(id);
+                }
             }
+
+            foreach (var id in ids)
+                yield return id;
         }
 
         // ── Group expansion ───────────────────────────────────────────
