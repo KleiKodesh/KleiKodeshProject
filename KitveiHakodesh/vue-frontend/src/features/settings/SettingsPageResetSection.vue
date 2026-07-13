@@ -3,10 +3,16 @@ import { ref } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useSettings } from './useSettingsPage'
 import { resetting } from './appResetState'
+import { showToast } from '@/composables/useToast'
 
 const { resetSettings, resetSearchIndex, resetAll, resetDocumentLocatorIndex } = useSettings()
 
-type ConfirmAction = { label: string; desc: string; action: () => Promise<void> | void }
+type ConfirmAction = {
+  label: string
+  desc: string
+  action: () => Promise<void> | void
+  successMessage?: string
+}
 const pendingConfirm = ref<ConfirmAction | null>(null)
 
 function confirmAction(action: ConfirmAction) {
@@ -18,6 +24,7 @@ async function runConfirmed() {
   const action = pendingConfirm.value
   pendingConfirm.value = null
   await action.action()
+  if (action.successMessage) showToast(action.successMessage, { variant: 'success' })
 }
 
 function cancelConfirm() {
@@ -40,9 +47,10 @@ function confirmResetSettings() {
 
 function confirmResetSearchIndex() {
   confirmAction({
-    label: 'איפוס אינדקס החיפוש',
+    label: 'איפוס אינדקס החיפוש בתוכן המאגר',
     desc: 'פעולה זו תמחק את אינדקס החיפוש ומטמון תוצאות החיפוש ותבנה את האינדקס מחדש. שאר נתוני האפליקציה לא יושפעו.',
     action: resetSearchIndex,
+    successMessage: 'איפוס אינדקס החיפוש בתוכן המאגר הושלם בהצלחה.',
   })
 }
 
@@ -51,6 +59,7 @@ function confirmResetDocumentLocatorIndex() {
     label: 'בנייה מחדש של אינדקס חיפוש קבצים',
     desc: 'פעולה זו תמחק את אינדקס חיפוש הקבצים ותבנה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.',
     action: resetDocumentLocatorIndex,
+    successMessage: 'איפוס אינדקס חיפוש הקבצים הושלם. הבנייה מחדש רצה כעת ברקע.',
   })
 }
 
@@ -77,7 +86,7 @@ function confirmResetAll() {
       </p>
     </div>
     <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש</button>
+      <button class="reset-btn" @click="confirmResetSearchIndex">איפוס אינדקס החיפוש בתוכן המאגר</button>
       <p class="reset-description" data-search-ignore>
         מוחק את אינדקס החיפוש ובונה אותו מחדש. שאר נתוני האפליקציה לא יושפעו.
       </p>

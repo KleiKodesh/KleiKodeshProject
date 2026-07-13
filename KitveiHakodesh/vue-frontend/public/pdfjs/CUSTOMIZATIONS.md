@@ -14,20 +14,43 @@ These files do not exist in the vanilla PDF.js dist and must be created fresh ea
 
 ### `web/pixel-ratio-override.js`
 
-Forces a minimum `devicePixelRatio` of 1.5 for sharp PDF rendering on low-DPI displays.
+Forces a minimum `devicePixelRatio` for sharp PDF rendering on low-DPI displays.
 Must be loaded **before** `viewer.mjs`.
 
 Why 1.5× and not 2×: each canvas uses `width × height × devicePixelRatio²` bytes. At 2× every canvas is 4× larger than at 1×; at 1.5× canvases are 2.25× larger — still noticeably sharper than 1×, but using only 56% of the memory that 2× would require. On displays already at ≥1.5× (125%+ Windows scaling, retina) this script is a no-op.
 
+**Old-Chromium blur fix (floor rises to 2.0 when CSS `round()` is missing).** PDF.js's `setLayerDimensions` (in `pdf.mjs`) snaps each page's CSS box down to a whole multiple of device pixels via CSS `round()`, so the integer-pixel canvas maps 1:1 to the screen and stays crisp:
+
+```js
+const useRound = FeatureTest.isCSSRoundSupported;   // CSS.supports("width: round(1.5px, 1px)")
+const widthStr = useRound ? `round(down, ${w}, var(--scale-round-x))` : `calc(${w})`;
+```
+
+CSS `round()` only shipped in Chromium 111. On older builds `useRound` is false and the page box becomes a fractional `calc()` size — the canvas is then scaled by a non-integer factor and pages look **slightly blurry**. `round()` can't be polyfilled live (the box is recomputed by CSS on every zoom), so instead the override raises the pixel-ratio floor to 2.0 on those builds; the browser downscales the higher-resolution canvas (supersampling), which hides the sub-pixel misalignment. The support test uses the **same expression PDF.js uses**, so the bump kicks in precisely when PDF.js takes the blurry `calc()` path. Modern Chromium keeps the leaner 1.5×.
+
 ```js
 (function () {
   const original = window.devicePixelRatio || 1;
-  const enhanced = Math.max(original, 1.5);
+
+  let cssRoundSupported = false;
+  try {
+    cssRoundSupported = !!(window.CSS && CSS.supports && CSS.supports("width: round(1.5px, 1px)"));
+  } catch (e) {
+    cssRoundSupported = false;
+  }
+
+  const floor = cssRoundSupported ? 1.5 : 2.0;
+  const enhanced = Math.max(original, floor);
+
   if (enhanced !== original) {
-    Object.defineProperty(window, 'devicePixelRatio', {
-      get: function () { return enhanced; },
-      configurable: true,
-    });
+    try {
+      Object.defineProperty(window, 'devicePixelRatio', {
+        get: function () { return enhanced; },
+        configurable: true,
+      });
+    } catch (e) {
+      // Some engines may refuse to redefine devicePixelRatio; keep the native value.
+    }
   }
 })();
 ```
@@ -336,6 +359,79 @@ Behavior:
 - Polls `waitForApp` until `PDFViewerApplication.pdfViewer` is ready and Fluent has translated the options before showing the first label.
 
 The init script is added as a `<script>` block immediately before `</body>`.
+
+---
+
+## `web/viewer.html` + `viewer-custom.css` — Narrow-viewport zoom control
+
+In a narrow toolbar the full zoom dropdown (`#scaleSelectContainer`, the select + the
+`#zoomInput` overlay) is too wide. PDF.js's own responsive CSS simply hides it
+(`@media (max-width: 560px){ #scaleSelectContainer{ display:none } }`), leaving no way
+to change zoom. This customization instead **collapses it into a compact icon button**
+at the same breakpoint, so tapping the icon opens the native option list directly (no
+custom popover — the real `<select>` does the work, so the list keeps its original size
+and theme).
+
+### Added file: `web/images/toolbarButton-zoom.svg`
+
+A "fit-to-width" glyph (a page rectangle with a horizontal double-headed arrow), used
+as the collapsed button's icon. It is drawn to match PDF.js's own toolbar icon set —
+**not** Fluent: PDF.js uses a custom set (solid `fill`/thin strokes, 16×16 viewBox).
+
+### `viewer-custom.css`
+
+At `@media (max-width: 560px)`, restyle `#scaleSelectContainer` into a 28px icon button
+and swap the dropdown caret (`::after`) for the zoom glyph. Key points:
+
+- Must set `display: inline-flex` to **override PDF.js's built-in `display:none`** at
+  this exact breakpoint (viewer-custom.css loads after viewer.css, so it wins) — this is
+  what makes the icon appear the instant the full dropdown would otherwise vanish.
+- The real `<select>` stays **in flow** (so the button keeps its height — absolutely
+  positioning it collapsed the container to 0px) and keeps its natural width so the
+  native list opens at the original size; it is clipped by the 28px container's
+  `overflow: hidden` and hidden with `opacity: 0` (still fully clickable).
+- `#zoomInput` is `display:none` at the same breakpoint.
+
+```css
+@media (max-width: 560px) {
+  #scaleSelectContainer {
+    display: inline-flex;   /* override PDF.js's display:none at 560px */
+    align-items: center;
+    position: relative;
+    min-width: 0;
+    width: 28px;
+    max-width: 28px;
+    padding: 0;
+    background: none;
+    border: none;
+    overflow: hidden;
+  }
+  #scaleSelectContainer:hover { background: var(--button-hover-color); }
+  #scaleSelectContainer > select {
+    flex: 0 0 auto;
+    width: 140px;           /* natural width → native list opens at original size */
+    opacity: 0;             /* invisible but clickable */
+    cursor: pointer;
+  }
+  #scaleSelectContainer::after {
+    inset-block: 0;
+    inset-inline: 0;
+    margin: auto;
+    -webkit-mask-image: url(images/toolbarButton-zoom.svg);
+            mask-image: url(images/toolbarButton-zoom.svg);
+  }
+}
+@media (max-width: 560px) { #zoomInput { display: none; } }
+```
+
+### `viewer.html` — zoom input script
+
+Since the collapsed button is icon-only, the zoom-input `mirrorSelect()` (see the zoom
+input overlay section above) also writes the current zoom % into the container's tooltip:
+
+```js
+if (container && text) container.title = 'שינוי מרחק (זום) — ' + text;
+```
 
 ---
 

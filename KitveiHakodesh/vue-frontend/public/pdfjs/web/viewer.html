@@ -1235,11 +1235,17 @@ See https://github.com/adobe-type-tools/cmap-resources
           const input = document.getElementById('zoomInput');
           if (!select || !input) return;
 
+          const container = document.getElementById('scaleSelectContainer');
+
           // Mirror exactly what the select currently shows — read the selected option's text node.
           function mirrorSelect() {
-            if (document.activeElement === input) return;
             const option = select.options[select.selectedIndex];
-            input.value = option ? option.textContent.trim() : '';
+            const text = option ? option.textContent.trim() : '';
+            // In the narrow-viewport icon-button mode the label is hidden, so
+            // surface the current zoom % in the container's tooltip.
+            if (container && text) container.title = 'שינוי מרחק (זום) — ' + text;
+            if (document.activeElement === input) return;
+            input.value = text;
           }
 
           function applyZoom() {

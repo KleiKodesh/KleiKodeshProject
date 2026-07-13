@@ -6,6 +6,7 @@
  * and scrolling the active match into view.
  */
 import { ref, computed, nextTick } from 'vue'
+import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import type { SearchMode } from './bookViewTypes'
 
 type ContentSearch = {
@@ -77,6 +78,35 @@ export function useBookViewSearchPanel(
     }
   }
 
+  // Element the current selection (or caret) is anchored in, if any.
+  function selectionAnchorElement(): Element | null {
+    const node = window.getSelection()?.anchorNode
+    if (!node) return null
+    return node instanceof Element ? node : node.parentElement
+  }
+
+  // Text currently selected in the lines or commentary view, normalized for
+  // use as a search query: diacritics removed, non-word characters collapsed
+  // to single spaces — except `-`, `"`, and `״` between word characters
+  // (hyphenated words, acronyms like רמב"ם), which are kept.
+  function selectionPrefill(): string {
+    const sel = window.getSelection()
+    if (!sel || sel.isCollapsed) return ''
+    if (!selectionAnchorElement()?.closest('.lines-content, .commentary-view')) return ''
+    return removeDiacriticsForSearch(sel.toString())
+      .replace(/[^\p{L}\p{N}\s"״-]+/gu, ' ')
+      .replace(/(?<![\p{L}\p{N}])["״-]+|["״-]+(?![\p{L}\p{N}])/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
+
+  function prefillFromSelection(target: ContentSearch | CommentarySearch) {
+    const prefill = selectionPrefill()
+    if (!prefill) return
+    clearFullTextSearchHighlights()
+    target.query.value = prefill
+  }
+
   function openContentSearch() {
     if (searchVisible.value && searchMode.value === 'content') {
       searchVisible.value = false
@@ -86,7 +116,20 @@ export function useBookViewSearchPanel(
     searchVisible.value = true
     searchMode.value = 'content'
     searchNavigationState.content = false
+    prefillFromSelection(contentSearch)
     nextTick(() => searchBarRef()?.focus())
+  }
+
+  // Toolbar toggle: close if open in any mode; otherwise open in the mode
+  // matching where the selection/caret sits — commentary search when it is
+  // in the commentary view, content search everywhere else.
+  function toggleSearch() {
+    if (searchVisible.value) {
+      searchVisible.value = false
+      return
+    }
+    if (selectionAnchorElement()?.closest('.commentary-view')) openCommentarySearch()
+    else openContentSearch()
   }
 
   function openCommentarySearch() {
@@ -97,6 +140,7 @@ export function useBookViewSearchPanel(
     searchVisible.value = true
     searchMode.value = 'commentary'
     searchNavigationState.commentary = false
+    prefillFromSelection(commentarySearch)
     nextTick(() => searchBarRef()?.focus())
   }
 
@@ -152,6 +196,7 @@ export function useBookViewSearchPanel(
     activeMatchIdx,
     openContentSearch,
     openCommentarySearch,
+    toggleSearch,
     onModeChange,
     onQueryChange,
     onSearchNext,

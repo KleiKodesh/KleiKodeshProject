@@ -10,6 +10,8 @@ Virtual-scrolled main text display for the book view. Handles line rendering, se
 
 **BookViewNoteBubble.vue** - editable note bubble anchored to a note marker in the scroller. Positioned relative to the marker's DOMRect with smart viewport-edge flip.
 
+**BookViewAbbrevTooltip.vue** - compact tooltip showing dictionary expansions for a selected abbreviation. All senses on one wrapped line, divider-separated; positioned above the selection with viewport flip. Keyed by lookup id so each new selection remounts and re-measures.
+
 ## Composables
 
 **useBookViewLinesTable.ts** - paginated line fetching in chunks of 200. Pre-allocates placeholder slots for correct virtualizer height. Use `prioritise(lineIndex)` to move a chunk to the front of the queue when the user jumps to a specific position.
@@ -17,6 +19,8 @@ Virtual-scrolled main text display for the book view. Handles line rendering, se
 **useBookViewLineRenderer.ts** - line content rendering with diacritics filtering, divine name censoring, and search highlighting. Caches rendered HTML per line to avoid re-running expensive transformations on every render cycle.
 
 **useBookViewLineCopyMenu.ts** - context menu for copying selected lines with optional source attribution. Provides three copy modes: block copy (selected HTML as-is), copy with source appended inline as "(Book Title, TOC Path)", and copy with source prepended as an `<h2>` block. The source is built from `getActiveTocEntry()` and `getTocPath()` for the selection's first line, falling back to `tabStore.activeTab.tocPath` for the live scroll position.
+
+**useBookViewAbbrevTooltip.ts** - shows the abbreviation tooltip when the user selects a single complete word shaped like a Hebrew abbreviation (gershayim in the middle — רשב"א — or geresh at the end — מת'). Normalizes ״/׳/curly quotes to ASCII (the dictionary stores abbreviations with ASCII quotes only), strips nikud and surrounding punctuation, and rejects partial-word or multi-word selections. Looks up via `dictAbbrevSenses` (dictionary DB only, never the seforim DB): exact headword first, then a `%term%` LIKE fallback. Dismissed when the selection collapses or the scroller scrolls.
 
 **useBookViewAnnotations.ts** - orchestrator that encapsulates all annotation state: highlights, notes, note bubble overlay, and selection-to-line-offset conversion. Exposes `onHighlight`, `onClearHighlight`, `onAddNote`, `onMarkerClick` handlers. Most annotation entry points go through here rather than the sub-composables directly.
 

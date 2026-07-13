@@ -21,6 +21,8 @@ import { useBookViewAnnotations } from './useBookViewAnnotations'
 import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
 import BookViewNoteBubble from './BookViewNoteBubble.vue'
+import BookViewAbbrevTooltip from './BookViewAbbrevTooltip.vue'
+import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
 const emit = defineEmits<{
@@ -196,6 +198,8 @@ onLongPress(scrollerEl, (event) => {
   contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
 })
 
+const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
+
 const { scrollToLineId, scrollToLineIndex } = useBookViewLinesNavigation(
   scrollerEl,
   getVirtualizer,
@@ -258,6 +262,11 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
       :delete-note="deleteNote"
       @close="closeNoteBubble"
       @deleted="closeNoteBubble"
+    />
+    <BookViewAbbrevTooltip
+      v-if="abbrevTooltip"
+      :key="abbrevTooltip.id"
+      :data="abbrevTooltip"
     />
     <div
       ref="scrollerEl"

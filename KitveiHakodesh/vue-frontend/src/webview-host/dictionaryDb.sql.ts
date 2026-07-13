@@ -25,6 +25,16 @@ export const SQL_DICT_CONTAINS = `
 export const SQL_DICT_EXACT_IN_WORD = `
   SELECT 1 FROM word WHERE headword = ? LIMIT 1`
 
+// %term% contains-match with no prefix exclusion — fallback tier for the
+// book-view abbreviation tooltip (unlike SQL_DICT_CONTAINS which excludes
+// prefix matches because they were already served by the prefix tier).
+export const SQL_DICT_ABBREV_CONTAINS = `
+  SELECT w.headword, s.nikud, s.text, sk.name AS source, s.source_id
+  FROM word w
+  JOIN sense s ON s.word_id = w.id
+  LEFT JOIN source_kind sk ON sk.id = s.source_id
+  WHERE w.headword LIKE ? LIMIT 30`
+
 // kind values: נרדף | כתיב | ראו_גם | ניגוד | נגזרת
 export const SQL_DICT_LINKS = `
   SELECT lk.name AS kind, w2.headword AS word

@@ -110,15 +110,47 @@
   max-width: 200px;
 }
 
-@media (max-width: 570px) {
+/* Narrow viewport: collapse the zoom dropdown into a compact icon button that
+   looks like the other toolbar buttons. The real <select> stays in place (just
+   invisible), so tapping the button opens the native option list directly —
+   no custom popover, no dropdown-inside-a-dropdown. The selected zoom % is
+   surfaced via the container's tooltip (set in JS). */
+@media (max-width: 560px) {
   #scaleSelectContainer {
-    max-width: 44px;
+    /* Override PDF.js's built-in `display:none` at this same breakpoint so the
+       container survives as our compact icon button the instant the full
+       dropdown would otherwise disappear. */
+    display: inline-flex;
+    align-items: center;
+    position: relative;
+    min-width: 0;
+    width: 28px;
+    max-width: 28px;
+    padding: 0;
+    background: none;
+    border: none;
+    overflow: hidden;
   }
-}
-
-@media (max-width: 420px) {
-  #scaleSelectContainer {
-    display: none;
+  #scaleSelectContainer:hover {
+    background: var(--button-hover-color);
+  }
+  /* The real <select> stays in flow (so the button keeps its height) and keeps
+     its natural width — so the native option list opens at the original size and
+     theme — but is clipped to the 28px button and hidden with opacity. It does
+     NOT shrink, and the whole button stays clickable and opens it. */
+  #scaleSelectContainer > select {
+    flex: 0 0 auto;
+    width: 140px;
+    opacity: 0;
+    cursor: pointer;
+  }
+  /* Replace the caret (::after) with the fit-to-width glyph, centered */
+  #scaleSelectContainer::after {
+    inset-block: 0;
+    inset-inline: 0;
+    margin: auto;
+    -webkit-mask-image: url(images/toolbarButton-zoom.svg);
+            mask-image: url(images/toolbarButton-zoom.svg);
   }
 }
 
@@ -193,7 +225,7 @@
 }
 
 /* Hide at the same breakpoint as the container */
-@media (max-width: 420px) {
+@media (max-width: 560px) {
   #zoomInput {
     display: none;
   }
