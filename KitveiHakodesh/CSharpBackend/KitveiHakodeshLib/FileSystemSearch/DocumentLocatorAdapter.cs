@@ -35,54 +35,80 @@ namespace KitveiHakodeshLib.FileSystemSearch
 
         // ── 2. WaitUntilReadyAsync ────────────────────────────────────────────────
 
+        // How many consecutive failed status polls (pipe timeouts, service-not-installed,
+        // etc.) we tolerate before giving up and surfacing the error to the caller.
+        // While the service IS responding with "building", we wait indefinitely —
+        // a first-time MFT crawl can legitimately take minutes.
+        private const int MaxConsecutiveStatusFailures = 5;
+
         public async Task WaitUntilReadyAsync(CancellationToken ct, Action<string> onProgress)
         {
+            // Remember a start failure (e.g. service not installed) so the eventual
+            // error message names the root cause, not just "no response". The status
+            // poll below still runs — the service may already be up despite this throw
+            // (e.g. the exe was launched manually and is serving the pipe).
+            Exception startError = null;
             try { ServiceBridge.StartService(); }
-            catch { }
+            catch (Exception ex) { startError = ex; }
 
-            while (!ct.IsCancellationRequested)
+            // Definitive failures (not installed / disabled / blocked / exe missing)
+            // won't heal by polling — give up after a single failed status check.
+            int maxFailures = IsDefinitiveStartFailure(startError)
+                ? 1
+                : MaxConsecutiveStatusFailures;
+
+            int consecutiveFailures = 0;
+
+            while (true)
             {
+                ct.ThrowIfCancellationRequested();
+
+                ServiceBridge.StatusResult status;
                 try
                 {
-                    var status = await ServiceBridge.GetStatusAsync(ct).ConfigureAwait(false);
-
-                    if (status == null)
-                    {
-                        onProgress("ממתין לשירות…");
-                        await Task.Delay(1000, ct).ConfigureAwait(false);
-                        continue;
-                    }
-
-                    switch (status.State)
-                    {
-                        case "ready":
-                            return;
-                        case "error":
-                            throw new InvalidOperationException("שגיאת אינדקס: " + status.Message);
-                        default: // "building"
-                            onProgress(status.Message ?? "בונה אינדקס…");
-                            await Task.Delay(500, ct).ConfigureAwait(false);
-                            break;
-                    }
+                    status = await ServiceBridge.GetStatusAsync(ct).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (AggregateException ae) when (Unwrap(ae) is OperationCanceledException)
                 {
                     throw new OperationCanceledException(ct);
                 }
-                catch (AggregateException ae) when (Unwrap(ae) is TimeoutException)
-                {
-                    onProgress("ממתין לצינור השירות…");
-                    await Task.Delay(1000, ct).ConfigureAwait(false);
-                }
                 catch (Exception ex)
                 {
-                    onProgress("שגיאה: " + Unwrap(ex).Message);
-                    await Task.Delay(1500, ct).ConfigureAwait(false);
+                    if (++consecutiveFailures >= maxFailures)
+                        throw new InvalidOperationException(
+                            DescribeUnavailable(startError ?? ex), Unwrap(ex));
+                    onProgress("ממתין לשירות…");
+                    await Task.Delay(1000, ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                if (status == null)
+                {
+                    if (++consecutiveFailures >= maxFailures)
+                        throw new InvalidOperationException(
+                            startError != null ? DescribeUnavailable(startError) : "שירות החיפוש אינו מגיב");
+                    onProgress("ממתין לשירות…");
+                    await Task.Delay(1000, ct).ConfigureAwait(false);
+                    continue;
+                }
+
+                consecutiveFailures = 0;
+
+                switch (status.State)
+                {
+                    case "ready":
+                        return;
+                    case "error":
+                        // Propagate — must NOT be swallowed by a retry loop, otherwise
+                        // the caller waits forever while the index is broken.
+                        throw new InvalidOperationException("שגיאת אינדקס: " + status.Message);
+                    default: // "building"
+                        onProgress(status.Message ?? "בונה אינדקס…");
+                        await Task.Delay(500, ct).ConfigureAwait(false);
+                        break;
                 }
             }
-
-            ct.ThrowIfCancellationRequested();
         }
 
         // ── 3. ReindexAsync ───────────────────────────────────────────────────────
@@ -112,7 +138,10 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 .ConfigureAwait(false);
 
             if (result.Status != "ok")
-                return (new List<FileSystemSearchResult>(), 0);
+                throw new InvalidOperationException(
+                    !string.IsNullOrEmpty(result.Message)
+                        ? result.Message
+                        : "שגיאה בחיפוש (" + (result.Status ?? "ללא סטטוס") + ")");
 
             var list = new List<FileSystemSearchResult>(result.Entries.Count);
             foreach (var entry in result.Entries)
@@ -125,6 +154,38 @@ namespace KitveiHakodeshLib.FileSystemSearch
             }
 
             return (list, result.Total);
+        }
+
+        private static bool IsDefinitiveStartFailure(Exception ex)
+        {
+            var sse = Unwrap(ex) as ServiceBridge.ServiceStartException;
+            return sse != null && sse.Reason != ServiceBridge.ServiceStartFailure.Other;
+        }
+
+        /// <summary>
+        /// Builds the user-facing (Hebrew) message for a service that could not be
+        /// reached, keyed on the classified start-failure reason when available.
+        /// </summary>
+        private static string DescribeUnavailable(Exception ex)
+        {
+            var cause = Unwrap(ex);
+            if (cause is ServiceBridge.ServiceStartException sse)
+            {
+                switch (sse.Reason)
+                {
+                    case ServiceBridge.ServiceStartFailure.NotInstalled:
+                        return "שירות החיפוש (DocumentLocator) אינו מותקן במחשב זה. " +
+                               "הפעל את היישום מחדש כדי להתקינו.";
+                    case ServiceBridge.ServiceStartFailure.Disabled:
+                        return "שירות החיפוש (DocumentLocator) מושבת. " +
+                               "יש להפעיל אותו דרך ניהול השירותים של Windows (services.msc).";
+                    case ServiceBridge.ServiceStartFailure.AccessDenied:
+                        return "הגישה לשירות החיפוש נחסמה — ייתכן על ידי מדיניות אבטחה או תוכנת אנטי־וירוס.";
+                    case ServiceBridge.ServiceStartFailure.ExeMissing:
+                        return "קובץ שירות החיפוש חסר בתיקיית היישום. יש להתקין את היישום מחדש.";
+                }
+            }
+            return "שירות החיפוש אינו זמין: " + cause.Message;
         }
 
         private static Exception Unwrap(Exception ex)
