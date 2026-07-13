@@ -9,6 +9,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
 import { dbReady, isHosted } from './webview-host/seforimDb'
+import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
 import { idbCheckAndExecReset } from './utils/persistence'
@@ -26,6 +27,9 @@ useSettingsStore().init()
 useBookViewStore().init()
 useThemeStore().init()
 useTabStore().init()
+
+// Mirror the tab store to the native chrome tab strip (no-op in dev / VSTO).
+initTabMirror()
 
 app.mount('#app')
 

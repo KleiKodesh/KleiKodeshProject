@@ -4,9 +4,13 @@ Pinia stores. The only layer (besides `persistence.ts`) allowed to read from or 
 
 Initialization order matters: `workspaceStore` must init before `tabStore`. See `main.ts`.
 
-**tabStore** — central store. Tab lifecycle, navigation, and all per-tab and per-book state persistence. Most features read from it. Use `updateActiveTab` for in-place navigation, `openTab` only for explicitly creating a new tab, and `navigateToSingleton` for singleton routes.
+**tabStore** — central store. Tab lifecycle, navigation, and all per-tab and per-book state persistence. Most features read from it. Use `updateActiveTab` for in-place navigation, `openTab` only for explicitly creating a new tab, and `navigateToSingleton(route, pane, openInNewTab)` for singleton routes (singletons are enforced per-pane).
 
-**bookViewStore** — book viewer UI state: toolbar visibility, search bar position, and per-tab+book zoom map. Read `zoom` as a computed for the active tab and book.
+Split-view panes: one flat `tabs` array holds both panes' tabs, and `Tab.pane` is the sole discriminator — absent or `1` means pane 1, `2` means pane 2. There is no second store, shell id, or per-pane array. Pane 1 and pane 2 have parallel function pairs: `openTab`/`openPane2Tab`, `switchTab`/`switchPaneTab`, `closeTab`/`closePane2Tab`, `updateActiveTab`/`updatePane2ActiveTab`, with active ids `activeTabId`/`pane2ActiveTabId` and computeds `pane1Tabs`/`pane2Tabs`/`activeTabForPane(pane)`. Pane-1 select and update also do the MRU move-to-front — the only tab reordering in the app (no drag UI). `closeAllTabs()` resets pane 1 only, leaving pane 2 intact; `ensurePane2HasTab()` guarantees pane 2 is never empty. Components inside a shell should not call the `*Pane2*` functions directly — go through `useAppShellPane`/`usePaneNavigation` (see `src/composables`).
+
+Persistence: the tab list is saved to localStorage per workspace under `KEYS.tabsList(wsId)` as `{ tabs, activeTabId, nextId }`; singleton-route tabs and in-memory-only fields (e.g. `localFileVirtualUrl`) are stripped before saving. Per-tab and per-book view state go to IndexedDB (`KEYS.tab`, `KEYS.book`).
+
+**bookViewStore** — book viewer UI state: toolbar visibility, search bar position, and per-tab+book zoom map. Read `zoom` as a computed for the active tab and book. Also owns split-view state (not tabStore): `splitViewEnabled`, `splitViewFraction` (0.5 default), `focusedPaneId` (1|2), mutated via `toggleSplitView`/`disableSplitView`/`setSplitViewFraction`/`setFocusedPane`; persisted under `KEYS.SETTINGS_SPLIT_VIEW` / `KEYS.SETTINGS_SPLIT_VIEW_FRACTION`.
 
 **settingsStore** — all app-wide settings. Each setting has its own IDB key and is watched individually so only the changed key is written. Add new settings here, not as local component state.
 
