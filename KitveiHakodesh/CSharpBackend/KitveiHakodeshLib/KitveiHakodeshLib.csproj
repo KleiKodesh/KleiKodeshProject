@@ -142,6 +142,11 @@
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="AppViewerTabs.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
+    <Compile Include="ChromeTabsMirror.cs" />
     <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
     <Compile Include="SplashOverlay.cs">
       <SubType>Component</SubType>
@@ -194,6 +199,9 @@
     <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
       <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
       <Name>DocumentLocator.Client</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\..\..\EasyTabs\FluentChromeTabs\FluentChromeTabs.csproj">
+      <Name>FluentChromeTabs</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
