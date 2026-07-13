@@ -2,6 +2,8 @@
 
 A .NET class library that hosts the KitveiHakodesh Vue app inside a WebView2 control and bridges it to native Windows APIs (file system, SQLite, PDF handling, HebrewBooks downloads, FtsLib full-text search).
 
+The C# side is a thin shell: one `AppViewer` UserControl owning one WebView2, hosted by a WinForms form (`MainForm` in the demo app) or the VSTO task pane. All UI beyond the window chrome lives in Vue — there is no C# tab UI at all; tabs, panes, and split view are purely frontend concepts. The bridge is a Promise-based RPC: action messages come in via `window.__webviewAction`, replies and push events go out via `window.__onWebviewEvent`. Dark mode is driven by Vue — the frontend sends a `setTheme` action on every theme change, and `AppViewerTheme.cs` applies it to the host window title bar via DarkNet (initial state is passed to Vue at startup via the injected `window.__webviewIsDark`).
+
 ## How It Integrates with the VSTO Add-in
 
 `KleiKodeshVsto` instantiates `KitveiHakodeshLib.AppViewer` (a WinForms `UserControl`) and passes it to `TaskpaneManager.Show()`. The task pane hosts the control, which in turn owns the WebView2 instance and all backend handlers.
@@ -10,7 +12,11 @@ A .NET class library that hosts the KitveiHakodesh Vue app inside a WebView2 con
 
 ```
 KitveiHakodeshLib/
-├── AppViewer.cs                    — Root UserControl; initialises WebView2, wires up all handlers
+├── AppViewer.cs                    — Root UserControl; WebView2 environment setup, initialisation, public API
+├── AppViewerMessageHandlers.cs     — AppViewer partial: bridge message dispatch and all Handle* methods
+├── AppViewerNavigation.cs          — AppViewer partial: navigation guard (allowlist) and reload logic
+├── AppViewerSplash.cs              — AppViewer partial: splash screen show/hide
+├── AppViewerTheme.cs               — AppViewer partial: DarkNet title-bar theme wiring and setTheme handler
 ├── SplashOverlay.cs                — Fade-in splash screen shown while WebView2 loads
 ├── WordExporter.cs                 — Exports content to Word
 ├── HebrewBooks.db                  — Local HebrewBooks catalogue database
@@ -93,6 +99,7 @@ Push events (e.g. `ftsIndexProgress`, `ftsIndexInvalidated`) use `WebBridge.Push
 | `fileSystemSearch`         | `FileSystemSearchHandler` | Search the file system via the DocumentLocator service |
 | `ResetDocumentLocatorIndex` | `FileSystemSearchHandler` | Wipe and rebuild the file-system index from scratch |
 | `openExcludedFoldersManager` | `FileSystemSearchHandler` | Open the RTL WinForms dialog to manage excluded folders; persists changes immediately (search-time filtering, no rebuild needed) |
+| `setTheme`                 | `AppViewerTheme` | Apply light/dark to the host window title bar via DarkNet; sent by Vue on every theme change |
 
 ## Startup Sequence
 

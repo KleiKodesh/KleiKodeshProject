@@ -4,7 +4,7 @@ Standalone WinForms demo application for testing the KitveiHakodeshLib backend.
 
 ## Purpose
 
-Hosts the KitveiHakodeshLib WebView2 control and Vue frontend outside of the Word VSTO context for development and testing.
+Hosts the KitveiHakodeshLib WebView2 control and Vue frontend outside of the Word VSTO context for development and testing. `MainForm.cs` is a plain WinForms shell that hosts a single `AppViewer` UserControl — all app UI (tabs, panes, pages) lives in the Vue frontend.
 
 ## Usage
 

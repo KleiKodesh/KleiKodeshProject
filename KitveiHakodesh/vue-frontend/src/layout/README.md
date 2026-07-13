@@ -2,11 +2,15 @@
 
 App shell components. Persistent chrome that wraps every page.
 
-**AppTitleBar.vue** — 40px fixed header. Left side: hamburger menu, theme toggle, toolbar toggle, PDF filter toggle. Center: active tab title and TOC path (interactive breadcrumb for book-view tabs). Right side: home, new tab, close tab. Handles `Ctrl+W`, `Ctrl+X`, `Ctrl+J`, `Ctrl+F`. Add new global keyboard shortcuts here.
+There is exactly one shell component; split view renders it twice. `src/App.vue` always renders pane 1 (`<AppShell :pane-id="1" />`) and renders pane 2 only while `bookViewStore.splitViewEnabled` is on, with a drag-handle divider between them. Split view requires a window at least `SPLIT_VIEW_MIN_WIDTH` (768px) wide and is disabled entirely in the VSTO/Word task-pane environment (`isVstoEnvironment`). Split/focus state (`splitViewEnabled`, `splitViewFraction`, `focusedPaneId`) lives in `bookViewStore`, not `tabStore`.
 
-**AppPageView.vue** — fills remaining height, renders the active page by route. Book view and search are keyed by `activeTabId` and remount on tab switch. Adding a new route means registering it here.
+**AppShell.vue** — one shell instance = one pane. Takes `paneId?: 1 | 2` (default 1). Contains `<AppTitleBar :pane-id>` + `<AppPageView :pane-id>`. On setup as pane 2 it calls `tabStore.ensurePane2HasTab()` so pane 2 never renders empty. It `provide`s `paneId` and `PANE_NAVIGATION_KEY` so all descendants operate on the correct pane (see `usePaneNavigation` in `src/composables`). Any `pointerdown` inside the shell calls `bookViewStore.setFocusedPane(paneId)`.
 
-**AppTitleBarTabDropdown.vue** — full tab list, opened by clicking the title bar center.
+**AppTitleBar.vue** — 40px fixed header, one per pane. Left side: hamburger menu, theme toggle, toolbar toggle, PDF filter toggle. Center: active tab title and TOC path (interactive breadcrumb for book-view tabs). Right side: home, new tab, close tab. Handles `Ctrl+W`, `Ctrl+X`, `Ctrl+J`, `Ctrl+F`. Add new global keyboard shortcuts here.
+
+**AppPageView.vue** — fills remaining height, renders the active page via a route → async-component map. Picks the active tab from its `paneId` (`activeTabForPane(2)` vs `activeTab`). book-view, search, and txt-view are keyed by the active tab id and remount on tab switch. Adding a new route means registering it here.
+
+**AppTitleBarTabDropdown.vue** — full tab list, opened by clicking the title bar center. Select and close only — there is no drag-reorder UI anywhere; tab order changes only via the MRU move-to-front in `tabStore`.
 
 **AppTitleBarNavDropdown.vue** — hamburger nav menu, anchored to the right edge of its button so it opens toward the screen center.
 
