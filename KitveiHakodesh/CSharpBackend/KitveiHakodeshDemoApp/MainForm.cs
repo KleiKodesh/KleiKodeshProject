@@ -1,3 +1,4 @@
+using FluentChromeTabs;
 using KitveiHakodeshLib;
 using KitveiHakodeshLib.Settings;
 using System;
@@ -8,9 +9,18 @@ using UpdateCheckerLib;
 
 namespace KitveiHakodeshDemoApp
 {
-    public class MainForm : Form
+    // FluentChromeTabsForm in loose mode: the strip tabs are pure metadata that mirror
+    // the Vue tab store (via ChromeTabsMirror), while the single AppViewer/WebView2
+    // fills the content area below the strip and switches tabs internally.
+    //
+    // RightToLeftLayout mirrors the whole strip (WS_EX_LAYOUTRTL): tabs flow from the
+    // visual right, caption buttons sit at the visual left. FluentChromeTabsForm's
+    // painting and hit testing are mirroring-aware (DrawUnmirroredImage,
+    // TextFormatFlags.RightToLeft, PointToClient), so no strip changes are needed.
+    public class MainForm : FluentChromeTabsForm
     {
         private readonly AppViewer _viewer;
+        private readonly ChromeTabsMirror _tabsMirror;
         private Form _popoutWindow;
 
         public MainForm(string initialFilePath = null)
@@ -18,14 +28,24 @@ namespace KitveiHakodeshDemoApp
             Text = "כתבי הקודש";
             ClientSize = new System.Drawing.Size(1000, 750);
             StartPosition = FormStartPosition.CenterScreen;
-            AutoScaleMode = AutoScaleMode.Font;
             Icon = CreateWindowIcon();
             RightToLeftLayout = true;
             RightToLeft = RightToLeft.Yes;
 
+            // Slightly taller than the Vue app-shell title bar (compact density: 32 CSS px,
+            // which WebView2 scales by DPI and app zoom). Logical px — scaled for DPI.
+            StripHeight = 34;
+            TabHeight = 26;
+            // Tab-list dropdown in the slot just before the tab strip (visual right in RTL) —
+            // lists all open tabs; picking one activates it (mirrored back into Vue).
+            ShowTabListButton = true;
+
             _viewer = new AppViewer("webcache-standalone") { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
+
+            // Keeps the strip in sync with the Vue tab store, both directions.
+            _tabsMirror = new ChromeTabsMirror(this, _viewer);
 
             // Queue the file to open as soon as the WebView2 bridge is ready.
             if (!string.IsNullOrEmpty(initialFilePath))
