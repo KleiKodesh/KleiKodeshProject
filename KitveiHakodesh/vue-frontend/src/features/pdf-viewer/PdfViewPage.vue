@@ -6,8 +6,10 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { syncPdfViewerTheme } from '@/theme/themes'
 import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
+import ContextMenu from '@/components/ContextMenu.vue'
 import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrSelection } from './usePdfOcrSelection'
+import { usePdfContextMenu } from './usePdfContextMenu'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { usePdfViewPageTracking } from './usePdfViewPageTracking'
@@ -20,6 +22,21 @@ const pageTracking = usePdfViewPageTracking()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
+
+// ── Custom right-click menu (copy / copy into Word / copy page as image) ──────
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const toast = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+function showToast(message: string) {
+  toast.value = message
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => (toast.value = ''), 2400)
+}
+const pdfContextMenu = usePdfContextMenu(() => iframeRef.value, contextMenuRef, {
+  // OCR mode has its own selection overlay — don't shadow it with our menu.
+  isBlocked: () => pdfOcrStore.isActive,
+  notify: showToast,
+})
 
 import { TAB_SWIPE_EVENT, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
 import { useSwipe } from '@vueuse/core'
@@ -94,6 +111,8 @@ function detachIframeWheelRelay() {
 // all rendered canvases, and the WebView2 sub-frame are released immediately
 // rather than waiting for the browser's garbage collector.
 onBeforeUnmount(() => {
+  pdfContextMenu.detach(iframeRef.value?.contentWindow ?? null)
+  if (toastTimer) clearTimeout(toastTimer)
   iframeContentWindow.value = null
   detachIframeWheelRelay()
   pageTracking.detach()
@@ -154,7 +173,10 @@ function onIframeLoad() {
   const contentWindow = iframeRef.value?.contentWindow ?? null
   iframeContentWindow.value = contentWindow
   attachIframeWheelRelay()
-  if (contentWindow) pageTracking.attach(contentWindow)
+  if (contentWindow) {
+    pageTracking.attach(contentWindow)
+    pdfContextMenu.attach(contentWindow)
+  }
   setTimeout(() => {
     syncPdfViewerTheme()
     // Apply toolbar visibility based on current setting
@@ -267,6 +289,12 @@ function cancelConversion() {
       @dismiss="ocr.dismissResult"
       @update:script="pdfOcrStore.setScript"
     />
+
+    <ContextMenu ref="contextMenuRef" :items="pdfContextMenu.items.value" />
+
+    <Transition name="pdf-toast-fade">
+      <div v-if="toast" class="pdf-toast">{{ toast }}</div>
+    </Transition>
   </div>
 </template>
 
@@ -410,6 +438,31 @@ function cancelConversion() {
   justify-content: center;
   color: var(--text-secondary);
   font-size: 14px;
+}
+.pdf-toast {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10001;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  max-width: 80%;
+  text-align: center;
+  pointer-events: none;
+}
+.pdf-toast-fade-enter-active,
+.pdf-toast-fade-leave-active {
+  transition: opacity 150ms ease;
+}
+.pdf-toast-fade-enter-from,
+.pdf-toast-fade-leave-to {
+  opacity: 0;
 }
 .converting {
   flex: 1;

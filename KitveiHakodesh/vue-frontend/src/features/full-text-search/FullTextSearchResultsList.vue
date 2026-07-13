@@ -6,6 +6,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import ContextMenu from '@/components/ContextMenu.vue'
+import { useFullTextSearchCopyMenu, useFullTextSearchScopedCopy } from './useFullTextSearchCopyMenu'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const props = defineProps<{
@@ -27,12 +29,17 @@ const emit = defineEmits<{
 }>()
 
 const SEARCH_ERROR_MESSAGES: Record<string, string> = {
-  indexNotReady: 'האינדקס עדיין לא מוכן לחיפוש',
+  indexNotReady: 'האינדקס לא מוכן לחיפוש — נסה שוב בעוד כמה רגעים',
   indexMerging:  'האינדקס מבצע מיזוג — נסה שוב בעוד כמה רגעים',
   searchFailed:  'אירעה שגיאה בחיפוש',
 }
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
+
+// Right-click copy menu (העתק / העתק טקסט נקי) — matches the book & txt views.
+const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const { items: copyMenuItems } = useFullTextSearchCopyMenu()
+useFullTextSearchScopedCopy(scrollEl)
 
 const fontPx = computed(() => {
   const zoomFactor = (props.zoom ?? 100) / 100
@@ -174,7 +181,14 @@ defineExpose({ captureScrollPos, scrollToBook })
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
     <template v-else>
-      <div ref="scrollEl" class="scroller" tabindex="0" :style="{ fontSize: `${fontPx}px` }" @scroll="onScroll">
+      <div
+        ref="scrollEl"
+        class="scroller"
+        tabindex="0"
+        :style="{ fontSize: `${fontPx}px` }"
+        @scroll="onScroll"
+        @contextmenu="contextMenuRef?.show($event)"
+      >
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
             v-for="vRow in virtualizer.getVirtualItems()"
@@ -208,6 +222,8 @@ defineExpose({ captureScrollPos, scrollToBook })
         </div>
       </div>
     </template>
+
+    <ContextMenu ref="contextMenuRef" :items="copyMenuItems" />
   </div>
 </template>
 

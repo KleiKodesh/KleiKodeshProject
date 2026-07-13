@@ -300,6 +300,17 @@ export function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
 }
 
 /**
+ * Place a PNG image on the Windows clipboard via the C# host.
+ * The browser's navigator.clipboard.write() for images is unreliable inside
+ * WebView2, so C# does it with System.Windows.Forms.Clipboard instead.
+ * `dataUrl` must be a PNG data: URL (canvas.toDataURL('image/png')).
+ * Rejects when the bridge is unavailable (dev/browser) — callers fall back.
+ */
+export function copyImageToClipboard(dataUrl: string): Promise<{ ok?: boolean; error?: string }> {
+  return action<{ ok?: boolean; error?: string }>('copyImageToClipboard', { dataUrl })
+}
+
+/**
  * Notify the C# host that the Vue theme has changed.
  * The host persists the preference and updates the WinForms title bar via DarkNet.
  * Fire-and-forget — no meaningful return value.

@@ -1,7 +1,9 @@
-in hom epage search if no results then move to toc heuristics
-
 בנייה מחדש של אינדקס חיפוש קבצים shouldn't navigate to the חיפוש קבצים page
 likewise איפוס אינדקס החיפוש ut can stay on teh search page and highlight the clicked button for a moment with wpf continuos progress bar style background for a moment
+
+unify the html of context menu
+context menu for search page?
+egeneric context manu)?
 
 האם בקורא קבצי הPDF שבכתבי הקודש יש אפשרות להעתיק מקובץ PDF כתמונה (ע"מ שאפשר יהיה לשתול אותו כתמונה בתוך קובץ וורד).
 

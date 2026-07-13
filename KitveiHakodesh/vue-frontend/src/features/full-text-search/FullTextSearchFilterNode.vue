@@ -1,17 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, inject } from 'vue'
 import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import { FILTER_EXPANSION_KEY } from './fullTextSearchFilterExpansion'
 
 const props = withDefaults(
   defineProps<{
     category: CategoryNode
-    depth?: number
     checkedBookIds: Set<number>
     resultCounts: Map<number, number>
     hasSearched?: boolean
   }>(),
-  { depth: 0, hasSearched: false },
+  { hasSearched: false },
 )
 
 const emit = defineEmits<{
@@ -20,13 +20,21 @@ const emit = defineEmits<{
   navigateToBook: [number]
 }>()
 
-const expanded = ref(false)
+// Expansion state is owned centrally by the panel (see fullTextSearchFilterExpansion)
+// so "expand all" can fill it progressively instead of mounting the whole tree at once.
+const expansion = inject(FILTER_EXPANSION_KEY)!
+const expanded = computed(() => expansion.isExpanded(props.category.id))
+function toggleExpanded() {
+  expansion.toggle(props.category.id)
+}
 
 function allBookIds(cat: CategoryNode): number[] {
   return [...cat.books.map((b) => b.id), ...cat.children.flatMap(allBookIds)]
 }
 
-const bookIds = computed(() => allBookIds(props.category))
+// Prefer the ids precomputed at catalog load; fall back to an on-the-fly flatten
+// only if this node predates the precompute pass.
+const bookIds = computed(() => props.category.subtreeBookIds ?? allBookIds(props.category))
 const totalResults = computed(() =>
   bookIds.value.reduce((s, id) => s + (props.resultCounts.get(id) ?? 0), 0),
 )
@@ -63,14 +71,13 @@ function navigateToCategory() {
   <div v-if="!hasSearched || totalResults > 0">
     <div
       class="row cat-row"
-      :class="{ checked: isChecked, indet: isIndet }"
-      :style="{ paddingInlineStart: `${depth * 14}px` }"
+      :class="{ checked: isChecked, indet: isIndet, expanded }"
     >
       <button
         v-if="hasChildren"
         class="expander"
         :class="{ open: expanded }"
-        @click.stop="expanded = !expanded"
+        @click.stop="toggleExpanded"
       >
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
@@ -89,7 +96,6 @@ function navigateToCategory() {
         v-for="child in category.children"
         :key="child.id"
         :category="child"
-        :depth="depth + 1"
         :checked-book-ids="checkedBookIds"
         :result-counts="resultCounts"
         :has-searched="hasSearched"
@@ -102,7 +108,6 @@ function navigateToCategory() {
           v-if="!hasSearched || resultCounts.get(book.id)"
           class="row book-row"
           :class="{ checked: checkedBookIds.has(book.id) }"
-          :style="{ paddingInlineStart: `${(depth + 1) * 14}px` }"
         >
           <button
             class="row-title"
@@ -130,11 +135,25 @@ function navigateToCategory() {
   height: 26px;
   white-space: nowrap;
   user-select: none;
+  /* Rows are a fixed 26px tall, so the browser can skip layout/paint for any row
+     scrolled out of view. This keeps a fully-expanded (very tall) tree cheap. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 26px;
+  /* Hierarchy is shown by highlighting expanded categories (like the book-view
+     commentary filter) rather than by indentation. */
+  --expanded-row-bg: color-mix(in srgb, var(--active-bg) 55%, transparent);
+  --expanded-row-hover-bg: color-mix(in srgb, var(--active-bg) 65%, var(--hover-bg));
 }
 .cat-row {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+.cat-row.expanded {
+  background: var(--expanded-row-bg);
+}
+.cat-row.expanded:hover {
+  background: var(--expanded-row-hover-bg);
 }
 .book-row {
   font-size: 11px;
@@ -223,5 +242,10 @@ function navigateToCategory() {
 .expander-placeholder {
   width: 26px;
   flex-shrink: 0;
+}
+
+:global(:root.dark) .row {
+  --expanded-row-bg: var(--active-bg);
+  --expanded-row-hover-bg: color-mix(in srgb, var(--active-bg) 70%, var(--hover-bg));
 }
 </style>

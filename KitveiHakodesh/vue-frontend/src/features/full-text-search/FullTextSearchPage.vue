@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useMediaQuery } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useFullTextSearch } from './useFullTextSearch'
@@ -108,12 +108,21 @@ const isAdvancedActive = computed(
      || settings.searchContextMarginWords !== 30,
 )
 
+// The filter panel closes on outside-click only in narrow "overlay" mode, where
+// it floats over the results. In wide mode (≥520px) it's a persistent side panel
+// beside the results, so clicking the results should not dismiss it.
+// Breakpoint mirrors the `@media (min-width: 520px)` layout switch below.
+const isOverlayMode = useMediaQuery('(max-width: 519.98px)')
+
 useDropdownClose(
   filterPanelRef,
   () => {
     if (isFilterOpen.value) isFilterOpen.value = false
   },
-  { toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null) },
+  {
+    toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
+    enabled: isOverlayMode,
+  },
 )
 
 // Re-run the search whenever any advanced setting changes — the current results
