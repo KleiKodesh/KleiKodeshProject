@@ -47,9 +47,13 @@ onMounted(() => {
   if (bookViewStore.splitViewEnabled) tabStore.ensurePane2HasTab()
 })
 
-// Watch for split view being enabled and ensure pane 2 has a tab
+// When split view is (re-)enabled, pane 2 takes its orphaned tabs back: pane 1 must
+// stop displaying an adopted orphan, and pane 2 must have at least one tab.
 watch(() => bookViewStore.splitViewEnabled, (enabled) => {
-  if (enabled) tabStore.ensurePane2HasTab()
+  if (enabled) {
+    tabStore.reclaimPane1ActiveForSplit()
+    tabStore.ensurePane2HasTab()
+  }
 })
 
 // ── Horizontal resize handle ──────────────────────────────────────────────────

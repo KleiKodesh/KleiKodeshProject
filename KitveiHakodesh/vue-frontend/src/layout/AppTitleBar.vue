@@ -30,15 +30,12 @@ import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
-import { useTabStore } from '@/stores/tabStore'
 import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, isVstoEnvironment as isVsto } from '@/webview-host/bridge'
-import { activateTabAnyPane, closeTabAnyPane } from '@/composables/useCrossPaneTabActions'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
 const pane = useAppShellPane(props.paneId)
-const tabStore = useTabStore()
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const pdfOcrStore = usePdfOcrStore()
@@ -127,19 +124,9 @@ function toggleNavDropdown() {
   dropdownOpen.value = false
 }
 
-// The main shell (pane 1) lists ALL tabs — including pane-2 ones — matching the
-// native chrome tab strip, which mirrors this list. Pane 2 lists only its own tabs.
-const dropdownTabs = computed(() => (props.paneId === 1 ? tabStore.tabs : pane.tabs.value))
-
 function selectTab(id: string) {
-  if (props.paneId === 1) activateTabAnyPane(id)
-  else pane.switchTab(id)
+  pane.switchTab(id)
   dropdownOpen.value = false
-}
-
-function closeDropdownTab(id: string) {
-  if (props.paneId === 1) closeTabAnyPane(id)
-  else pane.closeTab(id)
 }
 
 // Keyboard shortcuts — each pane installs its own handler.
@@ -419,10 +406,10 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   <!-- Tab dropdown — kept outside header so it stays visible when header is hidden -->
   <AppTitleBarTabDropdown
     v-if="dropdownOpen"
-    :tabs="dropdownTabs"
+    :tabs="pane.tabs.value"
     :active-tab-id="pane.activeTabId.value"
     @select="selectTab"
-    @close="closeDropdownTab"
+    @close="pane.closeTab"
     @dismiss="dropdownOpen = false"
     @click.stop
   />
