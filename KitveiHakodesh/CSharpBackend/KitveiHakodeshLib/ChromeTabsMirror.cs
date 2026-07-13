@@ -52,6 +52,7 @@ namespace KitveiHakodeshLib
             _form.TabClosing += OnTabClosing;
             _form.NewTabRequested += OnNewTabRequested;
             _form.TabListOpening += OnTabListOpening;
+            _form.SplitRatioChanged += OnSplitRatioChanged;
 
             _viewer.TabsStateChanged += OnTabsStateChanged;
             _viewer.ChromeThemeChanged += OnChromeThemeChanged;
@@ -79,7 +80,15 @@ namespace KitveiHakodeshLib
         private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)
         {
             e.Cancel = true;
-            _viewer.NotifyChromeNewTabRequested();
+            _viewer.NotifyChromeNewTabRequested(e.Group == 1 ? 2 : 1);
+        }
+
+        private void OnSplitRatioChanged(object sender, EventArgs e)
+        {
+            if (_syncing) return;
+            // The strip's SplitRatio is region 0's (pane 1's) share; Vue's splitViewFraction
+            // is pane 2's share — mirror images of the same divider.
+            _viewer.NotifyChromeSplitFractionChanged(1.0 - _form.SplitRatio);
         }
 
         private void OnTabListOpening(object sender, TabListOpeningEventArgs e)
@@ -117,6 +126,28 @@ namespace KitveiHakodeshLib
             _syncing = true;
             try
             {
+                _form.SplitStrip = e.SplitView;
+
+                if (e.SplitView)
+                {
+                    // Keep the ratio as the drag baseline / fallback...
+                    _form.SplitRatio = 1.0 - e.SplitFraction;
+
+                    // ...but pin the divider to the exact device pixels Vue rendered, so the
+                    // two bars form one seamless line at any window width. Vue measures from
+                    // the viewport's left edge; the mirrored (RTL) strip's client X axis runs
+                    // the other way, so flip.
+                    if (e.DividerLeftPx >= 0 && e.DividerWidthPx > 0)
+                    {
+                        // -1 in the mirrored flip: GDI renders fills in a WS_EX_LAYOUTRTL
+                        // window shifted one device pixel (measured constant across widths).
+                        int left = _form.RightToLeftLayout
+                            ? _form.ClientSize.Width - e.DividerLeftPx - e.DividerWidthPx - 1
+                            : e.DividerLeftPx;
+                        _form.SetSplitDividerPixels(left, e.DividerWidthPx);
+                    }
+                }
+
                 var wanted = new HashSet<string>(e.Tabs.Select(t => t.Id));
 
                 // Remove strip tabs that no longer exist in the Vue store.
@@ -129,24 +160,33 @@ namespace KitveiHakodeshLib
                     if (tab.Tag is string id && !byId.ContainsKey(id))
                         byId[id] = tab;
 
-                // Add new tabs (appended in snapshot order) and refresh titles.
+                // Add new tabs (appended in snapshot order); refresh titles, regions,
+                // and each region's own active-tab highlight.
                 foreach (var info in e.Tabs)
                 {
-                    if (byId.TryGetValue(info.Id, out var existing))
+                    if (!byId.TryGetValue(info.Id, out var tab))
                     {
-                        if (existing.Title != info.Title)
-                            existing.Title = info.Title;
+                        tab = _form.AddTab(info.Title);
+                        tab.Tag = info.Id;
+                        byId[info.Id] = tab;
                     }
-                    else
-                    {
-                        var added = _form.AddTab(info.Title);
-                        added.Tag = info.Id;
-                        byId[info.Id] = added;
-                    }
+
+                    if (tab.Title != info.Title)
+                        tab.Title = info.Title;
+
+                    // Group follows the pane only while split view is open; an adopted
+                    // orphan (pane 2, split off) lives in region 0 and can be pane 1's
+                    // active tab — so the highlight follows the region, not the pane.
+                    int group = e.SplitView && info.Pane == 2 ? 1 : 0;
+                    tab.Group = group;
+                    tab.Highlighted = group == 1
+                        ? info.Id == e.Pane2ActiveTabId
+                        : info.Id == e.ActiveTabId;
                 }
 
                 // Selection follows the focused pane's active tab.
-                if (e.ActiveTabId != null && byId.TryGetValue(e.ActiveTabId, out var active))
+                string focusedActiveId = e.SplitView && e.FocusedPane == 2 ? e.Pane2ActiveTabId : e.ActiveTabId;
+                if (focusedActiveId != null && byId.TryGetValue(focusedActiveId, out var active))
                     _form.SelectedTab = active;
             }
             finally
@@ -162,18 +202,23 @@ namespace KitveiHakodeshLib
             if (_form.IsDisposed) return;
             if (_form.InvokeRequired)
             {
-                _form.BeginInvoke(new Action(() => ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor)));
+                _form.BeginInvoke(new Action(() => ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor, e.BorderColor)));
                 return;
             }
-            ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor);
+            ApplyTheme(e.IsDark, e.ChromeColor, e.AccentColor, e.BorderColor);
         }
 
         private void ApplyPersistedTheme()
-            => ApplyTheme(AppSettings.LoadDarkMode(), AppSettings.LoadChromeColor(), AppSettings.LoadAccentColor());
+            => ApplyTheme(
+                AppSettings.LoadDarkMode(),
+                AppSettings.LoadChromeColor(),
+                AppSettings.LoadAccentColor(),
+                AppSettings.LoadBorderColor());
 
-        private void ApplyTheme(bool isDark, string chromeColorHex, string accentColorHex)
+        private void ApplyTheme(bool isDark, string chromeColorHex, string accentColorHex, string borderColorHex)
         {
             _form.AccentColor = TryParseColor(accentColorHex, out Color accent) ? accent : (Color?) null;
+            _form.SplitDividerColor = TryParseColor(borderColorHex, out Color border) ? border : (Color?) null;
 
             if (TryParseColor(chromeColorHex, out Color color))
                 _form.CustomThemeColor = color;

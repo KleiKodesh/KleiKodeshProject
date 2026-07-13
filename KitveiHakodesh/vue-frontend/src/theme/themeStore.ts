@@ -64,7 +64,7 @@ export const useThemeStore = defineStore('theme', () => {
   // the accent drives the active-tab indicator in the native tab-list dropdown.
   function syncHostTheme() {
     const ui = getTheme(themePreset.value)?.ui
-    setTheme(themePreset.value.includes('-dark'), ui?.bgSecondary, ui?.accentColor)
+    setTheme(themePreset.value.includes('-dark'), ui?.bgSecondary, ui?.accentColor, ui?.borderColor)
   }
 
   // Apply defaults immediately (before async init) so the UI doesn't flash

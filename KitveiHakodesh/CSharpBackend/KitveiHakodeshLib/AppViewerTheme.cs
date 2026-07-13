@@ -12,11 +12,12 @@ namespace KitveiHakodeshLib
     /// </summary>
     public class ChromeThemeChangedEventArgs : EventArgs
     {
-        public ChromeThemeChangedEventArgs(bool isDark, string chromeColor, string accentColor)
+        public ChromeThemeChangedEventArgs(bool isDark, string chromeColor, string accentColor, string borderColor)
         {
             IsDark = isDark;
             ChromeColor = chromeColor;
             AccentColor = accentColor;
+            BorderColor = borderColor;
         }
 
         public bool IsDark { get; }
@@ -24,6 +25,9 @@ namespace KitveiHakodeshLib
 
         /// <summary>The Vue theme's accent color (hex), for the tab-list active indicator; null when not sent.</summary>
         public string AccentColor { get; }
+
+        /// <summary>The Vue theme's border color (hex), so the strip's split divider matches Vue's; null when not sent.</summary>
+        public string BorderColor { get; }
     }
 
     // Title-bar theme (DarkNet) wiring for AppViewer.
@@ -116,10 +120,15 @@ namespace KitveiHakodeshLib
                                  ac.ValueKind == System.Text.Json.JsonValueKind.String
                 ? ac.GetString()
                 : null;
+            string borderColor = root.TryGetProperty("borderColor", out var bc) &&
+                                 bc.ValueKind == System.Text.Json.JsonValueKind.String
+                ? bc.GetString()
+                : null;
 
             AppSettings.SaveDarkMode(isDark);
             if (chromeColor != null) AppSettings.SaveChromeColor(chromeColor);
             if (accentColor != null) AppSettings.SaveAccentColor(accentColor);
+            if (borderColor != null) AppSettings.SaveBorderColor(borderColor);
 
             if (InvokeRequired)
                 Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
@@ -137,7 +146,7 @@ namespace KitveiHakodeshLib
             ApplySplashTheme(isDark);
 
             // Let a native chrome-tabs host (ChromeTabsMirror) re-derive its strip palette.
-            ChromeThemeChanged?.Invoke(this, new ChromeThemeChangedEventArgs(isDark, chromeColor, accentColor));
+            ChromeThemeChanged?.Invoke(this, new ChromeThemeChangedEventArgs(isDark, chromeColor, accentColor, borderColor));
         }
     }
 }
