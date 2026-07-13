@@ -106,7 +106,7 @@ const {
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, navigateToAdjacentTocSection, onCommentaryScroll,
   onCommentaryTreeChanged, openBookInTab,
-  openContentSearch, openCommentarySearch,
+  openContentSearch, openCommentarySearch, toggleSearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
   toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
   ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
@@ -165,7 +165,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
       :commentary-mode="commentaryMode"
       @cycle-commentary-mode="cycleCommentaryMode"
-      @toggle-search="searchVisible = !searchVisible"
+      @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
@@ -192,7 +192,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         :on-related-books-open="ensureStaticFilterGroupsLoaded"
         :commentary-mode="commentaryMode"
         @cycle-commentary-mode="cycleCommentaryMode"
-        @toggle-search="searchVisible = !searchVisible"
+        @toggle-search="toggleSearch"
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
         @navigate-to-next-section="navigateToAdjacentTocSection('next')"
@@ -470,7 +470,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
       :commentary-mode="commentaryMode"
       @cycle-commentary-mode="cycleCommentaryMode"
-      @toggle-search="searchVisible = !searchVisible"
+      @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"

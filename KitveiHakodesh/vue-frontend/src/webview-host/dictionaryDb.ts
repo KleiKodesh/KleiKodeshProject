@@ -10,6 +10,7 @@ import {
 } from './dictionarySeforimDb'
 import {
   SQL_DICT_EXACT, SQL_DICT_PREFIX, SQL_DICT_CONTAINS, SQL_DICT_EXACT_IN_WORD,
+  SQL_DICT_ABBREV_CONTAINS,
   SQL_DICT_LINKS, SQL_DICT_SYNONYMS, SQL_DICT_VARIANTS,
   SQL_DICT_SPELL_CANDIDATES_FRAG2, SQL_DICT_SPELL_CANDIDATES_FRAG3,
   buildKetivExistsQuery,
@@ -105,6 +106,17 @@ export async function dictSpellCandidates(term: string): Promise<string[]> {
 export async function abbrevLookup(term: string): Promise<SenseRow[]> {
   const { dictRows } = await combinedLookup(term)
   return dictRows
+}
+
+/**
+ * Dictionary-only abbreviation lookup for the book-view selection tooltip.
+ * Exact headword match first; falls back to a %term% LIKE when nothing matches.
+ * Never touches the seforim DB (unlike abbrevLookup/combinedLookup).
+ */
+export async function dictAbbrevSenses(term: string): Promise<SenseRow[]> {
+  const exact = await queryDict<SenseRow>(SQL_DICT_EXACT, [term])
+  if (exact.length > 0) return exact
+  return queryDict<SenseRow>(SQL_DICT_ABBREV_CONTAINS, [`%${term}%`])
 }
 
 /**

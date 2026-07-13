@@ -422,6 +422,7 @@ export function useBookView(
     openBookInTab,
     openContentSearch: searchPanel.openContentSearch,
     openCommentarySearch: searchPanel.openCommentarySearch,
+    toggleSearch: searchPanel.toggleSearch,
     onQueryChange: searchPanel.onQueryChange,
     onSearchNext: searchPanel.onSearchNext,
     onSearchPrev: searchPanel.onSearchPrev,

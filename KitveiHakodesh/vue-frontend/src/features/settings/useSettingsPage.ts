@@ -2,14 +2,12 @@ import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
-import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, setTheme } from '@/webview-host/bridge'
 
 export function useSettings() {
   const settings = useSettingsStore()
   const tabStore = useTabStore()
-  const paneNavigation = usePaneNavigation()
   const searchCache = useSearchCacheStore()
 
   const {
@@ -45,12 +43,10 @@ export function useSettings() {
   async function resetSearchIndexAction() {
     await searchCache.clear()
     await bridgeResetSearchIndex()
-    paneNavigation.updateActiveTab({ route: '/search', title: 'חיפוש' })
   }
 
   async function resetDocumentLocatorIndexAction() {
     await bridgeResetDocumentLocatorIndex()
-    paneNavigation.updateActiveTab({ route: '/file-search', title: 'חיפוש קבצים' })
   }
 
   function resetSettings() {
