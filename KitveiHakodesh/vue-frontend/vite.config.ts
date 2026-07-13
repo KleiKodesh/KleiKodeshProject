@@ -355,11 +355,22 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    exclude: [
+    // The @iconify-prerendered/* packages ship as a SINGLE ~12.5MB index.js barrel
+    // (not one-file-per-icon), so EXCLUDING them from pre-bundling does NOT serve
+    // "only the imported symbols" — it makes Vite serve the whole barrel raw, which
+    // its dev transform inflates to ~81MB with `Cache-Control: no-cache`, re-served
+    // and re-parsed on every cold reload (~5s blank screen).
+    // Pre-bundling (include) does NOT tree-shake the barrel down to used icons
+    // (esbuild keeps the full re-export set → ~13.5MB), but it converts it ONCE at
+    // startup into an immutable, long-cached .vite/deps chunk served in ~0.25s and
+    // reused across restarts. Prod (vite build via rollup) DOES tree-shake to the
+    // ~90 icons actually imported, so this only affects dev.
+    include: [
       '@iconify-prerendered/vue-fluent',
       '@iconify-prerendered/vue-fluent-color',
-      'tesseract.js',
     ],
+    // tesseract.js is lazy-loaded (wasm + workers) and must stay unbundled.
+    exclude: ['tesseract.js'],
   },
   build: {
     assetsInlineLimit: Number.MAX_SAFE_INTEGER,

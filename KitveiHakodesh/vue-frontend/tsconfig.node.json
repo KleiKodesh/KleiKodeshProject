@@ -1,7 +1,12 @@
 {
   "extends": "@tsconfig/node22/tsconfig.json",
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo",
+    // @tsconfig/node22 does not set noEmit (unlike @vue/tsconfig used by the app
+    // project), so `vue-tsc --build` would compile vite.config.ts and emit a
+    // vite.config.js next to it. Vite resolves .js before .ts, so that stale
+    // emitted copy silently shadows this config's source. Type-check only.
+    "noEmit": true
   },
   "include": ["vite.config.ts"]
 }
