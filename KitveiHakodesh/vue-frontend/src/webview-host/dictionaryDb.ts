@@ -110,13 +110,23 @@ export async function abbrevLookup(term: string): Promise<SenseRow[]> {
 
 /**
  * Dictionary-only abbreviation lookup for the book-view selection tooltip.
- * Exact headword match first; falls back to a %term% LIKE when nothing matches.
+ * Candidates are tried in order (full term first, then prefix-stripped forms
+ * like מהשי"ת → השי"ת): all exact matches first, then %candidate% LIKE
+ * fallbacks. Returns the first candidate that matched together with its rows.
  * Never touches the seforim DB (unlike abbrevLookup/combinedLookup).
  */
-export async function dictAbbrevSenses(term: string): Promise<SenseRow[]> {
-  const exact = await queryDict<SenseRow>(SQL_DICT_EXACT, [term])
-  if (exact.length > 0) return exact
-  return queryDict<SenseRow>(SQL_DICT_ABBREV_CONTAINS, [`%${term}%`])
+export async function dictAbbrevSenses(
+  candidates: string[],
+): Promise<{ matched: string; rows: SenseRow[] } | null> {
+  for (const candidate of candidates) {
+    const rows = await queryDict<SenseRow>(SQL_DICT_EXACT, [candidate])
+    if (rows.length > 0) return { matched: candidate, rows }
+  }
+  for (const candidate of candidates) {
+    const rows = await queryDict<SenseRow>(SQL_DICT_ABBREV_CONTAINS, [`%${candidate}%`])
+    if (rows.length > 0) return { matched: candidate, rows }
+  }
+  return null
 }
 
 /**

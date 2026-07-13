@@ -129,7 +129,7 @@ const {
   () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
 )
 
-const { setProgrammaticScroll, onScroll } = useBookViewLinesScroll(
+const { setProgrammaticScroll, onScroll, captureScrollPos } = useBookViewLinesScroll(
   scrollerEl,
   getVirtualizer,
   () => virtualItems.value,
@@ -248,7 +248,7 @@ function focusScroller() {
   scrollerEl.value?.focus({ preventScroll: true })
 }
 
-defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller })
+defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPos })
 </script>
 
 <template>

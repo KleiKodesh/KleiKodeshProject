@@ -5,8 +5,9 @@
  * abbreviation — gershayim in the middle (רשב"א) or a geresh at the end (מת') —
  * it is looked up in the dictionary DB (dictionary senses only, never the
  * seforim DB) and the expansions are shown in a compact tooltip anchored to
- * the selection. Exact headword match first, then a %term% LIKE fallback.
- * No match → no tooltip.
+ * the selection. Attached prefix letters are handled by also trying stripped
+ * candidates (מהשי"ת → השי"ת → שי"ת): exact headword matches for all
+ * candidates first, then %candidate% LIKE fallbacks. No match → no tooltip.
  *
  * Trigger rules:
  *   - Left-button mouseup inside the scroller with a non-collapsed selection.
@@ -24,16 +25,11 @@ import { ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { dictAbbrevSenses } from '@/webview-host/dictionaryDb'
 
-export interface AbbrevSense {
-  headword: string
-  text: string
-}
-
 export interface AbbrevTooltipData {
   /** Unique per lookup — used as component key so a new selection remounts/re-measures. */
   id: number
-  term: string
-  senses: AbbrevSense[]
+  /** Display-ready sense labels (headword-prefixed when it differs from the matched term). */
+  senses: string[]
   anchorRect: DOMRect
 }
 
@@ -58,6 +54,22 @@ export function extractAbbrevTerm(raw: string): string | null {
   // itself decides whether they are part of the abbreviation.
   text = text.replace(/^[^א-ת]+/, '').replace(/[^א-ת'"]+$/, '')
   return ABBREV_PATTERN.test(text) ? text : null
+}
+
+// Single-letter prepositions/conjunctions that attach to the following word.
+const PREFIX_LETTERS = new Set(['ו', 'ה', 'ב', 'כ', 'ל', 'מ', 'ש', 'ד'])
+
+/** The term plus prefix-stripped variants (מהשי"ת → השי"ת → שי"ת), fewest-stripped first. */
+export function abbrevCandidates(term: string): string[] {
+  const candidates = [term]
+  let current = term
+  for (let i = 0; i < 3; i++) {
+    if (!PREFIX_LETTERS.has(current[0]!)) break
+    current = current.slice(1)
+    if (!ABBREV_PATTERN.test(current)) break
+    candidates.push(current)
+  }
+  return candidates
 }
 
 function isBoundaryChar(ch: string | undefined): boolean {
@@ -98,24 +110,27 @@ export function useBookViewAbbrevTooltip(scrollerEl: Ref<HTMLElement | null>) {
     if (!term || !isFullWordSelection(range)) { closeAbbrevTooltip(); return }
 
     const token = ++lookupToken
-    let rows
+    let result
     try {
-      rows = await dictAbbrevSenses(term)
+      result = await dictAbbrevSenses(abbrevCandidates(term))
     } catch {
       return
     }
     if (token !== lookupToken) return
+    if (!result) { abbrevTooltip.value = null; return }
 
     const seen = new Set<string>()
-    const senses: AbbrevSense[] = []
-    for (const row of rows) {
-      if (seen.has(row.text)) continue
-      seen.add(row.text)
-      senses.push({ headword: row.headword, text: row.text })
+    const senses: string[] = []
+    for (const row of result.rows) {
+      // Headword prefix only when a LIKE fallback matched a different entry.
+      const label = row.headword === result.matched ? row.text : `${row.headword} — ${row.text}`
+      if (seen.has(label)) continue
+      seen.add(label)
+      senses.push(label)
     }
     if (!senses.length) { abbrevTooltip.value = null; return }
 
-    abbrevTooltip.value = { id: token, term, senses, anchorRect: range.getBoundingClientRect() }
+    abbrevTooltip.value = { id: token, senses, anchorRect: range.getBoundingClientRect() }
   }
 
   function onMouseUp(event: MouseEvent) {
