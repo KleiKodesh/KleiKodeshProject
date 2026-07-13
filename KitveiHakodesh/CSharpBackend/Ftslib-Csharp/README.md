@@ -71,11 +71,30 @@ index.BuildIndex(limit: 0, onProgress: n => { ... });
 ### `Search`
 
 ```csharp
-IEnumerable<SearchResult> results = index.Search(query, cap: 0, ct);
-IEnumerable<int>          ids     = index.SearchIds(query, ct);
+IEnumerable<SearchResult> results = index.Search(query, cap: 0, ct: ct);
+IEnumerable<int>          ids     = index.SearchIds(query, ct: ct);
 ```
 
 `Search` streams results lazily — index scan + DB fetch together. `SearchIds` skips the DB fetch; use it when you only need counts or will load content on demand.
+
+**Filtering by line ID** — both methods accept an optional `filterIds` keep-set:
+
+```csharp
+// Only lines of one sefer / category can match:
+var results = index.Search(query, filterIds: myLineIds);
+var ids     = index.SearchIds(query, filterIds: myLineIds);
+```
+
+Semantics: `null` = search everything (default); an empty collection matches
+nothing; duplicates and unknown IDs are fine (negative IDs are ignored).
+
+The filter is applied *inside* the posting intersection, not on the output —
+a small filter set becomes the driver of the intersection (candidate-driven
+probing, same idea as Lucene's cost-sorted `FILTER` clause), so heavy
+wildcard/fuzzy queries get **faster** when filtered, never slower than
+post-filtering the results yourself. Verified with `FtsLibTest.exe filtertest full`:
+`בני*` drops 343 ms → 62 ms with a ~1k-ID filter; `*כי* ביצחק` 6.7 s → 4.1 s
+(the remainder is term expansion, which no filter can skip).
 
 **`SearchResult` properties:**
 
