@@ -46,6 +46,16 @@ namespace FtsLibTest
         {
             Console.OutputEncoding = Encoding.UTF8;
 
+            // --slow: additionally run a SLOW CONSUMER of a broad full-pipeline
+            // Search (content fetch included) on a background thread for the whole
+            // merge. Reproduces the production regression where a search that
+            // streams results for minutes kept its SearchLease, a queued merge
+            // commit then blocked the write lock, and every new search stalled
+            // behind it. With leases scoped to segment reads only, foreground
+            // latency must stay low even with the slow consumer running.
+            bool slowConsumer = Array.Exists(args, a =>
+                a.Equals("--slow", StringComparison.OrdinalIgnoreCase));
+
             if (!Directory.Exists(BackupDir) ||
                 Directory.GetFiles(BackupDir, "seg_*.dat").Length == 0)
             {
@@ -89,6 +99,32 @@ namespace FtsLibTest
             var mergeSw   = Stopwatch.StartNew();
             var mergeTask = Task.Run(() => index.ForceMerge());
 
+            // 3b. Optional slow consumer: streams the full Search pipeline for a
+            // broad query, sleeping between results, for the whole merge duration.
+            var  slowCts   = new CancellationTokenSource();
+            Task slowTask  = null;
+            int  slowCount = 0;
+            if (slowConsumer)
+            {
+                // "כי ביצחק" (2,179 results) at 50ms/result holds the enumeration
+                // open for ~2 minutes — longer than the merge, like a user slowly
+                // paging through results in the UI while the index builds.
+                Console.WriteLine("║  Starting SLOW consumer (full-pipeline Search of \"כי ביצחק\", 50ms/result)...");
+                slowTask = Task.Run(() =>
+                {
+                    try
+                    {
+                        foreach (var r in index.Search("כי ביצחק", ct: slowCts.Token))
+                        {
+                            Interlocked.Increment(ref slowCount);
+                            Thread.Sleep(50);
+                        }
+                    }
+                    catch (OperationCanceledException) { }
+                });
+                Thread.Sleep(1500); // let it acquire its lease and start streaming
+            }
+
             // 4. Search loop while the merge runs
             int  searches      = 0;
             int  mismatches    = 0;
@@ -130,6 +166,12 @@ namespace FtsLibTest
             }
 
             mergeSw.Stop();
+            if (slowTask != null)
+            {
+                slowCts.Cancel();
+                try { slowTask.Wait(10_000); } catch { }
+                Console.WriteLine($"║  Slow consumer streamed {slowCount:N0} results before cancel.");
+            }
             try { mergeTask.Wait(); }
             catch (Exception ex)
             {
@@ -168,7 +210,13 @@ namespace FtsLibTest
             if (!concurrentEnough)
                 Console.WriteLine($"║  ✗ only {searches} searches completed during the merge — searches appear to be blocked by it");
 
-            bool pass = mismatches == 0 && exceptions == 0 && postOk && concurrentEnough;
+            // In --slow mode the point of the test is foreground latency: no search
+            // may stall behind a merge commit queued on the slow consumer's lease.
+            bool latencyOk = !slowConsumer || maxLatencyMs < 5_000;
+            if (!latencyOk)
+                Console.WriteLine($"║  ✗ max foreground latency {maxLatencyMs:N0}ms — searches are blocking behind the slow consumer's lease");
+
+            bool pass = mismatches == 0 && exceptions == 0 && postOk && concurrentEnough && latencyOk;
             Console.WriteLine($"║  {(pass ? "✓  PASS — searches ran concurrently with the merge, all result sets exact" : "✗  FAIL")}");
             Console.WriteLine("╚════════════════════════════════════════════════════════════════════");
 
