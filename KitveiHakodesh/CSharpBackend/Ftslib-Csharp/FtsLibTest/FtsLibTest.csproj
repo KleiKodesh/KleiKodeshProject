@@ -77,6 +77,7 @@
     <Compile Include="SearchIndex\KetivQueryTest.cs" />
     <Compile Include="SearchIndex\VerifyTest.cs" />
     <Compile Include="SearchIndex\SpeedTest.cs" />
+    <Compile Include="SearchIndex\FilterTest.cs" />
     <Compile Include="SearchIndex\PerformanceTest.cs" />
     <Compile Include="SearchIndex\ExpandDiag.cs" />
     <Compile Include="SearchIndex\LookupDiag.cs" />
