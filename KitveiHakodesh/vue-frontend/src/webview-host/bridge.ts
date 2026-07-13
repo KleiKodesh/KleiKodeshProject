@@ -313,11 +313,47 @@ export function copyImageToClipboard(dataUrl: string): Promise<{ ok?: boolean; e
 /**
  * Notify the C# host that the Vue theme has changed.
  * The host persists the preference and updates the WinForms title bar via DarkNet.
+ * chromeColor is the theme's title-bar background (hex) — the native chrome tab
+ * strip derives its full palette from it so it matches the Vue theme exactly.
+ * accentColor drives the active-tab indicator in the native tab-list dropdown.
  * Fire-and-forget — no meaningful return value.
  */
-export function setTheme(isDark: boolean): void {
+export function setTheme(isDark: boolean, chromeColor?: string, accentColor?: string): void {
   if (typeof window.__webviewAction !== 'function') return
-  action('setTheme', { isDark }).catch(() => {})
+  action('setTheme', {
+    isDark,
+    ...(chromeColor ? { chromeColor } : {}),
+    ...(accentColor ? { accentColor } : {}),
+  }).catch(() => {})
+}
+
+// ── Native chrome tabs mirror ────────────────────────────────────────────────
+
+export interface MirroredTab {
+  id: string
+  title: string
+  pane: 1 | 2
+}
+
+/** A recently opened document (not currently open) for the native tab-list dropdown. */
+export interface MirroredRecentItem {
+  /** Stable key from recentlyOpenedStore — echoed back by chromeRecentActivated. */
+  key: string
+  title: string
+}
+
+/**
+ * Push a full snapshot of the Vue tab store to the C# host so the native chrome
+ * tab strip can mirror it (membership, titles, active tab), plus recently opened
+ * documents for the dropdown's "נסגרו לאחרונה" section. Fire-and-forget.
+ */
+export function notifyTabsChanged(
+  tabs: MirroredTab[],
+  activeTabId: string,
+  recent: MirroredRecentItem[] = [],
+): void {
+  if (typeof window.__webviewAction !== 'function') return
+  action('tabsChanged', { tabs, activeTabId, recent }).catch(() => {})
 }
 
 /**
