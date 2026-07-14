@@ -159,6 +159,15 @@ function onRemove() {
 .tile-action--pin {
   color: var(--accent-color);
 }
+/* The pin glyph tilts into a "planted" angle when pinned, so the pinned state
+   reads at a glance. Rotating the inner glyph keeps it independent of the disc's
+   hover/press scaling. */
+.tile-action--pin :deep(svg) {
+  transition: transform 0.24s ease;
+}
+.tile-action--pin.is-active :deep(svg) {
+  transform: rotate(-28deg);
+}
 .tile-action--remove {
   color: var(--text-secondary);
 }
@@ -170,7 +179,7 @@ function onRemove() {
   opacity: 1;
   pointer-events: auto;
 }
-/* Click feedback: the pin gives a gentle pulse when toggled. */
+/* Click feedback: the disc gives a gentle pulse when toggled. */
 .tile-action--pin.is-popping {
   animation: pin-pop 0.26s ease;
 }
