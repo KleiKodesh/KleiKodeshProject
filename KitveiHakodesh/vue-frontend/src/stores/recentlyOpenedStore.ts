@@ -31,6 +31,8 @@ export interface RecentlyOpenedEntry {
   localFileName?: string
   /** Unix timestamp of last access (ms). */
   lastAccessedAt: number
+  /** Pinned entries sort ahead of the rest and are never evicted by the cap. */
+  pinned?: boolean
 }
 
 const RECENTLY_OPENED_DB = 'app-recently-opened'
@@ -120,6 +122,33 @@ function stripFileExtension(title: string): string {
   return title
 }
 
+// ── Ordering & cap ──────────────────────────────────────────────────────────────
+
+/** Returns a new list with pinned entries first, each group newest-first. */
+function sortPinnedFirst(list: RecentlyOpenedEntry[]): RecentlyOpenedEntry[] {
+  return [...list].sort((a, b) => {
+    const pinDelta = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
+    if (pinDelta !== 0) return pinDelta
+    return b.lastAccessedAt - a.lastAccessedAt
+  })
+}
+
+/**
+ * Trims the list to the cap without ever evicting pinned entries. All pins are
+ * kept (even if that exceeds the cap); the remaining slots go to the newest
+ * unpinned entries.
+ */
+function capList(list: RecentlyOpenedEntry[]): RecentlyOpenedEntry[] {
+  if (list.length <= RECENTLY_OPENED_MAX) return list
+  const pinned = list.filter((e) => e.pinned)
+  const room = Math.max(0, RECENTLY_OPENED_MAX - pinned.length)
+  const keptUnpinned = list
+    .filter((e) => !e.pinned)
+    .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
+    .slice(0, room)
+  return [...pinned, ...keptUnpinned]
+}
+
 // ── In-memory cache ───────────────────────────────────────────────────────────
 // null means not yet loaded from IDB. Max 16 tiny objects — safe to keep in memory.
 
@@ -148,11 +177,11 @@ export const TRACKABLE_ROUTES = new Set<TabRoute>([
 
 export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
   /**
-   * Returns the list sorted newest-first.
+   * Returns the list, pinned entries first then newest-first.
    * Synchronous from memory after first call; one IDB read on first call.
    */
   function getList(): Promise<RecentlyOpenedEntry[]> {
-    return ensureLoaded()
+    return ensureLoaded().then((list) => sortPinnedFirst(list))
   }
 
   /**
@@ -175,7 +204,7 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
     const key = deriveKey(route, bookId, localFilePath, localFileHbBookId, localFileName)
     const displayTitle = route === '/book-view' ? title : stripFileExtension(title)
 
-    const entry: RecentlyOpenedEntry = {
+    const baseEntry: RecentlyOpenedEntry = {
       key,
       route,
       title: displayTitle,
@@ -187,20 +216,45 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
       ...(localFileName ? { localFileName } : {}),
     }
 
+    // Re-opening a pinned document keeps it pinned (the fresh entry carries no flag).
+    const bump = (list: RecentlyOpenedEntry[]): RecentlyOpenedEntry[] => {
+      const entry = list.find((e) => e.key === key)?.pinned ? { ...baseEntry, pinned: true } : baseEntry
+      return capList([entry, ...list.filter((e) => e.key !== key)])
+    }
+
     if (_cache !== null) {
-      // Remove existing entry with the same key (bump-to-front)
-      _cache = _cache.filter((e) => e.key !== key)
-      // Prepend and trim to cap
-      _cache = [entry, ..._cache].slice(0, RECENTLY_OPENED_MAX)
+      _cache = bump(_cache)
     }
 
     // Fire-and-forget — the cache is already correct for any immediate re-reads
     ensureLoaded().then((list) => {
-      const updated = [entry, ...list.filter((e) => e.key !== key)].slice(0, RECENTLY_OPENED_MAX)
+      const updated = bump(list)
       _cache = updated
       idbSaveList(updated)
     })
   }
 
-  return { getList, trackNavigation }
+  /**
+   * Toggles the pinned state of an entry and persists. Returns the updated list
+   * (pinned first), or an empty list if the cache has not been loaded yet.
+   */
+  function togglePin(key: string): RecentlyOpenedEntry[] {
+    if (_cache === null) return []
+    _cache = capList(_cache.map((e) => (e.key === key ? { ...e, pinned: !e.pinned } : e)))
+    idbSaveList(_cache)
+    return sortPinnedFirst(_cache)
+  }
+
+  /**
+   * Removes an entry from the list and persists. Returns the updated list
+   * (pinned first), or an empty list if the cache has not been loaded yet.
+   */
+  function removeEntry(key: string): RecentlyOpenedEntry[] {
+    if (_cache === null) return []
+    _cache = _cache.filter((e) => e.key !== key)
+    idbSaveList(_cache)
+    return sortPinnedFirst(_cache)
+  }
+
+  return { getList, trackNavigation, togglePin, removeEntry }
 })
