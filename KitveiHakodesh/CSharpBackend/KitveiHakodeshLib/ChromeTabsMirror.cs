@@ -46,6 +46,12 @@ namespace KitveiHakodeshLib
             _form.ExitOnLastTabClose = false;
             _form.TabListOpenTabsHeader = "לשוניות פתוחות";
 
+            // Hebrew caption-button tooltips (replace Windows' OS-language ones)
+            _form.MinimizeToolTip = "מזער";
+            _form.MaximizeToolTip = "הגדל";
+            _form.RestoreToolTip = "שחזר";
+            _form.CloseToolTip = "סגור";
+
             ApplyPersistedTheme();
 
             _form.SelectedTabChanged += OnSelectedTabChanged;
