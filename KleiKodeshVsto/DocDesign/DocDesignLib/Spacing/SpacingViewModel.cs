@@ -54,11 +54,20 @@ namespace DocDesign.Spacing
 
         void UpdateProperties()
         {
-            SetProperty(ref _spaceAfter, Vsto.Selection.ParagraphFormat.SpaceAfter, nameof(SpaceAfter));
-            SetProperty(ref _spaceBefore, Vsto.Selection.ParagraphFormat.SpaceBefore, nameof(SpaceBefore));
-            SetProperty(ref _lineSpacing, Vsto.Selection.ParagraphFormat.LineSpacing, nameof(LineSpacing));
-            SetProperty(ref _wordSpacing, Vsto.Selection.GetSpaceBetweenWords(), nameof(WordSpacing));
-            SetProperty(ref _characterStretch, Vsto.Selection.Font.Spacing, nameof(CharacterStretch));
+            // Selection is null when no document is active (last doc closing, or a
+            // deferred idle / SelectionChange firing without a live selection).
+            var selection = Vsto.Selection;
+            if (selection == null) return;
+
+            try
+            {
+                SetProperty(ref _spaceAfter, selection.ParagraphFormat.SpaceAfter, nameof(SpaceAfter));
+                SetProperty(ref _spaceBefore, selection.ParagraphFormat.SpaceBefore, nameof(SpaceBefore));
+                SetProperty(ref _lineSpacing, selection.ParagraphFormat.LineSpacing, nameof(LineSpacing));
+                SetProperty(ref _wordSpacing, selection.GetSpaceBetweenWords(), nameof(WordSpacing));
+                SetProperty(ref _characterStretch, selection.Font.Spacing, nameof(CharacterStretch));
+            }
+            catch { } // selection can enter transient states (e.g. mid-close) that throw on read
         }
 
         void SetSpaceAfter(object param)
