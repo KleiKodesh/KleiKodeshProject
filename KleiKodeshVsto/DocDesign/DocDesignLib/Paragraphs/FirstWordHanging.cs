@@ -90,14 +90,14 @@ namespace DocDesign.Paragraphs
             targetRange.Start = targetRange.Paragraphs.First.Range.Start;
             targetRange.End = targetRange.Paragraphs.Last.Range.End;
 
-            using (new UndoRecordHelper("הסרת עיצוב חלון"))
-            {
-                var find = targetRange.Find;
-                find.Text = HardBreak;
-                find.Replacement.Text = "";
-                find.Wrap = WdFindWrap.wdFindStop;
-                find.Execute(Replace: WdReplace.wdReplaceAll);
-            }
+            // No UndoRecordHelper here: ReplaceAll is already a single native undo step,
+            // and wdReplaceAll inside an open custom UndoRecord crashes Word on
+            // window-formatted docs (multi-column + large character spacing).
+            var find = targetRange.Find;
+            find.Text = HardBreak;
+            find.Replacement.Text = "";
+            find.Wrap = WdFindWrap.wdFindStop;
+            find.Execute(Replace: WdReplace.wdReplaceAll);
         }
     }
 }

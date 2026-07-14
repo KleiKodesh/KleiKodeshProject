@@ -81,24 +81,23 @@ namespace DocDesign.Paragraphs
             targetRange.Start = targetRange.Paragraphs.First.Range.Start;
             targetRange.End = targetRange.Paragraphs.Last.Range.End;
 
-            using (new UndoRecordHelper("הסרת מירכוז שורה אחרונה"))
-            {
-                targetRange.End = targetRange.Paragraphs.Last.Range.End;
+            // No UndoRecordHelper: ReplaceAll is one native undo step, and wdReplaceAll
+            // inside an open custom UndoRecord crashes Word on some docs.
+            targetRange.End = targetRange.Paragraphs.Last.Range.End;
 
-                var find = targetRange.Find;
-                find.ClearFormatting();
-                find.Replacement.ClearFormatting();
-                find.ParagraphFormat.Alignment = WdParagraphAlignment.wdAlignParagraphDistribute;
-                find.Replacement.ParagraphFormat.Alignment = WdParagraphAlignment.wdAlignParagraphJustify;
+            var find = targetRange.Find;
+            find.ClearFormatting();
+            find.Replacement.ClearFormatting();
+            find.ParagraphFormat.Alignment = WdParagraphAlignment.wdAlignParagraphDistribute;
+            find.Replacement.ParagraphFormat.Alignment = WdParagraphAlignment.wdAlignParagraphJustify;
 
-                find.Text = "^t^p";
-                find.Replacement.Text = "^p";
-                find.Forward = true;
-                find.Wrap = WdFindWrap.wdFindStop;
-                find.Format = true;
+            find.Text = "^t^p";
+            find.Replacement.Text = "^p";
+            find.Forward = true;
+            find.Wrap = WdFindWrap.wdFindStop;
+            find.Format = true;
 
-                find.Execute(Replace: WdReplace.wdReplaceAll);
-            }
+            find.Execute(Replace: WdReplace.wdReplaceAll);
         }
 
         public void RemoveAlternative(Range targetRange = null)
@@ -109,16 +108,15 @@ namespace DocDesign.Paragraphs
             targetRange.Start = targetRange.Paragraphs.First.Range.Start;
             targetRange.End = targetRange.Paragraphs.Last.Range.End;
 
-            using (new UndoRecordHelper("הסרת מירכוז שורה אחרונה"))
-            {
-                targetRange.End = targetRange.Paragraphs.Last.Range.End;
+            // No UndoRecordHelper: ReplaceAll is one native undo step, and wdReplaceAll
+            // inside an open custom UndoRecord crashes Word on some docs.
+            targetRange.End = targetRange.Paragraphs.Last.Range.End;
 
-                var find2 = targetRange.Find;
-                find2.Text = "^l^t";
-                find2.Replacement.Text = "";
-                find2.Wrap = WdFindWrap.wdFindStop;
-                find2.Execute(Replace: WdReplace.wdReplaceAll);
-            }
+            var find2 = targetRange.Find;
+            find2.Text = "^l^t";
+            find2.Replacement.Text = "";
+            find2.Wrap = WdFindWrap.wdFindStop;
+            find2.Execute(Replace: WdReplace.wdReplaceAll);
         }
     }
 }
