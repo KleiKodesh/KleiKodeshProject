@@ -1,4 +1,5 @@
 using Microsoft.Office.Interop.Word;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -22,10 +23,15 @@ namespace DocDesign.Paragraphs
             }
         }
 
-        int _minLineCount = 2;
+        int _firstWordMinLineCount = 1;
+        int _hangingMinLineCount = 2;
+        int _centerLastLineMinLineCount = 2;
         ObservableCollection<ActiveStyle> _activeStyles = new ObservableCollection<ActiveStyle>();
         bool? _checkAllStyles;
-        public int MinLineCount { get => _minLineCount; set => SetProperty(ref _minLineCount, value); }
+
+        public int FirstWordMinLineCount { get => _firstWordMinLineCount; set => SetProperty(ref _firstWordMinLineCount, Math.Max(1, value)); }
+        public int HangingMinLineCount { get => _hangingMinLineCount; set => SetProperty(ref _hangingMinLineCount, Math.Max(2, value)); }
+        public int CenterLastLineMinLineCount { get => _centerLastLineMinLineCount; set => SetProperty(ref _centerLastLineMinLineCount, Math.Max(2, value)); }
         public bool? CheckAllStyles { get => _checkAllStyles; set { if (SetProperty(ref _checkAllStyles, value)) CheckAllChanged(value); } }
         public ObservableCollection<ActiveStyle> ActiveStyles { get => _activeStyles; set => SetProperty(ref _activeStyles, value); }
         public bool RefreshStyles { set => RefreshActiveStylesAction(); }
@@ -55,10 +61,10 @@ namespace DocDesign.Paragraphs
         public FirstWordHanging FirstWordHanging { get; } = new FirstWordHanging();
 
         // Apply Commands
-        public RelayCommand ApplyFirstWordHangingCommand => new RelayCommand(() => FirstWordHanging.Apply(ValidStyles, MinLineCount));
-        public RelayCommand ApplyDoubleFirstWordHangingCommand => new RelayCommand(() => FirstWordHanging.DoubleWindow(ValidStyles, MinLineCount));
-        public RelayCommand ApplyFirstWordStyleCommand => new RelayCommand(() => FirstWordStyle.Apply(ValidStyles, MinLineCount));
-        public RelayCommand ApplyCenterLastLineCommand => new RelayCommand(() => CenterLastLine.Apply(ValidStyles, MinLineCount));
+        public RelayCommand ApplyFirstWordStyleCommand => new RelayCommand(() => FirstWordStyle.Apply(ValidStyles, FirstWordMinLineCount));
+        public RelayCommand ApplyFirstWordHangingCommand => new RelayCommand(() => FirstWordHanging.Apply(ValidStyles, HangingMinLineCount));
+        public RelayCommand ApplyDoubleFirstWordHangingCommand => new RelayCommand(() => FirstWordHanging.DoubleWindow(ValidStyles, HangingMinLineCount));
+        public RelayCommand ApplyCenterLastLineCommand => new RelayCommand(() => CenterLastLine.Apply(ValidStyles, CenterLastLineMinLineCount));
 
         // Remove Commands
         public RelayCommand RemoveFirstWordHangingCommand => new RelayCommand(() => FirstWordHanging.Remove());

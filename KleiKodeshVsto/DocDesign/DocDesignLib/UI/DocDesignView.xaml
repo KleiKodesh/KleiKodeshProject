@@ -34,167 +34,189 @@
             <Expander Header="עיצוב פסקה" IsExpanded="True">
                 <StackPanel Margin="10,4,10,4">
 
-                    <!-- Apply buttons -->
-                    <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
-                        <Button ToolTip="סגנון מילה ראשונה"
-                                Command="{Binding ParagraphsViewModel.ApplyFirstWordStyleCommand}">
-                            <Path Data="{StaticResource Icon.FirstWordStyle}"/>
-                        </Button>
-                        <Button ToolTip="עיצוב חלון"
-                                Command="{Binding ParagraphsViewModel.ApplyFirstWordHangingCommand}">
-                            <Path Data="{StaticResource Icon.Hanging}"/>
-                        </Button>
-                        <Button ToolTip="עיצוב חלון כפול"
-                                Command="{Binding ParagraphsViewModel.ApplyDoubleFirstWordHangingCommand}">
-                            <Path Data="{StaticResource Icon.DoubleHanging}"/>
-                        </Button>
-                        <Button ToolTip="מירכוז שורה אחרונה"
-                                Command="{Binding ParagraphsViewModel.ApplyCenterLastLineCommand}">
-                            <Path Data="{StaticResource Icon.CenterLastLine}"/>
-                        </Button>
-                    </StackPanel>
+                    <!-- Shared min-line group: buttons hug the start (right, RTL),
+                         the "מניין שורות" input hugs the end (left) so the three inputs
+                         line up vertically. Column layout is identical per row. -->
 
-                    <!-- Remove buttons — same icon at 45% opacity + red diagonal overlay -->
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                        <Button ToolTip="הסר סגנון מילה ראשונה"
-                                Command="{Binding ParagraphsViewModel.RemoveFirstWordStyleCommand}">
-                            <Grid>
-                                <Path Data="{StaticResource Icon.FirstWordStyle}" Opacity="0.45"/>
-                                <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
-                                <Line X1="0" Y1="0" X2="1" Y2="1"
-                                      Stretch="Fill"
-                                      Stroke="#DC3545" StrokeThickness="1.5"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                      IsHitTestVisible="False"/>
-                            </Grid>
-                        </Button>
-                        <Button ToolTip="הסר עיצוב חלון"
-                                Command="{Binding ParagraphsViewModel.RemoveFirstWordHangingCommand}">
-                            <Grid>
-                                <Path Data="{StaticResource Icon.Hanging}" Opacity="0.45"/>
-                                <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
-                                <Line X1="0" Y1="0" X2="1" Y2="1"
-                                      Stretch="Fill"
-                                      Stroke="#DC3545" StrokeThickness="1.5"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                      IsHitTestVisible="False"/>
-                            </Grid>
-                        </Button>
-                        <Button ToolTip="הסר מירכוז שורה אחרונה"
-                                Command="{Binding ParagraphsViewModel.RemoveCenterLastLineCommand}">
-                            <Grid>
-                                <Path Data="{StaticResource Icon.CenterLastLine}" Opacity="0.45"/>
-                                <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
-                                <Line X1="0" Y1="0" X2="1" Y2="1"
-                                      Stretch="Fill"
-                                      Stroke="#DC3545" StrokeThickness="1.5"
-                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                      IsHitTestVisible="False"/>
-                            </Grid>
-                        </Button>
-                    </StackPanel>
+                    <!-- ROW 1: עיצוב מילה ראשונה -->
+                    <Grid Margin="0,2,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <Button ToolTip="סגנון מילה ראשונה"
+                                    Command="{Binding ParagraphsViewModel.ApplyFirstWordStyleCommand}">
+                                <Path Data="{StaticResource Icon.FirstWordStyle}"/>
+                            </Button>
+                            <Button ToolTip="הסר סגנון מילה ראשונה"
+                                    Command="{Binding ParagraphsViewModel.RemoveFirstWordStyleCommand}">
+                                <Grid>
+                                    <Path Data="{StaticResource Icon.FirstWordStyle}" Opacity="0.45"/>
+                                    <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
+                                    <Line X1="0" Y1="0" X2="1" Y2="1"
+                                          Stretch="Fill"
+                                          Stroke="#DC3545" StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          IsHitTestVisible="False"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="מניין שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                            <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.FirstWordMinLineCount}"
+                                                    Minimum="1"
+                                                    Width="38" Height="26"/>
+                        </StackPanel>
+                    </Grid>
 
-                    <!-- Style picker row -->
-                    <StackPanel Margin="0,0,0,4">
-                        <TextBlock Text="הגדרות"
-                                   Opacity="0.55"
-                                   FontSize="11"
-                                   Margin="0,6,0,2"/>
-                        <Grid Margin="0,0,0,4">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
+                    <!-- ROW 2: עיצוב חלון -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <Button ToolTip="עיצוב חלון"
+                                    Command="{Binding ParagraphsViewModel.ApplyFirstWordHangingCommand}">
+                                <Path Data="{StaticResource Icon.Hanging}"/>
+                            </Button>
+                            <Button ToolTip="עיצוב חלון כפול"
+                                    Command="{Binding ParagraphsViewModel.ApplyDoubleFirstWordHangingCommand}">
+                                <Path Data="{StaticResource Icon.DoubleHanging}"/>
+                            </Button>
+                            <Button ToolTip="הסר עיצוב חלון"
+                                    Command="{Binding ParagraphsViewModel.RemoveFirstWordHangingCommand}">
+                                <Grid>
+                                    <Path Data="{StaticResource Icon.Hanging}" Opacity="0.45"/>
+                                    <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
+                                    <Line X1="0" Y1="0" X2="1" Y2="1"
+                                          Stretch="Fill"
+                                          Stroke="#DC3545" StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          IsHitTestVisible="False"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="מניין שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                            <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.HangingMinLineCount}"
+                                                    Minimum="2"
+                                                    Width="38" Height="26"/>
+                        </StackPanel>
+                    </Grid>
 
-                            <ToggleButton x:Name="ChooseStylesToggle"
-                                          Grid.Column="0"
-                                          Style="{StaticResource CheckedToggle}"
-                                          Content="החל על ▾"
-                                          Height="26"
-                                          Padding="8,0"
-                                          FontSize="11"
-                                          HorizontalAlignment="Stretch"
-                                          IsHitTestVisible="{Binding IsOpen, ElementName=ChooseStylesPopup,
-                                              Converter={StaticResource ReverseBoolConverter}}"
-                                          IsChecked="{Binding RefreshStyles}"/>
-                            <Popup x:Name="ChooseStylesPopup"
-                                   StaysOpen="False"
-                                   PlacementTarget="{Binding ElementName=ChooseStylesToggle}"
-                                   IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
-                                   AllowsTransparency="False"
-                                   MaxHeight="220">
-                                <Border BorderBrush="#50808080"
-                                        BorderThickness="1"
-                                        MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}"
-                                        Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                                    <StackPanel>
-                                        <!-- "סמן הכל" row -->
-                                        <Border x:Name="SelectAllBd" Background="Transparent" Cursor="Hand">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="Transparent"/>
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="#0A808080"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
-                                            <CheckBox Content="סמן הכל"
-                                                      IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"
-                                                      Padding="4,0"
-                                                      Margin="8,5"/>
-                                        </Border>
-                                        <Separator Background="#50808080" Margin="0,2"/>
-                                        <!-- Style items -->
-                                        <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                                      VerticalScrollBarVisibility="Auto"
-                                                      MaxHeight="180">
-                                            <ItemsControl ItemsSource="{Binding ParagraphsViewModel.ActiveStyles}">
-                                                <ItemsControl.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Border Background="Transparent" Cursor="Hand">
-                                                            <Border.Style>
-                                                                <Style TargetType="Border">
-                                                                    <Setter Property="Background" Value="Transparent"/>
-                                                                    <Style.Triggers>
-                                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                                            <Setter Property="Background" Value="#0A808080"/>
-                                                                        </Trigger>
-                                                                    </Style.Triggers>
-                                                                </Style>
-                                                            </Border.Style>
-                                                            <CheckBox Content="{Binding Name}"
-                                                                      IsChecked="{Binding Apply}"
-                                                                      Padding="4,0"
-                                                                      Margin="8,4"/>
-                                                        </Border>
-                                                    </DataTemplate>
-                                                </ItemsControl.ItemTemplate>
-                                            </ItemsControl>
-                                        </ScrollViewer>
-                                    </StackPanel>
-                                </Border>
-                            </Popup>
+                    <!-- ROW 3: מרכוז שורה אחרונה -->
+                    <Grid Margin="0,0,0,4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <Button ToolTip="מירכוז שורה אחרונה"
+                                    Command="{Binding ParagraphsViewModel.ApplyCenterLastLineCommand}">
+                                <Path Data="{StaticResource Icon.CenterLastLine}"/>
+                            </Button>
+                            <Button ToolTip="הסר מירכוז שורה אחרונה"
+                                    Command="{Binding ParagraphsViewModel.RemoveCenterLastLineCommand}">
+                                <Grid>
+                                    <Path Data="{StaticResource Icon.CenterLastLine}" Opacity="0.45"/>
+                                    <Border CornerRadius="2" Background="#18DC3545" IsHitTestVisible="False"/>
+                                    <Line X1="0" Y1="0" X2="1" Y2="1"
+                                          Stretch="Fill"
+                                          Stroke="#DC3545" StrokeThickness="1.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          IsHitTestVisible="False"/>
+                                </Grid>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock Text="מניין שורות" Margin="0,0,4,0" Opacity="0.65"/>
+                            <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.CenterLastLineMinLineCount}"
+                                                    Minimum="2"
+                                                    Width="38" Height="26"/>
+                        </StackPanel>
+                    </Grid>
 
-                            <StackPanel Grid.Column="2"
-                                        Orientation="Horizontal"
-                                        VerticalAlignment="Center"
-                                        Margin="8,0,0,0">
-                                <TextBlock Text="מינ׳ שורות" Margin="0,0,4,0" Opacity="0.65"/>
-                                <controls:UpDownTextBox Value="{Binding ParagraphsViewModel.MinLineCount}"
-                                                        Minimum="2"
-                                                        Width="38" Height="26"/>
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
+                    <!-- Apply-to styles picker -->
+                        <ToggleButton x:Name="ChooseStylesToggle"
+                                      Grid.Column="0"
+                                      Style="{StaticResource CheckedToggle}"
+                                      Content="החל על ▾"
+                                      Height="26"
+                                      Margin="0,7"
+                                      Padding="8,0"
+                                      FontSize="11"
+                                      HorizontalAlignment="Stretch"
+                                      IsHitTestVisible="{Binding IsOpen, ElementName=ChooseStylesPopup,
+                                          Converter={StaticResource ReverseBoolConverter}}"
+                                      IsChecked="{Binding RefreshStyles}"/>
+                        <Popup x:Name="ChooseStylesPopup"
+                               StaysOpen="False"
+                               PlacementTarget="{Binding ElementName=ChooseStylesToggle}"
+                               IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
+                               AllowsTransparency="False"
+                               MaxHeight="220">
+                            <Border BorderBrush="#50808080"
+                                    BorderThickness="1"
+                                    MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}"
+                                    Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                                <StackPanel>
+                                    <Border x:Name="SelectAllBd" Background="Transparent" Cursor="Hand">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="Transparent"/>
+                                                <Style.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter Property="Background" Value="#0A808080"/>
+                                                    </Trigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <CheckBox Content="סמן הכל"
+                                                  IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"
+                                                  Padding="4,0"
+                                                  Margin="8,5"/>
+                                    </Border>
+                                    <Separator Background="#50808080" Margin="0,2"/>
+                                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                                  VerticalScrollBarVisibility="Auto"
+                                                  MaxHeight="180">
+                                        <ItemsControl ItemsSource="{Binding ParagraphsViewModel.ActiveStyles}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Background="Transparent" Cursor="Hand">
+                                                        <Border.Style>
+                                                            <Style TargetType="Border">
+                                                                <Setter Property="Background" Value="Transparent"/>
+                                                                <Style.Triggers>
+                                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                                        <Setter Property="Background" Value="#0A808080"/>
+                                                                    </Trigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Border.Style>
+                                                        <CheckBox Content="{Binding Name}"
+                                                                  IsChecked="{Binding Apply}"
+                                                                  Padding="4,0"
+                                                                  Margin="8,4"/>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                            </Border>
+                        </Popup>
 
-                    <TextBlock Text="סגנון מילה ראשונה"
+
+                        <!-- First-word character style picker -->
+                    <TextBlock Text="בחר סגנון עבור עיצוב מילה ראשונה"
                                Opacity="0.55"
                                FontSize="11"
-                               Margin="0,6,0,2"
+                               Margin="0,5,0,3"
                                ToolTip="בחר סגנון עבור מילה ראשונה (סגנון תו בלבד)"/>
-                    <Grid Margin="0,0,0,2">
+                    <Grid Margin="0,0,0,4">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="Auto"/>
