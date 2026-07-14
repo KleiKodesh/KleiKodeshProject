@@ -6,6 +6,24 @@ make sure all vsto isnatnce of appviewer share same webcach
 add setting to choose desktop use same webcach
 
 bookview toolbar is specific to lines view?....
+more padding in the sides like in barilan
+
+
+swipe sometimes fires twice or back and forth
+swipe is moveing wrong way
+is advancing along the drop down visible path and not the actual array which holds the current tab too
+cntrl ab jumos back and forth instead of cycling forward in teh array
+cntrl shoft tab is unpredicatable ned to show full path in the tabs
+
+ספר העיטור עשרת הדברות / הלכות שופר / חלק שני - הכשר תקיעה
+
+document locator '' instead of "
+
+document locator
+                
+for tabs is showing on the wrong side for rt aligmnet
+tooltip is close its supoosed to be סגרו for hebrew
+
 
 typo reporting
 
