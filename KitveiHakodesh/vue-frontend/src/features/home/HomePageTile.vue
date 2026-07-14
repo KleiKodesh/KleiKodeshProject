@@ -2,19 +2,89 @@
 import { ref } from 'vue'
 import type { Component } from 'vue'
 import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fluent'
-defineProps<{
+import { useDropdownClose } from '@/composables/useDropdownClose'
+
+const props = defineProps<{
   label: string
   icon: Component
   color?: string
   iconScale?: number
   pinned?: boolean
-  /** When set, the tile shows hover pin/delete actions (recently-opened tiles). */
+  /** When set, the tile shows pin/delete actions (recently-opened tiles). */
   actions?: boolean
 }>()
 const emit = defineEmits<{ tap: []; togglePin: []; remove: [] }>()
 
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
+
+// ── Touch: long-press reveals the actions (touch has no hover) ──────────────────
+// Detected via Pointer Events at runtime rather than an @media (hover) query, so
+// hybrid mouse+touch devices get both behaviours.
+const wrapRef = ref<HTMLElement | null>(null)
+const isRevealed = ref(false)
+const isTouch = ref(false)
+let pressTimer: number | undefined
+let longPressed = false
+let startX = 0
+let startY = 0
+const LONG_PRESS_MS = 450
+const MOVE_CANCEL_PX = 10
+
+function clearPressTimer() {
+  if (pressTimer !== undefined) {
+    window.clearTimeout(pressTimer)
+    pressTimer = undefined
+  }
+}
+
+function onPointerDown(e: PointerEvent) {
+  if (!props.actions || e.pointerType === 'mouse') return // mouse uses hover
+  if ((e.target as HTMLElement).closest('.tile-action')) return // don't re-arm on the buttons
+  longPressed = false
+  startX = e.clientX
+  startY = e.clientY
+  clearPressTimer()
+  pressTimer = window.setTimeout(() => {
+    pressTimer = undefined
+    longPressed = true
+    isTouch.value = true
+    isRevealed.value = true
+  }, LONG_PRESS_MS)
+}
+
+function onPointerMove(e: PointerEvent) {
+  if (pressTimer === undefined) return
+  // Movement past the threshold means the user is scrolling, not long-pressing.
+  if (Math.abs(e.clientX - startX) > MOVE_CANCEL_PX || Math.abs(e.clientY - startY) > MOVE_CANCEL_PX) {
+    clearPressTimer()
+  }
+}
+
+function onPointerUp() {
+  clearPressTimer()
+}
+
+function onClickCapture(e: MouseEvent) {
+  // Swallow the click that trails a long-press so the tile doesn't also open.
+  if (longPressed) {
+    e.stopPropagation()
+    e.preventDefault()
+    longPressed = false
+  }
+}
+
+function onContextMenu(e: Event) {
+  // Suppress the OS press-and-hold callout on touch for tiles with actions.
+  if (props.actions) e.preventDefault()
+}
+
+function hideActions() {
+  isRevealed.value = false
+  isTouch.value = false
+}
+
+useDropdownClose(wrapRef, hideActions, { enabled: () => isRevealed.value, closeOnBlur: false })
 
 function onPin() {
   emit('togglePin')
@@ -32,7 +102,18 @@ function onRemove() {
 </script>
 
 <template>
-  <div class="tile-wrap" :class="{ 'is-removing': isRemoving }">
+  <div
+    ref="wrapRef"
+    class="tile-wrap"
+    :class="{ 'is-removing': isRemoving, 'is-revealed': isRevealed, 'is-touch': isTouch }"
+    @pointerdown="onPointerDown"
+    @pointermove="onPointerMove"
+    @pointerup="onPointerUp"
+    @pointercancel="onPointerUp"
+    @pointerleave="onPointerUp"
+    @click.capture="onClickCapture"
+    @contextmenu="onContextMenu"
+  >
     <button class="tile" data-nav-item title="לחץ Tab למעבר בין האפשרויות, Enter לפתיחה" @click="$emit('tap')">
       <div class="tile-icon">
         <component
@@ -74,6 +155,9 @@ function onRemove() {
 .tile-wrap {
   position: relative;
   display: flex;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .tile {
@@ -112,10 +196,12 @@ function onRemove() {
   border-radius: 6px;
   background: none;
   font-size: 28px;
-  transition: transform 0.15s ease;
+  transition:
+    transform 0.15s ease,
+    opacity 0.12s ease;
 }
 
-/* ── Hover actions (pin / delete), stacked in the top corner ─────────────── */
+/* ── Actions (pin / delete), stacked in the top corner ───────────────────── */
 .tile-actions {
   position: absolute;
   top: 0;
@@ -145,7 +231,9 @@ function onRemove() {
     color 0.12s ease,
     transform 0.15s ease;
 }
-.tile-wrap:hover .tile-action {
+/* Mouse reveals on hover; touch reveals on long-press (.is-revealed). */
+.tile-wrap:hover .tile-action,
+.tile-wrap.is-revealed .tile-action {
   opacity: 1;
   pointer-events: auto;
 }
@@ -193,6 +281,28 @@ function onRemove() {
   100% {
     transform: scale(1);
   }
+}
+
+/* Touch long-press reveal: enlarged to a comfortable tap size and laid out as a
+   horizontal pair centered over the icon, so the targets clear the label. */
+.tile-wrap.is-touch .tile-actions {
+  top: 6px;
+  inset-inline-start: 0;
+  width: 100%;
+  height: 48px;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.tile-wrap.is-touch .tile-action {
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
+}
+/* Fade the icon back so the action buttons read as a deliberate action mode. */
+.tile-wrap.is-touch .tile-icon {
+  opacity: 0.3;
 }
 
 /* Delete: the whole tile gently scales + fades out before it is removed. */
