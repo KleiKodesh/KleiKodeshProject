@@ -3,6 +3,7 @@ import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useIntervalFn, useElementSize } from '@vueuse/core'
 import HomeTile from './HomePageTile.vue'
 import HomeSearchDropdown from './HomeSearchDropdown.vue'
+import ContextMenu, { type ContextMenuItem } from '@/components/ContextMenu.vue'
 import { useHomeSearch } from './useHomeSearch'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
@@ -311,6 +312,31 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
   }
   localFileStore.openFromHistory(entry)
 }
+
+// ── Recently-opened context menu (pin / remove) ────────────────────────────────
+const recentContextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const recentContextMenuEntry = ref<RecentlyOpenedEntry | null>(null)
+
+const recentContextMenuItems = computed<ContextMenuItem[]>(() => {
+  const entry = recentContextMenuEntry.value
+  if (!entry) return []
+  return [
+    {
+      label: entry.pinned ? 'בטל הצמדה' : 'הצמד',
+      action: () => (recentlyOpenedList.value = recentlyOpenedStore.togglePin(entry.key)),
+    },
+    { type: 'separator' },
+    {
+      label: 'הסר מהרשימה',
+      action: () => (recentlyOpenedList.value = recentlyOpenedStore.removeEntry(entry.key)),
+    },
+  ]
+})
+
+function onRecentContextMenu(event: MouseEvent, entry: RecentlyOpenedEntry) {
+  recentContextMenuEntry.value = entry
+  recentContextMenuRef.value?.show(event)
+}
 </script>
 
 <template>
@@ -370,11 +396,15 @@ function openRecentEntry(entry: RecentlyOpenedEntry) {
           :label="entry.title"
           :icon="RECENTLY_OPENED_ICON_MAP[entry.route]!.icon"
           :color="RECENTLY_OPENED_ICON_MAP[entry.route]!.color"
+          :pinned="entry.pinned"
           @tap="openRecentEntry(entry)"
           @keydown="onTileKeydown($event, tiles.length + i)"
+          @contextmenu="onRecentContextMenu($event, entry)"
         />
       </div>
     </div>
+
+    <ContextMenu ref="recentContextMenuRef" :items="recentContextMenuItems" />
 
     <div class="date-bar">
       <button

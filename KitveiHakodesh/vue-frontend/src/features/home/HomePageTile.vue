@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import type { Component } from 'vue'
+import { IconPin12Filled } from '@iconify-prerendered/vue-fluent'
 defineProps<{
   label: string
   icon: Component
   color?: string
   iconScale?: number
+  pinned?: boolean
 }>()
 defineEmits<{ tap: [] }>()
 </script>
@@ -16,6 +18,7 @@ defineEmits<{ tap: [] }>()
         :is="icon"
         :style="{ ...(color ? { color } : {}), ...(iconScale !== undefined ? { fontSize: iconScale + 'em' } : {}) }"
       />
+      <span v-if="pinned" class="tile-pin" aria-label="מוצמד"><IconPin12Filled /></span>
     </div>
     <span class="tile-label">{{ label }}</span>
   </button>
@@ -49,6 +52,7 @@ defineEmits<{ tap: [] }>()
 }
 
 .tile-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -58,6 +62,22 @@ defineEmits<{ tap: [] }>()
   background: none;
   font-size: 28px;
   transition: transform 0.15s ease;
+}
+
+.tile-pin {
+  position: absolute;
+  top: -3px;
+  inset-inline-start: -3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  color: var(--accent-color);
+  font-size: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
 }
 
 .tile-label {
