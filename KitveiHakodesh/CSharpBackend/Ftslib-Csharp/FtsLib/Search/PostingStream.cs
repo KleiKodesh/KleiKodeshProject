@@ -67,6 +67,10 @@ namespace FtsLib.Search
             _lastEncoded = 0;
         }
 
-        private static uint Encode(int v) => (uint)((long)v - int.MinValue);
+        // Doc/line IDs are non-negative and strictly ascending, so the raw value IS
+        // the encoded value — no int.MinValue rebasing. This makes the FIRST posting of
+        // every term cost varint(id) bytes (~3-4) instead of a fixed 5 (the rebased
+        // value was always >= 2^31). Deltas are unchanged. Format v2 (no-offset).
+        private static uint Encode(int v) => (uint)v;
     }
 }

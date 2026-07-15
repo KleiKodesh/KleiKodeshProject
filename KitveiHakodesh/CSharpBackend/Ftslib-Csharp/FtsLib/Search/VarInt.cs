@@ -20,6 +20,28 @@ namespace FtsLib.Search
             writeByte((byte)v);
         }
 
+        /// <summary>Writes a varint straight to a BinaryWriter (segment header fields).</summary>
+        public static void Write(uint v, System.IO.BinaryWriter bw)
+        {
+            while (v >= 0x80) { bw.Write((byte)(v | 0x80)); v >>= 7; }
+            bw.Write((byte)v);
+        }
+
+        /// <summary>Reads a varint from a BinaryReader (segment header fields).</summary>
+        public static uint Read(System.IO.BinaryReader br)
+        {
+            int  shift  = 0;
+            uint result = 0;
+            while (true)
+            {
+                byte b = br.ReadByte();
+                result |= (uint)(b & 0x7F) << shift;
+                if ((b & 0x80) == 0) break;
+                shift += 7;
+            }
+            return result;
+        }
+
         /// <summary>
         /// Encodes a varint into <paramref name="buf"/> starting at index 0.
         /// Returns the number of bytes written (1–5).
