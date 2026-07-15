@@ -85,6 +85,7 @@
     <Compile Include="SearchIndex\WildcardDiag.cs" />
     <Compile Include="SearchIndex\PrefixLenDiag.cs" />
     <Compile Include="SearchIndex\FstSizeDiag.cs" />
+    <Compile Include="SearchIndex\TermDictProto.cs" />
     <Compile Include="SearchIndex\FileLoadDiag.cs" />
     <!-- Ad-hoc DB queries -->
     <Compile Include="DbQuery.cs" />
