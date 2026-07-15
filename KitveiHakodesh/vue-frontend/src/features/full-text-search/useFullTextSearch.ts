@@ -9,87 +9,14 @@
  */
 import { ref, shallowRef } from 'vue'
 import { storeToRefs } from 'pinia'
-import { isHosted, query, onWebviewEvent } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
+import { getTocPathsForLines, getBookIdsForLines } from '@/webview-host/seforimApi'
+import { serviceCall } from '@/webview-host/serviceClient'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
-const DEV_SAMPLES: FullTextSearchResult[] = [
-  {
-    lineId: 1,
-    bookId: 1,
-    bookTitle: 'בראשית',
-    tocText: 'פרק א',
-    score: 0,
-    snippet: 'בראשית ברא אלקים את השמים ואת הארץ',
-    matchedTerms: [],
-  },
-  {
-    lineId: 2,
-    bookId: 1,
-    bookTitle: 'בראשית',
-    tocText: 'פרק א',
-    score: 0,
-    snippet: 'והארץ היתה תהו ובהו וחשך על פני תהום',
-    matchedTerms: [],
-  },
-  {
-    lineId: 3,
-    bookId: 2,
-    bookTitle: 'שמות',
-    tocText: 'פרק א',
-    score: 0,
-    snippet: 'ואלה שמות בני ישראל הבאים מצרימה',
-    matchedTerms: [],
-  },
-  {
-    lineId: 4,
-    bookId: 3,
-    bookTitle: 'ויקרא',
-    tocText: 'פרק א',
-    score: 0,
-    snippet: 'ויקרא אל משה וידבר אליו מאהל מועד',
-    matchedTerms: [],
-  },
-  {
-    lineId: 5,
-    bookId: 1,
-    bookTitle: 'בראשית',
-    tocText: 'פרק ב',
-    score: 0,
-    snippet: 'ויכלו השמים והארץ וכל צבאם',
-    matchedTerms: [],
-  },
-  {
-    lineId: 6,
-    bookId: 4,
-    bookTitle: 'משנה תורה להרמב"ם - ספר המדע',
-    tocText: 'הלכות יסודי התורה › פרק ראשון › הלכה א',
-    score: 0,
-    snippet: 'יסוד היסודות ועמוד החכמות לידע שיש שם מצוי ראשון',
-    matchedTerms: [],
-  },
-  {
-    lineId: 7,
-    bookId: 5,
-    bookTitle: 'שולחן ערוך עם כל הנושאי כלים - אורח חיים',
-    tocText: 'סימן א › סעיף א',
-    score: 0,
-    snippet: 'יתגבר כארי לעמוד בבוקר לעבודת בוראו שיהא הוא מעורר השחר',
-    matchedTerms: [],
-  },
-  {
-    lineId: 8,
-    bookId: 6,
-    bookTitle: 'תלמוד בבלי - מסכת ברכות',
-    tocText: 'פרק ראשון - מאימתי › דף ב עמוד א',
-    score: 0,
-    snippet: 'מאימתי קורין את שמע בערבין משעה שהכהנים נכנסים לאכול בתרומתן',
-    matchedTerms: [],
-  },
-]
 
 // ── chrome.webview message listener (search stream events from C#) ────────────
 // C# sends search events via window.__onWebviewEvent (routed through JsBridge).
@@ -148,10 +75,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
   const lineIds = [...new Set(batch.map((r) => r.lineId))]
   if (!lineIds.length) return
   try {
-    const rows = await query<{ lineId: number; bookId: number; tocPath: string }>(
-      SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
-      lineIds,
-    )
+    const rows = await getTocPathsForLines(lineIds)
     const dataMap = new Map(rows.map((r) => [r.lineId, { bookId: r.bookId, tocPath: r.tocPath }]))
     for (const r of batch) {
       const data = dataMap.get(r.lineId)
@@ -166,10 +90,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
     // such lines, leaving bookId as 0. Fetch bookId directly from the line table.
     const unenrichedIds = batch.filter((r) => !r.bookId).map((r) => r.lineId)
     if (unenrichedIds.length > 0) {
-      const fallbackRows = await query<{ lineId: number; bookId: number }>(
-        SQL.GET_BOOK_IDS_FOR_LINES(unenrichedIds.length),
-        unenrichedIds,
-      )
+      const fallbackRows = await getBookIdsForLines(unenrichedIds)
       const fallbackMap = new Map(fallbackRows.map((r) => [r.lineId, r.bookId]))
       for (const r of batch) {
         if (r.bookId === 0) {
@@ -409,11 +330,37 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     searchError.value = null
     executedQuery.value = q
 
-    // Dev fallback — bridge not available in browser dev
+    // Dev path — no C# bridge in the browser; run the search through the
+    // KitveiHakodesh service (one-shot, not streamed) and enrich toc paths.
     if (!isHosted || typeof window.__webviewAction !== 'function') {
-      await new Promise((r) => setTimeout(r, 400))
-      results.value = DEV_SAMPLES
-      isSearching.value = false
+      const normalizedQuery = q.trim().toLowerCase()
+      try {
+        const res = await serviceCall<{ ready: boolean; error?: string; results: FullTextSearchResult[] }>(
+          'ftsSearch',
+          {
+            query: _buildQueryToSend(normalizedQuery),
+            cap: 200,
+            maxWordDistance: settings.searchMaxWordDistance,
+            requireOrdered: settings.searchRequireOrdered,
+            contextWords: settings.searchContextMarginWords,
+            expandKetiv: settings.searchExpandKetiv,
+          },
+        )
+        if (executedQuery.value !== q) return // superseded by a newer search
+        if (!res.ready) {
+          searchError.value = 'indexNotReady'
+          return
+        }
+        const batch = res.results ?? []
+        await enrichTocPaths(batch)
+        if (executedQuery.value !== q) return
+        results.value = batch
+      } catch (err) {
+        console.error('[useFullTextSearch] dev FTS failed:', err)
+        searchError.value = 'searchFailed'
+      } finally {
+        isSearching.value = false
+      }
       return
     }
 
