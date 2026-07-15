@@ -479,6 +479,8 @@ namespace KitveiHakodeshLib
         {
             if (disposing)
             {
+                UninstallHorizontalWheelFilter();
+
                 // Unsubscribe all CoreWebView2 event handlers before the control is
                 // torn down. Leaving them attached creates reference cycles that prevent
                 // the renderer process from being released (per the WebView2 performance

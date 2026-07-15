@@ -56,6 +56,12 @@ namespace KitveiHakodeshLib
             // HandleCreated won't fire again — apply directly.
             if (hostForm.IsHandleCreated)
                 OnHostFormHandleCreated(hostForm, EventArgs.Empty);
+
+            // When the window gains activation (launch, alt-tab back), put OS focus on the
+            // web content rather than the native tab strip so wheel/keyboard gestures work
+            // immediately without a click. See AppViewerFocus.
+            hostForm.Activated -= OnHostFormActivated;
+            hostForm.Activated += OnHostFormActivated;
         }
 
         private void OnHostFormHandleCreated(object sender, EventArgs e)

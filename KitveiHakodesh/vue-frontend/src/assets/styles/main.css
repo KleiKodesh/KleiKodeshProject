@@ -7,6 +7,12 @@
 
 html, body, #app { height: 100%; width: 100%; }
 
+/* App-shell: the viewport itself must never scroll or rubber-band — inner panes own
+   their own scrolling. overscroll-behavior:none disables the Chromium/WebView2
+   two-finger horizontal swipe-navigation gesture that otherwise slides the whole
+   shell sideways and snaps it back on release, swallowing tab-switch swipes. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+
 #app { display: flex; flex-direction: column; }
 
 body {
