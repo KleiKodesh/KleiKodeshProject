@@ -147,7 +147,7 @@ namespace FtsLibTest
                                 using (var cmd2 = seg.Conn.CreateCommand())
                                 {
                                     cmd2.CommandText = "SELECT term FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                                    cmd2.Parameters.Add("@p", System.Data.DbType.String).Value = likeRaw;
+                                    cmd2.Parameters.Add("@p", Microsoft.Data.Sqlite.SqliteType.Text).Value = likeRaw;
                                     using (var r2 = cmd2.ExecuteReader())
                                         while (r2.Read()) rawSet.Add(r2.GetString(0));
                                 }

@@ -76,7 +76,7 @@ namespace FtsLibTest
                             string esc = ngrams[i].Replace("\\","\\\\")
                                                    .Replace("%","\\%")
                                                    .Replace("_","\\_");
-                            cmd.Parameters.Add($"@t{i}", System.Data.DbType.String).Value
+                            cmd.Parameters.Add($"@t{i}", Microsoft.Data.Sqlite.SqliteType.Text).Value
                                 = "%" + esc + "%";
                         }
                         using (var r = cmd.ExecuteReader())

@@ -292,3 +292,42 @@ public sealed class FtsIndexStatus
     public int ProcessedChunks { get; set; }
     public int TotalChunks { get; set; }
 }
+
+// ── Streaming FTS (start + poll) — mirrors the hosted C# batch-streaming so the dev
+//    path also paints first results instantly instead of waiting for every snippet. ──
+
+public sealed class FtsSearchStartArgs
+{
+    public string? Query { get; set; }
+    public int MaxWordDistance { get; set; } = 10;
+    public bool RequireOrdered { get; set; }
+    public int ContextWords { get; set; } = 8;
+    public bool ExpandKetiv { get; set; }
+}
+
+/// <summary>Reply to <c>ftsSearchStart</c>. <c>Ready</c> false = index still building.</summary>
+public sealed class FtsSearchStartResult
+{
+    public bool Ready { get; set; }
+    public string SearchId { get; set; } = "";
+}
+
+public sealed class FtsSearchPollArgs
+{
+    public string? SearchId { get; set; }
+    public int Offset { get; set; }
+}
+
+/// <summary>Incremental batch: the hits accumulated since <c>Offset</c>, plus whether
+/// the background search has finished. The frontend appends and polls until Done.</summary>
+public sealed class FtsSearchPollResult
+{
+    public List<FtsHit> Results { get; set; } = new();
+    public bool Done { get; set; }
+    public string? Error { get; set; }
+}
+
+public sealed class FtsCancelArgs
+{
+    public string? SearchId { get; set; }
+}

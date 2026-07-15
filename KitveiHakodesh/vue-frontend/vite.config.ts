@@ -92,10 +92,30 @@ let khsDbPath: string | undefined
 let khsFtsIndexPath: string | undefined
 
 /**
+ * Ask a running service to shut down GRACEFULLY over the pipe, so it cancels its
+ * background FTS build cleanly (aborts any in-flight merge, releases the index write
+ * lock) and leaves the index resumable — never hard-killed mid-merge, which risks
+ * index corruption. Returns once the service has exited (pipe down) or times out.
+ */
+async function gracefulStopKhs(): Promise<void> {
+  if (!(await khsPipeIsUp())) return
+  console.log('[khs] asking service to shut down gracefully (safe for the FTS index)...')
+  try {
+    await callPipe(KHS_PIPE, JSON.stringify({ op: 'shutdown', args: {} }), KHS_CONNECT_TIMEOUT_MS)
+  } catch { /* it may drop the connection as it exits — expected */ }
+  const deadline = Date.now() + 30_000
+  while (Date.now() < deadline) {
+    if (!(await khsPipeIsUp())) { console.log('[khs] service stopped cleanly'); return }
+    await new Promise((r) => setTimeout(r, 300))
+  }
+  console.warn('[khs] graceful shutdown timed out — will force-kill')
+}
+
+/**
  * Kill EVERY KitveiHakodesh service process — the `dotnet run` host and the apphost
  * exe — from this or any prior dev session, then wait for them to actually exit (so
- * the exe is unlocked and `dotnet run` can rebuild it). This is how we guarantee dev
- * both (a) runs the freshly-built service and (b) never has more than one instance.
+ * the exe is unlocked and `dotnet run` can rebuild it). Only a fallback for anything
+ * that ignored the graceful shutdown; call gracefulStopKhs() first.
  */
 function killKhsProcesses(): Promise<void> {
   if (process.platform !== 'win32') return Promise.resolve()
@@ -123,8 +143,11 @@ async function ensureKhsService(): Promise<void> {
     await waitForKhsPipe()
     return
   }
-  // Replace any running/orphaned service with a fresh build every launch.
+  // Replace any running/orphaned service with a fresh build every launch — but stop
+  // the old one GRACEFULLY first so its FTS build isn't hard-killed mid-merge (which
+  // corrupts the index). Force-kill only stragglers that ignored the graceful stop.
   console.log('[khs] stopping any existing service instance...')
+  await gracefulStopKhs()
   await killKhsProcesses()
   console.log('[khs] starting fresh service via `dotnet run`...')
   khsProc = spawn('dotnet', ['run', '--project', KHS_PROJECT, '-c', 'Debug'], {
@@ -148,7 +171,9 @@ function stopKhsService(): void {
   const pid = khsProc?.pid
   khsProc = null
   if (!pid) return
-  exec(`taskkill /pid ${pid} /T /F`, () => {})
+  // Graceful stop first (so the FTS build isn't hard-killed mid-merge), then force-kill
+  // the tree as a fallback. Best-effort on dev-server close.
+  void gracefulStopKhs().finally(() => exec(`taskkill /pid ${pid} /T /F`, () => {}))
 }
 
 function devSqlitePlugin(): Plugin {

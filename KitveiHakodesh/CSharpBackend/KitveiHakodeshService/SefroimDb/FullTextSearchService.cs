@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using FtsLib.SeforimDb;
 
 namespace KitveiHakodeshService.SefroimDb;
@@ -23,6 +24,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
     private readonly object _lock = new();
     private SeforimIndex? _index;
     private Task? _buildTask;
+    private CancellationTokenSource? _buildCts;   // cancels the background build (for reset)
 
     private volatile bool _isReady;
     private volatile bool _isIndexing;
@@ -87,11 +89,13 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
 
             _buildStarted = true;
             _isIndexing = true;
-            _buildTask = Task.Run(RunBuild);
+            _buildCts = new CancellationTokenSource();
+            var token = _buildCts.Token;
+            _buildTask = Task.Run(() => RunBuild(token));
         }
     }
 
-    private void RunBuild()
+    private void RunBuild(CancellationToken ct)
     {
         try
         {
@@ -125,7 +129,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
                 totalLines: total,
                 resumeOffset: resumeOffset,
                 forceMergeOnComplete: true,
-                ct: CancellationToken.None);
+                ct: ct);
 
             if (ok)
             {
@@ -136,6 +140,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
                 logger.LogInformation("FTS build complete — {Index}", _indexPath);
             }
         }
+        catch (OperationCanceledException)
+        {
+            logger.LogInformation("FTS build cancelled (reset)");
+        }
         catch (Exception ex)
         {
             logger.LogError(ex, "FTS index build failed");
@@ -144,6 +152,73 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
         {
             _isIndexing = false;
         }
+    }
+
+    /// <summary>Wipe the FTS index and rebuild it from scratch (dev "reset search index").
+    /// Runs on a background thread and returns immediately — progress is via Status().</summary>
+    public void ResetIndex()
+    {
+        if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
+        _ = Task.Run(DoReset);
+    }
+
+    private void DoReset()
+    {
+        // 1) Stop the running build (its `using IndexWriteLock` releases on return) and wait.
+        Task? build;
+        lock (_lock)
+        {
+            _buildCts?.Cancel();
+            build = _buildTask;
+        }
+        try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancellation / aggregate */ }
+
+        // 2) Cancel in-flight search sessions so nothing keeps reading the old segments.
+        foreach (var kv in _sessions) kv.Value.Cts.Cancel();
+        _sessions.Clear();
+
+        // 3) Delete the whole index directory, then reset state for a fresh build.
+        lock (_lock)
+        {
+            _index = null; // drop the SegmentStore so it holds no file references
+            try
+            {
+                if (Directory.Exists(_indexPath))
+                    Directory.Delete(_indexPath, recursive: true);
+            }
+            catch (Exception ex) { logger.LogError(ex, "FTS reset: could not delete {Index}", _indexPath); }
+
+            _isReady = false;
+            _isIndexing = false;
+            _buildStarted = false;
+            _pct = 0; _processed = 0; _total = 0;
+            _buildTask = null;
+            _buildCts = null;
+        }
+
+        logger.LogInformation("FTS index reset — rebuilding from scratch");
+        EnsureIndexing();
+    }
+
+    /// <summary>
+    /// Graceful shutdown: cancel the in-flight build and WAIT for it to unwind so the
+    /// index write lock is released and the on-disk index is left clean and resumable —
+    /// never abruptly killed mid-merge (the crash-during-merge path that risks
+    /// corruption). Called on host shutdown so a dev restart/stop never hard-kills a
+    /// build in progress.
+    /// </summary>
+    public void Shutdown()
+    {
+        Task? build;
+        lock (_lock)
+        {
+            _buildCts?.Cancel();
+            build = _buildTask;
+        }
+        foreach (var kv in _sessions) kv.Value.Cts.Cancel();   // stop live searches too
+        try { build?.Wait(TimeSpan.FromSeconds(25)); }
+        catch { /* OperationCanceledException / AggregateException on cancel */ }
+        logger.LogInformation("FTS build stopped for graceful shutdown");
     }
 
     private static long SafeCountLines(SeforimIndex idx)
@@ -176,34 +251,17 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
         }
         result.Ready = true;
         if (string.IsNullOrWhiteSpace(query)) return result;
-        if (cap <= 0) cap = 200;
+        // Full-text search results are NEVER capped. cap <= 0 means unlimited; a
+        // positive cap is only honoured if a caller ever explicitly asks for one.
 
         try
         {
             var index = GetIndex();
             foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv))
             {
-                var snippet = index.GenerateSnippet(hit, requireOrdered, contextWords);
-                if (!snippet.IsMatch) continue;
-                if (snippet.WordDistance > maxWordDistance) continue;
-
-                var matchedTerms = new List<string>();
-                foreach (var group in hit.MatchedGroups)
-                    foreach (var term in group)
-                        if (!matchedTerms.Contains(term)) matchedTerms.Add(term);
-
-                result.Results.Add(new FtsHit
-                {
-                    LineId = hit.LineId,
-                    BookId = 0,
-                    BookTitle = hit.BookTitle ?? "",
-                    TocText = "",
-                    Score = snippet.Score,
-                    Snippet = snippet.Html ?? "",
-                    MatchedTerms = matchedTerms,
-                });
-
-                if (result.Results.Count >= cap) break;
+                if (TryBuildHit(index, hit, requireOrdered, contextWords, maxWordDistance, out var built))
+                    result.Results.Add(built!);
+                if (cap > 0 && result.Results.Count >= cap) break;
             }
         }
         catch (Exception ex)
@@ -212,5 +270,155 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
             result.Error = ex.Message;
         }
         return result;
+    }
+
+    // ── Streaming search (start + poll) ─────────────────────────────────────────
+    // Mirrors the hosted C# FtsSearchExecutor: run the search on a background thread
+    // and let the caller drain results incrementally, so the first hits are available
+    // in milliseconds instead of after every snippet is generated. Results are NEVER
+    // capped — streaming is exactly what makes an uncapped search feel instant.
+
+    private sealed class SearchSession
+    {
+        public readonly List<FtsHit> Hits = new();
+        public volatile bool Done;
+        public string? Error;
+        public readonly CancellationTokenSource Cts = new();
+        public DateTime LastAccess = DateTime.UtcNow;
+    }
+
+    private readonly ConcurrentDictionary<string, SearchSession> _sessions = new();
+    private int _searchCounter;
+    private const int SessionTtlMinutes = 5;
+
+    public FtsSearchStartResult StartSearch(
+        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv)
+    {
+        EnsureIndexing();
+        if (!HasDb || !_isReady) return new FtsSearchStartResult { Ready = false };
+        if (string.IsNullOrWhiteSpace(query)) return new FtsSearchStartResult { Ready = true, SearchId = "" };
+
+        PruneStaleSessions();
+        var session = new SearchSession();
+        string id = "s" + Interlocked.Increment(ref _searchCounter);
+        _sessions[id] = session;
+
+        _ = Task.Run(() => RunSearch(session, query, maxWordDistance, requireOrdered, contextWords, expandKetiv));
+        return new FtsSearchStartResult { Ready = true, SearchId = id };
+    }
+
+    private void RunSearch(SearchSession session, string query,
+        int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv)
+    {
+        try
+        {
+            var index = GetIndex();
+            var ct = session.Cts.Token;
+            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (TryBuildHit(index, hit, requireOrdered, contextWords, maxWordDistance, out var built))
+                    lock (session.Hits) session.Hits.Add(built!);
+            }
+        }
+        catch (OperationCanceledException) { /* cancelled or superseded */ }
+        catch (Exception ex)
+        {
+            session.Error = ex.Message;
+            logger.LogError(ex, "FTS streaming search failed");
+        }
+        finally { session.Done = true; }
+    }
+
+    // Long-poll: the request is held open until a batch is ready, so results arrive
+    // as fast as they're generated (like the hosted push) with few round-trips. The
+    // pipe server handles each request on its own task, so blocking here is safe.
+    private const int PollMaxWaitMs = 8000;   // cap when the search produces nothing new
+    private const int PollBatchWindowMs = 120; // coalesce window once results start flowing
+    private const int PollBatchTarget = 500;   // …or return early once this many are ready
+    private const int PollTickMs = 15;
+
+    public async Task<FtsSearchPollResult> PollSearch(string searchId, int offset, CancellationToken ct)
+    {
+        if (string.IsNullOrEmpty(searchId) || !_sessions.TryGetValue(searchId, out var session))
+            return new FtsSearchPollResult { Done = true, Error = "unknown or expired search" };
+
+        session.LastAccess = DateTime.UtcNow;
+        if (offset < 0) offset = 0;
+
+        // 1) Hold until there's something new beyond offset (or the search finishes).
+        var deadline = DateTime.UtcNow.AddMilliseconds(PollMaxWaitMs);
+        while (CurrentCount(session) <= offset && !session.Done && DateTime.UtcNow < deadline)
+            await Task.Delay(PollTickMs, ct);
+
+        // 2) Coalesce a sizeable batch so we return few, large responses (low churn).
+        //    Skip it for the very first batch (offset 0) so the first results paint
+        //    the instant they exist — matching the hosted stream's flush-at-first-hit.
+        if (offset > 0 && !session.Done && CurrentCount(session) - offset < PollBatchTarget)
+        {
+            var batchDeadline = DateTime.UtcNow.AddMilliseconds(PollBatchWindowMs);
+            while (!session.Done
+                   && CurrentCount(session) - offset < PollBatchTarget
+                   && DateTime.UtcNow < batchDeadline)
+                await Task.Delay(PollTickMs, ct);
+        }
+
+        var result = new FtsSearchPollResult { Error = session.Error };
+        int total;
+        lock (session.Hits)
+        {
+            total = session.Hits.Count;
+            if (offset < total)
+                result.Results.AddRange(session.Hits.GetRange(offset, total - offset));
+        }
+        result.Done = session.Done;
+        // Free the session once a completed search has been fully drained.
+        if (session.Done && offset + result.Results.Count >= total)
+            _sessions.TryRemove(searchId, out _);
+        return result;
+    }
+
+    private static int CurrentCount(SearchSession s) { lock (s.Hits) return s.Hits.Count; }
+
+    public void CancelSearch(string searchId)
+    {
+        if (!string.IsNullOrEmpty(searchId) && _sessions.TryRemove(searchId, out var session))
+            session.Cts.Cancel();
+    }
+
+    private void PruneStaleSessions()
+    {
+        var cutoff = DateTime.UtcNow.AddMinutes(-SessionTtlMinutes);
+        foreach (var kv in _sessions)
+            if (kv.Value.LastAccess < cutoff && _sessions.TryRemove(kv.Key, out var s))
+                s.Cts.Cancel();
+    }
+
+    /// <summary>Generate the snippet, apply the match / word-distance filter, and build the
+    /// frontend hit. Returns false for hits that don't pass. Shared by one-shot + streaming.</summary>
+    private static bool TryBuildHit(SeforimIndex index, SearchResult hit,
+        bool requireOrdered, int contextWords, int maxWordDistance, out FtsHit? built)
+    {
+        built = null;
+        var snippet = index.GenerateSnippet(hit, requireOrdered, contextWords);
+        if (!snippet.IsMatch) return false;
+        if (snippet.WordDistance > maxWordDistance) return false;
+
+        var matchedTerms = new List<string>();
+        foreach (var group in hit.MatchedGroups)
+            foreach (var term in group)
+                if (!matchedTerms.Contains(term)) matchedTerms.Add(term);
+
+        built = new FtsHit
+        {
+            LineId = hit.LineId,
+            BookId = 0,
+            BookTitle = hit.BookTitle ?? "",
+            TocText = "",
+            Score = snippet.Score,
+            Snippet = snippet.Html ?? "",
+            MatchedTerms = matchedTerms,
+        };
+        return true;
     }
 }

@@ -11,7 +11,7 @@ import { ref, shallowRef } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 import { getTocPathsForLines, getBookIdsForLines } from '@/webview-host/seforimApi'
-import { serviceCall } from '@/webview-host/serviceClient'
+import { serviceCall, serviceCallVoid } from '@/webview-host/serviceClient'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -71,11 +71,22 @@ onWebviewEvent((msg) => {
   }
 })
 
+// FTS results are never capped, so the line-id list handed to enrichment can be
+// huge (tens of thousands). SQLite caps parameters per statement (~32766), so a
+// single IN(...) query silently returns nothing past that — split into chunks.
+const ENRICH_CHUNK = 20000
+async function chunkByLineIds<T>(ids: number[], fn: (chunk: number[]) => Promise<T[]>): Promise<T[]> {
+  if (ids.length <= ENRICH_CHUNK) return fn(ids)
+  const out: T[] = []
+  for (let i = 0; i < ids.length; i += ENRICH_CHUNK) out.push(...(await fn(ids.slice(i, i + ENRICH_CHUNK))))
+  return out
+}
+
 async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
   const lineIds = [...new Set(batch.map((r) => r.lineId))]
   if (!lineIds.length) return
   try {
-    const rows = await getTocPathsForLines(lineIds)
+    const rows = await chunkByLineIds(lineIds, getTocPathsForLines)
     const dataMap = new Map(rows.map((r) => [r.lineId, { bookId: r.bookId, tocPath: r.tocPath }]))
     for (const r of batch) {
       const data = dataMap.get(r.lineId)
@@ -90,7 +101,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
     // such lines, leaving bookId as 0. Fetch bookId directly from the line table.
     const unenrichedIds = batch.filter((r) => !r.bookId).map((r) => r.lineId)
     if (unenrichedIds.length > 0) {
-      const fallbackRows = await getBookIdsForLines(unenrichedIds)
+      const fallbackRows = await chunkByLineIds(unenrichedIds, getBookIdsForLines)
       const fallbackMap = new Map(fallbackRows.map((r) => [r.lineId, r.bookId]))
       for (const r of batch) {
         if (r.bookId === 0) {
@@ -335,26 +346,53 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     if (!isHosted || typeof window.__webviewAction !== 'function') {
       const normalizedQuery = q.trim().toLowerCase()
       try {
-        const res = await serviceCall<{ ready: boolean; error?: string; results: FullTextSearchResult[] }>(
-          'ftsSearch',
-          {
-            query: _buildQueryToSend(normalizedQuery),
-            cap: 200,
-            maxWordDistance: settings.searchMaxWordDistance,
-            requireOrdered: settings.searchRequireOrdered,
-            contextWords: settings.searchContextMarginWords,
-            expandKetiv: settings.searchExpandKetiv,
-          },
-        )
+        // Streaming (never capped): start a background search on the service, then
+        // poll for incremental batches — mirrors the hosted C# stream so the first
+        // hits paint in milliseconds instead of waiting for every snippet.
+        const start = await serviceCall<{ ready: boolean; searchId: string }>('ftsSearchStart', {
+          query: _buildQueryToSend(normalizedQuery),
+          maxWordDistance: settings.searchMaxWordDistance,
+          requireOrdered: settings.searchRequireOrdered,
+          contextWords: settings.searchContextMarginWords,
+          expandKetiv: settings.searchExpandKetiv,
+        })
         if (executedQuery.value !== q) return // superseded by a newer search
-        if (!res.ready) {
+        if (!start.ready) {
           searchError.value = 'indexNotReady'
           return
         }
-        const batch = res.results ?? []
-        await enrichTocPaths(batch)
-        if (executedQuery.value !== q) return
-        results.value = batch
+        const searchId = start.searchId
+        if (!searchId) return // empty query
+
+        const acc: FullTextSearchResult[] = []
+        let offset = 0
+        let pollFails = 0
+        for (;;) {
+          let poll: { results: FullTextSearchResult[]; done: boolean; error?: string }
+          try {
+            // Long-poll: the service holds this open until a batch is ready, so results
+            // arrive as fast as they're generated (no fixed client poll interval).
+            poll = await serviceCall('ftsSearchPoll', { searchId, offset })
+            pollFails = 0
+          } catch (e) {
+            // Transient pipe/proxy hiccup — retry a few times before giving up.
+            if (++pollFails > 8) throw e
+            await new Promise((r) => setTimeout(r, 200))
+            continue
+          }
+          if (executedQuery.value !== q) { serviceCallVoid('ftsSearchCancel', { searchId }); return } // superseded
+          if (poll.error) { if (!acc.length) searchError.value = 'searchFailed'; break }
+          const chunk = poll.results ?? []
+          if (chunk.length) {
+            await enrichTocPaths(chunk)
+            if (executedQuery.value !== q) { serviceCallVoid('ftsSearchCancel', { searchId }); return }
+            for (const c of chunk) acc.push(c) // spread-push would overflow on very large chunks
+            offset += chunk.length
+            results.value = acc.slice() // one flush per batch — the long-poll already paces the cadence
+          }
+          if (poll.done) break
+          if (!chunk.length) await new Promise((r) => setTimeout(r, 50)) // long-poll returned nothing new — brief backoff
+        }
       } catch (err) {
         console.error('[useFullTextSearch] dev FTS failed:', err)
         searchError.value = 'searchFailed'

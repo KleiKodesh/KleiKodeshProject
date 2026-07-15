@@ -187,9 +187,12 @@ namespace FtsLib.Indexing
                     "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
                 try
                 {
-                    File.Move(tmpDat, outDat);
+                    // Replace any stale leftover at the target path (interrupted prior
+                    // merge that re-runs to the same target id) — a plain File.Move would
+                    // throw "Cannot create a file when that file already exists".
+                    SegmentWriter.MoveReplace(tmpDat, outDat);
                     FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
-                    File.Move(tmpDb, outDb);
+                    SegmentWriter.MoveReplace(tmpDb, outDb);
                     FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
                 }
                 catch (Exception ex)
