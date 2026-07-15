@@ -1,6 +1,5 @@
 import { ref, watch } from 'vue'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -177,10 +176,7 @@ export function useFullTextSearchFilters(
 
   async function handleResultClick(result: FullTextSearchResult) {
     try {
-      const rows = await query<{ lineIndex: number; bookId: number }>(
-        SQL.GET_LINE_INDEX_FROM_LINE_ID,
-        [result.lineId],
-      )
+      const rows = await getLineIndexFromLineId(result.lineId)
       const lineIndex = rows[0]?.lineIndex
       const bookId = rows[0]?.bookId
       if (lineIndex == null || bookId == null) return

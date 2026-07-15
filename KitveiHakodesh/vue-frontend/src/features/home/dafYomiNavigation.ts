@@ -2,8 +2,7 @@ import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getTocEntryByTextPrefix } from '@/webview-host/seforimApi'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 
 // ─── Daf string parsing ───────────────────────────────────────────────────────
@@ -64,11 +63,7 @@ export async function navigateToDafYomi(dafYomi: string, paneNavigation: PaneNav
   const book = candidates[0]!
 
   // Query the TOC directly — no need to load all entries and run the tree scorer
-  type TocEntryRow = { id: number; lineIndex: number | null }
-  const rows = await query<TocEntryRow>(SQL.GET_TOC_ENTRY_BY_TEXT_PREFIX, [
-    book.id,
-    `${dafPrefix}%`,
-  ])
+  const rows = await getTocEntryByTextPrefix(book.id, `${dafPrefix}%`)
 
   if (rows.length > 0) {
     const tocEntry = rows[0]!

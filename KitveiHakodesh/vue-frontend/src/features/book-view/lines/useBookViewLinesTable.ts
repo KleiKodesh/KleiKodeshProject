@@ -1,6 +1,5 @@
 import { ref, watch } from 'vue'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getBookById, getLinesPaged } from '@/webview-host/seforimApi'
 
 export interface LineItem {
   id: number
@@ -86,10 +85,7 @@ export function useLines(bookId: () => number | undefined) {
 
   async function fetchRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
     try {
-      const rows = await query<{ id: number; lineIndex: number; content: string }>(
-        SQL.GET_LINES_PAGED,
-        [bookIdAtStart, limit, offset],
-      )
+      const rows = await getLinesPaged(bookIdAtStart, limit, offset)
       if (currentBookId !== bookIdAtStart) return false
       writeRows(rows)
       return true
@@ -159,19 +155,7 @@ export function useLines(bookId: () => number | undefined) {
     activeWorkers = 0
     slotState = new Uint8Array(0)
 
-    type BookRow = {
-      totalLines: number
-      hasTeamim: number
-      hasTargumConnection: number
-      hasReferenceConnection: number
-      hasSourceConnection: number
-      hasCommentaryConnection: number
-      hasOtherConnection: number
-    }
-
-    const metadataPromise = query<BookRow>(SQL.GET_BOOK_BY_ID, [id])
-      .then((rows) => rows[0])
-      .catch(() => undefined)
+    const metadataPromise = getBookById(id).catch(() => undefined)
 
     // Kick off the first chunk immediately alongside metadata — don't wait.
     markRange(0, CHUNK_SIZE, SLOT_PENDING)

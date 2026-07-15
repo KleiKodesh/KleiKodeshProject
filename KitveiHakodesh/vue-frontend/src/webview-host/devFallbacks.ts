@@ -7,30 +7,9 @@
 
 import type { LocalFileResult } from './bridge'
 
-// ── Database fallbacks ────────────────────────────────────────────────────────
-
-/** Hits the Vite dev middleware at /query (main seforim DB). */
-export async function devQuery<T = unknown>(sql: string, params: unknown[]): Promise<T[]> {
-  const res = await fetch('/query', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, params }),
-  })
-  if (!res.ok) throw new Error(`DB query failed: ${res.status} ${res.statusText}`)
-  return (await res.json()).rows as T[]
-}
-
-/** Hits the Vite dev middleware at /query-dict (dictionary DB — entries, senses, related). */
-export async function devQueryDict<T = unknown>(sql: string, params: unknown[]): Promise<T[]> {
-  const res = await fetch('/query-dict', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, params }),
-  })
-  const json = await res.json()
-  if (!res.ok) throw new Error(`Dict query failed: ${json.error ?? res.statusText}`)
-  return json.rows as T[]
-}
+// All dev DB access (seforim, dictionary, user-settings) now goes through the
+// KitveiHakodesh service (see seforimApi.ts / dictionaryDb.ts / userSettingsDb.ts).
+// The old better-sqlite3 dev worker has been removed — no fetch-based DB transports here.
 
 /** Browser file input fallback for pickFile() — accepts PDF, HTML, and text files. */
 export function devPickPdf(): Promise<LocalFileResult | null> {
@@ -49,52 +28,5 @@ export function devPickPdf(): Promise<LocalFileResult | null> {
   })
 }
 
-// ── DocumentLocator fallbacks ─────────────────────────────────────────────────
-
-/**
- * Dev-mode fallback for fileSystemSearch() — hits the Vite dev middleware at
- * /document-locator. The middleware translates between the frontend request format
- * and the DocumentLocator pipe protocol, and converts the pipe response to the
- * C# FileSystemSearchHandler format.
- */
-export async function devFileSystemSearch(
-  query: string,
-  max = 200,
-): Promise<{
-  results?: Array<{ fileName: string; path: string; modifiedDate?: number }>
-  total?: number
-  error?: string
-}> {
-  try {
-    const response = await callDocumentLocatorDev({ type: 'search', query, max })
-
-    // Response is already in C# format: { results, total } or { error }
-    if ('error' in response) {
-      return { error: (response.error as string) || 'Search error' }
-    }
-
-    if ('results' in response) {
-      return {
-        results: response.results as Array<{ fileName: string; path: string; modifiedDate?: number }>,
-        total: (response.total as number) || 0,
-      }
-    }
-
-    return { error: 'Unexpected response format from DocumentLocator' }
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown error'
-    return { error: message }
-  }
-}
-
-async function callDocumentLocatorDev(request: object): Promise<Record<string, unknown>> {
-  const res = await fetch('/document-locator', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(request),
-  })
-  if (!res.ok) {
-    throw new Error(`DocumentLocator request failed: ${res.status} ${res.statusText}`)
-  }
-  return (await res.json()) as Record<string, unknown>
-}
+// File-system ("Everything"-style) search moved to the KitveiHakodesh service —
+// see fileSystemSearch() in bridge.ts, which calls serviceCall('locateDocuments').

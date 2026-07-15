@@ -2,8 +2,13 @@
 // Queries מצודת ציון, מלבי"ם באור המילות, מחברת מנחם, and ספר הערוך from the main seforim DB.
 // Book IDs are looked up at runtime by title pattern and cached — never hardcoded.
 
-import { query as querySeforim } from './seforimDb'
-import { SQL } from './queries.sql'
+import {
+  getBookIdsByTitlePattern,
+  getBookIdByExactTitle,
+  getLinesWithContentPatternForBooks,
+  getLinesWithEitherContentPattern,
+  getLineByBookAndLineIndex,
+} from './seforimApi'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -40,7 +45,7 @@ export interface AruchRow {
 
 async function getBookIds(titlePattern: string, cache: { ids: number[] | null }): Promise<number[]> {
   if (cache.ids !== null) return cache.ids
-  const rows = await querySeforim<{ id: number }>(SQL.GET_BOOK_IDS_BY_TITLE_PATTERN, [titlePattern])
+  const rows = await getBookIdsByTitlePattern(titlePattern)
   cache.ids = rows.map(r => r.id)
   return cache.ids
 }
@@ -78,11 +83,7 @@ function headerMatchesPrefix(headerWord: string, term: string): boolean {
 }
 
 async function queryBoldLines(pattern: string, bookIds: number[]): Promise<MetzudatRow[]> {
-  type LineRow = { content: string; title: string; bookId: number; lineId: number; lineIndex: number }
-  const rows = await querySeforim<LineRow>(
-    SQL.GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS(bookIds.length),
-    [...bookIds, pattern]
-  )
+  const rows = await getLinesWithContentPatternForBooks(bookIds, pattern)
   return rows
     .map(r => parseBoldLine(r.content, r.title, r.bookId, r.lineId, r.lineIndex))
     .filter((r): r is MetzudatRow => r !== null)
@@ -155,15 +156,12 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
   if (bookIds.length === 0) return []
   const bookId = bookIds[0]!
 
-  type RawLine = { id: number; lineIndex: number; content: string }
-
   // Only query the dictionary section: <strong><big>HEADWORD</big></strong> lines.
   // The early synonym/intro section (before the first <big> entry) is skipped entirely —
   // it is preamble and section headers, not dictionary content.
   // Pattern covers both with and without trailing space before </big>.
-  const bigRows = await querySeforim<RawLine>(
-    SQL.GET_LINES_WITH_EITHER_CONTENT_PATTERN,
-    [bookId, `%<big>%${term}</big>%`, `%<big>%${term} </big>%`]
+  const bigRows = await getLinesWithEitherContentPattern(
+    bookId, `%<big>%${term}</big>%`, `%<big>%${term} </big>%`,
   )
 
   const results: MenchemRow[] = []
@@ -173,10 +171,7 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
     const normalized = word.replace(/[.,;:״"]/g, '').trim()
     if (!normalized.includes(term)) continue
 
-    const nextRows = await querySeforim<RawLine>(
-      SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX,
-      [bookId, row.lineIndex + 1]
-    )
+    const nextRows = await getLineByBookAndLineIndex(bookId, row.lineIndex + 1)
     const nextLine = nextRows[0]
     if (!nextLine) continue
     results.push({
@@ -214,18 +209,15 @@ export async function aruchLookup(term: string): Promise<AruchRow[]> {
   // Use exact title match — '%ספר הערוך%' also matches 'הפלאה שבערכין על ספר הערוך'
   // which is a different book with no <big> entries.
   if (_aruchCache.ids === null) {
-    const rows = await querySeforim<{ id: number }>(SQL.GET_BOOK_ID_BY_EXACT_TITLE, ['ספר הערוך'])
+    const rows = await getBookIdByExactTitle('ספר הערוך')
     _aruchCache.ids = rows.map(r => r.id)
   }
   if (_aruchCache.ids.length === 0) return []
   const bookId = _aruchCache.ids[0]!
 
-  type RawLine = { id: number; lineIndex: number; content: string }
-
   // Pattern covers both with and without trailing space before </big>
-  const rows = await querySeforim<RawLine>(
-    SQL.GET_LINES_WITH_EITHER_CONTENT_PATTERN,
-    [bookId, `%<big>${term}</big>%`, `%<big>${term} </big>%`]
+  const rows = await getLinesWithEitherContentPattern(
+    bookId, `%<big>${term}</big>%`, `%<big>${term} </big>%`,
   )
 
   const results: AruchRow[] = []

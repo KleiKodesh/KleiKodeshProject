@@ -3,8 +3,7 @@
  * lazy-loaded ID table. All connection-type knowledge lives here — nothing else in
  * the commentary feature should duplicate or re-derive these values.
  */
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getAllConnectionTypes } from '@/webview-host/seforimApi'
 
 export type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT' | 'OTHER' | 'REFERENCE'
 export type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT'
@@ -84,7 +83,7 @@ let connectionTypeIdsByName: Map<string, number> | null = null
 
 export async function ensureConnectionTypeNamesLoaded() {
   if (connectionTypeNamesById && connectionTypeIdsByName) return
-  const rows = await query<{ id: number; name: string }>(SQL.GET_ALL_CONNECTION_TYPES)
+  const rows = await getAllConnectionTypes()
   connectionTypeNamesById = new Map(rows.map((row) => [row.id, row.name]))
   connectionTypeIdsByName = new Map(rows.map((row) => [row.name, row.id]))
 }

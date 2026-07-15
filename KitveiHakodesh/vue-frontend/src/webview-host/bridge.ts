@@ -7,7 +7,8 @@
  */
 
 import { isHosted } from './seforimDb'
-import { devPickPdf, devFileSystemSearch } from './devFallbacks'
+import { devPickPdf } from './devFallbacks'
+import { serviceCall, serviceCallVoid } from './serviceClient'
 
 declare global {
   interface Window {
@@ -261,11 +262,14 @@ export function hbSearch(
   localFolder?: string,
   limit?: number,
 ): Promise<{ books?: unknown[]; error?: string }> {
-  return action<{ books?: unknown[]; error?: string }>('hbSearch', {
-    query,
-    localFolder: localFolder || '',
-    ...(limit !== undefined ? { limit } : {}),
-  })
+  const args = { query, localFolder: localFolder || '', ...(limit !== undefined ? { limit } : {}) }
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev mode: query the KitveiHakodesh service's bundled catalog.
+    return serviceCall<{ books: unknown[] }>('hbSearch', args).catch((err) => ({
+      error: err instanceof Error ? err.message : 'Search error',
+    }))
+  }
+  return action<{ books?: unknown[]; error?: string }>('hbSearch', args)
 }
 
 /**
@@ -275,12 +279,8 @@ export function hbSearch(
  */
 export function fileSystemSearchWarmup(): void {
   if (typeof window.__webviewAction !== 'function') {
-    // Dev mode: poke the pipe via the Vite middleware — also fire-and-forget.
-    fetch('/document-locator', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'status' }),
-    }).catch(() => {})
+    // Dev mode: warm up the DocumentLocator via the KitveiHakodesh service.
+    serviceCallVoid('locateDocumentsWarmup')
     return
   }
   action('fileSystemSearchWarmup').catch(() => {})
@@ -299,7 +299,16 @@ export function fileSystemSearch(
   total?: number
   error?: string
 }> {
-  if (typeof window.__webviewAction !== 'function') return devFileSystemSearch(query, max)
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev mode: query the KitveiHakodesh service for documents. The service owns
+    // the DocumentLocator delegation and the result shaping; we just ask for it.
+    return serviceCall<{
+      results: Array<{ fileName: string; path: string; modifiedDate?: number }>
+      total: number
+    }>('locateDocuments', { query, max }).catch((err) => ({
+      error: err instanceof Error ? err.message : 'Search error',
+    }))
+  }
   return action('fileSystemSearch', { query, max })
 }
 

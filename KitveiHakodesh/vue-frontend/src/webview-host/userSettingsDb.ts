@@ -4,8 +4,10 @@
  *
  * In the C# host: uses window.__webviewUserSettingsQuery / __webviewUserSettingsExecute
  * injected by JsBridge.cs.
- * In dev mode: falls back to /query-user-settings on the Vite dev middleware.
+ * In dev mode: routes through the KitveiHakodesh service (read + write).
  */
+
+import { serviceCall } from './serviceClient'
 
 declare global {
   interface Window {
@@ -27,14 +29,8 @@ export async function queryUserSettings<T = unknown>(
   if (typeof window.__webviewUserSettingsQuery === 'function') {
     return (await window.__webviewUserSettingsQuery(sql, params)).rows as T[]
   }
-  // Dev fallback
-  const response = await fetch('/query-user-settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, params }),
-  })
-  if (!response.ok) throw new Error(`User settings query failed: ${response.status}`)
-  return (await response.json()).rows as T[]
+  // Dev — through the KitveiHakodesh service.
+  return (await serviceCall<{ rows: T[] }>('userSettingsQuery', { sql, params })).rows
 }
 
 export async function executeUserSettings(
@@ -44,12 +40,6 @@ export async function executeUserSettings(
   if (typeof window.__webviewUserSettingsExecute === 'function') {
     return (await window.__webviewUserSettingsExecute(sql, params)).lastInsertId
   }
-  // Dev fallback
-  const response = await fetch('/execute-user-settings', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ sql, params }),
-  })
-  if (!response.ok) throw new Error(`User settings execute failed: ${response.status}`)
-  return (await response.json()).lastInsertId as number
+  // Dev — through the KitveiHakodesh service.
+  return (await serviceCall<{ lastInsertId: number }>('userSettingsExecute', { sql, params })).lastInsertId
 }
