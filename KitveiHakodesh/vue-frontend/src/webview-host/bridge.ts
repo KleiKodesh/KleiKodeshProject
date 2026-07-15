@@ -544,3 +544,30 @@ export async function setTurnOffUpdates(value: boolean): Promise<void> {
   if (typeof window.__webviewAction !== 'function') return
   await action('setTurnOffUpdates', { value }).catch(() => {})
 }
+
+/**
+ * Read whether the standalone app and the Word add-in share ONE WebView2 profile
+ * (shared browser data). The hosts always share one browser process; this only controls
+ * whether they share a profile. Backed by the SAME registry key both apps use
+ * (HKCU\...\KleiKodesh\WebView\ShareProfile), so one toggle governs both. Returns null in
+ * dev/browser (no host).
+ */
+export async function getShareProfile(): Promise<boolean | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  try {
+    const res = await action<{ value?: boolean; error?: string }>('getShareProfile')
+    if (res.error) return null
+    return res.value ?? false
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Persist the "share WebView2 profile" flag to the shared registry key. Takes effect
+ * on the next launch of each app (the profile is chosen once at startup).
+ */
+export async function setShareProfile(value: boolean): Promise<void> {
+  if (typeof window.__webviewAction !== 'function') return
+  await action('setShareProfile', { value }).catch(() => {})
+}

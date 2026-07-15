@@ -13,6 +13,8 @@ import {
   openExcludedFoldersManager,
   getTurnOffUpdates,
   setTurnOffUpdates,
+  getShareProfile,
+  setShareProfile,
 } from '@/webview-host/bridge'
 
 // ── Database path ─────────────────────────────────────────────────────────────
@@ -75,14 +77,30 @@ async function openExcludedFolders() {
 
 const turnOffUpdates = ref(false)
 
+// ── Shared WebView2 profile ───────────────────────────────────────────────────
+// Backed by the shared registry key (KleiKodesh\WebView\ShareProfile), read/written
+// via the host bridge. true = the standalone app and the Word add-in share ONE profile
+// (shared browser data). Either way they share one browser process. Takes effect on the
+// next launch of each app.
+
+const shareProfile = ref(false)
+
 onMounted(async () => {
   const value = await getTurnOffUpdates()
   if (value !== null) turnOffUpdates.value = value
+
+  const shared = await getShareProfile()
+  if (shared !== null) shareProfile.value = shared
 })
 
 async function applyTurnOffUpdates(value: boolean) {
   turnOffUpdates.value = value
   await setTurnOffUpdates(value)
+}
+
+async function applyShareProfile(value: boolean) {
+  shareProfile.value = value
+  await setShareProfile(value)
 }
 </script>
 
@@ -159,6 +177,25 @@ async function applyTurnOffUpdates(value: boolean) {
           { label: 'לא', value: false },
         ]"
         @update:model-value="applyTurnOffUpdates"
+      />
+    </SettingRow>
+    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
+
+    <!-- פרופיל דפדפן -->
+    <div class="subsection-label">פרופיל דפדפן</div>
+    <SettingRow
+      id="nav-share-profile"
+      data-nav-label="שיתוף פרופיל"
+      label="שיתוף פרופיל עם התוסף של וורד"
+      hint="כאשר מופעל, האפליקציה העצמאית והתוסף של וורד משתמשים באותו פרופיל דפדפן — נתוני ההתחברות, העוגיות והאחסון המקומי משותפים בין השניים. כאשר מכובה, לכל אחד פרופיל נפרד והנתונים מופרדים. בכל מקרה השניים חולקים תהליך דפדפן אחד לחיסכון בזיכרון. ההגדרה משותפת עם התוסף של וורד; השינוי ייכנס לתוקף בהפעלה הבאה."
+    >
+      <ToggleGroup
+        :model-value="shareProfile"
+        :options="[
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
+        ]"
+        @update:model-value="applyShareProfile"
       />
     </SettingRow>
     <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>

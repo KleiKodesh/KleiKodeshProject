@@ -441,7 +441,10 @@ Section Uninstall
 
   ; ── File system ──────────────────────────────────────────────────────────────
   DetailPrint "מסיר קבצי התוכנה..."
-  ; Current install location (v1.0.24+)
+  ; Current install location (v1.0.24+). This is $INSTDIR and holds ALL app files AND
+  ; the WebView2 webcaches (KleiKodesh\WebView2Cache and KleiKodesh\KitveiHakodesh\
+  ; WebView2Cache — both BaseDirectory-relative, i.e. inside the install folder), so this
+  ; one recursive delete removes the entire app in a single sweep.
   RMDir /r "$LOCALAPPDATA\KleiKodesh"
   ; Old install locations — English name (v1.0.x through ~v1.0.23)
   RMDir /r "$PROGRAMFILES\KleiKodesh"

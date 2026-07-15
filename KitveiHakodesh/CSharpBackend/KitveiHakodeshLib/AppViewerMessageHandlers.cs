@@ -53,6 +53,8 @@ namespace KitveiHakodeshLib
                         case "clearHbLocalFolder": _db.HandleClearHbLocalFolder(id); break;
                         case "getTurnOffUpdates": _db.HandleGetTurnOffUpdates(id); break;
                         case "setTurnOffUpdates": _db.HandleSetTurnOffUpdates(root, id); break;
+                        case "getShareProfile": _db.HandleGetShareProfile(id); break;
+                        case "setShareProfile": _db.HandleSetShareProfile(root, id); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
                         case "pickFile": _localFile.HandlePickFile(id, this); break;

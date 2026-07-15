@@ -33,9 +33,11 @@ namespace KitveiHakodeshLib
         private static readonly string AppDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh");
 
-        // Shared across all AppViewer instances in this process — one browser process,
-        // one localStorage origin. The folder name is fixed per process (set via
-        // WebCacheFolder before the first instance initialises).
+        // Shared across all AppViewer instances in this process — and, because every host
+        // uses the same fixed user-data folder (AppSettings.SharedUserDataFolder), across
+        // the standalone app and the Word add-in too: one browser process for all of them.
+        // Per-host data isolation, when requested, is done via the controller ProfileName,
+        // not via a separate folder or environment.
         private static Task<CoreWebView2Environment> _sharedEnvTask;
 
         private static Task<CoreWebView2Environment> GetSharedEnv(string userDataFolder)
@@ -177,13 +179,19 @@ namespace KitveiHakodeshLib
 
         // ── Constructor ─────────────────────────────────────────────────────────────
 
-        // Subfolder name under KitveiHakodesh\ used as the WebView2 user-data folder.
-        // Stored as a readonly field so it is captured before InitAsync runs.
-        private readonly string _webCacheFolder;
+        // This host's WebView2 profile name, used when the user keeps SEPARATE profiles
+        // (see InitAsyncCore). All hosts share one user-data folder; the profile is what
+        // isolates browser data per host. Stored readonly so it is captured before
+        // InitAsync runs. Must satisfy CoreWebView2ControllerOptions.ProfileName rules
+        // (ASCII, ≤64 chars, no trailing '.'/space) — callers pass short slugs like "word".
+        private readonly string _profileName;
 
-        public AppViewer(string webCacheFolder = "webcache")
+        // The single profile shared by all hosts when ShareProfile is ON.
+        private const string SharedProfileName = "default";
+
+        public AppViewer(string profileName = SharedProfileName)
         {
-            _webCacheFolder = webCacheFolder;
+            _profileName = profileName;
             RightToLeft = RightToLeft.No;
             AutoScaleMode = AutoScaleMode.None;
             BackColorChanged += (_, __) => _SyncSplashBackColor();
@@ -352,11 +360,25 @@ namespace KitveiHakodeshLib
 
         private async Task InitAsyncCore()
         {
-            string userDataFolder = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", _webCacheFolder);
-            var env = await GetSharedEnv(userDataFolder);
+            // All Kitvei Hakodesh hosts (standalone app + Word add-in) ALWAYS share one
+            // WebView2 user-data folder, so they run in a single browser process (lower
+            // memory; both can run at once). Both create the environment through
+            // GetSharedEnv with identical options, which is required to attach to that
+            // shared process.
+            var env = await GetSharedEnv(Settings.AppSettings.SharedUserDataFolder());
 
-            await _webView.EnsureCoreWebView2Async(env);
+            // The user chooses whether the hosts share ONE profile (shared cookies /
+            // localStorage / cache / login) or keep SEPARATE profiles (isolated data) —
+            // both cases still share the one browser process. Read once at init; switching
+            // the setting takes effect on the next launch. An empty ProfileName is invalid,
+            // so fall back to the shared profile if this host was given no key.
+            var controllerOptions = env.CreateCoreWebView2ControllerOptions();
+            controllerOptions.ProfileName =
+                Settings.AppSettings.LoadShareProfile() || string.IsNullOrEmpty(_profileName)
+                    ? SharedProfileName
+                    : _profileName;
+
+            await _webView.EnsureCoreWebView2Async(env, controllerOptions);
 
             // ── Disable WebView2 features the app does not use ────────────────────────
             // These are set once after EnsureCoreWebView2Async and before the first

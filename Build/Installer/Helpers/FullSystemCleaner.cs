@@ -188,9 +188,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// <summary>
         /// Deletes all WebView2 user-data folders written by KleiKodesh components.
         ///
-        /// Current path (v3.x+):  %LocalAppData%\KleiKodesh\WebView2Cache
-        ///   Written by: KleiKodeshWebView.cs (KitveiHakodesh panel)
-        ///   Lives inside the install folder — deleted with it, but cleaned explicitly here.
+        /// Current paths (all inside the install folder %LocalAppData%\KleiKodesh, so they
+        /// are already removed by CleanFileSystem's recursive delete — cleaned explicitly
+        /// here too so this stays self-documenting):
+        ///   %LocalAppData%\KleiKodesh\WebView2Cache                  — KleiKodeshWebView.cs (websites/Kiwix panels)
+        ///   %LocalAppData%\KleiKodesh\KitveiHakodesh\WebView2Cache   — AppViewer.cs (Kitvei Hakodesh; shared by
+        ///                                                              the standalone app + Word add-in via profiles)
         ///
         /// Legacy path (before webcache was moved into the install folder):
         ///   %LocalAppData%\KitveiHakodesh\webcache
@@ -209,8 +212,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             {
                 string localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 
-                // Current path — inside the install folder
+                // Current paths — inside the install folder (%LocalAppData%\KleiKodesh)
                 DeleteFolder(Path.Combine(localAppData, "KleiKodesh", "WebView2Cache"), result, log);
+                DeleteFolder(Path.Combine(localAppData, "KleiKodesh", "KitveiHakodesh", "WebView2Cache"), result, log);
 
                 // Old ghost: WebView2 creates "EBWebView" when given %LocalAppData% as root.
                 // Only delete it if it was ours — check for KleiKodesh content inside.

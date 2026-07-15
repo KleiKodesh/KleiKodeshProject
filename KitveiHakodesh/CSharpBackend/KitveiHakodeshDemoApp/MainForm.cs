@@ -40,7 +40,7 @@ namespace KitveiHakodeshDemoApp
             // lists all open tabs; picking one activates it (mirrored back into Vue).
             ShowTabListButton = true;
 
-            _viewer = new AppViewer("webcache-standalone") { Dock = DockStyle.Fill };
+            _viewer = new AppViewer("standalone") { Dock = DockStyle.Fill };
             _viewer.TogglePopOut = Toggle;
             Controls.Add(_viewer);
 
