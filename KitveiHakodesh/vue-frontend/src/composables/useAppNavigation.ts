@@ -1,6 +1,6 @@
-import { inject } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pickLocalFile } from '@/webview-host/bridge'
+import { useLocalFileStore } from '@/stores/localFileStore'
 import type { TabRoute } from '@/stores/tabStore'
 
 /**
@@ -29,10 +29,17 @@ export function useAppNavigation() {
   // ── Shared side-effect actions ────────────────────────────────────────────
 
   async function handleFilePicker(newTab: boolean): Promise<void> {
-    const result = await pickLocalFile()
-    // In hosted mode, push events handle navigation — pickLocalFile() returns null.
-    // In dev mode, navigate directly with the blob URL.
+    const result = await pickLocalFile(newTab)
     if (!result) return
+    // Hosted mode: the C# push events drive navigation (pane-aware in localFileStore,
+    // so the file opens only in the pane that initiated the pick). We must NOT navigate
+    // again here or the file would also open in pane 1. The reply is used only to finish
+    // a cached Word conversion, which produces no localFileConversionReady push.
+    if (typeof window.__webviewAction === 'function') {
+      useLocalFileStore().finalizeConvertingFromReply(result)
+      return
+    }
+    // Dev mode: no push events — navigate directly with the blob URL (pane-aware).
     const fn = result.fileName ?? ''
     const ext = fn.substring(fn.lastIndexOf('.')).toLowerCase()
     const isTxt = ext === '.txt'

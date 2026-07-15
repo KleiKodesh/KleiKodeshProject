@@ -70,22 +70,45 @@ export interface LocalFileRestoreResult {
 // ── Hosted actions ────────────────────────────────────────────────────────────
 
 /**
+ * The "open in a new tab" intent of an in-flight user-initiated file pick.
+ * Set while pickLocalFile() awaits the hosted `pickFile` RPC, cleared afterwards.
+ * localFileStore reads it so the push-event handlers can honour the frontend's
+ * new-tab intent (the C# events don't carry it) and can tell a user pick apart
+ * from an "Open With" launch (null → no pick in flight). See pendingPickOpenInNewTab().
+ */
+let _pendingPickOpenInNewTab: boolean | null = null
+
+/** The in-flight user pick's new-tab intent, or null when no user pick is in flight. */
+export function pendingPickOpenInNewTab(): boolean | null {
+  return _pendingPickOpenInNewTab
+}
+
+/**
  * Open native file picker (PDF, Word, HTML formats).
  * For Word files, C# pushes a `localFileConversionStarted` event before replying,
  * so the tab can show a converting placeholder while waiting.
- * Returns null if the user cancels.
+ *
+ * In hosted mode, navigation is driven entirely by the C# push events (handled in
+ * localFileStore, which targets the pane that initiated the pick). The returned
+ * result is used only to finalize a cached Word conversion (which has no
+ * localFileConversionReady push). Returns null if the user cancels.
  */
-export async function pickLocalFile(): Promise<LocalFileResult | null> {
+export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResult | null> {
   if (typeof window.__webviewAction !== 'function') return devPickPdf()
-  const res = await action<{
-    cancelled?: boolean
-    url?: string
-    fileName?: string
-    filePath?: string
-    error?: string
-  }>('pickFile')
-  if (res.cancelled || res.error || !res.url) return null
-  return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }
+  _pendingPickOpenInNewTab = openInNewTab
+  try {
+    const res = await action<{
+      cancelled?: boolean
+      url?: string
+      fileName?: string
+      filePath?: string
+      error?: string
+    }>('pickFile')
+    if (res.cancelled || res.error || !res.url) return null
+    return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }
+  } finally {
+    _pendingPickOpenInNewTab = null
+  }
 }
 
 /**

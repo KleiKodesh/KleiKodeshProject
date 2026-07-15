@@ -1,8 +1,14 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import { useTabStore } from './tabStore'
-import type { TabRoute } from './tabStore'
-import { disposeLocalFileHost, restoreLocalFile, restoreHbPdf } from '@/webview-host/bridge'
+import type { Tab, TabRoute } from './tabStore'
+import { useBookViewStore } from './bookViewStore'
+import {
+  disposeLocalFileHost,
+  restoreLocalFile,
+  restoreHbPdf,
+  pendingPickOpenInNewTab,
+} from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
 import { useSettingsStore } from './settingsStore'
 
@@ -13,6 +19,38 @@ function stripFileExtension(fileName: string): string {
 
 export const useLocalFileStore = defineStore('localFile', () => {
   const tabStore = useTabStore()
+
+  // ── Pane-aware navigation for C# push events ──────────────────────────────
+  // File-open push events must land in the pane that initiated the pick, not
+  // always pane 1. When split view is off there is only pane 1; when it's on we
+  // target the focused pane (the one the user opened the file from).
+  function targetPaneId(): 1 | 2 {
+    const bookViewStore = useBookViewStore()
+    return bookViewStore.splitViewEnabled ? bookViewStore.focusedPaneId : 1
+  }
+  /** Open a new tab in the target pane; returns its id. */
+  function openInTargetPane(fields: Omit<Tab, 'id' | 'pane'>): string {
+    return targetPaneId() === 2
+      ? tabStore.openPane2Tab(fields).id
+      : tabStore.openTab(fields).id
+  }
+  /** Navigate the target pane's active tab in place; returns its id. */
+  function updateActiveInTargetPane(fields: Partial<Omit<Tab, 'id'>>): string {
+    if (targetPaneId() === 2) {
+      tabStore.updatePane2ActiveTab(fields)
+      return tabStore.pane2ActiveTabId
+    }
+    tabStore.updateActiveTab(fields)
+    return tabStore.activeTabId
+  }
+  /**
+   * Resolve the new-tab intent for a push event: the in-flight user pick's intent
+   * (frontend-owned, since the C# events don't carry it), falling back to the
+   * event's own flag for "Open With" launches.
+   */
+  function resolveOpenInNewTab(eventFlag: unknown): boolean {
+    return pendingPickOpenInNewTab() ?? !!eventFlag
+  }
 
   const virtualUrl = computed(() => tabStore.activeTab.localFileVirtualUrl ?? null)
   const fileName = computed(() => tabStore.activeTab.localFileName ?? null)
@@ -31,7 +69,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
       startLocalFileConversion(
         msg.fileName as string,
         msg.filePath as string,
-        !!(msg.openInNewTab as boolean),
+        resolveOpenInNewTab(msg.openInNewTab),
       )
     }
     if (msg.event === 'localFileTxtReady') {
@@ -43,13 +81,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFilePath: msg.filePath as string,
         localFileConverting: false,
       }
-      let tabId: string
-      if (msg.openInNewTab) {
-        tabId = tabStore.openTab(tabFields).id
-      } else {
-        tabId = tabStore.activeTabId
-        tabStore.updateActiveTab(tabFields)
-      }
+      const tabId = resolveOpenInNewTab(msg.openInNewTab)
+        ? openInTargetPane(tabFields)
+        : updateActiveInTargetPane(tabFields)
       _converting.delete(tabId)
     }
     if (msg.event === 'localFileReady') {
@@ -66,13 +100,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFileVirtualUrl: msg.url as string,
         localFileConverting: false,
       }
-      let tabId: string
-      if (msg.openInNewTab) {
-        tabId = tabStore.openTab(tabFields).id
-      } else {
-        tabId = tabStore.activeTabId
-        tabStore.updateActiveTab(tabFields)
-      }
+      const tabId = resolveOpenInNewTab(msg.openInNewTab)
+        ? openInTargetPane(tabFields)
+        : updateActiveInTargetPane(tabFields)
       // Ensure the tab is tracked so finishLocalFileConversion no-ops if called again
       _converting.delete(tabId)
     }
@@ -147,13 +177,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
       localFileLoadingType: 'converting' as const,
       localFileVirtualUrl: undefined,
     }
-    let tabId: string
-    if (openInNewTab) {
-      tabId = tabStore.openTab(tabFields).id
-    } else {
-      tabId = tabStore.activeTabId
-      tabStore.updateActiveTab(tabFields)
-    }
+    const tabId = openInNewTab
+      ? openInTargetPane(tabFields)
+      : updateActiveInTargetPane(tabFields)
     _converting.add(tabId)
   }
 
@@ -194,6 +220,22 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFileConverting: false,
       })
     }
+  }
+
+  /**
+   * Finalize a Word conversion that was started by a user-initiated pick, using the
+   * pickFile RPC reply. Cached conversions produce no localFileConversionReady push
+   * (no FileSystemWatcher is set up when the cache file already exists), so without this
+   * the placeholder tab would stay converting forever. Idempotent: a no-op when the
+   * conversionReady push already finalized the tab, or when the pick was a plain
+   * PDF/HTML/TXT file (no tab is left in the converting state).
+   */
+  function finalizeConvertingFromReply(result: { url: string; fileName: string; filePath: string }) {
+    const convertingTabId = Array.from(_converting).find((tid) => {
+      const t = tabStore.tabs.find((x) => x.id === tid)
+      return t?.localFileLoadingType === 'converting'
+    })
+    if (convertingTabId) finishLocalFileConversion(convertingTabId, result)
   }
 
   /** Cancel an in-progress conversion — resets the tab to home. */
@@ -372,6 +414,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
     downloadErrorMessage,
     startLocalFileConversion,
     finishLocalFileConversion,
+    finalizeConvertingFromReply,
     cancelConversion,
     startHbDownload,
     finishHbDownload,
