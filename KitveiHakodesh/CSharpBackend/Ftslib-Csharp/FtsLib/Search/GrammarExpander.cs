@@ -1,4 +1,5 @@
 using FtsLib.Indexing;
+using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
 
@@ -267,7 +268,7 @@ namespace FtsLib.Search
                     cmd.CommandText =
                         "SELECT skip_offset, skip_count, offset, length, count " +
                         "FROM term_index WHERE term = @t";
-                    cmd.Parameters.Add("@t", System.Data.DbType.String);
+                    cmd.Parameters.Add("@t", SqliteType.Text);
 
                     foreach (var candidate in candidates)
                     {

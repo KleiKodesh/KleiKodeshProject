@@ -1,14 +1,14 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.IO;
 
 namespace FtsLib.SeforimDb
 {
     internal sealed class ZayitDb : IDisposable
     {
-        private readonly SQLiteConnection _connection;
+        private readonly SqliteConnection _connection;
         private readonly string _dbPath;
         private bool _disposed;
 
@@ -26,7 +26,7 @@ namespace FtsLib.SeforimDb
             }
 
             Console.WriteLine($"[ZayitDb] Opening: {resolved}");
-            _connection = new SQLiteConnection($"Data Source={resolved};Version=3;Page Size=4096;");
+            _connection = new SqliteConnection($"Data Source={resolved}");
             _connection.Open();
 
             using (var cmd = _connection.CreateCommand())
@@ -136,7 +136,7 @@ namespace FtsLib.SeforimDb
                 for (int i = 0; i < ChunkSize; i++)
                 {
                     paramNames[i] = $"@p{i}";
-                    cmd.Parameters.Add(paramNames[i], System.Data.DbType.Int32);
+                    cmd.Parameters.Add(paramNames[i], SqliteType.Integer);
                 }
 
                 for (int start = 0; start < ids.Count; start += ChunkSize)
@@ -188,7 +188,7 @@ namespace FtsLib.SeforimDb
                 for (int i = 0; i < ChunkSize; i++)
                 {
                     paramNames[i] = $"@p{i}";
-                    cmd.Parameters.Add(paramNames[i], System.Data.DbType.Int32);
+                    cmd.Parameters.Add(paramNames[i], SqliteType.Integer);
                 }
 
                 foreach (int id in ids)
@@ -211,7 +211,7 @@ namespace FtsLib.SeforimDb
         }
 
         private static IEnumerable<(int Id, string Content, string BookTitle)> FetchChunk(
-            SQLiteCommand cmd,
+            SqliteCommand cmd,
             string[]      paramNames,
             List<int>     ids)
         {
@@ -253,7 +253,7 @@ namespace FtsLib.SeforimDb
                 for (int i = 0; i < ChunkSize; i++)
                 {
                     paramNames[i] = $"@p{i}";
-                    cmd.Parameters.Add(paramNames[i], System.Data.DbType.Int32);
+                    cmd.Parameters.Add(paramNames[i], SqliteType.Integer);
                 }
 
                 for (int start = 0; start < ids.Count; start += ChunkSize)

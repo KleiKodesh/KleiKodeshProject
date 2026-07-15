@@ -1,6 +1,6 @@
 using FtsLib.Indexing;
 using System.Collections.Generic;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using System.Text;
 
 namespace FtsLib.Search
@@ -127,7 +127,7 @@ namespace FtsLib.Search
                     cmd.CommandText = sql;
                     // Add parameters in the same order as the SQL — list guarantees this.
                     for (int i = 0; i < ngrams.Count; i++)
-                        cmd.Parameters.Add($"@t{i}", System.Data.DbType.String).Value
+                        cmd.Parameters.Add($"@t{i}", SqliteType.Text).Value
                             = "%" + EscapeLike(ngrams[i]) + "%";
 
                     using (var reader = cmd.ExecuteReader())
@@ -166,7 +166,7 @@ namespace FtsLib.Search
                     cmd.CommandText =
                         "SELECT term, skip_offset, skip_count, offset, length, count " +
                         "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                    cmd.Parameters.Add("@p", System.Data.DbType.String).Value = pattern;
+                    cmd.Parameters.Add("@p", SqliteType.Text).Value = pattern;
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())

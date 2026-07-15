@@ -1,7 +1,7 @@
 using FtsLib.Indexing;
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 
 namespace FtsLib.Search
 {
@@ -157,15 +157,15 @@ namespace FtsLib.Search
                         cmd.CommandText =
                             "SELECT term, skip_offset, skip_count, offset, length, count " +
                             "FROM term_index WHERE term >= @lo AND term < @hi";
-                        cmd.Parameters.Add("@lo", System.Data.DbType.String).Value = rangeLo;
-                        cmd.Parameters.Add("@hi", System.Data.DbType.String).Value = rangeHi;
+                        cmd.Parameters.Add("@lo", SqliteType.Text).Value = rangeLo;
+                        cmd.Parameters.Add("@hi", SqliteType.Text).Value = rangeHi;
                     }
                     else
                     {
                         cmd.CommandText =
                             "SELECT term, skip_offset, skip_count, offset, length, count " +
                             "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                        cmd.Parameters.Add("@p", System.Data.DbType.String).Value = likePattern;
+                        cmd.Parameters.Add("@p", SqliteType.Text).Value = likePattern;
                     }
 
                     using (var reader = cmd.ExecuteReader())
@@ -320,7 +320,7 @@ namespace FtsLib.Search
                     cmd.CommandText =
                         "SELECT skip_offset, skip_count, offset, length, count " +
                         "FROM term_index WHERE term = @t";
-                    cmd.Parameters.Add("@t", System.Data.DbType.String).Value = term;
+                    cmd.Parameters.Add("@t", SqliteType.Text).Value = term;
                     using (var reader = cmd.ExecuteReader())
                         if (reader.Read())
                         {
