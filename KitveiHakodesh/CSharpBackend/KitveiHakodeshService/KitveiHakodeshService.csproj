@@ -6,19 +6,32 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>true</PublishAot>
+    <!-- Required by the LibraryImport source generator (advapi32 SCM P/Invokes). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UserSecretsId>dotnet-KitveiHakodeshService-65893fd5-946c-4ba8-8798-4e827a79ea21</UserSecretsId>
   </PropertyGroup>
 
+  <!-- Catalog databases shipped with the service, copied to output only when newer. -->
   <ItemGroup>
-    <Compile Remove="SefroimDb\Sqlite.Queries.cs" />
+    <Content Include="HebrewBooks\HebrewBooksCatalog.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="Dictionary\Dictionary.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="SefroimDb\Sqlite.Queries.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="11.0.0-preview.5.26302.115" />
+    <!-- 10.0.9 (e_sqlite3), NOT 11.x: FtsLib's segment writer does File.Move on a just-written
+         SQLite file; 11.x's SourceGear provider keeps the handle open (pooling) and the move
+         fails with a sharing violation. 10.0.9 matches FtsLib and is AOT/AnyCPU-friendly. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+  </ItemGroup>
+
+  <!-- The custom full-text search engine. FtsLib multi-targets net48;net10.0; the net10.0
+       leg is referenced here so the service can run FTS searches in-process. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Ftslib-Csharp\FtsLib\FtsLib.csproj" />
   </ItemGroup>
 </Project>
