@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 import { callBridgeAction } from '@/webview-host/bridge'
+import { serviceCall } from '@/webview-host/serviceClient'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 
 export interface IndexingState {
@@ -35,46 +36,31 @@ export function useFullTextSearchIndexingStatus() {
 
   onMounted(async () => {
     if (!isHosted || typeof window.__webviewAction !== 'function') {
-      // Dev simulation: 0→100% over ~3s, ticking every 10,000 lines out of 1,000,000
-      const TOTAL_LINES = 1_000_000
-      const TICK_LINES  = 10_000
-      state.value = { ...IDLE, isIndexing: true, totalChunks: TOTAL_LINES, eta: '3s', segmentCount: 0, latestSegmentPct: null }
-      let processed = 0
-      let devLatestSegmentPct: number | null = null
-      const tick = () => {
-        processed += TICK_LINES
-        const pct = Math.min(100, (processed / TOTAL_LINES) * 100)
-        if (pct >= 100) {
+      // Dev: poll the KitveiHakodesh service, which builds the FTS index in the
+      // background. Keep polling while the build is running; stop once it's done.
+      const poll = async () => {
+        try {
+          const s = await serviceCall<{
+            isReady: boolean; isIndexing: boolean; percentage: number
+            processedChunks: number; totalChunks: number
+          }>('ftsIndexingStatus')
           state.value = {
-            isReady: true,
-            isIndexing: false,
-            percentage: 100,
-            processedChunks: TOTAL_LINES,
-            totalChunks: TOTAL_LINES,
+            isReady: s.isReady,
+            isIndexing: s.isIndexing,
+            percentage: s.percentage ?? 0,
+            processedChunks: s.processedChunks ?? 0,
+            totalChunks: s.totalChunks ?? 0,
             eta: '',
-            segmentCount: devLatestSegmentPct !== null ? 2 : 0,
-            latestSegmentPct: devLatestSegmentPct,
+            segmentCount: 0,
+            latestSegmentPct: null,
             dbNotFound: false,
           }
-          return
+          if (s.isIndexing || !s.isReady) devTimer = setTimeout(poll, 1000)
+        } catch {
+          devTimer = setTimeout(poll, 2000)
         }
-        // Simulate a segment flush at ~20% and ~60%
-        if (pct >= 20 && devLatestSegmentPct === null) devLatestSegmentPct = pct
-        if (pct >= 60 && devLatestSegmentPct !== null && devLatestSegmentPct < 60) devLatestSegmentPct = pct
-        state.value = {
-          isReady: pct >= 20,
-          isIndexing: true,
-          percentage: pct,
-          processedChunks: processed,
-          totalChunks: TOTAL_LINES,
-          eta: `${Math.round((TOTAL_LINES - processed) / TOTAL_LINES * 3)}s`,
-          segmentCount: devLatestSegmentPct !== null ? (pct >= 60 ? 2 : 1) : 0,
-          latestSegmentPct: devLatestSegmentPct,
-          dbNotFound: false,
-        }
-        devTimer = setTimeout(tick, 300)
       }
-      devTimer = setTimeout(tick, 300)
+      void poll()
       return
     }
 

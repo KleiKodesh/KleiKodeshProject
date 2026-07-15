@@ -142,6 +142,19 @@ watch(
   },
 )
 
+// The index builds in the background; a search issued before the first segments
+// flush returns 'indexNotReady' and the results area shows that error until the
+// user searches again. Re-run the pending search automatically the moment the
+// index becomes searchable, so results appear without a manual retry.
+watch(
+  () => indexingState.value.isReady,
+  (ready, wasReady) => {
+    if (ready && !wasReady && searchError.value === 'indexNotReady' && executedQuery.value) {
+      handleSearch(executedQuery.value)
+    }
+  },
+)
+
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)
