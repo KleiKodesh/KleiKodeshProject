@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, inject } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import {
   IconDismiss20Regular,
   IconHome20Regular,
@@ -11,26 +11,17 @@ import {
   IconApps20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
-import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useListKeys } from '@/composables/useListKeyNav'
 import type { Tab } from '@/stores/tabStore'
 
 const props = defineProps<{ tabs: Tab[]; activeTabId: string }>()
 const emit = defineEmits<{ select: [id: string]; close: [id: string]; dismiss: [] }>()
 
-const paneId = inject<1 | 2>('paneId', 1)
-const { titleBarVisible } = useUiChromeVisibility(paneId)
 const containerRef = ref<HTMLElement | null>(null)
-const visibleTabs = computed(() => {
-  const filtered = props.tabs.filter((t) => t.route !== '/settings')
-  // When the title bar is visible the active tab is already shown there — no need to
-  // repeat it in the dropdown. When the title bar is hidden the dropdown is the only
-  // place the user can see their full tab list, so include the active tab.
-  if (titleBarVisible.value) {
-    return filtered.filter((t) => t.id !== props.activeTabId)
-  }
-  return filtered
-})
+// Always show the full tab list (including the active tab, highlighted) so the
+// dropdown is a complete map of where you are and can navigate to — the active
+// row is marked with the `.active` class below.
+const visibleTabs = computed(() => props.tabs.filter((t) => t.route !== '/settings'))
 
 const { focusedIndex } = useListKeys(
   containerRef,
