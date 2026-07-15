@@ -277,6 +277,48 @@ export const useTabStore = defineStore('tabs', () => {
     }
   }
 
+  /**
+   * Move a tab between split panes — driven by a cross-region drag in the native chrome
+   * tab strip. The tab becomes the active tab of its destination pane; the source pane's
+   * active pointer is reassigned if it pointed at the moved tab, and pane 2 is never left
+   * empty (a home tab is spawned, mirroring the closePane2Tab guarantee).
+   */
+  function moveTabToPane(id: string, targetPane: 1 | 2) {
+    const tab = tabs.value.find((t) => t.id === id)
+    if (!tab) return
+    const fromPane: 1 | 2 = tab.pane === 2 ? 2 : 1
+    if (fromPane === targetPane) return
+
+    tab.pane = targetPane
+
+    if (targetPane === 2) {
+      // Left pane 1 — hand it another active tab if this was the one on screen.
+      if (activeTabId.value === id) {
+        const own = tabs.value.filter((t) => !t.pane || t.pane === 1)
+        if (own.length > 0) {
+          activeTabId.value = own[0]!.id
+        } else {
+          const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+          tabs.value.push(home)
+          activeTabId.value = home.id
+        }
+      }
+      pane2ActiveTabId.value = id
+    } else {
+      // Moved into pane 1 — becomes its active tab.
+      activeTabId.value = id
+      // Pane 2 must never be left empty while split view is open.
+      const remaining = tabs.value.filter((t) => t.pane === 2)
+      if (remaining.length === 0) {
+        const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
+        tabs.value.push(home)
+        pane2ActiveTabId.value = home.id
+      } else if (pane2ActiveTabId.value === id) {
+        pane2ActiveTabId.value = remaining[0]!.id
+      }
+    }
+  }
+
   /** Ensure pane 2 has at least one tab; returns the active pane-2 tab id. */
   function ensurePane2HasTab(): string {
     const existing = tabs.value.filter((t) => t.pane === 2)
@@ -598,6 +640,7 @@ export const useTabStore = defineStore('tabs', () => {
     closePane2Tab,
     ensurePane2HasTab,
     reclaimPane1ActiveForSplit,
+    moveTabToPane,
     updatePane2ActiveTab,
     init,
     openTab,
