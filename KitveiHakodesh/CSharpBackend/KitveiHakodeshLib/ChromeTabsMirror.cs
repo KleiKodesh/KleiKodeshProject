@@ -59,6 +59,7 @@ namespace KitveiHakodeshLib
             _form.NewTabRequested += OnNewTabRequested;
             _form.TabListOpening += OnTabListOpening;
             _form.SplitRatioChanged += OnSplitRatioChanged;
+            _form.TabDraggedToGroup += OnTabDraggedToGroup;
 
             _viewer.TabsStateChanged += OnTabsStateChanged;
             _viewer.ChromeThemeChanged += OnChromeThemeChanged;
@@ -81,6 +82,15 @@ namespace KitveiHakodeshLib
             e.Cancel = true;
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabCloseRequested(tabId);
+        }
+
+        private void OnTabDraggedToGroup(object sender, FluentTabGroupEventArgs e)
+        {
+            if (_syncing) return;
+            // Region 0 = pane 1, region 1 = pane 2. Vue moves the tab between panes and
+            // pushes back a fresh snapshot, which reconciles the strip's Group/Highlighted.
+            if (e.Tab?.Tag is string tabId)
+                _viewer.NotifyChromeTabMovedToPane(tabId, e.Group == 1 ? 2 : 1);
         }
 
         private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)

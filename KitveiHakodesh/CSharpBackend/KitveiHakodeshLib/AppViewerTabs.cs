@@ -160,5 +160,9 @@ namespace KitveiHakodeshLib
         /// <summary>Forwards a live drag of the native split divider to Vue (pane 2's width share).</summary>
         public void NotifyChromeSplitFractionChanged(double fraction)
             => _bridge?.PushEvent(new { @event = "chromeSplitFractionChanged", fraction });
+
+        /// <summary>Forwards a cross-region tab drag (split strip) to Vue so it moves the tab between panes.</summary>
+        public void NotifyChromeTabMovedToPane(string tabId, int pane)
+            => _bridge?.PushEvent(new { @event = "chromeTabMovedToPane", tabId, pane });
     }
 }

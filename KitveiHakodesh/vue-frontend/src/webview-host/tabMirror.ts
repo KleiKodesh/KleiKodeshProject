@@ -176,6 +176,14 @@ export function initTabMirror(): void {
       case 'chromeRecentActivated':
         void openRecent(String(msg.key))
         break
+      case 'chromeTabMovedToPane': {
+        // Cross-region drag in the split strip — move the tab between Vue panes and focus
+        // the pane it landed in.
+        const pane = msg.pane === 2 ? 2 : 1
+        tabStore.moveTabToPane(String(msg.tabId), pane)
+        bookViewStore.setFocusedPane(pane)
+        break
+      }
       case 'chromeSplitFractionChanged': {
         // Live drag of the native strip divider — resize the split panes in tandem.
         // The strip reports the divider CENTER; convert back to the store fraction
