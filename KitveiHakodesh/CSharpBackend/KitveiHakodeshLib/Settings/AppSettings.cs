@@ -124,6 +124,77 @@ namespace KitveiHakodeshLib.Settings
             Interaction.SaveSetting(UpdateCheckerAppName, "UpdateChecker", "TurnOffUpdates", turnedOff ? "True" : "False");
         }
 
+        // ── Shared WebView2 browser process + profiles ──────────────────────────────
+        //
+        // Both Kitvei Hakodesh hosts — the standalone app and the Word (VSTO) add-in —
+        // render through AppViewer, which creates its WebView2 environment with an
+        // identical set of CoreWebView2EnvironmentOptions. They ALWAYS point at ONE
+        // shared user-data folder (see SharedUserDataFolder), so they run in a SINGLE
+        // shared browser process. Per Microsoft's WebView2 docs this "optimizes system
+        // resources by running in one browser process" — one browser/GPU/utility process
+        // instead of a separate set per host — and lets both run at the same time.
+        //
+        // What the user CAN choose is whether the two hosts share the same *profile*
+        // (CoreWebView2ControllerOptions.ProfileName) under that shared folder:
+        //   ShareProfile = true  → both use one profile → shared cookies, localStorage,
+        //                          browser cache, and login state.
+        //   ShareProfile = false → each host uses its own profile → browser data is
+        //                          isolated, but they still share the one browser process.
+        // Multiple profiles under one user-data folder is the documented, supported model
+        // (and the memory saving is identical either way — it comes from the shared
+        // browser process, not from sharing a profile).
+        //
+        // Stored under the SHARED "KleiKodesh" app name (NOT "KitveiHakodesh"), exactly
+        // like TurnOffUpdates, so the standalone app and the Word add-in read/write the
+        // SAME value and one toggle governs both:
+        //   HKCU\Software\VB and VBA Program Settings\KleiKodesh\WebView\ShareProfile
+        private const string WebViewAppName = "KleiKodesh";
+
+        /// <summary>
+        /// True when the two hosts should share ONE WebView2 profile (shared browser data).
+        /// False (default) = each host uses its own profile (isolated data). Either way the
+        /// hosts share one browser process. Reads the shared VSTO key so both apps agree.
+        /// </summary>
+        public static bool LoadShareProfile()
+        {
+            return string.Equals(
+                Interaction.GetSetting(WebViewAppName, "WebView", "ShareProfile", "False"),
+                "True",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static void SaveShareProfile(bool shared)
+        {
+            Interaction.SaveSetting(WebViewAppName, "WebView", "ShareProfile", shared ? "True" : "False");
+        }
+
+        /// <summary>
+        /// The WebView2 user-data folder shared by ALL Kitvei Hakodesh hosts (standalone
+        /// app + Word add-in) so they run in one browser process.
+        ///
+        /// Resolved RELATIVE TO THE RUNNING APP (AppDomain.CurrentDomain.BaseDirectory), so
+        /// it ALWAYS lives inside the install folder and is removed in one sweep when the
+        /// install folder is deleted or the app is uninstalled — no matter where the app is
+        /// installed. Sharing works because the installed product is a FLAT layout: the
+        /// standalone exe (כתבי הקודש.exe) and the VSTO add-in assembly both sit directly in
+        /// %LocalAppData%\KleiKodesh, so BaseDirectory is the SAME folder in both processes
+        /// and they resolve this to the identical path. (In dev they run from separate
+        /// bin\Debug folders and simply get separate caches — harmless.) BaseDirectory is
+        /// per-user writable here, which WebView2 requires — never point a UDF at a
+        /// write-protected install dir such as %ProgramFiles%.
+        ///
+        /// The "KitveiHakodesh" subfolder matches AppViewer.AppDir (where the Vue frontend
+        /// lives) and, in the Word process, keeps this distinct from the add-in's OTHER
+        /// webview KleiKodeshWebView (…\KleiKodesh\WebView2Cache), which uses different
+        /// environment options — sharing one folder across mismatched options would clash
+        /// (ERROR_INVALID_STATE). Keep them in separate subfolders.
+        /// </summary>
+        public static string SharedUserDataFolder()
+        {
+            return Path.Combine(
+                AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "WebView2Cache");
+        }
+
         // ── Dark mode ─────────────────────────────────────────────────────────────
 
         /// <summary>
