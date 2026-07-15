@@ -27,7 +27,12 @@
     <RootNamespace>KleiKodesh</RootNamespace>
     <AssemblyName>KleiKodesh</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
-    <DefineConstants>VSTO40</DefineConstants>
+    <!-- useofficeinterop selects the direct PIA Reference branch below (Interop.Word/Office
+         at assembly Version=15.0.0.0, EmbedInteropTypes) instead of the tlbimp COMReference.
+         Required so this add-in references the SAME Word interop version (15.0.0.0) that
+         KitveiHakodeshLib embeds and exposes via WordToPdfConverter/WordThesaurusProvider
+         .HostApplication — otherwise CS0012 (type 'Application' in an unreferenced assembly). -->
+    <DefineConstants>VSTO40;useofficeinterop</DefineConstants>
     <ResolveComReferenceSilent>true</ResolveComReferenceSilent>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
