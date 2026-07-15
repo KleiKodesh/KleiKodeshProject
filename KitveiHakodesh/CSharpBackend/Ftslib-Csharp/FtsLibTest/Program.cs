@@ -165,6 +165,10 @@ namespace FtsLibTest
                     FstSizeDiag.Run(args);
                     return;
 
+                case "termdict":
+                    TermDictProto.Run(args);
+                    return;
+
                 case "fileload":
                     FileLoadDiag.Run(args);
                     return;

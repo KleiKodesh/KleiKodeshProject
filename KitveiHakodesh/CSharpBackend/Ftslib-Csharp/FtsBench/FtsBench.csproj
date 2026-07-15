@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Isolated benchmark harness for the FtsLib number-type + SIMD optimization
+    experiment (branch perf/ftslib-numtypes-simd).
+
+    Targets net48 x64 DELIBERATELY: it must reproduce the exact JIT / Vector<T>
+    behavior of the shipping FtsLib (.NET Framework 4.8), NOT .NET Core's wider
+    AVX2 vectors and hardware intrinsics. Benchmarking on modern .NET would be
+    misleading.
+
+    Has NO dependency on SQLite / Dapper / the seforim DB — it links only the
+    pure-algorithm production source files and reads raw .dat posting files.
+  -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Prefer32Bit>false</Prefer32Bit>
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Optimize>true</Optimize>
+    <Deterministic>true</Deterministic>
+    <AssemblyName>FtsBench</AssemblyName>
+    <RootNamespace>FtsBench</RootNamespace>
+    <!-- Keep the bench self-contained; don't drag in the classic-project globs. -->
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="System.Numerics.Vectors" Version="4.5.0" />
+    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.0.0" />
+  </ItemGroup>
+
+  <!-- Link the exact production algorithm source (no copies, no drift). -->
+  <ItemGroup>
+    <Compile Include="..\FtsLib\Search\VarInt.cs"           Link="Linked\VarInt.cs" />
+    <Compile Include="..\FtsLib\Search\PostingStream.cs"     Link="Linked\PostingStream.cs" />
+    <Compile Include="..\FtsLib\Search\PostingIterator.cs"   Link="Linked\PostingIterator.cs" />
+    <Compile Include="..\FtsLib\Search\RoaringBitmap.cs"     Link="Linked\RoaringBitmap.cs" />
+    <Compile Include="..\FtsLib\Indexing\SegmentReader.cs"   Link="Linked\SegmentReader.cs" />
+  </ItemGroup>
+
+</Project>
