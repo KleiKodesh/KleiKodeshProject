@@ -197,6 +197,21 @@ namespace FtsLib.Search
         }
 
         /// <summary>
+        /// Bulk-copies all doc IDs (ascending) into <paramref name="dst"/> from index 0,
+        /// returning the count written. This is the allocation-free equivalent of
+        /// GetValues(): no yield state machines and no nested per-container enumerators —
+        /// just tight loops writing into the caller's buffer. Used to materialize large
+        /// result sets. <paramref name="dst"/> must have Length &gt;= Count.
+        /// </summary>
+        public int GetValuesInto(int[] dst)
+        {
+            int n = 0;
+            for (int b = 0; b < _keys.Count; b++)
+                n += _containers[b].GetValuesInto(dst, n, _keys[b] << 16);
+            return n;
+        }
+
+        /// <summary>
         /// Enumerates all doc IDs that are &gt;= <paramref name="fromValueInclusive"/>,
         /// in ascending order.
         ///
@@ -286,6 +301,9 @@ namespace FtsLib.Search
             public abstract int  Cardinality { get; }
             public abstract bool Add(ushort value);
             public abstract IEnumerable<int> GetValues();
+            /// <summary>Bulk-writes all values (OR-ed with <paramref name="baseValue"/>)
+            /// into <paramref name="dst"/> from <paramref name="offset"/>; returns count written.</summary>
+            public abstract int GetValuesInto(int[] dst, int offset, int baseValue);
             /// <summary>
             /// Enumerates values >= <paramref name="fromLow"/> (a low-16 value, 0–65535).
             /// Used by <see cref="RoaringBitmap.GetValuesFrom"/> to avoid scanning from
@@ -338,6 +356,13 @@ namespace FtsLib.Search
             {
                 for (int i = 0; i < _count; i++)
                     yield return _values[i];
+            }
+
+            public override int GetValuesInto(int[] dst, int offset, int baseValue)
+            {
+                for (int i = 0; i < _count; i++)
+                    dst[offset + i] = baseValue | _values[i];
+                return _count;
             }
 
             /// <summary>
@@ -582,6 +607,49 @@ namespace FtsLib.Search
                         bits ^= lsb;
                     }
                 }
+            }
+
+            public override int GetValuesInto(int[] dst, int offset, int baseValue)
+            {
+                int start = offset;
+                int vLen  = Vector<ulong>.Count;
+                var zero  = Vector<ulong>.Zero;
+                int word  = 0;
+
+                if (Vector.IsHardwareAccelerated)
+                {
+                    for (; word <= 1024 - vLen; word += vLen)
+                    {
+                        var v = new Vector<ulong>(_bits, word);
+                        if (v == zero) continue;
+                        for (int w = word; w < word + vLen; w++)
+                        {
+                            ulong bits = _bits[w];
+                            if (bits == 0) continue;
+                            int basePos = baseValue | (w << 6);
+                            while (bits != 0)
+                            {
+                                ulong lsb = bits & (ulong)(-(long)bits);
+                                dst[offset++] = basePos + TrailingZeroCount64(lsb);
+                                bits ^= lsb;
+                            }
+                        }
+                    }
+                }
+
+                for (; word < 1024; word++)
+                {
+                    ulong bits = _bits[word];
+                    if (bits == 0) continue;
+                    int basePos = baseValue | (word << 6);
+                    while (bits != 0)
+                    {
+                        ulong lsb = bits & (ulong)(-(long)bits);
+                        dst[offset++] = basePos + TrailingZeroCount64(lsb);
+                        bits ^= lsb;
+                    }
+                }
+                return offset - start;
             }
 
             public override Container Clone()
