@@ -183,8 +183,12 @@ async function saveFilterState() {
   }
   const allCount = booksStore.allBooks.length
   const isAllChecked = allCount > 0 && checkedBookIds.value.size === allCount
+  // Persist an explicit book subset ONLY when it's a real, partial selection. An empty
+  // set (filter not yet initialized, or everything unchecked) must never be saved as [] —
+  // that restores as "no books" and hides every result. Fall back to "all" (undefined).
+  const persistSubset = allCount > 0 && checkedBookIds.value.size > 0 && !isAllChecked
   const state = {
-    searchCheckedBookIds: isAllChecked ? undefined : [...checkedBookIds.value],
+    searchCheckedBookIds: persistSubset ? [...checkedBookIds.value] : undefined,
     searchAtFilters: atFilters.value.length ? [...atFilters.value] : undefined,
     searchScrollIndex: lastScrollIndex,
     searchScrollOffset: lastScrollOffset,
@@ -212,7 +216,11 @@ onMounted(async () => {
   if (saved?.searchCheckedBookIds != null) {
     const validIds = new Set(booksStore.allBooks.map((b) => b.id))
     const restored = new Set(saved.searchCheckedBookIds.filter((id) => validIds.has(id)))
-    setCheckedBookIds(restored)
+    // An empty restored set means the saved filter is stale or degenerate (e.g. it was
+    // persisted before the book list loaded, or its ids no longer exist). Restoring it
+    // as-is would filter out EVERY result ("לא נמצאו תוצאות") — default to all books.
+    if (restored.size > 0) setCheckedBookIds(restored)
+    else initCheckedBooks()
   } else {
     initCheckedBooks()
   }
