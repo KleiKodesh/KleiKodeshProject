@@ -95,6 +95,25 @@ namespace KitveiHakodeshLib.Db
             _bridge.Reply(id, new { });
         }
 
+        /// <summary>
+        /// Reads the shared "turn off automatic updates" flag (same registry key as the
+        /// KleiKodesh Word add-in). Replies with { value: bool }.
+        /// </summary>
+        public void HandleGetTurnOffUpdates(string id)
+        {
+            _bridge.Reply(id, new { value = AppSettings.LoadTurnOffUpdates() });
+        }
+
+        /// <summary>
+        /// Persists the shared "turn off automatic updates" flag. Expects { value: bool }.
+        /// </summary>
+        public void HandleSetTurnOffUpdates(JsonElement root, string id)
+        {
+            bool value = root.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.True;
+            AppSettings.SaveTurnOffUpdates(value);
+            _bridge.Reply(id, new { });
+        }
+
         public void HandleSetDbPath(JsonElement root, string id)
         {
             string path = root.GetProperty("path").GetString();

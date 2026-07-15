@@ -51,6 +51,8 @@ namespace KitveiHakodeshLib
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "clearDbPath": _db.HandleClearDbPath(id); break;
                         case "clearHbLocalFolder": _db.HandleClearHbLocalFolder(id); break;
+                        case "getTurnOffUpdates": _db.HandleGetTurnOffUpdates(id); break;
+                        case "setTurnOffUpdates": _db.HandleSetTurnOffUpdates(root, id); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
                         case "pickFile": _localFile.HandlePickFile(id, this); break;

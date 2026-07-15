@@ -94,6 +94,36 @@ namespace KitveiHakodeshLib.Settings
             Interaction.SaveSetting("KitveiHakodesh", "HebrewBooks", "CsvLastUpdated", utcDate.ToString("o"));
         }
 
+        // ── Automatic update check ─────────────────────────────────────────────────
+        //
+        // Shared with the KleiKodesh Word VSTO add-in: both apps read/write the SAME
+        // registry value so a single toggle governs the automatic update check in both.
+        // The VSTO writes it via SettingsManager.Save("UpdateChecker","TurnOffUpdates",...)
+        // which resolves to app name "KleiKodesh" (NOT "KitveiHakodesh"). We deliberately
+        // pass "KleiKodesh" here so we hit the exact same key:
+        //   HKCU\Software\VB and VBA Program Settings\KleiKodesh\UpdateChecker\TurnOffUpdates
+        // Do not change the app name / section / key — that would fork the setting.
+        private const string UpdateCheckerAppName = "KleiKodesh";
+
+        /// <summary>
+        /// True when the user has turned OFF the automatic update check.
+        /// Reads the shared VSTO key so the Word add-in and the standalone app agree.
+        /// </summary>
+        public static bool LoadTurnOffUpdates()
+        {
+            return string.Equals(
+                Interaction.GetSetting(UpdateCheckerAppName, "UpdateChecker", "TurnOffUpdates", "False"),
+                "True",
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static void SaveTurnOffUpdates(bool turnedOff)
+        {
+            // Store the same "True"/"False" string the VSTO's bool.ToString() produces,
+            // so SettingsManager.GetBool()'s bool.TryParse round-trips it correctly.
+            Interaction.SaveSetting(UpdateCheckerAppName, "UpdateChecker", "TurnOffUpdates", turnedOff ? "True" : "False");
+        }
+
         // ── Dark mode ─────────────────────────────────────────────────────────────
 
         /// <summary>

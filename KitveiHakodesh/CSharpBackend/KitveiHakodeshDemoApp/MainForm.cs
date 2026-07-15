@@ -76,6 +76,12 @@ namespace KitveiHakodeshDemoApp
             if (_updateCheckDone) return;
             _updateCheckDone = true;
 
+            // Respect the shared "turn off automatic updates" toggle (same registry key
+            // as the KleiKodesh Word add-in — set from the Vue settings "מתקדם" card).
+            // When on, skip the network/GitHub check entirely. RunPendingInstaller() on
+            // close is intentionally NOT gated — an already-downloaded update still applies.
+            if (AppSettings.LoadTurnOffUpdates()) return;
+
             // ── Step 1: sync disk check — no network, instant ────────────────────
             // Reads %TEMP%\KleiKodeshSetup.exe version and compares to registry.
             // Arms RunPendingInstaller() and returns the version if newer.
