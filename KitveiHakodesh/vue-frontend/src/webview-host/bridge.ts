@@ -511,3 +511,27 @@ export async function clearHbLocalFolder(): Promise<void> {
   if (typeof window.__webviewAction !== 'function') return
   await action('clearHbLocalFolder').catch(() => {})
 }
+
+/**
+ * Read whether the automatic update check is turned off. Backed by the SAME registry
+ * key the KleiKodesh Word add-in uses (HKCU\...\KleiKodesh\UpdateChecker\TurnOffUpdates),
+ * so one toggle governs both apps. Returns null in dev/browser (no host).
+ */
+export async function getTurnOffUpdates(): Promise<boolean | null> {
+  if (typeof window.__webviewAction !== 'function') return null
+  try {
+    const res = await action<{ value?: boolean; error?: string }>('getTurnOffUpdates')
+    if (res.error) return null
+    return res.value ?? false
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Persist the "turn off automatic updates" flag to the shared VSTO registry key.
+ */
+export async function setTurnOffUpdates(value: boolean): Promise<void> {
+  if (typeof window.__webviewAction !== 'function') return
+  await action('setTurnOffUpdates', { value }).catch(() => {})
+}

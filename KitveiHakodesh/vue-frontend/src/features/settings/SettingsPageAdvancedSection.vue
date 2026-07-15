@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
+import ToggleGroup from './ToggleGroup.vue'
 import { isHosted, onDbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { pickFolder, clearDbPath, clearHbLocalFolder, openExcludedFoldersManager } from '@/webview-host/bridge'
+import {
+  pickFolder,
+  clearDbPath,
+  clearHbLocalFolder,
+  openExcludedFoldersManager,
+  getTurnOffUpdates,
+  setTurnOffUpdates,
+} from '@/webview-host/bridge'
 
 // ── Database path ─────────────────────────────────────────────────────────────
 
@@ -58,6 +66,23 @@ async function resetDbPath() {
 
 async function openExcludedFolders() {
   await openExcludedFoldersManager()
+}
+
+// ── Automatic updates ─────────────────────────────────────────────────────────
+// Backed by the shared VSTO registry key (KleiKodesh\UpdateChecker\TurnOffUpdates),
+// read/written directly via the host bridge — not the settings store (which persists
+// to localStorage). true = the automatic update check is turned OFF.
+
+const turnOffUpdates = ref(false)
+
+onMounted(async () => {
+  const value = await getTurnOffUpdates()
+  if (value !== null) turnOffUpdates.value = value
+})
+
+async function applyTurnOffUpdates(value: boolean) {
+  turnOffUpdates.value = value
+  await setTurnOffUpdates(value)
 }
 </script>
 
@@ -116,6 +141,25 @@ async function openExcludedFolders() {
       >
         ניהול תיקיות מוחרגות
       </button>
+    </SettingRow>
+    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
+
+    <!-- עדכונים -->
+    <div class="subsection-label">עדכונים</div>
+    <SettingRow
+      id="nav-turn-off-updates"
+      data-nav-label="כבה בדיקת עדכונים"
+      label="כבה בדיקת עדכונים אוטומטית"
+      hint="כאשר מופעל, האפליקציה לא תבדוק אוטומטית אם קיים עדכון בעת הפתיחה. הגדרה זו משותפת עם התוסף של וורד. עדכון שכבר הורד עדיין יותקן עם סגירת האפליקציה."
+    >
+      <ToggleGroup
+        :model-value="turnOffUpdates"
+        :options="[
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
+        ]"
+        @update:model-value="applyTurnOffUpdates"
+      />
     </SettingRow>
     <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
   </div>
