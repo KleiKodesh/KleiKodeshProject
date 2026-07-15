@@ -1,6 +1,5 @@
 import { ref, shallowRef, computed, watch } from 'vue'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/webview-host/seforimApi'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
 import type { TreeNodeItem } from '@/components/treeTypes'
 
@@ -71,7 +70,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     loading.value = true
     error.value = null
     try {
-      const entries = await query<TocEntry>(SQL.GET_ALL_TOC_ENTRIES, [id])
+      const entries = await getAllTocEntries(id)
       const stripped = stripBookTitleRoot(entries, bookTitle?.(), id)
       tocEntries.value = stripped
       tocSearchTree.value = new SearchableTree(stripped)
@@ -97,10 +96,10 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     _altTocBookId = id
     _altTocLoading = true
     try {
-      const structures = await query<AltTocStructure>(SQL.GET_ALT_TOC_STRUCTURES, [id])
+      const structures = await getAltTocStructures(id)
       const sections = await Promise.all(
         structures.map(async (s) => {
-          const entries = await query<TocEntry>(SQL.GET_ALL_ALT_TOC_ENTRIES, [s.id])
+          const entries = await getAllAltTocEntries(s.id)
           return { structure: s, entries, searchTree: null }
         }),
       )

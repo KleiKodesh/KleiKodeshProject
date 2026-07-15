@@ -1,5 +1,4 @@
 import { ref } from 'vue'
-import { devQuery } from './devFallbacks'
 
 export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
 export const dbReady = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
@@ -13,6 +12,12 @@ let _schemaDetecting: Promise<void> | null = null
 /** Lazy — only runs on first call. Safe to call multiple times. */
 export function ensureCategorySchema(): Promise<void> {
   if (_schemaDetected) return Promise.resolve()
+  // Dev routes the catalog through the service, which detects the orderIndex column
+  // itself — categoryHasOrderIndex is only consulted on the hosted (C#) SQL path.
+  if (typeof window.__webviewQuery !== 'function') {
+    _schemaDetected = true
+    return Promise.resolve()
+  }
   if (_schemaDetecting) return _schemaDetecting
   _schemaDetecting = query<{ name: string }>('PRAGMA table_info(category)', [])
     .then((cols) => {
@@ -70,8 +75,8 @@ export async function query<T = unknown>(sql: string, params: unknown[] = []): P
   if (typeof window.__webviewQuery === 'function') {
     return (await window.__webviewQuery(sql, params)).rows as T[]
   }
-  // In the hosted environment without a DB (user skipped setup), return empty
-  // results rather than falling through to the dev fetch which would fail.
+  // In the hosted environment without a DB (user skipped setup), return empty results.
   if (isHosted && !dbReady.value) return []
-  return devQuery<T>(sql, params)
+  // Dev seforim access goes through seforimApi (the KitveiHakodesh service), not here.
+  throw new Error('seforimDb.query() is hosted-only; dev uses seforimApi')
 }

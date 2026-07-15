@@ -1,8 +1,10 @@
 // Dictionary DB query layer for KitveiHakodesh_dictionary.db.
-// All SQL strings live in dictionaryDb.sql.ts.
+// Hosted (C#) still runs the SQL from dictionaryDb.sql.ts via the dict-sql bridge.
+// Dev routes through the KitveiHakodesh service (serviceCall), which owns the SQL —
+// the browser dev build no longer sends dictionary SQL.
 // Seforim DB queries (מצודת ציון, מלבי"ם, מחברת מנחם) live in dictionarySeforimDb.ts.
 
-import { devQueryDict } from './devFallbacks'
+import { serviceCall } from './serviceClient'
 import {
   boldExact, boldPrefix, boldContains,
   getMetzudatBookIds, getMalbimBookIds,
@@ -41,57 +43,67 @@ declare global {
 
 // ── Query transport ───────────────────────────────────────────────────────────
 
-async function queryDict<T>(sql: string, params: unknown[]): Promise<T[]> {
-  if (typeof window.__webviewDictQuery === 'function') {
-    return (await window.__webviewDictQuery(sql, params)).rows as T[]
-  }
-  return devQueryDict<T>(sql, params)
+/** True when the C# dict-sql bridge is present (hosted). Dev falls to the service. */
+const isDictHosted = (): boolean => typeof window.__webviewDictQuery === 'function'
+
+/** Hosted-only transport — runs SQL via the C# dict-sql bridge. */
+async function queryDictHosted<T>(sql: string, params: unknown[]): Promise<T[]> {
+  return (await window.__webviewDictQuery!(sql, params)).rows as T[]
 }
 
 // ── Dictionary tier queries ───────────────────────────────────────────────────
 
 async function dictExact(term: string): Promise<{ rows: SenseRow[]; isExact: boolean }> {
-  const rows = await queryDict<SenseRow>(SQL_DICT_EXACT, [term])
+  if (!isDictHosted())
+    return serviceCall<{ rows: SenseRow[]; isExact: boolean }>('dictExact', { term })
+  const rows = await queryDictHosted<SenseRow>(SQL_DICT_EXACT, [term])
   if (rows.length > 0) return { rows, isExact: true }
-  const hit = await queryDict<{ '1': number }>(SQL_DICT_EXACT_IN_WORD, [term])
+  const hit = await queryDictHosted<{ '1': number }>(SQL_DICT_EXACT_IN_WORD, [term])
   return { rows: [], isExact: hit.length > 0 }
 }
 
 async function dictPrefix(term: string): Promise<SenseRow[]> {
-  return queryDict<SenseRow>(SQL_DICT_PREFIX, [`${term}%`, term])
+  if (!isDictHosted()) return (await serviceCall<{ rows: SenseRow[] }>('dictPrefix', { term })).rows
+  return queryDictHosted<SenseRow>(SQL_DICT_PREFIX, [`${term}%`, term])
 }
 
 async function dictContains(term: string): Promise<SenseRow[]> {
-  return queryDict<SenseRow>(SQL_DICT_CONTAINS, [`%${term}%`, `${term}%`])
+  if (!isDictHosted()) return (await serviceCall<{ rows: SenseRow[] }>('dictContains', { term })).rows
+  return queryDictHosted<SenseRow>(SQL_DICT_CONTAINS, [`%${term}%`, `${term}%`])
 }
 
 // ── Exported dictionary functions ─────────────────────────────────────────────
 
 /** Related words (ראו גם, נגזרות, ניגודים — excludes כתיב variants). */
-export function dictLinks(term: string): Promise<DictLink[]> {
-  return queryDict<DictLink>(SQL_DICT_LINKS, [term])
+export async function dictLinks(term: string): Promise<DictLink[]> {
+  if (!isDictHosted()) return (await serviceCall<{ links: DictLink[] }>('dictLinks', { term })).links
+  return queryDictHosted<DictLink>(SQL_DICT_LINKS, [term])
 }
 
 /** Synonym words (נרדף). */
 export async function dictSynonyms(term: string): Promise<string[]> {
-  const rows = await queryDict<{ word: string }>(SQL_DICT_SYNONYMS, [term])
+  if (!isDictHosted()) return (await serviceCall<{ words: string[] }>('dictSynonyms', { term })).words
+  const rows = await queryDictHosted<{ word: string }>(SQL_DICT_SYNONYMS, [term])
   return rows.map(r => r.word)
 }
 
 /** Spelling variants — same word different spelling (כתיב). */
 export async function dictVariants(term: string): Promise<string[]> {
-  const rows = await queryDict<{ word: string }>(SQL_DICT_VARIANTS, [term])
+  if (!isDictHosted()) return (await serviceCall<{ words: string[] }>('dictVariants', { term })).words
+  const rows = await queryDictHosted<{ word: string }>(SQL_DICT_VARIANTS, [term])
   return rows.map(r => r.word)
 }
 
 /** Candidate headwords for spelling suggestions (Levenshtein). */
 export async function dictSpellCandidates(term: string): Promise<string[]> {
+  if (!isDictHosted())
+    return (await serviceCall<{ words: string[] }>('dictSpellCandidates', { term })).words
   const frag2 = term.slice(0, 2)
   const frag3 = term.slice(0, 3)
   const [r2, r3] = await Promise.all([
-    queryDict<{ headword: string }>(SQL_DICT_SPELL_CANDIDATES_FRAG2, [`${frag2}%`]),
+    queryDictHosted<{ headword: string }>(SQL_DICT_SPELL_CANDIDATES_FRAG2, [`${frag2}%`]),
     frag3.length === 3
-      ? queryDict<{ headword: string }>(SQL_DICT_SPELL_CANDIDATES_FRAG3, [`${frag3}%`])
+      ? queryDictHosted<{ headword: string }>(SQL_DICT_SPELL_CANDIDATES_FRAG3, [`${frag3}%`])
       : Promise.resolve([]),
   ])
   const seen = new Set<string>()
@@ -118,12 +130,16 @@ export async function abbrevLookup(term: string): Promise<SenseRow[]> {
 export async function dictAbbrevSenses(
   candidates: string[],
 ): Promise<{ matched: string; rows: SenseRow[] } | null> {
+  if (!isDictHosted()) {
+    const r = await serviceCall<{ matched: string | null; rows: SenseRow[] }>('dictAbbrevSenses', { candidates })
+    return r.matched ? { matched: r.matched, rows: r.rows } : null
+  }
   for (const candidate of candidates) {
-    const rows = await queryDict<SenseRow>(SQL_DICT_EXACT, [candidate])
+    const rows = await queryDictHosted<SenseRow>(SQL_DICT_EXACT, [candidate])
     if (rows.length > 0) return { matched: candidate, rows }
   }
   for (const candidate of candidates) {
-    const rows = await queryDict<SenseRow>(SQL_DICT_ABBREV_CONTAINS, [`%${candidate}%`])
+    const rows = await queryDictHosted<SenseRow>(SQL_DICT_ABBREV_CONTAINS, [`%${candidate}%`])
     if (rows.length > 0) return { matched: candidate, rows }
   }
   return null
@@ -135,7 +151,9 @@ export async function dictAbbrevSenses(
  */
 export async function dictKetivVariants(candidates: string[]): Promise<string[]> {
   if (candidates.length === 0) return []
-  const rows = await queryDict<{ headword: string }>(
+  if (!isDictHosted())
+    return (await serviceCall<{ words: string[] }>('dictKetivVariants', { candidates })).words
+  const rows = await queryDictHosted<{ headword: string }>(
     buildKetivExistsQuery(candidates.length),
     candidates,
   )

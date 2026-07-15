@@ -20,8 +20,11 @@ import { IconLibrary16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import {
+  getLinkTargetForSourceLineAndBook,
+  getNextSectionWithCommentary,
+  getPrevSectionWithCommentary,
+} from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
 
@@ -120,36 +123,21 @@ async function resolveTargetLineIndex(targetBookId: number): Promise<number | un
   if (topLine == null) return undefined
 
   // 1. Direct hit — does the current top line already link to this book?
-  const directRows = await query<{ targetLineId: number; lineIndex: number }>(
-    SQL.GET_LINK_TARGET_FOR_SOURCE_LINE_AND_BOOK,
-    [topLine.id, targetBookId],
-  )
+  const directRows = await getLinkTargetForSourceLineAndBook(topLine.id, targetBookId)
   if (directRows.length) return directRows[0]!.lineIndex
 
   // 2. Forward scan — nearest line ahead with a link to this book
-  const forwardRows = await query<{ id: number; lineIndex: number }>(
-    SQL.GET_NEXT_SECTION_WITH_COMMENTARY,
-    [props.bookId, targetBookId, props.currentScrollLineIndex],
-  )
+  const forwardRows = await getNextSectionWithCommentary(props.bookId, targetBookId, props.currentScrollLineIndex)
   if (forwardRows.length) {
     // Resolve the target line in the commentary book for that source line
-    const targetRows = await query<{ targetLineId: number; lineIndex: number }>(
-      SQL.GET_LINK_TARGET_FOR_SOURCE_LINE_AND_BOOK,
-      [forwardRows[0]!.id, targetBookId],
-    )
+    const targetRows = await getLinkTargetForSourceLineAndBook(forwardRows[0]!.id, targetBookId)
     if (targetRows.length) return targetRows[0]!.lineIndex
   }
 
   // 3. Backward scan — nearest line behind with a link to this book
-  const backwardRows = await query<{ id: number; lineIndex: number }>(
-    SQL.GET_PREV_SECTION_WITH_COMMENTARY,
-    [props.bookId, targetBookId, props.currentScrollLineIndex],
-  )
+  const backwardRows = await getPrevSectionWithCommentary(props.bookId, targetBookId, props.currentScrollLineIndex)
   if (backwardRows.length) {
-    const targetRows = await query<{ targetLineId: number; lineIndex: number }>(
-      SQL.GET_LINK_TARGET_FOR_SOURCE_LINE_AND_BOOK,
-      [backwardRows[0]!.id, targetBookId],
-    )
+    const targetRows = await getLinkTargetForSourceLineAndBook(backwardRows[0]!.id, targetBookId)
     if (targetRows.length) return targetRows[0]!.lineIndex
   }
 

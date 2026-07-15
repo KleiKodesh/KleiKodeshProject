@@ -1,5 +1,9 @@
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import {
+  getNextSectionWithCommentary,
+  getPrevSectionWithCommentary,
+  getNextTocSectionWithCommentary,
+  getPrevTocSectionWithCommentary,
+} from '@/webview-host/seforimApi'
 import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
 
 export interface SectionNavResult {
@@ -12,11 +16,7 @@ export async function findNextCommentarySection(
   commentaryBookId: number,
   currentLineIndex: number,
 ): Promise<SectionNavResult | null> {
-  const rows = await query<SectionNavResult>(SQL.GET_NEXT_SECTION_WITH_COMMENTARY, [
-    mainBookId,
-    commentaryBookId,
-    currentLineIndex,
-  ])
+  const rows = await getNextSectionWithCommentary(mainBookId, commentaryBookId, currentLineIndex)
   return rows[0] ?? null
 }
 
@@ -25,11 +25,7 @@ export async function findPrevCommentarySection(
   commentaryBookId: number,
   currentLineIndex: number,
 ): Promise<SectionNavResult | null> {
-  const rows = await query<SectionNavResult>(SQL.GET_PREV_SECTION_WITH_COMMENTARY, [
-    mainBookId,
-    commentaryBookId,
-    currentLineIndex,
-  ])
+  const rows = await getPrevSectionWithCommentary(mainBookId, commentaryBookId, currentLineIndex)
   return rows[0] ?? null
 }
 
@@ -57,10 +53,7 @@ export async function findNextTocCommentarySection(
   // Bind order: interleaved pairs first, then mainBookId + commentaryBookId at the end
   // (matching the correlated subquery param order in the SQL).
   const rangePairs = candidates.flatMap((entry) => [entry.lineIndex, getSectionEnd(entry, allEntries)])
-  const rows = await query<{ sectionStart: number }>(
-    SQL.GET_NEXT_TOC_SECTION_WITH_COMMENTARY(candidates.length),
-    [...rangePairs, mainBookId, commentaryBookId],
-  )
+  const rows = await getNextTocSectionWithCommentary(mainBookId, commentaryBookId, rangePairs)
   if (!rows.length) return null
 
   const matchingStart = rows[0]!.sectionStart
@@ -82,10 +75,7 @@ export async function findPrevTocCommentarySection(
 
   // Same batch approach as findNextTocCommentarySection — single query for all candidates.
   const rangePairs = candidates.flatMap((entry) => [entry.lineIndex, getSectionEnd(entry, allEntries)])
-  const rows = await query<{ sectionStart: number }>(
-    SQL.GET_PREV_TOC_SECTION_WITH_COMMENTARY(candidates.length),
-    [...rangePairs, mainBookId, commentaryBookId],
-  )
+  const rows = await getPrevTocSectionWithCommentary(mainBookId, commentaryBookId, rangePairs)
   if (!rows.length) return null
 
   const matchingStart = rows[0]!.sectionStart

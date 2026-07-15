@@ -3,8 +3,7 @@
  * All data transformation and querying for the commentary panel lives here.
  * No Vue reactivity — purely async functions and pure transformations.
  */
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getReverseLineData, getReverseBooks, getStaticFilterBooks } from '@/webview-host/seforimApi'
 import type { BookRow } from '../../book-catalog/bookCatalogTree'
 import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
@@ -218,18 +217,7 @@ export async function fetchSourceEntriesViaReverseQuery(
   const commentaryTypeIds = getCommentaryConnectionTypeIds()
   if (!commentaryTypeIds.length) return []
 
-  const isMulti = lineIds.length > 1
-  const sql = isMulti
-    ? SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE(commentaryTypeIds.length, lineIds.length)
-    : SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP(commentaryTypeIds.length)
-  const params = isMulti ? [...lineIds, ...commentaryTypeIds] : [lineIds[0]!, ...commentaryTypeIds]
-
-  const rows = await query<{
-    sourceBookId: number
-    sourceLineId: number
-    lineIndex: number
-    content: string
-  }>(sql, params)
+  const rows = await getReverseLineData(lineIds, commentaryTypeIds)
 
   if (!rows.length) return []
 
@@ -274,18 +262,7 @@ export async function fetchTargumEntriesViaReverseQuery(
   const targumTypeIds = getTargumConnectionTypeIds()
   if (!targumTypeIds.length) return []
 
-  const isMulti = lineIds.length > 1
-  const sql = isMulti
-    ? SQL.GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP_RANGE(targumTypeIds.length, lineIds.length)
-    : SQL.GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP(targumTypeIds.length)
-  const params = isMulti ? [...lineIds, ...targumTypeIds] : [lineIds[0]!, ...targumTypeIds]
-
-  const rows = await query<{
-    sourceBookId: number
-    sourceLineId: number
-    lineIndex: number
-    content: string
-  }>(sql, params)
+  const rows = await getReverseLineData(lineIds, targumTypeIds)
 
   if (!rows.length) return []
 
@@ -346,24 +323,9 @@ export async function buildStaticCommentaryFilterGroups(
   const targumTypeIds = getTargumConnectionTypeIds()
 
   const [forwardRows, reverseSourceRows, reverseTargumRows] = await Promise.all([
-    forwardConnectionTypeIds.length
-      ? query<{ targetBookId: number; connectionTypeId: number }>(
-          SQL.GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK(forwardConnectionTypeIds.length),
-          [sourceBookId, ...forwardConnectionTypeIds],
-        )
-      : Promise.resolve([]),
-    commentaryTypeIds.length
-      ? query<{ sourceBookId: number }>(
-          SQL.GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP(commentaryTypeIds.length),
-          [sourceBookId, ...commentaryTypeIds],
-        )
-      : Promise.resolve([]),
-    targumTypeIds.length
-      ? query<{ sourceBookId: number }>(
-          SQL.GET_TARGUM_BOOKS_BY_REVERSE_TARGUM_LOOKUP(targumTypeIds.length),
-          [sourceBookId, ...targumTypeIds],
-        )
-      : Promise.resolve([]),
+    getStaticFilterBooks(sourceBookId, forwardConnectionTypeIds),
+    getReverseBooks(sourceBookId, commentaryTypeIds),
+    getReverseBooks(sourceBookId, targumTypeIds),
   ])
 
   if (!forwardRows.length && !reverseSourceRows.length && !reverseTargumRows.length) return []

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { query, categoryHasOrderIndex, ensureCategorySchema } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { ensureCategorySchema } from '@/webview-host/seforimDb'
+import { getAllCategories, getAllBooks } from '@/webview-host/seforimApi'
 import {
   buildTree,
   assignFullPaths,
@@ -41,15 +41,12 @@ export const useBooksDataStore = defineStore('booksData', () => {
         let categories: CategoryRow[] = []
         let books: BookRow[] = []
         try {
-          ;[categories, books] = await Promise.all([
-            query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)),
-            query<BookRow>(SQL.GET_ALL_BOOKS),
-          ])
+          ;[categories, books] = await Promise.all([getAllCategories(), getAllBooks()])
         } catch (e) {
           // If the combined fetch fails, try each query individually so a broken
           // books table doesn't prevent categories from loading (and vice versa).
-          try { categories = await query<CategoryRow>(SQL.GET_ALL_CATEGORIES(categoryHasOrderIndex)) } catch { /* use empty */ }
-          try { books = await query<BookRow>(SQL.GET_ALL_BOOKS) } catch { /* use empty */ }
+          try { categories = await getAllCategories() } catch { /* use empty */ }
+          try { books = await getAllBooks() } catch { /* use empty */ }
           // Only surface an error if we got nothing at all
           if (!categories.length && !books.length) throw e
         }

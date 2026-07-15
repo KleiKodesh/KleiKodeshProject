@@ -24,6 +24,8 @@
 
 import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
+import { isDbHosted } from '@/webview-host/seforimApi'
+import { serviceCall } from '@/webview-host/serviceClient'
 import { SearchableTree, stripTocTitleRoots } from '../book-view/toc/tocSearchUtils'
 import type { BookRow } from './bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
@@ -163,28 +165,32 @@ export async function fetchTocRowsForBooks(
   const filterWord = lastTocWord?.toLowerCase() ?? ''
   const usePrefilter = filterWord.length > 0 && LIKE_SAFE_WORD_RE.test(filterWord)
 
-  const batchResults = usePrefilter
-    ? [
-        await query<TocRow>(SQL.GET_TOC_TITLES_MATCHING_FOR_BOOKS(bookIds.length), [
-          ...bookIds,
-          escapeLikeWord(filterWord),
-        ]),
-      ]
-    : await Promise.all(
-        splitIntoBatches(bookIds).map((batch) =>
-          query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
-        ),
-      )
+  // Dev routes through the service (which owns the prefilter/escape/batch logic);
+  // hosted keeps the SQL here (prefiltered query, or parallel batches by book id).
+  let rawRows: TocRow[]
+  if (!isDbHosted()) {
+    rawRows = (await serviceCall<{ rows: TocRow[] }>('getTocTitlesForBooks', { bookIds, filterWord })).rows
+  } else if (usePrefilter) {
+    rawRows = await query<TocRow>(SQL.GET_TOC_TITLES_MATCHING_FOR_BOOKS(bookIds.length), [
+      ...bookIds,
+      escapeLikeWord(filterWord),
+    ])
+  } else {
+    const batches = await Promise.all(
+      splitIntoBatches(bookIds).map((batch) =>
+        query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
+      ),
+    )
+    rawRows = batches.flat()
+  }
   if (isCancelled()) return null
 
   // Group rows per book, then strip redundant roots per book.
   const rowsByBook = new Map<number, TocRow[]>()
-  for (const rows of batchResults) {
-    for (const row of rows) {
-      const group = rowsByBook.get(row.bookId)
-      if (group) group.push(row)
-      else rowsByBook.set(row.bookId, [row])
-    }
+  for (const row of rawRows) {
+    const group = rowsByBook.get(row.bookId)
+    if (group) group.push(row)
+    else rowsByBook.set(row.bookId, [row])
   }
 
   // Assemble in book tree order — identical ordering to the old sequential

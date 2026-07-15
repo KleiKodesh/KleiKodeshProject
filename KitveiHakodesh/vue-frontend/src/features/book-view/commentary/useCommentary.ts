@@ -1,6 +1,5 @@
 import { computed, nextTick, ref, watch } from 'vue'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getCommentaryLinksForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import {
   ensureConnectionTypeNamesLoaded,
@@ -158,10 +157,7 @@ export function useCommentary(
   /** Fetches content for one batch of lines and writes it into every matching line object. */
   async function fetchContentsInto(builtGroups: CommentaryGroup[], batch: CommentaryLine[]) {
     for (const line of batch) contentRequested.add(line.lineId)
-    const rows = await query<{ id: number; content: string }>(
-      SQL.GET_LINE_CONTENTS(batch.length),
-      batch.map((line) => line.lineId),
-    )
+    const rows = await getLineContents(batch.map((line) => line.lineId))
     const contentById = new Map(rows.map((row) => [row.id, row.content ?? '']))
     for (const group of builtGroups) {
       for (const line of group.lines) {
@@ -238,17 +234,9 @@ export function useCommentary(
       // content-joining query cost 150ms-1.4s and up to 10MB per click), so group
       // structure renders immediately. Line text is backfilled below.
       const queryLineIds = isMulti ? multiIds : [lineId]
-      const sql = SQL.GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE(queryLineIds.length)
-      const params = queryLineIds
       const lineIdsForReverse = queryLineIds
 
-      const forwardQueryPromise = query<{
-        targetBookId: number
-        targetLineId: number
-        connectionTypeId: number
-        lineIndex: number
-        content?: string
-      }>(sql, params)
+      const forwardQueryPromise = getCommentaryLinksForSourceLineRange(queryLineIds)
 
       const [rows, sourceEntries, targumEntries] = await Promise.all([
         forwardQueryPromise,

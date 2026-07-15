@@ -10,8 +10,7 @@
  * capture happens at the point of user interaction, not asynchronously.
  */
 import { ref, watch } from 'vue'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getDefaultCommentators } from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
 
@@ -33,7 +32,7 @@ export function usePinnedCommentary(
   async function ensureDefaultCommentatorsLoaded() {
     if (defaultCommentatorsLoaded || bookId == null) return
     defaultCommentatorsLoaded = true
-    const rows = await query<{ commentatorBookId: number }>(SQL.GET_DEFAULT_COMMENTATORS, [bookId])
+    const rows = await getDefaultCommentators(bookId)
     defaultCommentatorBookIds = rows.map((r) => r.commentatorBookId)
   }
 

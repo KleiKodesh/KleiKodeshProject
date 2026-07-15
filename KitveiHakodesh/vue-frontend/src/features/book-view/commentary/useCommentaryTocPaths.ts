@@ -1,6 +1,5 @@
 import { ref, watch } from 'vue'
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
+import { getTocPathsForLines, getEnclosingTocPathForLineRanges } from '@/webview-host/seforimApi'
 
 /**
  * Fetches and caches TOC paths for commentary groups. Keyed by bookId — resolved
@@ -26,10 +25,7 @@ export function useCommentaryTocPaths(
       .filter((id): id is number => id != null && id > 0)
     if (!lineIds.length) return
 
-    const rows = await query<{ lineId: number; bookId: number; tocPath: string }>(
-      SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
-      lineIds,
-    )
+    const rows = await getTocPathsForLines(lineIds)
     const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
     const resolved = new Map<number, string>()
     for (const g of groupList) {
@@ -71,10 +67,7 @@ export function useCommentaryTocPaths(
       for (const { groupKey, firstLineId, lastLineId } of triples) {
         params.push(groupKey, firstLineId, lastLineId)
       }
-      const rows = await query<{ groupKey: number; bookId: number; tocPath: string }>(
-        SQL.GET_ENCLOSING_TOC_PATH_FOR_LINE_RANGES(triples.length),
-        params,
-      )
+      const rows = await getEnclosingTocPathForLineRanges(params)
       const pathsByGroupKey = new Map(rows.map((r) => [r.groupKey, r.tocPath]))
       for (const { groupKey, bookId } of triples) {
         const tocPath = pathsByGroupKey.get(groupKey)
@@ -85,10 +78,7 @@ export function useCommentaryTocPaths(
     // Fall back to the single-line query for groups with only one real line.
     if (singleLineGroups.length > 0) {
       const lineIds = singleLineGroups.map((g) => g.lineId)
-      const rows = await query<{ lineId: number; bookId: number; tocPath: string }>(
-        SQL.GET_TOC_PATHS_FOR_LINES(lineIds.length),
-        lineIds,
-      )
+      const rows = await getTocPathsForLines(lineIds)
       const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
       for (const { lineId, bookId } of singleLineGroups) {
         const tocPath = pathsByLineId.get(lineId)
