@@ -1,7 +1,7 @@
 using System;
 using System.Buffers;
 using System.Collections.Generic;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using System.IO;
 using System.Text;
 
@@ -124,10 +124,17 @@ namespace FtsLib.Indexing
             string path,
             List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> rows)
         {
-            string connStr = $"Data Source={path};Version=3;Page Size=65536;Cache Size=8000;";
-            using (var conn = new SQLiteConnection(connStr))
+            // Pooling=False: these segment .db files are written once then File.Move'd to their
+            // final name. With pooling on, Microsoft.Data.Sqlite keeps the file handle open after
+            // Dispose, so the subsequent File.Move fails with a sharing violation on .NET (Core/10).
+            string connStr = new SqliteConnectionStringBuilder { DataSource = path, Pooling = false }.ConnectionString;
+            using (var conn = new SqliteConnection(connStr))
             {
                 conn.Open();
+                // page_size + cache_size were connection-string options under System.Data.SQLite;
+                // Microsoft.Data.Sqlite needs them as PRAGMAs, set BEFORE any table/WAL write so the
+                // 64 KB page size is baked into the fresh segment .db (preserves the on-disk format).
+                Exec(conn, "PRAGMA page_size=65536;PRAGMA cache_size=8000;");
                 Exec(conn,
                     "PRAGMA journal_mode=WAL;PRAGMA synchronous=NORMAL;" +
                     "PRAGMA temp_store=MEMORY;PRAGMA mmap_size=1073741824;");
@@ -142,12 +149,12 @@ namespace FtsLib.Indexing
                     ins.CommandText =
                         "INSERT INTO term_index(term,skip_offset,skip_count,offset,length,count) " +
                         "VALUES(@t,@so,@sc,@o,@l,@c)";
-                    var pT  = ins.Parameters.Add("@t",  System.Data.DbType.String);
-                    var pSO = ins.Parameters.Add("@so", System.Data.DbType.Int64);
-                    var pSC = ins.Parameters.Add("@sc", System.Data.DbType.Int32);
-                    var pO  = ins.Parameters.Add("@o",  System.Data.DbType.Int64);
-                    var pL  = ins.Parameters.Add("@l",  System.Data.DbType.Int32);
-                    var pC  = ins.Parameters.Add("@c",  System.Data.DbType.Int32);
+                    var pT  = ins.Parameters.Add("@t",  SqliteType.Text);
+                    var pSO = ins.Parameters.Add("@so", SqliteType.Integer);
+                    var pSC = ins.Parameters.Add("@sc", SqliteType.Integer);
+                    var pO  = ins.Parameters.Add("@o",  SqliteType.Integer);
+                    var pL  = ins.Parameters.Add("@l",  SqliteType.Integer);
+                    var pC  = ins.Parameters.Add("@c",  SqliteType.Integer);
                     foreach (var (term, skipOff, skipCnt, off, len, cnt) in rows)
                     {
                         pT.Value  = term;
@@ -176,7 +183,7 @@ namespace FtsLib.Indexing
             try { if (File.Exists(path + "-wal")) File.Delete(path + "-wal"); } catch { }
         }
 
-        private static void Exec(SQLiteConnection conn, string sql)
+        private static void Exec(SqliteConnection conn, string sql)
         {
             using (var cmd = conn.CreateCommand())
             { cmd.CommandText = sql; cmd.ExecuteNonQuery(); }

@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
+using Microsoft.Data.Sqlite;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -467,8 +467,8 @@ namespace FtsLib.Indexing
                     while (reader.MoveNext()) termCount++;
                 if (termCount == 0) return false;
 
-                using (var conn = new SQLiteConnection(
-                    $"Data Source={dbPath};Version=3;Read Only=True;FailIfMissing=True;"))
+                using (var conn = new SqliteConnection(
+                    $"Data Source={dbPath};Mode=ReadOnly"))
                 {
                     conn.Open();
                     using (var cmd = conn.CreateCommand())

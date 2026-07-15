@@ -52,8 +52,8 @@ namespace FtsLib.Indexing
     internal sealed class SegmentHandle : IDisposable
     {
         public readonly string DatPath;
-        public readonly System.Data.SQLite.SQLiteConnection Conn;
-        public readonly System.Data.SQLite.SQLiteCommand    Lookup;
+        public readonly Microsoft.Data.Sqlite.SqliteConnection Conn;
+        public readonly Microsoft.Data.Sqlite.SqliteCommand    Lookup;
 
         // Plain FileStream for positioned reads.
         // ReadBytes() locks _readLock before seeking so concurrent callers are serialised.
@@ -74,13 +74,13 @@ namespace FtsLib.Indexing
 
             try
             {
-                Conn = new System.Data.SQLite.SQLiteConnection(
-                    string.Format("Data Source={0};Version=3;Read Only=True;", dbPath));
+                Conn = new Microsoft.Data.Sqlite.SqliteConnection(
+                    string.Format("Data Source={0};Mode=ReadOnly", dbPath));
                 Conn.Open();
                 Lookup = Conn.CreateCommand();
                 Lookup.CommandText =
                     "SELECT skip_offset, skip_count, offset, length, count FROM term_index WHERE term = @t";
-                Lookup.Parameters.Add("@t", System.Data.DbType.String);
+                Lookup.Parameters.Add("@t", Microsoft.Data.Sqlite.SqliteType.Text);
             }
             catch
             {
