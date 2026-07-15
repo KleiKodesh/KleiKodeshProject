@@ -18,7 +18,8 @@ public sealed class Dispatcher(
     DictionaryService dictionary,
     SeforimDbService seforim,
     FullTextSearchService fts,
-    UserSettingsService userSettings)
+    UserSettingsService userSettings,
+    IHostApplicationLifetime lifetime)
 {
     public async Task<string> DispatchAsync(string requestJson, CancellationToken ct)
     {
@@ -42,6 +43,14 @@ public sealed class Dispatcher(
                 case "ping":
                     return RpcResponse.Ok("{\"pong\":true}");
 
+                // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
+                // cancels the build cleanly (aborts any merge, releases the index lock)
+                // before the process exits. The dev killer calls this before taskkill so
+                // a restart never hard-kills a build in progress (index-corruption path).
+                case "shutdown":
+                    lifetime.StopApplication();
+                    return RpcResponse.Ok("{\"shuttingDown\":true}");
+
                 case "locateDocuments":
                 {
                     var args = req.Args.ValueKind == JsonValueKind.Object
@@ -56,6 +65,10 @@ public sealed class Dispatcher(
                 case "locateDocumentsWarmup":
                     locator.Warmup();
                     return RpcResponse.Ok("{\"started\":true}");
+
+                case "resetDocumentLocatorIndex":
+                    await locator.ReindexAsync(ct);
+                    return RpcResponse.Ok("{\"reset\":true}");
 
                 case "hbSearch":
                 {
@@ -354,9 +367,36 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(JsonSerializer.Serialize(res, RpcJsonContext.Default.FtsSearchResult));
                 }
 
+                // Streaming FTS: start a background search, then poll for incremental
+                // batches — mirrors the hosted C# streaming so the first hits paint fast.
+                case "ftsSearchStart":
+                {
+                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsSearchStartArgs) ?? new FtsSearchStartArgs();
+                    var res = fts.StartSearch(a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv);
+                    return RpcResponse.Ok(JsonSerializer.Serialize(res, RpcJsonContext.Default.FtsSearchStartResult));
+                }
+
+                case "ftsSearchPoll":
+                {
+                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsSearchPollArgs) ?? new FtsSearchPollArgs();
+                    var res = await fts.PollSearch(a.SearchId ?? "", a.Offset, ct);
+                    return RpcResponse.Ok(JsonSerializer.Serialize(res, RpcJsonContext.Default.FtsSearchPollResult));
+                }
+
+                case "ftsSearchCancel":
+                {
+                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsCancelArgs) ?? new FtsCancelArgs();
+                    fts.CancelSearch(a.SearchId ?? "");
+                    return RpcResponse.Ok("{\"cancelled\":true}");
+                }
+
                 case "ftsIndexingStatus":
                     return RpcResponse.Ok(JsonSerializer.Serialize(
                         fts.Status(), RpcJsonContext.Default.FtsIndexStatus));
+
+                case "ftsResetIndex":
+                    fts.ResetIndex();
+                    return RpcResponse.Ok("{\"reset\":true}");
 
                 default:
                     return RpcResponse.Err("Unknown op: " + req.Op);

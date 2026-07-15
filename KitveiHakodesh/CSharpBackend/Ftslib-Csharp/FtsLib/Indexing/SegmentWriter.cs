@@ -103,9 +103,14 @@ namespace FtsLib.Indexing
 
                 WriteMetaDb(tmpDb, meta);
 
-                // Both files are fully written — rename atomically to final paths.
-                File.Move(tmpDat, datPath);
-                File.Move(tmpDb,  dbPath);
+                // Both files are fully written — rename to their final paths, replacing
+                // any stale leftover already there. A leftover happens when a build is
+                // interrupted between writing a segment's files and saving progress: the
+                // resumed build re-emits the same segment id, and a plain File.Move would
+                // throw "Cannot create a file when that file already exists". The leftover
+                // is unregistered (not yet a live segment), so replacing it is safe.
+                MoveReplace(tmpDat, datPath);
+                MoveReplace(tmpDb,  dbPath);
             }
             catch
             {
@@ -114,6 +119,23 @@ namespace FtsLib.Indexing
                 try { if (File.Exists(tmpDb))  File.Delete(tmpDb);  } catch { }
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Move <paramref name="src"/> to <paramref name="dst"/>, replacing a stale file
+        /// already at <paramref name="dst"/> (and its SQLite -wal/-shm sidecars). Behaves
+        /// exactly like File.Move when nothing is there — this only rescues the interrupted-
+        /// build case where the resumed build re-emits an already-written segment id.
+        /// </summary>
+        internal static void MoveReplace(string src, string dst)
+        {
+            if (File.Exists(dst))
+            {
+                File.Delete(dst);
+                if (File.Exists(dst + "-wal")) File.Delete(dst + "-wal");
+                if (File.Exists(dst + "-shm")) File.Delete(dst + "-shm");
+            }
+            File.Move(src, dst);
         }
 
         /// <summary>

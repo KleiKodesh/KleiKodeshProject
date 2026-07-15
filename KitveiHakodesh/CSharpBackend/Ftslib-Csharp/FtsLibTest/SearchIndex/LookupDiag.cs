@@ -71,7 +71,7 @@ namespace FtsLibTest
                     using (var cmd = seg.Conn.CreateCommand())
                     {
                         cmd.CommandText = "SELECT COUNT(*) FROM term_index WHERE term = @t";
-                        cmd.Parameters.Add("@t", System.Data.DbType.String).Value = term;
+                        cmd.Parameters.Add("@t", Microsoft.Data.Sqlite.SqliteType.Text).Value = term;
                         long cnt = (long)cmd.ExecuteScalar();
                         Console.WriteLine($"  Raw SQL count: {cnt}");
                     }

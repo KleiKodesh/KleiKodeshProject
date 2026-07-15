@@ -28,7 +28,7 @@ namespace KitveiHakodeshDemoApp
             RightToLeftLayout = true;
             RightToLeft = RightToLeft.Yes;
 
-            _viewer = new AppViewer("plaindebug") { Dock = DockStyle.Fill };
+            _viewer = new AppViewer("webcache-plaindebug") { Dock = DockStyle.Fill };
             Controls.Add(_viewer);
 
             if (!string.IsNullOrEmpty(initialFilePath))

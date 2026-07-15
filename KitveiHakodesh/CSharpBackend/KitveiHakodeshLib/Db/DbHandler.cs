@@ -114,27 +114,6 @@ namespace KitveiHakodeshLib.Db
             _bridge.Reply(id, new { });
         }
 
-        /// <summary>
-        /// Reads the shared "share WebView2 profile" flag (same registry key as the
-        /// KleiKodesh Word add-in). Replies with { value: bool }.
-        /// </summary>
-        public void HandleGetShareProfile(string id)
-        {
-            _bridge.Reply(id, new { value = AppSettings.LoadShareProfile() });
-        }
-
-        /// <summary>
-        /// Persists the shared "share WebView2 profile" flag. Expects { value: bool }.
-        /// Takes effect on the next app launch (the WebView2 profile is chosen once per
-        /// control at startup).
-        /// </summary>
-        public void HandleSetShareProfile(JsonElement root, string id)
-        {
-            bool value = root.TryGetProperty("value", out var v) && v.ValueKind == JsonValueKind.True;
-            AppSettings.SaveShareProfile(value);
-            _bridge.Reply(id, new { });
-        }
-
         public void HandleSetDbPath(JsonElement root, string id)
         {
             string path = root.GetProperty("path").GetString();

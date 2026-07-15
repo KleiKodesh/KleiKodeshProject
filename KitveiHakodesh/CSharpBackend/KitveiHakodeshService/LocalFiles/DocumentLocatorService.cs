@@ -59,6 +59,21 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         return Transform(response);
     }
 
+    /// <summary>Tell DocumentLocator to wipe its index and rebuild from scratch
+    /// (the dev "reset file-search index"). Starts the service on demand and returns
+    /// once the reindex has been acknowledged; the rebuild then runs in its service.</summary>
+    public async Task ReindexAsync(CancellationToken ct)
+    {
+        const string reindexRequest = "{\"type\":\"reindex\"}";
+        string? response = await TryCallAsync(reindexRequest, ct);
+        if (response is null)
+        {
+            StartDocumentLocatorService();
+            await WaitForPipeAsync(ct);
+            await TryCallAsync(reindexRequest, ct);
+        }
+    }
+
     /// <summary>Fire-and-forget: make sure the DocumentLocator service is up so the
     /// first real query is fast. Errors are swallowed — it's a hint, not a promise.</summary>
     public void Warmup()
