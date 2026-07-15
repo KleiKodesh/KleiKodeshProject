@@ -469,15 +469,12 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function switchTab(id: string) {
+    // Keep the array in stable tab-strip order — do NOT reorder on switch.
+    // Sequential navigation (Ctrl+Tab, swipe) cycles by index, which only works
+    // if a tab keeps its position; MRU reordering made "next" oscillate between
+    // the two most-recent tabs instead of advancing through the list.
     if (tabs.value.some((t) => t.id === id)) {
       activeTabId.value = id
-      // Move switched tab to the front for MRU ordering
-      const idx = tabs.value.findIndex((t) => t.id === id)
-      if (idx > 0) {
-        const tab = tabs.value[idx]!
-        tabs.value.splice(idx, 1)
-        tabs.value.unshift(tab)
-      }
     }
   }
 
@@ -531,12 +528,7 @@ export const useTabStore = defineStore('tabs', () => {
     const tab = tabs.value.find((t) => t.id === activeTabId.value)
     if (tab) {
       Object.assign(tab, patch)
-      // Move to front for MRU ordering
-      const idx = tabs.value.findIndex((t) => t.id === activeTabId.value)
-      if (idx > 0) {
-        tabs.value.splice(idx, 1)
-        tabs.value.unshift(tab)
-      }
+      // Stable order — see switchTab: navigating in place must not move the tab.
       // Only track navigation when the route or bookId/file identity changes — not on every tocPath update.
       if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)

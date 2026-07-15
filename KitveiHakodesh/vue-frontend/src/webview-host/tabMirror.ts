@@ -74,10 +74,9 @@ export function initTabMirror(): void {
   }
 
   // Both panes' visible tabs (pane1Tabs is split-aware: it includes adopted
-  // orphans while split view is off; pane2Tabs is empty then). Sorted by id so
-  // Vue's MRU move-to-front reordering doesn't produce spurious snapshots — the
-  // strip keeps its own stable visual order and only needs membership, titles,
-  // split state, and the per-pane active tabs.
+  // orphans while split view is off; pane2Tabs is empty then). Sorted by id so the
+  // strip keeps a stable visual order regardless of store order — it only needs
+  // membership, titles, split state, and the per-pane active tabs.
   // Window resizes move the rendered divider without touching any store state —
   // bump a tick so the snapshot recomputes and the divider is re-measured.
   const resizeTick = ref(0)
