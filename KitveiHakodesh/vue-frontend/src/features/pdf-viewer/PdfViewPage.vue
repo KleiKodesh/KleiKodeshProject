@@ -38,7 +38,7 @@ const pdfContextMenu = usePdfContextMenu(() => iframeRef.value, contextMenuRef, 
   notify: showToast,
 })
 
-import { TAB_SWIPE_EVENT, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
+import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
 import { useSwipe } from '@vueuse/core'
 import { shallowRef } from 'vue'
 
@@ -50,8 +50,6 @@ import { shallowRef } from 'vue'
 // not a manual touchstart/touchend hack.
 
 const RELAY_TOUCH_THRESHOLD_PX = 60
-const RELAY_TRACKPAD_DELTA_THRESHOLD = 150
-const RELAY_TRACKPAD_COOLDOWN_MS = 400
 
 const iframeContentWindow = shallowRef<Window | null>(null)
 
@@ -66,13 +64,14 @@ function fireSwipe(direction: 'next' | 'previous') {
 useSwipe(iframeContentWindow, {
   threshold: RELAY_TOUCH_THRESHOLD_PX,
   onSwipeEnd(_event, direction) {
-    if (direction === 'left') fireSwipe('next')
-    else if (direction === 'right') fireSwipe('previous')
+    if (direction === 'right') fireSwipe('next')
+    else if (direction === 'left') fireSwipe('previous')
   },
 })
 
 // Trackpad horizontal scroll — wheel events also stay inside the iframe.
-// useSwipe only handles touch, so we still need a wheel relay.
+// useSwipe only handles touch, so we still need a wheel relay. The shared handler
+// carries the RTL direction convention and one-switch-per-gesture debounce.
 let iframeWheelCleanup: (() => void) | null = null
 
 function attachIframeWheelRelay() {
@@ -80,24 +79,7 @@ function attachIframeWheelRelay() {
   const contentWindow = iframeRef.value?.contentWindow
   if (!contentWindow) return
 
-  let accumulatedDeltaX = 0
-  let lastSwitchTime = 0
-
-  function onWheel(event: WheelEvent) {
-    if (Math.abs(event.deltaX) <= Math.abs(event.deltaY)) return
-    const now = Date.now()
-    if (now - lastSwitchTime < RELAY_TRACKPAD_COOLDOWN_MS) {
-      accumulatedDeltaX = 0
-      return
-    }
-    accumulatedDeltaX += event.deltaX
-    if (Math.abs(accumulatedDeltaX) >= RELAY_TRACKPAD_DELTA_THRESHOLD) {
-      fireSwipe(accumulatedDeltaX > 0 ? 'next' : 'previous')
-      accumulatedDeltaX = 0
-      lastSwitchTime = now
-    }
-  }
-
+  const onWheel = createWheelSwipeHandler(fireSwipe)
   contentWindow.addEventListener('wheel', onWheel, { passive: true })
   iframeWheelCleanup = () => contentWindow.removeEventListener('wheel', onWheel)
 }

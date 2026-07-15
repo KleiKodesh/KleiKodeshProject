@@ -72,6 +72,9 @@ namespace KitveiHakodeshLib
             if (_syncing) return;
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabActivated(tabId);
+            // Clicking a strip tab moved OS focus to the native strip — hand it back to the
+            // web content so wheel/keyboard gestures keep working without a click in the page.
+            _viewer.FocusWebContent();
         }
 
         private void OnTabClosing(object sender, FluentTabClosingEventArgs e)
@@ -82,6 +85,14 @@ namespace KitveiHakodeshLib
             e.Cancel = true;
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabCloseRequested(tabId);
+            _viewer.FocusWebContent();
+        }
+
+        private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)
+        {
+            e.Cancel = true;
+            _viewer.NotifyChromeNewTabRequested(e.Group == 1 ? 2 : 1);
+            _viewer.FocusWebContent();
         }
 
         private void OnTabDraggedToGroup(object sender, FluentTabGroupEventArgs e)
@@ -91,12 +102,6 @@ namespace KitveiHakodeshLib
             // pushes back a fresh snapshot, which reconciles the strip's Group/Highlighted.
             if (e.Tab?.Tag is string tabId)
                 _viewer.NotifyChromeTabMovedToPane(tabId, e.Group == 1 ? 2 : 1);
-        }
-
-        private void OnNewTabRequested(object sender, NewTabRequestedEventArgs e)
-        {
-            e.Cancel = true;
-            _viewer.NotifyChromeNewTabRequested(e.Group == 1 ? 2 : 1);
         }
 
         private void OnSplitRatioChanged(object sender, EventArgs e)
@@ -115,7 +120,11 @@ namespace KitveiHakodeshLib
             foreach (var item in _recentItems)
             {
                 string key = item.Key;
-                recent.Items.Add(new TabListItem(item.Title, false, () => _viewer.NotifyChromeRecentActivated(key)));
+                recent.Items.Add(new TabListItem(item.Title, false, () =>
+                {
+                    _viewer.NotifyChromeRecentActivated(key);
+                    _viewer.FocusWebContent();
+                }));
             }
             e.Sections.Add(recent);
         }

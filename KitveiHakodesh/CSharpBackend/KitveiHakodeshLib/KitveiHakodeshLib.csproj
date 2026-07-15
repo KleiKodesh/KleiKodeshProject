@@ -146,6 +146,10 @@
       <DependentUpon>AppViewer.cs</DependentUpon>
       <SubType>UserControl</SubType>
     </Compile>
+    <Compile Include="AppViewerFocus.cs">
+      <DependentUpon>AppViewer.cs</DependentUpon>
+      <SubType>UserControl</SubType>
+    </Compile>
     <Compile Include="ChromeTabsMirror.cs" />
     <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
     <Compile Include="SplashOverlay.cs">

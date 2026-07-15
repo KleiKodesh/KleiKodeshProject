@@ -43,6 +43,12 @@ namespace KitveiHakodeshLib
             // Hide the splash regardless of success — a failed navigation still shows the
             // WebView error page, which is more useful than an infinite splash screen.
             _HideSplash();
+            // Put OS focus on the web content on first load so trackpad/keyboard gestures
+            // (e.g. swipe-to-switch-tab) work immediately without the user clicking the page.
+            FocusWebContent();
+            // Guarantee horizontal trackpad swipes reach the page even when WinForms (not the
+            // web content) holds focus — Windows routes WM_MOUSEHWHEEL to the focused window.
+            InstallHorizontalWheelFilter();
         }
 
         private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
