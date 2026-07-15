@@ -32,15 +32,15 @@ namespace FtsLib.Indexing
         /// Writes to .tmp files first, then renames atomically so a crash mid-write
         /// never leaves a corrupt file at the final path.
         ///
-        /// Per-term record layout in .dat:
-        ///   4 bytes  int    termByteLen
-        ///   N bytes         term (UTF-8)
-        ///   4 bytes  int    chunkByteLen
-        ///   4 bytes  int    docCount
-        ///   4 bytes  uint   lastEncoded
-        ///   4 bytes  int    skipCount
+        /// Per-term record layout in .dat (format v2 — varint header, no-offset postings):
+        ///   varint   termByteLen
+        ///   N bytes  term (UTF-8)
+        ///   varint   chunkByteLen
+        ///   varint   docCount
+        ///   varint   lastEncoded
+        ///   varint   skipCount
         ///   skipCount × 12 bytes  skip table (int32 docId, int32 byteOffset, int32 prevEncoded)
-        ///   M bytes         varint posting data
+        ///   M bytes  varint posting data
         /// </summary>
         internal static void WriteSegment(
             RamIndex     ramIndex,
@@ -78,12 +78,16 @@ namespace FtsLib.Indexing
                         int    postLen   = entry.Stream.ByteLength;
                         int    skipCount = entry.SkipLen / 3;
 
-                        bw.Write(termByteLen);
+                        // Format v2: the five fixed header scalars are varint-encoded
+                        // (were 20 bytes of int32/uint32). Search never reads this header
+                        // — it jumps to posting bytes via the .db offsets — so only the
+                        // sequential merge reader and the on-disk size are affected.
+                        FtsLib.Search.VarInt.Write((uint)termByteLen, bw);
                         bw.Write(termBytes, 0, termByteLen);
-                        bw.Write(postLen);
-                        bw.Write(entry.Stream.Count);
-                        bw.Write(entry.Stream.LastEncoded);
-                        bw.Write(skipCount);
+                        FtsLib.Search.VarInt.Write((uint)postLen, bw);
+                        FtsLib.Search.VarInt.Write((uint)entry.Stream.Count, bw);
+                        FtsLib.Search.VarInt.Write(entry.Stream.LastEncoded, bw);
+                        FtsLib.Search.VarInt.Write((uint)skipCount, bw);
                         bw.Flush();
 
                         // Write skip table — each entry is 3 × int32.

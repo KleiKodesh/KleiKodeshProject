@@ -346,12 +346,13 @@ namespace FtsLib.Indexing
                     int    chunkLen    = mergedLen;
                     int    skipCount   = skipLen / 3;
 
-                    bw.Write(termByteLen);
+                    // Format v2: varint header scalars (must match SegmentWriter).
+                    VarInt.Write((uint)termByteLen, bw);
                     bw.Write(termBytes, 0, termByteLen);
-                    bw.Write(chunkLen);
-                    bw.Write(totalCount);
-                    bw.Write(lastEncoded);
-                    bw.Write(skipCount);
+                    VarInt.Write((uint)chunkLen, bw);
+                    VarInt.Write((uint)totalCount, bw);
+                    VarInt.Write(lastEncoded, bw);
+                    VarInt.Write((uint)skipCount, bw);
                     bw.Flush();
 
                     long skipOff = outFs.Position;
@@ -444,7 +445,7 @@ namespace FtsLib.Indexing
                     {
                         uint delta = VarInt.Read(chunk, ref readPos, chunkLen);
                         encoded   += delta;
-                        int docId  = (int)((long)encoded + int.MinValue);
+                        int docId  = (int)encoded;   // format v2 (no-offset)
 
                         if (deletes.Contains(docId)) continue;
 
@@ -484,7 +485,7 @@ namespace FtsLib.Indexing
                     uint delta            = VarInt.Read(buf, ref readPos, mergedLen);
                     prevEnc  = encoded;
                     encoded += delta;
-                    int docId = (int)((long)encoded + int.MinValue);
+                    int docId = (int)encoded;   // format v2 (no-offset)
                     docIndex++;
 
                     // Emit a skip entry after every SkipInterval-th doc (not the very first).

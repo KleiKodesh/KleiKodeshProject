@@ -78,7 +78,7 @@ namespace FtsLib.Search
             while (pos < len)
             {
                 encoded += VarInt.Read(buf, ref pos, len);
-                bitmap.Add((int)((long)encoded + int.MinValue));
+                bitmap.Add((int)encoded);
             }
 
             _pos     = pos;
@@ -136,7 +136,7 @@ namespace FtsLib.Search
 
         private uint ReadVarInt() => VarInt.Read(_buf, ref _pos, _len);
 
-        private static uint Encode(int v) => (uint)((long)v - int.MinValue);
-        private static int  Decode(uint v) => (int)((long)v + int.MinValue);
+        // Format v2 (no-offset): the encoded value IS the doc id.
+        private static int Decode(uint v) => (int)v;
     }
 }
