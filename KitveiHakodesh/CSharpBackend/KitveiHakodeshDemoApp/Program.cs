@@ -23,6 +23,16 @@ namespace KitveiHakodeshDemoApp
 
             string filePath = GetFilePathArgument();
 
+            // Debug harness: `--plain` hosts the viewer in a bare Form with no chrome-tabs
+            // strip / mirror, to isolate whether the strip steals web-content focus. Runs
+            // standalone (skips the single-instance mutex + its own webcache folder).
+            if (Array.Exists(Environment.GetCommandLineArgs(),
+                    a => string.Equals(a, "--plain", StringComparison.OrdinalIgnoreCase)))
+            {
+                Application.Run(new PlainDebugForm(filePath));
+                return;
+            }
+
             bool createdNew;
             using (var mutex = new Mutex(initiallyOwned: true, MutexName, out createdNew))
             {
