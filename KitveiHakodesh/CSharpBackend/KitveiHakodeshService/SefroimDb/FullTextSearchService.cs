@@ -145,9 +145,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                         _pct = Math.Min(99.9, indexed * 100.0 / total);
                         _processed = (int)Math.Min(indexed, int.MaxValue);
                         if (!_isReady && SegmentsExist()) _isReady = true; // first segment → searchable
+                        NotifyProgress();
                     }
                 },
-                onFlush: () => { if (!_isReady && SegmentsExist()) _isReady = true; },
+                onFlush: () =>
+                {
+                    if (!_isReady && SegmentsExist()) _isReady = true;
+                    NotifyProgress();
+                },
                 totalLines: total,
                 resumeOffset: resumeOffset,
                 forceMergeOnComplete: true,
@@ -174,11 +179,12 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         finally
         {
             _isIndexing = false;
+            NotifyProgress();   // terminal (or failed) state — wake subscribers so streams close
         }
     }
 
     /// <summary>Wipe the FTS index and rebuild it from scratch (dev "reset search index").
-    /// Runs on a background thread and returns immediately — progress is via Status().</summary>
+    /// Runs on a background thread and returns immediately — progress is streamed.</summary>
     public void ResetIndex()
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
@@ -221,6 +227,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
         logger.LogInformation("FTS index reset — rebuilding from scratch");
         EnsureIndexing();
+        NotifyProgress();
     }
 
     /// <summary>
@@ -252,14 +259,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     public FtsIndexStatus Status()
     {
         EnsureIndexing();
-        return new FtsIndexStatus
-        {
-            IsReady = _isReady,
-            IsIndexing = _isIndexing,
-            Percentage = Math.Round(_pct, 1),
-            ProcessedChunks = _processed,
-            TotalChunks = _total,
-        };
+        return Snapshot();
     }
 
     public FtsSearchResult Search(
@@ -296,118 +296,120 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         return result;
     }
 
-    // ── Streaming search (start + poll) ─────────────────────────────────────────
-    // Mirrors the hosted C# FtsSearchExecutor: run the search on a background thread
-    // and let the caller drain results incrementally, so the first hits are available
-    // in milliseconds instead of after every snippet is generated. Results are NEVER
+    // ── Streaming search (ftsSearchStream) ───────────────────────────────────────
+    // The service PUSHES result frames continuously over the caller's single pipe
+    // connection until the search finishes — no polling, no offsets, no buffering.
+    // Backpressure is inherent: each batch awaits the pipe write before the next one
+    // is built. Client disconnect (broken pipe) cancels the search. Results are NEVER
     // capped — streaming is exactly what makes an uncapped search feel instant.
 
+    /// <summary>An in-flight streaming search — tracked only for cancellation
+    /// (supersession, reset, shutdown). Results are pushed, never buffered.</summary>
     private sealed class SearchSession
     {
-        public readonly List<FtsHit> Hits = new();
-        public volatile bool Done;
-        public string? Error;
         public readonly CancellationTokenSource Cts = new();
-        public DateTime LastAccess = DateTime.UtcNow;
     }
 
     private readonly ConcurrentDictionary<string, SearchSession> _sessions = new();
     private int _searchCounter;
-    private string? _currentSearchId;   // most-recent streaming search; the next one supersedes it
-    private const int SessionTtlMinutes = 5;
+    private string? _currentSearchId;   // most-recent search; the next one supersedes it
 
-    public FtsSearchStartResult StartSearch(
-        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv)
+    /// <summary>Run a search and push each built batch through <paramref name="emit"/>,
+    /// ending with a <c>Done</c> frame. The connection is the stream: the caller passes
+    /// an emit that writes one frame per chunk on the client's pipe connection.</summary>
+    public async Task StreamSearch(
+        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt)
     {
         EnsureIndexing();
-        if (!HasDb || !_isReady) return new FtsSearchStartResult { Ready = false };
-        if (string.IsNullOrWhiteSpace(query)) return new FtsSearchStartResult { Ready = true, SearchId = "" };
+        if (!HasDb || !_isReady) { await emit(new FtsStreamChunk { Ready = false, Done = true }); return; }
+        if (string.IsNullOrWhiteSpace(query)) { await emit(new FtsStreamChunk { Done = true }); return; }
 
-        PruneStaleSessions();
         var session = new SearchSession();
         string id = "s" + Interlocked.Increment(ref _searchCounter);
         _sessions[id] = session;
 
         // A new search SUPERSEDES the previous in-flight one — cancel it so the service
         // never keeps burning cores generating snippets for results the caller has already
-        // moved on from. This makes "latest search wins" a SERVICE guarantee (mirroring the
-        // hosted FtsSearchExecutor), so every consumer gets it for free with no client-side
-        // bookkeeping — a client only needs to StartSearch again. The atomic swap makes
-        // rapid back-to-back searches race-safe (exactly one predecessor cancelled each time).
+        // moved on from. "Latest search wins" is a SERVICE guarantee (mirroring the hosted
+        // FtsSearchExecutor): a client only ever starts a new stream, nothing else. The
+        // atomic swap makes rapid back-to-back searches race-safe.
         var prevId = Interlocked.Exchange(ref _currentSearchId, id);
         if (prevId != null && _sessions.TryRemove(prevId, out var prev)) prev.Cts.Cancel();
 
-        _ = Task.Run(() => RunSearch(session, query, maxWordDistance, requireOrdered, contextWords, expandKetiv));
-        return new FtsSearchStartResult { Ready = true, SearchId = id };
-    }
-
-    private void RunSearch(SearchSession session, string query,
-        int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv)
-    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
         try
         {
-            var index = GetIndex();
-            var ct = session.Cts.Token;
-            // Content fetch STREAMS from one SQLite reader (sequential I/O, cache-friendly
-            // even cold, and it overlaps naturally with the snippet stage below); snippet
-            // generation is the dominant CPU cost and is done per-batch across all cores.
-            // Pull hits in ordered batches and snippet each batch in parallel, appending
-            // passing hits in order — this preserves result order AND streaming cadence, so
-            // the first hits paint in tens of milliseconds instead of after the whole set.
-            //
-            // NOTE: a whole-set parallel fetch (SeforimIndex.SearchParallel) is ~2x faster
-            // at the fetch step in isolation (see FetchBenchTest), but it did NOT help here:
-            // for large result sets the service wall-clock is dominated by serializing and
-            // transporting tens of thousands of hits over the pipe (~85%), not by fetch, and
-            // its up-front barrier delayed the first paint. Streaming + parallel snippet wins
-            // on first-result latency, which is what the search feels like. SearchParallel
-            // stays available as a bulk-fetch API for callers that consume the whole set.
-            const int SnippetBatch = 256;
-            var batch = new List<SearchResult>(SnippetBatch);
-            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
-            {
-                ct.ThrowIfCancellationRequested();
-                batch.Add(hit);
-                if (batch.Count >= SnippetBatch)
-                {
-                    FlushSnippetRange(session, index, batch, 0, batch.Count, requireOrdered, contextWords, maxWordDistance, ct);
-                    batch.Clear();
-                }
-            }
-            if (batch.Count > 0)
-                FlushSnippetRange(session, index, batch, 0, batch.Count, requireOrdered, contextWords, maxWordDistance, ct);
+            await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
+                linked.Token, built => emit(new FtsStreamChunk { Results = built }));
+            await emit(new FtsStreamChunk { Done = true });
         }
-        catch (OperationCanceledException) { /* cancelled or superseded */ }
+        catch (OperationCanceledException) { /* superseded, reset, or client left */ }
+        catch (IOException) { /* client disconnected mid-stream — that IS the cancel signal */ }
         catch (Exception ex)
         {
-            session.Error = ex.Message;
             logger.LogError(ex, "FTS streaming search failed");
+            try { await emit(new FtsStreamChunk { Done = true, Error = ex.Message }); } catch { /* client gone */ }
         }
-        finally { session.Done = true; }
+        finally
+        {
+            _sessions.TryRemove(id, out _);
+            Interlocked.CompareExchange(ref _currentSearchId, null, id);
+        }
     }
 
-    /// <summary>Snippet-generate results[start..end) across all cores (thread-safe: FtsLib's
-    /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, enrich the passing
-    /// hits (bookId + toc path) server-side, then append them to the session buffer.</summary>
-    private void FlushSnippetRange(SearchSession session, SeforimIndex index,
-        IReadOnlyList<SearchResult> results, int start, int end,
+    /// <summary>The search pipeline shared by streaming and one-shot paths: content fetch
+    /// STREAMS from one SQLite reader (sequential I/O, overlaps with snippeting); snippet
+    /// generation — the dominant CPU cost — runs per-batch across all cores; each finished,
+    /// enriched batch is handed to <paramref name="onBatch"/> in order.
+    ///
+    /// NOTE: a whole-set parallel fetch (SeforimIndex.SearchParallel) is ~2x faster at the
+    /// fetch step in isolation (see FetchBenchTest), but its up-front barrier delays the
+    /// first paint — streaming + parallel snippet wins on first-result latency, which is
+    /// what the search feels like. SearchParallel stays available as a bulk-fetch API.</summary>
+    private async Task RunSearchCoreAsync(
+        string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
+        CancellationToken ct, Func<List<FtsHit>, Task> onBatch)
+    {
+        var index = GetIndex();
+        const int SnippetBatch = 256;
+        var batch = new List<SearchResult>(SnippetBatch);
+        foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            batch.Add(hit);
+            if (batch.Count >= SnippetBatch)
+            {
+                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, ct);
+                if (built.Count > 0) await onBatch(built);
+                batch.Clear();
+            }
+        }
+        if (batch.Count > 0)
+        {
+            var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, ct);
+            if (built.Count > 0) await onBatch(built);
+        }
+    }
+
+    /// <summary>Snippet-generate a batch across all cores (thread-safe: FtsLib's
+    /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, and enrich the
+    /// passing hits (bookId + toc path) server-side.</summary>
+    private List<FtsHit> BuildBatch(SeforimIndex index, IReadOnlyList<SearchResult> results,
         bool requireOrdered, int contextWords, int maxWordDistance, CancellationToken ct)
     {
-        int count = end - start;
-        var built = new FtsHit?[count];
-        Parallel.For(0, count, new ParallelOptions { CancellationToken = ct }, i =>
+        var built = new FtsHit?[results.Count];
+        Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = ct }, i =>
         {
-            if (TryBuildHit(index, results[start + i], requireOrdered, contextWords, maxWordDistance, out var h))
+            if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance, out var h))
                 built[i] = h;
         });
 
-        // Collect passing hits in order, enrich them server-side, then publish the batch.
-        var passing = new List<FtsHit>(count);
+        var passing = new List<FtsHit>(results.Count);
         for (int i = 0; i < built.Length; i++)
             if (built[i] is { } hit) passing.Add(hit);
         EnrichHits(passing);
-
-        lock (session.Hits) session.Hits.AddRange(passing);
+        return passing;
     }
 
     /// <summary>
@@ -453,71 +455,63 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         }
     }
 
-    // Long-poll: the request is held open until a batch is ready, so results arrive
-    // as fast as they're generated (like the hosted push) with few round-trips. The
-    // pipe server handles each request on its own task, so blocking here is safe.
-    private const int PollMaxWaitMs = 8000;   // cap when the search produces nothing new
-    private const int PollBatchWindowMs = 120; // coalesce window once results start flowing
-    private const int PollBatchTarget = 500;   // …or return early once this many are ready
-    private const int PollTickMs = 15;
+    // ── Indexing-progress stream (ftsIndexProgressStream) ────────────────────────
+    // Event-driven push: the build's progress callback signals every subscriber, and
+    // each subscriber's stream emits a fresh snapshot per signal — no polling on the
+    // wire and none inside the service. The stream ends (connection closes) when the
+    // build reaches a terminal state (ready, or no DB to index), so an idle service
+    // carries no open progress streams.
 
-    public async Task<FtsSearchPollResult> PollSearch(string searchId, int offset, CancellationToken ct)
+    private readonly List<System.Threading.Channels.Channel<bool>> _progressSubs = new();
+
+    /// <summary>Wake every progress subscriber. Cheap (TryWrite on a capacity-1 channel
+    /// that drops when full — a pending signal already guarantees a fresh snapshot).</summary>
+    private void NotifyProgress()
     {
-        if (string.IsNullOrEmpty(searchId) || !_sessions.TryGetValue(searchId, out var session))
-            return new FtsSearchPollResult { Done = true, Error = "unknown or expired search" };
-
-        session.LastAccess = DateTime.UtcNow;
-        if (offset < 0) offset = 0;
-
-        // 1) Hold until there's something new beyond offset (or the search finishes).
-        var deadline = DateTime.UtcNow.AddMilliseconds(PollMaxWaitMs);
-        while (CurrentCount(session) <= offset && !session.Done && DateTime.UtcNow < deadline)
-            await Task.Delay(PollTickMs, ct);
-
-        // 2) Coalesce a sizeable batch so we return few, large responses (low churn).
-        //    Skip it for the very first batch (offset 0) so the first results paint
-        //    the instant they exist — matching the hosted stream's flush-at-first-hit.
-        if (offset > 0 && !session.Done && CurrentCount(session) - offset < PollBatchTarget)
-        {
-            var batchDeadline = DateTime.UtcNow.AddMilliseconds(PollBatchWindowMs);
-            while (!session.Done
-                   && CurrentCount(session) - offset < PollBatchTarget
-                   && DateTime.UtcNow < batchDeadline)
-                await Task.Delay(PollTickMs, ct);
-        }
-
-        var result = new FtsSearchPollResult { Error = session.Error };
-        int total;
-        lock (session.Hits)
-        {
-            total = session.Hits.Count;
-            if (offset < total)
-                result.Results.AddRange(session.Hits.GetRange(offset, total - offset));
-        }
-        result.Done = session.Done;
-        // Free the session once a completed search has been fully drained.
-        if (session.Done && offset + result.Results.Count >= total)
-            _sessions.TryRemove(searchId, out _);
-        return result;
+        lock (_progressSubs)
+            foreach (var ch in _progressSubs) ch.Writer.TryWrite(true);
     }
 
-    private static int CurrentCount(SearchSession s) { lock (s.Hits) return s.Hits.Count; }
-
-    public void CancelSearch(string searchId)
+    private FtsIndexStatus Snapshot() => new()
     {
-        if (string.IsNullOrEmpty(searchId)) return;
-        // If this was the current search, it's no longer current (clear only if unchanged).
-        Interlocked.CompareExchange(ref _currentSearchId, null, searchId);
-        if (_sessions.TryRemove(searchId, out var session))
-            session.Cts.Cancel();
-    }
+        IsReady = _isReady,
+        IsIndexing = _isIndexing,
+        Percentage = Math.Round(_pct, 1),
+        ProcessedChunks = _processed,
+        TotalChunks = _total,
+        DbMissing = !HasDb,
+    };
 
-    private void PruneStaleSessions()
+    /// <summary>Push the current status immediately, then a fresh snapshot on every
+    /// progress signal, until the build reaches a terminal state.</summary>
+    public async Task StreamIndexingProgress(Func<FtsIndexStatus, Task> emit, CancellationToken ct)
     {
-        var cutoff = DateTime.UtcNow.AddMinutes(-SessionTtlMinutes);
-        foreach (var kv in _sessions)
-            if (kv.Value.LastAccess < cutoff && _sessions.TryRemove(kv.Key, out var s))
-                s.Cts.Cancel();
+        EnsureIndexing();
+
+        var ch = System.Threading.Channels.Channel.CreateBounded<bool>(
+            new System.Threading.Channels.BoundedChannelOptions(1)
+            {
+                FullMode = System.Threading.Channels.BoundedChannelFullMode.DropWrite,
+            });
+        lock (_progressSubs) _progressSubs.Add(ch);
+        try
+        {
+            var last = Snapshot();
+            await emit(last);
+            // Terminal: nothing left to report — ready and not building, or no DB at all.
+            while (!((last.IsReady && !last.IsIndexing) || last.DbMissing))
+            {
+                await ch.Reader.ReadAsync(ct);
+                last = Snapshot();
+                await emit(last);
+            }
+        }
+        catch (OperationCanceledException) { /* client left */ }
+        catch (IOException) { /* client disconnected mid-stream */ }
+        finally
+        {
+            lock (_progressSubs) _progressSubs.Remove(ch);
+        }
     }
 
     /// <summary>Generate the snippet, apply the match / word-distance filter, and build the

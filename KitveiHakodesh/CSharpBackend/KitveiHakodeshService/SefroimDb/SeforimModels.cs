@@ -368,13 +368,15 @@ public sealed class FtsIndexStatus
     public double Percentage { get; set; }
     public int ProcessedChunks { get; set; }
     public int TotalChunks { get; set; }
+    /// <summary>True when no seforim DB exists at the resolved path — nothing to index.</summary>
+    public bool DbMissing { get; set; }
 }
 
-// ── Streaming FTS (start + poll) — mirrors the hosted C# batch-streaming so the dev
-//    path also paints first results instantly instead of waiting for every snippet. ──
+// ── Streaming FTS (ftsSearchStream) — the service PUSHES result frames continuously
+//    over one pipe connection until the search finishes. No polling anywhere. ──
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsSearchStartArgs
+public sealed class FtsSearchStreamArgs
 {
     public string? Query { get; set; }
     public int MaxWordDistance { get; set; } = 10;
@@ -383,33 +385,14 @@ public sealed class FtsSearchStartArgs
     public bool ExpandKetiv { get; set; }
 }
 
-/// <summary>Reply to <c>ftsSearchStart</c>. <c>Ready</c> false = index still building.</summary>
+/// <summary>One pushed frame of a streaming search. The final frame has <c>Done</c> true
+/// (and the connection closes after it). <c>Ready</c> false = index still building —
+/// sent as the first and only frame.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsSearchStartResult
+public sealed class FtsStreamChunk
 {
-    public bool Ready { get; set; }
-    public string SearchId { get; set; } = "";
-}
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsSearchPollArgs
-{
-    public string? SearchId { get; set; }
-    public int Offset { get; set; }
-}
-
-/// <summary>Incremental batch: the hits accumulated since <c>Offset</c>, plus whether
-/// the background search has finished. The frontend appends and polls until Done.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsSearchPollResult
-{
+    public bool Ready { get; set; } = true;
     public List<FtsHit> Results { get; set; } = new();
     public bool Done { get; set; }
     public string? Error { get; set; }
-}
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsCancelArgs
-{
-    public string? SearchId { get; set; }
 }

@@ -1,7 +1,7 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 import { callBridgeAction } from '@/webview-host/bridge'
-import { serviceCall } from '@/webview-host/serviceClient'
+import { serviceStream } from '@/webview-host/serviceClient'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 
 export interface IndexingState {
@@ -32,35 +32,48 @@ export function useFullTextSearchIndexingStatus() {
   const state = ref<IndexingState>({ ...IDLE })
   const cache = useSearchCacheStore()
   let unregister: (() => void) | null = null
-  let devTimer: ReturnType<typeof setTimeout> | null = null
+  let devAbort: AbortController | null = null
 
   onMounted(async () => {
     if (!isHosted || typeof window.__webviewAction !== 'function') {
-      // Dev: poll the KitveiHakodesh service, which builds the FTS index in the
-      // background. Keep polling while the build is running; stop once it's done.
-      const poll = async () => {
-        try {
-          const s = await serviceCall<{
-            isReady: boolean; isIndexing: boolean; percentage: number
-            processedChunks: number; totalChunks: number
-          }>('ftsIndexingStatus')
-          state.value = {
-            isReady: s.isReady,
-            isIndexing: s.isIndexing,
-            percentage: s.percentage ?? 0,
-            processedChunks: s.processedChunks ?? 0,
-            totalChunks: s.totalChunks ?? 0,
-            eta: '',
-            segmentCount: 0,
-            latestSegmentPct: null,
-            dbNotFound: false,
+      // Dev: the service PUSHES a status frame on every build-progress change over one
+      // open stream (ftsIndexProgressStream) — no polling. The stream ends on its own
+      // when the build reaches a terminal state (ready, or no DB). If it drops early
+      // (service restart), reopen it once the service is back.
+      const abort = new AbortController()
+      devAbort = abort
+      const consume = async () => {
+        while (!abort.signal.aborted) {
+          try {
+            const stream = serviceStream<{
+              isReady: boolean; isIndexing: boolean; percentage: number
+              processedChunks: number; totalChunks: number; dbMissing: boolean
+            }>('ftsIndexProgressStream', {}, abort.signal)
+            let last: { isReady: boolean; isIndexing: boolean; dbMissing: boolean } | null = null
+            for await (const s of stream) {
+              last = s
+              state.value = {
+                isReady: s.isReady,
+                isIndexing: s.isIndexing,
+                percentage: s.percentage ?? 0,
+                processedChunks: s.processedChunks ?? 0,
+                totalChunks: s.totalChunks ?? 0,
+                eta: '',
+                segmentCount: 0,
+                latestSegmentPct: null,
+                dbNotFound: s.dbMissing ?? false,
+              }
+            }
+            // Terminal state reached — nothing more will ever be pushed.
+            if (last && (last.dbMissing || (last.isReady && !last.isIndexing))) return
+          } catch {
+            /* service restarting — fall through to the reconnect delay */
           }
-          if (s.isIndexing || !s.isReady) devTimer = setTimeout(poll, 1000)
-        } catch {
-          devTimer = setTimeout(poll, 2000)
+          // Stream dropped before a terminal state (service restart) — reconnect.
+          await new Promise((r) => setTimeout(r, 1500))
         }
       }
-      void poll()
+      void consume()
       return
     }
 
@@ -113,7 +126,7 @@ export function useFullTextSearchIndexingStatus() {
 
   onUnmounted(() => {
     unregister?.()
-    if (devTimer) clearTimeout(devTimer)
+    devAbort?.abort()
   })
 
   return { state }

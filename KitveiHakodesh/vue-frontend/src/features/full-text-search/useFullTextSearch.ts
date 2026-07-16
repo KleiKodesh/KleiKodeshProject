@@ -11,7 +11,7 @@ import { ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 import { getTocPathsForLines, getBookIdsForLines } from '@/webview-host/seforimApi'
-import { serviceCall, serviceCallVoid } from '@/webview-host/serviceClient'
+import { serviceStream } from '@/webview-host/serviceClient'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -156,6 +156,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const searchError = ref<SearchFailReason | null>(null)
   let currentSearchId: string | null = null
   let resultsReadyResolve: (() => void) | null = null
+  // Dev: the in-flight ftsSearchStream — aborting it closes the connection, which is
+  // the service's cancel signal (no cancel op, no polling).
+  let _devStreamAbort: AbortController | null = null
 
   // Accumulation buffer — batches are held here and flushed to `results` at most
   // every FLUSH_INTERVAL_MS. This prevents Vue from re-rendering on every C#
@@ -268,6 +271,12 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   }
 
   async function cancelSearch() {
+    // Dev: closing the stream IS the cancel — the service sees the broken pipe.
+    if (_devStreamAbort) {
+      _devStreamAbort.abort()
+      _devStreamAbort = null
+      isSearching.value = false
+    }
     if (!currentSearchId) return
     const id = currentSearchId
     _cleanup()
@@ -388,76 +397,65 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     searchError.value = null
     executedQuery.value = q
 
-    // Dev path — no C# bridge in the browser; run the search through the
-    // KitveiHakodesh service (one-shot, not streamed) and enrich toc paths.
+    // Dev path — no C# bridge in the browser; the service PUSHES result frames
+    // continuously over one connection (ftsSearchStream) until the search finishes.
+    // No polling: aborting the stream is the cancel signal, and the service itself
+    // supersedes the previous search when a new one starts.
     if (!isHosted || typeof window.__webviewAction !== 'function') {
       const normalizedQuery = q.trim().toLowerCase()
+      // Abort the previous stream (if any) and own a fresh controller for this one.
+      _devStreamAbort?.abort()
+      const abort = new AbortController()
+      _devStreamAbort = abort
       try {
-        // Streaming (never capped): start a background search on the service, then
-        // poll for incremental batches — mirrors the hosted C# stream so the first
-        // hits paint in milliseconds instead of waiting for every snippet.
-        const start = await serviceCall<{ ready: boolean; searchId: string }>('ftsSearchStart', {
+        const acc: FullTextSearchResult[] = []
+        const stream = serviceStream<{
+          ready: boolean
+          results: FullTextSearchResult[]
+          done: boolean
+          error?: string
+        }>('ftsSearchStream', {
           query: _buildQueryToSend(normalizedQuery),
           maxWordDistance: settings.searchMaxWordDistance,
           requireOrdered: settings.searchRequireOrdered,
           contextWords: settings.searchContextMarginWords,
           expandKetiv: settings.searchExpandKetiv,
-        })
-        if (executedQuery.value !== q) return // superseded by a newer search
-        if (!start.ready) {
-          searchError.value = 'indexNotReady'
-          return
-        }
-        const searchId = start.searchId
-        if (!searchId) return // empty query
+        }, abort.signal)
 
-        const acc: FullTextSearchResult[] = []
-        let offset = 0
-        let pollFails = 0
-        for (;;) {
-          let poll: { results: FullTextSearchResult[]; done: boolean; error?: string }
-          try {
-            // Long-poll: the service holds this open until a batch is ready, so results
-            // arrive as fast as they're generated (no fixed client poll interval).
-            poll = await serviceCall('ftsSearchPoll', { searchId, offset })
-            pollFails = 0
-          } catch (e) {
-            // Transient pipe/proxy hiccup — retry a few times before giving up.
-            if (++pollFails > 8) throw e
-            await new Promise((r) => setTimeout(r, 200))
-            continue
+        for await (const chunk of stream) {
+          if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
+          if (chunk.ready === false) {
+            searchError.value = 'indexNotReady'
+            return
           }
-          if (executedQuery.value !== q) { serviceCallVoid('ftsSearchCancel', { searchId }); return } // superseded
-          if (poll.error) {
-            // "unknown or expired search" = the service superseded this search with a newer
-            // one (it now enforces "latest search wins") or the session aged out — that is
-            // normal, not a failure. Only a genuine backend error should surface.
-            if (!/unknown|expired/i.test(String(poll.error)) && !acc.length) searchError.value = 'searchFailed'
+          const hits = chunk.results ?? []
+          if (hits.length) {
+            // Hits arrive fully enriched (bookId + tocText) from the service — no
+            // client-side enrichment round-trip.
+            for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
+            results.value = acc.slice() // one flush per pushed frame — the service paces the cadence
+          }
+          if (chunk.error) {
+            if (!acc.length) searchError.value = 'searchFailed'
             break
           }
-          const chunk = poll.results ?? []
-          if (chunk.length) {
-            // Hits arrive fully enriched (bookId + tocText) from the service — no client-side
-            // enrichment round-trip. The service owns that lookup so every consumer gets
-            // complete results without replicating it.
-            for (const c of chunk) acc.push(c) // spread-push would overflow on very large chunks
-            offset += chunk.length
-            results.value = acc.slice() // one flush per batch — the long-poll already paces the cadence
-          }
-          if (poll.done) {
+          if (chunk.done) {
             // Search complete — apply the relevancy sort now (no-op for 'lineId').
             // Done here rather than in `finally` so it runs only on genuine completion,
             // not when the loop exits early via supersession/error.
             finalizeSort()
             break
           }
-          if (!chunk.length) await new Promise((r) => setTimeout(r, 50)) // long-poll returned nothing new — brief backoff
         }
       } catch (err) {
-        console.error('[useFullTextSearch] dev FTS failed:', err)
-        searchError.value = 'searchFailed'
+        // An aborted stream is a cancel (new search / navigation), not a failure.
+        if (!abort.signal.aborted) {
+          console.error('[useFullTextSearch] dev FTS failed:', err)
+          searchError.value = 'searchFailed'
+        }
       } finally {
-        isSearching.value = false
+        if (_devStreamAbort === abort) _devStreamAbort = null
+        if (executedQuery.value === q) isSearching.value = false
       }
       return
     }

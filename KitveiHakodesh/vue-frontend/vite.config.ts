@@ -233,6 +233,73 @@ function devSqlitePlugin(): Plugin {
 
         // KitveiHakodesh service RPC — dumb proxy: forward the {op,args} envelope
         // to the service pipe and return its {ok,...} reply verbatim.
+        if (req.url === '/khs-stream') {
+          // Streaming courier: the service PUSHES many length-prefixed frames over one
+          // pipe connection (search results, indexing progress); every incoming pipe byte
+          // is forwarded verbatim into a chunked HTTP response — frames keep their 4-byte
+          // LE prefixes so the browser can split them. Closing the HTTP request destroys
+          // the pipe socket, which is the service's cancel signal. No polling anywhere.
+          const streamChunks: Buffer[] = []
+          req.on('data', (chunk: Buffer | string) => {
+            streamChunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
+          })
+          req.on('error', () => {
+            if (!res.headersSent) { res.writeHead(400); res.end('request error') }
+          })
+          req.on('end', async () => {
+            const body = Buffer.concat(streamChunks)
+
+            // Connect directly (NO pre-probe: a probe connection consumes the pipe's
+            // listening instance and races the real connect straight into ENOENT).
+            // Resolves once connected + headers/request are on the wire; from then on
+            // the socket streams into the response until the service closes it.
+            const openStream = () =>
+              new Promise<void>((resolve, reject) => {
+                const socket = net.createConnection(KHS_PIPE)
+                let connected = false
+                const connectTimer = setTimeout(
+                  () => socket.destroy(Object.assign(new Error('pipe connect timeout'), { code: 'ETIMEDOUT' })),
+                  KHS_CONNECT_TIMEOUT_MS,
+                )
+                socket.on('connect', () => {
+                  connected = true
+                  clearTimeout(connectTimer)
+                  res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-cache' })
+                  res.flushHeaders?.()
+                  const header = Buffer.alloc(4)
+                  header.writeInt32LE(body.length, 0)
+                  socket.write(Buffer.concat([header, body]))
+                  // Client gone (tab closed, search superseded via AbortController) → cancel.
+                  res.on('close', () => socket.destroy())
+                  resolve()
+                })
+                socket.on('data', (chunk) => { res.write(chunk) })
+                socket.on('close', () => { if (connected) res.end() })
+                socket.on('error', (err) => {
+                  clearTimeout(connectTimer)
+                  if (!connected) reject(err)   // pre-connect failure → caller may retry
+                  else res.end()                // mid-stream failure → just end the response
+                })
+              })
+
+            try {
+              if (khsReady) await khsReady
+              try {
+                await openStream()
+              } catch {
+                // Service may have died / be restarting — (re)start once, then retry.
+                khsReady = ensureKhsService()
+                await khsReady
+                await openStream()
+              }
+            } catch (err: any) {
+              console.error('[khs] stream error:', err?.message)
+              if (!res.headersSent) { res.writeHead(503); res.end(err?.message || 'service unavailable') }
+            }
+          })
+          return
+        }
+
         if (req.url === '/khs') {
           // Dumb binary courier: the request body is a MessagePack frame, forwarded verbatim
           // over the pipe; the reply bytes are returned verbatim. No per-op logic, no parsing —
