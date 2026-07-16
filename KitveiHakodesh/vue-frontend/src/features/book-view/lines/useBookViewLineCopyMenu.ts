@@ -206,12 +206,16 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
   function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {
     const separator = includeComma ? ', ' : ' '
+    // TOC paths are stored with " / " between segments (search-UI display format).
+    // A מקור reference should read as one continuous title, so collapse the segment
+    // separators to a single space. Not a document format used in the sources.
+    const flattenTocPath = (path: string): string => path.replace(/\s*\/\s*/g, ' ')
     if (firstLineIndex != null && options.getActiveTocEntry && options.getTocPath) {
       const entry = options.getActiveTocEntry(firstLineIndex)
-      if (entry) return `${bookTitle}${separator}${options.getTocPath(entry)}`
+      if (entry) return `${bookTitle}${separator}${flattenTocPath(options.getTocPath(entry))}`
     }
     const tocPath = tabStore.activeTab.tocPath
-    return tocPath ? `${bookTitle}${separator}${tocPath}` : bookTitle
+    return tocPath ? `${bookTitle}${separator}${flattenTocPath(tocPath)}` : bookTitle
   }
 
   /**
