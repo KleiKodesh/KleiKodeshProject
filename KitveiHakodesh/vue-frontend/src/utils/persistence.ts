@@ -79,6 +79,7 @@ export interface TabState {
   searchZoom?: number             // per-tab zoom level for the search results page (50–200)
   searchScrollIndex?: number      // virtual scroller item index for scroll restore
   searchScrollOffset?: number     // virtual scroller item offset for scroll restore
+  searchSortOrder?: import('@/features/full-text-search/fullTextSearchTypes').FullTextSearchSortOrder // per-tab FTS result sort ('lineId' | 'relevance')
   htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
   txtViewZoom?: number            // per-tab zoom level for /txt-view tabs (50–400)
 }
