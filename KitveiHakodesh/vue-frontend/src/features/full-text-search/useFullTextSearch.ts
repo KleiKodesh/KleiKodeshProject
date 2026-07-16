@@ -16,7 +16,7 @@ import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { eraRank } from './ftsChronology'
+import { eraRank, authorYear } from './ftsChronology'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 
@@ -232,12 +232,17 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // same book stay in document order.
       sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || a.lineId - b.lineId)
     } else if (sortOrder.value === 'chronological') {
-      // Era rank (from the book's period), then book name within an era, then line ID.
-      // Stage 2 will insert an author-year key between era and book name.
+      // Era rank (from the book's period) → author death-year within the era (where the
+      // author is in the curated map) → book name → line ID. Books whose author year is
+      // unknown sort after dated books of the same era (so an era's dated works lead,
+      // undated ones trail), then alphabetically.
       const bookMap = booksStore.allBooksMap
       const rankOf = (r: FullTextSearchResult) => eraRank(bookMap.get(r.bookId)?.period)
+      const yearOf = (r: FullTextSearchResult) =>
+        authorYear(bookMap.get(r.bookId)?.authors) ?? Number.POSITIVE_INFINITY
       sorted.sort((a, b) =>
         rankOf(a) - rankOf(b) ||
+        yearOf(a) - yearOf(b) ||
         (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
         a.lineId - b.lineId)
     } else {
