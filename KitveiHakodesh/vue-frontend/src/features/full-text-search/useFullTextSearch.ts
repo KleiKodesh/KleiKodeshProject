@@ -7,7 +7,7 @@
  *
  * Falls back to sample data in dev when the C# host is not present.
  */
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
 import { getTocPathsForLines, getBookIdsForLines } from '@/webview-host/seforimApi'
@@ -118,7 +118,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap, ftsSortOrder } = storeToRefs(settings)
 
   function _buildQueryToSend(normalizedQuery: string): string {
     if (!settings.searchGrammarWrap) return normalizedQuery
@@ -186,6 +186,40 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       results.value = [...results.value, ...flushed]
     }
   }
+
+  // Apply the current relevancy sort to the fully-collected result set. Called only
+  // once the search has completed — sorting mid-stream would fight the incremental
+  // append (results paint in ascending line-ID order as they arrive). 'lineId' is the
+  // natural streamed order, so it's a no-op; 'relevance' orders by word-distance score
+  // (smaller = closer) with line ID as a stable tiebreaker. results is a shallowRef, so
+  // we always assign a fresh array to trigger reactivity.
+  function finalizeSort() {
+    if (results.value.length < 2) return
+    const sorted = [...results.value]
+    if (ftsSortOrder.value === 'relevance') {
+      // Sole relevancy key: minimum word distance (0 = query words adjacent → most relevant).
+      // Ties keep their original streamed (line-ID) order. We deliberately do NOT tiebreak on
+      // `score` (character span) — that reorders equally-adjacent hits by irrelevant length
+      // differences (nikud, word length), which reads as nonsense to the user.
+      // `?? 0` guards results restored from a cache written before wordDistance existed on
+      // the wire — treat a missing distance as "closest" rather than sorting to NaN.
+      const wd = (r: FullTextSearchResult) => r.wordDistance ?? 0
+      sorted.sort((a, b) => wd(a) - wd(b) || a.lineId - b.lineId)
+    } else {
+      // 'lineId' — restore the original streamed order (ascending line ID). This is a
+      // no-op right after streaming, but matters when the user switches back from
+      // 'relevance' on an already-sorted set.
+      sorted.sort((a, b) => a.lineId - b.lineId)
+    }
+    results.value = sorted
+  }
+
+  // Re-sort an already-completed result set when the user changes the sort order.
+  // No-op while a search is in flight — the completion handler applies the sort then.
+  watch(ftsSortOrder, () => {
+    if (isSearching.value) return
+    finalizeSort()
+  })
 
   function _startSearchTimeout(searchId: string) {
     _clearSearchTimeout()
@@ -290,6 +324,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       onComplete: async () => {
         if (currentSearchId !== searchId) return
         _flushNow()
+        finalizeSort()
         isSearching.value = false
         if (!isIndexing?.()) {
           try {
@@ -397,7 +432,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
             offset += chunk.length
             results.value = acc.slice() // one flush per batch — the long-poll already paces the cadence
           }
-          if (poll.done) break
+          if (poll.done) {
+            // Search complete — apply the relevancy sort now (no-op for 'lineId').
+            // Done here rather than in `finally` so it runs only on genuine completion,
+            // not when the loop exits early via supersession/error.
+            finalizeSort()
+            break
+          }
           if (!chunk.length) await new Promise((r) => setTimeout(r, 50)) // long-poll returned nothing new — brief backoff
         }
       } catch (err) {

@@ -3,7 +3,11 @@ export interface FullTextSearchResult {
   bookId: number
   bookTitle: string
   tocText: string
+  /** Character span of the tightest window covering all query terms (smaller = closer). */
   score: number
+  /** Word distance of the tightest window — number of tokens between the outermost matched
+   *  words (0 = adjacent). This is the primary relevancy key. */
+  wordDistance: number
   snippet: string
   /** Concrete index terms that matched — one flat list of all expanded forms across all query groups.
    *  Used by the book view to highlight the actual matched words (e.g. the fuzzy expansion ביצחק
@@ -20,3 +24,14 @@ export interface FullTextSearchResult {
  * searchFailed   — unexpected error during search execution
  */
 export type SearchFailReason = 'indexNotReady' | 'indexMerging' | 'searchFailed'
+
+/**
+ * How the full-text-search results are ordered.
+ *
+ * lineId    — original returned order (ascending line ID = document order). Default.
+ * relevance — by word distance (score, smaller = closer), then line ID as a tiebreaker.
+ *
+ * Sorting is applied only after the search completes, so it never interferes with
+ * the incremental streaming of results.
+ */
+export type FullTextSearchSortOrder = 'lineId' | 'relevance'

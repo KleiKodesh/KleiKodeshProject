@@ -344,6 +344,8 @@ public sealed class FtsHit
     public string BookTitle { get; set; } = "";
     public string TocText { get; set; } = "";
     public int Score { get; set; }
+    /// <summary>Word-distance of the tightest window (0 = query words adjacent). Used for relevancy sorting on the frontend.</summary>
+    public int WordDistance { get; set; }
     public string Snippet { get; set; } = "";
     public List<string> MatchedTerms { get; set; } = new();
 }
