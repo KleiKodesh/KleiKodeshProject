@@ -106,4 +106,21 @@
 			</tab>
 		</tabs>
 	</ribbon>
+
+	<contextMenus>
+		<contextMenu idMso="ContextMenuText">
+			<button id="SearchFtsFromSelection"
+					label="העתק לחיפוש בכתבי הקודש"
+					imageMso="Copy"
+					onAction="contextMenu_Click"
+					insertBeforeMso="Cut"/>
+			<button id="SearchCatalogFromSelection"
+					label="חיפוש ספר בכתבי הקודש"
+					imageMso="Copy"
+					onAction="contextMenu_Click"
+					insertBeforeMso="Cut"/>
+			<menuSeparator id="KleiKodeshContextSeparator"
+						   insertBeforeMso="Cut"/>
+		</contextMenu>
+	</contextMenus>
 </customUI>

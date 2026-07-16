@@ -48,6 +48,43 @@ namespace KleiKodesh.Ribbon
             Execute(id);
         }
 
+        // Right-click context-menu items: push the current Word selection into the
+        // Kitvei Hakodesh app as a search. Both items reuse the running task pane (or
+        // launch it) and then call SearchFromHost on the live AppViewer — the text is
+        // stripped of non-word characters app-side before searching.
+        public void contextMenu_Click(Office.IRibbonControl control)
+        {
+            try
+            {
+                string target = control.Id == "SearchCatalogFromSelection" ? "catalog" : "fts";
+
+                string selection = Globals.ThisAddIn.Application.Selection?.Text;
+                if (string.IsNullOrWhiteSpace(selection))
+                    return;
+
+                var appViewer = ShowKitveiHakodesh();
+                appViewer?.SearchFromHost(selection, target);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Shows the Kitvei Hakodesh task pane, reusing the already-launched pane for
+        /// the active window if present (TaskPaneManager.Show handles the reuse), and
+        /// returns its live <see cref="KitveiHakodeshLib.AppViewer"/> so callers can
+        /// drive it directly without relaunching.
+        /// </summary>
+        private KitveiHakodeshLib.AppViewer ShowKitveiHakodesh()
+        {
+            var pane = TaskPaneManager.Show(
+                new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true },
+                "כתבי הקודש", 610, popOutBehavior: true);
+            return pane?.Control as KitveiHakodeshLib.AppViewer;
+        }
+
         void Execute(string id)
         {
             try
@@ -55,7 +92,7 @@ namespace KleiKodesh.Ribbon
                 switch (id)
                 {
                     case "KitveiHakodesh":
-                        TaskPaneManager.Show(new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true }, "כתבי הקודש", 610, popOutBehavior: true);
+                        ShowKitveiHakodesh();
                         break;
                     case "Kiwix":
                         TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);

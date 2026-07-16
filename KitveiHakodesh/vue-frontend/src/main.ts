@@ -13,6 +13,7 @@ import { serviceCallVoid } from './webview-host/serviceClient'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
+import { useHostSearchStore } from './stores/hostSearchStore'
 import { idbCheckAndExecReset } from './utils/persistence'
 
 // Synchronous localStorage check — zero cost on normal boots.
@@ -57,6 +58,9 @@ warmBooksDataInBackground()
 // PDF/HTML tabs render their loading placeholder right away; the virtual URL
 // is filled in asynchronously once the C# bridge confirms the file is ready.
 const localFileStore = useLocalFileStore()
+// Register the host-search listener before 'appReady' is posted below, so any search
+// request queued C#-side (context menu clicked before Vue mounted) is delivered.
+useHostSearchStore()
 const tabStore = useTabStore()
 void Promise.all(
   tabStore.tabs

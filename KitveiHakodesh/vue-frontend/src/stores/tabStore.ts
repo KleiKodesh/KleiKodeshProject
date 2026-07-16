@@ -65,6 +65,10 @@ export interface Tab {
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
   searchQuery?: string
+  // Seed query for the book-catalog page (route '/books'), pushed from the VSTO
+  // host's "חיפוש ספר בכתבי הקודש" context menu. BookCatalogPage reads this on mount
+  // into its reactive searchQuery. Kept separate from searchQuery, which the FTS page owns.
+  catalogQuery?: string
   tocPath?: string
 }
 

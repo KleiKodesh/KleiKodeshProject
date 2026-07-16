@@ -15,6 +15,7 @@ using System;
 using System.IO;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -121,6 +122,9 @@ namespace KitveiHakodeshLib
         // Dispatched when Vue sends the 'appReady' message, guaranteeing that all
         // event listeners (localFileStore) are live before the push event fires.
         private string _pendingFilePath;
+        // A search request queued before the Vue app has finished mounting, dispatched
+        // on 'appReady' just like _pendingFilePath. Only the last request is kept.
+        private (string text, string target)? _pendingSearch;
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
 
@@ -173,6 +177,44 @@ namespace KitveiHakodeshLib
             {
                 _ = _localFile.OpenFileFromPathAsync(filePath);
             }
+        }
+
+        // Matches any run of characters that are NOT a Hebrew letter, Latin letter, or
+        // digit. Hebrew niqqud and cantillation marks (U+0591–U+05C7) are intentionally
+        // NOT in the keep-set, so they collapse away too — the FTS/catalog indexes are
+        // unpointed, and a pointed selection must match against them.
+        private static readonly Regex _nonWordRun =
+            new Regex(@"[^א-תa-zA-Z0-9]+", RegexOptions.Compiled);
+
+        /// <summary>
+        /// Strips a Word selection down to searchable words — removes punctuation,
+        /// niqqud/cantillation, newlines, and any other non-word characters, collapsing
+        /// each run to a single space. Returns null/empty when nothing searchable remains.
+        /// </summary>
+        private static string StripToSearchText(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            string cleaned = _nonWordRun.Replace(raw, " ").Trim();
+            return cleaned.Length == 0 ? null : cleaned;
+        }
+
+        /// <summary>
+        /// Runs a search inside the app from the VSTO host (right-click context menu).
+        /// <paramref name="target"/> is "fts" (full-text search page) or "catalog"
+        /// (book catalog page). The selection text is stripped of all non-word
+        /// characters before being pushed to Vue. Safe to call immediately after the
+        /// pane is shown — if Vue is not yet mounted the request is queued and fired
+        /// on 'appReady', mirroring <see cref="OpenFileFromPath"/>.
+        /// </summary>
+        public void SearchFromHost(string text, string target)
+        {
+            string cleaned = StripToSearchText(text);
+            if (cleaned == null) return;
+
+            if (!_appReady)
+                _pendingSearch = (cleaned, target);
+            else
+                _bridge.PushEvent(new { @event = "hostSearch", target, text = cleaned });
         }
 
         // ── Constructor ─────────────────────────────────────────────────────────────
