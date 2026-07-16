@@ -173,11 +173,17 @@ const grid = computed<GridCell[]>(() => {
 /* Grid */
 .grid {
   flex: 1;
+  min-height: 0;
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  grid-auto-rows: 1fr;
   gap: 1px;
-  overflow: hidden;
+  /* Rows size to their (square) content; the whole grid scrolls if it
+     overflows the card, so cells never get squished out of square. */
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+  align-content: start;
 }
 
 /* Cell */
@@ -187,9 +193,15 @@ const grid = computed<GridCell[]>(() => {
   border: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   border-radius: 3px;
   padding: 2px 3px;
-  overflow: hidden;
+  /* Always square regardless of viewport/scale. Content is clipped to the
+     square (min-height:0 + overflow:hidden) so a busy day can never inflate
+     the cell and push later rows off-screen — the grid stays a clean 6×7. */
+  aspect-ratio: 1 / 1;
   min-height: 0;
+  overflow: hidden;
   background: var(--bg-primary);
+  /* Let inner text scale to the cell so small viewports still fit. */
+  container-type: size;
 }
 .cell.outside {
   opacity: 0.35;
@@ -212,7 +224,8 @@ const grid = computed<GridCell[]>(() => {
   gap: 2px;
 }
 .greg-num {
-  font-size: 13px;
+  /* Scales with the cell (cqmin) but clamped so it stays legible. */
+  font-size: clamp(9px, 22cqmin, 13px);
   font-weight: 300;
   color: var(--text-primary);
   line-height: 1;
@@ -222,7 +235,7 @@ const grid = computed<GridCell[]>(() => {
   font-weight: 600;
 }
 .heb-gem {
-  font-size: 9px;
+  font-size: clamp(7px, 16cqmin, 9px);
   color: var(--text-secondary);
   line-height: 1;
 }
@@ -235,7 +248,7 @@ const grid = computed<GridCell[]>(() => {
   flex: 1;
 }
 .ev {
-  font-size: 9px;
+  font-size: clamp(7px, 15cqmin, 9px);
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;

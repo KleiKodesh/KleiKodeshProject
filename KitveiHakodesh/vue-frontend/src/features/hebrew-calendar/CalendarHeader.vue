@@ -54,71 +54,62 @@ function hebYearGem(y: number): string {
   }
 }
 
-// ── Dropdown helpers ──────────────────────────────────────────────────────────
-function makeDropdown() {
-  const show = ref(false)
-  const btnRef = ref<HTMLElement | null>(null)
-  const dropRef = ref<HTMLElement | null>(null)
-  const listRef = ref<HTMLElement | null>(null)
-  useDropdownClose(
-    dropRef,
-    (e) => {
-      if (btnRef.value?.contains((e as MouseEvent).target as Node)) return
-      show.value = false
-    },
-    { ignore: [btnRef] },
-  )
-  return { show, btnRef, dropRef, listRef }
-}
+// ── Dropdowns ───────────────────────────────────────────────────────────────
+// One "which dropdown is open" flag instead of per-dropdown object-path refs.
+// (Template refs bound via `ref="obj.prop"` are fragile in production builds;
+// a single discriminant + top-level refs is robust across dev and WebView2.)
+type DropId = 'hebMonth' | 'hebYear' | 'gregMonth' | 'gregYear' | null
+const openDrop = ref<DropId>(null)
 
-const hebMonthDrop = makeDropdown()
-const hebYearDrop = makeDropdown()
-const gregMonthDrop = makeDropdown()
-const gregYearDrop = makeDropdown()
+const rootRef = ref<HTMLElement | null>(null)
+const hebYearListRef = ref<HTMLElement | null>(null)
+const gregYearListRef = ref<HTMLElement | null>(null)
 
-function selectHebMonth(m: number) {
-  emit('select-heb-month', m)
-  hebMonthDrop.show.value = false
-}
-function selectHebYear(y: number) {
-  emit('select-heb-year', y)
-  hebYearDrop.show.value = false
-}
-function selectGregMonth(i: number) {
-  emit('select-greg-month', i)
-  gregMonthDrop.show.value = false
-}
-function selectGregYear(y: number) {
-  emit('select-greg-year', y)
-  gregYearDrop.show.value = false
-}
+// Close whenever the click lands outside the whole header (covers all four).
+useDropdownClose(rootRef, () => {
+  openDrop.value = null
+})
 
-function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
-  drop.show.value = !drop.show.value
-  if (drop.show.value) {
+function toggleDrop(id: Exclude<DropId, null>) {
+  const willOpen = openDrop.value !== id
+  openDrop.value = willOpen ? id : null
+  if (willOpen && (id === 'hebYear' || id === 'gregYear')) {
     nextTick(() => {
-      const list = drop.listRef.value
+      const list = id === 'hebYear' ? hebYearListRef.value : gregYearListRef.value
       const active = list?.querySelector<HTMLElement>('.active')
       if (!list || !active) return
       list.scrollTop = active.offsetTop - list.clientHeight / 2 + active.offsetHeight / 2
     })
   }
 }
+
+function selectHebMonth(m: number) {
+  emit('select-heb-month', m)
+  openDrop.value = null
+}
+function selectHebYear(y: number) {
+  emit('select-heb-year', y)
+  openDrop.value = null
+}
+function selectGregMonth(i: number) {
+  emit('select-greg-month', i)
+  openDrop.value = null
+}
+function selectGregYear(y: number) {
+  emit('select-greg-year', y)
+  openDrop.value = null
+}
 </script>
 
 <template>
-  <div class="header">
+  <div ref="rootRef" class="header">
     <!-- Physical RIGHT: Hebrew label -->
     <div class="side side--he">
       <div class="picker">
-        <span
-          ref="hebMonthDrop.btnRef"
-          class="label-btn"
-          @click="hebMonthDrop.show.value = !hebMonthDrop.show.value"
-        >
+        <span class="label-btn" @click="toggleDrop('hebMonth')">
           {{ labelMonth(hebrewLabel) }}
         </span>
-        <div v-if="hebMonthDrop.show.value" ref="hebMonthDrop.dropRef" class="drop month-drop">
+        <div v-if="openDrop === 'hebMonth'" class="drop month-drop">
           <button
             v-for="m in HEB_MONTHS"
             :key="m.num"
@@ -131,11 +122,11 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
         </div>
       </div>
       <div class="picker">
-        <span ref="hebYearDrop.btnRef" class="label-btn" @click="openYearDrop(hebYearDrop)">
+        <span class="label-btn" @click="toggleDrop('hebYear')">
           {{ labelYear(hebrewLabel) }}
         </span>
-        <div v-if="hebYearDrop.show.value" ref="hebYearDrop.dropRef" class="drop year-drop">
-          <div ref="hebYearDrop.listRef" class="year-list">
+        <div v-if="openDrop === 'hebYear'" class="drop year-drop">
+          <div ref="hebYearListRef" class="year-list">
             <button
               v-for="y in HEB_YEARS"
               :key="y"
@@ -182,18 +173,10 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
     <!-- Physical LEFT: Gregorian label -->
     <div class="side side--greg">
       <div class="picker">
-        <span
-          ref="gregMonthDrop.btnRef"
-          class="label-btn"
-          @click="gregMonthDrop.show.value = !gregMonthDrop.show.value"
-        >
+        <span class="label-btn" @click="toggleDrop('gregMonth')">
           {{ labelMonth(gregLabel) }}
         </span>
-        <div
-          v-if="gregMonthDrop.show.value"
-          ref="gregMonthDrop.dropRef"
-          class="drop month-drop greg-drop"
-        >
+        <div v-if="openDrop === 'gregMonth'" class="drop month-drop greg-drop">
           <button
             v-for="(name, i) in GREG_MONTHS"
             :key="i"
@@ -206,15 +189,11 @@ function openYearDrop(drop: ReturnType<typeof makeDropdown>) {
         </div>
       </div>
       <div class="picker">
-        <span ref="gregYearDrop.btnRef" class="label-btn" @click="openYearDrop(gregYearDrop)">
+        <span class="label-btn" @click="toggleDrop('gregYear')">
           {{ labelYear(gregLabel) }}
         </span>
-        <div
-          v-if="gregYearDrop.show.value"
-          ref="gregYearDrop.dropRef"
-          class="drop year-drop greg-drop"
-        >
-          <div ref="gregYearDrop.listRef" class="year-list">
+        <div v-if="openDrop === 'gregYear'" class="drop year-drop greg-drop">
+          <div ref="gregYearListRef" class="year-list">
             <button
               v-for="y in GREG_YEARS"
               :key="y"
