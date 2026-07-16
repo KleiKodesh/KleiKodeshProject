@@ -15,6 +15,8 @@ import { serviceStream } from '@/webview-host/serviceClient'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import { eraRank } from './ftsChronology'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 
@@ -118,6 +120,7 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
+  const booksStore = useBooksDataStore()
   const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap } = storeToRefs(settings)
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
@@ -202,8 +205,18 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // natural streamed order, so it's a no-op; 'relevance' orders by word-distance score
   // (smaller = closer) with line ID as a stable tiebreaker. results is a shallowRef, so
   // we always assign a fresh array to trigger reactivity.
-  function finalizeSort() {
+  async function finalizeSort() {
     if (results.value.length < 2) return
+
+    // Chronological needs each book's era label (period), which booksDataStore derives
+    // from the category tree lazily. Load it before sorting; guard against a newer sort
+    // pick landing while we awaited.
+    if (sortOrder.value === 'chronological') {
+      const picked = sortOrder.value
+      await booksStore.ensureCommentaryMetadataLoaded()
+      if (sortOrder.value !== picked) return
+    }
+
     const sorted = [...results.value]
     if (sortOrder.value === 'relevance') {
       // Sole relevancy key: minimum word distance (0 = query words adjacent → most relevant).
@@ -218,6 +231,15 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Alphabetical by book title (Hebrew collation), then line ID so lines within the
       // same book stay in document order.
       sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || a.lineId - b.lineId)
+    } else if (sortOrder.value === 'chronological') {
+      // Era rank (from the book's period), then book name within an era, then line ID.
+      // Stage 2 will insert an author-year key between era and book name.
+      const bookMap = booksStore.allBooksMap
+      const rankOf = (r: FullTextSearchResult) => eraRank(bookMap.get(r.bookId)?.period)
+      sorted.sort((a, b) =>
+        rankOf(a) - rankOf(b) ||
+        (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+        a.lineId - b.lineId)
     } else {
       // 'lineId' — restore the original streamed order (ascending line ID). This is a
       // no-op right after streaming, but matters when the user switches back from
@@ -232,7 +254,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // so in practice this only fires on an explicit user pick after results finish.
   watch(sortOrder, () => {
     if (isSearching.value) return
-    finalizeSort()
+    void finalizeSort().catch((err) => console.error('[useFullTextSearch] sort failed:', err))
   })
 
   function _startSearchTimeout(searchId: string) {
@@ -344,7 +366,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       onComplete: async () => {
         if (currentSearchId !== searchId) return
         _flushNow()
-        finalizeSort()
+        await finalizeSort()
         isSearching.value = false
         if (!isIndexing?.()) {
           try {
@@ -440,10 +462,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
             break
           }
           if (chunk.done) {
-            // Search complete — apply the relevancy sort now (no-op for 'lineId').
+            // Search complete — apply the sort now (no-op for 'lineId').
             // Done here rather than in `finally` so it runs only on genuine completion,
             // not when the loop exits early via supersession/error.
-            finalizeSort()
+            await finalizeSort()
             break
           }
         }
