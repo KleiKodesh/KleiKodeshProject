@@ -208,10 +208,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   async function finalizeSort() {
     if (results.value.length < 2) return
 
-    // Chronological needs each book's era label (period), which booksDataStore derives
-    // from the category tree lazily. Load it before sorting; guard against a newer sort
-    // pick landing while we awaited.
-    if (sortOrder.value === 'chronological') {
+    // chronological/authorName need per-book metadata (period / authors) that
+    // booksDataStore derives from the catalog lazily. Load it before sorting; guard
+    // against a newer sort pick landing while we awaited.
+    if (sortOrder.value === 'chronological' || sortOrder.value === 'authorName') {
       const picked = sortOrder.value
       await booksStore.ensureCommentaryMetadataLoaded()
       if (sortOrder.value !== picked) return
@@ -231,6 +231,19 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Alphabetical by book title (Hebrew collation), then line ID so lines within the
       // same book stay in document order.
       sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || a.lineId - b.lineId)
+    } else if (sortOrder.value === 'authorName') {
+      // Alphabetical by author name (Hebrew collation), then book name, then line ID.
+      // Authorless books (empty author string) sort last. book.authors is the comma-joined
+      // author list; we collate on it as-is (its natural first author leads the string).
+      const bookMap = booksStore.allBooksMap
+      const authorOf = (r: FullTextSearchResult) => bookMap.get(r.bookId)?.authors || ''
+      sorted.sort((a, b) => {
+        const aa = authorOf(a), ab = authorOf(b)
+        if (!aa !== !ab) return aa ? -1 : 1 // non-empty authors before authorless
+        return aa.localeCompare(ab, 'he') ||
+          (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+          a.lineId - b.lineId
+      })
     } else if (sortOrder.value === 'chronological') {
       // Era rank (from the book's period) → author death-year within the era (where the
       // author is in the curated map) → book name → line ID. Books whose author year is
