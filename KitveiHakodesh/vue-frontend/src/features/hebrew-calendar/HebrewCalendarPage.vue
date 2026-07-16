@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
+import { HDate } from '@hebcal/core'
 import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import { useZmanim } from './useZmanim'
 import { useWeeklyView } from './useWeeklyView'
@@ -33,6 +34,27 @@ function onToday() {
   viewMode.value === 'weekly' ? weekly.goToday() : monthly.goToday()
 }
 
+// ── Date-picker selections ────────────────────────────────────────────────
+// Each selection drives BOTH views (monthly month state + weekly week offset)
+// so the calendar jumps regardless of which view is active and stays in sync
+// when the user toggles between them.
+function onSelectHebMonth(m: number) {
+  monthly.jumpToHebrew(monthly.hebYear.value, m)
+  weekly.goToDate(new HDate(1, m, monthly.hebYear.value).greg())
+}
+function onSelectHebYear(y: number) {
+  monthly.jumpToHebrew(y, monthly.hebMonth.value)
+  weekly.goToDate(new HDate(1, monthly.hebMonth.value, y).greg())
+}
+function onSelectGregMonth(m: number) {
+  monthly.gregMonth.value = m
+  weekly.goToDate(new Date(monthly.gregYear.value, m, 1))
+}
+function onSelectGregYear(y: number) {
+  monthly.gregYear.value = y
+  weekly.goToDate(new Date(y, monthly.gregMonth.value, 1))
+}
+
 onMounted(() => {
   const savedView = lsGet<ViewMode>(KEYS.SETTINGS_CALENDAR_VIEW)
   viewMode.value = savedView === 'monthly' ? 'monthly' : 'weekly'
@@ -61,10 +83,10 @@ onMounted(() => {
             @next="onNext"
             @today="onToday"
             @set-view="viewMode = $event"
-            @select-heb-month="monthly.jumpToHebrew(monthly.hebYear.value, $event)"
-            @select-heb-year="monthly.jumpToHebrew($event, monthly.hebMonth.value)"
-            @select-greg-month="monthly.gregMonth.value = $event"
-            @select-greg-year="monthly.gregYear.value = $event"
+            @select-heb-month="onSelectHebMonth"
+            @select-heb-year="onSelectHebYear"
+            @select-greg-month="onSelectGregMonth"
+            @select-greg-year="onSelectGregYear"
           />
           <WeeklyView v-if="viewMode === 'weekly'" :weekly="weekly" class="calendar-view" />
           <MonthlyView v-else :monthly="monthly" class="calendar-view" />

@@ -197,11 +197,21 @@ export function useWeeklyView(city: { value: City }) {
     () => { offset.value = 0 },
   )
 
+  // Jump so the visible week contains `date`. Offset is measured in whole
+  // weeks between the Sunday of today's week and the Sunday of the target's.
+  function goToDate(date: Date) {
+    const targetSunday = sundayOf(date)
+    const baseSunday = sundayOf(today0)
+    const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000
+    offset.value = Math.round((targetSunday.getTime() - baseSunday.getTime()) / MS_PER_WEEK)
+  }
+
   return {
     week,
     prev: () => { offset.value-- },
     next: () => { offset.value++ },
     goToday: () => { offset.value = 0 },
+    goToDate,
     reset: () => { offset.value = 0 },
   }
 }
