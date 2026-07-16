@@ -19,6 +19,7 @@ namespace FtsLibTest
             {
                 case "bench":             BenchTest.Run(args); return;
                 case "fetchbench":        FetchBenchTest.Run(args); return;
+                case "forcemergebug":     ForceMergeBugTest.Run(args); return;
                 case "build":             BuildTest.Run(args); return;
                 case "buildfresh":        BuildFreshTest.Run(args); return;
                 case "search":            SearchTest.Run(args); return;
