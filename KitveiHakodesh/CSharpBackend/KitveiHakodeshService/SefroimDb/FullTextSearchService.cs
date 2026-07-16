@@ -14,7 +14,7 @@ namespace KitveiHakodeshService.SefroimDb;
 /// the index too. A completed build writes fts.ver so later runs skip rebuilding.
 /// Search returns one capped batch (the hosted C# path streams; dev doesn't need to).
 /// </summary>
-public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
+public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger, SeforimDbService seforim)
 {
     private readonly string? _dbPath = Environment.GetEnvironmentVariable("DB_PATH");
     private readonly string _indexPath = ResolveIndexPath();
@@ -263,6 +263,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
                     result.Results.Add(built!);
                 if (cap > 0 && result.Results.Count >= cap) break;
             }
+            EnrichHits(result.Results);   // fill bookId + toc path server-side (self-contained results)
         }
         catch (Exception ex)
         {
@@ -363,9 +364,9 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
     }
 
     /// <summary>Snippet-generate results[start..end) across all cores (thread-safe: FtsLib's
-    /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, then append the
-    /// passing hits to the session buffer under a single lock.</summary>
-    private static void FlushSnippetRange(SearchSession session, SeforimIndex index,
+    /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, enrich the passing
+    /// hits (bookId + toc path) server-side, then append them to the session buffer.</summary>
+    private void FlushSnippetRange(SearchSession session, SeforimIndex index,
         IReadOnlyList<SearchResult> results, int start, int end,
         bool requireOrdered, int contextWords, int maxWordDistance, CancellationToken ct)
     {
@@ -376,9 +377,57 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
             if (TryBuildHit(index, results[start + i], requireOrdered, contextWords, maxWordDistance, out var h))
                 built[i] = h;
         });
-        lock (session.Hits)
-            for (int i = 0; i < built.Length; i++)
-                if (built[i] is { } hit) session.Hits.Add(hit);
+
+        // Collect passing hits in order, enrich them server-side, then publish the batch.
+        var passing = new List<FtsHit>(count);
+        for (int i = 0; i < built.Length; i++)
+            if (built[i] is { } hit) passing.Add(hit);
+        EnrichHits(passing);
+
+        lock (session.Hits) session.Hits.AddRange(passing);
+    }
+
+    /// <summary>
+    /// Fill each hit's <c>BookId</c> and <c>TocText</c> from the seforim DB so results come
+    /// out of the service COMPLETE — no consumer has to make a second round-trip to resolve
+    /// them. This is the same lookup the frontend used to do per batch (getTocPathsForLines +
+    /// a getBookIdsForLines fallback for lines with no toc entry, e.g. custom books), now
+    /// owned by the service. Batched (one query per flush), so it adds negligible cost and
+    /// removes an entire client-side enrichment lane. SeforimDbService opens a fresh
+    /// read-only connection per call, so this is safe to call from the search task.
+    /// </summary>
+    private void EnrichHits(List<FtsHit> hits)
+    {
+        if (hits.Count == 0) return;
+
+        var lineIds = new List<int>(hits.Count);
+        foreach (var h in hits) lineIds.Add(h.LineId);
+
+        var toc = seforim.GetTocPathsForLines(lineIds);
+        if (toc.Count > 0)
+        {
+            var map = new Dictionary<int, TocPathRow>(toc.Count);
+            foreach (var t in toc) map[t.LineId] = t;
+            foreach (var h in hits)
+                if (map.TryGetValue(h.LineId, out var t)) { h.BookId = t.BookId; h.TocText = t.TocPath; }
+        }
+
+        // Fallback: lines with no line_toc entry (custom books / negative IDs) get no toc row,
+        // so resolve their bookId directly from the line table.
+        List<int>? missing = null;
+        foreach (var h in hits)
+            if (h.BookId == 0) (missing ??= new List<int>()).Add(h.LineId);
+        if (missing != null)
+        {
+            var books = seforim.GetBookIdsForLines(missing);
+            if (books.Count > 0)
+            {
+                var bmap = new Dictionary<int, int>(books.Count);
+                foreach (var b in books) bmap[b.LineId] = b.BookId;
+                foreach (var h in hits)
+                    if (h.BookId == 0 && bmap.TryGetValue(h.LineId, out var bid)) h.BookId = bid;
+            }
+        }
     }
 
     // Long-poll: the request is held open until a batch is ready, so results arrive
