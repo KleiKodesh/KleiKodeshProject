@@ -258,6 +258,7 @@ nextTick(() => inputRef.value?.focus())
       :anchor-left="anchorLeft"
       :anchor-right="anchorRight"
       :max-height="maxHeight"
+      :min-width="320"
       @select-catalog-book="onSelectCatalogBook"
       @select-catalog-toc="onSelectCatalogToc"
       @select-hebrew-book="onSelectHebrewBook"
