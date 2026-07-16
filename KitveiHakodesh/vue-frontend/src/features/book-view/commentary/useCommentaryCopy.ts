@@ -25,7 +25,11 @@ export function useCommentaryCopy(
 
   function buildCommentarySource(bookTitle: string, tocPath?: string): string {
     const cleanTitle = bookTitle.replace(/\s+מפרשים\s*$/, '').replace(/\s+רשנם\s*$/, '')
-    return tocPath ? `${cleanTitle}, ${tocPath}` : cleanTitle
+    // TOC paths are stored with " / " between segments (search-UI display format).
+    // A מקור reference should read as one continuous title, so collapse the segment
+    // separators to a single space. Not a document format used in the sources.
+    const flatPath = tocPath?.replace(/\s*\/\s*/g, ' ')
+    return flatPath ? `${cleanTitle}, ${flatPath}` : cleanTitle
   }
 
   // ── Selection extraction (for highlight/note offset tracking) ───────────────
