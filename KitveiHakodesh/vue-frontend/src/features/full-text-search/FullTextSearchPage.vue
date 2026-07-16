@@ -194,6 +194,9 @@ async function saveFilterState() {
     searchScrollIndex: lastScrollIndex,
     searchScrollOffset: lastScrollOffset,
     searchZoom: zoom.value !== ZOOM_CONFIG.DEFAULT ? zoom.value : undefined,
+    // Persist the sort only when it's the non-default 'relevance' — 'lineId' is the
+    // reset-on-new-search default, so there's nothing to remember for it.
+    searchSortOrder: sortOrder.value !== 'lineId' ? sortOrder.value : undefined,
   }
   tabStore.setTabViewState(tabId, state)
 }
@@ -248,6 +251,13 @@ onMounted(async () => {
   // Restore search query and results from cache/session. The scroll position
   // is restored automatically by FullTextSearchResultsList's watcher when results arrive.
   await restoreFromTab()
+
+  // Restore the per-tab sort AFTER restoreFromTab: executeSearch() resets sortOrder to
+  // 'lineId' synchronously at its start, so setting it here wins. For cache-restored
+  // results the sortOrder watch re-sorts immediately; for a live re-search the value is
+  // read by finalizeSort() when that search completes.
+  if (saved?.searchSortOrder) sortOrder.value = saved.searchSortOrder
+
   searchBarRef.value?.focus()
 })
 
