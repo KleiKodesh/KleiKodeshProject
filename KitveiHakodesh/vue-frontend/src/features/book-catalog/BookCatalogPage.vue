@@ -39,6 +39,21 @@ onMounted(async () => {
   view.value = await tabStore.getBooksView()
 })
 
+// Query pushed from the VSTO host ("חיפוש ספר בכתבי הקודש" context menu) arrives on
+// the tab as catalogQuery. Watch it (immediate) so it works both on first mount and
+// when the host re-targets an already-open catalog tab. Consume once and clear it so
+// the search doesn't re-fire when the user returns to this tab. Mutating searchQuery
+// is enough — useBookCatalogSearch watches it and runs the search reactively.
+watch(
+  () => paneNavigation.activeTab.catalogQuery,
+  (seed) => {
+    if (!seed) return
+    searchQuery.value = seed
+    paneNavigation.updateActiveTab({ catalogQuery: undefined })
+  },
+  { immediate: true },
+)
+
 // ── Diagnostics (auto-runs when a bitness-mismatch error is detected) ─────────
 
 const diagData = ref<Record<string, string> | null>(null)

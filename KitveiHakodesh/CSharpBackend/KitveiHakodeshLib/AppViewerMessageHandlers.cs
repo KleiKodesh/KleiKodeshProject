@@ -223,6 +223,12 @@ namespace KitveiHakodeshLib
                 _pendingFilePath = null;
                 _ = _localFile.OpenFileFromPathAsync(path);
             }
+            if (_pendingSearch != null)
+            {
+                var (text, target) = _pendingSearch.Value;
+                _pendingSearch = null;
+                _bridge.PushEvent(new { @event = "hostSearch", target, text });
+            }
         }
 
         private void HandleGetDiagnostics(string id)
