@@ -23,6 +23,7 @@ public sealed class Dispatcher(
 {
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
+        IdleMemoryTrimmer.Touch(); // re-arm the idle memory trimmer on every RPC
         RpcRequest? req;
         try
         {

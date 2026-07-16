@@ -44,6 +44,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
     private bool HasDb => !string.IsNullOrWhiteSpace(_dbPath) && File.Exists(_dbPath);
 
+    /// <summary>True while background work is running (index build or live search
+    /// sessions) — the idle memory trimmer must not run then.</summary>
+    public bool IsBusy => _isIndexing || !_sessions.IsEmpty;
+
     private bool SegmentsExist()
     {
         try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, "seg_*.dat").Length > 0; }
