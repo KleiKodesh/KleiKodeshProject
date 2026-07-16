@@ -467,8 +467,15 @@ namespace FtsLib.Indexing
                     while (reader.MoveNext()) termCount++;
                 if (termCount == 0) return false;
 
+                // Pooling=false: a pooled read handle would survive this using-block and
+                // keep the segment .db open, blocking a later merge's File.Delete of it.
                 using (var conn = new SqliteConnection(
-                    $"Data Source={dbPath};Mode=ReadOnly"))
+                    new SqliteConnectionStringBuilder
+                    {
+                        DataSource = dbPath,
+                        Mode = SqliteOpenMode.ReadOnly,
+                        Pooling = false,
+                    }.ConnectionString))
                 {
                     conn.Open();
                     using (var cmd = conn.CreateCommand())

@@ -289,6 +289,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
 
     private readonly ConcurrentDictionary<string, SearchSession> _sessions = new();
     private int _searchCounter;
+    private string? _currentSearchId;   // most-recent streaming search; the next one supersedes it
     private const int SessionTtlMinutes = 5;
 
     public FtsSearchStartResult StartSearch(
@@ -302,6 +303,15 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
         var session = new SearchSession();
         string id = "s" + Interlocked.Increment(ref _searchCounter);
         _sessions[id] = session;
+
+        // A new search SUPERSEDES the previous in-flight one — cancel it so the service
+        // never keeps burning cores generating snippets for results the caller has already
+        // moved on from. This makes "latest search wins" a SERVICE guarantee (mirroring the
+        // hosted FtsSearchExecutor), so every consumer gets it for free with no client-side
+        // bookkeeping — a client only needs to StartSearch again. The atomic swap makes
+        // rapid back-to-back searches race-safe (exactly one predecessor cancelled each time).
+        var prevId = Interlocked.Exchange(ref _currentSearchId, id);
+        if (prevId != null && _sessions.TryRemove(prevId, out var prev)) prev.Cts.Cancel();
 
         _ = Task.Run(() => RunSearch(session, query, maxWordDistance, requireOrdered, contextWords, expandKetiv));
         return new FtsSearchStartResult { Ready = true, SearchId = id };
@@ -423,7 +433,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
 
     public void CancelSearch(string searchId)
     {
-        if (!string.IsNullOrEmpty(searchId) && _sessions.TryRemove(searchId, out var session))
+        if (string.IsNullOrEmpty(searchId)) return;
+        // If this was the current search, it's no longer current (clear only if unchanged).
+        Interlocked.CompareExchange(ref _currentSearchId, null, searchId);
+        if (_sessions.TryRemove(searchId, out var session))
             session.Cts.Cancel();
     }
 

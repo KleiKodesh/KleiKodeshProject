@@ -381,7 +381,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
             continue
           }
           if (executedQuery.value !== q) { serviceCallVoid('ftsSearchCancel', { searchId }); return } // superseded
-          if (poll.error) { if (!acc.length) searchError.value = 'searchFailed'; break }
+          if (poll.error) {
+            // "unknown or expired search" = the service superseded this search with a newer
+            // one (it now enforces "latest search wins") or the session aged out — that is
+            // normal, not a failure. Only a genuine backend error should surface.
+            if (!/unknown|expired/i.test(String(poll.error)) && !acc.length) searchError.value = 'searchFailed'
+            break
+          }
           const chunk = poll.results ?? []
           if (chunk.length) {
             await enrichTocPaths(chunk)

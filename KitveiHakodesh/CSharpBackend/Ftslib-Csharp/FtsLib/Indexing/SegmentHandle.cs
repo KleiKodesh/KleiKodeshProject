@@ -74,8 +74,19 @@ namespace FtsLib.Indexing
 
             try
             {
+                // Pooling=false: this is a live per-segment read handle. When the segment
+                // is superseded by a merge, disposing this SegmentHandle must release the OS
+                // file handle to the .db *immediately* so the merger can delete the source.
+                // Microsoft.Data.Sqlite pools by default — a pooled connection keeps the
+                // handle open after Dispose, which makes the merge's File.Delete fail with
+                // "used by another process" (aborts the whole index build).
                 Conn = new Microsoft.Data.Sqlite.SqliteConnection(
-                    string.Format("Data Source={0};Mode=ReadOnly", dbPath));
+                    new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+                    {
+                        DataSource = dbPath,
+                        Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly,
+                        Pooling = false,
+                    }.ConnectionString);
                 Conn.Open();
                 Lookup = Conn.CreateCommand();
                 Lookup.CommandText =
