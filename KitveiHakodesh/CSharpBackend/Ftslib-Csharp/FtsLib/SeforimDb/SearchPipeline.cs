@@ -112,6 +112,83 @@ namespace FtsLib.SeforimDb
         }
 
         /// <summary>
+        /// Same result set as <see cref="Search"/>, but Phase 2 (the DB content fetch —
+        /// the dominant cost of a broad query) runs across up to <paramref name="maxDop"/>
+        /// connections in parallel and the results are returned as an ordered array
+        /// (ascending line ID), not a lazy stream. Phase 1 (expansion + intersection,
+        /// under the search lease) is unchanged; the lease is released before the fetch.
+        /// </summary>
+        internal static SearchResult[] SearchParallel(
+            string            query,
+            string            indexPath,
+            string            dbPath,
+            List<(string dat, string db)> livePaths,
+            SearchLease       lease,
+            int               maxDop,
+            bool              expandKetiv = false,
+            IEnumerable<int>  filterIds = null,
+            CancellationToken ct  = default)
+        {
+            var parsed = QueryParser.Parse(query);
+            if (parsed.IsEmpty)
+            {
+                lease?.Dispose();
+                return System.Array.Empty<SearchResult>();
+            }
+
+            var filter = BuildFilter(filterIds);
+
+            var ids = new List<int>();
+            IReadOnlyList<IReadOnlyCollection<string>> matchedGroups = null;
+            int originalGroupCount = parsed.Groups.Count;
+
+            // Phase 1 — under the lease (see Search for the release-before-fetch rationale).
+            using (var reader = new IndexReader(indexPath, livePaths, lease))
+            {
+                var groups         = new List<IEnumerable<string>>(parsed.Groups.Count);
+                var expandedGroups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
+
+                foreach (var group in parsed.Groups)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    var groupTerms = ExpandGroup(group, reader, expandKetiv, ct, out bool hardMiss);
+                    if (hardMiss) return System.Array.Empty<SearchResult>();
+                    if (groupTerms.Count == 0) continue;
+                    groups.Add(groupTerms);
+                    expandedGroups.Add(groupTerms);
+                }
+
+                if (groups.Count == 0) return System.Array.Empty<SearchResult>();
+
+                matchedGroups = expandedGroups;
+
+                foreach (var id in reader.Search(groups, filter, ct))
+                {
+                    ct.ThrowIfCancellationRequested();
+                    ids.Add(id);
+                }
+            }
+
+            if (ids.Count == 0) return System.Array.Empty<SearchResult>();
+
+            // Phase 2 — lease released: parallel content fetch across connections.
+            var arr = ZayitDb.FetchSearchResultsParallel(
+                dbPath, ids, matchedGroups, originalGroupCount, maxDop, ct);
+
+            // Every matched id comes from the line table, so each slot is filled; guard
+            // against a null (row vanished mid-search) by compacting, preserving order.
+            int nulls = 0;
+            for (int i = 0; i < arr.Length; i++) if (arr[i] == null) nulls++;
+            if (nulls == 0) return arr;
+
+            var compact = new SearchResult[arr.Length - nulls];
+            int j = 0;
+            for (int i = 0; i < arr.Length; i++) if (arr[i] != null) compact[j++] = arr[i];
+            return compact;
+        }
+
+        /// <summary>
         /// Returns the normalised query terms for a raw query string.
         /// Fuzzy/wildcard markers are stripped — only the base word forms are returned.
         /// Used as a fallback when the caller does not have a <see cref="SearchResult"/>

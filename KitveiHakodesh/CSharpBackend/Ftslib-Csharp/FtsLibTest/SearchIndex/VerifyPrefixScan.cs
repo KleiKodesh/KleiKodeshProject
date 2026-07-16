@@ -137,7 +137,7 @@ namespace FtsLibTest
                         {
                             cmd.CommandText =
                                 "SELECT term FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                            cmd.Parameters.Add("@p", Microsoft.Data.Sqlite.SqliteType.Text).Value =
+                            cmd.Parameters.Add("@p", System.Data.DbType.String).Value =
                                 EscapeLike(prefix) + "%";
                             using (var r = cmd.ExecuteReader())
                                 while (r.Read()) likeSet.Add(r.GetString(0));
@@ -149,8 +149,8 @@ namespace FtsLibTest
                         {
                             cmd.CommandText =
                                 "SELECT term FROM term_index WHERE term >= @lo AND term < @hi";
-                            cmd.Parameters.Add("@lo", Microsoft.Data.Sqlite.SqliteType.Text).Value = lo;
-                            cmd.Parameters.Add("@hi", Microsoft.Data.Sqlite.SqliteType.Text).Value = hi;
+                            cmd.Parameters.Add("@lo", System.Data.DbType.String).Value = lo;
+                            cmd.Parameters.Add("@hi", System.Data.DbType.String).Value = hi;
                             using (var r = cmd.ExecuteReader())
                                 while (r.Read()) rangeSet.Add(r.GetString(0));
                         }

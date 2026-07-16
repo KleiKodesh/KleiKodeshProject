@@ -43,6 +43,10 @@ namespace FtsLibTest
                     RunAll(args);
                     return;
 
+                case "bench":
+                    BenchTest.Run(args);
+                    return;
+
                 case "query":
                     QueryTest.Run(args);
                     return;
