@@ -29,9 +29,10 @@ export type SearchFailReason = 'indexNotReady' | 'indexMerging' | 'searchFailed'
  * How the full-text-search results are ordered.
  *
  * lineId    — original returned order (ascending line ID = document order). Default.
- * relevance — by word distance (score, smaller = closer), then line ID as a tiebreaker.
+ * relevance — by minimum word distance (0 = adjacent), then line ID as a tiebreaker.
+ * bookName  — alphabetically by book title (Hebrew collation), then line ID within a book.
  *
  * Sorting is applied only after the search completes, so it never interferes with
  * the incremental streaming of results.
  */
-export type FullTextSearchSortOrder = 'lineId' | 'relevance'
+export type FullTextSearchSortOrder = 'lineId' | 'relevance' | 'bookName'

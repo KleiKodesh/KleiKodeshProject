@@ -211,10 +211,14 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // the wire — treat a missing distance as "closest" rather than sorting to NaN.
       const wd = (r: FullTextSearchResult) => r.wordDistance ?? 0
       sorted.sort((a, b) => wd(a) - wd(b) || a.lineId - b.lineId)
+    } else if (sortOrder.value === 'bookName') {
+      // Alphabetical by book title (Hebrew collation), then line ID so lines within the
+      // same book stay in document order.
+      sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || a.lineId - b.lineId)
     } else {
       // 'lineId' — restore the original streamed order (ascending line ID). This is a
       // no-op right after streaming, but matters when the user switches back from
-      // 'relevance' on an already-sorted set.
+      // another order on an already-sorted set.
       sorted.sort((a, b) => a.lineId - b.lineId)
     }
     results.value = sorted
