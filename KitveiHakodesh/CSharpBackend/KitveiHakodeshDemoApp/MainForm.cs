@@ -22,6 +22,7 @@ namespace KitveiHakodeshDemoApp
         private readonly AppViewer _viewer;
         private readonly ChromeTabsMirror _tabsMirror;
         private Form _popoutWindow;
+        private Rectangle _lastNormalBounds;
 
         public MainForm(string initialFilePath = null)
         {
@@ -51,9 +52,13 @@ namespace KitveiHakodeshDemoApp
             if (!string.IsNullOrEmpty(initialFilePath))
                 _viewer.OpenFileFromPath(initialFilePath);
 
+            _lastNormalBounds = Bounds;
+
             Load        += MainForm_Load;
             FormClosing += MainForm_FormClosing;
             ResizeEnd   += MainForm_ResizeEnd;
+            Move        += MainForm_BoundsChanged;
+            Resize      += MainForm_BoundsChanged;
         }
 
         /// <summary>
@@ -70,6 +75,7 @@ namespace KitveiHakodeshDemoApp
         private void MainForm_Load(object sender, EventArgs e)
         {
             FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
+            _lastNormalBounds = Bounds;
             if (AppSettings.LoadMainWindowMaximized())
                 WindowState = FormWindowState.Maximized;
 
@@ -110,13 +116,19 @@ namespace KitveiHakodeshDemoApp
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
-            FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
+            FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
             UpdateChecker.RunPendingInstaller();
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)
         {
             AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
+        }
+
+        private void MainForm_BoundsChanged(object sender, EventArgs e)
+        {
+            if (WindowState == FormWindowState.Normal)
+                _lastNormalBounds = Bounds;
         }
 
         private static Icon CreateWindowIcon()

@@ -38,10 +38,17 @@
         /// <summary>
         /// Saves the form's size and location (not window state — that is handled separately).
         /// </summary>
-        public static void SaveFormSettings(Form form, string appName, string formName)
+        /// <param name="lastNormalBounds">
+        /// Last bounds observed while <see cref="Form.WindowState"/> was <see cref="FormWindowState.Normal"/>,
+        /// tracked live by the caller. Used instead of <see cref="Form.RestoreBounds"/> when the form is not
+        /// currently Normal: RestoreBounds is WinForms-cached and can be stale (e.g. closing while minimized),
+        /// which previously made the saved position drift downward on every minimize/restore cycle.
+        /// </param>
+        public static void SaveFormSettings(Form form, string appName, string formName, Rectangle? lastNormalBounds = null)
         {
-            // Always save the restore bounds so we have the normal size even when maximized.
-            Rectangle bounds = (form.WindowState == FormWindowState.Normal) ? form.Bounds : form.RestoreBounds;
+            Rectangle bounds = (form.WindowState == FormWindowState.Normal)
+                ? form.Bounds
+                : (lastNormalBounds ?? form.RestoreBounds);
 
             Interaction.SaveSetting(appName, formName + "FormSettings", $"{form.Name}_Left", bounds.Left.ToString());
             Interaction.SaveSetting(appName, formName + "FormSettings", $"{form.Name}_Top", bounds.Top.ToString());
