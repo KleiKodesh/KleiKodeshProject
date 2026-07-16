@@ -16,7 +16,7 @@ namespace KitveiHakodeshService.SefroimDb;
 /// </summary>
 public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger, SeforimDbService seforim)
 {
-    private readonly string? _dbPath = Environment.GetEnvironmentVariable("DB_PATH");
+    private readonly string? _dbPath = SeforimDbLocator.Resolve();
     private readonly string _indexPath = ResolveIndexPath();
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
     private readonly bool _external = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FTS_INDEX_PATH"));
@@ -83,8 +83,26 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // the progress file on the next service start.
             if (_buildStarted) return;
 
+            // fts.ver records WHICH seforim DB the index was built from. If the user
+            // switched databases (settings page / wizard → registry → service restart),
+            // the old index answers for the wrong content — wipe and rebuild.
+            string verFile = Path.Combine(_indexPath, "fts.ver");
+            if (File.Exists(verFile))
+            {
+                string builtFrom = "";
+                try { builtFrom = File.ReadAllText(verFile).Trim(); } catch { }
+                if (!string.Equals(builtFrom, _dbPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    logger.LogInformation(
+                        "FTS index was built from a different DB ({Old}) — wiping for rebuild against {New}",
+                        builtFrom, _dbPath);
+                    try { Directory.Delete(_indexPath, recursive: true); }
+                    catch (Exception ex) { logger.LogError(ex, "FTS stale-index wipe failed"); }
+                }
+            }
+
             // A completed service-owned build → ready without rebuilding.
-            if (File.Exists(Path.Combine(_indexPath, "fts.ver")) && SegmentsExist())
+            if (File.Exists(verFile) && SegmentsExist())
             {
                 _isReady = true;
                 _buildStarted = true;
@@ -137,7 +155,8 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
             if (ok)
             {
-                File.WriteAllText(Path.Combine(_indexPath, "fts.ver"), "service");
+                // Record the source DB so a later DB switch invalidates this index.
+                File.WriteAllText(Path.Combine(_indexPath, "fts.ver"), _dbPath ?? "");
                 try { index.DeleteBuildProgressFile(); } catch { }
                 _pct = 100.0;
                 _isReady = true;
@@ -523,6 +542,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             BookTitle = hit.BookTitle ?? "",
             TocText = "",
             Score = snippet.Score,
+            WordDistance = snippet.WordDistance,
             Snippet = snippet.Html ?? "",
             MatchedTerms = matchedTerms,
         };

@@ -15,7 +15,7 @@ namespace KitveiHakodeshService.SefroimDb;
 /// </summary>
 public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
 {
-    private readonly string? _dbPath = Environment.GetEnvironmentVariable("DB_PATH");
+    private readonly string? _dbPath = SeforimDbLocator.Resolve();
 
     public bool HasDb => !string.IsNullOrWhiteSpace(_dbPath) && File.Exists(_dbPath);
 

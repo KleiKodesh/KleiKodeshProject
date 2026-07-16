@@ -56,6 +56,26 @@ public sealed class ExecuteResult
     public long LastInsertId { get; set; }
 }
 
+/// <summary>Args for <c>setSeforimDbPath</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class DbPathArgs
+{
+    public string? Path { get; set; }
+}
+
+/// <summary>Result for the seforim-DB-path ops. <c>IsCustom</c> = the registry value is
+/// set (user's explicit choice); <c>Restarting</c> = the service restarts to apply the
+/// change (the dev courier respawns it on the next request).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class DbPathResult
+{
+    public string Path { get; set; } = "";
+    public bool IsCustom { get; set; }
+    public bool Exists { get; set; }
+    public bool Restarting { get; set; }
+    public string? Error { get; set; }
+}
+
 /// <summary>A single file-system hit, in the exact shape the Vue app already consumes.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class FileHit
