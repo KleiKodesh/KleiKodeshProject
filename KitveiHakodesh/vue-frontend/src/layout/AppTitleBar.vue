@@ -99,10 +99,11 @@ const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 //   - VSTO / dev browser (no strip): single click = tab list;
 //     double click = search.
 // Ctrl+E focuses the search everywhere.
+// Each hint line is separated by a newline (tooltips render \n as line breaks).
 const barTitleHint = computed(() =>
   hasNativeChromeTabs
-    ? 'לחץ לחיפוש (Ctrl+E) · Ctrl+T לרשימת הלשוניות'
-    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T) · לחיצה כפולה לחיפוש (Ctrl+E)',
+    ? 'לחץ לחיפוש (Ctrl+E)\nCtrl+T לרשימת הלשוניות'
+    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T)\nלחיצה כפולה לחיפוש (Ctrl+E)',
 )
 
 const barTitle = computed(() => {
@@ -110,7 +111,7 @@ const barTitle = computed(() => {
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
     : activeTab.value?.title
   const hint = barTitleHint.value
-  return full ? full + '\n(' + hint + ')' : '(' + hint + ')'
+  return full ? full + '\n' + hint : hint
 })
 
 const toolbarTitle = computed(() => {
