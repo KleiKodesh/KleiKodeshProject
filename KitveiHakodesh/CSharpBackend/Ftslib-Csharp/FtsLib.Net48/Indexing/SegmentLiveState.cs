@@ -91,7 +91,16 @@ namespace FtsLib.Indexing
             lock (_lock)
             {
                 if (!_liveSegs.TryGetValue(level, out var set)) return new List<int>();
-                return new List<int>(set);
+                var list = new List<int>(set);
+                // MUST be ascending. The merger CONCATENATES posting chunks in this order and
+                // re-bases each chunk's first delta against the previous chunk's last doc-id
+                // (a uint subtraction). Segments are created in ascending doc-id order, so
+                // ascending segId == ascending doc-id range. HashSet iteration is UNORDERED —
+                // feeding chunks out of order underflows that subtraction and corrupts every
+                // following posting's doc-id (single-term counts survive, but AND/phrase
+                // intersections collapse). Sorting here is the correctness guarantee.
+                list.Sort();
+                return list;
             }
         }
 
