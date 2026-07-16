@@ -111,6 +111,13 @@ public sealed class Dispatcher(
                     locator.Warmup();
                     return RpcResponse.Ok(MsgPack.Ser(new StartedResult()));
 
+                // App-load warm-up: an app that just loaded is about to need the seforim
+                // DB — pay the service's one-time cold costs (native lib, first connection,
+                // catalog cache, JIT) in the background now, not on the first book click.
+                case "dbWarmup":
+                    seforim.Warmup();
+                    return RpcResponse.Ok(MsgPack.Ser(new StartedResult()));
+
                 case "resetDocumentLocatorIndex":
                     await locator.ReindexAsync(ct);
                     return RpcResponse.Ok(MsgPack.Ser(new ResetResult()));

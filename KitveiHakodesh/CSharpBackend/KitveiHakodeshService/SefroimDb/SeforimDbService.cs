@@ -42,6 +42,30 @@ public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
         return false;
     }
 
+    /// <summary>
+    /// Client-triggered warm-up — called by an app when IT loads (never at service boot;
+    /// boot stays idle by design). Pays the one-time cold costs in the background so the
+    /// user's first real query doesn't: loads the SQLite native library, opens the first
+    /// pooled connection to the seforim DB, fills the static catalog cache, and JITs the
+    /// hot read paths with a tiny book+lines query. Fire-and-forget; best-effort.
+    /// </summary>
+    public void Warmup()
+    {
+        if (!HasDb) return;
+        _ = Task.Run(() =>
+        {
+            try
+            {
+                GetAllCategories();
+                GetAllBooks();
+                GetBookById(1);
+                GetLinesPaged(1, 1, 0);
+                logger.LogInformation("seforim DB warm-up complete (client-triggered)");
+            }
+            catch { /* best-effort — the first real query will warm instead */ }
+        });
+    }
+
     /// <summary>Runs a query body guarded by DB availability + error logging.</summary>
     private void Run(Action action, string op)
     {

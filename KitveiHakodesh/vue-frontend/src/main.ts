@@ -9,6 +9,7 @@ import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
 import { dbReady, isHosted } from './webview-host/seforimDb'
+import { serviceCallVoid } from './webview-host/serviceClient'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
@@ -34,6 +35,13 @@ initTabMirror()
 app.mount('#app')
 
 initPdfThemeObserver()
+
+// Dev: tell the service to pay its one-time cold costs NOW (SQLite native lib, first
+// connection to the 7GB DB, catalog cache, JIT of the read paths) — while the user is
+// still looking at the home screen — instead of on their first book click. The service
+// deliberately does nothing at its own boot; a loaded client is the signal that work
+// is coming. Fire-and-forget; hosted mode has its own in-process warm path.
+if (typeof window.__webviewAction !== 'function') serviceCallVoid('dbWarmup')
 
 function warmBooksDataInBackground() {
   if (!dbReady.value) return
