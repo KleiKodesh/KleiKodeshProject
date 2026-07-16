@@ -70,17 +70,17 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 
       <!-- Center: events + action pills -->
       <div class="center">
-        <span v-if="day.parasha" class="pill-dummy">{{ day.parasha }}</span>
+        <span v-if="day.parasha" class="chip parasha">{{ day.parasha }}</span>
         <template v-for="(h, i) in day.holidays" :key="h">
-          <span class="ev holiday">{{ h }}</span>
+          <span class="chip holiday">{{ h }}</span>
         </template>
-        <span v-if="day.chanukahCandles" class="ev chanukah">{{ day.chanukahCandles }}</span>
-        <button class="pill" :class="{ on: zmanimOpen }" @click="$emit('toggle-zmanim')">
+        <span v-if="day.chanukahCandles" class="chip chanukah">{{ day.chanukahCandles }}</span>
+        <button class="chip pill" :class="{ on: zmanimOpen }" @click="$emit('toggle-zmanim')">
           זמני היום
         </button>
         <button
           v-if="hasLearning"
-          class="pill green"
+          class="chip pill green"
           :class="{ on: learningOpen }"
           @click="$emit('toggle-learning')"
         >
@@ -227,24 +227,15 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
   min-width: 0;
 }
 
-/* ── Event text ── */
-.sep {
-  color: var(--text-secondary);
-  opacity: 0.4;
-  font-size: 11px;
-}
+/* ── Event text (panel rows) ── */
 .ev {
   font-size: 11px;
   line-height: 1;
   display: inline-block;
 }
-.holiday {
+.ev.holiday {
   font-weight: 600;
   color: #f0a500;
-}
-.chanukah {
-  font-weight: 600;
-  color: #e8a020;
 }
 .havdalah {
   font-weight: 600;
@@ -261,39 +252,47 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
   font-style: italic;
 }
 
-/* ── Pills ── */
-.pill {
+/* ── Center chips — one shared box; variants set only colour + hover ── */
+.chip {
   font-size: 11px;
   font-weight: 600;
-  color: var(--accent-color, #0078d4);
-  opacity: 0.75;
-  border-radius: 4px;
-  padding: 2px 5px;
-  cursor: pointer;
-  white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
   line-height: 1;
+  padding: 2px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
   display: inline-block;
   font-variant-numeric: normal;
 }
-.pill:hover,
-.pill.on {
-  opacity: 1;
-  background: color-mix(in srgb, var(--accent-color, #0078d4) 10%, transparent);
-}
-.pill.green {
-  color: #3a9e6e;
-}
-.pill.green:hover,
-.pill.green.on {
-  background: color-mix(in srgb, #3a9e6e 10%, transparent);
+button.chip {
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Dummy pill (non-interactive) ── */
-.pill-dummy {
-  font-size: 10px;
-  font-weight: 700;
+/* colour variants */
+.chip.parasha {
   color: var(--text-secondary);
+}
+.chip.holiday {
+  color: #f0a500;
+}
+.chip.chanukah {
+  color: #e8a020;
+}
+.chip.pill {
+  color: var(--accent-color, #0078d4);
+}
+.chip.pill.green {
+  color: #3a9e6e;
+}
+
+/* interactive-only hover / active */
+.chip.pill:hover,
+.chip.pill.on {
+  background: color-mix(in srgb, var(--accent-color, #0078d4) 10%, transparent);
+}
+.chip.pill.green:hover,
+.chip.pill.green.on {
+  background: color-mix(in srgb, #3a9e6e 10%, transparent);
 }
 
 /* ── Expand panels ── */
