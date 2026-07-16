@@ -21,16 +21,16 @@ public sealed class Dispatcher(
     UserSettingsService userSettings,
     IHostApplicationLifetime lifetime)
 {
-    public async Task<string> DispatchAsync(string requestJson, CancellationToken ct)
+    public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
         RpcRequest? req;
         try
         {
-            req = JsonSerializer.Deserialize(requestJson, RpcJsonContext.Default.RpcRequest);
+            req = MessagePack.MessagePackSerializer.Deserialize<RpcRequest>(request, MsgPack.Options);
         }
         catch (Exception ex)
         {
-            return RpcResponse.Err("Invalid request JSON: " + ex.Message);
+            return RpcResponse.Err("Invalid request: " + ex.Message);
         }
 
         if (req is null || string.IsNullOrEmpty(req.Op))
@@ -41,7 +41,7 @@ public sealed class Dispatcher(
             switch (req.Op)
             {
                 case "ping":
-                    return RpcResponse.Ok("{\"pong\":true}");
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
 
                 // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
                 // cancels the build cleanly (aborts any merge, releases the index lock)
@@ -49,354 +49,278 @@ public sealed class Dispatcher(
                 // a restart never hard-kills a build in progress (index-corruption path).
                 case "shutdown":
                     lifetime.StopApplication();
-                    return RpcResponse.Ok("{\"shuttingDown\":true}");
+                    return RpcResponse.Ok(MsgPack.Ser(new ShuttingDownResult()));
 
                 case "locateDocuments":
                 {
-                    var args = req.Args.ValueKind == JsonValueKind.Object
-                        ? req.Args.Deserialize(RpcJsonContext.Default.LocateDocumentsArgs) ?? new LocateDocumentsArgs()
-                        : new LocateDocumentsArgs();
+                    var args = MsgPack.De<LocateDocumentsArgs>(req.Args);
                     int max = args.Max > 0 ? args.Max : 200;
                     var result = await locator.LocateAsync(args.Query ?? "", max, ct);
                     return RpcResponse.Ok(
-                        JsonSerializer.Serialize(result, RpcJsonContext.Default.LocateDocumentsResult));
+                        MsgPack.Ser(result));
                 }
 
                 case "locateDocumentsWarmup":
                     locator.Warmup();
-                    return RpcResponse.Ok("{\"started\":true}");
+                    return RpcResponse.Ok(MsgPack.Ser(new StartedResult()));
 
                 case "resetDocumentLocatorIndex":
                     await locator.ReindexAsync(ct);
-                    return RpcResponse.Ok("{\"reset\":true}");
+                    return RpcResponse.Ok(MsgPack.Ser(new ResetResult()));
 
                 case "hbSearch":
                 {
-                    var args = req.Args.ValueKind == JsonValueKind.Object
-                        ? req.Args.Deserialize(RpcJsonContext.Default.HbSearchArgs) ?? new HbSearchArgs()
-                        : new HbSearchArgs();
+                    var args = MsgPack.De<HbSearchArgs>(req.Args);
                     var result = hebrewBooks.Search(args.Query ?? "", args.LocalFolder, args.Limit);
                     return RpcResponse.Ok(
-                        JsonSerializer.Serialize(result, RpcJsonContext.Default.HbSearchResult));
+                        MsgPack.Ser(result));
                 }
 
                 // ── Dictionary (KitveiHakodesh_dictionary.db) ──────────────────
                 case "dictExact":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        dictionary.Exact(Term(req.Args)), RpcJsonContext.Default.DictExactResult));
+                    return RpcResponse.Ok(MsgPack.Ser(dictionary.Exact(Term(req.Args))));
 
                 case "dictPrefix":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictSensesResult { Rows = dictionary.Prefix(Term(req.Args)) },
-                        RpcJsonContext.Default.DictSensesResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictSensesResult { Rows = dictionary.Prefix(Term(req.Args)) }));
 
                 case "dictContains":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictSensesResult { Rows = dictionary.Contains(Term(req.Args)) },
-                        RpcJsonContext.Default.DictSensesResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictSensesResult { Rows = dictionary.Contains(Term(req.Args)) }));
 
                 case "dictLinks":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictLinksResult { Links = dictionary.Links(Term(req.Args)) },
-                        RpcJsonContext.Default.DictLinksResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictLinksResult { Links = dictionary.Links(Term(req.Args)) }));
 
                 case "dictSynonyms":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictWordsResult { Words = dictionary.Synonyms(Term(req.Args)) },
-                        RpcJsonContext.Default.DictWordsResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictWordsResult { Words = dictionary.Synonyms(Term(req.Args)) }));
 
                 case "dictVariants":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictWordsResult { Words = dictionary.Variants(Term(req.Args)) },
-                        RpcJsonContext.Default.DictWordsResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictWordsResult { Words = dictionary.Variants(Term(req.Args)) }));
 
                 case "dictSpellCandidates":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictWordsResult { Words = dictionary.SpellCandidates(Term(req.Args)) },
-                        RpcJsonContext.Default.DictWordsResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictWordsResult { Words = dictionary.SpellCandidates(Term(req.Args)) }));
 
                 case "dictAbbrevSenses":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        dictionary.AbbrevSenses(Candidates(req.Args)),
-                        RpcJsonContext.Default.DictAbbrevResult));
+                    return RpcResponse.Ok(MsgPack.Ser(dictionary.AbbrevSenses(Candidates(req.Args))));
 
                 case "dictKetivVariants":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DictWordsResult { Words = dictionary.KetivVariants(Candidates(req.Args)) },
-                        RpcJsonContext.Default.DictWordsResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new DictWordsResult { Words = dictionary.KetivVariants(Candidates(req.Args)) }));
 
                 // ── Seforim DB — catalog ───────────────────────────────────────
                 case "getAllCategories":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new CategoriesResult { Rows = seforim.GetAllCategories() },
-                        RpcJsonContext.Default.CategoriesResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new CategoriesResult { Rows = seforim.GetAllCategories() }));
 
                 case "getAllBooks":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new BooksResult { Rows = seforim.GetAllBooks() },
-                        RpcJsonContext.Default.BooksResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new BooksResult { Rows = seforim.GetAllBooks() }));
 
                 case "getBookById":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.BookByIdArgs) ?? new BookByIdArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new BookByIdResult { Book = seforim.GetBookById(a.Id) },
-                        RpcJsonContext.Default.BookByIdResult));
+                    var a = MsgPack.De<BookByIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BookByIdResult { Book = seforim.GetBookById(a.Id) }));
                 }
 
                 case "getLinesPaged":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LinesPagedArgs) ?? new LinesPagedArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset) },
-                        RpcJsonContext.Default.LinesResult));
+                    var a = MsgPack.De<LinesPagedArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset) }));
                 }
 
                 // ── Seforim DB — TOC ───────────────────────────────────────────
                 case "getAllTocEntries":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TocByBookArgs) ?? new TocByBookArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new TocEntriesResult { Rows = seforim.GetAllTocEntries(a.BookId) },
-                        RpcJsonContext.Default.TocEntriesResult));
+                    var a = MsgPack.De<TocByBookArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new TocEntriesResult { Rows = seforim.GetAllTocEntries(a.BookId) }));
                 }
 
                 case "getAltTocStructures":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TocByBookArgs) ?? new TocByBookArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new AltTocStructuresResult { Rows = seforim.GetAltTocStructures(a.BookId) },
-                        RpcJsonContext.Default.AltTocStructuresResult));
+                    var a = MsgPack.De<TocByBookArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new AltTocStructuresResult { Rows = seforim.GetAltTocStructures(a.BookId) }));
                 }
 
                 case "getAllAltTocEntries":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TocByStructureArgs) ?? new TocByStructureArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new TocEntriesResult { Rows = seforim.GetAllAltTocEntries(a.StructureId) },
-                        RpcJsonContext.Default.TocEntriesResult));
+                    var a = MsgPack.De<TocByStructureArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new TocEntriesResult { Rows = seforim.GetAllAltTocEntries(a.StructureId) }));
                 }
 
                 case "getTocTitlesForBooks":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TocTitlesArgs) ?? new TocTitlesArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new TocTitlesResult { Rows = seforim.GetTocTitlesForBooks(a.BookIds, a.FilterWord) },
-                        RpcJsonContext.Default.TocTitlesResult));
+                    var a = MsgPack.De<TocTitlesArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new TocTitlesResult { Rows = seforim.GetTocTitlesForBooks(a.BookIds, a.FilterWord) }));
                 }
 
                 case "getTocEntryByTextPrefix":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TocPrefixArgs) ?? new TocPrefixArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new TocPrefixResult { Rows = seforim.GetTocEntryByTextPrefix(a.BookId, a.Pattern) },
-                        RpcJsonContext.Default.TocPrefixResult));
+                    var a = MsgPack.De<TocPrefixArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new TocPrefixResult { Rows = seforim.GetTocEntryByTextPrefix(a.BookId, a.Pattern) }));
                 }
 
                 // ── Seforim DB — commentary/links ──────────────────────────────
                 case "getCommentaryLinksForSourceLineRange":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LineIdsArgs) ?? new LineIdsArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new CommentaryLinksResult { Rows = seforim.GetCommentaryLinksForSourceLineRange(a.LineIds) },
-                        RpcJsonContext.Default.CommentaryLinksResult));
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new CommentaryLinksResult { Rows = seforim.GetCommentaryLinksForSourceLineRange(a.LineIds) }));
                 }
 
                 case "getLineContents":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LineIdsArgs) ?? new LineIdsArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new LineContentsResult { Rows = seforim.GetLineContents(a.LineIds) },
-                        RpcJsonContext.Default.LineContentsResult));
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineContentsResult { Rows = seforim.GetLineContents(a.LineIds) }));
                 }
 
                 case "getAllConnectionTypes":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new ConnectionTypesResult { Rows = seforim.GetAllConnectionTypes() },
-                        RpcJsonContext.Default.ConnectionTypesResult));
+                    return RpcResponse.Ok(MsgPack.Ser(new ConnectionTypesResult { Rows = seforim.GetAllConnectionTypes() }));
 
                 case "getDefaultCommentators":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.BookIdArgs) ?? new BookIdArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new DefaultCommentatorsResult { Rows = seforim.GetDefaultCommentators(a.BookId) },
-                        RpcJsonContext.Default.DefaultCommentatorsResult));
+                    var a = MsgPack.De<BookIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new DefaultCommentatorsResult { Rows = seforim.GetDefaultCommentators(a.BookId) }));
                 }
 
                 case "getReverseLineData":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.ReverseLineDataArgs) ?? new ReverseLineDataArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new ReverseLineDataResult { Rows = seforim.GetReverseLineData(a.LineIds, a.TypeIds) },
-                        RpcJsonContext.Default.ReverseLineDataResult));
+                    var a = MsgPack.De<ReverseLineDataArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new ReverseLineDataResult { Rows = seforim.GetReverseLineData(a.LineIds, a.TypeIds) }));
                 }
 
                 case "getReverseBooks":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.ReverseBooksArgs) ?? new ReverseBooksArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new ReverseBooksResult { Rows = seforim.GetReverseBooks(a.BookId, a.TypeIds) },
-                        RpcJsonContext.Default.ReverseBooksResult));
+                    var a = MsgPack.De<ReverseBooksArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new ReverseBooksResult { Rows = seforim.GetReverseBooks(a.BookId, a.TypeIds) }));
                 }
 
                 case "getStaticFilterBooks":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.StaticFilterArgs) ?? new StaticFilterArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new StaticFilterResult { Rows = seforim.GetStaticFilterBooks(a.SourceBookId, a.TypeIds) },
-                        RpcJsonContext.Default.StaticFilterResult));
+                    var a = MsgPack.De<StaticFilterArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new StaticFilterResult { Rows = seforim.GetStaticFilterBooks(a.SourceBookId, a.TypeIds) }));
                 }
 
                 case "getSectionWithCommentary":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.SectionNavArgs) ?? new SectionNavArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new SectionNavResult { Rows = seforim.GetSectionWithCommentary(a.MainBookId, a.CommentaryBookId, a.LineIndex, a.Direction != "prev") },
-                        RpcJsonContext.Default.SectionNavResult));
+                    var a = MsgPack.De<SectionNavArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new SectionNavResult { Rows = seforim.GetSectionWithCommentary(a.MainBookId, a.CommentaryBookId, a.LineIndex, a.Direction != "prev") }));
                 }
 
                 case "getTocSectionWithCommentary":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TocSectionArgs) ?? new TocSectionArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new TocSectionResult { Rows = seforim.GetTocSectionWithCommentary(a.MainBookId, a.CommentaryBookId, a.RangePairs, a.Direction != "prev") },
-                        RpcJsonContext.Default.TocSectionResult));
+                    var a = MsgPack.De<TocSectionArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new TocSectionResult { Rows = seforim.GetTocSectionWithCommentary(a.MainBookId, a.CommentaryBookId, a.RangePairs, a.Direction != "prev") }));
                 }
 
                 case "getLinkTargetForSourceLineAndBook":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LinkTargetArgs) ?? new LinkTargetArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new LinkTargetResult { Rows = seforim.GetLinkTargetForSourceLineAndBook(a.SourceLineId, a.TargetBookId) },
-                        RpcJsonContext.Default.LinkTargetResult));
+                    var a = MsgPack.De<LinkTargetArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LinkTargetResult { Rows = seforim.GetLinkTargetForSourceLineAndBook(a.SourceLineId, a.TargetBookId) }));
                 }
 
                 case "getTocPathsForLines":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LineIdsArgs) ?? new LineIdsArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new TocPathsResult { Rows = seforim.GetTocPathsForLines(a.LineIds) },
-                        RpcJsonContext.Default.TocPathsResult));
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new TocPathsResult { Rows = seforim.GetTocPathsForLines(a.LineIds) }));
                 }
 
                 case "getEnclosingTocPathForLineRanges":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.EnclosingTocPathArgs) ?? new EnclosingTocPathArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new EnclosingTocPathResult { Rows = seforim.GetEnclosingTocPathForLineRanges(a.Triples) },
-                        RpcJsonContext.Default.EnclosingTocPathResult));
+                    var a = MsgPack.De<EnclosingTocPathArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new EnclosingTocPathResult { Rows = seforim.GetEnclosingTocPathForLineRanges(a.Triples) }));
                 }
 
                 case "getBookIdsForLines":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LineIdsArgs) ?? new LineIdsArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new LineBooksResult { Rows = seforim.GetBookIdsForLines(a.LineIds) },
-                        RpcJsonContext.Default.LineBooksResult));
+                    var a = MsgPack.De<LineIdsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineBooksResult { Rows = seforim.GetBookIdsForLines(a.LineIds) }));
                 }
 
                 case "getLineIndexFromLineId":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LineIdArgs) ?? new LineIdArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new LineIndexResult { Rows = seforim.GetLineIndexFromLineId(a.LineId) },
-                        RpcJsonContext.Default.LineIndexResult));
+                    var a = MsgPack.De<LineIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineIndexResult { Rows = seforim.GetLineIndexFromLineId(a.LineId) }));
                 }
 
                 // ── Seforim DB — dictionary sources (מצודת/מלבי״ם/מנחם/ערוך) ────
                 case "getBookIdsByTitlePattern":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.TitlePatternArgs) ?? new TitlePatternArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new BookIdsResult { Rows = seforim.GetBookIdsByTitlePattern(a.Pattern) },
-                        RpcJsonContext.Default.BookIdsResult));
+                    var a = MsgPack.De<TitlePatternArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BookIdsResult { Rows = seforim.GetBookIdsByTitlePattern(a.Pattern) }));
                 }
 
                 case "getBookIdByExactTitle":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.ExactTitleArgs) ?? new ExactTitleArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new BookIdsResult { Rows = seforim.GetBookIdByExactTitle(a.Title) },
-                        RpcJsonContext.Default.BookIdsResult));
+                    var a = MsgPack.De<ExactTitleArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BookIdsResult { Rows = seforim.GetBookIdByExactTitle(a.Title) }));
                 }
 
                 case "getLinesWithContentPatternForBooks":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.BoldLinesArgs) ?? new BoldLinesArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new BoldLinesResult { Rows = seforim.GetLinesWithContentPatternForBooks(a.BookIds, a.Pattern) },
-                        RpcJsonContext.Default.BoldLinesResult));
+                    var a = MsgPack.De<BoldLinesArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BoldLinesResult { Rows = seforim.GetLinesWithContentPatternForBooks(a.BookIds, a.Pattern) }));
                 }
 
                 case "getLinesWithEitherContentPattern":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.EitherPatternArgs) ?? new EitherPatternArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new RawLinesResult { Rows = seforim.GetLinesWithEitherContentPattern(a.BookId, a.P1, a.P2) },
-                        RpcJsonContext.Default.RawLinesResult));
+                    var a = MsgPack.De<EitherPatternArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new RawLinesResult { Rows = seforim.GetLinesWithEitherContentPattern(a.BookId, a.P1, a.P2) }));
                 }
 
                 case "getLineByBookAndLineIndex":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.LineByIndexArgs) ?? new LineByIndexArgs();
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        new RawLinesResult { Rows = seforim.GetLineByBookAndLineIndex(a.BookId, a.LineIndex) },
-                        RpcJsonContext.Default.RawLinesResult));
+                    var a = MsgPack.De<LineByIndexArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new RawLinesResult { Rows = seforim.GetLineByBookAndLineIndex(a.BookId, a.LineIndex) }));
                 }
 
                 // ── User settings (highlights/notes) — read + write ────────────
                 case "userSettingsQuery":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.RawSqlArgs) ?? new RawSqlArgs();
-                    string rowsJson = userSettings.QueryRowsJson(a.Sql ?? "", a.Params ?? []);
-                    return RpcResponse.Ok("{\"rows\":" + rowsJson + "}");
+                    var a = MsgPack.De<RawSqlArgs>(req.Args);
+                    using var pd = ParseParams(a.ParamsJson);
+                    string rowsJson = userSettings.QueryRowsJson(a.Sql ?? "", pd.Elements);
+                    return RpcResponse.Ok(MsgPack.Ser(new RawRowsResult { RowsJson = rowsJson }));
                 }
 
                 case "userSettingsExecute":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.RawSqlArgs) ?? new RawSqlArgs();
-                    long id = userSettings.Execute(a.Sql ?? "", a.Params ?? []);
-                    return RpcResponse.Ok("{\"lastInsertId\":" + id + "}");
+                    var a = MsgPack.De<RawSqlArgs>(req.Args);
+                    using var pd = ParseParams(a.ParamsJson);
+                    long id = userSettings.Execute(a.Sql ?? "", pd.Elements);
+                    return RpcResponse.Ok(MsgPack.Ser(new ExecuteResult { LastInsertId = id }));
                 }
 
                 // ── Full-text search (FtsLib) ──────────────────────────────────
                 case "ftsSearch":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsSearchArgs) ?? new FtsSearchArgs();
+                    var a = MsgPack.De<FtsSearchArgs>(req.Args);
                     var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv);
-                    return RpcResponse.Ok(JsonSerializer.Serialize(res, RpcJsonContext.Default.FtsSearchResult));
+                    return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
                 // Streaming FTS: start a background search, then poll for incremental
                 // batches — mirrors the hosted C# streaming so the first hits paint fast.
                 case "ftsSearchStart":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsSearchStartArgs) ?? new FtsSearchStartArgs();
+                    var a = MsgPack.De<FtsSearchStartArgs>(req.Args);
                     var res = fts.StartSearch(a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv);
-                    return RpcResponse.Ok(JsonSerializer.Serialize(res, RpcJsonContext.Default.FtsSearchStartResult));
+                    return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
                 case "ftsSearchPoll":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsSearchPollArgs) ?? new FtsSearchPollArgs();
+                    var a = MsgPack.De<FtsSearchPollArgs>(req.Args);
                     var res = await fts.PollSearch(a.SearchId ?? "", a.Offset, ct);
-                    return RpcResponse.Ok(JsonSerializer.Serialize(res, RpcJsonContext.Default.FtsSearchPollResult));
+                    return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
                 case "ftsSearchCancel":
                 {
-                    var a = req.Args.Deserialize(RpcJsonContext.Default.FtsCancelArgs) ?? new FtsCancelArgs();
+                    var a = MsgPack.De<FtsCancelArgs>(req.Args);
                     fts.CancelSearch(a.SearchId ?? "");
-                    return RpcResponse.Ok("{\"cancelled\":true}");
+                    return RpcResponse.Ok(MsgPack.Ser(new CancelledResult()));
                 }
 
                 case "ftsIndexingStatus":
-                    return RpcResponse.Ok(JsonSerializer.Serialize(
-                        fts.Status(), RpcJsonContext.Default.FtsIndexStatus));
+                    return RpcResponse.Ok(MsgPack.Ser(fts.Status()));
 
                 case "ftsResetIndex":
                     fts.ResetIndex();
-                    return RpcResponse.Ok("{\"reset\":true}");
+                    return RpcResponse.Ok(MsgPack.Ser(new ResetResult()));
 
                 default:
                     return RpcResponse.Err("Unknown op: " + req.Op);
@@ -412,13 +336,26 @@ public sealed class Dispatcher(
         }
     }
 
-    private static string Term(JsonElement args) =>
-        (args.ValueKind == JsonValueKind.Object
-            ? args.Deserialize(RpcJsonContext.Default.DictTermArgs)?.Term
-            : null) ?? "";
+    private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 
-    private static List<string> Candidates(JsonElement args) =>
-        (args.ValueKind == JsonValueKind.Object
-            ? args.Deserialize(RpcJsonContext.Default.DictCandidatesArgs)?.Candidates
-            : null) ?? [];
+    private static List<string> Candidates(byte[]? args) => MsgPack.De<DictCandidatesArgs>(args).Candidates ?? [];
+
+    /// <summary>Parse the user-settings <c>paramsJson</c> (a JSON array string carried inside
+    /// the msgpack envelope) into JsonElement bind values. The values reference the returned
+    /// document's memory, so the caller must keep it alive (a <c>using</c>) until the SQL runs.</summary>
+    private static ParsedParams ParseParams(string? json)
+    {
+        if (string.IsNullOrEmpty(json)) return new ParsedParams(null, []);
+        var doc = JsonDocument.Parse(json);
+        var arr = doc.RootElement.ValueKind == JsonValueKind.Array
+            ? doc.RootElement.EnumerateArray().ToArray()
+            : [];
+        return new ParsedParams(doc, arr);
+    }
+
+    private sealed class ParsedParams(JsonDocument? doc, JsonElement[] elements) : IDisposable
+    {
+        public JsonElement[] Elements { get; } = elements;
+        public void Dispose() => doc?.Dispose();
+    }
 }

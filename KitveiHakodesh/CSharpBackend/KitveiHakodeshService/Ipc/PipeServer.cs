@@ -66,10 +66,10 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
         {
             try
             {
-                string? request = await FrameProtocol.ReadFrameAsync(pipe, ct);
+                byte[]? request = await FrameProtocol.ReadFrameAsync(pipe, ct);
                 if (request is null) return; // client closed without sending
 
-                string response = await dispatcher.DispatchAsync(request, ct);
+                byte[] response = await dispatcher.DispatchAsync(request, ct);
                 await FrameProtocol.WriteFrameAsync(pipe, response, ct);
             }
             catch (OperationCanceledException)

@@ -29,8 +29,11 @@ export async function queryUserSettings<T = unknown>(
   if (typeof window.__webviewUserSettingsQuery === 'function') {
     return (await window.__webviewUserSettingsQuery(sql, params)).rows as T[]
   }
-  // Dev — through the KitveiHakodesh service.
-  return (await serviceCall<{ rows: T[] }>('userSettingsQuery', { sql, params })).rows
+  // Dev — through the KitveiHakodesh service. This raw-SQL path stays JSON (dynamic params +
+  // arbitrary row shapes): params ride as a JSON string, rows come back as a JSON string —
+  // no point re-encoding already-JSON data as MessagePack.
+  const r = await serviceCall<{ rowsJson: string }>('userSettingsQuery', { sql, paramsJson: JSON.stringify(params) })
+  return JSON.parse(r.rowsJson) as T[]
 }
 
 export async function executeUserSettings(
@@ -40,6 +43,6 @@ export async function executeUserSettings(
   if (typeof window.__webviewUserSettingsExecute === 'function') {
     return (await window.__webviewUserSettingsExecute(sql, params)).lastInsertId
   }
-  // Dev — through the KitveiHakodesh service.
-  return (await serviceCall<{ lastInsertId: number }>('userSettingsExecute', { sql, params })).lastInsertId
+  // Dev — through the KitveiHakodesh service (params as a JSON string; see queryUserSettings).
+  return (await serviceCall<{ lastInsertId: number }>('userSettingsExecute', { sql, paramsJson: JSON.stringify(params) })).lastInsertId
 }

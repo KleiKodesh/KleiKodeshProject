@@ -25,6 +25,7 @@
     <!-- 10.0.9 (e_sqlite3), NOT 11.x: FtsLib's segment writer does File.Move on a just-written
          SQLite file; 11.x's SourceGear provider keeps the handle open (pooling) and the move
          fails with a sharing violation. 10.0.9 matches FtsLib and is AOT/AnyCPU-friendly. -->
+    <PackageReference Include="MessagePack" Version="3.1.8" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
   </ItemGroup>

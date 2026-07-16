@@ -7,6 +7,7 @@ import path from 'node:path'
 import { fileURLToPath as toPath } from 'node:url'
 import net from 'node:net'
 import { spawn, exec, execFile, type ChildProcess } from 'node:child_process'
+import { encode as mpEncode } from '@msgpack/msgpack'
 
 // ── KitveiHakodesh service (named-pipe RPC courier) ────────────────────────────
 // The clean data path: the dev server spawns the .NET service and forwards the
@@ -23,7 +24,7 @@ const KHS_STARTUP_TIMEOUT_MS = 120_000 // first `dotnet run` may build from cold
 const KHS_STARTUP_POLL_MS = 500
 
 /** One request/response round-trip over a named pipe using 4-byte LE length framing. */
-function callPipe(pipePath: string, requestJson: string, connectTimeoutMs: number): Promise<string> {
+function callPipe(pipePath: string, requestBody: Buffer, connectTimeoutMs: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(pipePath)
     const connectTimer = setTimeout(() => {
@@ -36,10 +37,10 @@ function callPipe(pipePath: string, requestJson: string, connectTimeoutMs: numbe
 
     socket.on('connect', () => {
       clearTimeout(connectTimer)
-      const body = Buffer.from(requestJson, 'utf8')
+      // The channel is MessagePack now — frame the raw binary body verbatim (4-byte LE length).
       const header = Buffer.alloc(4)
-      header.writeInt32LE(body.length, 0)
-      socket.write(Buffer.concat([header, body]))
+      header.writeInt32LE(requestBody.length, 0)
+      socket.write(Buffer.concat([header, requestBody]))
     })
 
     socket.on('data', (chunk) => {
@@ -48,9 +49,9 @@ function callPipe(pipePath: string, requestJson: string, connectTimeoutMs: numbe
         expectedLength = responseBuffer.readInt32LE(0)
       }
       if (expectedLength !== -1 && responseBuffer.length >= 4 + expectedLength) {
-        const responseJson = responseBuffer.slice(4, 4 + expectedLength).toString('utf8')
+        const responseBody = responseBuffer.subarray(4, 4 + expectedLength)
         socket.destroy()
-        resolve(responseJson)
+        resolve(responseBody)
       }
     })
 
@@ -59,6 +60,12 @@ function callPipe(pipePath: string, requestJson: string, connectTimeoutMs: numbe
       reject(err)
     })
   })
+}
+
+/** Build a MessagePack request frame body: { Op, Args } with Args = nested msgpack of the args
+ *  object (PascalCase keys to match the service's keyAsPropertyName DTOs). */
+function encodeKhsRequest(op: string, args: unknown): Buffer {
+  return Buffer.from(mpEncode({ Op: op, Args: mpEncode(args ?? {}) }))
 }
 
 /** True if something is already answering on the KitveiHakodesh pipe. */
@@ -101,7 +108,7 @@ async function gracefulStopKhs(): Promise<void> {
   if (!(await khsPipeIsUp())) return
   console.log('[khs] asking service to shut down gracefully (safe for the FTS index)...')
   try {
-    await callPipe(KHS_PIPE, JSON.stringify({ op: 'shutdown', args: {} }), KHS_CONNECT_TIMEOUT_MS)
+    await callPipe(KHS_PIPE, encodeKhsRequest('shutdown', {}), KHS_CONNECT_TIMEOUT_MS)
   } catch { /* it may drop the connection as it exits — expected */ }
   const deadline = Date.now() + 30_000
   while (Date.now() < deadline) {
@@ -224,51 +231,41 @@ function devSqlitePlugin(): Plugin {
         // KitveiHakodesh service RPC — dumb proxy: forward the {op,args} envelope
         // to the service pipe and return its {ok,...} reply verbatim.
         if (req.url === '/khs') {
-          let body = ''
+          // Dumb binary courier: the request body is a MessagePack frame, forwarded verbatim
+          // over the pipe; the reply bytes are returned verbatim. No per-op logic, no parsing —
+          // encoding/decoding lives entirely in the frontend serviceClient and the service.
+          const chunks: Buffer[] = []
 
           req.on('data', (chunk: Buffer | string) => {
-            body += typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+            chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk)
           })
 
           req.on('error', () => {
-            if (!res.headersSent) {
-              res.writeHead(400, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ ok: false, error: 'Request error' }))
-            }
+            if (!res.headersSent) { res.writeHead(400); res.end('request error') }
           })
 
           req.on('end', async () => {
-            // Validate the envelope shape early so we return a clean JSON error
-            // rather than forwarding garbage to the pipe.
-            try {
-              JSON.parse(body)
-            } catch {
-              res.writeHead(400, { 'Content-Type': 'application/json' })
-              res.end(JSON.stringify({ ok: false, error: 'Invalid JSON' }))
-              return
-            }
-
+            const body = Buffer.concat(chunks)
             try {
               if (khsReady) await khsReady
-              let responseJson: string
+              let response: Buffer
               try {
-                responseJson = await callPipe(KHS_PIPE, body, KHS_CONNECT_TIMEOUT_MS)
+                response = await callPipe(KHS_PIPE, body, KHS_CONNECT_TIMEOUT_MS)
               } catch {
                 // Service may have died mid-session — try to (re)start once, then retry.
                 khsReady = ensureKhsService()
                 await khsReady
-                responseJson = await callPipe(KHS_PIPE, body, KHS_CONNECT_TIMEOUT_MS)
+                response = await callPipe(KHS_PIPE, body, KHS_CONNECT_TIMEOUT_MS)
               }
               if (!res.headersSent) {
-                res.writeHead(200, { 'Content-Type': 'application/json' })
-                res.end(responseJson)
+                res.writeHead(200, { 'Content-Type': 'application/octet-stream' })
+                res.end(response)
               }
             } catch (err: any) {
               console.error('[khs] request error:', err?.message)
-              if (!res.headersSent) {
-                res.writeHead(503, { 'Content-Type': 'application/json' })
-                res.end(JSON.stringify({ ok: false, error: err?.message || 'service unavailable' }))
-              }
+              // HTTP error status → the frontend serviceClient throws on !res.ok (it never
+              // tries to msgpack-decode a non-200 body).
+              if (!res.headersSent) { res.writeHead(503); res.end(err?.message || 'service unavailable') }
             }
           })
           return

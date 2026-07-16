@@ -16,27 +16,28 @@ internal static class FrameProtocol
 {
     private const int MaxFrameBytes = 64 * 1024 * 1024;
 
-    public static async Task WriteFrameAsync(Stream stream, string text, CancellationToken ct)
+    public static async Task WriteFrameAsync(Stream stream, ReadOnlyMemory<byte> body, CancellationToken ct)
     {
-        byte[] body = Encoding.UTF8.GetBytes(text);
         byte[] len = BitConverter.GetBytes(body.Length); // little-endian on Windows
         await stream.WriteAsync(len.AsMemory(0, 4), ct);
-        await stream.WriteAsync(body.AsMemory(0, body.Length), ct);
+        await stream.WriteAsync(body, ct);
         await stream.FlushAsync(ct);
     }
 
-    /// <summary>Reads one frame, or null when the peer closed the pipe cleanly.</summary>
-    public static async Task<string?> ReadFrameAsync(Stream stream, CancellationToken ct)
+    /// <summary>Reads one frame's raw bytes, or null when the peer closed the pipe cleanly.
+    /// The payload is a MessagePack envelope (see <see cref="Rpc"/>).</summary>
+    public static async Task<byte[]?> ReadFrameAsync(Stream stream, CancellationToken ct)
     {
         byte[]? lenBuf = await ReadExactAsync(stream, 4, ct);
         if (lenBuf is null) return null;
 
         int length = BitConverter.ToInt32(lenBuf, 0);
-        if (length <= 0 || length > MaxFrameBytes)
+        if (length < 0 || length > MaxFrameBytes)
             throw new InvalidDataException($"Bad frame length: {length}");
+        if (length == 0) return Array.Empty<byte>();
 
         byte[]? payload = await ReadExactAsync(stream, length, ct);
-        return payload is null ? null : Encoding.UTF8.GetString(payload);
+        return payload;
     }
 
     private static async Task<byte[]?> ReadExactAsync(Stream stream, int count, CancellationToken ct)
