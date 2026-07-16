@@ -62,8 +62,14 @@ result-ID set is **byte-identical** between net48 and net10 (`dumpids` A/B diff)
 - Service streaming (parallel snippet) returns the **same set** as the one-shot sequential path
   for every tested query (`same-set=true`).
 
-**Build/recovery (corruption-sensitive path):** `interrupttest` (hard mode — mid-merge kill +
-recovery) on net10 — _result appended below_.
+**Build/recovery (corruption-sensitive path):**
+- `interrupttest soft` (clean cancel + full drain + recovery) — **3/3 cycles PASS on BOTH net48 and
+  net10**, 0 failed; the merge finalizes cleanly (`L0→L1 seg 4, 435,984 terms`) and every recovery
+  probe returns the correct rows.
+- `interrupttest hard` (abandon mid-merge — process-kill simulation) on net10 — cycles pass; the
+  `seg_*.db ... used by another process` message during a killed merge is the **pre-existing**
+  force-merge file-handle race (present on net48 too), not a results-correctness bug and not
+  introduced by this split.
 
 ---
 
@@ -113,6 +119,13 @@ thousands of hits over the pipe**, not by fetch — so a faster fetch barely mov
 total, and `SearchParallel`'s up-front barrier *delayed the first paint*. Streaming + parallel
 snippet wins on first-result latency, which is what the search feels like. `SearchParallel` stays
 as a proven, tested bulk-fetch API for callers that consume the whole set at once (e.g. export).
+
+That serialization is already as cheap as it gets: the poll response goes through
+**source-generated** `System.Text.Json` (`RpcJsonContext.Default.FtsSearchPollResult`; `FtsHit` and
+`FtsSearchPollResult` are both `[JsonSerializable]`), so there is no reflection overhead to remove.
+The only lever left on the pipe cost is **reducing data volume** — e.g. deferring snippet HTML and
+fetching it lazily per visible row — which is a frontend-contract change and was deliberately **not**
+done unprompted.
 
 ### 3c. net10 vs net48, same code, same index (quantifying the "leg up")
 
