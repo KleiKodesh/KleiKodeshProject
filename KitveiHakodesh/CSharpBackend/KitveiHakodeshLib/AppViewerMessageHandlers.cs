@@ -89,6 +89,7 @@ namespace KitveiHakodeshLib
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
                         case "setTheme": HandleSetTheme(root, id); break;
                         case "tabsChanged": HandleTabsChanged(root, id); break;
+                        case "toggleChromeTabList": HandleToggleChromeTabList(id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }

@@ -63,6 +63,7 @@ namespace KitveiHakodeshLib
 
             _viewer.TabsStateChanged += OnTabsStateChanged;
             _viewer.ChromeThemeChanged += OnChromeThemeChanged;
+            _viewer.ChromeTabListToggleRequested += OnChromeTabListToggleRequested;
         }
 
         // ── Strip gestures → Vue ────────────────────────────────────────────────────
@@ -127,6 +128,72 @@ namespace KitveiHakodeshLib
                 }));
             }
             e.Sections.Add(recent);
+        }
+
+        // ── Vue Ctrl+T → open the strip's tab-list dropdown ─────────────────────────
+
+        // While the tab list is shown in fullscreen we reveal the strip just for the
+        // duration of the popup (ShowTabListMenu anchors to the tab-list button, which
+        // is not painted while the strip is hidden), then re-hide it on close. This
+        // timer polls IsTabListOpen because the strip has no "tab list closed" event.
+        private System.Windows.Forms.Timer _fullscreenTabListTimer;
+
+        private void OnChromeTabListToggleRequested(object sender, EventArgs e)
+        {
+            if (_form.IsDisposed) return;
+            if (_form.InvokeRequired)
+            {
+                _form.BeginInvoke(new Action(ToggleTabListMenu));
+                return;
+            }
+            ToggleTabListMenu();
+        }
+
+        private void ToggleTabListMenu()
+        {
+            if (_form.IsDisposed) return;
+
+            // Group 0 is the normal (non-split) region; when split, the focused pane's
+            // region owns the visible active tab, so target the region of the selected tab.
+            int group = _form.SplitStrip && _form.SelectedTab != null ? _form.SelectedTab.Group : 0;
+
+            // Not in fullscreen — the strip is visible, so just toggle the menu.
+            if (_form.StripVisible)
+            {
+                _form.ShowTabListMenu(group);
+                return;
+            }
+
+            // Fullscreen: the strip is hidden. If the menu is already up (from a prior
+            // toggle) let ShowTabListMenu close it; otherwise reveal the strip so the
+            // popup can anchor, then re-hide it once the user dismisses the menu.
+            if (_form.IsTabListOpen)
+            {
+                _form.ShowTabListMenu(group);
+                return;
+            }
+
+            _form.StripVisible = true;
+            _form.ShowTabListMenu(group);
+
+            _fullscreenTabListTimer?.Stop();
+            _fullscreenTabListTimer?.Dispose();
+            _fullscreenTabListTimer = new System.Windows.Forms.Timer { Interval = 150 };
+            _fullscreenTabListTimer.Tick += (s, _) =>
+            {
+                if (_form.IsDisposed || !_form.IsTabListOpen)
+                {
+                    _fullscreenTabListTimer.Stop();
+                    _fullscreenTabListTimer.Dispose();
+                    _fullscreenTabListTimer = null;
+                    // Only re-hide if we're still in fullscreen (the user may have exited
+                    // it while the menu was open, which legitimately shows the strip).
+                    if (!_form.IsDisposed && _form.FormBorderStyle == System.Windows.Forms.FormBorderStyle.None
+                        && _form.WindowState == System.Windows.Forms.FormWindowState.Maximized)
+                        _form.StripVisible = false;
+                }
+            };
+            _fullscreenTabListTimer.Start();
         }
 
         // ── Vue snapshots → strip ───────────────────────────────────────────────────

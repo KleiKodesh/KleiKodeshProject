@@ -24,6 +24,7 @@ import ThemeToggle from '@/theme/ThemeToggle.vue'
 // don't add to the cold-start parse cost. They load on first open, which is imperceptible.
 const AppTitleBarTabDropdown = defineAsyncComponent(() => import('./AppTitleBarTabDropdown.vue'))
 const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarNavDropdown.vue'))
+const AddressBar = defineAsyncComponent(() => import('./AddressBar.vue'))
 import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
@@ -31,7 +32,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { useThemeStore } from '@/theme/themeStore'
-import { toggleFullscreen, isVstoEnvironment as isVsto } from '@/webview-host/bridge'
+import { toggleFullscreen, toggleChromeTabList, isVstoEnvironment as isVsto, hasNativeChromeTabs } from '@/webview-host/bridge'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -92,11 +93,24 @@ const isPdfTab = computed(
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
+// Interaction hint depends on the environment:
+//   - Demo/standalone (native chrome strip): single click = search;
+//     Ctrl+T opens the (native) tab list.
+//   - VSTO / dev browser (no strip): single click = tab list;
+//     double click = search.
+// Ctrl+E focuses the search everywhere.
+const barTitleHint = computed(() =>
+  hasNativeChromeTabs
+    ? 'לחץ לחיפוש (Ctrl+E) · Ctrl+T לרשימת הלשוניות'
+    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T) · לחיצה כפולה לחיפוש (Ctrl+E)',
+)
+
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
     : activeTab.value?.title
-  return full ? full + '\n(לחץ להצגת רשימת הלשוניות - Ctrl+T)' : '(לחץ להצגת רשימת הלשוניות - Ctrl+T)'
+  const hint = barTitleHint.value
+  return full ? full + '\n(' + hint + ')' : '(' + hint + ')'
 })
 
 const toolbarTitle = computed(() => {
@@ -117,6 +131,43 @@ const { justClosed } = useDropdownClose(barRef, () => {
 function toggleTabDropdown() {
   if (justClosed.value) return
   dropdownOpen.value = !dropdownOpen.value
+}
+
+// ── Title-bar search (Explorer-style address bar) ─────────────────────────────
+// The title becomes an editable search field, reusing the home-page search.
+// The gesture split depends on whether a native chrome tab strip is present:
+//   - Native strip present (standalone/demo): the strip already lists the tabs,
+//     so the Vue tab dropdown isn't used here — a single click on the Vue title
+//     bar switches straight to search mode.
+//   - No native strip (VSTO task pane AND the dev browser): single click opens
+//     the Vue tab-list dropdown; double-click switches to search mode.
+const searchMode = ref(false)
+
+function enterSearchMode() {
+  dropdownOpen.value = false
+  // The address bar lives inside the header — make sure it's visible first
+  // (Ctrl+H may have hidden it).
+  titleBarVisible.value = true
+  searchMode.value = true
+}
+
+function onTitleBarClick() {
+  if (searchMode.value) return
+  if (hasNativeChromeTabs) {
+    // Standalone/demo: single click = search mode.
+    enterSearchMode()
+  } else {
+    // VSTO / dev browser: single click = Vue tab list; search via double-click.
+    toggleTabDropdown()
+  }
+}
+
+function onTitleBarDblClick() {
+  // Double-click always enters search mode (the primary gesture where a single
+  // click opens the tab list, and a harmless equivalent to a single click where
+  // it already enters search mode).
+  if (!hasNativeChromeTabs) dropdownOpen.value = false
+  enterSearchMode()
 }
 
 function toggleNavDropdown() {
@@ -210,7 +261,17 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       return
     } else if (e.ctrlKey && e.code === 'KeyT') {
       e.preventDefault()
-      toggleTabDropdown()
+      // The standalone/demo app shows the tab list in the native chrome strip's
+      // dropdown (works in fullscreen); VSTO and the dev browser use the Vue
+      // title-bar dropdown.
+      if (hasNativeChromeTabs) toggleChromeTabList()
+      else toggleTabDropdown()
+      return
+    } else if (e.ctrlKey && e.code === 'KeyE') {
+      // Focus the address bar (Explorer/omnibox-style). Enters search mode; the
+      // AddressBar focuses its input on mount.
+      e.preventDefault()
+      enterSearchMode()
       return
     } else if (e.ctrlKey && e.code === 'KeyN') {
       e.preventDefault()
@@ -296,7 +357,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 <template>
   <!-- Keyboard event listener is always active (above), but only render the visual header when titleBarVisible is true -->
   <div ref="barRef" class="title-bar-container" :class="{ hidden: !titleBarVisible }">
-    <header class="title-bar" @click="toggleTabDropdown">
+    <header class="title-bar" @click="onTitleBarClick" @dblclick="onTitleBarDblClick">
     <div class="bar-start">
       <div class="nav-btn-wrap">
         <button
@@ -352,7 +413,15 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       </button>
     </div>
 
-    <span class="bar-title" dir="rtl" :title="barTitle">
+    <!-- Search mode — the title turns into an editable address-bar search. -->
+    <AddressBar
+      v-if="searchMode"
+      :pane-id="props.paneId"
+      class="bar-search"
+      @close="searchMode = false"
+    />
+
+    <span v-else class="bar-title" dir="rtl" :title="barTitle">
       <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
       <AppTitleBarTocBreadcrumb
         v-if="tocBreadcrumbSegments.length > 0 || tocBreadcrumbRootTocEntries.length > 0 || tocBreadcrumbRootPdfEntries.length > 0"
@@ -425,24 +494,18 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 </template>
 
 <style scoped>
-/* ── Title bar layout — Flexbox centering trick (DO NOT CHANGE) ────────────────
- * Three-zone layout: left buttons | centered title | right buttons.
- * The title is truly centered relative to the bar (not just between the buttons)
- * and uses maximum available space without ever overlapping the button groups.
+/* ── Title bar layout — Explorer address-bar model ────────────────────────────
+ * Three-zone layout: left buttons | address-bar box | right buttons.
+ *   - .bar-start / .bar-end are flex: 0 0 auto → each hugs its buttons.
+ *   - .bar-title (and .bar-search in search mode) is flex: 1 1 auto → the
+ *     bordered box FILLS all remaining width between the two button groups,
+ *     like the Windows Explorer address bar. Not centered, not content-sized.
+ *   - min-width: 0 + overflow: hidden on .bar-title lets it shrink below its
+ *     natural content width so the inner text ellipsizes.
  *
- * How it works (from tchumim.com):
- *   - .bar-start and .bar-end both get flex: 1 → each grows to fill half the
- *     leftover space, keeping the center perfectly symmetric.
- *   - .bar-title gets flex: 0 1 auto → does NOT grow (won't steal from sides),
- *     CAN shrink when space is tight, sizes to content by default.
- *   - min-width: 0 + overflow: hidden on .bar-title → allows shrinking below
- *     natural content width, which triggers text-overflow: ellipsis on children.
- *   - justify-content: flex-end on .bar-end → buttons stick to the right edge,
- *     leaving the gap between the sides free for the centered title.
- *
- * Breaking this means either: title drifts off-center, title overlaps buttons,
- * or ellipsis stops working. Do not add flex-grow to .bar-title or remove
- * flex: 1 from the sides.
+ * The persistent border on .bar-title is intentional — it's the affordance that
+ * signals the bar is a clickable input. Search mode swaps .bar-title for the
+ * editable .bar-search (AddressBar) in the same footprint.
  * ──────────────────────────────────────────────────────────────────────────── */
 .title-bar-container {
   position: relative;
@@ -464,7 +527,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   display: flex;
   align-items: center;
   gap: 0;
-  flex: 1;
+  flex: 0 0 auto;
 }
 .nav-btn-wrap {
   position: relative;
@@ -474,21 +537,46 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   align-items: center;
   justify-content: flex-end;
   gap: 0;
-  flex: 1;
+  flex: 0 0 auto;
 }
+/* The title/breadcrumb is styled as a Windows-Explorer address bar: a bordered
+   box that FILLS the space between the button groups (not a centered, content-
+   sized label). The persistent border is the affordance that tells the user the
+   bar is a clickable input. Clicking it enters search mode (AddressBar), which
+   reuses the very same box footprint (.bar-search) for a seamless swap. */
 .bar-title {
   display: flex;
   align-items: center;
+  /* Box fills the bar (Explorer address-bar), but the breadcrumb/title inside it
+     is centered while inactive. Editing swaps in .bar-search, whose field is
+     start-aligned for typing. */
   justify-content: center;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  height: 24px;
+  margin-inline: 6px;
+  padding-inline: 6px;
   font-weight: 400;
   font-size: 0.82rem;
   color: var(--text-secondary);
   white-space: nowrap;
-  cursor: pointer;
-  padding-inline: 4px;
-  flex: 0 1 auto;
+  cursor: text;
+  /* Blend into the title bar (--bg-secondary) rather than stand out as a filled
+     field — a subtle, uniform 1px frame is enough of an input hint. All four
+     sides match at rest; the accent underline appears only on focus. */
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+.bar-title:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+/* Search mode swaps in the editable AddressBar, occupying the same box. */
+.bar-search {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-inline: 6px;
 }
 /* Block pointer events on text spans so clicks bubble to the header toggle,
    but leave buttons (chevrons) fully interactive. */

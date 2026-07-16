@@ -3,8 +3,8 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
-import { notifyTabsChanged, isVstoEnvironment } from './bridge'
-import { onWebviewEvent, isHosted } from './seforimDb'
+import { notifyTabsChanged, hasNativeChromeTabs } from './bridge'
+import { onWebviewEvent } from './seforimDb'
 import {
   activateTabAnyPane,
   closeTabAnyPane,
@@ -48,8 +48,7 @@ function tabRecentKey(tab: Tab): string | null {
 }
 
 export function initTabMirror(): void {
-  if (!isHosted || isVstoEnvironment) return
-  if (typeof window.__webviewAction !== 'function') return
+  if (!hasNativeChromeTabs) return
 
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
