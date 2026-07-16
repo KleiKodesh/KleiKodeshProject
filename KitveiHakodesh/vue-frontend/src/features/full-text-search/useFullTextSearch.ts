@@ -15,7 +15,7 @@ import { serviceCall, serviceCallVoid } from '@/webview-host/serviceClient'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
+import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 
 // ── chrome.webview message listener (search stream events from C#) ────────────
@@ -118,7 +118,13 @@ async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
 export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap, ftsSortOrder } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap } = storeToRefs(settings)
+
+  // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
+  // 'lineId' (original streamed order), so results always finish in document order and the
+  // user must actively pick 'relevance' from the toggle (which is only shown once streaming
+  // completes) to reorder. See executeSearch (reset) and the watch below (user-driven re-sort).
+  const sortOrder = ref<FullTextSearchSortOrder>('lineId')
 
   function _buildQueryToSend(normalizedQuery: string): string {
     if (!settings.searchGrammarWrap) return normalizedQuery
@@ -196,7 +202,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   function finalizeSort() {
     if (results.value.length < 2) return
     const sorted = [...results.value]
-    if (ftsSortOrder.value === 'relevance') {
+    if (sortOrder.value === 'relevance') {
       // Sole relevancy key: minimum word distance (0 = query words adjacent → most relevant).
       // Ties keep their original streamed (line-ID) order. We deliberately do NOT tiebreak on
       // `score` (character span) — that reorders equally-adjacent hits by irrelevant length
@@ -215,8 +221,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   }
 
   // Re-sort an already-completed result set when the user changes the sort order.
-  // No-op while a search is in flight — the completion handler applies the sort then.
-  watch(ftsSortOrder, () => {
+  // No-op while a search is in flight — but the toggle is hidden during streaming anyway,
+  // so in practice this only fires on an explicit user pick after results finish.
+  watch(sortOrder, () => {
     if (isSearching.value) return
     finalizeSort()
   })
@@ -373,6 +380,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     isSearching.value = true
     hasSearched.value = true
     results.value = []
+    sortOrder.value = 'lineId'   // each new search starts in original order; user re-sorts after
     searchError.value = null
     executedQuery.value = q
 
@@ -520,6 +528,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     requireOrdered: searchRequireOrdered,
     expandKetiv: searchExpandKetiv,
     grammarWrap: searchGrammarWrap,
+    sortOrder,
     executeSearch,
     cancelSearch,
     clearSearch,

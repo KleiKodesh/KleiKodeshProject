@@ -59,6 +59,7 @@ const {
   requireOrdered,
   expandKetiv,
   grammarWrap,
+  sortOrder,
   executeSearch,
   cancelSearch,
   clearSearch,
@@ -336,7 +337,7 @@ onBeforeUnmount(() => {
       :at-filter-count="atFilters.length"
       :is-advanced-open="isAdvancedOpen"
       :is-advanced-active="isAdvancedActive"
-      v-model:sort-order="settings.ftsSortOrder"
+      v-model:sort-order="sortOrder"
       @search="onSearch"
       @cancel="cancelSearch"
       @toggle-filter="isFilterOpen = !isFilterOpen"

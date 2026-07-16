@@ -131,8 +131,30 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       >
         <IconOptions20Regular />
       </button>
-      <!-- Sort dropdown -->
-      <div ref="sortControlRef" class="sort-control">
+    </template>
+    <input
+      ref="inputRef"
+      v-model="localQuery"
+      type="text"
+      name="full-text-search"
+      class="search-input"
+      :placeholder="placeholder"
+      :disabled="disabled"
+      spellcheck="true"
+      autocomplete="on"
+      @keydown.enter="handleSearch"
+      @keydown.esc="handleClear"
+    />
+    <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
+      {{ resultCount.toLocaleString() }}
+      <template v-if="!isSearching && resultCount < totalResultCount">
+        / {{ totalResultCount.toLocaleString() }}
+      </template>
+    </span>
+    <template #right>
+      <!-- Sort dropdown — shown only after results finish streaming in (hidden while
+           searching / when there are no results), so it never reorders a partial set. -->
+      <div v-if="!isSearching && resultCount > 0" ref="sortControlRef" class="sort-control">
         <button
           ref="sortToggleButtonRef"
           class="bar-btn"
@@ -159,27 +181,6 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
           </div>
         </div>
       </div>
-    </template>
-    <input
-      ref="inputRef"
-      v-model="localQuery"
-      type="text"
-      name="full-text-search"
-      class="search-input"
-      :placeholder="placeholder"
-      :disabled="disabled"
-      spellcheck="true"
-      autocomplete="on"
-      @keydown.enter="handleSearch"
-      @keydown.esc="handleClear"
-    />
-    <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
-      {{ resultCount.toLocaleString() }}
-      <template v-if="!isSearching && resultCount < totalResultCount">
-        / {{ totalResultCount.toLocaleString() }}
-      </template>
-    </span>
-    <template #right>
       <button
         class="bar-btn"
         :disabled="disabled || (!isSearching && !localQuery.trim())"
