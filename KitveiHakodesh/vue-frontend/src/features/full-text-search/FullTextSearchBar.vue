@@ -45,6 +45,7 @@ const SORT_OPTIONS: { value: FullTextSearchSortOrder; label: string }[] = [
   { value: 'lineId', label: 'סדר מקורי' },
   { value: 'relevance', label: 'רלוונטיות' },
   { value: 'bookName', label: 'שם הספר' },
+  { value: 'chronological', label: 'סדר כרונולוגי' },
 ]
 const isSortDropdownOpen = ref(false)
 const sortToggleButtonRef = ref<HTMLElement | null>(null)
