@@ -38,6 +38,20 @@ export const showPopOutButton = window.__webviewShowPopOut === true
  */
 export const isVstoEnvironment = showPopOutButton
 
+/**
+ * True only when a native chrome tab strip (FluentChromeTabsForm) is actually
+ * present to mirror the tabs — i.e. the standalone/demo WebView2 host, not the
+ * VSTO task pane and not the dev browser. This is the exact condition under which
+ * initTabMirror() wires up the strip, so UI that delegates to the native strip
+ * (e.g. the Ctrl+T tab list) can gate on the same flag.
+ *
+ * The dev browser has no strip, so it must behave like VSTO (Vue-owned tab list),
+ * not like the demo — hence !isHosted-in-dev alone is not enough; we require the
+ * bridge action channel too.
+ */
+export const hasNativeChromeTabs =
+  isHosted && !isVstoEnvironment && typeof window.__webviewAction === 'function'
+
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
     return Promise.reject(new Error('bridge not available'))
@@ -421,6 +435,17 @@ export interface TabsSnapshot {
 export function notifyTabsChanged(snapshot: TabsSnapshot): void {
   if (typeof window.__webviewAction !== 'function') return
   action('tabsChanged', { ...snapshot }).catch(() => {})
+}
+
+/**
+ * Ask the C# host to toggle the native chrome tab strip's tab-list dropdown
+ * (the "לשוניות פתוחות" menu). Used by Ctrl+T in the standalone/demo app, where
+ * the strip — not the Vue title bar — owns the tab list. Fire-and-forget; a
+ * no-op when there is no native strip (VSTO / browser dev). Works in fullscreen.
+ */
+export function toggleChromeTabList(): void {
+  if (typeof window.__webviewAction !== 'function') return
+  action('toggleChromeTabList').catch(() => {})
 }
 
 /**

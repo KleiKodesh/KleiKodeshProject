@@ -86,6 +86,13 @@ namespace KitveiHakodeshLib
         /// <summary>Raised on the UI thread whenever Vue reports a new tab snapshot.</summary>
         public event EventHandler<TabsStateChangedEventArgs> TabsStateChanged;
 
+        /// <summary>
+        /// Raised when Vue asks to toggle the native chrome tab-strip's tab-list dropdown
+        /// (Ctrl+T in the standalone/demo app). ChromeTabsMirror handles it by calling
+        /// <c>ShowTabListMenu</c> on the strip form; it must work even in fullscreen.
+        /// </summary>
+        public event EventHandler ChromeTabListToggleRequested;
+
         private void HandleTabsChanged(JsonElement root, string id)
         {
             _bridge.Reply(id, new { });
@@ -139,6 +146,15 @@ namespace KitveiHakodeshLib
                 new TabsStateChangedEventArgs(
                     tabs, activeTabId, pane2ActiveTabId, splitView, focusedPane, splitFraction,
                     dividerLeftPx, dividerWidthPx, recent));
+        }
+
+        private void HandleToggleChromeTabList(string id)
+        {
+            _bridge.Reply(id, new { });
+            if (InvokeRequired)
+                Invoke(new Action(() => ChromeTabListToggleRequested?.Invoke(this, EventArgs.Empty)));
+            else
+                ChromeTabListToggleRequested?.Invoke(this, EventArgs.Empty);
         }
 
         /// <summary>Forwards a native tab-strip selection to Vue.</summary>

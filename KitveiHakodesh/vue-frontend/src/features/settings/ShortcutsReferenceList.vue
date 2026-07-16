@@ -10,6 +10,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>X</kbd></div><span class="shortcut-description">סגור את כל הלשוניות</span></div>
     <!-- Navigation -->
     <div class="shortcuts-group-label">ניווט</div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>E</kbd></div><span class="shortcut-description">מיקוד שורת החיפוש</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>G</kbd></div><span class="shortcut-description">עבור לדף הבית</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>M</kbd></div><span class="shortcut-description">פתח תפריט ראשי</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>L</kbd></div><span class="shortcut-description">החלף ערכת נושא</span></div>
