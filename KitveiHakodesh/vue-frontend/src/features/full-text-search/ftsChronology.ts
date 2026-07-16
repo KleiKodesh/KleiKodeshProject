@@ -57,3 +57,44 @@ export function eraRank(period: string | null | undefined): number {
   // "מפרשים על …" and "על ה…" commentary buckets — treat as the medieval/early-modern middle.
   return ERA_RANK_FALLBACK
 }
+
+// ── Author death-year refinement (within-era key) ──────────────────────────────
+//
+// authorYears.json maps a NORMALIZED author name → approximate Gregorian death year,
+// curated from המכלול / Torat Emet / chronological charts (373 of the DB's 384 authors;
+// the ~11 omitted are living/unidentifiable and simply fall back to era-only ordering).
+// The frontend only has each book's authors as a comma-joined name string (book.authors),
+// so we normalize identically on both sides — strip Hebrew nikud/te'amim, quote glyphs,
+// and directional marks — and match a name substring.
+import authorYearsData from './authorYears.json'
+
+const AUTHOR_YEARS: Record<string, number> = authorYearsData
+
+/** Strip Hebrew diacritics, quote glyphs, and directional marks; collapse space; lowercase.
+ *  Must match the normalization used when authorYears.json was generated. */
+function normAuthor(s: string): string {
+  return s
+    .replace(/[֑-ׇ]/g, '') // Hebrew nikud + te'amim
+    .replace(/["'״׳‎‏]/g, '') // quotes, gershayim/geresh, LRM/RLM
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
+}
+
+/**
+ * Approximate death year for a book's author(s), or null when unknown. `authors` is the
+ * comma-joined name string from book.authors. When a book lists several authors we take
+ * the EARLIEST known year (the base author of a work generally predates its annotators),
+ * which keeps a commented base text sorting by the base author's era, not a later glossator.
+ */
+export function authorYear(authors: string | null | undefined): number | null {
+  if (!authors) return null
+  let best: number | null = null
+  for (const raw of authors.split(',')) {
+    const key = normAuthor(raw)
+    if (!key) continue
+    const year = AUTHOR_YEARS[key]
+    if (year != null && (best === null || year < best)) best = year
+  }
+  return best
+}
