@@ -47,6 +47,21 @@ const NEXT_LABELS: Partial<Record<keyof CalendarZmanim, string>> = {
 const SOON_MIN = 20
 const IMMINENT_MIN = 8
 
+/**
+ * Zmanim with a halachic deadline the user actually races against. Only these
+ * get the flashing "imminent" animation; the rest still color when close but
+ * don't pulse.
+ */
+const CRITICAL_KEYS: ReadonlySet<keyof CalendarZmanim> = new Set([
+  'alot',
+  'sofShmaGra',
+  'sofShmaMga',
+  'sofTfillaGra',
+  'sofTfillaMga',
+  'sunset',
+  'tzeit',
+])
+
 export type ZmanUrgency = 'normal' | 'soon' | 'imminent'
 
 export interface NextZman {
@@ -56,6 +71,8 @@ export interface NextZman {
   /** Minutes until the zman (>= 0). */
   minutesUntil: number
   urgency: ZmanUrgency
+  /** True only when imminent AND a deadline-critical zman — drives the pulse. */
+  flash: boolean
 }
 
 export interface ZmanRow {
@@ -132,7 +149,8 @@ export function useNextZman() {
           const minutesUntil = Math.max(0, Math.round((t.getTime() - current.getTime()) / 60000))
           const urgency: ZmanUrgency =
             minutesUntil <= IMMINENT_MIN ? 'imminent' : minutesUntil <= SOON_MIN ? 'soon' : 'normal'
-          return { key, label, time: t, minutesUntil, urgency }
+          const flash = urgency === 'imminent' && CRITICAL_KEYS.has(key)
+          return { key, label, time: t, minutesUntil, urgency, flash }
         }
       }
     }

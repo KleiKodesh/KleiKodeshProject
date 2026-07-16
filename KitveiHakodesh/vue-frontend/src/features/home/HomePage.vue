@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useIntervalFn, useElementSize, useNow, useWindowSize } from '@vueuse/core'
+import { useIntervalFn, useElementSize, useNow, useWindowSize, useResizeObserver } from '@vueuse/core'
 import HomeTile from './HomePageTile.vue'
 import HomeSearchDropdown from './HomeSearchDropdown.vue'
 import { useHomeSearch } from './useHomeSearch'
@@ -64,6 +64,53 @@ const clockTime = computed(() =>
 const showBarClock = computed(() => !(showClock.value && isFullscreen.value))
 
 const { next: nextZman, displayTime: nextZmanTime, rows: zmanRows, city: zmanCity } = useNextZman()
+
+// The date bar never wraps. When it can't fit on one line we drop optional
+// items by priority — clock first (level ≥ 1), then the nearest-zman
+// (level ≥ 2) — keeping the date and daf yomi.
+const dateBarRef = ref<HTMLElement | null>(null)
+const barHideLevel = ref(0)
+const showClockInBar = computed(() => showBarClock.value && barHideLevel.value < 1)
+const showZmanInBar = computed(() => !!nextZman.value && barHideLevel.value < 2)
+
+let measuring = false
+function measureBarFit() {
+  const el = dateBarRef.value
+  if (!el || measuring) return
+  measuring = true
+  // Try to show as much as possible, then step down until it fits (or we've
+  // dropped everything droppable). Each step re-measures after the DOM updates.
+  const step = () => {
+    if (!dateBarRef.value) { measuring = false; return }
+    const overflow = dateBarRef.value.scrollWidth > dateBarRef.value.clientWidth + 1
+    if (overflow && barHideLevel.value < 2) {
+      barHideLevel.value++
+      nextTick(step)
+    } else if (!overflow && barHideLevel.value > 0) {
+      // Room may have opened up — try restoring one level and see if it still fits.
+      const prev = barHideLevel.value
+      barHideLevel.value--
+      nextTick(() => {
+        if (dateBarRef.value && dateBarRef.value.scrollWidth > dateBarRef.value.clientWidth + 1) {
+          barHideLevel.value = prev // didn't fit; revert
+          measuring = false
+        } else {
+          step() // fit — keep trying to restore more
+        }
+      })
+    } else {
+      measuring = false
+    }
+  }
+  step()
+}
+
+useResizeObserver(dateBarRef, () => measureBarFit())
+// Re-measure when the content itself changes (zman appears, daf loads, etc.).
+watch([showBarClock, nextZman, () => dateInfo.value.dafYomi, clockTime], () =>
+  nextTick(measureBarFit),
+)
+
 const isZmanPopupOpen = ref(false)
 const zmanBarItemRef = ref<HTMLElement | null>(null)
 const zmanButtonRef = ref<HTMLElement | null>(null)
@@ -450,17 +497,17 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
       </div>
     </div>
 
-    <div class="date-bar">
-      <template v-if="showBarClock">
+    <div ref="dateBarRef" class="date-bar">
+      <template v-if="showClockInBar">
         <span class="bar-item bar-clock">{{ clockTime }}</span>
         <span class="bar-sep">·</span>
       </template>
-      <template v-if="nextZman">
+      <template v-if="nextZman && showZmanInBar">
         <div ref="zmanBarItemRef" class="zman-wrap">
           <button
             ref="zmanButtonRef"
             class="bar-item bar-item--btn zman"
-            :class="[`zman--${nextZman.urgency}`, { on: isZmanPopupOpen }]"
+            :class="[`zman--${nextZman.urgency}`, { on: isZmanPopupOpen, 'zman--flash': nextZman.flash }]"
             :title="`בעוד ${nextZman.minutesUntil} דקות · לחץ לכל הזמנים`"
             @click="toggleZmanPopup"
           >
@@ -502,22 +549,29 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  overflow: hidden;
   outline: none;
   position: relative;
   container-type: inline-size;
 }
 
+/* Search + tiles scroll together as one group, centered when there's room and
+   pushed toward the top once they overflow. Only the date bar stays fixed. */
 .home-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* safe center: vertically centered when there's room, but aligns to the top
+     once content overflows so the search bar stays reachable by scrolling. */
+  justify-content: safe center;
   flex: 1;
-  min-height: min-content;
-  padding: 16px 24px;
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
+  /* No top padding: the sticky search wrapper supplies its own top spacing so
+     it can stick flush to the scroll-area top with nothing peeking above it. */
+  padding: 0 24px 16px;
 }
 
 .home-grid {
@@ -528,13 +582,21 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
   max-width: 920px;
 }
 
-/* Search bar — uses the same .search-inner pattern as the rest of the app */
+/* Search bar — flows with the tiles (centered as a group when there's room),
+   but sticks to the top of the scroll area once the tiles scroll under it. */
 .home-search-bar-wrapper {
   display: block;
-  position: relative;
+  position: sticky;
+  top: 0;
+  z-index: 2;
   width: 100%;
   max-width: 560px;
   margin-bottom: 20px;
+  padding: 16px 0 8px;
+  flex-shrink: 0;
+  /* Opaque backdrop so tiles scrolling underneath don't show through around
+     the rounded search pill. */
+  background: var(--bg-primary);
 }
 
 .home-search-bar {
@@ -590,10 +652,11 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 
-/* Date bar */
+/* Date bar — always a single line; items are dropped by priority (see
+   barHideLevel) rather than wrapping. */
 .date-bar {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -601,6 +664,8 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
   font-size: 11.5px;
   color: var(--text-secondary);
   border-top: 1px solid var(--border-color);
+  overflow: hidden;
+  white-space: nowrap;
 }
 .bar-sep {
   color: var(--text-secondary);
@@ -649,6 +714,10 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
   color: #d64545;
   opacity: 1;
   font-weight: 700;
+}
+/* Pulse is reserved for deadline-critical zmanim (see CRITICAL_KEYS). Other
+   imminent zmanim still turn red above, just without the flashing. */
+.zman--flash {
   animation: zman-pulse 1.6s ease-in-out infinite;
 }
 @keyframes zman-pulse {
@@ -661,7 +730,7 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .zman--imminent {
+  .zman--flash {
     animation: none;
   }
 }
