@@ -157,7 +157,10 @@ async function ensureKhsService(): Promise<void> {
   await gracefulStopKhs()
   await killKhsProcesses()
   console.log('[khs] starting fresh service via `dotnet run`...')
-  khsProc = spawn('dotnet', ['run', '--project', KHS_PROJECT, '-c', 'Debug'], {
+  // Release: the service is the dev's entire data layer — running it as a Debug JIT
+  // build made every query slower than the in-app C# host (the "dev lag"). Release
+  // costs a slightly longer first build, cached by dotnet afterwards.
+  khsProc = spawn('dotnet', ['run', '--project', KHS_PROJECT, '-c', 'Release'], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
     env: {

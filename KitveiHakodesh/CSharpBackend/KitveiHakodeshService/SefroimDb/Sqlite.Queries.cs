@@ -9,9 +9,22 @@ namespace KitveiHakodeshService.SefroimDb;
 public sealed partial class SeforimDbService
 {
     // ── Catalog ─────────────────────────────────────────────────────────────────
+    // The catalog (categories + books) is STATIC for the life of the process — the
+    // seforim DB is read-only and only ever replaced while the service is down. Both
+    // queries are also the heaviest catalog cost (getAllBooks is a 3-table GROUP BY +
+    // group_concat over every book, ~70-90ms), so serve them from an in-memory cache
+    // after the first load: every consumer (dev reloads, future hosted path) gets an
+    // instant catalog without re-running the join.
+
+    private List<CategoryRow>? _categoriesCache;
+    private List<BookRow>? _booksCache;
+    private readonly object _catalogCacheLock = new();
 
     public List<CategoryRow> GetAllCategories()
     {
+        lock (_catalogCacheLock)
+            if (_categoriesCache is { } cached) return cached;
+
         var list = new List<CategoryRow>();
         Run(() =>
         {
@@ -33,11 +46,17 @@ public sealed partial class SeforimDbService
                 });
             }
         }, "getAllCategories");
+
+        if (list.Count > 0)
+            lock (_catalogCacheLock) _categoriesCache ??= list;
         return list;
     }
 
     public List<BookRow> GetAllBooks()
     {
+        lock (_catalogCacheLock)
+            if (_booksCache is { } cached) return cached;
+
         var list = new List<BookRow>();
         Run(() =>
         {
@@ -57,6 +76,9 @@ public sealed partial class SeforimDbService
                 });
             }
         }, "getAllBooks");
+
+        if (list.Count > 0)
+            lock (_catalogCacheLock) _booksCache ??= list;
         return list;
     }
 
