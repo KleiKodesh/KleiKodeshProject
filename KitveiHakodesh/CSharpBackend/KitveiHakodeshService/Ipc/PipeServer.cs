@@ -69,6 +69,12 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
                 byte[]? request = await FrameProtocol.ReadFrameAsync(pipe, ct);
                 if (request is null) return; // client closed without sending
 
+                // Streaming ops push MANY frames over this one connection (the connection
+                // IS the stream); everything else stays one request → one response.
+                if (await dispatcher.TryDispatchStreamAsync(
+                        request, resp => FrameProtocol.WriteFrameAsync(pipe, resp, ct), ct))
+                    return;
+
                 byte[] response = await dispatcher.DispatchAsync(request, ct);
                 await FrameProtocol.WriteFrameAsync(pipe, response, ct);
             }

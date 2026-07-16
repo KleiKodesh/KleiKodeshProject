@@ -72,3 +72,55 @@ export function serviceCallVoid(op: string, args: object = {}): void {
     body: encodeRequest(op, args),
   }).catch(() => {})
 }
+
+/**
+ * Call a STREAMING service op: the service pushes many result frames over one
+ * connection (via the /khs-stream courier) and this generator yields each decoded
+ * frame as it arrives — no polling anywhere. Frames on the wire keep the pipe's
+ * 4-byte LE length prefix; each frame body is a normal {Ok, Result, Error} envelope.
+ * Aborting `signal` (or breaking out of the loop) closes the connection, which is
+ * the service's cancel signal.
+ */
+export async function* serviceStream<T = unknown>(
+  op: string,
+  args: object = {},
+  signal?: AbortSignal,
+): AsyncGenerator<T, void, void> {
+  const res = await fetch('/khs-stream', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: encodeRequest(op, args),
+    signal,
+  })
+  if (!res.ok || !res.body) throw new Error(`service '${op}' stream failed: ${res.status} ${res.statusText}`)
+
+  const reader = res.body.getReader()
+  let buf = new Uint8Array(0)
+  try {
+    for (;;) {
+      const { value, done } = await reader.read()
+      if (done) break
+      if (!value || value.length === 0) continue
+
+      const merged = new Uint8Array(buf.length + value.length)
+      merged.set(buf); merged.set(value, buf.length)
+      buf = merged
+
+      // Drain every complete frame in the buffer.
+      for (;;) {
+        if (buf.length < 4) break
+        const len = new DataView(buf.buffer, buf.byteOffset, 4).getInt32(0, true)
+        if (buf.length < 4 + len) break
+        const frame = buf.subarray(4, 4 + len)
+        buf = buf.subarray(4 + len)
+
+        const env = mpDecode(frame) as Envelope
+        if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
+        if (env.Result && env.Result.length > 0)
+          yield transformKeys(mpDecode(env.Result), decodeKey) as T
+      }
+    }
+  } finally {
+    reader.cancel().catch(() => {})
+  }
+}

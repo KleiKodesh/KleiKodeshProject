@@ -315,10 +315,5 @@ internal static class RpcResponse
 [JsonSerializable(typeof(FtsHit))]
 [JsonSerializable(typeof(FtsSearchResult))]
 [JsonSerializable(typeof(FtsIndexStatus))]
-[JsonSerializable(typeof(FtsSearchStartArgs))]
-[JsonSerializable(typeof(FtsSearchStartResult))]
-[JsonSerializable(typeof(FtsSearchPollArgs))]
-[JsonSerializable(typeof(FtsSearchPollResult))]
-[JsonSerializable(typeof(FtsCancelArgs))]
 [JsonSerializable(typeof(string))]
 internal partial class RpcJsonContext : JsonSerializerContext;

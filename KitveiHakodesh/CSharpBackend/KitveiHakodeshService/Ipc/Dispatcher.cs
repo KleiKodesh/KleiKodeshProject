@@ -339,29 +339,6 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
-                // Streaming FTS: start a background search, then poll for incremental
-                // batches — mirrors the hosted C# streaming so the first hits paint fast.
-                case "ftsSearchStart":
-                {
-                    var a = MsgPack.De<FtsSearchStartArgs>(req.Args);
-                    var res = fts.StartSearch(a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv);
-                    return RpcResponse.Ok(MsgPack.Ser(res));
-                }
-
-                case "ftsSearchPoll":
-                {
-                    var a = MsgPack.De<FtsSearchPollArgs>(req.Args);
-                    var res = await fts.PollSearch(a.SearchId ?? "", a.Offset, ct);
-                    return RpcResponse.Ok(MsgPack.Ser(res));
-                }
-
-                case "ftsSearchCancel":
-                {
-                    var a = MsgPack.De<FtsCancelArgs>(req.Args);
-                    fts.CancelSearch(a.SearchId ?? "");
-                    return RpcResponse.Ok(MsgPack.Ser(new CancelledResult()));
-                }
-
                 case "ftsIndexingStatus":
                     return RpcResponse.Ok(MsgPack.Ser(fts.Status()));
 
@@ -380,6 +357,46 @@ public sealed class Dispatcher(
         catch (Exception ex)
         {
             return RpcResponse.Err(ex.Message);
+        }
+    }
+
+    // ── Streaming ops: many response frames pushed over the caller's ONE connection ──
+    // The connection is the stream: each emitted frame is a normal {ok,result} envelope,
+    // the last one carrying the op's terminal marker, then the service closes the pipe.
+    // Client disconnect (broken pipe) is the cancel signal — no cancel op, no polling.
+
+    /// <summary>Handles the streaming ops. Returns false when <paramref name="request"/> is
+    /// a regular single-response op (the caller then uses <see cref="DispatchAsync"/>).</summary>
+    public async Task<bool> TryDispatchStreamAsync(byte[] request, Func<byte[], Task> writeFrame, CancellationToken ct)
+    {
+        RpcRequest? req;
+        try { req = MessagePack.MessagePackSerializer.Deserialize<RpcRequest>(request, MsgPack.Options); }
+        catch { return false; }
+
+        switch (req?.Op)
+        {
+            // Full-text search: result batches stream until Done.
+            case "ftsSearchStream":
+            {
+                IdleMemoryTrimmer.Touch();
+                var a = MsgPack.De<FtsSearchStreamArgs>(req.Args);
+                await fts.StreamSearch(
+                    a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv,
+                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct);
+                return true;
+            }
+
+            // Index-build progress: a snapshot per change, ends at the terminal state.
+            case "ftsIndexProgressStream":
+            {
+                IdleMemoryTrimmer.Touch();
+                await fts.StreamIndexingProgress(
+                    s => writeFrame(RpcResponse.Ok(MsgPack.Ser(s))), ct);
+                return true;
+            }
+
+            default:
+                return false;
         }
     }
 
