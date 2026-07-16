@@ -390,8 +390,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           }
           const chunk = poll.results ?? []
           if (chunk.length) {
-            await enrichTocPaths(chunk)
-            if (executedQuery.value !== q) { serviceCallVoid('ftsSearchCancel', { searchId }); return }
+            // Hits arrive fully enriched (bookId + tocText) from the service — no client-side
+            // enrichment round-trip. The service owns that lookup so every consumer gets
+            // complete results without replicating it.
             for (const c of chunk) acc.push(c) // spread-push would overflow on very large chunks
             offset += chunk.length
             results.value = acc.slice() // one flush per batch — the long-poll already paces the cadence
