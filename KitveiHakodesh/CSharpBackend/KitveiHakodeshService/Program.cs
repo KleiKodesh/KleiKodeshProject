@@ -24,18 +24,4 @@ builder.Services.AddHostedService<FtsIndexingStarter>();
 builder.Services.AddHostedService<IdleMemoryTrimmer>();
 
 var host = builder.Build();
-
-// Warm the static catalog cache in the background so even the first catalog open is
-// served from memory (getAllBooks is a ~70-90ms GROUP BY otherwise). Best-effort.
-_ = Task.Run(() =>
-{
-    try
-    {
-        var seforim = host.Services.GetRequiredService<SeforimDbService>();
-        seforim.GetAllCategories();
-        seforim.GetAllBooks();
-    }
-    catch { /* no DB yet — the lazy cache will fill on first real request */ }
-});
-
 host.Run();
