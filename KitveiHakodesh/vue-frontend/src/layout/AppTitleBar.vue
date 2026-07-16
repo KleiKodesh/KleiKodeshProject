@@ -93,17 +93,13 @@ const isPdfTab = computed(
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
-// Interaction hint depends on the environment:
-//   - Demo/standalone (native chrome strip): single click = search;
-//     Ctrl+T opens the (native) tab list.
-//   - VSTO / dev browser (no strip): single click = tab list;
-//     double click = search.
-// Ctrl+E focuses the search everywhere.
+// Interaction hint depends on the environment (single-click action differs),
+// but double-click always opens the quick-navigation flow.
 // Each hint line is separated by a newline (tooltips render \n as line breaks).
 const barTitleHint = computed(() =>
   hasNativeChromeTabs
-    ? 'לחץ לחיפוש (Ctrl+E)\nCtrl+T לרשימת הלשוניות'
-    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T)\nלחיצה כפולה לחיפוש (Ctrl+E)',
+    ? 'לחץ לחיפוש (Ctrl+E)\nלחיצה כפולה לניווט מהיר באפליקציה'
+    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T)\nלחיצה כפולה לניווט מהיר באפליקציה',
 )
 
 const barTitle = computed(() => {
@@ -522,7 +518,9 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   position: relative;
-  cursor: pointer;
+  /* Regular arrow over the bar and the breadcrumb/title; only the buttons and
+     breadcrumb chevrons use the pointer (hand). */
+  cursor: default;
 }
 .bar-start {
   display: flex;
@@ -562,7 +560,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   font-size: 0.82rem;
   color: var(--text-secondary);
   white-space: nowrap;
-  cursor: text;
+  cursor: default;
   /* Blend into the title bar (--bg-secondary) rather than stand out as a filled
      field — a subtle, uniform 1px frame is enough of an input hint. All four
      sides match at rest; the accent underline appears only on focus. */

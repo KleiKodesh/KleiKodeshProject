@@ -37,6 +37,13 @@ const props = defineProps<{
   anchorLeft: number
   anchorRight: number
   maxHeight: number
+  /**
+   * Optional minimum width (px). The dropdown normally spans exactly the anchor
+   * width (both left+right pinned). When minWidth is set and the anchor is
+   * narrower, the left edge is released so the box keeps its right edge on the
+   * anchor and grows leftward (RTL) up to at least minWidth.
+   */
+  minWidth?: number
 }>()
 
 const emit = defineEmits<{
@@ -49,6 +56,33 @@ const emit = defineEmits<{
 }>()
 
 const dropdownRef = ref<HTMLElement | null>(null)
+
+// Positioning: pin left+right to the anchor so the dropdown spans exactly the
+// anchor width (the wide-screen case). If a minWidth is given and the anchor is
+// narrower, release the left edge and let the box grow leftward (RTL) from its
+// pinned right edge up to minWidth — but never past the viewport: max-width is
+// capped to the room from the anchor's right edge to the left margin, so on a
+// screen narrower than minWidth it fits with an 8px gutter for legibility.
+const VIEWPORT_GUTTER = 8
+const dropdownStyle = computed(() => {
+  const base: Record<string, string> = {
+    top: props.anchorTop + 'px',
+    right: props.anchorRight + 'px',
+    maxHeight: props.maxHeight + 'px',
+  }
+  const anchorWidth = window.innerWidth - props.anchorLeft - props.anchorRight
+  if (props.minWidth && anchorWidth < props.minWidth) {
+    // Grow leftward from the pinned right edge. Available room = everything from
+    // the right edge to the left gutter.
+    const available = window.innerWidth - props.anchorRight - VIEWPORT_GUTTER
+    base.left = 'auto'
+    base.minWidth = Math.min(props.minWidth, available) + 'px'
+    base.maxWidth = available + 'px'
+  } else {
+    base.left = props.anchorLeft + 'px'
+  }
+  return base
+})
 
 // The three sections in priority order. The prioritized source comes first;
 // the other two follow in their natural default order.
@@ -143,12 +177,7 @@ function getFileIcon(fileName: string): FileIconInfo {
       ref="dropdownRef"
       class="home-search-dropdown"
       tabindex="0"
-      :style="{
-        top: anchorTop + 'px',
-        left: anchorLeft + 'px',
-        right: anchorRight + 'px',
-        maxHeight: maxHeight + 'px',
-      }"
+      :style="dropdownStyle"
       @click.stop
       @focus="onDropdownFocus"
       @blur="onDropdownBlur"
