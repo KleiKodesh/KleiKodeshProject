@@ -261,6 +261,7 @@ export const KEYS = {
   SETTINGS_COMPACT_MODE: 'compactMode',
   SETTINGS_SHOW_RECENTLY_OPENED: 'showRecentlyOpened',
   SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
+  SETTINGS_FTS_SORT_ORDER: 'search.sortOrder',
   // tab list is also localStorage (small JSON, needed synchronously at boot)
   tabsList: (wsId: string) => `tabs:${wsId}`,
 

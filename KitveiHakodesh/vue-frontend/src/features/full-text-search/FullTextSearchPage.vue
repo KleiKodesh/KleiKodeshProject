@@ -336,6 +336,7 @@ onBeforeUnmount(() => {
       :at-filter-count="atFilters.length"
       :is-advanced-open="isAdvancedOpen"
       :is-advanced-active="isAdvancedActive"
+      v-model:sort-order="settings.ftsSortOrder"
       @search="onSearch"
       @cancel="cancelSearch"
       @toggle-filter="isFilterOpen = !isFilterOpen"

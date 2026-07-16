@@ -6,8 +6,12 @@ import {
   IconDismiss20Regular,
   IconFilter20Regular,
   IconOptions20Regular,
+  IconArrowSort20Regular,
+  IconCheckmark20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import { useDropdownClose } from '@/composables/useDropdownClose'
+import type { FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 const props = defineProps<{
   searchQuery: string
@@ -18,6 +22,7 @@ const props = defineProps<{
   atFilterCount: number
   isAdvancedOpen: boolean
   isAdvancedActive: boolean
+  sortOrder: FullTextSearchSortOrder
   disabled?: boolean
 }>()
 const emit = defineEmits<{
@@ -27,12 +32,37 @@ const emit = defineEmits<{
   toggleAdvanced: []
   clear: []
   'update:searchQuery': [string]
+  'update:sortOrder': [FullTextSearchSortOrder]
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
 const filterBtnRef = ref<HTMLElement | null>(null)
 const advancedBtnRef = ref<HTMLElement | null>(null)
 const localQuery = ref(props.searchQuery)
+
+// ── Sort dropdown ─────────────────────────────────────────────────────────────
+const SORT_OPTIONS: { value: FullTextSearchSortOrder; label: string }[] = [
+  { value: 'lineId', label: 'סדר מקורי' },
+  { value: 'relevance', label: 'רלוונטיות' },
+]
+const isSortDropdownOpen = ref(false)
+const sortToggleButtonRef = ref<HTMLElement | null>(null)
+const sortControlRef = ref<HTMLElement | null>(null)
+
+const { justClosed } = useDropdownClose(
+  sortControlRef,
+  () => { isSortDropdownOpen.value = false },
+  { toggleButton: sortToggleButtonRef },
+)
+
+function toggleSortDropdown() {
+  if (justClosed.value) return
+  isSortDropdownOpen.value = !isSortDropdownOpen.value
+}
+function selectSortOrder(value: FullTextSearchSortOrder) {
+  emit('update:sortOrder', value)
+  isSortDropdownOpen.value = false
+}
 
 watch(
   () => props.searchQuery,
@@ -101,6 +131,34 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       >
         <IconOptions20Regular />
       </button>
+      <!-- Sort dropdown -->
+      <div ref="sortControlRef" class="sort-control">
+        <button
+          ref="sortToggleButtonRef"
+          class="bar-btn"
+          :class="{ 'filter-active': sortOrder !== 'lineId' }"
+          :title="'מיון: ' + SORT_OPTIONS.find((o) => o.value === sortOrder)!.label"
+          @click.stop="toggleSortDropdown"
+        >
+          <IconArrowSort20Regular />
+        </button>
+        <div v-if="isSortDropdownOpen" class="sort-dropdown">
+          <div
+            v-for="option in SORT_OPTIONS"
+            :key="option.value"
+            role="option"
+            class="sort-dropdown__item"
+            :class="{ 'is-selected': sortOrder === option.value }"
+            @click="selectSortOrder(option.value)"
+          >
+            <IconCheckmark20Regular
+              class="sort-dropdown__checkmark"
+              :class="{ 'is-visible': sortOrder === option.value }"
+            />
+            <span>{{ option.label }}</span>
+          </div>
+        </div>
+      </div>
     </template>
     <input
       ref="inputRef"
@@ -185,6 +243,52 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
 }
 .filter-active {
   color: var(--accent-color);
+}
+/* Sort control */
+.sort-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.sort-dropdown {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 140px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  z-index: 100;
+}
+.sort-dropdown__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sort-dropdown__item:hover {
+  background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+.sort-dropdown__item:active {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+.sort-dropdown__item.is-selected {
+  color: var(--accent-color);
+}
+.sort-dropdown__checkmark {
+  flex-shrink: 0;
+  opacity: 0;
+  color: var(--accent-color);
+}
+.sort-dropdown__checkmark.is-visible {
+  opacity: 1;
 }
 .result-count-badge {
   font-size: 11px;

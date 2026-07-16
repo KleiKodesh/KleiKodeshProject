@@ -35,6 +35,8 @@ const DEFAULTS = {
   searchExpandKetiv: true,
   searchWildcardWrap: false,
   searchGrammarWrap: false,
+  // How full-text-search results are ordered ('lineId' = original order, 'relevance' = by word distance)
+  ftsSortOrder: 'lineId' as import('@/features/full-text-search/fullTextSearchTypes').FullTextSearchSortOrder,
   copyCleanText: false,
   copyAsBlob: false,
   copySourcePosition: null as 'end' | 'start' | null,
@@ -75,6 +77,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
   const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
+  const ftsSortOrder = ref<import('@/features/full-text-search/fullTextSearchTypes').FullTextSearchSortOrder>(DEFAULTS.ftsSortOrder)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
   const copyAsBlob = ref(DEFAULTS.copyAsBlob)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
@@ -161,6 +164,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
+    loadSetting(KEYS.SETTINGS_FTS_SORT_ORDER, ftsSortOrder)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
     loadSetting(KEYS.SETTINGS_COPY_AS_BLOB, copyAsBlob)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
@@ -207,6 +211,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
   persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
+  persistSetting(ftsSortOrder, KEYS.SETTINGS_FTS_SORT_ORDER)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
   persistSetting(copyAsBlob, KEYS.SETTINGS_COPY_AS_BLOB)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
@@ -280,6 +285,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
     searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
+    ftsSortOrder.value = DEFAULTS.ftsSortOrder
     copyCleanText.value = DEFAULTS.copyCleanText
     copyAsBlob.value = DEFAULTS.copyAsBlob
     copySourcePosition.value = DEFAULTS.copySourcePosition
@@ -302,6 +308,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
+    ftsSortOrder,
     copyCleanText,
     copyAsBlob,
     copySourcePosition,

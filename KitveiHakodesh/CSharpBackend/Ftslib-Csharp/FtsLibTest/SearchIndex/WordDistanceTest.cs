@@ -129,6 +129,26 @@ namespace FtsLibTest
                 originalCount:    3,
                 expectedDistance: 4);
 
+            // ── 10b. Multiple occurrences — reports the MINIMUM distance ──
+            // "כי" appears twice: once 4 words before ביצחק, once adjacent to it.
+            // The tightest window is the adjacent pair, so distance must be 0 — the
+            // metric is a boolean-ish "closest occurrence", not affected by the far pair
+            // or by how many times the words appear.
+            Check(ref passed, ref failed,
+                name:             "repeated words: far pair + adjacent pair → minimum distance 0",
+                content:          "כי אחד שתים שלש ביצחק ואמר כי ביצחק יקרא",
+                groups:           G("כי", "ביצחק"),
+                originalCount:    2,
+                expectedDistance: 0);
+
+            // Adjacent pair first, then a far pair — order must not matter.
+            Check(ref passed, ref failed,
+                name:             "repeated words: adjacent pair then far pair → minimum distance 0",
+                content:          "כי ביצחק יקרא לך זרע ואמר עוד כי אחד שתים ביצחק",
+                groups:           G("כי", "ביצחק"),
+                originalCount:    2,
+                expectedDistance: 0);
+
             // ── 11. maxWordDistance filter: passes when within limit ──
 
             CheckFilter(ref passed, ref failed,

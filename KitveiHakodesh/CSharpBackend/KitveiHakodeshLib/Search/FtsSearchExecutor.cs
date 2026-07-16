@@ -145,6 +145,7 @@ namespace KitveiHakodeshLib.Search
                         bookTitle    = result.BookTitle,
                         tocText      = "",
                         score        = snippet.Score,
+                        wordDistance = snippet.WordDistance,
                         snippet      = snippet.Html,
                         matchedTerms = matchedTerms.ToArray()
                     });
