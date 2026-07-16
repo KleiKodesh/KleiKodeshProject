@@ -65,7 +65,7 @@ namespace FtsLibTest
                     {
                         cmd.CommandText =
                             "SELECT term FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                        cmd.Parameters.Add("@p", Microsoft.Data.Sqlite.SqliteType.Text).Value = like;
+                        cmd.Parameters.Add("@p", System.Data.DbType.String).Value = like;
                         using (var r = cmd.ExecuteReader())
                             while (r.Read()) all.Add(r.GetString(0));
                     }

@@ -260,6 +260,24 @@ namespace FtsLib.SeforimDb
             return SearchPipeline.SearchIds(query, _indexPath, livePaths, lease, expandKetiv, filterIds, ct);
         }
 
+        /// <summary>
+        /// Same results as <see cref="Search"/> (ascending line ID), but the DB content
+        /// fetch runs across multiple connections in parallel and the full ordered result
+        /// set is returned at once instead of a lazy stream. For a broad query the content
+        /// read is the dominant cost; parallelizing it is the biggest single win on a
+        /// multi-core box. Use this when you want the whole set fastest and will process
+        /// it in parallel anyway (e.g. snippet generation); <see cref="Search"/> stays the
+        /// low-latency, first-result-fast streaming path.
+        /// </summary>
+        /// <param name="maxDop">Max parallel connections; 0 = Environment.ProcessorCount.</param>
+        public IReadOnlyList<SearchResult> SearchParallel(string query, int maxDop = 0,
+            bool expandKetiv = false, IEnumerable<int> filterIds = null, CancellationToken ct = default)
+        {
+            if (maxDop <= 0) maxDop = Environment.ProcessorCount;
+            var lease = AcquireSearchLease(out var livePaths);
+            return SearchPipeline.SearchParallel(query, _indexPath, _dbPath, livePaths, lease, maxDop, expandKetiv, filterIds, ct);
+        }
+
         // ── Snippets ──────────────────────────────────────────────────
 
         public SnippetResult GenerateSnippet(int lineId, string query)

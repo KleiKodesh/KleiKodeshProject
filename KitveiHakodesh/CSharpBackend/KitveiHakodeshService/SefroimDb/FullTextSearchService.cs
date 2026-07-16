@@ -314,12 +314,34 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
         {
             var index = GetIndex();
             var ct = session.Cts.Token;
+            // Content fetch STREAMS from one SQLite reader (sequential I/O, cache-friendly
+            // even cold, and it overlaps naturally with the snippet stage below); snippet
+            // generation is the dominant CPU cost and is done per-batch across all cores.
+            // Pull hits in ordered batches and snippet each batch in parallel, appending
+            // passing hits in order — this preserves result order AND streaming cadence, so
+            // the first hits paint in tens of milliseconds instead of after the whole set.
+            //
+            // NOTE: a whole-set parallel fetch (SeforimIndex.SearchParallel) is ~2x faster
+            // at the fetch step in isolation (see FetchBenchTest), but it did NOT help here:
+            // for large result sets the service wall-clock is dominated by serializing and
+            // transporting tens of thousands of hits over the pipe (~85%), not by fetch, and
+            // its up-front barrier delayed the first paint. Streaming + parallel snippet wins
+            // on first-result latency, which is what the search feels like. SearchParallel
+            // stays available as a bulk-fetch API for callers that consume the whole set.
+            const int SnippetBatch = 256;
+            var batch = new List<SearchResult>(SnippetBatch);
             foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
             {
                 ct.ThrowIfCancellationRequested();
-                if (TryBuildHit(index, hit, requireOrdered, contextWords, maxWordDistance, out var built))
-                    lock (session.Hits) session.Hits.Add(built!);
+                batch.Add(hit);
+                if (batch.Count >= SnippetBatch)
+                {
+                    FlushSnippetRange(session, index, batch, 0, batch.Count, requireOrdered, contextWords, maxWordDistance, ct);
+                    batch.Clear();
+                }
             }
+            if (batch.Count > 0)
+                FlushSnippetRange(session, index, batch, 0, batch.Count, requireOrdered, contextWords, maxWordDistance, ct);
         }
         catch (OperationCanceledException) { /* cancelled or superseded */ }
         catch (Exception ex)
@@ -328,6 +350,25 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger)
             logger.LogError(ex, "FTS streaming search failed");
         }
         finally { session.Done = true; }
+    }
+
+    /// <summary>Snippet-generate results[start..end) across all cores (thread-safe: FtsLib's
+    /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, then append the
+    /// passing hits to the session buffer under a single lock.</summary>
+    private static void FlushSnippetRange(SearchSession session, SeforimIndex index,
+        IReadOnlyList<SearchResult> results, int start, int end,
+        bool requireOrdered, int contextWords, int maxWordDistance, CancellationToken ct)
+    {
+        int count = end - start;
+        var built = new FtsHit?[count];
+        Parallel.For(0, count, new ParallelOptions { CancellationToken = ct }, i =>
+        {
+            if (TryBuildHit(index, results[start + i], requireOrdered, contextWords, maxWordDistance, out var h))
+                built[i] = h;
+        });
+        lock (session.Hits)
+            for (int i = 0; i < built.Length; i++)
+                if (built[i] is { } hit) session.Hits.Add(hit);
     }
 
     // Long-poll: the request is held open until a batch is ready, so results arrive

@@ -1,9 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- net10.0 (plain, NOT -windows) so the net10.0 KitveiHakodeshService can reference it. -->
-    <TargetFrameworks>net48;net10.0</TargetFrameworks>
-    <ProjectGuid>{76F9DAA9-374F-40F9-8511-3239FB6E846E}</ProjectGuid>
+    <!-- net10-ONLY. The .NET Framework build now lives in the separate FtsLib.Net48
+         project (reverted to System.Data.SQLite) used by the hosted KitveiHakodeshLib /
+         DemoApp. THIS project is the forward, net10-optimized FTS engine used by
+         KitveiHakodeshService — free to use hardware intrinsics net48 can't. -->
+    <TargetFramework>net10.0</TargetFramework>
     <RootNamespace>FtsLib</RootNamespace>
     <AssemblyName>FtsLib</AssemblyName>
     <!-- Keep the hand-written Properties\AssemblyInfo.cs (holds InternalsVisibleTo("FtsLibTest")). -->
@@ -11,33 +13,13 @@
     <Deterministic>true</Deterministic>
     <!-- CA1416: Microsoft.VisualBasic.Interaction.GetSetting is Windows-only; fine (runs on Windows). -->
     <NoWarn>$(NoWarn);CA1416</NoWarn>
+    <!-- For SIMD hot-path optimizations (Vector256/512 loads, hardware popcount). -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <!--
-    SQLite via Microsoft.Data.Sqlite (SQLitePCLRaw / native e_sqlite3): AnyCPU — ships x86/x64/arm64
-    native and loads the matching one at runtime by process bitness; AOT/trim-friendly; works on
-    net48 + net10. FtsLib uses raw ADO.NET only (no Dapper), so nothing blocks the service's AOT.
-  -->
   <ItemGroup>
-    <!-- 10.0.x deliberately: it uses the SQLitePCLRaw e_sqlite3 native, which supports AnyCPU
-         (ships x86+x64, picked at runtime by bitness) — required for the net48 VSTO/app.
-         Do NOT move to 11.x: it switched to SourceGear.sqlite3, whose net4x build rejects
-         AnyCPU ("does not support Any CPU builds"). The net10 service can still unify FtsLib's
-         net10 leg up to its own 11.x at build time (net10 uses a RID, so AnyCPU is moot there). -->
+    <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict). -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-  </ItemGroup>
-
-  <!-- net48 backfills — these are in-box on net10 (FtsLib's own Span/Vector/ArrayPool code). -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <PackageReference Include="Microsoft.Bcl.AsyncInterfaces" Version="9.0.1" />
-    <PackageReference Include="System.Buffers" Version="4.6.1" />
-    <PackageReference Include="System.Memory" Version="4.6.3" />
-    <PackageReference Include="System.Numerics.Vectors" Version="4.6.1" />
-    <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" />
-    <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
-    <!-- Framework assemblies the SDK does not auto-reference on net4x but the code needs. -->
-    <Reference Include="Microsoft.VisualBasic" />
-    <Reference Include="System.Data" />
   </ItemGroup>
 
 </Project>

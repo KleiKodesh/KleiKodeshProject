@@ -3,6 +3,8 @@ using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace FtsLib.SeforimDb
 {
@@ -234,6 +236,140 @@ namespace FtsLib.SeforimDb
                         r.GetInt32(0),
                         r.IsDBNull(1) ? string.Empty : r.GetString(1),
                         r.IsDBNull(2) ? string.Empty : r.GetString(2));
+        }
+
+        // ── Parallel search-result fetching (net10) ───────────────────
+        //
+        // The dominant cost of a broad query is Phase 2: reading (content, bookTitle)
+        // for every matched line from the 7 GB seforim DB. Done over one connection it
+        // is strictly serial. Because the matched IDs are fully materialized (ascending,
+        // unique) BEFORE the fetch, and WAL mode lets any number of readers run at once,
+        // we can split the ID list into contiguous ranges and read each range on its own
+        // connection across cores. Results are placed back into an ordered array (same
+        // order as `ids`), so the parallel fetch is result-identical to the serial one.
+
+        // Below this many rows a single connection is faster than paying N connection-open
+        // costs; above it the parallel read dominates.
+        private const int MinRowsPerFetchWorker = 1500;
+
+        /// <summary>
+        /// Reads (id, content, bookTitle) for the pre-materialized ascending <paramref name="ids"/>
+        /// list using up to <paramref name="maxDop"/> connections concurrently, returning
+        /// <see cref="SearchResult"/>s in the SAME order as <paramref name="ids"/>.
+        /// SqliteConnection is not thread-safe, so each worker owns its own connection.
+        /// </summary>
+        public static SearchResult[] FetchSearchResultsParallel(
+            string dbPath,
+            List<int> ids,
+            System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
+            int originalGroupCount,
+            int maxDop,
+            CancellationToken ct = default)
+        {
+            var results = new SearchResult[ids.Count];
+            if (ids.Count == 0) return results;
+
+            // id -> slot in the ordered output. Built once; a Dictionary supports any
+            // number of concurrent readers as long as it is not being mutated.
+            var idToIndex = new Dictionary<int, int>(ids.Count);
+            for (int i = 0; i < ids.Count; i++) idToIndex[ids[i]] = i;
+
+            int workers = Math.Max(1,
+                Math.Min(maxDop, (ids.Count + MinRowsPerFetchWorker - 1) / MinRowsPerFetchWorker));
+
+            if (workers == 1)
+            {
+                FetchRangeInto(dbPath, ids, 0, ids.Count, idToIndex, matchedGroups, originalGroupCount, results, ct);
+                return results;
+            }
+
+            int per = (ids.Count + workers - 1) / workers;
+            Parallel.For(0, workers,
+                new ParallelOptions { MaxDegreeOfParallelism = workers, CancellationToken = ct },
+                w =>
+                {
+                    int start = w * per;
+                    if (start >= ids.Count) return;
+                    int end = Math.Min(start + per, ids.Count);
+                    FetchRangeInto(dbPath, ids, start, end, idToIndex, matchedGroups, originalGroupCount, results, ct);
+                });
+            return results;
+        }
+
+        /// <summary>Read ids[start..end) on a dedicated connection, writing each row into
+        /// <paramref name="results"/> at its ordered slot (via <paramref name="idToIndex"/>).</summary>
+        private static void FetchRangeInto(
+            string dbPath,
+            List<int> ids, int start, int end,
+            Dictionary<int, int> idToIndex,
+            System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
+            int originalGroupCount,
+            SearchResult[] results,
+            CancellationToken ct)
+        {
+            const int ChunkSize = 500;
+            using (var conn = OpenReadConnection(dbPath))
+            using (var cmd = conn.CreateCommand())
+            {
+                var paramNames = new string[ChunkSize];
+                for (int i = 0; i < ChunkSize; i++)
+                {
+                    paramNames[i] = "@p" + i;
+                    cmd.Parameters.Add(paramNames[i], SqliteType.Integer);
+                }
+
+                for (int s = start; s < end; s += ChunkSize)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    int e = Math.Min(s + ChunkSize, end);
+                    int count = e - s;
+
+                    var sb = new System.Text.StringBuilder(
+                        "SELECT l.id, l.content, b.title" +
+                        " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
+                        " WHERE l.id IN (");
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append(paramNames[i]);
+                        cmd.Parameters[paramNames[i]].Value = ids[s + i];
+                    }
+                    sb.Append(')');
+                    cmd.CommandText = sb.ToString();
+
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read())
+                        {
+                            int id = r.GetInt32(0);
+                            results[idToIndex[id]] = new SearchResult(
+                                id,
+                                r.IsDBNull(2) ? string.Empty : r.GetString(2),
+                                r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                                matchedGroups,
+                                originalGroupCount);
+                        }
+                }
+            }
+        }
+
+        /// <summary>Opens a fresh connection tuned for parallel content reads. The DB is
+        /// already in WAL mode (set by the primary connection), so this only sets the
+        /// read-side pragmas — it never touches journal_mode, avoiding write-lock
+        /// contention when several workers open at once. Cache is deliberately modest
+        /// (16 MB) since N of these run concurrently; mmap is OS-shared.</summary>
+        private static SqliteConnection OpenReadConnection(string dbPath)
+        {
+            var conn = new SqliteConnection($"Data Source={dbPath}");
+            conn.Open();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    "PRAGMA cache_size=-16384;" +   // 16 MB page cache per worker
+                    "PRAGMA temp_store=MEMORY;" +
+                    "PRAGMA mmap_size=268435456;";  // 256 MB memory-mapped I/O (OS-shared)
+                cmd.ExecuteNonQuery();
+            }
+            return conn;
         }
 
         /// <summary>
