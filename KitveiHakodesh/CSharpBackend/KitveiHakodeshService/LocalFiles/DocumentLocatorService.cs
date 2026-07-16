@@ -123,8 +123,11 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             using var pipe = new NamedPipeClientStream(
                 ".", DlPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
             await pipe.ConnectAsync(ConnectTimeoutMs, ct);
-            await FrameProtocol.WriteFrameAsync(pipe, request, ct);
-            return await FrameProtocol.ReadFrameAsync(pipe, ct);
+            // The upstream DocumentLocator pipe speaks UTF-8 JSON (not our msgpack channel),
+            // so encode/decode the string ourselves over the byte-oriented frame protocol.
+            await FrameProtocol.WriteFrameAsync(pipe, System.Text.Encoding.UTF8.GetBytes(request), ct);
+            byte[]? reply = await FrameProtocol.ReadFrameAsync(pipe, ct);
+            return reply is null ? null : System.Text.Encoding.UTF8.GetString(reply);
         }
         catch (TimeoutException) { return null; }
         catch (IOException) { return null; }
