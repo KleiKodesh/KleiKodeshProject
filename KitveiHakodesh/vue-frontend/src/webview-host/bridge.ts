@@ -514,13 +514,56 @@ export async function pickFolder(): Promise<string | null> {
   return result.folderPath
 }
 
+// ── Seforim DB path (settings page + setup wizard) ─────────────────────────────
+// Hosted: the C# host owns the setting. Dev: the KitveiHakodesh service owns it —
+// BOTH persist to the same registry value (KitveiHakodesh\Database\Path), so the
+// choice made in either mode is the one the app and the service agree on.
+
+export interface DbPathInfo {
+  path: string
+  isCustom: boolean
+  exists: boolean
+}
+
+/** Current seforim DB path (+ whether user-set and whether the file exists). */
+export async function getDbPathInfo(): Promise<DbPathInfo | null> {
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev — ask the service.
+    try {
+      return await serviceCall<DbPathInfo>('getSeforimDbPath')
+    } catch {
+      return null
+    }
+  }
+  const p = window.__webviewDbPath
+  return p ? { path: p, isCustom: true, exists: true } : null
+}
+
+/**
+ * Persist a new seforim DB path. Dev: the service writes the registry value and
+ * restarts itself to re-resolve everything (DB, user settings, FTS — a stale FTS
+ * index is auto-detected and rebuilt); throws when the file doesn't exist.
+ */
+export async function setDbPathDev(path: string): Promise<void> {
+  const res = await serviceCall<{ path: string; error?: string }>('setSeforimDbPath', { path })
+  if (res.error) throw new Error(res.error)
+}
+
 /**
  * Reset the database path to the auto-resolved default (Zayit / Otzaria).
- * C# reopens the DB at that path and triggers a search index reset if the path changed.
+ * Hosted: C# reopens the DB and resets the search index if the path changed.
+ * Dev: the service clears the registry value and restarts.
  * Returns the resolved default path so the frontend can update its display.
  */
 export async function clearDbPath(): Promise<string | null> {
-  if (typeof window.__webviewAction !== 'function') return null
+  if (typeof window.__webviewAction !== 'function') {
+    try {
+      const res = await serviceCall<{ path: string }>('clearSeforimDbPath')
+      return res.path ?? null
+    } catch {
+      return null
+    }
+  }
   const result = await action<{ path?: string; error?: string }>('clearDbPath')
   if (result.error || !result.path) return null
   return result.path

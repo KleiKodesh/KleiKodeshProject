@@ -15,7 +15,7 @@ namespace KitveiHakodeshService.UserSettings;
 /// </summary>
 public sealed class UserSettingsService
 {
-    private readonly string? _dbPath = ResolvePath(Environment.GetEnvironmentVariable("DB_PATH"));
+    private readonly string? _dbPath = ResolvePath(SefroimDb.SeforimDbLocator.Resolve());
     private readonly object _initLock = new();
     private bool _initialized;
 

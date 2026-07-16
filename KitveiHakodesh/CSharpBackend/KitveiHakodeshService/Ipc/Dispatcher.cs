@@ -52,6 +52,52 @@ public sealed class Dispatcher(
                     lifetime.StopApplication();
                     return RpcResponse.Ok(MsgPack.Ser(new ShuttingDownResult()));
 
+                // ── Seforim DB location (settings page / setup wizard) ─────────
+                // Persisted in the SAME registry value KitveiHakodeshLib uses
+                // (KitveiHakodesh\Database\Path), so the hosted app and this service
+                // always agree. Changing it restarts the service (after the reply
+                // flushes) so every component re-resolves; the dev courier respawns
+                // the service on the next request. A stale FTS index is detected and
+                // rebuilt on startup via the fts.ver source-DB marker.
+                case "getSeforimDbPath":
+                {
+                    string p = SeforimDbLocator.Resolve();
+                    return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
+                    {
+                        Path = p,
+                        IsCustom = SeforimDbLocator.IsCustom(),
+                        Exists = File.Exists(p),
+                    }));
+                }
+
+                case "setSeforimDbPath":
+                {
+                    var a = MsgPack.De<DbPathArgs>(req.Args);
+                    string p = (a.Path ?? "").Trim().Trim('"');
+                    if (string.IsNullOrWhiteSpace(p))
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Error = "empty path" }));
+                    if (!File.Exists(p))
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = p, Error = "file not found" }));
+
+                    SeforimDbLocator.SaveRegistryPath(p);
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
+                    {
+                        Path = p, IsCustom = true, Exists = true, Restarting = true,
+                    }));
+                }
+
+                case "clearSeforimDbPath":
+                {
+                    SeforimDbLocator.ClearRegistryPath();
+                    string p = SeforimDbLocator.Resolve();
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
+                    {
+                        Path = p, IsCustom = false, Exists = File.Exists(p), Restarting = true,
+                    }));
+                }
+
                 case "locateDocuments":
                 {
                     var args = MsgPack.De<LocateDocumentsArgs>(req.Args);
@@ -336,6 +382,13 @@ public sealed class Dispatcher(
             return RpcResponse.Err(ex.Message);
         }
     }
+
+    /// <summary>Graceful restart shortly after the current reply flushes: host shutdown
+    /// cancels the FTS build cleanly (resumable) and releases the index lock; the dev
+    /// courier (or the SCM, when installed) starts a fresh instance that re-resolves
+    /// the seforim DB path.</summary>
+    private void RestartSoon() =>
+        _ = Task.Delay(400).ContinueWith(_ => lifetime.StopApplication());
 
     private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 

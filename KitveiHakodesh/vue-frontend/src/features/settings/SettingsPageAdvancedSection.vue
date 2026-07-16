@@ -13,17 +13,44 @@ import {
   openExcludedFoldersManager,
   getTurnOffUpdates,
   setTurnOffUpdates,
+  getDbPathInfo,
+  setDbPathDev,
 } from '@/webview-host/bridge'
 
 // ── Database path ─────────────────────────────────────────────────────────────
+// Hosted: the C# host owns the setting (native file picker + __webviewSetDbPath).
+// Dev: the KitveiHakodesh service owns it — same registry value, so both modes
+// read/write one setting. In dev the path is typed into the editable field (no
+// native dialog in a browser); the service validates, persists and restarts.
 
+const isDev = typeof window.__webviewAction !== 'function'
 const dbPath = ref(window.__webviewDbPath ?? '')
+
+onMounted(async () => {
+  if (!dbPath.value) {
+    const info = await getDbPathInfo()
+    if (info) dbPath.value = info.path
+  }
+})
 
 function pickDbPath() {
   window.__webviewPickDbPath?.()
 }
 
 async function commitDbPath(newPath: string) {
+  if (isDev) {
+    const prev = dbPath.value
+    try {
+      await setDbPathDev(newPath)
+      dbPath.value = newPath
+      // The service restarts on the new DB (and rebuilds a stale FTS index).
+      // Reload so every store refetches from it; /khs waits for the respawn.
+      setTimeout(() => window.location.reload(), 800)
+    } catch {
+      dbPath.value = prev
+    }
+    return
+  }
   if (!window.__webviewSetDbPath) return
   try {
     await window.__webviewSetDbPath(newPath)
@@ -58,6 +85,11 @@ async function resetDbPath() {
   const defaultPath = await clearDbPath()
   if (defaultPath !== null) {
     dbPath.value = defaultPath
+    if (isDev) {
+      // Service restarted on the default DB — reload so stores refetch.
+      setTimeout(() => window.location.reload(), 800)
+      return
+    }
     onDbReady(defaultPath)
   }
 }
@@ -112,21 +144,21 @@ async function applyTurnOffUpdates(value: boolean) {
 
     <!-- מסד נתונים -->
     <div class="subsection-label">מסד נתונים</div>
-    <template v-if="isHosted">
-      <div class="db-path-row">
-        <span class="db-path-label">נתיב מסד הנתונים</span>
-        <SettingsPagePathField
-          :value="dbPath"
-          placeholder="לא נבחר נתיב"
-          :clearable="true"
-          :editable="true"
-          @pick="pickDbPath"
-          @clear="resetDbPath"
-          @commit="commitDbPath"
-        />
-      </div>
-    </template>
-    <p v-else class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
+    <div class="db-path-row">
+      <span class="db-path-label">נתיב מסד הנתונים</span>
+      <SettingsPagePathField
+        :value="dbPath"
+        placeholder="לא נבחר נתיב"
+        :clearable="true"
+        :editable="true"
+        @pick="pickDbPath"
+        @clear="resetDbPath"
+        @commit="commitDbPath"
+      />
+    </div>
+    <p v-if="isDev" class="hint-text">
+      שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך.
+    </p>
 
     <!-- חיפוש קבצים -->
     <div class="subsection-label">חיפוש קבצים</div>
