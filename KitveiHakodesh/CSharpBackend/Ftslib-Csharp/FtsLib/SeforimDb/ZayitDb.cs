@@ -27,14 +27,24 @@ namespace FtsLib.SeforimDb
                 return;
             }
 
-            Console.WriteLine($"[ZayitDb] Opening: {resolved}");
-            _connection = new SqliteConnection($"Data Source={resolved}");
+            // seforim.db is a pre-built CONTENT database this app only ever READS (indexing
+            // reads lines; search reads content). Open it READ-ONLY so no write lock is ever
+            // taken — that is what lets the background build and any number of concurrent
+            // searches all read at once. Pooling is left ON (default), so a `new ZayitDb` per
+            // search is a cheap pooled-handle checkout, not a real file open. No journal_mode
+            // is set: read-only cannot change it, and it is not this app's DB mode to dictate.
+            // (Matches SeforimDbService.Open() and the segment readers.)
+            _connection = new SqliteConnection(
+                new SqliteConnectionStringBuilder
+                {
+                    DataSource = resolved,
+                    Mode = SqliteOpenMode.ReadOnly,
+                }.ConnectionString);
             _connection.Open();
 
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText =
-                    "PRAGMA journal_mode=WAL;" +
                     "PRAGMA cache_size=-65536;" +  // up to 64 MB page cache
                     "PRAGMA temp_store=MEMORY;" +
                     "PRAGMA mmap_size=268435456;"; // 256 MB memory-mapped I/O
