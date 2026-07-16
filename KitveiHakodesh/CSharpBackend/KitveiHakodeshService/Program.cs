@@ -21,6 +21,7 @@ builder.Services.AddSingleton<UserSettingsService>();
 builder.Services.AddSingleton<Dispatcher>();
 builder.Services.AddHostedService<PipeServer>();
 builder.Services.AddHostedService<FtsIndexingStarter>();
+builder.Services.AddHostedService<IdleMemoryTrimmer>();
 
 var host = builder.Build();
 
