@@ -44,7 +44,7 @@ const RECENT_MAX = 8
 // title, and the home tab is just "בית".
 const LIST_TITLE_PREFIXES: Record<string, string> = {
   '/book-view': 'ספר',
-  '/pdf-view': 'PDF',
+  '/pdf-view': 'מסמך',
   '/txt-view': 'טקסט',
   '/html-view': 'מסמך',
 }
@@ -54,6 +54,15 @@ function listTitleFor(t: Tab): string {
   const prefix = LIST_TITLE_PREFIXES[t.route]
   const body = t.tocPath ? `${t.title} · ${t.tocPath}` : t.title
   return prefix ? `${prefix}: ${body}` : body
+}
+
+/**
+ * "prefix: title" (no breadcrumb) — drawn on the strip tab itself, but only when the
+ * tab is wide enough to fit it whole; narrow tabs fall back to the clean title.
+ */
+function stripTitleFor(t: Tab): string {
+  const prefix = LIST_TITLE_PREFIXES[t.route]
+  return prefix ? `${prefix}: ${t.title}` : t.title
 }
 
 /** Same identity rules as recentlyOpenedStore.deriveKey, applied to an open tab. */
@@ -111,8 +120,9 @@ export function initTabMirror(): void {
           id: t.id,
           title: t.title,
           // Page-type prefix + full breadcrumb for the native tab-list dropdown and
-          // tab tooltip. The strip tab caption stays `title`.
+          // tab tooltip; prefix-only variant for the strip caption when it fits.
           listTitle: listTitleFor(t),
+          stripTitle: stripTitleFor(t),
           pane: t.pane === 2 ? 2 : 1,
         })),
       activeTabId: tabStore.activeTabId,
