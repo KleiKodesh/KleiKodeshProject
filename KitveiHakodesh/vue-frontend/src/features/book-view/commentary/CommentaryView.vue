@@ -230,6 +230,7 @@ const {
   scrollToFlatIndex,
   captureScrollPos,
   restoreCommentaryScrollPos,
+  claimRestoreIntent,
   topVisibleFlatIndex,
   setupGroupReloadScroll,
 } = useCommentaryScroll(
@@ -321,6 +322,7 @@ defineExpose({
   activeBookId,
   captureScrollPos,
   restoreCommentaryScrollPos,
+  claimRestoreIntent,
   getFilterButtonEl: () => headerNavRef.value?.filterBtnRef ?? null,
 })
 

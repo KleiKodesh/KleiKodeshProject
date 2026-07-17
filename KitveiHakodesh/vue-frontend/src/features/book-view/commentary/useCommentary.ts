@@ -125,7 +125,14 @@ export function useCommentary(
   })
 
   let loadedForLineId: number | null = null
-  let loadUsedSectionRange = false
+  // Signature of the exact line-ID set the current groups were loaded for. Lets the
+  // fallback watcher below detect when the effective query changes (e.g. ctrl-click
+  // extends the manual selection while commentaryLineId — the anchor — stays put).
+  let loadedIdsSignature: string | null = null
+
+  function idsSignature(lineId: number, ids: number[] | null): string {
+    return ids != null && ids.length > 0 ? ids.join(',') : String(lineId)
+  }
 
   // Content backfill batch sizes. The first batch covers roughly what fits on
   // screen so text paints as fast as possible after the structure; later batches
@@ -218,7 +225,7 @@ export function useCommentary(
     loadedForLineId = lineId
     const multiIds = selectedLineIds()
     const isMulti = multiIds != null && multiIds.length > 0
-    loadUsedSectionRange = isMulti
+    loadedIdsSignature = idsSignature(lineId, multiIds)
     groups.value = []
     contentRequested.clear()
     loading.value = true
@@ -316,10 +323,11 @@ export function useCommentary(
         }
       }
     } finally {
+      // Keep the spinner up if the effective ID set has already changed since this
+      // load started — the fallback watcher is about to fire another load().
       const refetchImminent =
-        !loadUsedSectionRange &&
-        selectedLineIds() != null &&
-        selectedLineIds()!.length > 0
+        loadedForLineId === lineId &&
+        idsSignature(lineId, selectedLineIds()) !== loadedIdsSignature
       if (!refetchImminent) loading.value = false
     }
   }
@@ -344,7 +352,7 @@ export function useCommentary(
     async (id) => {
       if (id == null) {
         loadedForLineId = null
-        loadUsedSectionRange = false
+        loadedIdsSignature = null
         groups.value = []
         return
       }
@@ -355,19 +363,19 @@ export function useCommentary(
     { immediate: true },
   )
 
-  // Re-fetch when selectedLineIds becomes available after the initial load.
-  // This handles the rare case where selectedLineIds was still null after the
-  // nextTick yield above (e.g. lines or TOC took more than one tick to arrive).
+  // Re-fetch when the effective set of query line IDs changes while the anchor
+  // (selectedLineId / commentaryLineId) stays the same. This covers two cases:
+  //   1. selectedLineIds arriving after the initial load (lines/TOC took >1 tick).
+  //   2. ctrl-click / shift-click extending the manual selection — the anchor is
+  //      unchanged so watch(selectedLineId) never fires, yet the ID set differs.
+  // Comparing signatures (not a loadUsedSectionRange flag) is what makes case 2
+  // work: a plain click on a line inside a TOC section already loads with a
+  // section range, so the old !loadUsedSectionRange guard suppressed the reload.
   watch(selectedLineIds, (ids) => {
     const lineId = selectedLineId()
-    if (
-      lineId != null &&
-      lineId === loadedForLineId &&
-      !loadUsedSectionRange &&
-      ids != null &&
-      ids.length > 0
-    )
-      void load(lineId)
+    if (lineId == null || lineId !== loadedForLineId) return
+    if (idsSignature(lineId, ids) === loadedIdsSignature) return
+    void load(lineId)
   })
 
   // Lazy — called by useBookView when the related-books dropdown or commentary filter
