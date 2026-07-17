@@ -5,7 +5,7 @@ using System.Text;
 namespace FtsLib.Snippets
 {
     /// <summary>
-    /// Builds a highlighted HTML snippet from raw HTML content and a set of query terms.
+    /// Builds a highlighted HTML snippet from raw HTML content and a prepared query.
     ///
     /// Single-pass design — the raw HTML is scanned exactly once:
     ///   1. <see cref="TokenStream"/> tokenizes the raw HTML, producing tokens with
@@ -15,8 +15,12 @@ namespace FtsLib.Snippets
     ///      no re-scanning of the raw string.
     ///   4. The renderer walks only the snippet range, stripping tags inline.
     ///
-    /// All internal data structures are reused across calls — zero per-call heap
-    /// allocation on the hot path. Not thread-safe — one instance per thread.
+    /// Query state (the term→group map) lives in <see cref="PreparedQueryGroups"/> —
+    /// immutable, built once per query, shared read-only across every line and every
+    /// thread. The builder itself holds only pure per-call scratch buffers (token
+    /// stream, group counters, render buffer), reused across calls with zero
+    /// per-call heap allocation. Per-line cost is therefore independent of how many
+    /// terms the query expanded to. Not thread-safe — one instance per thread.
     /// </summary>
     internal sealed class SnippetBuilder
     {
@@ -28,20 +32,11 @@ namespace FtsLib.Snippets
         // (e.g. a single paragraph with no word breaks). Normal lines never hit this.
         private const int SafetyCeiling = 4000;
 
-        private readonly TokenStream _tokenStream = new TokenStream();
+        // ── Per-call scratch (no query state — that is PreparedQueryGroups) ──
 
-        // ── Reused per-call state ─────────────────────────────────────
-
-        // A term can appear in multiple AND groups (e.g. "אין דרך אין תורה" has
-        // "אין" in group 0 and group 2). Map term → all group indices it belongs to
-        // so every token occurrence can cover any of its owning groups.
-        private readonly Dictionary<string, List<int>> _termToGroups =
-            new Dictionary<string, List<int>>(System.StringComparer.Ordinal);
-        private int[] _groupCount = new int[8];
-
-        private readonly HashSet<string> _termSet    = new HashSet<string>(System.StringComparer.Ordinal);
-        private readonly HashSet<string> _allTerms   = new HashSet<string>(System.StringComparer.Ordinal);
-        private readonly StringBuilder   _renderBuf  = new StringBuilder(512);
+        private readonly TokenStream   _tokenStream = new TokenStream();
+        private          int[]         _groupCount  = new int[8];
+        private readonly StringBuilder _renderBuf   = new StringBuilder(512);
 
         public SnippetBuilder(
             string preTag       = "<mark>",
@@ -55,150 +50,82 @@ namespace FtsLib.Snippets
 
         // ── Public API ───────────────────────────────────────────────
 
-        public SnippetResult Build(string rawHtml, IReadOnlyCollection<string> queryTerms)
+        /// <summary>
+        /// The core build. <paramref name="prepared"/> is the query's immutable
+        /// term→group map — prepare it ONCE per query (not per line) and share it
+        /// across every result and every thread.
+        /// </summary>
+        public SnippetResult Build(
+            string              rawHtml,
+            PreparedQueryGroups prepared,
+            bool                requireOrdered     = false,
+            int                 originalGroupCount = 0)
         {
-            if (string.IsNullOrEmpty(rawHtml) || queryTerms == null || queryTerms.Count == 0)
+            if (string.IsNullOrEmpty(rawHtml) || prepared == null || prepared.IsEmpty)
                 return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, int.MaxValue, false);
 
             var tokens = _tokenStream.Tokenize(rawHtml);
-            return BuildCoreLiteral(tokens, rawHtml, queryTerms);
+            if (tokens.Count == 0)
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
+
+            var (iLeft, iRight, score) = FindWindow(tokens, prepared);
+            if (score == int.MaxValue)
+                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
+
+            var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
+            string html = RenderFromRaw(rawHtml, tokens, prepared, snapStart, snapEnd);
+
+            // WordDistance = extra words between matched slots (0 = all consecutive).
+            // originalGroupCount overrides so skipped wildcards still count as a slot.
+            int denominator = originalGroupCount > 0 ? originalGroupCount : prepared.GroupCount;
+            int wordDist = iRight - iLeft - (denominator - 1);
+            if (wordDist < 0) wordDist = 0;
+
+            if (requireOrdered && prepared.GroupCount > 1 && !HasOrderedMatch(tokens, prepared))
+                return new SnippetResult(html, score, wordDist, false);
+
+            return new SnippetResult(html, score, wordDist, true);
         }
 
+        /// <summary>
+        /// Convenience for one-off literal-term builds (each term occurrence is its
+        /// own AND slot). Prepares per call — use the <see cref="PreparedQueryGroups"/>
+        /// overload when building snippets for many lines of one query.
+        /// </summary>
+        public SnippetResult Build(string rawHtml, IReadOnlyCollection<string> queryTerms)
+            => Build(rawHtml, PreparedQueryGroups.FromLiteralTerms(queryTerms));
+
+        /// <summary>
+        /// Convenience for one-off group builds. Prepares per call — use the
+        /// <see cref="PreparedQueryGroups"/> overload when building snippets for
+        /// many lines of one query.
+        /// </summary>
         public SnippetResult Build(
             string                                     rawHtml,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
             bool                                       requireOrdered     = false,
             int                                        originalGroupCount = 0)
-        {
-            if (string.IsNullOrEmpty(rawHtml) || queryGroups == null || queryGroups.Count == 0)
-                return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, int.MaxValue, false);
-
-            _allTerms.Clear();
-            foreach (var g in queryGroups)
-                foreach (var t in g)
-                    _allTerms.Add(t);
-
-            int denominator = originalGroupCount > 0 ? originalGroupCount : queryGroups.Count;
-
-            var tokens = _tokenStream.Tokenize(rawHtml);
-            var result = BuildCoreGroups(tokens, rawHtml, queryGroups, _allTerms, denominator);
-
-            if (requireOrdered && result.IsMatch && queryGroups.Count > 1)
-            {
-                if (!HasOrderedMatch(tokens))
-                    return new SnippetResult(result.Html, result.Score, result.WordDistance, false);
-            }
-
-            return result;
-        }
-
-        // ── Core pipelines ────────────────────────────────────────────
-
-        private SnippetResult BuildCoreLiteral(
-            List<TextToken>             tokens,
-            string                      rawHtml,
-            IReadOnlyCollection<string> queryTerms)
-        {
-            if (tokens.Count == 0)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
-
-            var (iLeft, iRight, score) = FindWindowLiteral(tokens, queryTerms);
-            if (score == int.MaxValue)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
-
-            var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
-            string html = RenderFromRaw(rawHtml, tokens, queryTerms, snapStart, snapEnd);
-            // WordDistance = extra words between matched terms (0 = all terms consecutive).
-            int wordDist = iRight - iLeft - (queryTerms.Count - 1);
-            if (wordDist < 0) wordDist = 0;
-            return new SnippetResult(html, score, wordDist, true);
-        }
-
-        private SnippetResult BuildCoreGroups(
-            List<TextToken>                            tokens,
-            string                                     rawHtml,
-            IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
-            IReadOnlyCollection<string>                highlightTerms,
-            int                                        originalGroupCount)
-        {
-            if (tokens.Count == 0)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
-
-            var (iLeft, iRight, score) = FindWindowGroups(tokens, queryGroups);
-            if (score == int.MaxValue)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
-
-            var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
-            string html = RenderFromRaw(rawHtml, tokens, highlightTerms, snapStart, snapEnd);
-            // Use originalGroupCount so skipped wildcards still count as a slot.
-            int wordDist = iRight - iLeft - (originalGroupCount - 1);
-            if (wordDist < 0) wordDist = 0;
-            return new SnippetResult(html, score, wordDist, true);
-        }
+            => Build(rawHtml, PreparedQueryGroups.FromGroups(queryGroups),
+                     requireOrdered, originalGroupCount);
 
         // ── Window finding ────────────────────────────────────────────
         // Returns (iLeft, iRight, score) — token indices, not raw positions.
 
-        private (int iLeft, int iRight, int score) FindWindowLiteral(
-            List<TextToken>             tokens,
-            IReadOnlyCollection<string> queryTerms)
+        private (int iLeft, int iRight, int score) FindWindow(
+            List<TextToken>     tokens,
+            PreparedQueryGroups prepared)
         {
-            _termToGroups.Clear();
-            int g = 0;
-            foreach (var t in queryTerms)
-            {
-                if (!_termToGroups.ContainsKey(t))
-                    _termToGroups[t] = new List<int>(1);
-                if (!_termToGroups[t].Contains(g))
-                    _termToGroups[t].Add(g);
-                g++;
-            }
-
-            int required = g; // one group per query term (even repeated ones)
+            int required = prepared.GroupCount;
             EnsureGroupCount(required);
             for (int i = 0; i < required; i++) _groupCount[i] = 0;
-            return RunSlidingWindow(tokens, required);
-        }
 
-        private (int iLeft, int iRight, int score) FindWindowGroups(
-            List<TextToken>                            tokens,
-            IReadOnlyList<IReadOnlyCollection<string>> queryGroups)
-        {
-            _termToGroups.Clear();
-            for (int gi = 0; gi < queryGroups.Count; gi++)
-            {
-                foreach (var t in queryGroups[gi])
-                {
-                    List<int> groupIndices;
-                    if (!_termToGroups.TryGetValue(t, out groupIndices))
-                    {
-                        groupIndices = new List<int>(1);
-                        _termToGroups[t] = groupIndices;
-                    }
-                    if (!groupIndices.Contains(gi))
-                        groupIndices.Add(gi);
-                }
-            }
-
-            int required = queryGroups.Count;
-            EnsureGroupCount(required);
-            for (int i = 0; i < required; i++) _groupCount[i] = 0;
-            return RunSlidingWindow(tokens, required);
-        }
-
-        private (int iLeft, int iRight, int score) RunSlidingWindow(
-            List<TextToken> tokens,
-            int             required)
-        {
             int covered    = 0;
             int bestILeft  = -1, bestIRight = -1, bestScore = int.MaxValue;
             int L = 0;
 
             for (int R = 0; R < tokens.Count; R++)
             {
-                string rt = tokens[R].Normalized;
-                List<int> rGroups;
-                if (_termToGroups.TryGetValue(rt, out rGroups))
+                if (prepared.TryGetGroups(tokens[R].Normalized, out int[] rGroups))
                 {
                     foreach (int rg in rGroups)
                         if (_groupCount[rg]++ == 0) covered++;
@@ -214,9 +141,7 @@ namespace FtsLib.Snippets
                         bestILeft  = L;
                         bestIRight = R;
                     }
-                    string lt = tokens[L].Normalized;
-                    List<int> lGroups;
-                    if (_termToGroups.TryGetValue(lt, out lGroups))
+                    if (prepared.TryGetGroups(tokens[L].Normalized, out int[] lGroups))
                     {
                         foreach (int lg in lGroups)
                             if (--_groupCount[lg] == 0) covered--;
@@ -240,28 +165,18 @@ namespace FtsLib.Snippets
         /// Returns true when there exists a position in <paramref name="tokens"/>
         /// where each query group is satisfied by a token appearing strictly after
         /// the token satisfying the previous group (left-to-right order).
-        ///
-        /// Relies on <see cref="_termToGroups"/> already being populated by the
-        /// preceding <see cref="FindWindowGroups"/> call — no rebuild needed.
         /// Uses a greedy forward scan: O(n) in token count.
         /// </summary>
-        private bool HasOrderedMatch(List<TextToken> tokens)
+        private static bool HasOrderedMatch(List<TextToken> tokens, PreparedQueryGroups prepared)
         {
-            // _termToGroups is already populated by FindWindowGroups.
-            // Determine the number of groups from the max value stored.
-            int numGroups = 0;
-            foreach (var kv in _termToGroups)
-                foreach (int idx in kv.Value)
-                    if (idx >= numGroups) numGroups = idx + 1;
-
+            int numGroups = prepared.GroupCount;
             if (numGroups <= 1) return true; // single group — order is trivially satisfied
 
             // Try every starting token that belongs to group 0.
             for (int start = 0; start < tokens.Count; start++)
             {
-                List<int> startGroups;
-                if (!_termToGroups.TryGetValue(tokens[start].Normalized, out startGroups)
-                    || !startGroups.Contains(0))
+                if (!prepared.TryGetGroups(tokens[start].Normalized, out int[] startGroups)
+                    || System.Array.IndexOf(startGroups, 0) < 0)
                     continue;
 
                 // Greedily advance through groups 1..numGroups-1.
@@ -269,9 +184,8 @@ namespace FtsLib.Snippets
                 int nextGroup = 1;
                 while (nextGroup < numGroups && pos < tokens.Count)
                 {
-                    List<int> tGroups;
-                    if (_termToGroups.TryGetValue(tokens[pos].Normalized, out tGroups)
-                        && tGroups.Contains(nextGroup))
+                    if (prepared.TryGetGroups(tokens[pos].Normalized, out int[] tGroups)
+                        && System.Array.IndexOf(tGroups, nextGroup) >= 0)
                         nextGroup++;
                     pos++;
                 }
@@ -340,15 +254,12 @@ namespace FtsLib.Snippets
         // ── Single-pass renderer from raw HTML ────────────────────────
 
         private string RenderFromRaw(
-            string                      rawHtml,
-            List<TextToken>             tokens,
-            IReadOnlyCollection<string> queryTerms,
-            int                         snapStart,
-            int                         snapEnd)
+            string              rawHtml,
+            List<TextToken>     tokens,
+            PreparedQueryGroups prepared,
+            int                 snapStart,
+            int                 snapEnd)
         {
-            _termSet.Clear();
-            foreach (var t in queryTerms) _termSet.Add(t);
-
             _renderBuf.Clear();
             if (snapStart > 0) _renderBuf.Append('…');
 
@@ -358,7 +269,7 @@ namespace FtsLib.Snippets
             {
                 if (tok.RawEnd   <= snapStart) continue;
                 if (tok.RawStart >= snapEnd)   break;
-                if (!_termSet.Contains(tok.Normalized)) continue;
+                if (!prepared.ContainsTerm(tok.Normalized)) continue;
 
                 AppendRawStripped(rawHtml, pos, tok.RawStart, snapEnd);
                 pos = tok.RawStart;

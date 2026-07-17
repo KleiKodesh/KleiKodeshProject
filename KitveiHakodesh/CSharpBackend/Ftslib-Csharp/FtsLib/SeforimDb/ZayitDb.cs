@@ -268,11 +268,12 @@ namespace FtsLib.SeforimDb
         /// <see cref="SearchResult"/>s in the SAME order as <paramref name="ids"/>.
         /// SqliteConnection is not thread-safe, so each worker owns its own connection.
         /// </summary>
-        public static SearchResult[] FetchSearchResultsParallel(
+        internal static SearchResult[] FetchSearchResultsParallel(
             string dbPath,
             List<int> ids,
             System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
             int originalGroupCount,
+            FtsLib.Snippets.PreparedQueryGroups prepared,
             int maxDop,
             CancellationToken ct = default)
         {
@@ -289,7 +290,7 @@ namespace FtsLib.SeforimDb
 
             if (workers == 1)
             {
-                FetchRangeInto(dbPath, ids, 0, ids.Count, idToIndex, matchedGroups, originalGroupCount, results, ct);
+                FetchRangeInto(dbPath, ids, 0, ids.Count, idToIndex, matchedGroups, originalGroupCount, prepared, results, ct);
                 return results;
             }
 
@@ -301,7 +302,7 @@ namespace FtsLib.SeforimDb
                     int start = w * per;
                     if (start >= ids.Count) return;
                     int end = Math.Min(start + per, ids.Count);
-                    FetchRangeInto(dbPath, ids, start, end, idToIndex, matchedGroups, originalGroupCount, results, ct);
+                    FetchRangeInto(dbPath, ids, start, end, idToIndex, matchedGroups, originalGroupCount, prepared, results, ct);
                 });
             return results;
         }
@@ -314,6 +315,7 @@ namespace FtsLib.SeforimDb
             Dictionary<int, int> idToIndex,
             System.Collections.Generic.IReadOnlyList<System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
             int originalGroupCount,
+            FtsLib.Snippets.PreparedQueryGroups prepared,
             SearchResult[] results,
             CancellationToken ct)
         {
@@ -356,7 +358,8 @@ namespace FtsLib.SeforimDb
                                 r.IsDBNull(2) ? string.Empty : r.GetString(2),
                                 r.IsDBNull(1) ? string.Empty : r.GetString(1),
                                 matchedGroups,
-                                originalGroupCount);
+                                originalGroupCount,
+                                prepared);
                         }
                 }
             }
