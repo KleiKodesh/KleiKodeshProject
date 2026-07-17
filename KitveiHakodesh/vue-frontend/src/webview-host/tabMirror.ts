@@ -38,6 +38,24 @@ import type { MirroredTab, MirroredRecentItem } from './bridge'
 
 const RECENT_MAX = 8
 
+// Page-type prefix for the native tab-list dropdown / tab tooltip, in the style of
+// the full-text-search page's own "חיפוש: <query>" titles. Only content routes get
+// one — singleton pages (מילון, לוח שנה, חיפוש…) already carry their type as the
+// title, and the home tab is just "בית".
+const LIST_TITLE_PREFIXES: Record<string, string> = {
+  '/book-view': 'ספר',
+  '/pdf-view': 'PDF',
+  '/txt-view': 'טקסט',
+  '/html-view': 'מסמך',
+}
+
+/** "prefix: title · tocPath" — the string shown in the dropdown row and tab tooltip. */
+function listTitleFor(t: Tab): string {
+  const prefix = LIST_TITLE_PREFIXES[t.route]
+  const body = t.tocPath ? `${t.title} · ${t.tocPath}` : t.title
+  return prefix ? `${prefix}: ${body}` : body
+}
+
 /** Same identity rules as recentlyOpenedStore.deriveKey, applied to an open tab. */
 function tabRecentKey(tab: Tab): string | null {
   if (tab.route === '/book-view' && tab.bookId !== undefined) return `book:${tab.bookId}`
@@ -92,9 +110,9 @@ export function initTabMirror(): void {
         .map((t): MirroredTab => ({
           id: t.id,
           title: t.title,
-          // Full breadcrumb for the native tab-list dropdown — same "title · path"
-          // string the Vue title bar shows. The strip tab caption stays `title`.
-          listTitle: t.tocPath ? `${t.title} · ${t.tocPath}` : t.title,
+          // Page-type prefix + full breadcrumb for the native tab-list dropdown and
+          // tab tooltip. The strip tab caption stays `title`.
+          listTitle: listTitleFor(t),
           pane: t.pane === 2 ? 2 : 1,
         })),
       activeTabId: tabStore.activeTabId,
