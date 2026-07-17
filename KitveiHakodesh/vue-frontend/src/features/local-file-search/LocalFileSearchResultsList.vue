@@ -70,6 +70,12 @@ function formatDate(unixMs: number): string {
   return date.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: '2-digit' })
 }
 
+function getTooltip(item: LocalFileSearchResult): string {
+  return [item.fileName, item.path, formatDate(item.modifiedDate)]
+    .filter(Boolean)
+    .join('\n')
+}
+
 defineExpose({
   focusContainer: () => scrollElement.value?.focus(),
 })
@@ -95,7 +101,7 @@ defineExpose({
           class="file-item"
           data-nav-item
           :class="{ 'is-focused': containerFocused && focusedIndex === virtualRow.index }"
-          :title="items[virtualRow.index]!.fullPath"
+          :title="getTooltip(items[virtualRow.index]!)"
           @click="selectItem(virtualRow.index)"
         >
           <span class="icon" :style="{ color: getFileIcon(items[virtualRow.index]!.fileName).color }">
