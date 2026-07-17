@@ -1,4 +1,5 @@
 using System.Text.Json;
+using KitveiHakodeshService.Catalog;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.LocalFiles;
@@ -18,6 +19,7 @@ public sealed class Dispatcher(
     DictionaryService dictionary,
     SeforimDbService seforim,
     FullTextSearchService fts,
+    CatalogTocSearchService catalogToc,
     UserSettingsService userSettings,
     IHostApplicationLifetime lifetime)
 {
@@ -351,6 +353,20 @@ public sealed class Dispatcher(
 
                 case "ftsResetIndex":
                     fts.ResetIndex();
+                    return RpcResponse.Ok(MsgPack.Ser(new ResetResult()));
+
+                // ── Catalog TOC-path search (Lucene) ───────────────────────────
+                case "catalogTocSearch":
+                {
+                    var a = MsgPack.De<CatalogTocSearchArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(catalogToc.Search(a.Query ?? "", a.DedupAncestors)));
+                }
+
+                case "catalogTocStatus":
+                    return RpcResponse.Ok(MsgPack.Ser(catalogToc.Status()));
+
+                case "catalogTocResetIndex":
+                    catalogToc.ResetIndex();
                     return RpcResponse.Ok(MsgPack.Ser(new ResetResult()));
 
                 default:

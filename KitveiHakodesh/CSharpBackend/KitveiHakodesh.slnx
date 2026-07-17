@@ -8,4 +8,5 @@
   <Project Path="KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />
   <Project Path="KitveiHakodeshLib/KitveiHakodeshLib.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567890" />
   <Project Path="KitveiHakodeshService/KitveiHakodeshService.csproj" />
+  <Project Path="KitveiHakodeshService.Tests/KitveiHakodeshService.Tests.csproj" />
 </Solution>

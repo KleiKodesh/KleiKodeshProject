@@ -28,6 +28,16 @@
     <PackageReference Include="MessagePack" Version="3.1.8" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <!-- Catalog TOC-path search (Catalog/CatalogTocIndex). 4.8 beta — the only line. -->
+    <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
+  </ItemGroup>
+
+  <!-- Lucene discovers codecs/postings/doc-values formats via reflection (NamedSPILoader +
+       Activator.CreateInstance). Root the assembly so ILC keeps that metadata under native
+       AOT — without this the published exe throws MissingMethodException on first use
+       (verified with an AOT probe, 2026-07-17). -->
+  <ItemGroup>
+    <TrimmerRootAssembly Include="Lucene.Net" />
   </ItemGroup>
 
   <!-- The custom full-text search engine. FtsLib multi-targets net48;net10.0; the net10.0

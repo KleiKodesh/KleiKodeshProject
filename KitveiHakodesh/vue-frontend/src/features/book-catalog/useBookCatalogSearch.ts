@@ -1,7 +1,15 @@
 /**
  * File-system search composable.
  *
- * Two-phase search:
+ * DEV (service-backed): a single call to the service's Lucene catalog TOC index
+ * (`catalogTocSearch`) replaces the whole two-phase pipeline below — book-title docs
+ * and full-TOC-path docs are searched together and come back ranked. Parity with the
+ * manual pipeline is covered by KitveiHakodeshService.Tests (2026-07-17: 0 misses).
+ *
+ * HOSTED (C#): still the manual two-phase search below — the hosted app has no
+ * service, so it keeps the in-memory book match + TOC heuristics for now.
+ *
+ * Two-phase search (hosted path):
  *
  *   Phase 1 — Instant book match (runs on every keystroke, synchronous)
  *             Filters the in-memory book catalog by the query words.
@@ -28,6 +36,8 @@ import { refDebounced } from '@vueuse/core'
 import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from './bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { isDbHosted } from '@/webview-host/seforimApi'
+import { serviceCall } from '@/webview-host/serviceClient'
 import {
   runTocHeuristics,
   runTocKeywordHeuristics,
@@ -60,9 +70,129 @@ function toQueryWords(rawQuery: string): string[] {
     .filter((word) => word.length > 0)
 }
 
+// ─── Lucene service search (dev) ──────────────────────────────────────────────
+
+/** One `catalogTocSearch` hit on the wire (serviceClient camelCases the msgpack keys). */
+type CatalogTocServiceHit = {
+  kind: 'book' | 'toc' | 'alttoc'
+  bookId: number
+  tocEntryId: number
+  lineId: number
+  lineIndex: number // -1 = no resolved line
+  bookTitle: string
+  tocPath: string
+  score: number
+}
+
+type CatalogTocServiceResult = {
+  ready: boolean
+  results: CatalogTocServiceHit[]
+  /** True when a newer search cancelled this one server-side — discard and retry. */
+  superseded?: boolean
+  error?: string | null
+}
+
+/** Poll interval while the service is still building the index (first start after a
+ * seforim-DB change) — the search stays in its loading state until ready. */
+const INDEX_NOT_READY_RETRY_MS = 1200
+
+/**
+ * Dev path: the service's Lucene index over book titles + full TOC paths answers the
+ * whole query in one call. The service's ranking (manual-scorer re-rank + catalog tree
+ * order) is preserved as-is — book and TOC hits interleave the way the service ranked
+ * them, so an exact TOC target beats a book whose title merely prefix-matches.
+ */
+function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
+  const store = useBooksDataStore()
+  const debouncedQuery = refDebounced(searchQuery, 150)
+  const results = ref<SearchFsItem[]>([])
+  const searching = ref(false)
+
+  let searchGeneration = 0
+
+  const toItems = (hits: CatalogTocServiceHit[]): SearchFsItem[] => {
+    const bookById = new Map(store.allBooks.map((b) => [b.id, b]))
+    const items: SearchFsItem[] = []
+    for (const hit of hits) {
+      const book = bookById.get(hit.bookId)
+      if (!book) continue // book not in the loaded catalog (e.g. stale index row)
+      if (hit.kind === 'book') {
+        items.push({ uid: `b-${book.id}`, kind: 'book', book })
+      } else {
+        // Alt-TOC hits navigate by line only: their entry ids live in a different id
+        // namespace (alt_toc_entry), so passing one as openTocEntryId could highlight
+        // an unrelated regular-TOC entry that happens to share the number.
+        const isAlt = hit.kind === 'alttoc'
+        items.push({
+          uid: `${isAlt ? 'alttoc' : 'toc'}-${hit.bookId}-${hit.tocEntryId}`,
+          kind: 'toc',
+          book,
+          tocEntryId: isAlt ? 0 : hit.tocEntryId,
+          tocLineIndex: hit.lineIndex >= 0 ? hit.lineIndex : null,
+          tocTitle: hit.tocPath.split(' / ').pop() ?? hit.tocPath,
+          tocPath: hit.tocPath,
+        })
+      }
+    }
+    return items
+  }
+
+  // Instant clear so an emptied input doesn't keep showing stale results for 150ms.
+  watch(searchQuery, (rawQuery) => {
+    if (!rawQuery?.trim()) {
+      searchGeneration++
+      results.value = []
+      searching.value = false
+    }
+  })
+
+  watch(
+    debouncedQuery,
+    async (rawQuery) => {
+      const generation = ++searchGeneration
+      const query = (rawQuery ?? '').trim()
+      if (!query) {
+        results.value = []
+        searching.value = false
+        return
+      }
+
+      searching.value = true
+      try {
+        // Retry while the index is still building — a newer search supersedes the loop.
+        for (;;) {
+          const res = await serviceCall<CatalogTocServiceResult>('catalogTocSearch', {
+            query,
+            dedupAncestors: true,
+          })
+          if (generation !== searchGeneration) return
+          if (res.ready && !res.superseded) {
+            results.value = toItems(res.results ?? [])
+            break
+          }
+          // superseded (requests raced on the pipe) → re-issue promptly; not-ready
+          // (index still building) → poll slowly.
+          await new Promise((resolve) => setTimeout(resolve, res.superseded ? 150 : INDEX_NOT_READY_RETRY_MS))
+          if (generation !== searchGeneration) return
+        }
+      } catch {
+        if (generation === searchGeneration) results.value = []
+      } finally {
+        if (generation === searchGeneration) searching.value = false
+      }
+    },
+    { immediate: true },
+  )
+
+  return { results, searching }
+}
+
 // ─── Composable ───────────────────────────────────────────────────────────────
 
 export function useBookCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
+  // Dev talks to the service → Lucene only. Hosted C# keeps the manual pipeline below.
+  if (!isDbHosted()) return useLuceneCatalogSearch(searchQuery)
+
   const store = useBooksDataStore()
   const debouncedQuery = refDebounced(searchQuery, 300)
   const results = ref<SearchFsItem[]>([])
