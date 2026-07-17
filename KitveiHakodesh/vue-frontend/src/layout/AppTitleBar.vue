@@ -94,12 +94,13 @@ const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
 // Interaction hint depends on the environment (single-click action differs),
-// but double-click always opens the quick-navigation flow.
+// but double-click always opens the quick-navigation flow. The Ctrl+E shortcut
+// (focus search) is appended to the end of the second line in both variants.
 // Each hint line is separated by a newline (tooltips render \n as line breaks).
 const barTitleHint = computed(() =>
   hasNativeChromeTabs
-    ? 'לחץ לחיפוש (Ctrl+E)\nלחיצה כפולה לניווט מהיר באפליקציה'
-    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T)\nלחיצה כפולה לניווט מהיר באפליקציה',
+    ? 'לחץ לניווט מהיר\nלחיצה כפולה לניווט מהיר באפליקציה (Ctrl+E)'
+    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T)\nלחיצה כפולה לניווט מהיר באפליקציה (Ctrl+E)',
 )
 
 const barTitle = computed(() => {
