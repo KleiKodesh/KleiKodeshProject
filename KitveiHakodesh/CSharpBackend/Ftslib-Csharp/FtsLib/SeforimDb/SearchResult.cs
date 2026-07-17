@@ -31,6 +31,14 @@ namespace FtsLib.SeforimDb
         /// </summary>
         public int OriginalGroupCount { get; }
 
+        /// <summary>
+        /// The query's snippet-ready term→group map, prepared ONCE per query and
+        /// shared by every result of that query (immutable — safe across threads).
+        /// Null only for externally constructed results; the snippet pipeline then
+        /// prepares from <see cref="MatchedGroups"/> on demand.
+        /// </summary>
+        internal Snippets.PreparedQueryGroups Prepared { get; }
+
         public SearchResult(int lineId, string bookTitle, string content,
             System.Collections.Generic.IReadOnlyList<
                 System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups = null,
@@ -44,6 +52,16 @@ namespace FtsLib.SeforimDb
             OriginalGroupCount = originalGroupCount > 0
                 ? originalGroupCount
                 : MatchedGroups.Count;
+        }
+
+        internal SearchResult(int lineId, string bookTitle, string content,
+            System.Collections.Generic.IReadOnlyList<
+                System.Collections.Generic.IReadOnlyCollection<string>> matchedGroups,
+            int originalGroupCount,
+            Snippets.PreparedQueryGroups prepared)
+            : this(lineId, bookTitle, content, matchedGroups, originalGroupCount)
+        {
+            Prepared = prepared;
         }
 
         public override string ToString() => $"[{LineId}] {BookTitle}";

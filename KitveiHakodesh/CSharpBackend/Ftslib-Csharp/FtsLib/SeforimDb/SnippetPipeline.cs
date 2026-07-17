@@ -24,9 +24,11 @@ namespace FtsLib.SeforimDb
     /// </summary>
     internal static class SnippetPipeline
     {
-        // One SnippetBuilder per thread — not safe to share across threads because
-        // SnippetBuilder reuses internal data structures across calls. [ThreadStatic]
+        // One SnippetBuilder per thread — the builder holds only per-call SCRATCH
+        // buffers (token stream, group counters, render buffer), so [ThreadStatic]
         // gives each thread its own instance with zero per-call allocation overhead.
+        // All QUERY state (the term→group map) lives in PreparedQueryGroups —
+        // immutable, built once per query, shared read-only by every thread.
         public const int DefaultContextWords = 8;
 
         [System.ThreadStatic]
@@ -65,6 +67,26 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, queryGroups, requireOrdered, originalGroupCount);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
+        }
+
+        /// <summary>
+        /// The hot path: builds from a query-level <see cref="PreparedQueryGroups"/>
+        /// prepared once per query — per-line cost is independent of how many terms
+        /// the query expanded to. Used by
+        /// <see cref="SeforimIndex.GenerateSnippet(SearchResult, bool, int)"/>.
+        /// </summary>
+        internal static SnippetResult Generate(
+            string              content,
+            PreparedQueryGroups prepared,
+            bool                requireOrdered     = false,
+            int                 originalGroupCount = 0,
+            int                 contextWords       = DefaultContextWords)
+        {
+            if (string.IsNullOrEmpty(content) || prepared == null || prepared.IsEmpty)
+                return SnippetResult.NoMatch;
+
+            var inner = GetBuilder(contextWords).Build(content, prepared, requireOrdered, originalGroupCount);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
         }
 

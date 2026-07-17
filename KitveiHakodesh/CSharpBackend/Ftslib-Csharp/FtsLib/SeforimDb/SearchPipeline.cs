@@ -100,13 +100,18 @@ namespace FtsLib.SeforimDb
 
             if (ids.Count == 0) yield break;
 
+            // Prepared ONCE per query: the snippet-side term→group map, shared by
+            // every result row (immutable — safe across snippet threads). Building
+            // it per line was O(#expanded terms) per snippet.
+            var prepared = FtsLib.Snippets.PreparedQueryGroups.FromGroups(matchedGroups);
+
             // Phase 2 — lease released: stream content rows from the DB.
             using (var db = new ZayitDb(dbPath))
             {
                 foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(ids))
                 {
                     ct.ThrowIfCancellationRequested();
-                    yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount);
+                    yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount, prepared);
                 }
             }
         }
@@ -172,9 +177,12 @@ namespace FtsLib.SeforimDb
 
             if (ids.Count == 0) return System.Array.Empty<SearchResult>();
 
+            // Prepared ONCE per query (see Search) — shared by every fetched row.
+            var prepared = FtsLib.Snippets.PreparedQueryGroups.FromGroups(matchedGroups);
+
             // Phase 2 — lease released: parallel content fetch across connections.
             var arr = ZayitDb.FetchSearchResultsParallel(
-                dbPath, ids, matchedGroups, originalGroupCount, maxDop, ct);
+                dbPath, ids, matchedGroups, originalGroupCount, prepared, maxDop, ct);
 
             // Every matched id comes from the line table, so each slot is filled; guard
             // against a null (row vanished mid-search) by compacting, preserving order.

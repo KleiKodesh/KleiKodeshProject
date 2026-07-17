@@ -157,6 +157,7 @@
     <Compile Include="Tokenization\Tokenizer.cs" />
     <Compile Include="Tokenization\TokenStream.cs" />
     <!-- Snippets: highlighted excerpt generation -->
+    <Compile Include="Snippets\PreparedQueryGroups.cs" />
     <Compile Include="Snippets\SnippetBuilder.cs" />
     <Compile Include="Snippets\SnippetResult.cs" />
     <!-- Seforim: public API over the seforim database -->

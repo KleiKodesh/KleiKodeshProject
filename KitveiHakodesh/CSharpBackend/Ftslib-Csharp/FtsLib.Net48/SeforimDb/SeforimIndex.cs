@@ -273,9 +273,16 @@ namespace FtsLib.SeforimDb
         {
             if (result == null) return SnippetResult.NoMatch;
             if (result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
+
+            // Results from Search carry the query's prepared term→group map
+            // (built once, shared across lines and threads). Externally
+            // constructed results fall back to preparing here.
+            var prepared = result.Prepared
+                ?? FtsLib.Snippets.PreparedQueryGroups.FromGroups(result.MatchedGroups);
+
             return SnippetPipeline.Generate(
                 result.Content,
-                result.MatchedGroups,
+                prepared,
                 requireOrdered,
                 result.OriginalGroupCount,
                 contextWords);
