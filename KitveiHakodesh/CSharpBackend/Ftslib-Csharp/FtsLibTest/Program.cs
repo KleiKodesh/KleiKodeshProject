@@ -111,6 +111,10 @@ namespace FtsLibTest
                     CapSweepTest.Run(args);
                     return;
 
+                case "filterrepro":
+                    FilterRepro.Run(args);
+                    return;
+
                 case "prefixlen":
                     PrefixLenDiag.Run(args);
                     return;
