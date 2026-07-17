@@ -60,6 +60,10 @@ export interface Tab {
   openToc?: boolean
   openTocEntryId?: number
   openTocLineIndex?: number
+  // Set when the book is opened from a VSTO host deep link (otzaria:// / zayit://).
+  // Triggers a momentary background flash on the target line, then fades. Consumed
+  // and cleared on open like the openToc* fields.
+  flashOpenLine?: boolean
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
   searchHighlightSnippet?: string

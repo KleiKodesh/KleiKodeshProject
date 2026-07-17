@@ -125,6 +125,9 @@ namespace KitveiHakodeshLib
         // A search request queued before the Vue app has finished mounting, dispatched
         // on 'appReady' just like _pendingFilePath. Only the last request is kept.
         private (string text, string target)? _pendingSearch;
+        // An open-book (deep link) request queued before the Vue app is ready. Same
+        // dispatch-on-'appReady' pattern; only the last request is kept.
+        private HostLink _pendingOpenBook;
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
 
@@ -215,6 +218,38 @@ namespace KitveiHakodeshLib
                 _pendingSearch = (cleaned, target);
             else
                 _bridge.PushEvent(new { @event = "hostSearch", target, text = cleaned });
+        }
+
+        /// <summary>
+        /// Opens a book at a specific line inside the app from the VSTO host — driven
+        /// by an otzaria:// or zayit:// deep link found in the Word selection's
+        /// hyperlinks (see <see cref="HostLink"/>). Otzaria links carry a positional
+        /// line index that the frontend uses directly; Zayit links carry a DB line
+        /// row-id the frontend converts to an index. Queued and flushed on 'appReady'
+        /// if Vue is not yet mounted, mirroring <see cref="OpenFileFromPath"/>.
+        /// </summary>
+        public void OpenBookFromHost(HostLink link)
+        {
+            if (link == null) return;
+
+            if (!_appReady)
+                _pendingOpenBook = link;
+            else
+                PushOpenBook(link);
+        }
+
+        private void PushOpenBook(HostLink link)
+        {
+            _bridge.PushEvent(new
+            {
+                @event = "hostOpenBook",
+                scheme = link.Scheme == HostLink.LinkScheme.Zayit ? "zayit" : "otzaria",
+                bookId = link.BookId,
+                index = link.Index,      // Otzaria positional index (null for Zayit)
+                lineId = link.LineId,    // Zayit DB line row-id (null for Otzaria)
+                mark = link.Mark,        // highlight the whole line
+                markText = link.MarkText // highlight a specific span (null when absent)
+            });
         }
 
         // ── Constructor ─────────────────────────────────────────────────────────────

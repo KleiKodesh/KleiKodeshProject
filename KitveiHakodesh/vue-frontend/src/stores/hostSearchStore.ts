@@ -1,21 +1,28 @@
 import { defineStore } from 'pinia'
 import { useTabStore } from './tabStore'
+import { useBooksDataStore } from './booksDataStore'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
+import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
 
 /**
- * Receives "search from the VSTO host" pushes and routes them to a page.
+ * Receives "navigate from the VSTO host" pushes and routes them to a page.
  *
- * The Word ribbon's right-click context menu ("העתק לחיפוש בכתבי הקודש" /
- * "חיפוש ספר בכתבי הקודש") calls AppViewer.SearchFromHost on the C# side, which
- * strips the selection to searchable words and pushes:
+ * The Word ribbon's right-click context menu calls into the C# AppViewer, which
+ * pushes one of two events:
  *
- *   { event: 'hostSearch', target: 'fts' | 'catalog', text: '<cleaned selection>' }
+ * 1. hostSearch — "העתק לחיפוש בכתבי הקודש" / "חיפוש ספר בכתבי הקודש":
+ *      { event: 'hostSearch', target: 'fts' | 'catalog', text: '<cleaned selection>' }
+ *    fts     → open a full-text-search tab seeded with the text (FullTextSearchPage
+ *              auto-runs the search from tab.searchQuery on mount).
+ *    catalog → open the book-catalog singleton seeded with the text via
+ *              tab.catalogQuery (BookCatalogPage reads it on mount and searches).
  *
- * fts     → open a full-text-search tab seeded with the text (FullTextSearchPage
- *           auto-runs the search from tab.searchQuery on mount).
- * catalog → open the book-catalog singleton seeded with the text via
- *           tab.catalogQuery (BookCatalogPage reads it on mount and searches
- *           reactively).
+ * 2. hostOpenBook — "פתח קישור בכתבי הקודש": an otzaria:// or zayit:// deep link
+ *    found in the selection's hyperlinks, parsed C#-side into:
+ *      { event: 'hostOpenBook', scheme: 'otzaria' | 'zayit', bookId,
+ *        index, lineId, mark, markText }
+ *    Otzaria carries a positional line `index` (used directly); Zayit carries a DB
+ *    `lineId` we convert to a positional index via getLineIndexFromLineId.
  *
  * The listener is global and lives for the app's lifetime, so this store is
  * instantiated once at startup (main.ts) — before 'appReady' is posted, so any
@@ -25,7 +32,14 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
   const tabStore = useTabStore()
 
   onWebviewEvent((msg) => {
-    if (msg.event !== 'hostSearch') return
+    if (msg.event === 'hostSearch') {
+      handleHostSearch(msg)
+    } else if (msg.event === 'hostOpenBook') {
+      void handleHostOpenBook(msg)
+    }
+  })
+
+  function handleHostSearch(msg: Record<string, unknown>) {
     const text = (msg.text as string | undefined)?.trim()
     if (!text) return
     const target = msg.target as string | undefined
@@ -48,7 +62,49 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     const ftsText = text.replace(/@/g, ' ').replace(/\s+/g, ' ').trim()
     if (!ftsText) return
     tabStore.openTab({ route: '/search', title: 'חיפוש: ' + ftsText, searchQuery: ftsText })
-  })
+  }
+
+  async function handleHostOpenBook(msg: Record<string, unknown>) {
+    const bookId = typeof msg.bookId === 'number' ? msg.bookId : undefined
+    if (bookId == null) return
+
+    // Resolve the positional line index. Otzaria links already carry it; Zayit
+    // links carry a DB line row-id that must be converted (and only resolves on a
+    // machine whose DB matches the version the link was made against).
+    let lineIndex: number | undefined
+    let resolvedBookId = bookId
+    if (typeof msg.index === 'number') {
+      lineIndex = msg.index
+    } else if (typeof msg.lineId === 'number') {
+      try {
+        const rows = await getLineIndexFromLineId(msg.lineId)
+        lineIndex = rows[0]?.lineIndex
+        // Trust the DB's bookId for the resolved line over the one in the link.
+        if (rows[0]?.bookId != null) resolvedBookId = rows[0].bookId
+      } catch {
+        /* fall through — open the book at its start below */
+      }
+    }
+
+    // Resolve a human title for the tab (falls back to a generic label).
+    const booksData = useBooksDataStore()
+    try { await booksData.ensureLoaded() } catch { /* title falls back */ }
+    const title = booksData.allBooksMap.get(resolvedBookId)?.title ?? 'כתבי הקודש'
+
+    // Otzaria links may carry highlight params (&m=<text> / &mark). We parse them
+    // C#-side so any link type is accepted, but intentionally IGNORE the highlight
+    // here — just open the book scrolled to the target line. (To honour it later,
+    // set searchHighlightLineIndex + searchHighlightQuery/Terms from msg.markText.)
+    tabStore.openTab({
+      route: '/book-view',
+      bookId: resolvedBookId,
+      title,
+      openTocLineIndex: lineIndex,
+      // Momentarily flash the target line's background so the user sees where the
+      // link landed (only meaningful when we resolved a line).
+      flashOpenLine: lineIndex != null,
+    })
+  }
 
   return {}
 })

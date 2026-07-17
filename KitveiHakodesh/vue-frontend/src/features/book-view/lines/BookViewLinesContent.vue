@@ -48,6 +48,7 @@ const props = defineProps<{
   initialLineIndex?: number
   initialScrollIndex?: number
   initialScrollOffset?: number
+  flashLineOnOpen?: boolean
   searchHighlightLineIndex?: number
   searchHighlightQuery?: string
   searchHighlightSnippet?: string
@@ -360,6 +361,26 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
 }
 .line.multi-selected {
   background: color-mix(in srgb, var(--accent-color) 8%, transparent);
+}
+/* Momentary flash when the line is opened from a deep link (otzaria:// / zayit://).
+   A soft, light orange that eases in, holds briefly, then fades through several
+   gradient stops to transparent for a gentle finish. One-shot animation; the class
+   is removed imperatively. */
+.line.flash-open {
+  border-radius: 6px;
+  animation: line-flash-open 3.5s cubic-bezier(0.33, 0, 0.2, 1);
+}
+@keyframes line-flash-open {
+  0%   { background: rgba(255, 190, 90, 0); }
+  12%  { background: rgba(255, 190, 90, 0.28); }
+  40%  { background: rgba(255, 190, 90, 0.28); }
+  60%  { background: rgba(255, 196, 105, 0.2); }
+  78%  { background: rgba(255, 205, 125, 0.11); }
+  92%  { background: rgba(255, 215, 150, 0.04); }
+  100% { background: rgba(255, 215, 150, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .line.flash-open { animation-duration: 1.5s; }
 }
 .line.multi-selected::after {
   opacity: 1;

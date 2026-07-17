@@ -111,15 +111,37 @@
 		<contextMenu idMso="ContextMenuText">
 			<button id="SearchFtsFromSelection"
 					label="העתק לחיפוש בכתבי הקודש"
-					imageMso="Copy"
+					getImage="getKitveiHakodeshIcon"
 					onAction="contextMenu_Click"
 					insertBeforeMso="Cut"/>
 			<button id="SearchCatalogFromSelection"
 					label="חיפוש ספר בכתבי הקודש"
-					imageMso="Copy"
+					getImage="getKitveiHakodeshIcon"
 					onAction="contextMenu_Click"
 					insertBeforeMso="Cut"/>
+			<button id="OpenLinkInKitveiHakodesh"
+					label="פתח קישור בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"
+					insertBeforeMso="Cut"/>
 			<menuSeparator id="KleiKodeshContextSeparator"
+						   insertBeforeMso="Cut"/>
+		</contextMenu>
+
+		<!-- Right-clicking ON a hyperlink swaps in the hyperlink-specific menu
+		     (ContextMenuHyperlink) — NOT ContextMenuText. Only the open-link item
+		     belongs here (the two search items require selected text). Anchored before
+		     "Cut" — the first built-in control on this menu — so it sits at the very top
+		     (anchoring before HyperlinkEdit put it below Cut/Copy/Paste). -->
+		<contextMenu idMso="ContextMenuHyperlink">
+			<button id="OpenLinkInKitveiHakodeshHl"
+					label="פתח קישור בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"
+					insertBeforeMso="Cut"/>
+			<menuSeparator id="KleiKodeshContextSeparatorHl"
 						   insertBeforeMso="Cut"/>
 		</contextMenu>
 	</contextMenus>

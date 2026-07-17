@@ -229,6 +229,12 @@ namespace KitveiHakodeshLib
                 _pendingSearch = null;
                 _bridge.PushEvent(new { @event = "hostSearch", target, text });
             }
+            if (_pendingOpenBook != null)
+            {
+                var link = _pendingOpenBook;
+                _pendingOpenBook = null;
+                PushOpenBook(link);
+            }
         }
 
         private void HandleGetDiagnostics(string id)

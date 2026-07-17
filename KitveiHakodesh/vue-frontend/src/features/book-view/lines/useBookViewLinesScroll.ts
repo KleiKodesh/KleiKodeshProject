@@ -31,6 +31,7 @@ export interface BookViewLinesScrollProps {
   initialLineIndex?: number
   initialScrollIndex?: number
   initialScrollOffset?: number
+  flashLineOnOpen?: boolean
   searchHighlightLineIndex?: number
   idbResolved?: boolean
   commentaryVisible?: boolean
@@ -100,6 +101,9 @@ export function useBookViewLinesScroll(
   // ── Initial scroll on load ──────────────────────────────────────────────────
 
   let cancelStabilize: (() => void) | null = null
+  // Timer for the deep-link line flash; cleared on cancel/unmount so it never fires
+  // against a stale element.
+  let flashTimer: number | null = null
   {
     let restored = false
     let stopContentWatch: (() => void) | null = null
@@ -124,7 +128,11 @@ export function useBookViewLinesScroll(
           restored = true
 
           let cancelled = false
-          cancelStabilize = () => { cancelled = true; programmaticScrolling = false }
+          cancelStabilize = () => {
+            cancelled = true
+            programmaticScrolling = false
+            if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
+          }
           programmaticScrolling = true
 
           // Stage 1 — estimated heights, gets item on screen immediately.
@@ -210,6 +218,33 @@ export function useBookViewLinesScroll(
                         if (++markAttempts < 30) requestAnimationFrame(tryScrollToMark)
                       }
                       requestAnimationFrame(tryScrollToMark)
+                    }
+
+                    // Deep-link open (otzaria:// / zayit://): momentarily flash the
+                    // target line's background so the user sees where the link landed.
+                    // The row may not be in the DOM yet (virtualizer), so poll by
+                    // [data-index] with the same rAF-retry pattern as the mark scroll.
+                    if (props.flashLineOnOpen) {
+                      let flashAttempts = 0
+                      function tryFlashLine() {
+                        if (cancelled || !scrollerEl.value) return
+                        const row = scrollerEl.value.querySelector(
+                          `[data-index="${target}"] .line`,
+                        ) as HTMLElement | null
+                        if (row) {
+                          row.classList.add('flash-open')
+                          // Remove after the animation finishes (must match the CSS
+                          // animation duration, ~3.5s) so the class doesn't linger and
+                          // re-fire on virtualizer recycle. Cleared on cancel/unmount.
+                          flashTimer = window.setTimeout(() => {
+                            row.classList.remove('flash-open')
+                            flashTimer = null
+                          }, 3600)
+                          return
+                        }
+                        if (++flashAttempts < 30) requestAnimationFrame(tryFlashLine)
+                      }
+                      requestAnimationFrame(tryFlashLine)
                     }
                     return
                   }
