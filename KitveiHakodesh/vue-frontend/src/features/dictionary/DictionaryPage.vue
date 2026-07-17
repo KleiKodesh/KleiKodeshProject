@@ -93,7 +93,7 @@ watch(debouncedQuery, async (q) => {
       return
     }
 
-    const [{ dictRows, metzudatRows, malbimRows, menchemRows, aruchRows, isExact }] = await Promise.all([
+    const [{ dictRows, metzudatRows, malbimRows, menchemRows, micropediaRows, aruchRows, isExact }] = await Promise.all([
       combinedLookup(trimmed),
     ])
 
@@ -141,7 +141,7 @@ watch(debouncedQuery, async (q) => {
       }
     }
 
-    if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !aruchRows.length && !synonyms.length) {
+    if (!dictRows.length && !metzudatRows.length && !malbimRows.length && !menchemRows.length && !micropediaRows.length && !aruchRows.length && !synonyms.length) {
       pageData.value = null
       noResults.value = true
       paneNavigation.updateActiveTab({ title: 'מילון' })
@@ -153,6 +153,7 @@ watch(debouncedQuery, async (q) => {
         metzudat:    metzudatRows,
         malbim:      malbimRows,
         menchemRows,
+        micropediaRows,
         aruchRows,
         links, synonyms, variants,
         ketivSuggestions,
