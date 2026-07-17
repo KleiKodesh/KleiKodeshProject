@@ -41,7 +41,11 @@ namespace KitveiHakodeshLib.Db
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => _db.Query(sql, ParseParamsStatic(root)));
+                // ConfigureAwait(false): keep the continuation (JSON-serializing a
+                // potentially huge row set in Reply) OFF the WinForms UI thread —
+                // that thread also services WebView2 accelerator keys, and stalls
+                // there directly delay Ctrl+Tab / Ctrl+W / etc. reaching the page.
+                var rows = await Task.Run(() => _db.Query(sql, ParseParamsStatic(root))).ConfigureAwait(false);
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }

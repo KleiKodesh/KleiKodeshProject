@@ -117,7 +117,8 @@ namespace KitveiHakodeshLib
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => _dictionary.Query(sql, DbHandler.ParseParamsStatic(root)));
+                // Off-UI continuation — see DbHandler.HandleSql.
+                var rows = await Task.Run(() => _dictionary.Query(sql, DbHandler.ParseParamsStatic(root))).ConfigureAwait(false);
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -133,7 +134,8 @@ namespace KitveiHakodeshLib
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => _dictionary.QueryWiki(sql, DbHandler.ParseParamsStatic(root)));
+                // Off-UI continuation — see DbHandler.HandleSql.
+                var rows = await Task.Run(() => _dictionary.QueryWiki(sql, DbHandler.ParseParamsStatic(root))).ConfigureAwait(false);
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }

@@ -220,6 +220,9 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       return
     } else if (e.ctrlKey && !e.shiftKey && e.code === 'Tab') {
       e.preventDefault()
+      // One switch per physical press — holding the combo must not machine-gun
+      // through tabs via key auto-repeat (each hop cold-remounts a page).
+      if (e.repeat) return
       const paneTabs = pane.tabs.value
       const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
       const nextIndex = (currentIndex + 1) % paneTabs.length
@@ -227,6 +230,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       return
     } else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
       e.preventDefault()
+      if (e.repeat) return
       const paneTabs = pane.tabs.value
       const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
       const previousIndex = (currentIndex - 1 + paneTabs.length) % paneTabs.length

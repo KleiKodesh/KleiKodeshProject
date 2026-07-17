@@ -50,8 +50,11 @@ namespace KitveiHakodeshLib.Bridge
 
             try
             {
+                // BeginInvoke, not Invoke: a background caller must not block on a busy
+                // UI thread — accelerator keys (Ctrl+Tab etc.) are serviced by that same
+                // thread and any queued work directly delays keyboard input delivery.
                 if (_control.InvokeRequired)
-                    _control.Invoke(new Action(Send));
+                    _control.BeginInvoke(new Action(Send));
                 else
                     Send();
             }
