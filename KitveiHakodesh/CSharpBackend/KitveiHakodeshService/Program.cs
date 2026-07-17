@@ -1,3 +1,4 @@
+using KitveiHakodeshService.Catalog;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Ipc;
@@ -17,10 +18,12 @@ builder.Services.AddSingleton<HebrewBooksService>();
 builder.Services.AddSingleton<DictionaryService>();
 builder.Services.AddSingleton<SeforimDbService>();
 builder.Services.AddSingleton<FullTextSearchService>();
+builder.Services.AddSingleton<CatalogTocSearchService>();
 builder.Services.AddSingleton<UserSettingsService>();
 builder.Services.AddSingleton<Dispatcher>();
 builder.Services.AddHostedService<PipeServer>();
 builder.Services.AddHostedService<FtsIndexingStarter>();
+builder.Services.AddHostedService<CatalogTocIndexingStarter>();
 builder.Services.AddHostedService<IdleMemoryTrimmer>();
 
 var host = builder.Build();

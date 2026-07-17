@@ -22,7 +22,10 @@ namespace KitveiHakodeshService.Ipc;
 /// One trim per idle period: activity re-arms it. Trimming is skipped while busy so it
 /// never fights an index build or an in-flight search.
 /// </summary>
-public sealed class IdleMemoryTrimmer(FullTextSearchService fts, ILogger<IdleMemoryTrimmer> logger)
+public sealed class IdleMemoryTrimmer(
+    FullTextSearchService fts,
+    KitveiHakodeshService.Catalog.CatalogTocSearchService catalogToc,
+    ILogger<IdleMemoryTrimmer> logger)
     : BackgroundService
 {
     /// <summary>Idle time before trimming. Override with KHS_IDLE_TRIM_SECONDS (0 disables).</summary>
@@ -56,7 +59,7 @@ public sealed class IdleMemoryTrimmer(FullTextSearchService fts, ILogger<IdleMem
             bool idleLongEnough = (DateTime.UtcNow.Ticks - last) >= TimeSpan.FromSeconds(IdleSeconds).Ticks;
             bool alreadyTrimmed = last == lastTrimmedActivity;
 
-            if (!idleLongEnough || alreadyTrimmed || fts.IsBusy) continue;
+            if (!idleLongEnough || alreadyTrimmed || fts.IsBusy || catalogToc.IsBusy) continue;
 
             try
             {
