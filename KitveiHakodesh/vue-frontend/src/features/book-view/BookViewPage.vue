@@ -101,6 +101,7 @@ const {
   commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+  flashOpenLine,
   restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
   activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
@@ -317,6 +318,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :initial-line-index="initialLineIndex"
                 :initial-scroll-index="initialScrollTop"
                 :initial-scroll-offset="initialScrollOffset"
+                :flash-line-on-open="flashOpenLine"
                 :idb-resolved="idbResolved"
                 :search-highlight-line-index="searchHighlightLineIndex"
                 :search-highlight-query="searchHighlightQuery"
@@ -358,6 +360,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :initial-line-index="initialLineIndex"
                 :initial-scroll-index="initialScrollTop"
                 :initial-scroll-offset="initialScrollOffset"
+                :flash-line-on-open="flashOpenLine"
                 :idb-resolved="idbResolved"
                 :search-highlight-line-index="searchHighlightLineIndex"
                 :search-highlight-query="searchHighlightQuery"

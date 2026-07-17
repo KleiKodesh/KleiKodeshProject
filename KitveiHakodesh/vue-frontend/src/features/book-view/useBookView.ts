@@ -80,15 +80,19 @@ export function useBookView(
 
   const openTocEntryId = paneNavigation.activeTab.openTocEntryId
   const openTocLineIndex = paneNavigation.activeTab.openTocLineIndex
+  const flashOpenLine = paneNavigation.activeTab.flashOpenLine ?? false
   const searchHighlightLineIndex = paneNavigation.activeTab.searchHighlightLineIndex
   const searchHighlightQuery = paneNavigation.activeTab.searchHighlightQuery ?? ''
   const searchHighlightSnippet = paneNavigation.activeTab.searchHighlightSnippet
   const searchHighlightTerms = paneNavigation.activeTab.searchHighlightTerms
 
-  if (openTocEntryId != null)
+  // A deep-link open (flashOpenLine) sets openTocLineIndex without openTocEntryId, so
+  // include it in the clear gate — otherwise the flash flag would survive a remount.
+  if (openTocEntryId != null || flashOpenLine)
     paneNavigation.updateActiveTab({
       openTocEntryId: undefined,
       openTocLineIndex: undefined,
+      flashOpenLine: undefined,
       searchHighlightLineIndex: undefined,
       searchHighlightQuery: undefined,
       searchHighlightSnippet: undefined,
@@ -410,6 +414,7 @@ export function useBookView(
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+    flashOpenLine,
     restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
     activeMatchCount: searchPanel.activeMatchCount,
     activeMatchIdx: searchPanel.activeMatchIdx,
