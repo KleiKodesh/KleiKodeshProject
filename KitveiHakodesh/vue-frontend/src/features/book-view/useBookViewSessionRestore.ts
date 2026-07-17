@@ -6,17 +6,13 @@
  * Also exposes the initial scroll refs that BookViewLinesContent needs before
  * the IDB read completes.
  */
-import { ref, watch, nextTick } from 'vue'
+import { ref } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { Ref } from 'vue'
 import type { CommentaryTreeState } from './bookViewTypes'
 import { isCommentaryBookUnchecked } from './commentary/uncheckedCommentaryBooks'
-
-interface CommentaryViewRef {
-  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
-}
 
 export function useBookViewSessionRestore(
   tabId: string,
@@ -26,9 +22,11 @@ export function useBookViewSessionRestore(
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
   commentaryTreeState: CommentaryTreeState,
-  commentaryLoading: Ref<boolean>,
-  commentaryViewRef: () => CommentaryViewRef | null,
-  commentaryGroups: () => { length: number },
+  // Seeds the live commentary-scroll refs in useBookViewCommentaryPanel with the
+  // persisted position. onCommentaryPanelMounted reads them and owns the actual
+  // restore; seeding also makes hasSavedScrollPos true so setupGroupReloadScroll
+  // defers to the restore instead of jumping to the pinned group on tab switch.
+  seedSavedScrollPos: (index: number, offset: number) => void = () => {},
 ) {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
@@ -163,35 +161,16 @@ export function useBookViewSessionRestore(
     const so = _restoredSo
 
     if (si != null && so != null) {
-      const stop = watch(
-        () => !commentaryLoading.value && commentaryGroups().length > 0,
-        async (ready) => {
-          if (!ready) return
-          stop()
-          await nextTick()
-          const doRestore = async (viewRef: CommentaryViewRef) => {
-            await viewRef.restoreCommentaryScrollPos(si, so)
-          }
-          const viewRef = commentaryViewRef()
-          if (viewRef) {
-            nextTick(() => {
-              void doRestore(viewRef)
-            })
-          } else {
-            const stopRef = watch(
-              () => commentaryViewRef(),
-              (newRef) => {
-                if (!newRef) return
-                stopRef()
-                nextTick(() => {
-                  void doRestore(newRef)
-                })
-              },
-            )
-          }
-        },
-        { flush: 'sync', immediate: true },
-      )
+      // Publish the persisted position into the live panel refs. This is the ONLY
+      // thing session restore does for commentary scroll — the actual restore is
+      // owned entirely by onCommentaryPanelMounted (useBookViewCommentaryPanel),
+      // which fires when commentaryVisible flips true (set by _applyRestoreData
+      // above), reads these seeded refs, claims restore intent, and restores.
+      // Seeding also makes hasSavedScrollPos true before the first groups load,
+      // so setupGroupReloadScroll defers instead of jumping to the pinned group.
+      // (Seeding happens in this microtask, before the panel path's setTimeout(0),
+      // so the ordering is guaranteed.)
+      seedSavedScrollPos(si, so)
     }
 
     return {

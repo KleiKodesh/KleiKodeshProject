@@ -1,6 +1,7 @@
 import { computed, ref, watch, nextTick } from 'vue'
 import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
+import { commentaryScrollTrace as trace } from '@/utils/commentaryScrollTrace'
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
 const NAV_HEIGHT = 32
@@ -50,6 +51,17 @@ export function useCommentaryScroll(
   // setupGroupReloadScroll so it doesn't overwrite the in-flight restore scroll.
   let isRestoringScrollPos = false
 
+  // Restore INTENT latch. Set synchronously by the panel the instant it commits to
+  // restoring a saved position (before the nextTick + await inside
+  // restoreCommentaryScrollPos actually flips isRestoringScrollPos). Without this,
+  // setupGroupReloadScroll and the panel-mount restore both wake on the same
+  // "groups reloaded" tick and race: whichever watcher callback runs first wins,
+  // so the panel non-deterministically lands on the pinned group (scrollToGroup)
+  // instead of the saved position. The latch lets the reload-scroll watcher stand
+  // down deterministically. Cleared when the restore promise settles.
+  let restoreIntentClaimed = false
+  function claimRestoreIntent() { restoreIntentClaimed = true }
+
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
     scrollTop.value = scrollerEl()?.scrollTop ?? 0
     const pos = captureScrollPos()
@@ -62,7 +74,8 @@ export function useCommentaryScroll(
 
   function scrollToGroup(bookId: number, sectionLabel?: string, subSectionLabel?: string) {
     const el = scrollerEl()
-    if (!el) return
+    trace.begin('scrollToGroup', { bookId, sectionLabel, subSectionLabel, hasEl: !!el, flatItems: flatItems().length })
+    if (!el) { trace.push('scrollToGroup', 'ABORT_no_scroller', {}); return }
     const token = ++scrollToGroupToken
 
     function resolveIndex(): number {
@@ -76,10 +89,12 @@ export function useCommentaryScroll(
     }
 
     const idx = resolveIndex()
-    if (idx < 0) return
+    trace.push('scrollToGroup', 'resolveIndex', { idx, flatItems: flatItems().length })
+    if (idx < 0) { trace.push('scrollToGroup', 'ABORT_index_not_found', {}); return }
 
     // Step 1 — bring the target into the rendered range.
     virtualizer().scrollToIndex(idx, { align: 'start' })
+    trace.push('scrollToGroup', 'scrollToIndex', { idx, scrollTop: el.scrollTop })
 
     // Step 2 — correct to the header's measured position, and KEEP correcting for a
     // bounded window: the two-phase commentary loader backfills line content into
@@ -105,16 +120,20 @@ export function useCommentaryScroll(
 
     function correct(): void {
       if (done) return
-      if (token !== scrollToGroupToken) { finish(); return }
-      if (performance.now() - startedAt > CORRECTION_WINDOW_MS) { finish(); return }
+      if (token !== scrollToGroupToken) { trace.push('scrollToGroup', 'correct_cancelled_token', { token, current: scrollToGroupToken }); finish(); return }
+      if (performance.now() - startedAt > CORRECTION_WINDOW_MS) { trace.push('scrollToGroup', 'correct_window_expired', {}); finish(); return }
       const currentIdx = resolveIndex()
-      if (currentIdx < 0) return
+      if (currentIdx < 0) { trace.push('scrollToGroup', 'correct_no_index', {}); return }
       const m = virtualizer().measurementsCache.find((c: any) => c.index === currentIdx)
-      if (!m) return
+      if (!m) { trace.push('scrollToGroup', 'correct_no_measurement', { currentIdx }); return }
       const targetScrollTop = Math.max(0, m.start)
+      const before = elCaptured.scrollTop
       if (Math.abs(elCaptured.scrollTop - targetScrollTop) > 2) {
         elCaptured.scrollTop = targetScrollTop
         scrollTop.value = targetScrollTop
+        trace.push('scrollToGroup', 'correct_applied', { before, target: targetScrollTop, mStart: m.start, currentIdx })
+      } else {
+        trace.push('scrollToGroup', 'correct_noop', { scrollTop: before, target: targetScrollTop, currentIdx })
       }
     }
 
@@ -287,10 +306,74 @@ export function useCommentaryScroll(
     }
   }
 
+  /**
+   * Keeps the restored position anchored while the two-phase loader backfills text.
+   * The one-shot apply in restoreCommentaryScrollPos computes item.start from
+   * measurements that are still settling — lines above the target are near-empty
+   * stubs whose heights change as their content arrives, shifting the content under
+   * the viewport by tens/hundreds of px ("near but not exact" restores). Mirrors
+   * scrollToGroup's MutationObserver correction: on every DOM mutation, re-derive
+   * the target from the CURRENT measurement of scrollIndex and re-apply. Cancelled
+   * by user interaction, by a newer scrollToGroup/restore (token), or when the
+   * window elapses.
+   */
+  const RESTORE_CORRECTION_WINDOW_MS = 2500
+  function startRestoreCorrection(scrollIndex: number, scrollOffset: number) {
+    const el = scrollerEl()
+    if (!el) return
+    const token = scrollToGroupToken
+    const startedAt = performance.now()
+    let done = false
+    let observer: MutationObserver | null = null
+
+    function finish() {
+      if (done) return
+      done = true
+      observer?.disconnect()
+      el!.removeEventListener('wheel', finish)
+      el!.removeEventListener('touchstart', finish)
+      el!.removeEventListener('pointerdown', finish)
+    }
+
+    function correct(): void {
+      if (done) return
+      if (token !== scrollToGroupToken) { finish(); return }
+      if (performance.now() - startedAt > RESTORE_CORRECTION_WINDOW_MS) { finish(); return }
+      const m = virtualizer().measurementsCache.find((c) => c.index === scrollIndex)
+      if (!m) return
+      const maxScrollTop = Math.max(0, el!.scrollHeight - el!.clientHeight)
+      const target = Math.min(Math.max(0, m.start + scrollOffset), maxScrollTop)
+      if (Math.abs(el!.scrollTop - target) > 2) {
+        const before = el!.scrollTop
+        el!.scrollTop = target
+        scrollTop.value = target
+        trace.push('restore', 'correction_applied', { before, target, itemStart: m.start })
+      }
+    }
+
+    el.addEventListener('wheel', finish, { passive: true })
+    el.addEventListener('touchstart', finish, { passive: true })
+    el.addEventListener('pointerdown', finish, { passive: true })
+
+    requestAnimationFrame(() => {
+      if (done) return
+      correct()
+      if (done) return
+      observer = new MutationObserver(() => correct())
+      observer.observe(el, { childList: true, subtree: true, attributes: false })
+      setTimeout(finish, RESTORE_CORRECTION_WINDOW_MS + 50)
+    })
+  }
+
   function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
     isRestoringScrollPos = true
+    restoreIntentClaimed = true
+    trace.begin('restore', { scrollIndex, scrollOffset, flatItems: flatItems().length, hasEl: !!scrollerEl() })
     // Cancel any in-flight or queued scrollToGroup call — restore takes priority.
     scrollToGroupToken++
+    // Set true when the position is actually applied — gates the post-restore
+    // correction loop (no point correcting a restore that gave up).
+    let applied = false
     return new Promise<void>((resolve) => {
       let attempts = 0
       const MAX_ATTEMPTS = 40
@@ -300,18 +383,21 @@ export function useCommentaryScroll(
         const itemsLength = flatItems().length
 
         if (!el || itemsLength === 0) {
+          trace.push('restore', 'wait_for_items', { attempts, hasEl: !!el, itemsLength })
           if (attempts < MAX_ATTEMPTS) {
             attempts++
             nextTick(() => requestAnimationFrame(startRestore))
             return
           }
 
+          trace.push('restore', 'GIVE_UP_no_items', { attempts })
           resolve()
           return
         }
 
         // Scroll to the target index — this is synchronous for already-measured items
         virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
+        trace.push('restore', 'scrollToIndex', { scrollIndex, scrollTop: el.scrollTop })
 
         function tryApplyScroll() {
           const el2 = scrollerEl()
@@ -339,10 +425,12 @@ export function useCommentaryScroll(
             flatItem.lineId > 0 &&
             flatItem.content === ''
           if (contentPending && attempts < MAX_ATTEMPTS) {
+            trace.push('restore', 'content_pending', { attempts, scrollIndex, lineId: flatItem?.lineId })
             attempts++
             nextTick(() => requestAnimationFrame(tryApplyScroll))
             return
           }
+          if (contentPending) trace.push('restore', 'content_still_pending_at_max', { attempts, scrollIndex })
 
           const measuredHeight = item && item.start !== undefined && item.end !== undefined ? item.end - item.start : 0
           if (item && measuredHeight > 0) {
@@ -350,23 +438,32 @@ export function useCommentaryScroll(
             const maxScrollTop = Math.max(0, el2.scrollHeight - el2.clientHeight)
             const desiredScrollTop = Math.min(targetScrollTop, maxScrollTop)
             el2.scrollTop = desiredScrollTop
+            trace.push('restore', 'apply', {
+              attempts, itemStart: item.start, measuredHeight, scrollOffset,
+              targetScrollTop, maxScrollTop, desiredScrollTop, clamped: desiredScrollTop < targetScrollTop,
+            })
 
             requestAnimationFrame(() => {
               if (Math.abs(el2.scrollTop - desiredScrollTop) > 1 && attempts < MAX_ATTEMPTS) {
+                trace.push('restore', 'apply_drifted_retry', { attempts, got: el2.scrollTop, wanted: desiredScrollTop })
                 attempts++
 
                 nextTick(() => requestAnimationFrame(tryApplyScroll))
                 return
               }
 
+              trace.push('restore', 'DONE', { attempts, finalScrollTop: el2.scrollTop, desiredScrollTop })
+              applied = true
               resolve()
             })
           } else if (attempts < MAX_ATTEMPTS) {
             // Item not yet measured — retry
+            trace.push('restore', 'not_measured_retry', { attempts, scrollIndex, hasItem: !!item, measuredHeight })
             attempts++
             nextTick(() => requestAnimationFrame(tryApplyScroll))
           } else {
             // Give up after max attempts
+            trace.push('restore', 'GIVE_UP_not_measured', { attempts, scrollIndex })
             resolve()
           }
         }
@@ -380,7 +477,12 @@ export function useCommentaryScroll(
       // Bump the token to cancel any scrollToGroup that started concurrently with
       // restore and is now in its rAF chain — restore takes priority.
       scrollToGroupToken++
+      restoreIntentClaimed = false
       requestAnimationFrame(() => { isRestoringScrollPos = false })
+      // Keep the position anchored while backfill re-measures items above it.
+      // Started AFTER the token bump so the correction's captured token stays valid
+      // until the next scrollToGroup/restore cancels it.
+      if (applied) startRestoreCorrection(scrollIndex, scrollOffset)
     })
   }
 
@@ -414,7 +516,10 @@ export function useCommentaryScroll(
         if (!newGroups.length) return
         // Skip partial loads — only scroll when loading is fully complete.
         if (isLoading()) return
-        if (isRestoringScrollPos) return
+        // A restore is running OR the panel has synchronously claimed intent to
+        // restore this same reload — stand down so we don't fight it (would land
+        // on the pinned group instead of the saved position). See restoreIntentClaimed.
+        if (isRestoringScrollPos || restoreIntentClaimed) return
         const generation = ++scrollGeneration
         // Single nextTick with flush:'post' is sufficient — the virtualizer has
         // the new items after Vue flushes. The previous double-nextTick + rAF added
@@ -425,7 +530,9 @@ export function useCommentaryScroll(
         if (!pinned) return
         const found = newGroups.some((g: any) => g.bookId === pinned.bookId)
         if (found) {
-          if (isRestoringScrollPos) return
+          // Re-check after the awaited nextTick — a restore may have started/claimed
+          // intent while we were yielded.
+          if (isRestoringScrollPos || restoreIntentClaimed) return
           scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel)
         }
       },
@@ -442,6 +549,7 @@ export function useCommentaryScroll(
     scrollToFlatIndex,
     captureScrollPos,
     restoreCommentaryScrollPos,
+    claimRestoreIntent,
     topVisibleFlatIndex,
     setupGroupReloadScroll,
   }

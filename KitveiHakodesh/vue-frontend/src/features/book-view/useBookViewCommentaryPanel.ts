@@ -16,6 +16,7 @@ type CommentaryGroup = { bookId: number; bookTitle: string; sectionLabel?: strin
 type CommentaryViewInstance = {
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
+  claimRestoreIntent?: () => void
   scrollToGroup: (bookId: number) => void
 }
 
@@ -115,9 +116,18 @@ export function useBookViewCommentaryPanel(
         () => !commentaryLoading.value && groups.value.length > 0,
         (ready) => {
           if (!ready) return
+          // A line click while commentary was loading clears the saved position
+          // (see onLineSelected in useBookView) — the queued restore is stale and
+          // must yield to the pinned-group jump for the newly clicked line.
+          if (commentaryScrollIndex.value == null) { cancelRestore(); return }
           stopLoading?.()
           const viewRef = commentaryViewRef()
           if (viewRef) {
+            // Claim restore intent SYNCHRONOUSLY, before the nextTick below. This
+            // reload also wakes setupGroupReloadScroll's watcher; without the
+            // synchronous claim the two race and the panel can land on the pinned
+            // group instead of the saved position.
+            viewRef.claimRestoreIntent?.()
             nextTick(async () => {
               await viewRef.restoreCommentaryScrollPos(savedScrollIndex, savedScrollOffset)
               lastRestoredCommentaryKey = restoreKey
@@ -128,6 +138,7 @@ export function useBookViewCommentaryPanel(
               (newRef) => {
                 if (!newRef) return
                 stopViewRef?.()
+                newRef.claimRestoreIntent?.()
                 nextTick(async () => {
                   await newRef.restoreCommentaryScrollPos(savedScrollIndex, savedScrollOffset)
                   lastRestoredCommentaryKey = restoreKey

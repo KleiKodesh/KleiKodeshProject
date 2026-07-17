@@ -10,7 +10,7 @@
  * - useBookViewSearchPanel        — search panel state and match navigation
  * - useBookViewCommentaryPanel    — commentary panel visibility and scroll restore
  */
-import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, inject } from 'vue'
+import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -142,7 +142,7 @@ export function useBookView(
 
   const {
     manualSelectionLineIds,
-    selectedSectionLineIds, clearManualSelection, onLineSelected,
+    selectedSectionLineIds, clearManualSelection, onLineSelected: onLineSelectedRaw,
   } = useBookViewLineSelection(
     () => lines.value,
     () => tocEntries.value,
@@ -151,6 +151,35 @@ export function useBookView(
     (group) => pendingPinFns.setPendingPin(group),
     () => pendingPinFns.getActivePinnedGroup(),
   )
+
+  /**
+   * An explicit line click invalidates any saved commentary scroll position:
+   * the pinned-group jump owns positioning for fresh navigation, and a stale
+   * session-restored position must not be applied to the new line's commentary
+   * (it would land on an arbitrary commentator and suppress the pinned jump).
+   * The position refs repopulate naturally — the pinned jump's programmatic
+   * scroll fires a scroll event that re-captures them.
+   * (commentaryPanel is initialized below; clicks can only happen after setup.)
+   */
+  function onLineSelected(lineId: number, isShiftClick: boolean) {
+    commentaryPanel.commentaryScrollIndex.value = null
+    commentaryPanel.commentaryScrollOffset.value = null
+    // Re-clicking the already-selected line changes no reactive state, so no
+    // commentary reload fires and setupGroupReloadScroll never wakes — jump to
+    // the pinned group explicitly (e.g. the session-restored line: restore put
+    // the panel at the saved position; a deliberate click should still show the
+    // default commentator).
+    const isSameLineReclick = !isShiftClick && commentaryLineId.value === lineId
+    onLineSelectedRaw(lineId, isShiftClick)
+    if (isSameLineReclick) {
+      const pinned = pinnedCommentaryGroupForDisplay.value
+      if (pinned) {
+        void nextTick(() =>
+          commentaryViewRef()?.scrollToGroup(pinned.bookId),
+        )
+      }
+    }
+  }
 
   // ── Commentary data ───────────────────────────────────────────────────────
 
@@ -311,8 +340,14 @@ export function useBookView(
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     commentaryPanel.commentaryVisible, selectedLineId, commentaryLineId,
-    commentaryTreeState, commentaryLoading, commentaryViewRef,
-    () => groups.value,
+    commentaryTreeState,
+    (index, offset) => {
+      // A user line-click before the IDB read resolves sets commentaryLineId and
+      // invalidates any saved position — don't overwrite that with stale values.
+      if (commentaryLineId.value != null) return
+      commentaryPanel.commentaryScrollIndex.value = index
+      commentaryPanel.commentaryScrollOffset.value = offset
+    },
   )
 
   watch(() => bookId, () => {
