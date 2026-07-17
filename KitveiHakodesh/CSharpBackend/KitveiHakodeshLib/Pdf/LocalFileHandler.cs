@@ -268,7 +268,9 @@ namespace KitveiHakodeshLib.LocalFile
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
                 if (ext == ".txt")
                 {
-                    string content = File.ReadAllText(filePath, Encoding.UTF8);
+                    // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
+                    // The branches below stay on the UI thread — RegisterFolder touches CoreWebView2.
+                    string content = await Task.Run(() => File.ReadAllText(filePath, Encoding.UTF8)).ConfigureAwait(false);
                     _bridge.Reply(id, new { textContent = content });
                     return;
                 }
@@ -289,20 +291,20 @@ namespace KitveiHakodeshLib.LocalFile
             }
         }
 
-        public Task HandleReadTxtFileContent(JsonElement root, string id)
+        public async Task HandleReadTxtFileContent(JsonElement root, string id)
         {
             try
             {
                 string filePath = root.GetProperty("filePath").GetString();
-                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return Task.CompletedTask; }
-                string content = File.ReadAllText(filePath, Encoding.UTF8);
+                if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
+                // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
+                string content = await Task.Run(() => File.ReadAllText(filePath, Encoding.UTF8)).ConfigureAwait(false);
                 _bridge.Reply(id, new { textContent = content });
             }
             catch (Exception ex)
             {
                 _bridge.Reply(id, new { error = ex.Message });
             }
-            return Task.CompletedTask;
         }
 
         public void HandleDisposeLocalFileHost(JsonElement root, string id)

@@ -55,7 +55,8 @@ namespace KitveiHakodeshLib.UserSettings
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                var rows = await Task.Run(() => db.Query(sql, _ParseParams(root)));
+                // Off-UI continuation — see DbHandler.HandleSql.
+                var rows = await Task.Run(() => db.Query(sql, _ParseParams(root))).ConfigureAwait(false);
                 _bridge.Reply(id, new { rows });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
@@ -68,7 +69,8 @@ namespace KitveiHakodeshLib.UserSettings
             string sql = root.GetProperty("sql").GetString();
             try
             {
-                long lastInsertId = await Task.Run(() => db.Execute(sql, _ParseParams(root)));
+                // Off-UI continuation — see DbHandler.HandleSql.
+                long lastInsertId = await Task.Run(() => db.Execute(sql, _ParseParams(root))).ConfigureAwait(false);
                 _bridge.Reply(id, new { lastInsertId });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
