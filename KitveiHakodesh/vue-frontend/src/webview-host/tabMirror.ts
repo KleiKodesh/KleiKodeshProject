@@ -89,7 +89,14 @@ export function initTabMirror(): void {
     return {
       tabs: [...tabStore.pane1Tabs, ...tabStore.pane2Tabs]
         .sort((a, b) => Number(a.id) - Number(b.id))
-        .map((t): MirroredTab => ({ id: t.id, title: t.title, pane: t.pane === 2 ? 2 : 1 })),
+        .map((t): MirroredTab => ({
+          id: t.id,
+          title: t.title,
+          // Full breadcrumb for the native tab-list dropdown — same "title · path"
+          // string the Vue title bar shows. The strip tab caption stays `title`.
+          listTitle: t.tocPath ? `${t.title} · ${t.tocPath}` : t.title,
+          pane: t.pane === 2 ? 2 : 1,
+        })),
       activeTabId: tabStore.activeTabId,
       pane2ActiveTabId: splitOn ? tabStore.pane2ActiveTabId : '',
       splitView: splitOn,

@@ -266,6 +266,9 @@ namespace KitveiHakodeshLib
                     if (tab.Title != info.Title)
                         tab.Title = info.Title;
 
+                    // Dropdown-only breadcrumb text — no strip repaint involved.
+                    tab.ListTitle = info.ListTitle;
+
                     // Group follows the pane only while split view is open; an adopted
                     // orphan (pane 2, split off) lives in region 0 and can be pane 1's
                     // active tab — so the highlight follows the region, not the pane.
