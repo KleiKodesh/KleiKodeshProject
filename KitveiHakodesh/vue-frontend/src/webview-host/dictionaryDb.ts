@@ -8,7 +8,7 @@ import { serviceCall } from './serviceClient'
 import {
   boldExact, boldPrefix, boldContains,
   getMetzudatBookIds, getMalbimBookIds,
-  menchemLookup, aruchLookup,
+  menchemLookup, aruchLookup, micropediaLookup,
 } from './dictionarySeforimDb'
 import {
   SQL_DICT_EXACT, SQL_DICT_PREFIX, SQL_DICT_CONTAINS, SQL_DICT_EXACT_IN_WORD,
@@ -33,7 +33,7 @@ export interface DictLink {
   word: string
 }
 
-export type { MetzudatRow, MenchemRow, AruchRow } from './dictionarySeforimDb'
+export type { MetzudatRow, MenchemRow, AruchRow, MicropediaRow } from './dictionarySeforimDb'
 
 declare global {
   interface Window {
@@ -163,12 +163,13 @@ export async function dictKetivVariants(candidates: string[]): Promise<string[]>
 // ── Combined lookup ───────────────────────────────────────────────────────────
 
 export interface CombinedLookupResult {
-  dictRows:     SenseRow[]
-  metzudatRows: import('./dictionarySeforimDb').MetzudatRow[]
-  malbimRows:   import('./dictionarySeforimDb').MetzudatRow[]
-  menchemRows:  import('./dictionarySeforimDb').MenchemRow[]
-  aruchRows:    import('./dictionarySeforimDb').AruchRow[]
-  isExact:      boolean
+  dictRows:        SenseRow[]
+  metzudatRows:    import('./dictionarySeforimDb').MetzudatRow[]
+  malbimRows:      import('./dictionarySeforimDb').MetzudatRow[]
+  menchemRows:     import('./dictionarySeforimDb').MenchemRow[]
+  micropediaRows:  import('./dictionarySeforimDb').MicropediaRow[]
+  aruchRows:       import('./dictionarySeforimDb').AruchRow[]
+  isExact:         boolean
 }
 
 /**
@@ -176,8 +177,8 @@ export interface CombinedLookupResult {
  * progression: exact → prefix → contains. All three exact queries fire together;
  * if any source finds results the tier is done and lower tiers are skipped.
  *
- * מחברת מנחם and ספר הערוך run independently in parallel (exact-only, different structure)
- * and do not participate in the tier gating.
+ * מחברת מנחם, מיקרופדיה and ספר הערוך run independently in parallel (exact-only,
+ * different structure) and do not participate in the tier gating.
  */
 export async function combinedLookup(term: string): Promise<CombinedLookupResult> {
   const [metzudatIds, malbimIds] = await Promise.all([
@@ -185,8 +186,9 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
     getMalbimBookIds(),
   ])
 
-  // מחברת מנחם and ספר הערוך are exact-only — fire them immediately and collect at the end
+  // מחברת מנחם, מיקרופדיה and ספר הערוך are exact-only — fire them immediately and collect at the end
   const menchemPromise = menchemLookup(term)
+  const micropediaPromise = micropediaLookup(term)
   const aruchPromise = aruchLookup(term)
 
   // Tier 1 — exact
@@ -201,8 +203,9 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
       dictRows:     dictExactResult.rows,
       metzudatRows: metzudatExactRows,
       malbimRows:   malbimExactRows,
-      menchemRows:  await menchemPromise,
-      aruchRows:    await aruchPromise,
+      menchemRows:    await menchemPromise,
+      micropediaRows: await micropediaPromise,
+      aruchRows:      await aruchPromise,
       isExact:      true,
     }
   }
@@ -219,8 +222,9 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
       dictRows:     dictPrefixRows,
       metzudatRows: metzudatPrefixRows,
       malbimRows:   malbimPrefixRows,
-      menchemRows:  await menchemPromise,
-      aruchRows:    await aruchPromise,
+      menchemRows:    await menchemPromise,
+      micropediaRows: await micropediaPromise,
+      aruchRows:      await aruchPromise,
       isExact:      false,
     }
   }
@@ -236,8 +240,9 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
     dictRows:     dictContainsRows,
     metzudatRows: metzudatContainsRows,
     malbimRows:   malbimContainsRows,
-    menchemRows:  await menchemPromise,
-    aruchRows:    await aruchPromise,
-    isExact:      false,
+    menchemRows:    await menchemPromise,
+    micropediaRows: await micropediaPromise,
+    aruchRows:      await aruchPromise,
+    isExact:        false,
   }
 }
