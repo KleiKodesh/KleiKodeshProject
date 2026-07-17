@@ -13,6 +13,18 @@ const activeTabId = computed(() =>
 )
 const route = computed(() => activeTab.value.route)
 
+// Remount key for pages that read their target once at setup (they don't watch
+// for in-place changes). Book view reads bookId once, so switching to a
+// DIFFERENT book on the SAME tab (e.g. picking a result from the address bar
+// while already in book view) must force a remount — include bookId in the key.
+// Other keyed routes just key by tab id.
+const pageKey = computed(() => {
+  const r = route.value
+  if (r === '/book-view') return `${activeTabId.value}:${activeTab.value.bookId ?? ''}`
+  if (r === '/search' || r === '/txt-view') return activeTabId.value
+  return undefined
+})
+
 const pages: Record<string, unknown> = {
   '/': defineAsyncComponent(() => import('@/features/home/HomePage.vue')),
   '/books': defineAsyncComponent(() => import('@/features/book-catalog/BookCatalogPage.vue')),
@@ -40,6 +52,6 @@ const pages: Record<string, unknown> = {
 <template>
   <component
     :is="pages[route]"
-    :key="route === '/book-view' || route === '/search' || route === '/txt-view' ? activeTabId : undefined"
+    :key="pageKey"
   />
 </template>
