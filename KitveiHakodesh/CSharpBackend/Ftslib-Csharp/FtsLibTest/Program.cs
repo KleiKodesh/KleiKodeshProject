@@ -107,6 +107,10 @@ namespace FtsLibTest
                     WildcardDiag.Run(args);
                     return;
 
+                case "capsweep":
+                    CapSweepTest.Run(args);
+                    return;
+
                 case "prefixlen":
                     PrefixLenDiag.Run(args);
                     return;

@@ -39,6 +39,13 @@ namespace FtsLib.Search
     ///
     ///   MaxOptionalChars (4): a pattern may contain at most this many '?' operators.
     ///   Patterns with more are rejected to cap the 2^N combinatorial expansion.
+    ///
+    ///   MaxExpandedTerms: when a pattern still expands to more concrete terms than
+    ///   this cap (broad infix patterns like *כי*), the expansion is trimmed
+    ///   shortest-term-first — shorter terms sit closest to the anchor and carry the
+    ///   most matches per term, so they sacrifice the fewest results. Ties prefer
+    ///   the higher document count, then ordinal order (deterministic across runs
+    ///   and runtimes).
     /// </summary>
     internal static class HebrewWildcardExpander
     {
@@ -66,6 +73,27 @@ namespace FtsLib.Search
         /// Caps the 2^N combinatorial expansion at 2^4 = 16 variants.
         /// </summary>
         public const int MaxOptionalChars = 4;
+
+        /// <summary>
+        /// Tuned default for <see cref="MaxExpandedTerms"/>.
+        /// Measured with FtsLibTest capsweep on the FULL tier (2026-07-17):
+        /// *כי* expands to 27,543 terms uncapped; snippet generation rebuilds a
+        /// term→group map per line, so 2,000 results cost 18-19s uncapped vs 2.1s
+        /// at cap 2000, while keeping 88.3% of the 2.39M matching lines. Results
+        /// kept is flat (~87-88%) across caps 1000-3000 and only reaches 95.9% at
+        /// 5000 for 2.6x the snippet cost; below 1000 it cliffs (75% → 52%).
+        /// 2000 sits mid-plateau: ~9x end-to-end on the pathological query while
+        /// normal patterns (*יצח* = 199 terms) are untouched.
+        /// </summary>
+        public const int DefaultMaxExpandedTerms = 2000;
+
+        /// <summary>
+        /// Maximum number of concrete terms a single wildcard pattern may expand to.
+        /// 0 = unlimited. When the expansion exceeds the cap, terms are kept
+        /// shortest-first (ties: higher doc count, then ordinal).
+        /// Runtime-settable so hosts and test rigs can tune it.
+        /// </summary>
+        public static int MaxExpandedTerms = DefaultMaxExpandedTerms;
 
         // ── Public entry point ────────────────────────────────────────
 
@@ -98,44 +126,60 @@ namespace FtsLib.Search
             var subPatterns = new HashSet<string>(StringComparer.Ordinal);
             ExpandOptionals(pattern, 0, new System.Text.StringBuilder(pattern.Length), subPatterns);
 
-            // Collect results across all sub-patterns, deduplicating.
-            var seen    = new HashSet<string>(StringComparer.Ordinal);
-            var results = new List<string>();
+            // Collect results across all sub-patterns, deduplicating. Counts are
+            // set-once: a term found via two sub-patterns comes from the same
+            // term_index rows, so its total is identical either way.
+            var merged = new Dictionary<string, long>(StringComparer.Ordinal);
 
             foreach (var sub in subPatterns)
             {
-                List<string> expanded;
                 if (sub.IndexOf('*') >= 0)
-                    expanded = ExpandStar(sub, segments, cache);
-                else
-                    expanded = LookupLiteral(sub, segments, cache);
-
-                foreach (var term in expanded)
-                    if (seen.Add(term))
-                        results.Add(term);
+                {
+                    foreach (var kv in ExpandStarCore(sub, segments, cache))
+                        if (!merged.ContainsKey(kv.Key))
+                            merged[kv.Key] = kv.Value;
+                }
+                else if (!merged.ContainsKey(sub) &&
+                         TryLookupLiteral(sub, segments, cache, out long count))
+                {
+                    merged[sub] = count;
+                }
             }
 
-            return results;
+            // The cap is applied once on the merged set (not per sub-pattern) so
+            // shortest-first competes across all '?' variants together.
+            return CapTerms(merged);
         }
 
         // ── '*'-only expansion (original logic) ───────────────────────
 
         /// <summary>
         /// Queries every segment for terms matching <paramref name="pattern"/>
-        /// (which must contain only '*' wildcards, no '?'), then filters out any
-        /// result where the wildcard portion exceeds <see cref="MaxWildcardChars"/>.
+        /// (which must contain only '*' wildcards, no '?'), filters out any
+        /// result where the wildcard portion exceeds the affix budgets, then
+        /// applies the <see cref="MaxExpandedTerms"/> shortest-first cap.
         ///
         /// Returns an empty list when the anchor is too short or nothing survives
         /// the filter.
         /// </summary>
         public static List<string> ExpandStar(string pattern, IReadOnlyList<SegmentHandle> segments,
                                               TermChunkCache cache = null)
+            => CapTerms(ExpandStarCore(pattern, segments, cache));
+
+        /// <summary>
+        /// Uncapped '*' expansion. Returns each surviving term with its total
+        /// document count (summed across segments) so <see cref="CapTerms"/> can
+        /// break length ties in favour of the more frequent term.
+        /// </summary>
+        private static Dictionary<string, long> ExpandStarCore(string pattern,
+                                                               IReadOnlyList<SegmentHandle> segments,
+                                                               TermChunkCache cache)
         {
             int anchorLen = AnchorLength(pattern);
 
             // Reject anchor-too-short patterns (includes bare "*" and "*" with 1 char).
             if (anchorLen < MinAnchorLength)
-                return new List<string>();
+                return new Dictionary<string, long>(StringComparer.Ordinal);
 
             // F06: pure prefix patterns (abc*) whose semantics a binary range can
             // reproduce exactly are served via idx_term instead of a full LIKE
@@ -144,7 +188,7 @@ namespace FtsLib.Search
             bool useRange = TryGetPrefixRange(pattern, out string rangeLo, out string rangeHi);
 
             string likePattern = useRange ? null : ToLikePattern(pattern);
-            var    raw         = new HashSet<string>(StringComparer.Ordinal);
+            var    raw         = new Dictionary<string, long>(StringComparer.Ordinal);
 
             foreach (var seg in segments)
             {
@@ -171,14 +215,16 @@ namespace FtsLib.Search
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
                         {
-                            string term = reader.GetString(0);
-                            raw.Add(term);
+                            string term  = reader.GetString(0);
+                            int    count = reader.GetInt32(5);
+                            raw.TryGetValue(term, out long total);
+                            raw[term] = total + count;
                             cache?.Add(term, new SegmentChunk(seg,
                                 reader.GetInt64(1),   // skip_offset
                                 reader.GetInt32(2),   // skip_count
                                 reader.GetInt64(3),   // offset
                                 reader.GetInt32(4),   // length
-                                reader.GetInt32(5))); // count
+                                count));              // count
                         }
                 }
             }
@@ -191,33 +237,69 @@ namespace FtsLib.Search
             bool hasLeadingStar  = pattern.StartsWith("*");
             bool hasTrailingStar = pattern.EndsWith("*");
 
-            var results = new List<string>(raw.Count);
-            foreach (var term in raw)
+            var results = new Dictionary<string, long>(StringComparer.Ordinal);
+            foreach (var kv in raw)
             {
-                int extra = term.Length - anchorLen; // total wildcard chars matched
+                int extra = kv.Key.Length - anchorLen; // total wildcard chars matched
 
                 if (hasLeadingStar && hasTrailingStar)
                 {
                     // Infix: we don't know the exact split, but the total extra chars
                     // cannot exceed the combined budget.
                     if (extra <= MaxPrefixWildcardChars + MaxSuffixWildcardChars)
-                        results.Add(term);
+                        results.Add(kv.Key, kv.Value);
                 }
                 else if (hasLeadingStar)
                 {
                     // Suffix wildcard (*abc): extra chars are all prefix.
                     if (extra <= MaxPrefixWildcardChars)
-                        results.Add(term);
+                        results.Add(kv.Key, kv.Value);
                 }
                 else
                 {
                     // Prefix wildcard (abc*): extra chars are all suffix.
                     if (extra <= MaxSuffixWildcardChars)
-                        results.Add(term);
+                        results.Add(kv.Key, kv.Value);
                 }
             }
 
             return results;
+        }
+
+        // ── Expansion cap ─────────────────────────────────────────────
+
+        /// <summary>
+        /// Applies <see cref="MaxExpandedTerms"/> to an expansion, keeping the
+        /// shortest terms (ties: higher doc count, then ordinal). Under the cap
+        /// the terms are returned unsorted — the intersection does not care.
+        /// </summary>
+        private static List<string> CapTerms(Dictionary<string, long> terms)
+        {
+            int cap = MaxExpandedTerms;
+            if (cap <= 0 || terms.Count <= cap)
+                return new List<string>(terms.Keys);
+
+            var entries = new List<KeyValuePair<string, long>>(terms);
+            entries.Sort(CompareShortestFirst);
+
+            var kept = new List<string>(cap);
+            for (int i = 0; i < cap; i++)
+                kept.Add(entries[i].Key);
+            return kept;
+        }
+
+        /// <summary>
+        /// Orders expansion candidates: shortest term first, then higher document
+        /// count, then ordinal — fully deterministic across runs and runtimes.
+        /// </summary>
+        internal static int CompareShortestFirst(KeyValuePair<string, long> a,
+                                                 KeyValuePair<string, long> b)
+        {
+            int c = a.Key.Length.CompareTo(b.Key.Length);
+            if (c != 0) return c;
+            c = b.Value.CompareTo(a.Value); // higher count first
+            if (c != 0) return c;
+            return string.CompareOrdinal(a.Key, b.Key);
         }
 
         // ── '?' expansion helpers ─────────────────────────────────────
@@ -300,17 +382,18 @@ namespace FtsLib.Search
         // ── Literal lookup ────────────────────────────────────────────
 
         /// <summary>
-        /// Looks up an exact term across all segments.
-        /// Returns a single-element list if found, empty list otherwise.
-        /// Probes EVERY segment (no early exit) so the cached chunk list is
+        /// Looks up an exact term across all segments, reporting its total document
+        /// count. Probes EVERY segment (no early exit) so the cached chunk list is
         /// complete — a cache entry missing a segment would silently drop that
         /// segment's postings at resolve time.
         /// </summary>
-        private static List<string> LookupLiteral(string term, IReadOnlyList<SegmentHandle> segments,
-                                                  TermChunkCache cache = null)
+        private static bool TryLookupLiteral(string term, IReadOnlyList<SegmentHandle> segments,
+                                             TermChunkCache cache, out long totalCount)
         {
+            totalCount = 0;
+
             if (AnchorLength(term) < MinAnchorLength)
-                return new List<string>();
+                return false;
 
             bool found = false;
             foreach (var seg in segments)
@@ -325,16 +408,18 @@ namespace FtsLib.Search
                         if (reader.Read())
                         {
                             found = true;
+                            int count = reader.GetInt32(4);
+                            totalCount += count;
                             cache?.Add(term, new SegmentChunk(seg,
                                 reader.GetInt64(0),
                                 reader.GetInt32(1),
                                 reader.GetInt64(2),
                                 reader.GetInt32(3),
-                                reader.GetInt32(4)));
+                                count));
                         }
                 }
             }
-            return found ? new List<string> { term } : new List<string>();
+            return found;
         }
 
         // ── Prefix range scan (F06) ───────────────────────────────────
