@@ -33,14 +33,26 @@ namespace FtsLib.Search
         public const int MaxAllowedDistance = 3;
 
         /// <summary>
-        /// Tuned default for <see cref="MaxExpandedTerms"/>.
+        /// Tuned default for <see cref="MaxExpandedTerms"/> — the chosen sweet spot,
+        /// matching the wildcard default.
         /// Measured with FtsLibTest capsweep on the FULL tier (2026-07-17): fuzzy
         /// expansions are naturally small (יצחק~1 = 43 terms, יצחק~2 = 135); the
-        /// worst observed case, אמר~2 = 2,030 terms, keeps 100.0% of its results
-        /// at cap 2000. Tighter caps lose results (1000 → 90.5%) without saving
-        /// time — fuzzy search cost is postings volume, not term count — so 2000
-        /// is a pure safety valve against pathological expansions, matching the
-        /// wildcard default.
+        /// worst observed case, אמר~2 = 2,030 terms, keeps 99.9998% of its results
+        /// at this cap (2,481,178 of 2,481,183 — the closest-first ordering trims
+        /// only the farthest 30 terms). Tighter caps lose real results (1000 →
+        /// 90.5%) without saving time — fuzzy search cost is postings volume, not
+        /// term count — so in practice the cap is a safety valve against
+        /// pathological expansions.
+        ///
+        /// Lucene reference (verified against lucene/main source): FuzzyQuery ships
+        /// defaultMaxExpansions = 50 with TopTermsBlendedFreqScoringRewrite — a
+        /// bounded priority queue ordered by boost = 1 − editDistance/min(|query|,
+        /// |term|) (exact match = 1.0, ties broken by term bytes; FuzzyTermsEnum
+        /// even shrinks its Levenshtein automaton as the queue bottom rises).
+        /// Terms beyond the top-50 are silently dropped — Lucene accepts fuzzy
+        /// recall loss by design. Our contract is never to drop reachable results
+        /// without cause, so this valve sits ~40x looser than Lucene's;
+        /// the closest-first ordering mirrors Lucene's similarity ordering.
         /// </summary>
         public const int DefaultMaxExpandedTerms = 2000;
 
