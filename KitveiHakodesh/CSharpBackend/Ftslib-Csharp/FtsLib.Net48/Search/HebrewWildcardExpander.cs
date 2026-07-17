@@ -75,15 +75,26 @@ namespace FtsLib.Search
         public const int MaxOptionalChars = 4;
 
         /// <summary>
-        /// Tuned default for <see cref="MaxExpandedTerms"/>.
+        /// Tuned default for <see cref="MaxExpandedTerms"/> — the chosen sweet spot.
         /// Measured with FtsLibTest capsweep on the FULL tier (2026-07-17):
-        /// *כי* expands to 27,543 terms uncapped; snippet generation rebuilds a
-        /// term→group map per line, so 2,000 results cost 18-19s uncapped vs 2.1s
-        /// at cap 2000, while keeping 88.3% of the 2.39M matching lines. Results
-        /// kept is flat (~87-88%) across caps 1000-3000 and only reaches 95.9% at
-        /// 5000 for 2.6x the snippet cost; below 1000 it cliffs (75% → 52%).
-        /// 2000 sits mid-plateau: ~9x end-to-end on the pathological query while
-        /// normal patterns (*יצח* = 199 terms) are untouched.
+        /// *כי* expands to 27,543 terms uncapped; results kept sit on a flat
+        /// plateau (~87-88%) across caps 1000-3000 — 2000 is its middle, keeping
+        /// 88.3% of the 2.39M matching lines — then cliff below 1000 (75% → 52%).
+        /// 5000 reaches 95.9% but more than doubles the capped posting volume for
+        /// a marginal recall gain. Snippet cost no longer depends on term count
+        /// (the term→group map is prepared once per query — see
+        /// Snippets.PreparedQueryGroups), so the cap bounds expansion-scan and
+        /// posting-resolution work on pathological patterns, not snippets.
+        /// Normal patterns (*יצח* = 199 terms) are untouched.
+        ///
+        /// Lucene reference (verified against lucene/main source): wildcard-style
+        /// MultiTermQueries there are NOT term-capped — CONSTANT_SCORE_BLENDED_REWRITE
+        /// enumerates every matching term, pre-merging postings with docFreq ≤ 512
+        /// into one bitset and keeping only ~16 high-frequency iterators live
+        /// (AbstractMultiTermQueryConstantScoreWrapper.BOOLEAN_REWRITE_TERM_COUNT_THRESHOLD).
+        /// Only its SCORING boolean rewrites cap, via IndexSearcher.maxClauseCount = 1024.
+        /// Our cap is therefore a deliberate recall/latency trade the caller controls,
+        /// not an emulation of Lucene.
         /// </summary>
         public const int DefaultMaxExpandedTerms = 2000;
 

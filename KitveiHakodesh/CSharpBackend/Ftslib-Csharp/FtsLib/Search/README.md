@@ -107,11 +107,15 @@ Hebrew-aware wildcard expansion handling:
 - Optional character patterns (`?`)
 - `MaxExpandedTerms` cap (default 2000): oversized expansions (e.g. `*כי*` →
   27k+ terms) are trimmed shortest-term-first (ties: higher doc count, then
-  ordinal) — tuned via `FtsLibTest.exe capsweep`
+  ordinal) — tuned via `FtsLibTest.exe capsweep`. Snippet cost is independent
+  of term count (see `Snippets/PreparedQueryGroups`), so the cap only bounds
+  expansion-scan and posting-resolution work. Lucene never term-caps wildcards
+  (constant-score bitset rewrite); ours is a deliberate recall/latency trade.
 
 ### FuzzyExpander
 
 Levenshtein-based fuzzy matching up to distance 3.
 Shares the `MaxExpandedTerms` cap (default 2000): oversized expansions keep the
 closest matches — lower edit distance first, then shorter term, then higher doc
-count.
+count (mirrors Lucene's similarity-ordered top-terms rewrite, but far looser
+than its maxExpansions = 50 because we never drop reachable results without cause).
