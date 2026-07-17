@@ -104,14 +104,12 @@ defineExpose({
           <span class="item-text">
             <span class="item-title-row">
               <span class="item-title">{{ items[virtualRow.index]!.fileName }}</span>
-            </span>
-            <span class="item-path-row">
-              <span class="item-path" dir="ltr">{{ items[virtualRow.index]!.path }}</span>
               <span
                 v-if="items[virtualRow.index]!.modifiedDate"
                 class="item-date-pill"
               >{{ formatDate(items[virtualRow.index]!.modifiedDate) }}</span>
             </span>
+            <span class="item-path" dir="ltr">{{ items[virtualRow.index]!.path }}</span>
           </span>
         </div>
       </div>
@@ -178,12 +176,6 @@ defineExpose({
   min-width: 0;
   flex-shrink: 1;
 }
-/* Path row: relative container so the pill can anchor to its left edge */
-.item-path-row {
-  position: relative;
-  overflow: hidden;
-  line-height: 1.3;
-}
 .item-path {
   display: block;
   font-size: 11px;
@@ -194,15 +186,11 @@ defineExpose({
   text-overflow: ellipsis;
   direction: ltr;
   text-align: right;
-  /* Leave room at the physical left end so the pill never overlaps the path text */
-  padding-inline-end: 70px;
 }
-/* Pill anchored to the physical left edge of the path row */
+/* Pill pushed to the far inline end of the title row (physical left in RTL) */
 .item-date-pill {
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  margin-inline-start: auto;
+  flex-shrink: 0;
   font-size: 10px;
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--bg-secondary) 90%, transparent);
