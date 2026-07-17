@@ -9,6 +9,8 @@ namespace KitveiHakodeshLib
     {
         public string Id { get; set; }
         public string Title { get; set; }
+        /// <summary>Full breadcrumb ("title · toc path") for the tab-list dropdown; falls back to Title when empty.</summary>
+        public string ListTitle { get; set; }
         /// <summary>Which Vue split pane the tab belongs to (1 = main shell, 2 = secondary shell).</summary>
         public int Pane { get; set; } = 1;
     }
@@ -108,6 +110,7 @@ namespace KitveiHakodeshLib
                     {
                         Id = tabId,
                         Title = t.TryGetProperty("title", out var ti) ? (ti.GetString() ?? "") : "",
+                        ListTitle = t.TryGetProperty("listTitle", out var lt) ? (lt.GetString() ?? "") : "",
                         Pane = t.TryGetProperty("pane", out var p) && p.TryGetInt32(out int pane) ? pane : 1,
                     });
                 }
