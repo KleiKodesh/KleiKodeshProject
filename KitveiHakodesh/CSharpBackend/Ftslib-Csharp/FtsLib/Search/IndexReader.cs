@@ -43,14 +43,13 @@ namespace FtsLib.Search
             _deletes = DeleteSet.Load(DeletesFile);
             if (livePaths == null || livePaths.Count == 0) return;
 
-            // Sort by segId so ConcatIterator sees doc IDs in ascending order.
-            livePaths.Sort((a, b) => ParseSegId(a.dat).CompareTo(ParseSegId(b.dat)));
-
             foreach (var (dat, db) in livePaths)
             {
                 if (File.Exists(dat) && File.Exists(db))
                     _segments.Add(new SegmentHandle(dat, db));
             }
+
+            OrderSegmentsByFirstDoc(_segments);
         }
 
         /// <summary>
@@ -76,9 +75,7 @@ namespace FtsLib.Search
 
             if (!Directory.Exists(IndexPath)) return;
 
-            // Sort by segId so ConcatIterator sees doc IDs in ascending order
             var datFiles = Directory.GetFiles(IndexPath, "seg_*.dat");
-            System.Array.Sort(datFiles, (a, b) => ParseSegId(a).CompareTo(ParseSegId(b)));
 
             foreach (var datFile in datFiles)
             {
@@ -86,13 +83,76 @@ namespace FtsLib.Search
                 if (File.Exists(dbFile))
                     _segments.Add(new SegmentHandle(datFile, dbFile));
             }
+
+            OrderSegmentsByFirstDoc(_segments);
         }
 
-        private static int ParseSegId(string path)
+        // ── Segment ordering ─────────────────────────────────────────
+
+        /// <summary>
+        /// Orders segments by the doc ID of their first stored posting so that
+        /// <see cref="ConcatIterator"/> streams globally ascending doc IDs.
+        ///
+        /// Segment IDs do NOT order doc ranges: a merge target's ID is allocated
+        /// when the merge STARTS, so a merge of older segments that runs after a
+        /// newer flush exists (e.g. L1_30 + L1_35 → L2_37 while L0_36 already
+        /// holds newer docs) receives the highest segment ID while holding lower
+        /// doc IDs. Sorting by segment ID then breaks the ascending-stream
+        /// contract that the filter leap-frog, the AND intersection, and the
+        /// "results ascend by line ID" API guarantee all rely on — filtered
+        /// queries silently DROP every match in the out-of-place segment.
+        ///
+        /// Live segments hold contiguous, disjoint slices of the build's doc
+        /// timeline, so ANY posting is a valid representative of its segment's
+        /// position; we read the first posting of the chunk at the smallest .dat
+        /// offset (one SQL row + at most 5 bytes of IO per segment).
+        /// </summary>
+        private static void OrderSegmentsByFirstDoc(List<SegmentHandle> segments)
         {
-            string name  = Path.GetFileNameWithoutExtension(path); // seg_L_ID
-            var    parts = name.Split('_');
-            return parts.Length == 3 && int.TryParse(parts[2], out int id) ? id : 0;
+            if (segments.Count < 2) return;
+
+            var keyed = new KeyValuePair<int, SegmentHandle>[segments.Count];
+            for (int i = 0; i < segments.Count; i++)
+                keyed[i] = new KeyValuePair<int, SegmentHandle>(
+                    ReadFirstDocId(segments[i]), segments[i]);
+
+            // Ties are impossible on a healthy index (disjoint ranges); order by
+            // path as a deterministic fallback for degenerate states.
+            Array.Sort(keyed, (a, b) =>
+            {
+                int c = a.Key.CompareTo(b.Key);
+                return c != 0 ? c : string.CompareOrdinal(a.Value.DatPath, b.Value.DatPath);
+            });
+
+            segments.Clear();
+            foreach (var kv in keyed)
+                segments.Add(kv.Value);
+        }
+
+        /// <summary>
+        /// Doc ID of the segment's first stored posting: the first varint of the
+        /// chunk at the smallest .dat offset is that chunk's absolute encoded
+        /// first doc (deltas start from 0). Returns int.MaxValue for a segment
+        /// with no terms — it contributes nothing and sorts last.
+        /// </summary>
+        private static int ReadFirstDocId(SegmentHandle seg)
+        {
+            long offset;
+            using (var cmd = seg.Conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT MIN(offset) FROM term_index";
+                object result = cmd.ExecuteScalar();
+                if (result == null || result == DBNull.Value) return int.MaxValue;
+                offset = Convert.ToInt64(result);
+            }
+
+            var buf  = new byte[5]; // a uint varint is at most 5 bytes
+            int read = seg.ReadBytes(offset, buf, 0, buf.Length);
+            if (read <= 0) return int.MaxValue;
+
+            int  pos     = 0;
+            uint encoded = VarInt.Read(buf, ref pos, read);
+            return (int)((long)encoded + int.MinValue);
         }
 
         // ── Wildcard expansion ────────────────────────────────────────
