@@ -397,8 +397,10 @@ export function setTheme(
 export interface MirroredTab {
   id: string
   title: string
-  /** Full breadcrumb ("title · toc path") for the native tab-list dropdown; equals title when no path. */
+  /** Full breadcrumb ("prefix: title · toc path") for the native tab-list dropdown; equals title when no path. */
   listTitle: string
+  /** "prefix: title" — strip caption used only when the tab is wide enough to fit it. */
+  stripTitle: string
   pane: 1 | 2
 }
 
