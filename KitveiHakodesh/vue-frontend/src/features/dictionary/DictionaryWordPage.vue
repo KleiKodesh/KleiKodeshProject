@@ -102,7 +102,7 @@ const senseGroups = computed((): SenseGroup[] => {
   }))
 })
 
-// ── Special sources (מחברת מנחם and הערוך) — shown after all definitions ──────
+// ── Special sources (מחברת מנחם, מיקרופדיה, הערוך) — shown after all definitions ──
 
 const specialEntries = computed((): SenseItem[] => {
   const items: SenseItem[] = []
@@ -116,6 +116,19 @@ const specialEntries = computed((): SenseItem[] => {
       text: row.text,
       sourceLabel: `מחברת מנחם — ${row.word}`,
       bookLocation: { bookId: row.bookId, bookTitle: 'מחברת מנחם', lineIndex: row.lineIndex },
+      isSpecialSource: true,
+    })
+  }
+
+  // מיקרופדיה — shown before ספר הערוך
+  const seenMicropedia = new Set<string>()
+  for (const row of props.data.micropediaRows ?? []) {
+    if (seenMicropedia.has(`${row.lineId}`)) continue
+    seenMicropedia.add(`${row.lineId}`)
+    items.push({
+      text: row.text,
+      sourceLabel: `מיקרופדיה — ${row.word}`,
+      bookLocation: { bookId: row.bookId, bookTitle: 'מיקרופדיה', lineIndex: row.lineIndex },
       isSpecialSource: true,
     })
   }
