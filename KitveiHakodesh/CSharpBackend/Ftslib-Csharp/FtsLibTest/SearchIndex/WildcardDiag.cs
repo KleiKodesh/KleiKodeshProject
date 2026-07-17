@@ -157,7 +157,7 @@ namespace FtsLibTest
 
                             Console.WriteLine($"║    DB returned  : {rawCount:N0} term(s)  ({sw.ElapsedMilliseconds} ms)");
                             if (filtered > 0)
-                                Console.WriteLine($"║    After filter : {expanded.Count:N0} term(s)  ({filtered:N0} discarded — prefix cap={HebrewWildcardExpander.MaxPrefixWildcardChars}, suffix cap={HebrewWildcardExpander.MaxSuffixWildcardChars})");
+                                Console.WriteLine($"║    After filter : {expanded.Count:N0} term(s)  ({filtered:N0} discarded — prefix cap={HebrewWildcardExpander.MaxPrefixWildcardChars}, suffix cap={HebrewWildcardExpander.MaxSuffixWildcardChars}, term cap={HebrewWildcardExpander.MaxExpandedTerms})");
                             else
                                 Console.WriteLine($"║    After filter : {expanded.Count:N0} term(s)  (none discarded)");
                         }

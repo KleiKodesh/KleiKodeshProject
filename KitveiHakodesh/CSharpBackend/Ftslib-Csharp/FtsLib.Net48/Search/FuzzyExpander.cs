@@ -33,8 +33,30 @@ namespace FtsLib.Search
         public const int MaxAllowedDistance = 3;
 
         /// <summary>
+        /// Tuned default for <see cref="MaxExpandedTerms"/>.
+        /// Measured with FtsLibTest capsweep on the FULL tier (2026-07-17): fuzzy
+        /// expansions are naturally small (יצחק~1 = 43 terms, יצחק~2 = 135); the
+        /// worst observed case, אמר~2 = 2,030 terms, keeps 100.0% of its results
+        /// at cap 2000. Tighter caps lose results (1000 → 90.5%) without saving
+        /// time — fuzzy search cost is postings volume, not term count — so 2000
+        /// is a pure safety valve against pathological expansions, matching the
+        /// wildcard default.
+        /// </summary>
+        public const int DefaultMaxExpandedTerms = 2000;
+
+        /// <summary>
+        /// Maximum number of index terms a single fuzzy token may expand to.
+        /// 0 = unlimited. When the expansion exceeds the cap, the closest terms
+        /// win: lower edit distance first, then shorter term, then higher doc
+        /// count, then ordinal (deterministic across runs and runtimes).
+        /// Runtime-settable so hosts and test rigs can tune it.
+        /// </summary>
+        public static int MaxExpandedTerms = DefaultMaxExpandedTerms;
+
+        /// <summary>
         /// Expands <paramref name="term"/> to all index terms within
-        /// <paramref name="maxDistance"/> edits.
+        /// <paramref name="maxDistance"/> edits (capped at
+        /// <see cref="MaxExpandedTerms"/> terms, closest first).
         /// </summary>
         public static List<string> Expand(
             string                       term,
@@ -45,7 +67,7 @@ namespace FtsLib.Search
             if (maxDistance > MaxAllowedDistance) maxDistance = MaxAllowedDistance;
             if (maxDistance < 1)                  maxDistance = 1;
 
-            HashSet<string> candidates;
+            Dictionary<string, long> candidates;
 
             if (term.Length >= 4)
             {
@@ -66,15 +88,51 @@ namespace FtsLib.Search
                 candidates = QueryBySubstring(term, segments, cache);
             }
 
-            // Phase 2: Levenshtein confirmation
-            var results = new List<string>(candidates.Count);
-            foreach (var candidate in candidates)
+            // Phase 2: Levenshtein confirmation. The actual distance is kept so
+            // the cap can prefer the closest matches.
+            var confirmed = new List<Scored>(candidates.Count);
+            foreach (var kv in candidates)
             {
-                if (Levenshtein.Distance(term, candidate, maxDistance) <= maxDistance)
-                    results.Add(candidate);
+                int d = Levenshtein.Distance(term, kv.Key, maxDistance);
+                if (d <= maxDistance)
+                    confirmed.Add(new Scored { Term = kv.Key, Distance = d, Count = kv.Value });
             }
 
+            int cap = MaxExpandedTerms;
+            if (cap > 0 && confirmed.Count > cap)
+            {
+                confirmed.Sort(CompareClosestFirst);
+                confirmed.RemoveRange(cap, confirmed.Count - cap);
+            }
+
+            var results = new List<string>(confirmed.Count);
+            foreach (var s in confirmed)
+                results.Add(s.Term);
             return results;
+        }
+
+        // ── Expansion cap ─────────────────────────────────────────────
+
+        private struct Scored
+        {
+            public string Term;
+            public int    Distance;
+            public long   Count;
+        }
+
+        /// <summary>
+        /// Orders fuzzy candidates: lower edit distance first, then shorter term,
+        /// then higher document count, then ordinal — fully deterministic.
+        /// </summary>
+        private static int CompareClosestFirst(Scored a, Scored b)
+        {
+            int c = a.Distance.CompareTo(b.Distance);
+            if (c != 0) return c;
+            c = a.Term.Length.CompareTo(b.Term.Length);
+            if (c != 0) return c;
+            c = b.Count.CompareTo(a.Count); // higher count first
+            if (c != 0) return c;
+            return string.CompareOrdinal(a.Term, b.Term);
         }
 
         // ── N-gram generation ─────────────────────────────────────────
@@ -99,15 +157,16 @@ namespace FtsLib.Search
         // ── Segment queries ───────────────────────────────────────────
 
         /// <summary>
-        /// Queries each segment for terms containing at least one of the given n-grams.
+        /// Queries each segment for terms containing at least one of the given n-grams,
+        /// mapping each term to its total document count (summed across segments).
         /// Uses UNION strategy (OR across n-grams) to maximise recall.
         /// </summary>
-        private static HashSet<string> QueryByNgrams(
+        private static Dictionary<string, long> QueryByNgrams(
             List<string>                 ngrams,
             IReadOnlyList<SegmentHandle> segments,
             TermChunkCache               cache)
         {
-            var results = new HashSet<string>(System.StringComparer.Ordinal);
+            var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
 
             // Build SQL once — parameter names match list indices exactly.
             // Chunk metadata is piggybacked so resolve skips its point SELECTs (F01).
@@ -133,14 +192,16 @@ namespace FtsLib.Search
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
                         {
-                            string t = reader.GetString(0);
-                            results.Add(t);
+                            string t     = reader.GetString(0);
+                            int    count = reader.GetInt32(5);
+                            results.TryGetValue(t, out long total);
+                            results[t] = total + count;
                             cache?.Add(t, new SegmentChunk(seg,
                                 reader.GetInt64(1),
                                 reader.GetInt32(2),
                                 reader.GetInt64(3),
                                 reader.GetInt32(4),
-                                reader.GetInt32(5)));
+                                count));
                         }
                 }
             }
@@ -151,12 +212,12 @@ namespace FtsLib.Search
         /// <summary>
         /// Fallback for terms of 2 chars or fewer: queries with a simple infix LIKE.
         /// </summary>
-        private static HashSet<string> QueryBySubstring(
+        private static Dictionary<string, long> QueryBySubstring(
             string                       term,
             IReadOnlyList<SegmentHandle> segments,
             TermChunkCache               cache)
         {
-            var results = new HashSet<string>(System.StringComparer.Ordinal);
+            var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
             string pattern = "%" + EscapeLike(term) + "%";
 
             foreach (var seg in segments)
@@ -171,14 +232,16 @@ namespace FtsLib.Search
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
                         {
-                            string t = reader.GetString(0);
-                            results.Add(t);
+                            string t     = reader.GetString(0);
+                            int    count = reader.GetInt32(5);
+                            results.TryGetValue(t, out long total);
+                            results[t] = total + count;
                             cache?.Add(t, new SegmentChunk(seg,
                                 reader.GetInt64(1),
                                 reader.GetInt32(2),
                                 reader.GetInt64(3),
                                 reader.GetInt32(4),
-                                reader.GetInt32(5)));
+                                count));
                         }
                 }
             }

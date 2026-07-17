@@ -88,6 +88,7 @@
     <Compile Include="SearchIndex\LookupDiag.cs" />
     <Compile Include="SearchIndex\MonitorTest.cs" />
     <Compile Include="SearchIndex\WildcardDiag.cs" />
+    <Compile Include="SearchIndex\CapSweepTest.cs" />
     <Compile Include="SearchIndex\PrefixLenDiag.cs" />
     <Compile Include="SearchIndex\FstSizeDiag.cs" />
     <Compile Include="SearchIndex\FileLoadDiag.cs" />

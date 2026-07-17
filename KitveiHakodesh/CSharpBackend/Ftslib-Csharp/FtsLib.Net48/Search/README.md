@@ -105,7 +105,13 @@ Hebrew-aware wildcard expansion handling:
 - RTL text direction
 - Hebrew character ranges
 - Optional character patterns (`?`)
+- `MaxExpandedTerms` cap (default 2000): oversized expansions (e.g. `*כי*` →
+  27k+ terms) are trimmed shortest-term-first (ties: higher doc count, then
+  ordinal) — tuned via `FtsLibTest.exe capsweep`
 
 ### FuzzyExpander
 
 Levenshtein-based fuzzy matching up to distance 3.
+Shares the `MaxExpandedTerms` cap (default 2000): oversized expansions keep the
+closest matches — lower edit distance first, then shorter term, then higher doc
+count.
