@@ -27,6 +27,74 @@ public static class ManualCatalogPipeline
     public const int MaxTocCandidateBooks = 50;
     public const int ScoreExact = 3, ScorePrefix = 2, ScoreNone = 0;
 
+    // ── Legacy text rules (frozen copies — the oracle must not drift with the
+    //    service's simplified pipeline) ─────────────────────────────────────────
+
+    /// <summary>normalizeText.ts normalize(): lowercase + strip quote characters.</summary>
+    public static string LegacyNormalize(string s)
+    {
+        var sb = new System.Text.StringBuilder(s.Length);
+        foreach (char c in s.ToLowerInvariant())
+            if (c is not ('"' or '\'' or '״' or '׳')) sb.Append(c);
+        return sb.ToString();
+    }
+
+    /// <summary>bookCatalogSearchNormalizer.ts normalizeBookPath() on normalized text.</summary>
+    public static string LegacyApplyBookVariants(string normalized) =>
+        normalized.Replace("שוע", "שלחן ערוך").Replace("שולחן", "שלחן");
+
+    /// <summary>bookCatalogSearchNormalizer.ts stripHePrefix().</summary>
+    public static string? LegacyStripHePrefix(string word) =>
+        word.Length >= 3 && word[0] == 'ה' ? word[1..] : null;
+
+    /// <summary>segmentSearchTree.ts tokenizeSegmentText(): letters/digits are word
+    /// chars; '.' and ':' stay attached to a preceding word char; else separators.</summary>
+    public static List<string> LegacyTokenizeSegmentText(string text)
+    {
+        string s = text.ToLowerInvariant();
+        var tokens = new List<string>();
+        var token = new System.Text.StringBuilder();
+        bool prevIsWord = false;
+
+        for (int i = 0; i < s.Length; i++)
+        {
+            char c = s[i];
+            if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            {
+                int cp = char.ConvertToUtf32(c, s[i + 1]);
+                var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(cp);
+                bool isWordCp = cat
+                    is System.Globalization.UnicodeCategory.UppercaseLetter
+                    or System.Globalization.UnicodeCategory.LowercaseLetter
+                    or System.Globalization.UnicodeCategory.TitlecaseLetter
+                    or System.Globalization.UnicodeCategory.ModifierLetter
+                    or System.Globalization.UnicodeCategory.OtherLetter
+                    or System.Globalization.UnicodeCategory.DecimalDigitNumber
+                    or System.Globalization.UnicodeCategory.LetterNumber
+                    or System.Globalization.UnicodeCategory.OtherNumber;
+                if (isWordCp) { token.Append(c).Append(s[i + 1]); }
+                else if (token.Length > 0) { tokens.Add(token.ToString()); token.Clear(); }
+                prevIsWord = false;
+                i++;
+                continue;
+            }
+
+            bool isWord = char.IsLetter(c) || char.IsNumber(c);
+            if (isWord || ((c == '.' || c == ':') && prevIsWord))
+            {
+                token.Append(c);
+            }
+            else if (token.Length > 0)
+            {
+                tokens.Add(token.ToString());
+                token.Clear();
+            }
+            prevIsWord = isWord;
+        }
+        if (token.Length > 0) tokens.Add(token.ToString());
+        return tokens;
+    }
+
     // ── Data model ──────────────────────────────────────────────────────────────
 
     public sealed class Book
@@ -101,7 +169,7 @@ public static class ManualCatalogPipeline
     // ── Query words (useBookCatalogSearch.ts toQueryWords) ──────────────────────
 
     public static string[] ToQueryWords(string rawQuery) =>
-        CatalogTocTextRules.ApplyBookVariants(CatalogTocTextRules.Normalize(rawQuery.Trim()))
+        LegacyApplyBookVariants(LegacyNormalize(rawQuery.Trim()))
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
 
     // ── Catalog tree (bookCatalogTree.ts buildTree + assignFullPaths) ───────────
@@ -178,9 +246,9 @@ public static class ManualCatalogPipeline
         foreach (var b in books)
         {
             string fullPath = b.ParentPath.Length > 0 ? b.ParentPath + " / " + b.Title : b.Title;
-            string searchString = CatalogTocTextRules.ApplyBookVariants(CatalogTocTextRules.Normalize(fullPath));
+            string searchString = LegacyApplyBookVariants(LegacyNormalize(fullPath));
             if (!string.IsNullOrEmpty(b.Authors))
-                searchString += " " + CatalogTocTextRules.ApplyBookVariants(CatalogTocTextRules.Normalize(b.Authors));
+                searchString += " " + LegacyApplyBookVariants(LegacyNormalize(b.Authors));
 
             b.PathTokens = searchString.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             b.PathDecomps = new Decomp[b.PathTokens.Length];
@@ -188,10 +256,10 @@ public static class ManualCatalogPipeline
             for (int i = 0; i < b.PathTokens.Length; i++)
             {
                 b.PathDecomps[i] = Decompose(b.PathTokens[i]);
-                b.PathTokensHeStripped[i] = CatalogTocTextRules.StripHePrefix(b.PathTokens[i]);
+                b.PathTokensHeStripped[i] = LegacyStripHePrefix(b.PathTokens[i]);
             }
 
-            b.TitleTokens = CatalogTocTextRules.ApplyBookVariants(CatalogTocTextRules.Normalize(b.Title))
+            b.TitleTokens = LegacyApplyBookVariants(LegacyNormalize(b.Title))
                 .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
                 .ToHashSet();
         }
@@ -241,7 +309,7 @@ public static class ManualCatalogPipeline
         var wordDecomps = new Decomp[words.Length];
         for (int i = 0; i < words.Length; i++)
         {
-            wordStripped[i] = CatalogTocTextRules.StripHePrefix(words[i]);
+            wordStripped[i] = LegacyStripHePrefix(words[i]);
             wordDecomps[i] = Decompose(words[i]);
         }
 
@@ -310,7 +378,7 @@ public static class ManualCatalogPipeline
     ];
 
     public static readonly HashSet<string> TocKeywords = TocKeywordSource
-        .SelectMany(k => CatalogTocTextRules.ApplyBookVariants(CatalogTocTextRules.Normalize(k))
+        .SelectMany(k => LegacyApplyBookVariants(LegacyNormalize(k))
             .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
         .ToHashSet();
 
@@ -340,15 +408,39 @@ public static class ManualCatalogPipeline
     }
 
     // ── Root stripping (tocSearchUtils.ts stripTocTitleRoots) ───────────────────
+    // Frozen legacy copies: the frontend's FORCE_STRIP_BOOK_IDS list and the original
+    // title-variant strip set (WITHOUT the ASCII apostrophe the service added later).
+
+    private static readonly HashSet<int> LegacyForceStripBookIds = [6036, 6037, 6042, 6043, 6044];
+
+    private static bool LegacyIsTitleVariant(string bookTitle, string rootText)
+    {
+        static List<string> Words(string s)
+        {
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+                if (c is not ('"' or '״' or '׳' or '“' or '”' or '‘' or '’' or '־' or '-'))
+                    sb.Append(c);
+            return sb.ToString().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).ToList();
+        }
+        var bt = Words(bookTitle);
+        var rt = Words(rootText);
+        if (bt.Count == 0 || rt.Count == 0) return false;
+        var (shorter, longer) = bt.Count <= rt.Count ? (bt, rt) : (rt, bt);
+        if (shorter.Count < longer.Count * 0.6) return false;
+        foreach (var w in shorter)
+            if (!longer.Contains(w)) return false;
+        return true;
+    }
 
     /// <summary>Book-scoped and query-independent — call once per book and cache.</summary>
     public static List<TocRow> StripTocTitleRoots(List<TocRow> rows, string bookTitle, int bookId)
     {
         if (string.IsNullOrEmpty(bookTitle) || rows.Count == 0) return rows;
-        bool forceStrip = CatalogTocTextRules.ForceStripBookIds.Contains(bookId);
+        bool forceStrip = LegacyForceStripBookIds.Contains(bookId);
         var rootIds = new HashSet<int>();
         foreach (var r in rows)
-            if (r.ParentId is null && (forceStrip || CatalogTocTextRules.IsTitleVariant(bookTitle, r.Text)))
+            if (r.ParentId is null && (forceStrip || LegacyIsTitleVariant(bookTitle, r.Text)))
                 rootIds.Add(r.Id);
         if (rootIds.Count == 0) return rows;
 
@@ -386,7 +478,7 @@ public static class ManualCatalogPipeline
                 var parentSegs = node.ParentId is { } pid ? GetSegments(pid) : [];
                 var result = new List<List<string>>(parentSegs.Count + 1);
                 result.AddRange(parentSegs);
-                result.Add(CatalogTocTextRules.TokenizeSegmentText(node.Text));
+                result.Add(LegacyTokenizeSegmentText(node.Text));
                 segCache[id] = result;
                 return result;
             }

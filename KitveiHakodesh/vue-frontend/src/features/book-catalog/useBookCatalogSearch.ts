@@ -74,14 +74,13 @@ function toQueryWords(rawQuery: string): string[] {
 
 /** One `catalogTocSearch` hit on the wire (serviceClient camelCases the msgpack keys). */
 type CatalogTocServiceHit = {
-  kind: 'book' | 'toc' | 'alttoc'
   bookId: number
-  tocEntryId: number
-  lineId: number
   lineIndex: number // -1 = no resolved line
-  bookTitle: string
-  tocPath: string
-  score: number
+  /** Display path: book title, then " / "-joined TOC segments. */
+  fullTocPath: string
+  /** 0 = book-title hit, 1+ = TOC depth. */
+  level: number
+  treeOrder: number
 }
 
 type CatalogTocServiceResult = {
@@ -98,9 +97,8 @@ const INDEX_NOT_READY_RETRY_MS = 1200
 
 /**
  * Dev path: the service's Lucene index over book titles + full TOC paths answers the
- * whole query in one call. The service's ranking (manual-scorer re-rank + catalog tree
- * order) is preserved as-is — book and TOC hits interleave the way the service ranked
- * them, so an exact TOC target beats a book whose title merely prefix-matches.
+ * whole query in one call. The service's deterministic order (TOC level, then catalog
+ * tree order) is preserved as-is — book hits are simply the level-0 docs, so they lead.
  */
 function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const store = useBooksDataStore()
@@ -116,21 +114,24 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
     for (const hit of hits) {
       const book = bookById.get(hit.bookId)
       if (!book) continue // book not in the loaded catalog (e.g. stale index row)
-      if (hit.kind === 'book') {
+      if (hit.level === 0) {
         items.push({ uid: `b-${book.id}`, kind: 'book', book })
       } else {
-        // Alt-TOC hits navigate by line only: their entry ids live in a different id
-        // namespace (alt_toc_entry), so passing one as openTocEntryId could highlight
-        // an unrelated regular-TOC entry that happens to share the number.
-        const isAlt = hit.kind === 'alttoc'
+        // fullTocPath is "<book title> / <toc path>" — the UI prepends the book title
+        // itself, so show only the TOC part. Navigation is line-based (tocEntryId is
+        // no longer carried by the index).
+        const titlePrefix = `${book.title} / `
+        const tocPath = hit.fullTocPath.startsWith(titlePrefix)
+          ? hit.fullTocPath.slice(titlePrefix.length)
+          : hit.fullTocPath
         items.push({
-          uid: `${isAlt ? 'alttoc' : 'toc'}-${hit.bookId}-${hit.tocEntryId}`,
+          uid: `toc-${hit.bookId}-${hit.treeOrder}`,
           kind: 'toc',
           book,
-          tocEntryId: isAlt ? 0 : hit.tocEntryId,
+          tocEntryId: 0,
           tocLineIndex: hit.lineIndex >= 0 ? hit.lineIndex : null,
-          tocTitle: hit.tocPath.split(' / ').pop() ?? hit.tocPath,
-          tocPath: hit.tocPath,
+          tocTitle: tocPath.split(' / ').pop() ?? tocPath,
+          tocPath,
         })
       }
     }
@@ -161,10 +162,7 @@ function useLuceneCatalogSearch(searchQuery: ReturnType<typeof ref<string>>) {
       try {
         // Retry while the index is still building — a newer search supersedes the loop.
         for (;;) {
-          const res = await serviceCall<CatalogTocServiceResult>('catalogTocSearch', {
-            query,
-            dedupAncestors: true,
-          })
+          const res = await serviceCall<CatalogTocServiceResult>('catalogTocSearch', { query })
           if (generation !== searchGeneration) return
           if (res.ready && !res.superseded) {
             results.value = toItems(res.results ?? [])
