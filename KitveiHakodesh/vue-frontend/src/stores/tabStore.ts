@@ -73,6 +73,10 @@ export interface Tab {
   // host's "חיפוש ספר בכתבי הקודש" context menu. BookCatalogPage reads this on mount
   // into its reactive searchQuery. Kept separate from searchQuery, which the FTS page owns.
   catalogQuery?: string
+  // Query for the local-file-search page (route '/file-search'), saved so the input
+  // survives navigating away and back. Kept separate from searchQuery, which the FTS
+  // page owns — sharing that field leaked an FTS query into the file-search input.
+  fileSearchQuery?: string
   tocPath?: string
 }
 
