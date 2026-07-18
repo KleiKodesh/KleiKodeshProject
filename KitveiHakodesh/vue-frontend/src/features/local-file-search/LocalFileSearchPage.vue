@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   IconSearch20Regular,
   IconWarning20Regular,
@@ -68,24 +68,20 @@ function selectSortOrder(value: LocalFileSearchSortOrder) {
   isSortDropdownOpen.value = false
 }
 
-// ── Query persistence across tab switches ─────────────────────────────────────
+// ── Query persistence across navigation ───────────────────────────────────────
 
 // Restore from the tab object on mount (singleton route — mounted once)
 onMounted(() => {
-  const savedQuery = paneNavigation.activeTab.searchQuery
+  const savedQuery = paneNavigation.activeTab.fileSearchQuery
   if (savedQuery) searchQuery.value = savedQuery
   nextTick(() => searchInputElement.value?.focus())
 })
 
-// Save to the tab when the user switches away — fires once per tab switch, not per keystroke
-watch(
-  () => tabStore.activeTabId,
-  (newTabId) => {
-    if (newTabId !== fileSearchTabId) {
-      tabStore.updateTab(fileSearchTabId, { searchQuery: searchQuery.value || undefined })
-    }
-  },
-)
+// The page unmounts on every switch away (tab switch or same-tab navigation) —
+// save once here rather than per keystroke.
+onBeforeUnmount(() => {
+  tabStore.updateTab(fileSearchTabId, { fileSearchQuery: searchQuery.value || undefined })
+})
 
 function focusResults() {
   resultsListElement.value?.focusContainer()
