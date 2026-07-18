@@ -1,6 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
-using KitveiHakodeshService.SefroimDb;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Documents;
@@ -13,207 +10,561 @@ using Microsoft.Data.Sqlite;
 namespace KitveiHakodeshService.Catalog;
 
 /// <summary>
-/// Lucene.NET (4.8) full-text index over FULL TOC PATHS — the engine behind the catalog
-/// "file-system" search, replacing the frontend's manual per-query TOC heuristics.
+/// Lucene.NET (4.8) disk index over FULL TOC PATHS — the engine behind the catalog
+/// "file-system" search.
 ///
-/// One document per TOC entry, carrying two indexed fields:
-///   b — the book part: title + category path + authors (what the manual pipeline's
-///       book matcher searched)
-///   t — the TOC part: every segment of the entry's root→leaf path (what the manual
-///       SegmentSearchTree scored), with title-variant roots stripped the same way
-/// plus one document per book (title only) pointing at the book's first line.
+/// DESIGN (deliberately simple):
+///   - One document per TOC entry (regular + alt structures) and one per book title
+///     (pointing at the book's first line).
+///   - THREE indexed fields, all analyzed by the shared normalization pipeline
+///     (CatalogTocTextRules): the full TOC path (also stored — display + order-rule
+///     text), the catalog (category) path, and the author names. The rest is
+///     stored-only metadata.
+///   - Search is contains-all: per query token, a MUST over (path OR catalog OR
+///     author). No scoring, no boosting, no fuzzy/phrase/proximity/wildcard queries,
+///     and results are NEVER capped.
+///   - Ordering ignores Lucene relevance entirely: Level ascending (book title = 0,
+///     then TOC depth), then TreeOrder ascending (catalog tree order, then the
+///     original TOC order within the book). Nothing else affects ordering.
 ///
-/// Both fields store an EXPANDED token set (see CatalogTocTextRules.ExpandIndexTokens)
-/// so an AND-of-prefix-queries over the plain query words is a superset of every manual
-/// matcher tier (exact / prefix / ה-prefix / חסר-מלא skeleton / quote-splitting).
-///
-/// Search = for each query word a MUST clause matching (b OR t) by prefix, exact hits
-/// boosted; results are never capped. Ancestry dedup (a matched entry suppresses its
-/// matched descendants — manual Pass 3) is applied unless the caller opts out.
-///
-/// This class is deliberately host-agnostic (plain ctor args, synchronous Build) so the
-/// parity test drives it directly; service concerns (background build, hash-triggered
-/// rebuild, RPC) live in CatalogTocSearchService.
+/// SEARCH-WHILE-BUILDING (near-real-time): there is ONE in-place index directory. A
+/// rebuild writes into it with the writer kept open, and a near-real-time reader is
+/// opened off that live writer (DirectoryReader.Open(writer, …)) and refreshed on an
+/// interval — so documents become searchable AS they are indexed, and partial results
+/// appear immediately instead of waiting for the whole build to finish. When the build
+/// completes the writer commits, the ver file (source-DB hash) is written, and the
+/// reader is refreshed one last time. When no build is running the reader is a plain
+/// DirectoryReader on the committed index. Either way the reader is reused across
+/// queries and only reopened to pick up new documents.
 /// </summary>
-public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposable
+public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposable
 {
     private const LuceneVersion Ver = LuceneVersion.LUCENE_48;
 
-    // Stored/indexed field names — short on purpose (a million+ docs).
-    private const string FieldBook = "b";        // indexed: book title + category path + authors
-    private const string FieldToc = "t";         // indexed: full TOC path segments
-    private const string FieldKindIndexed = "ki";// indexed: "b" = book title doc, "t" = toc entry doc
-    private const string FieldKind = "k";        // stored: 1 = book title doc, 2 = toc entry doc
-    private const string FieldBookId = "bid";    // stored
-    private const string FieldTocEntryId = "tid";// stored (0 for book docs)
-    private const string FieldLineId = "lid";    // stored (0 when the entry has no line)
-    private const string FieldLineIndex = "lix"; // stored (-1 when unknown)
-    private const string FieldTitle = "bt";      // stored: book title
-    private const string FieldDisplay = "dp";    // stored: TOC display path within the book
-    private const string FieldAncestors = "anc"; // stored: comma-joined ancestor tocEntry ids
-    private const string FieldTreeOrder = "to";  // stored: the book's catalog tree order (rank tiebreak)
+    // Field names. THREE indexed fields: the full TOC path (also stored — it is the
+    // display path AND the text the query-token-order rule runs against), the catalog
+    // (category) path, and the author names — both matchable but order-exempt.
+    private const string FieldFullTocPath = "p";  // indexed + stored
+    private const string FieldCatalog = "c";      // indexed + stored
+    private const string FieldAuthor = "a";       // indexed + stored
+    private const string FieldBookId = "b";
+    private const string FieldLineIndex = "l";
+    private const string FieldLevel = "v";
+    private const string FieldTreeOrder = "o";
 
-    private readonly object _readerLock = new();
+    /// <summary>Every indexed field, in the order the per-token OR probes them.</summary>
+    private static readonly string[] IndexedFields = [FieldFullTocPath, FieldCatalog, FieldAuthor];
+
+    private readonly object _lock = new();
+    private FSDirectory? _dir;
     private DirectoryReader? _reader;
     private IndexSearcher? _searcher;
+    private IndexWriter? _writer;   // non-null only while a build is in flight
 
-    public string IndexPath => indexPath;
+    public string RootPath => rootPath;
 
-    // ── Source-DB hash ──────────────────────────────────────────────────────────
+    // ── Source-DB hash + ver file ───────────────────────────────────────────────
 
-    /// <summary>Bump when the index schema changes (new fields, token rules) so existing
-    /// indexes rebuild — the version is folded into the ver-file content.</summary>
-    public const string IndexFormatVersion = "v4";
+    /// <summary>Bump when the index schema or normalization changes so existing
+    /// indexes rebuild — folded into the hash, which is stored in the ver file.
+    /// v9: single in-place index + NRT reader (dropped the a/b slot directories and the
+    /// two-line ver file), so pre-v9 on-disk layouts are discarded and rebuilt.
+    /// v10: SearchText split into three fields — TOC path (indexed+stored), catalog
+    /// path (indexed+stored), author (indexed+stored); order rule scoped to the path.
+    /// v11: title-variant root strip also folds ASCII apostrophes (ש''ע/ר' roots) and
+    /// the stale hardcoded force-strip book-id list is gone.
+    /// v12: ש"ע/ש''ע/שו''ע canonical variants; the DB stamp is a plain readable
+    /// composite (no pointless SHA-256 over 60 bytes of metadata).</summary>
+    public const string IndexFormatVersion = "v12";
 
     /// <summary>
-    /// Fingerprint of the seforim DB the index answers for: path + size + mtime hashed,
-    /// prefixed with the index format version. Changes whenever the DB file is replaced,
-    /// updated, the user switches databases, or the index schema itself changes — the
-    /// trigger for a full rebuild (mirrors the FTS index's source-DB versioning).
+    /// Fingerprint of the seforim DB the index answers for: format version + path +
+    /// file size + last-write time, as one readable string. Cheap (one stat call, no
+    /// file content read) and reliable: any change to the DB file — content written
+    /// (size/mtime move), file replaced, or the user switching databases (path) —
+    /// changes the stamp and triggers a full rebuild. Human-readable in the ver file.
     /// </summary>
     public static string ComputeDbHash(string dbPath)
     {
         var info = new FileInfo(dbPath);
-        string material = $"{dbPath.ToLowerInvariant()}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
-        return IndexFormatVersion + "-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(material)));
+        return $"{IndexFormatVersion}|{dbPath.ToLowerInvariant()}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
     }
 
-    // ── Build ───────────────────────────────────────────────────────────────────
+    private string VerFile => Path.Combine(rootPath, "catalogtoc.ver");
 
-    private sealed class TocRow
+    /// <summary>Ver file: a single line = the DB hash the committed index was built from.
+    /// Written only after a build fully completes, so a hash match means the on-disk
+    /// index is complete and fresh (a build interrupted mid-way leaves no/stale ver).</summary>
+    private string? ReadVer()
     {
-        public int Id;
-        public int? ParentId;
-        public int BookId;
-        public int LineId;       // 0 = none
-        public int LineIndex;    // -1 = none
-        public string Text = "";
+        try
+        {
+            if (!File.Exists(VerFile)) return null;
+            var lines = File.ReadAllLines(VerFile);
+            return lines.Length >= 1 && !string.IsNullOrWhiteSpace(lines[0]) ? lines[0].Trim() : null;
+        }
+        catch { return null; }
     }
 
-    /// <summary>Rebuild the whole index from the seforim DB (synchronous; the service
-    /// wrapper runs it on a background task). Returns the number of documents written.</summary>
-    public int Build(Action<int, int>? onProgress = null, CancellationToken ct = default)
-    {
-        InvalidateReader();
+    /// <summary>The DB hash the committed on-disk index was built from, or null when no
+    /// complete index exists.</summary>
+    public string? ActiveHash => ReadVer();
 
+    // ── Open / refresh ──────────────────────────────────────────────────────────
+
+    /// <summary>Open a reader on the committed on-disk index if one exists. Idempotent;
+    /// the reader is opened once and reused. (During a build the reader is a near-real-
+    /// time reader off the live writer instead — see <see cref="RefreshNrtLocked"/>.)</summary>
+    public bool TryOpenActive()
+    {
+        lock (_lock)
+        {
+            if (_searcher is not null) return true;
+            return OpenCommittedLocked();
+        }
+    }
+
+    private bool OpenCommittedLocked()
+    {
+        FSDirectory? dir = null;
+        try
+        {
+            if (!System.IO.Directory.Exists(rootPath)) return false;
+            dir = _dir ?? FSDirectory.Open(rootPath);
+            if (!DirectoryReader.IndexExists(dir))
+            {
+                if (!ReferenceEquals(dir, _dir)) dir.Dispose();
+                return false;
+            }
+            var reader = DirectoryReader.Open(dir);
+            SwapReaderLocked(dir, reader);
+            return true;
+        }
+        catch
+        {
+            if (!ReferenceEquals(dir, _dir)) dir?.Dispose();
+            return false;
+        }
+    }
+
+    /// <summary>Open (or reopen) a near-real-time reader off the live build writer so
+    /// documents added so far become searchable mid-build. Cheap when nothing changed
+    /// (OpenIfChanged returns null and the current reader is kept). No-op if no build
+    /// is running.</summary>
+    private void RefreshNrtLocked()
+    {
+        if (_writer is null) return;
+        try
+        {
+            DirectoryReader reader = _reader is not null
+                ? DirectoryReader.OpenIfChanged(_reader, _writer, applyAllDeletes: true) ?? _reader
+                : DirectoryReader.Open(_writer, applyAllDeletes: true);
+            if (!ReferenceEquals(reader, _reader))
+                SwapReaderLocked(_dir, reader);
+        }
+        catch { /* keep serving the current reader */ }
+    }
+
+    /// <summary>Install a new reader/searcher, disposing the previous reader. The
+    /// directory handle is kept alive for the index's lifetime.</summary>
+    private void SwapReaderLocked(FSDirectory? dir, DirectoryReader reader)
+    {
+        var old = _reader;
+        _dir = dir;
+        _reader = reader;
+        _searcher = new IndexSearcher(reader);
+        if (!ReferenceEquals(old, reader)) old?.Dispose();
+    }
+
+    /// <summary>Total docs in the open index (0 when none is open).</summary>
+    public int DocCount()
+    {
+        TryOpenActive();
+        lock (_lock) return _reader?.NumDocs ?? 0;
+    }
+
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            _reader?.Dispose();
+            _reader = null;
+            _searcher = null;
+            _writer?.Dispose();
+            _writer = null;
+            _dir?.Dispose();
+            _dir = null;
+        }
+    }
+
+    // ── Build (in-place, searchable while building) ─────────────────────────────
+
+    /// <summary>How often (in indexed books) to refresh the near-real-time reader so
+    /// partial results appear during a build. Cheap when nothing changed.</summary>
+    private const int NrtRefreshEveryBooks = 200;
+
+    /// <summary>
+    /// Rebuild the whole index from the seforim DB IN PLACE, keeping it searchable the
+    /// whole time via a near-real-time reader that refreshes as documents are added.
+    /// On completion the writer commits, the ver file (DB hash) is written, and the
+    /// reader is refreshed one last time. Returns the number of documents written.
+    /// (Name kept for API compatibility; there is no longer a slot swap.)
+    /// </summary>
+    public int BuildAndSwitch(string dbHash, Action<int, int>? onProgress = null, CancellationToken ct = default)
+    {
+        System.IO.Directory.CreateDirectory(rootPath);
+
+        // A completed index is only claimed by the ver file; clear it up front so a
+        // build interrupted midway is never mistaken for fresh on the next run.
+        try { if (File.Exists(VerFile)) File.Delete(VerFile); } catch { /* best effort */ }
+
+        // Sweep any pre-v9 slot directories (a/b) left by the old two-slot layout.
+        foreach (var slot in new[] { "a", "b" })
+        {
+            string old = Path.Combine(rootPath, slot);
+            try { if (System.IO.Directory.Exists(old)) System.IO.Directory.Delete(old, recursive: true); }
+            catch { /* harmless leftovers */ }
+        }
+
+        try
+        {
+            int docCount = BuildInPlace(onProgress, ct);
+
+            // Build finished: publish the hash, then refresh once more so the final
+            // documents (the Tanach verse pass) are visible on the NRT reader.
+            File.WriteAllText(VerFile, dbHash);
+            lock (_lock) RefreshNrtLocked();
+            return docCount;
+        }
+        finally
+        {
+            // Always release the writer (and its lock). Whatever it committed stays on
+            // disk; the NRT reader opened off it remains valid after the writer closes.
+            lock (_lock)
+            {
+                _writer?.Dispose();
+                _writer = null;
+            }
+        }
+    }
+
+    private int BuildInPlace(Action<int, int>? onProgress, CancellationToken ct)
+    {
         using var conn = OpenDb();
         var categoryList = LoadCategories(conn);
         var books = LoadBooks(conn);
         var firstLines = LoadFirstLines(conn);
-        var treeOrders = ComputeTreeOrders(categoryList, books);
+        var bookRank = ComputeTreeOrders(categoryList, books);
+        var altStructures = LoadAltStructures(conn);
 
-        var categories = new Dictionary<int, (int? ParentId, string Title)>(categoryList.Count);
-        foreach (var c in categoryList) categories[c.Id] = (c.ParentId, c.Title);
+        // Full catalog (category) path per book — part of SearchText so a query can
+        // address a book through its shelf: "תנך בראשית", "שלחן ערוך אורח חיים סימן ב"
+        // for a book like פרי מגדים whose title carries neither שלחן nor ערוך.
+        var catalogPathByBook = ComputeCatalogPaths(categoryList, books);
 
-        using var dir = FSDirectory.Open(indexPath);
-        using var analyzer = new WhitespaceOnlyAnalyzer();
+        // Reuse the already-open directory handle if one exists (a committed reader may
+        // be serving off it); otherwise open one. A single handle per index path avoids
+        // write-lock contention from two FSDirectory instances on the same folder.
+        FSDirectory fsDir;
+        lock (_lock) fsDir = _dir ??= FSDirectory.Open(rootPath);
+
+        var analyzer = new PipelineAnalyzer();
         var config = new IndexWriterConfig(Ver, analyzer)
         {
             OpenMode = OpenMode.CREATE,
             RAMBufferSizeMB = 48,
         };
-        using var writer = new IndexWriter(dir, config);
+        var writer = new IndexWriter(fsDir, config);
+        // Publish the writer, drop any committed reader, and open the first NRT reader so
+        // searches hit the (empty, then filling) index immediately. OpenMode.CREATE has
+        // marked the old segments for deletion; disposing the old reader releases them.
+        lock (_lock)
+        {
+            _reader?.Dispose();
+            _reader = null;
+            _searcher = null;
+            _writer = writer;
+            RefreshNrtLocked();
+        }
+
+        // The NRT reader refreshes on the same cadence as the progress callback.
+        void Progress(int done, int total)
+        {
+            onProgress?.Invoke(done, total);
+            lock (_lock) RefreshNrtLocked();
+        }
+
+        var bookMeta = books.ToDictionary(b => b.Id, b => b);
+        // Per-book doc sequence: 0 = the book-title doc, then TOC entries in original
+        // order. TreeOrder = (catalog book rank << 24) | seq — one long that sorts by
+        // catalog position first, original TOC order within the book second.
+        var nextSeq = new Dictionary<int, int>(books.Count);
+        long TreeOrder(int bookId)
+        {
+            int seq = nextSeq.GetValueOrDefault(bookId);
+            nextSeq[bookId] = seq + 1;
+            return ((long)bookRank.GetValueOrDefault(bookId, int.MaxValue) << 24) | (uint)seq;
+        }
 
         int docCount = 0, bookNo = 0;
 
-        // Book-title docs — the title points at the book's first line.
-        foreach (var (bookId, title, categoryId, authors) in books)
+        // Book-title docs — Level 0, pointing at the book's first line.
+        foreach (var b in books)
         {
             ct.ThrowIfCancellationRequested();
-            var doc = new Document
-            {
-                new TextField(FieldBook, BookFieldText(title, categoryId, authors, categories), Field.Store.NO),
-                new StringField(FieldKindIndexed, "b", Field.Store.NO),
-                new StoredField(FieldKind, 1),
-                new StoredField(FieldBookId, bookId),
-                new StoredField(FieldTocEntryId, 0),
-                new StoredField(FieldLineId, firstLines.TryGetValue(bookId, out var fl) ? fl.LineId : 0),
-                new StoredField(FieldLineIndex, firstLines.TryGetValue(bookId, out var fl2) ? fl2.LineIndex : -1),
-                new StoredField(FieldTitle, title),
-                new StoredField(FieldDisplay, ""),
-                new StoredField(FieldAncestors, ""),
-                new StoredField(FieldTreeOrder, treeOrders.GetValueOrDefault(bookId, int.MaxValue)),
-            };
-            writer.AddDocument(doc);
+            writer.AddDocument(MakeDoc(
+                catalogPath: catalogPathByBook.GetValueOrDefault(b.Id, ""),
+                authors: b.Authors,
+                bookId: b.Id,
+                lineIndex: firstLines.TryGetValue(b.Id, out var fl) ? fl.LineIndex : -1,
+                fullTocPath: b.Title,
+                level: 0,
+                treeOrder: TreeOrder(b.Id)));
             docCount++;
         }
 
-        // TOC docs — stream all entries ordered by book, index each book's tree at once.
-        var bookMeta = books.ToDictionary(b => b.Id, b => b);
+        // Regular TOC docs — one per entry, full root→leaf path prefixed by the title.
         foreach (var group in StreamTocRowsByBook(conn))
         {
             ct.ThrowIfCancellationRequested();
             if (!bookMeta.TryGetValue(group.BookId, out var book)) continue;
-
-            var rows = StripTitleRoots(group.Rows, book.Title, group.BookId);
-            docCount += IndexBookToc(writer, rows, book, categories,
-                treeOrders.GetValueOrDefault(group.BookId, int.MaxValue));
-
-            if (++bookNo % 200 == 0) onProgress?.Invoke(bookNo, books.Count);
+            docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
+                catalogPathByBook.GetValueOrDefault(group.BookId, ""));
+            if (++bookNo % NrtRefreshEveryBooks == 0) Progress(bookNo, books.Count);
         }
 
-        // Alt-TOC docs — alternative structures (parshiot/aliyot, dapim, …) indexed the
-        // same way, one tree per structure, so "בראשית נח עליה א" resolves. The
-        // structure's label tokens are folded into the toc field (queries may include
-        // them) but stay out of the display path (the alt tree doesn't show them).
-        var altStructures = LoadAltStructures(conn);
+        // Alt-TOC docs — alternative structures (parshiot/aliyot, dapim, …), same shape.
         foreach (var group in StreamAltTocRowsByStructure(conn))
         {
             ct.ThrowIfCancellationRequested();
             if (!altStructures.TryGetValue(group.StructureId, out var st)) continue;
             if (!bookMeta.TryGetValue(st.BookId, out var book)) continue;
-
-            var rows = StripTitleRoots(group.Rows, book.Title, st.BookId);
-            docCount += IndexBookToc(writer, rows, book, categories,
-                treeOrders.GetValueOrDefault(st.BookId, int.MaxValue),
-                altStructureLabel: string.IsNullOrWhiteSpace(st.HeTitle) ? st.Title : st.HeTitle);
+            docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
+                catalogPathByBook.GetValueOrDefault(st.BookId, ""));
         }
 
+        // 1+2. The normal index is complete — commit it before the slower verse pass,
+        // and refresh so every book/TOC entry is searchable before verses stream in.
         writer.Commit();
-        onProgress?.Invoke(books.Count, books.Count);
+        Progress(books.Count, books.Count);
+
+        // 3-5. Second pass, Tanach only: the seforim DB's Tanach TOCs stop at chapters,
+        // so verse-level entries are generated from the LINE TEXT and added as ordinary
+        // documents (same fields, analyzer, ordering). 6. Final commit here. The writer
+        // is left OPEN — the caller writes the ver file, does the final NRT refresh (so
+        // the verses become visible), then disposes it.
+        docCount += IndexTanachVerses(writer, conn, books, TreeOrder, catalogPathByBook, ct);
+        writer.Commit();
+
         return docCount;
     }
 
-    /// <summary>Index one book's (root-stripped) TOC rows: build each entry's segment
-    /// chain root→leaf, expand tokens per segment, and add one doc per entry.
-    /// With <paramref name="altStructureLabel"/> set, the rows are an ALT-TOC structure:
-    /// the label's tokens seed every chain and docs are stored as kind 3.</summary>
-    private static int IndexBookToc(
+    // ── Tanach verse extraction (compensates for missing verse-level TOC) ─────────
+
+    /// <summary>The Tanach base-text books, titled exactly as in the seforim DB — the
+    /// traditional 24 books as the DB stores them (שמואל/מלכים/דברי הימים split in two,
+    /// תרי עשר as twelve). Only these get the verse-extraction pass.</summary>
+    public static readonly HashSet<string> TanachBookTitles = new(StringComparer.Ordinal)
+    {
+        // תורה
+        "בראשית", "שמות", "ויקרא", "במדבר", "דברים",
+        // נביאים
+        "יהושע", "שופטים", "שמואל א", "שמואל ב", "מלכים א", "מלכים ב",
+        "ישעיהו", "ירמיהו", "יחזקאל",
+        "הושע", "יואל", "עמוס", "עובדיה", "יונה", "מיכה", "נחום", "חבקוק", "צפניה", "חגי", "זכריה", "מלאכי",
+        // כתובים
+        "תהילים", "משלי", "איוב", "שיר השירים", "רות", "איכה", "קהלת", "אסתר",
+        "דניאל", "עזרא", "נחמיה", "דברי הימים א", "דברי הימים ב",
+    };
+
+    private static readonly System.Text.RegularExpressions.Regex VerseMarkerRe =
+        new(@"\(([א-ת]{1,3})\)", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static readonly System.Text.RegularExpressions.Regex HtmlTagRe =
+        new("<[^>]*>", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Generate verse-level TOC documents for the Tanach books by scanning their line
+    /// text. A verse begins at a marker like <c>(א)</c>; a marker only counts when its
+    /// gematria value is exactly the NEXT expected verse number for the current chapter
+    /// (resets at every TOC entry) — this rejects parasha markers (פ)/(ס) and any other
+    /// parenthesized text. Each verse becomes a normal document: path =
+    /// "&lt;chapter path&gt; / פסוק &lt;letters&gt;", level = chapter level + 1,
+    /// LineIndex = the marker's line.
+    /// </summary>
+    private static int IndexTanachVerses(
+        IndexWriter writer, SqliteConnection conn,
+        List<(int Id, string Title, int CategoryId, string? Authors)> books,
+        Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
+    {
+        int added = 0;
+        foreach (var book in books)
+        {
+            if (!TanachBookTitles.Contains(book.Title)) continue;
+            ct.ThrowIfCancellationRequested();
+            string catalogPath = catalogPathByBook.GetValueOrDefault(book.Id, "");
+
+            // The book's TOC entries (chapters), root-stripped, with resolved paths.
+            var rows = StripTitleRoots(LoadTocRowsForBook(conn, book.Id), book.Title, book.Id);
+            var byId = rows.ToDictionary(r => r.Id);
+            var chainCache = new Dictionary<int, (string Path, int Level)>();
+            (string Path, int Level) GetChain(TocRow row)
+            {
+                if (chainCache.TryGetValue(row.Id, out var cached)) return cached;
+                var result = row.ParentId is { } pid && byId.TryGetValue(pid, out var parent)
+                    ? (GetChain(parent).Path + " / " + row.Text, GetChain(parent).Level + 1)
+                    : (book.Title + " / " + row.Text, 1);
+                chainCache[row.Id] = result;
+                return result;
+            }
+
+            // Entries in line order — each owns the lines up to the next entry.
+            var entries = rows.Where(r => r.LineIndex >= 0).OrderBy(r => r.LineIndex).ToList();
+            if (entries.Count == 0) continue;
+
+            int entryIdx = -1;
+            int expectedVerse = 1;
+            string chapterPath = "";
+            int chapterLevel = 0;
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT lineIndex, content FROM line WHERE bookId = @b ORDER BY lineIndex";
+            cmd.Parameters.AddWithValue("@b", book.Id);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                int lineIndex = reader.IsDBNull(0) ? -1 : reader.GetInt32(0);
+                string content = reader.IsDBNull(1) ? "" : reader.GetString(1);
+
+                // Advance to the TOC entry this line belongs to (reset the verse counter).
+                while (entryIdx + 1 < entries.Count && entries[entryIdx + 1].LineIndex <= lineIndex)
+                {
+                    entryIdx++;
+                    var (path, level) = GetChain(entries[entryIdx]);
+                    chapterPath = path;
+                    chapterLevel = level;
+                    expectedVerse = 1;
+                }
+                if (entryIdx < 0) continue; // front matter before the first entry
+
+                foreach (System.Text.RegularExpressions.Match m in
+                         VerseMarkerRe.Matches(HtmlTagRe.Replace(content, " ")))
+                {
+                    string letters = m.Groups[1].Value;
+                    if (Gematria(letters) != expectedVerse) continue; // (פ)/(ס)/quotes etc.
+
+                    string path = chapterPath + " / פסוק " + letters;
+                    writer.AddDocument(MakeDoc(
+                        catalogPath: catalogPath,
+                        authors: book.Authors,
+                        bookId: book.Id,
+                        lineIndex: lineIndex,
+                        fullTocPath: path,
+                        level: chapterLevel + 1,
+                        treeOrder: treeOrder(book.Id)));
+                    added++;
+                    expectedVerse++;
+                }
+            }
+        }
+        return added;
+    }
+
+    private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId)
+    {
+        var rows = new List<TocRow>();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT te.id, te.parentId, tt.text, l.lineIndex
+            FROM tocEntry te
+            JOIN tocText tt ON tt.id = te.textId
+            LEFT JOIN line l ON l.id = te.lineId
+            WHERE te.bookId = @b
+            ORDER BY te.id";
+        cmd.Parameters.AddWithValue("@b", bookId);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            rows.Add(new TocRow
+            {
+                Id = r.GetInt32(0),
+                ParentId = r.IsDBNull(1) ? null : r.GetInt32(1),
+                BookId = bookId,
+                Text = r.IsDBNull(2) ? "" : r.GetString(2),
+                LineIndex = r.IsDBNull(3) ? -1 : r.GetInt32(3),
+            });
+        return rows;
+    }
+
+    /// <summary>Standard Hebrew numeral value (א=1 … ת=400, finals folded); -1 when a
+    /// character is not a Hebrew letter. Sum-based, so both טו and יה style forms work.</summary>
+    private static int Gematria(string letters)
+    {
+        int value = 0;
+        foreach (char c in letters)
+        {
+            int v = c switch
+            {
+                >= 'א' and <= 'ט' => c - 'א' + 1,
+                'י' => 10, 'כ' or 'ך' => 20, 'ל' => 30, 'מ' or 'ם' => 40, 'נ' or 'ן' => 50,
+                'ס' => 60, 'ע' => 70, 'פ' or 'ף' => 80, 'צ' or 'ץ' => 90,
+                'ק' => 100, 'ר' => 200, 'ש' => 300, 'ת' => 400,
+                _ => -1,
+            };
+            if (v < 0) return -1;
+            value += v;
+        }
+        return value;
+    }
+
+    /// <summary>The TOC path is one field doing double duty: indexed (searchable, and
+    /// the order rule's reference text) and stored (the display path). Catalog path and
+    /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
+    private static Document MakeDoc(
+        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int level, long treeOrder)
+    {
+        var doc = new Document
+        {
+            new TextField(FieldFullTocPath, fullTocPath, Field.Store.YES),
+            new StoredField(FieldBookId, bookId),
+            new StoredField(FieldLineIndex, lineIndex),
+            new StoredField(FieldLevel, level),
+            new StoredField(FieldTreeOrder, treeOrder),
+        };
+        if (catalogPath.Length > 0)
+            doc.Add(new TextField(FieldCatalog, catalogPath, Field.Store.YES));
+        if (!string.IsNullOrWhiteSpace(authors))
+            doc.Add(new TextField(FieldAuthor, authors, Field.Store.YES));
+        return doc;
+    }
+
+    /// <summary>Index one TOC tree (regular or alt): title-variant roots are dropped
+    /// from the PATHS (display only — "בראשית / בראשית / פרק א" would be noise), then
+    /// each entry gets a doc with its full path, its depth as Level, and the next
+    /// per-book sequence number as TreeOrder. <paramref name="catalogPath"/> is folded
+    /// into SearchText only — never into the display path.</summary>
+    private int IndexTocTree(
         IndexWriter writer, List<TocRow> rows,
         (int Id, string Title, int CategoryId, string? Authors) book,
-        Dictionary<int, (int? ParentId, string Title)> categories,
-        int treeOrder,
-        string? altStructureLabel = null)
+        Func<int, long> treeOrder, string catalogPath)
     {
+        rows = StripTitleRoots(rows, book.Title, book.Id);
         var byId = rows.ToDictionary(r => r.Id);
-        string bookField = BookFieldText(book.Title, book.CategoryId, book.Authors, categories);
-        bool isAlt = altStructureLabel is not null;
 
-        // Memoized per-entry chains (token text, display path, ancestor ids).
-        var chainCache = new Dictionary<int, (string TocText, string Display, string Ancestors)>();
-        (string TocText, string Display, string Ancestors) GetChain(TocRow row)
+        // Memoized (path, level) per entry, root→leaf.
+        var chainCache = new Dictionary<int, (string Path, int Level)>();
+        (string Path, int Level) GetChain(TocRow row)
         {
             if (chainCache.TryGetValue(row.Id, out var cached)) return cached;
-
-            var tokens = new HashSet<string>();
-            string display, ancestors;
+            (string Path, int Level) result;
             if (row.ParentId is { } pid && byId.TryGetValue(pid, out var parent))
             {
                 var p = GetChain(parent);
-                foreach (var t in p.TocText.Split(' ', StringSplitOptions.RemoveEmptyEntries)) tokens.Add(t);
-                CatalogTocTextRules.ExpandIndexTokens(row.Text, tokens);
-                display = p.Display.Length > 0 ? p.Display + " / " + row.Text : row.Text;
-                ancestors = p.Ancestors.Length > 0 ? p.Ancestors + "," + pid : pid.ToString();
+                result = (p.Path + " / " + row.Text, p.Level + 1);
             }
             else
             {
-                if (!string.IsNullOrWhiteSpace(altStructureLabel))
-                    CatalogTocTextRules.ExpandIndexTokens(altStructureLabel, tokens);
-                CatalogTocTextRules.ExpandIndexTokens(row.Text, tokens);
-                display = row.Text;
-                ancestors = "";
+                result = (book.Title + " / " + row.Text, 1);
             }
-            var result = (string.Join(' ', tokens), display, ancestors);
             chainCache[row.Id] = result;
             return result;
         }
@@ -221,61 +572,55 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
         int added = 0;
         foreach (var row in rows)
         {
-            var (tocText, display, ancestors) = GetChain(row);
-            var doc = new Document
-            {
-                new TextField(FieldBook, bookField, Field.Store.NO),
-                new TextField(FieldToc, tocText, Field.Store.NO),
-                new StringField(FieldKindIndexed, "t", Field.Store.NO),
-                new StoredField(FieldKind, isAlt ? 3 : 2),
-                new StoredField(FieldBookId, book.Id), // alt rows carry no own bookId
-                new StoredField(FieldTocEntryId, row.Id),
-                new StoredField(FieldLineId, row.LineId),
-                new StoredField(FieldLineIndex, row.LineIndex),
-                new StoredField(FieldTitle, book.Title),
-                new StoredField(FieldDisplay, display),
-                new StoredField(FieldAncestors, ancestors),
-                new StoredField(FieldTreeOrder, treeOrder),
-            };
-            writer.AddDocument(doc);
+            var (path, level) = GetChain(row);
+            writer.AddDocument(MakeDoc(
+                catalogPath: catalogPath,
+                authors: book.Authors,
+                bookId: book.Id,
+                lineIndex: row.LineIndex,
+                fullTocPath: path,
+                level: level,
+                treeOrder: treeOrder(book.Id)));
             added++;
         }
         return added;
     }
 
-    /// <summary>The indexed "book part" of every doc: title + category path + authors,
-    /// token-expanded — everything the manual book matcher (filterBooksByWords) indexed.</summary>
-    private static string BookFieldText(
-        string title, int categoryId, string? authors,
-        Dictionary<int, (int? ParentId, string Title)> categories)
+    /// <summary>Each book's full catalog (category) path, root→leaf, space-joined —
+    /// SearchText material only. Orphaned books (unknown category) get "".</summary>
+    private static Dictionary<int, string> ComputeCatalogPaths(
+        List<(int Id, int? ParentId, string Title)> categories,
+        List<(int Id, string Title, int CategoryId, string? Authors)> books)
     {
-        var tokens = new HashSet<string>();
-        CatalogTocTextRules.ExpandIndexTokens(title, tokens);
+        var catById = new Dictionary<int, (int? ParentId, string Title)>(categories.Count);
+        foreach (var c in categories) catById[c.Id] = (c.ParentId, c.Title);
 
-        int? cat = categoryId;
-        var guard = 0;
-        while (cat is { } cid && categories.TryGetValue(cid, out var c) && guard++ < 32)
+        var pathCache = new Dictionary<int, string>(categories.Count);
+        string CatPath(int id)
         {
-            CatalogTocTextRules.ExpandIndexTokens(c.Title, tokens);
-            cat = c.ParentId;
+            if (pathCache.TryGetValue(id, out var cached)) return cached;
+            if (!catById.TryGetValue(id, out var c)) return "";
+            string result = c.ParentId is { } pid ? JoinNonEmpty(CatPath(pid), c.Title) : c.Title;
+            pathCache[id] = result;
+            return result;
         }
 
-        if (!string.IsNullOrWhiteSpace(authors))
-            CatalogTocTextRules.ExpandIndexTokens(authors, tokens);
-
-        return string.Join(' ', tokens);
+        var map = new Dictionary<int, string>(books.Count);
+        foreach (var b in books) map[b.Id] = CatPath(b.CategoryId);
+        return map;
     }
 
+    private static string JoinNonEmpty(string a, string? b) =>
+        string.IsNullOrWhiteSpace(b) ? a : a + " " + b;
+
     /// <summary>Remove root TOC entries whose text is a title variant of the book title,
-    /// re-parenting their children — port of tocSearchUtils.ts stripTocTitleRoots(), the
-    /// same transformation the manual pipeline applies before scoring.</summary>
+    /// re-parenting their children (the paths would just repeat the title).</summary>
     private static List<TocRow> StripTitleRoots(List<TocRow> rows, string bookTitle, int bookId)
     {
         if (string.IsNullOrEmpty(bookTitle) || rows.Count == 0) return rows;
-        bool forceStrip = CatalogTocTextRules.ForceStripBookIds.Contains(bookId);
         var rootIds = new HashSet<int>();
         foreach (var r in rows)
-            if (r.ParentId is null && (forceStrip || CatalogTocTextRules.IsTitleVariant(bookTitle, r.Text)))
+            if (r.ParentId is null && CatalogTocTextRules.IsTitleVariant(bookTitle, r.Text))
                 rootIds.Add(r.Id);
         if (rootIds.Count == 0) return rows;
 
@@ -290,6 +635,15 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
     }
 
     // ── DB loading ──────────────────────────────────────────────────────────────
+
+    private sealed class TocRow
+    {
+        public int Id;
+        public int? ParentId;
+        public int BookId;
+        public int LineIndex; // -1 = none
+        public string Text = "";
+    }
 
     private SqliteConnection OpenDb()
     {
@@ -327,13 +681,41 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
         return list;
     }
 
+    private static List<(int Id, string Title, int CategoryId, string? Authors)> LoadBooks(SqliteConnection conn)
+    {
+        var list = new List<(int, string, int, string?)>();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors
+            FROM book b
+            LEFT JOIN book_author ba ON ba.bookId = b.id
+            LEFT JOIN author a ON a.id = ba.authorId
+            GROUP BY b.id
+            ORDER BY b.orderIndex";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add((r.GetInt32(0), r.IsDBNull(2) ? "" : r.GetString(2), r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                r.IsDBNull(3) ? null : r.GetString(3)));
+        return list;
+    }
+
+    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(SqliteConnection conn)
+    {
+        // SQLite MIN() aggregate guarantees the bare columns come from the minimal row.
+        var map = new Dictionary<int, (int, int)>();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT bookId, id, MIN(lineIndex) FROM line GROUP BY bookId";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            map[r.GetInt32(0)] = (r.GetInt32(1), r.IsDBNull(2) ? -1 : r.GetInt32(2));
+        return map;
+    }
+
     /// <summary>
     /// Each book's position in the catalog tree — identical to the frontend's
     /// buildTree + assignFullPaths (bookCatalogTree.ts): categories nested in load
     /// order, custom (negative-id) entries sorted last per level, orphaned books under
-    /// a synthetic last root, then a DFS that numbers books as encountered. This is the
-    /// order the manual pipeline effectively ranked tied results by, so it is the
-    /// re-rank tiebreak.
+    /// a synthetic last root, then a DFS that numbers books as encountered.
     /// </summary>
     private static Dictionary<int, int> ComputeTreeOrders(
         List<(int Id, int? ParentId, string Title)> categories,
@@ -387,31 +769,7 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
         }
     }
 
-    private static List<(int Id, string Title, int CategoryId, string? Authors)> LoadBooks(SqliteConnection conn)
-    {
-        var list = new List<(int, string, int, string?)>();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = SeforimSql.GetAllBooks;
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-            list.Add((r.GetInt32(0), r.IsDBNull(2) ? "" : r.GetString(2), r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                r.IsDBNull(4) ? null : r.GetString(4)));
-        return list;
-    }
-
-    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(SqliteConnection conn)
-    {
-        // SQLite MIN() aggregate guarantees the bare columns come from the minimal row.
-        var map = new Dictionary<int, (int, int)>();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT bookId, id, MIN(lineIndex) FROM line GROUP BY bookId";
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-            map[r.GetInt32(0)] = (r.GetInt32(1), r.IsDBNull(2) ? -1 : r.GetInt32(2));
-        return map;
-    }
-
-    /// <summary>All alt-TOC structures: structureId → (bookId, titles).</summary>
+    /// <summary>All alt-TOC structures: structureId → owning bookId.</summary>
     private static Dictionary<int, (int BookId, string Title, string HeTitle)> LoadAltStructures(SqliteConnection conn)
     {
         var map = new Dictionary<int, (int, string, string)>();
@@ -426,83 +784,74 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
         return map;
     }
 
-    private sealed class AltTocGroup
-    {
-        public int StructureId;
-        public List<TocRow> Rows = [];
-    }
-
-    /// <summary>Stream all alt-TOC entries ordered by structure — one group per
-    /// structure, mirroring StreamTocRowsByBook.</summary>
-    private static IEnumerable<AltTocGroup> StreamAltTocRowsByStructure(SqliteConnection conn)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = @"
-            SELECT ae.structureId, ae.id, ae.parentId, ae.lineId, tt.text, l.lineIndex
-            FROM alt_toc_entry ae
-            JOIN tocText tt ON tt.id = ae.textId
-            LEFT JOIN line l ON l.id = ae.lineId
-            ORDER BY ae.structureId, ae.id";
-        using var r = cmd.ExecuteReader();
-
-        AltTocGroup? group = null;
-        while (r.Read())
-        {
-            int structureId = r.GetInt32(0);
-            if (group is null || group.StructureId != structureId)
-            {
-                if (group is not null) yield return group;
-                group = new AltTocGroup { StructureId = structureId };
-            }
-            group.Rows.Add(new TocRow
-            {
-                Id = r.GetInt32(1),
-                ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
-                BookId = 0, // filled from the structure's book by the caller's doc writer
-                LineId = r.IsDBNull(3) ? 0 : r.GetInt32(3),
-                Text = r.IsDBNull(4) ? "" : r.GetString(4),
-                LineIndex = r.IsDBNull(5) ? -1 : r.GetInt32(5),
-            });
-        }
-        if (group is not null) yield return group;
-    }
-
-    private sealed class BookTocGroup
+    private sealed class TocGroup
     {
         public int BookId;
+        public int StructureId;
         public List<TocRow> Rows = [];
     }
 
     /// <summary>Stream all TOC entries ordered by book — one group per book so each
     /// book's tree is materialized (and released) in turn instead of all at once.</summary>
-    private static IEnumerable<BookTocGroup> StreamTocRowsByBook(SqliteConnection conn)
+    private static IEnumerable<TocGroup> StreamTocRowsByBook(SqliteConnection conn)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
-            SELECT te.bookId, te.id, te.parentId, te.lineId, tt.text, l.lineIndex
+            SELECT te.bookId, te.id, te.parentId, tt.text, l.lineIndex
             FROM tocEntry te
             JOIN tocText tt ON tt.id = te.textId
             LEFT JOIN line l ON l.id = te.lineId
             ORDER BY te.bookId, te.id";
         using var r = cmd.ExecuteReader();
 
-        BookTocGroup? group = null;
+        TocGroup? group = null;
         while (r.Read())
         {
             int bookId = r.GetInt32(0);
             if (group is null || group.BookId != bookId)
             {
                 if (group is not null) yield return group;
-                group = new BookTocGroup { BookId = bookId };
+                group = new TocGroup { BookId = bookId };
             }
             group.Rows.Add(new TocRow
             {
                 Id = r.GetInt32(1),
                 ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
                 BookId = bookId,
-                LineId = r.IsDBNull(3) ? 0 : r.GetInt32(3),
-                Text = r.IsDBNull(4) ? "" : r.GetString(4),
-                LineIndex = r.IsDBNull(5) ? -1 : r.GetInt32(5),
+                Text = r.IsDBNull(3) ? "" : r.GetString(3),
+                LineIndex = r.IsDBNull(4) ? -1 : r.GetInt32(4),
+            });
+        }
+        if (group is not null) yield return group;
+    }
+
+    /// <summary>Stream all alt-TOC entries ordered by structure — one group per structure.</summary>
+    private static IEnumerable<TocGroup> StreamAltTocRowsByStructure(SqliteConnection conn)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = @"
+            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex
+            FROM alt_toc_entry ae
+            JOIN tocText tt ON tt.id = ae.textId
+            LEFT JOIN line l ON l.id = ae.lineId
+            ORDER BY ae.structureId, ae.id";
+        using var r = cmd.ExecuteReader();
+
+        TocGroup? group = null;
+        while (r.Read())
+        {
+            int structureId = r.GetInt32(0);
+            if (group is null || group.StructureId != structureId)
+            {
+                if (group is not null) yield return group;
+                group = new TocGroup { StructureId = structureId };
+            }
+            group.Rows.Add(new TocRow
+            {
+                Id = r.GetInt32(1),
+                ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
+                Text = r.IsDBNull(3) ? "" : r.GetString(3),
+                LineIndex = r.IsDBNull(4) ? -1 : r.GetInt32(4),
             });
         }
         if (group is not null) yield return group;
@@ -510,318 +859,158 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
 
     // ── Search ──────────────────────────────────────────────────────────────────
 
-    /// <summary>Search the index. Results are NEVER capped. <paramref name="dedupAncestors"/>
-    /// mirrors the manual pipeline's Pass 3 (a matched entry suppresses matched descendants).
+    /// <summary>
+    /// Contains-all search: every query token (same normalization pipeline as indexing)
+    /// must appear in ONE of the document's indexed fields — TOC path, catalog path, or
+    /// author. Results are NEVER capped. Lucene relevance is ignored — ordering is
+    /// Level ascending (book title = 0, then TOC depth), then TreeOrder ascending
+    /// (catalog book position, then the original TOC order). Nothing else affects
+    /// ordering.
     ///
-    /// Pipeline: one collector pass gathers every matching (doc, luceneScore) — no
-    /// count-then-collect double execution and no priority queue. Stored fields are
-    /// then read in docId order (compressed stored-field chunks decompress once per
-    /// neighborhood instead of once per hit — this is what makes a 10k+-hit query fast).
-    /// Finally the hits are re-ranked with the manual scorer's semantics (see Rerank)
-    /// so the top of the list matches what the catalog page ranked highest today.
-    ///
-    /// SINGLE-WORD queries search book-title docs only. This is exact manual-pipeline
-    /// behavior (both TOC split heuristics need ≥ 2 words, so the manual way never
-    /// returns TOC items for one word) and it kills the pathology where a one-letter
-    /// query prefix-matched a million TOC docs.</summary>
-    public List<CatalogTocHit> Search(string query, bool dedupAncestors = true, CancellationToken ct = default)
+    /// Query token order (final tie-breaker, never a relevance score): the test runs
+    /// against the TOC-PATH FIELD ONLY — query tokens present among the path's tokens
+    /// must appear there in typed order; tokens that aren't in the path (catalog terms,
+    /// authors) don't participate by construction. When a (level, book) group contains
+    /// BOTH an in-order and an out-of-order hit, the out-of-order hits are DISCARDED
+    /// ("תנך בראשית ד יד" keeps פרק ד / פסוק יד and drops פרק יד / פסוק ד). Groups with
+    /// no in-order hit are kept untouched, so title/catalog word order (משנה תורה vs
+    /// תורה משנה) never filters anything.
+    /// </summary>
+    public List<CatalogTocHit> Search(string query, CancellationToken ct = default)
     {
-        var words = CatalogTocTextRules.QueryWords(query);
-        if (words.Count == 0) return [];
+        var tokens = CatalogTocTextRules.Tokenize(query);
+        if (tokens.Count == 0) return [];
 
-        var searcher = GetSearcher();
-        if (searcher is null) return [];
-
-        bool booksOnly = words.Count == 1;
-        var bq = new BooleanQuery();
-        foreach (var word in words)
+        IndexSearcher? searcher;
+        lock (_lock) searcher = _searcher;
+        if (searcher is null)
         {
-            var perWord = new BooleanQuery();
-            foreach (var form in WordForms(word))
-            {
-                perWord.Add(new PrefixQuery(new Term(FieldBook, form)), Occur.SHOULD);
-                if (!booksOnly) perWord.Add(new PrefixQuery(new Term(FieldToc, form)), Occur.SHOULD);
-            }
-            bq.Add(perWord, Occur.MUST);
+            if (!TryOpenActive()) return [];
+            lock (_lock) searcher = _searcher;
+            if (searcher is null) return [];
         }
-        if (booksOnly) bq.Add(new TermQuery(new Term(FieldKindIndexed, "b")), Occur.MUST);
 
-        // Single pass, uncapped, docId order.
-        var collector = new AllHitsCollector(ct);
+        var bq = new BooleanQuery();
+        foreach (var token in tokens.Distinct())
+        {
+            var perToken = new BooleanQuery();
+            foreach (var field in IndexedFields)
+                perToken.Add(new TermQuery(new Term(field, token)), Occur.SHOULD);
+            bq.Add(perToken, Occur.MUST);
+        }
+
+        var collector = new AllDocsCollector(ct);
         searcher.Search(bq, collector);
-        var scoreDocs = collector.Hits;
-        if (scoreDocs.Count == 0) return [];
+        if (collector.DocIds.Count == 0) return [];
 
-        var hits = new List<CatalogTocHit>(scoreDocs.Count);
-        foreach (var (docId, luceneScore) in scoreDocs)
+        // Stored fields are read in docId order (collector order) — compressed
+        // stored-field chunks decompress once per neighborhood, not once per hit.
+        var hits = new List<CatalogTocHit>(collector.DocIds.Count);
+        foreach (int docId in collector.DocIds)
         {
             ct.ThrowIfCancellationRequested();
             var doc = searcher.Doc(docId);
-            int kind = doc.GetField(FieldKind).GetInt32Value() ?? 2;
             hits.Add(new CatalogTocHit
             {
-                Kind = kind == 1 ? "book" : kind == 3 ? "alttoc" : "toc",
-                BookId = doc.GetField(FieldBookId).GetInt32Value() ?? 0,
-                TocEntryId = doc.GetField(FieldTocEntryId).GetInt32Value() ?? 0,
-                LineId = doc.GetField(FieldLineId).GetInt32Value() ?? 0,
-                LineIndex = doc.GetField(FieldLineIndex).GetInt32Value() ?? -1,
-                BookTitle = doc.Get(FieldTitle) ?? "",
-                TocPath = doc.Get(FieldDisplay) ?? "",
-                Score = luceneScore,
-                AncestorIds = doc.Get(FieldAncestors) ?? "",
-                TreeOrder = doc.GetField(FieldTreeOrder)?.GetInt32Value() ?? int.MaxValue,
+                BookId = doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
+                LineIndex = doc.GetField(FieldLineIndex)?.GetInt32Value() ?? -1,
+                FullTocPath = doc.Get(FieldFullTocPath) ?? "",
+                Level = doc.GetField(FieldLevel)?.GetInt32Value() ?? 0,
+                TreeOrder = doc.GetField(FieldTreeOrder)?.GetInt64Value() ?? long.MaxValue,
             });
         }
 
-        Rerank(hits, words);
-        return dedupAncestors ? DedupAncestors(hits) : hits;
+        // Query-token-order tiebreak: only meaningful for multi-token queries (a single
+        // token is trivially in order). Within each (level, book) group that has at
+        // least one in-order hit, the out-of-order hits are discarded.
+        if (tokens.Count >= 2)
+        {
+            foreach (var h in hits)
+                h.QueryInOrder = ContainsInQueryOrder(h.FullTocPath, tokens);
+
+            var groupsWithInOrder = new HashSet<(int Level, long Book)>();
+            foreach (var h in hits)
+                if (h.QueryInOrder) groupsWithInOrder.Add((h.Level, h.TreeOrder >> 24));
+
+            if (groupsWithInOrder.Count > 0)
+                hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
+        }
+
+        hits.Sort(static (a, b) =>
+        {
+            int c = a.Level.CompareTo(b.Level);
+            return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
+        });
+        return hits;
     }
 
-    /// <summary>Collects every matching doc with its score, in docId order, no cap.
-    /// Checks the cancellation token periodically so a superseded search stops early.</summary>
-    private sealed class AllHitsCollector(CancellationToken ct) : ICollector
+    /// <summary>
+    /// The query-token-order test, defined by the TOC path alone: query tokens that
+    /// exist among the path's tokens must appear there as an ordered subsequence in
+    /// typed order. Tokens NOT present in the path (they matched via catalog/author)
+    /// are excluded from the test by construction; fewer than two participating tokens
+    /// means there is nothing to order — the hit counts as in order.
+    /// </summary>
+    private static bool ContainsInQueryOrder(string fullTocPath, List<string> queryTokens)
     {
-        public readonly List<(int DocId, float Score)> Hits = [];
-        private Scorer? _scorer;
+        var pathTokens = CatalogTocTextRules.Tokenize(fullTocPath);
+        var pathSet = new HashSet<string>(pathTokens);
+
+        var participating = new List<string>(queryTokens.Count);
+        foreach (var t in queryTokens)
+            if (pathSet.Contains(t)) participating.Add(t);
+        if (participating.Count < 2) return true;
+
+        int qi = 0;
+        foreach (var tok in pathTokens)
+        {
+            if (tok == participating[qi] && ++qi == participating.Count) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Collects every matching docId, in order, no cap, no scores.</summary>
+    private sealed class AllDocsCollector(CancellationToken ct) : ICollector
+    {
+        public readonly List<int> DocIds = [];
         private int _docBase;
 
-        public void SetScorer(Scorer scorer) => _scorer = scorer;
+        public void SetScorer(Scorer scorer) { /* scores are ignored by design */ }
         public void SetNextReader(AtomicReaderContext context) => _docBase = context.DocBase;
         public bool AcceptsDocsOutOfOrder => true;
 
         public void Collect(int doc)
         {
-            if ((Hits.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
-            Hits.Add((_docBase + doc, _scorer?.GetScore() ?? 0f));
+            if ((DocIds.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
+            DocIds.Add(_docBase + doc);
         }
     }
 
-    // ── Manual-style re-rank ────────────────────────────────────────────────────
-    //
-    // Raw Lucene TF-IDF ranks a short unrelated path above the exact section the user
-    // addressed. The manual pipeline's scorer (segmentSearchTree.ts) got this right, so
-    // its semantics are applied here as a re-RANK (never a filter — recall is untouched):
-    //
-    //   - each hit's segments = [book title] + its TOC display path segments, tokenized
-    //     the same way the manual tree tokenized node texts
-    //   - query words must appear as an ordered subsequence with prefix matching;
-    //     score = intra-segment token distance + 10 per segment boundary crossed
-    //     (lower = tighter = better), exactly the manual formula
-    //   - two-attempt: hits where the LAST word matches a token exactly (Talmud page
-    //     suffixes "י." / "י:" count as exact for "י") rank as a group above
-    //     prefix-only hits — the manual "פרק ל before פרק לא" behavior
-    //   - ties break on (catalog treeOrder, tocEntryId) — exactly the order the manual
-    //     pipeline assembled tied results in (candidate books in tree order, rows in
-    //     entry order), so רש"י/רמב"ן follow the chumash the way the catalog shelves them
-    //   - hits the manual scorer can't score at all (they matched only via expanded
-    //     token forms) sort by the same tree order at the bottom
-    private static void Rerank(List<CatalogTocHit> hits, List<string> words)
-    {
-        var ranked = new (int Tier, int Score)[hits.Count];
-        for (int i = 0; i < hits.Count; i++)
-        {
-            var segments = SegmentsForHit(hits[i]);
-            int exactScore = ScorePath(segments, words, lastWordExact: true);
-            int prefixScore = exactScore != int.MaxValue ? exactScore : ScorePath(segments, words, lastWordExact: false);
-            int tier = exactScore != int.MaxValue ? 0 : prefixScore != int.MaxValue ? 1 : 2;
-            ranked[i] = (tier, prefixScore);
-        }
+    // ── Analyzer ────────────────────────────────────────────────────────────────
 
-        var order = Enumerable.Range(0, hits.Count).ToArray();
-        Array.Sort(order, (a, b) =>
-        {
-            int c = ranked[a].Tier.CompareTo(ranked[b].Tier);
-            if (c != 0) return c;
-            if (ranked[a].Tier < 2 && (c = ranked[a].Score.CompareTo(ranked[b].Score)) != 0) return c;
-            c = hits[a].TreeOrder.CompareTo(hits[b].TreeOrder);
-            if (c != 0) return c;
-            c = hits[a].TocEntryId.CompareTo(hits[b].TocEntryId);
-            return c != 0 ? c : a.CompareTo(b); // stable
-        });
-
-        var sorted = new List<CatalogTocHit>(hits.Count);
-        foreach (int i in order) sorted.Add(hits[i]);
-        hits.Clear();
-        hits.AddRange(sorted);
-    }
-
-    /// <summary>Tokenized segment chain for a hit: book title first, then each TOC path
-    /// segment — the shape the manual scorer walked.</summary>
-    private static List<List<string>> SegmentsForHit(CatalogTocHit h)
-    {
-        var segments = new List<List<string>> { CatalogTocTextRules.TokenizeSegmentText(h.BookTitle) };
-        if (h.TocPath.Length > 0)
-            foreach (var part in h.TocPath.Split(" / "))
-                segments.Add(CatalogTocTextRules.TokenizeSegmentText(part));
-        return segments;
-    }
-
-    /// <summary>The manual scorer (segmentSearchTree.ts _score) adapted for UNSPLIT
-    /// queries: ordered-subsequence prefix match of words across segments;
-    /// int.MaxValue = no match.
-    ///
-    /// Segment 0 is the BOOK TITLE. In the manual pipeline, book words were split out
-    /// of TOC scoring entirely, so here every pair anchored in the title is FREE:
-    /// title-internal pairs cost 0 (the manual book matcher was order-free and
-    /// positionless) and the title→TOC crossing costs 0 (the manual scorer only ever
-    /// penalized between TOC words). Within non-title segments the next word must
-    /// match FORWARD of the previous one — without this, a long TOC text containing
-    /// "…יד…בראשית…" scores negative and beats a real "פרק יד" entry.</summary>
-    private static int ScorePath(List<List<string>> segments, List<string> words, bool lastWordExact)
-    {
-        Span<int> segIndices = words.Count <= 16 ? stackalloc int[words.Count] : new int[words.Count];
-        Span<int> tokenIndices = words.Count <= 16 ? stackalloc int[words.Count] : new int[words.Count];
-        int segFrom = 0;
-
-        for (int wi = 0; wi < words.Count; wi++)
-        {
-            string w = words[wi];
-            bool requireExact = lastWordExact && wi == words.Count - 1;
-            bool found = false;
-
-            for (int si = segFrom; si < segments.Count && !found; si++)
-            {
-                var seg = segments[si];
-                // Forward-only within the previous word's (non-title) segment; the
-                // title segment stays order-free like the manual book matcher.
-                int tiStart = wi > 0 && si == segFrom && si != 0 ? tokenIndices[wi - 1] + 1 : 0;
-                for (int ti = tiStart; ti < seg.Count; ti++)
-                {
-                    string tok = seg[ti];
-                    bool isTalmudSuffix = tok.Length == w.Length + 1
-                        && (tok.EndsWith('.') || tok.EndsWith(':'))
-                        && tok.StartsWith(w, StringComparison.Ordinal);
-                    bool matches = requireExact
-                        ? tok == w || isTalmudSuffix
-                        : tok.StartsWith(w, StringComparison.Ordinal);
-                    if (matches)
-                    {
-                        segIndices[wi] = si;
-                        tokenIndices[wi] = ti;
-                        segFrom = si;
-                        found = true;
-                        break;
-                    }
-                }
-            }
-
-            if (!found) return int.MaxValue;
-        }
-
-        const int SegmentCrossingPenalty = 10;
-        int score = 0;
-        for (int i = 1; i < words.Count; i++)
-        {
-            if (segIndices[i - 1] == 0) continue; // pair anchored in the title — free
-            if (segIndices[i] == segIndices[i - 1]) score += tokenIndices[i] - tokenIndices[i - 1];
-            else score += (segIndices[i] - segIndices[i - 1]) * SegmentCrossingPenalty;
-        }
-        return score;
-    }
-
-    /// <summary>The lookup forms tried for one query word — mirrors the manual matcher:
-    /// the word itself, its ה-stripped form, and its חסר/מלא skeleton.</summary>
-    private static IEnumerable<string> WordForms(string word)
-    {
-        yield return word;
-        if (CatalogTocTextRules.StripHePrefix(word) is { } stripped) yield return stripped;
-        string skel = CatalogTocTextRules.Skeleton(word);
-        if (skel.Length > 0 && skel != word) yield return skel;
-    }
-
-    /// <summary>Manual Pass 3: drop any hit whose TOC ancestor (same book) also matched.
-    /// Regular and alt TOC entries live in different id namespaces, so the kind is part
-    /// of the key — a regular entry never suppresses an alt entry or vice versa.</summary>
-    private static List<CatalogTocHit> DedupAncestors(List<CatalogTocHit> hits)
-    {
-        var matched = new HashSet<(string Kind, int BookId, int TocEntryId)>();
-        foreach (var h in hits)
-            if (h.TocEntryId != 0) matched.Add((h.Kind, h.BookId, h.TocEntryId));
-
-        var result = new List<CatalogTocHit>(hits.Count);
-        foreach (var h in hits)
-        {
-            bool suppressed = false;
-            if (h.TocEntryId != 0 && h.AncestorIds.Length > 0)
-            {
-                foreach (var part in h.AncestorIds.Split(','))
-                    if (int.TryParse(part, out int anc) && matched.Contains((h.Kind, h.BookId, anc)))
-                    {
-                        suppressed = true;
-                        break;
-                    }
-            }
-            if (!suppressed) result.Add(h);
-        }
-        return result;
-    }
-
-    // ── Reader lifecycle ────────────────────────────────────────────────────────
-
-    private FSDirectory? _dir;
-
-    private IndexSearcher? GetSearcher()
-    {
-        lock (_readerLock)
-        {
-            if (_searcher is not null) return _searcher;
-            var dir = FSDirectory.Open(indexPath);
-            if (!DirectoryReader.IndexExists(dir))
-            {
-                dir.Dispose();
-                return null;
-            }
-            _dir = dir;
-            _reader = DirectoryReader.Open(dir);
-            _searcher = new IndexSearcher(_reader);
-            return _searcher;
-        }
-    }
-
-    /// <summary>Total docs in the index (0 when not yet built).</summary>
-    public int DocCount()
-    {
-        GetSearcher();
-        lock (_readerLock) return _reader?.NumDocs ?? 0;
-    }
-
-    private void InvalidateReader()
-    {
-        lock (_readerLock)
-        {
-            _reader?.Dispose();
-            _reader = null;
-            _searcher = null;
-            _dir?.Dispose();
-            _dir = null;
-        }
-    }
-
-    public void Dispose() => InvalidateReader();
-
-    /// <summary>Trivial whitespace analyzer — index text is pre-tokenized/expanded by
-    /// CatalogTocTextRules, so tokens just split on spaces. No Analysis.Common needed.</summary>
-    private sealed class WhitespaceOnlyAnalyzer : Analyzer
+    /// <summary>The shared normalization pipeline as a Lucene analyzer — indexing runs
+    /// text through CatalogTocTextRules.Tokenize, exactly like query parsing does.</summary>
+    private sealed class PipelineAnalyzer : Analyzer
     {
         protected override TokenStreamComponents CreateComponents(string fieldName, TextReader reader)
-            => new(new SpaceTokenizer(reader));
+            => new(new PipelineTokenizer(reader));
     }
 
-    private sealed class SpaceTokenizer : Tokenizer
+    private sealed class PipelineTokenizer : Tokenizer
     {
         private readonly ICharTermAttribute _termAtt;
-        private string[]? _tokens;
+        private List<string>? _tokens;
         private int _pos;
 
-        public SpaceTokenizer(TextReader input) : base(input)
+        public PipelineTokenizer(TextReader input) : base(input)
         {
             _termAtt = AddAttribute<ICharTermAttribute>();
         }
 
         public override bool IncrementToken()
         {
-            _tokens ??= m_input.ReadToEnd().Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (_pos >= _tokens.Length) return false;
+            _tokens ??= CatalogTocTextRules.Tokenize(m_input.ReadToEnd());
+            if (_pos >= _tokens.Count) return false;
             ClearAttributes();
             _termAtt.SetEmpty().Append(_tokens[_pos++]);
             return true;
@@ -836,29 +1025,22 @@ public sealed class CatalogTocIndex(string indexPath, string dbPath) : IDisposab
     }
 }
 
-/// <summary>One catalog TOC search hit — a book title or a full TOC path.</summary>
+/// <summary>One catalog TOC search hit. Level 0 = a book-title hit (LineIndex is the
+/// book's first line); Level ≥ 1 = a TOC entry at that depth.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CatalogTocHit
 {
-    /// <summary>"book" (title doc → first line), "toc" (TOC entry doc), or "alttoc"
-    /// (alternative-structure entry — its TocEntryId is an alt_toc_entry id).</summary>
-    public string Kind { get; set; } = "toc";
     public int BookId { get; set; }
-    /// <summary>0 for book-title hits. For "alttoc" hits this is the alt_toc_entry id
-    /// (a different id namespace than tocEntry).</summary>
-    public int TocEntryId { get; set; }
-    /// <summary>The line the TOC path points to (book hits: the book's first line). 0 = none.</summary>
-    public int LineId { get; set; }
     /// <summary>-1 when the entry has no resolved line.</summary>
     public int LineIndex { get; set; }
-    public string BookTitle { get; set; } = "";
-    /// <summary>TOC display path within the book ("פרק א / פסוק ד"); empty for book hits.</summary>
-    public string TocPath { get; set; } = "";
-    public float Score { get; set; }
-    /// <summary>Comma-joined ancestor tocEntry ids (internal — used for ancestry dedup).</summary>
+    /// <summary>Display path: the book title, then " / "-joined TOC segments.</summary>
+    public string FullTocPath { get; set; } = "";
+    /// <summary>0 = book title, 1+ = TOC depth. First sort key.</summary>
+    public int Level { get; set; }
+    /// <summary>Catalog tree position + original TOC order. Second sort key.</summary>
+    public long TreeOrder { get; set; }
+    /// <summary>Internal (not on the wire): query tokens appear in typed order in the
+    /// path — the last tiebreak within a (book, level) group.</summary>
     [MessagePack.IgnoreMember]
-    public string AncestorIds { get; set; } = "";
-    /// <summary>The book's catalog tree order (internal — rank tiebreak).</summary>
-    [MessagePack.IgnoreMember]
-    public int TreeOrder { get; set; } = int.MaxValue;
+    public bool QueryInOrder { get; set; }
 }

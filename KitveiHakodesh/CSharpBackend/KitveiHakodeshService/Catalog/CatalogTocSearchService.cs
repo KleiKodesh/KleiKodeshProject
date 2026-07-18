@@ -3,19 +3,17 @@ namespace KitveiHakodeshService.Catalog;
 using KitveiHakodeshService.SefroimDb;
 
 /// <summary>
-/// Service wrapper around <see cref="CatalogTocIndex"/> — Lucene full-text search over
-/// full TOC paths, replacing the catalog page's manual per-query TOC heuristics.
+/// Service wrapper around <see cref="CatalogTocIndex"/> — the disk-based Lucene index
+/// over full TOC paths behind the catalog search.
 ///
 /// Index location: "CatalogTocIndex" next to the service binary (AppContext.BaseDirectory),
-/// the same convention as the FTS index and the document-locator index — deleting the
-/// service folder deletes the index with it.
+/// the same convention as the FTS index and the document-locator index.
 ///
-/// Rebuild trigger: catalogtoc.ver records the HASH of the seforim DB (path+size+mtime,
-/// see CatalogTocIndex.ComputeDbHash) the index was built from. Any change to the DB
-/// file — updated content, replaced file, switched database — changes the hash, and the
-/// next EnsureIndex() wipes and rebuilds in the background (mirrors how the FTS index
-/// rebuilds on a source-DB change). The ver file is written only after a completed
-/// build, so an interrupted build also rebuilds from scratch.
+/// Rebuilds: the ver file records the seforim-DB hash the committed index was built
+/// from. When the hash differs (DB updated/replaced/switched, or index format bumped),
+/// a rebuild starts on a background task and builds IN PLACE. Searches stay available
+/// throughout: a near-real-time reader serves partial results as documents are indexed,
+/// so results appear during the very first build too (see CatalogTocIndex.BuildAndSwitch).
 /// </summary>
 public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> logger)
 {
@@ -27,9 +25,9 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     private Task? _buildTask;
     private CancellationTokenSource? _buildCts;
 
-    private volatile bool _isReady;
+    private volatile bool _isReady;      // an index (fresh or stale) is open and serving
     private volatile bool _isIndexing;
-    private volatile bool _buildStarted;   // latch: build at most once per process
+    private volatile bool _buildStarted; // latch: build at most once per process
     private volatile int _builtBooks;
     private volatile int _totalBooks;
 
@@ -46,24 +44,23 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     /// fight it.</summary>
     public bool IsBusy => _isIndexing;
 
-    private string VerFile => Path.Combine(_indexPath, "catalogtoc.ver");
-
     private CatalogTocIndex GetIndex()
     {
         lock (_lock) { return _index ??= new CatalogTocIndex(_indexPath, _dbPath!); }
     }
 
     /// <summary>
-    /// Idempotent. Ready immediately when the stored DB hash matches; otherwise wipes
-    /// the stale index and kicks off a background rebuild. Called at startup by
-    /// <see cref="CatalogTocIndexingStarter"/> and lazily from search/status.
+    /// Idempotent. Opens the existing index (even a stale one — no downtime) and, when
+    /// the stored DB hash differs from the current one, kicks off a background rebuild
+    /// that builds IN PLACE and stays searchable via a near-real-time reader. Called at
+    /// startup by <see cref="CatalogTocIndexingStarter"/> and lazily from search/status.
     /// </summary>
     public void EnsureIndex()
     {
-        if (!HasDb || _isReady) return;
+        if (!HasDb || _buildStarted && _isReady) return;
         lock (_lock)
         {
-            if (_isReady || _buildStarted) return;
+            if (_buildStarted) return;
 
             string currentHash;
             try { currentHash = CatalogTocIndex.ComputeDbHash(_dbPath!); }
@@ -73,25 +70,20 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
                 return;
             }
 
-            // Completed build against the SAME DB (hash match) → ready, no rebuild.
-            string builtFrom = "";
-            if (File.Exists(VerFile))
+            var index = GetIndex();
+            bool opened = index.TryOpenActive();
+            if (opened) _isReady = true; // stale or fresh — either way, keep serving
+
+            if (opened && string.Equals(index.ActiveHash, currentHash, StringComparison.OrdinalIgnoreCase))
             {
-                try { builtFrom = File.ReadAllText(VerFile).Trim(); } catch { }
-                if (string.Equals(builtFrom, currentHash, StringComparison.OrdinalIgnoreCase))
-                {
-                    _isReady = true;
-                    _buildStarted = true;
-                    return;
-                }
-                logger.LogInformation(
-                    "catalog TOC index was built from a different seforim DB (hash {Old} → {New}) — rebuilding",
-                    Shorten(builtFrom), Shorten(currentHash));
+                _buildStarted = true; // up to date — nothing to build
+                return;
             }
 
-            // Stale or missing — wipe whatever is there and rebuild from scratch.
-            try { if (Directory.Exists(_indexPath)) Directory.Delete(_indexPath, recursive: true); }
-            catch (Exception ex) { logger.LogError(ex, "catalog TOC index: stale-index wipe failed"); }
+            logger.LogInformation(
+                opened
+                    ? "catalog TOC index is stale (seforim DB changed) — rebuilding in the background, serving the old index meanwhile"
+                    : "catalog TOC index missing — building");
 
             _buildStarted = true;
             _isIndexing = true;
@@ -101,27 +93,20 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         }
     }
 
-    private static string Shorten(string hash) => hash.Length > 12 ? hash[..12] : hash;
-
     private void RunBuild(string dbHash, CancellationToken ct)
     {
         try
         {
             Directory.CreateDirectory(_indexPath);
-            var index = GetIndex();
-
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            logger.LogInformation("catalog TOC index build starting — {Index}", _indexPath);
-
-            int docs = index.Build(
+            int docs = GetIndex().BuildAndSwitch(
+                dbHash,
                 onProgress: (done, total) => { _builtBooks = done; _totalBooks = total; },
                 ct: ct);
-
-            // Record the source-DB hash only after a COMPLETED build.
-            File.WriteAllText(VerFile, dbHash);
             _isReady = true;
             logger.LogInformation(
-                "catalog TOC index build complete — {Docs} docs in {Elapsed:F1}s", docs, sw.Elapsed.TotalSeconds);
+                "catalog TOC index build complete — {Docs} docs in {Elapsed:F1}s (switched atomically)",
+                docs, sw.Elapsed.TotalSeconds);
         }
         catch (OperationCanceledException)
         {
@@ -167,8 +152,10 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         });
     }
 
-    /// <summary>Graceful shutdown: cancel the in-flight build and wait for it to unwind so
-    /// the Lucene writer is disposed cleanly (never hard-killed mid-commit).</summary>
+    /// <summary>Graceful shutdown: cancel the in-flight build and wait for it to unwind
+    /// so the Lucene writer is disposed cleanly. The ver file is written only on full
+    /// completion, so an interrupted build is treated as stale and simply rebuilt next
+    /// run.</summary>
     public void Shutdown()
     {
         Task? build;
@@ -183,9 +170,12 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     public CatalogTocStatus Status()
     {
         EnsureIndex();
+        // A near-real-time reader during a build counts as ready (partial results).
+        bool ready = _isReady || (HasDb && GetIndex().TryOpenActive());
+        if (ready) _isReady = true;
         return new CatalogTocStatus
         {
-            Ready = _isReady,
+            Ready = ready,
             Indexing = _isIndexing,
             BuiltBooks = _builtBooks,
             TotalBooks = _totalBooks,
@@ -193,21 +183,28 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         };
     }
 
-    // A new search SUPERSEDES the previous in-flight one (latest-wins, like the FTS
-    // service) so an abandoned heavy query stops burning cores as soon as the user
-    // keeps typing.
+    // A new search SUPERSEDES the previous in-flight one (latest-wins) so an abandoned
+    // heavy query stops burning cores as soon as the user keeps typing.
     private CancellationTokenSource? _searchCts;
 
-    /// <summary>Run a catalog TOC-path search. Results are NEVER capped.</summary>
-    public CatalogTocSearchResult Search(string query, bool dedupAncestors)
+    /// <summary>Run a catalog TOC-path search. Results are NEVER capped; ordering is
+    /// (Level, TreeOrder) only.</summary>
+    public CatalogTocSearchResult Search(string query)
     {
         EnsureIndex();
         var result = new CatalogTocSearchResult();
-        if (!HasDb || !_isReady)
+
+        // Ready as soon as a reader exists — during a build the near-real-time reader
+        // serves partial results, so we don't gate on the build finishing. Only report
+        // not-ready when there is genuinely no reader yet (DB missing, or the very first
+        // build hasn't opened its reader in this split second).
+        bool ready = _isReady || (HasDb && GetIndex().TryOpenActive());
+        if (!ready)
         {
-            result.Ready = false;   // still building (or no DB)
+            result.Ready = false;
             return result;
         }
+        _isReady = true;
         result.Ready = true;
         if (string.IsNullOrWhiteSpace(query)) return result;
 
@@ -216,7 +213,7 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         prev?.Cancel();
         try
         {
-            result.Results = GetIndex().Search(query, dedupAncestors, cts.Token);
+            result.Results = GetIndex().Search(query, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -235,8 +232,9 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     }
 }
 
-/// <summary>Kicks off the catalog TOC index check/build at service start (hash compare is
-/// cheap; a rebuild runs in the background), and unwinds a running build on shutdown.</summary>
+/// <summary>Kicks off the catalog TOC index check/build at service start (hash compare
+/// is cheap; a rebuild runs in the background and stays searchable via a near-real-time
+/// reader), and unwinds a running build on shutdown.</summary>
 public sealed class CatalogTocIndexingStarter(CatalogTocSearchService catalogToc) : BackgroundService
 {
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
@@ -258,15 +256,12 @@ public sealed class CatalogTocIndexingStarter(CatalogTocSearchService catalogToc
 public sealed class CatalogTocSearchArgs
 {
     public string? Query { get; set; }
-    /// <summary>Suppress hits whose matched TOC ancestor also matched (manual Pass 3).
-    /// Default true — pass false to see the raw match set.</summary>
-    public bool DedupAncestors { get; set; } = true;
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CatalogTocSearchResult
 {
-    /// <summary>False while the index is still building (or no seforim DB) — retry later.</summary>
+    /// <summary>False while no index is available yet (first build) — retry later.</summary>
     public bool Ready { get; set; }
     public List<CatalogTocHit> Results { get; set; } = new();
     /// <summary>True when a newer search cancelled this one — discard this response.</summary>

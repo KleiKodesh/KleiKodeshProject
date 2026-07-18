@@ -359,7 +359,7 @@ public sealed class Dispatcher(
                 case "catalogTocSearch":
                 {
                     var a = MsgPack.De<CatalogTocSearchArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(catalogToc.Search(a.Query ?? "", a.DedupAncestors)));
+                    return RpcResponse.Ok(MsgPack.Ser(catalogToc.Search(a.Query ?? "")));
                 }
 
                 case "catalogTocStatus":

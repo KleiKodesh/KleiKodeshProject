@@ -1,17 +1,19 @@
-// Catalog TOC search parity test.
+// Catalog TOC search test — validates the SIMPLIFIED index design:
 //
-// Ground truth: ManualCatalogPipeline — a faithful C# port of the catalog page's manual
-// search (book matcher + TOC heuristics + SegmentSearchTree scorer). Candidate: the
-// Lucene CatalogTocIndex the service now uses.
+//   1. Analyzer spec table  — the canonical-normalization examples must hold exactly
+//                             (שלחן / שו"ע / שו״ע → שולחן, before punctuation stripping)
+//   2. Hash trigger         — the rebuild fingerprint is stable / changes on DB change
+//   3. Self-recall          — for a corpus of (title + path-words) queries generated
+//                             from real books, regular TOC entries, and alt-TOC
+//                             entries, the entry's own doc must be returned
+//   4. Contains-all         — sampled results must contain every query token in
+//                             (FullTocPath + authors), same pipeline both sides
+//   5. Ordering             — results are sorted by (Level, TreeOrder) — nothing else
 //
-// For an extensive corpus of queries (curated + generated from real books/TOC entries):
-//   1. TOC recall  — every TOC item the manual way returns must be in the Lucene results
-//   2. Book recall — every book the manual matcher returns must be in the Lucene results
-//   3. Dedup sanity — ancestor-dedup results must be a subset of the raw results
-// plus first-line spot checks for book docs and a rebuild-hash unit check.
+// --compare "<query>" prints the OLD manual pipeline's results next to the Lucene
+// results for eyeballing (informational — the simplified design intentionally differs).
 //
-// Usage: dotnet run -c Release [-- --db <seforim.db>] [--books 300] [--entries 3]
-//        [--rebuild] [--max-queries N]
+// Usage: dotnet run -c Release [-- --db <seforim.db>] [--books 300] [--entries 3] [--rebuild]
 using System.Diagnostics;
 using KitveiHakodeshService.Catalog;
 using KitveiHakodeshService.Tests;
@@ -22,7 +24,7 @@ using Microsoft.Data.Sqlite;
 string? dbPath = null;
 string? indexPath = null;
 string? compareQuery = null;
-int sampleBooks = 300, entriesPerBook = 3, maxQueries = int.MaxValue;
+int sampleBooks = 300, entriesPerBook = 3;
 bool forceRebuild = false;
 for (int i = 0; i < args.Length; i++)
 {
@@ -32,7 +34,6 @@ for (int i = 0; i < args.Length; i++)
         case "--index": indexPath = args[++i]; break;
         case "--books": sampleBooks = int.Parse(args[++i]); break;
         case "--entries": entriesPerBook = int.Parse(args[++i]); break;
-        case "--max-queries": maxQueries = int.Parse(args[++i]); break;
         case "--rebuild": forceRebuild = true; break;
         case "--compare": compareQuery = args[++i]; break;
     }
@@ -56,7 +57,48 @@ indexPath ??= Path.Combine(AppContext.BaseDirectory, "CatalogTocIndex.test");
 Console.WriteLine($"db:    {dbPath}");
 Console.WriteLine($"index: {indexPath}");
 
-// ── Rebuild-hash unit check (the rebuild trigger itself) ────────────────────────
+int failures = 0;
+void Fail(string message)
+{
+    failures++;
+    Console.Error.WriteLine("  FAIL: " + message);
+}
+
+// ── 1. Analyzer spec table ──────────────────────────────────────────────────────
+
+{
+    var cases = new (string Input, string Expected)[]
+    {
+        ("שלחן ערוך", "שולחן ערוך"),
+        ("שולחן ערוך", "שולחן ערוך"),
+        ("שו\"ע", "שולחן"),
+        ("שו״ע", "שולחן"),
+        ("שו''ע", "שולחן"),
+        ("ש\"ע", "שולחן"),
+        ("ש״ע", "שולחן"),
+        ("ש''ע", "שולחן"),
+        ("קיצור ש''ע ילקוט יוסף", "קיצור שולחן ילקוט יוסף"),
+        ("שלחן", "שולחן"),
+        ("פירוש שו\"ע אבן העזר", "פירוש שולחן אבן העזר"),
+        ("הלכות שו\"ע החדשות", "הלכות שולחן החדשות"),
+        ("רש\"י, על בראשית!", "רשי על בראשית"),   // non-word chars stripped
+        ("דף יד.", "דף יד עמוד א"),                 // amud mark → עמוד, before stripping
+        ("דף יד:", "דף יד עמוד ב"),
+        ("פסחים דף י: תוספות", "פסחים דף י עמוד ב תוספות"),
+        ("דף יד", "דף יד"),                         // no mark — no amud token
+        ("יד:", "יד"),                              // not after דף — mark just strips
+    };
+    int ok = 0;
+    foreach (var (input, expected) in cases)
+    {
+        string actual = string.Join(' ', CatalogTocTextRules.Tokenize(input));
+        if (actual == expected) ok++;
+        else Fail($"analyzer: \"{input}\" → \"{actual}\", expected \"{expected}\"");
+    }
+    Console.WriteLine($"analyzer spec table: {ok}/{cases.Length} OK");
+}
+
+// ── 2. Hash trigger ─────────────────────────────────────────────────────────────
 
 {
     string scratch = Path.Combine(Path.GetTempPath(), $"catalogtoc-hash-probe-{Environment.ProcessId}.tmp");
@@ -66,17 +108,19 @@ Console.WriteLine($"index: {indexPath}");
     File.WriteAllText(scratch, "two-longer");
     string h2 = CatalogTocIndex.ComputeDbHash(scratch);
     File.Delete(scratch);
-    if (h1 != h1Again) { Console.Error.WriteLine("FAIL: DB hash is not stable for an unchanged file"); return 2; }
-    if (h1 == h2) { Console.Error.WriteLine("FAIL: DB hash did not change when the file changed"); return 2; }
-    Console.WriteLine("hash-trigger unit check: OK (stable when unchanged, changes on file change)");
+    if (h1 != h1Again) Fail("DB hash is not stable for an unchanged file");
+    if (h1 == h2) Fail("DB hash did not change when the file changed");
+    Console.WriteLine("hash-trigger check: OK (stable when unchanged, changes on file change)");
 }
 
-// ── Load catalog data (same order the frontend loads it) ───────────────────────
+// ── Load catalog data (corpus generation + the --compare oracle) ────────────────
 
 var swLoad = Stopwatch.StartNew();
 var categories = new List<(int Id, int? ParentId, string Title)>();
 var books = new List<ManualCatalogPipeline.Book>();
 var rowsByBook = new Dictionary<int, List<ManualCatalogPipeline.TocRow>>();
+var altRowsByStructure = new Dictionary<int, List<ManualCatalogPipeline.TocRow>>();
+var altStructureBook = new Dictionary<int, int>();
 
 using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
 {
@@ -150,41 +194,101 @@ using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
             });
         }
     }
+
+    using (var cmd = conn.CreateCommand())
+    {
+        cmd.CommandText = "SELECT id, bookId FROM alt_toc_structure";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            altStructureBook[r.GetInt32(0)] = r.IsDBNull(1) ? 0 : r.GetInt32(1);
+    }
+
+    using (var cmd = conn.CreateCommand())
+    {
+        cmd.CommandText = @"
+            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex
+            FROM alt_toc_entry ae
+            JOIN tocText tt ON tt.id = ae.textId
+            LEFT JOIN line l ON l.id = ae.lineId
+            ORDER BY ae.structureId, ae.id";
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            int structureId = r.GetInt32(0);
+            if (!altRowsByStructure.TryGetValue(structureId, out var list)) altRowsByStructure[structureId] = list = [];
+            list.Add(new ManualCatalogPipeline.TocRow
+            {
+                Id = r.GetInt32(1),
+                ParentId = r.IsDBNull(2) ? null : r.GetInt32(2),
+                Text = r.IsDBNull(3) ? "" : r.GetString(3),
+                LineIndex = r.IsDBNull(4) ? -1 : r.GetInt32(4),
+            });
+        }
+    }
 }
 
 ManualCatalogPipeline.AssignTreeOrderAndPaths(categories, books);
 ManualCatalogPipeline.PrepareBookTokens(books);
 
 var bookById = books.ToDictionary(b => b.Id);
+
+// Legacy-stripped rows — the frozen oracle's rule, used ONLY by --compare.
 var strippedRowsByBook = new Dictionary<int, List<ManualCatalogPipeline.TocRow>>(rowsByBook.Count);
+// Service-stripped rows — the CURRENT service rule (fuzzy title variant incl. ASCII
+// apostrophe, no force list), used for corpus generation / expected paths.
+var serviceStrippedByBook = new Dictionary<int, List<ManualCatalogPipeline.TocRow>>(rowsByBook.Count);
+
+static List<ManualCatalogPipeline.TocRow> ServiceStripTitleRoots(
+    List<ManualCatalogPipeline.TocRow> rows, string bookTitle)
+{
+    if (string.IsNullOrEmpty(bookTitle) || rows.Count == 0) return rows;
+    var rootIds = new HashSet<int>();
+    foreach (var r in rows)
+        if (r.ParentId is null && CatalogTocTextRules.IsTitleVariant(bookTitle, r.Text))
+            rootIds.Add(r.Id);
+    if (rootIds.Count == 0) return rows;
+    var result = new List<ManualCatalogPipeline.TocRow>(rows.Count);
+    foreach (var r in rows)
+    {
+        if (rootIds.Contains(r.Id)) continue;
+        result.Add(r.ParentId is { } pid && rootIds.Contains(pid)
+            ? new ManualCatalogPipeline.TocRow { Id = r.Id, ParentId = null, BookId = r.BookId, LineId = r.LineId, LineIndex = r.LineIndex, Text = r.Text }
+            : r);
+    }
+    return result;
+}
+
 foreach (var (bookId, rows) in rowsByBook)
-    strippedRowsByBook[bookId] = bookById.TryGetValue(bookId, out var b)
-        ? ManualCatalogPipeline.StripTocTitleRoots(rows, b.Title, bookId)
-        : rows;
+{
+    if (bookById.TryGetValue(bookId, out var b))
+    {
+        strippedRowsByBook[bookId] = ManualCatalogPipeline.StripTocTitleRoots(rows, b.Title, bookId);
+        serviceStrippedByBook[bookId] = ServiceStripTitleRoots(rows, b.Title);
+    }
+    else
+    {
+        strippedRowsByBook[bookId] = rows;
+        serviceStrippedByBook[bookId] = rows;
+    }
+}
 
 long tocRowCount = rowsByBook.Values.Sum(r => (long)r.Count);
-Console.WriteLine($"loaded: {books.Count} books, {categories.Count} categories, " +
-                  $"{tocRowCount} toc rows in {swLoad.Elapsed.TotalSeconds:F1}s");
+Console.WriteLine($"loaded: {books.Count} books, {categories.Count} categories, {tocRowCount} toc rows, " +
+                  $"{altRowsByStructure.Count} alt structures in {swLoad.Elapsed.TotalSeconds:F1}s");
 
 // ── Build (or reuse) the Lucene index ───────────────────────────────────────────
 
-string verFile = Path.Combine(indexPath, "catalogtoc.ver");
 string dbHash = CatalogTocIndex.ComputeDbHash(dbPath);
-bool needBuild = forceRebuild || !File.Exists(verFile)
-    || !string.Equals(File.ReadAllText(verFile).Trim(), dbHash, StringComparison.OrdinalIgnoreCase);
-
 var index = new CatalogTocIndex(indexPath, dbPath);
-if (needBuild)
+if (forceRebuild || !index.TryOpenActive() || !string.Equals(index.ActiveHash, dbHash, StringComparison.OrdinalIgnoreCase))
 {
-    if (Directory.Exists(indexPath)) Directory.Delete(indexPath, recursive: true);
     Directory.CreateDirectory(indexPath);
     var swBuild = Stopwatch.StartNew();
-    int docs = index.Build(onProgress: (done, total) =>
+    int docs = index.BuildAndSwitch(dbHash, onProgress: (done, total) =>
     {
         if (done % 1000 == 0 || done == total) Console.Write($"\r  indexing books {done}/{total}");
     });
     Console.WriteLine();
-    File.WriteAllText(verFile, dbHash);
     Console.WriteLine($"lucene index built: {docs} docs in {swBuild.Elapsed.TotalSeconds:F1}s");
 }
 else
@@ -192,22 +296,38 @@ else
     Console.WriteLine($"lucene index reused: {index.DocCount()} docs (hash match)");
 }
 
-// ── Order comparison mode (--compare "<query>") ─────────────────────────────────
-// Prints the manual pipeline's ranked results next to the Lucene ranking so the two
-// orderings can be eyeballed side by side.
+// ── Helpers for expected paths ──────────────────────────────────────────────────
+
+// Full display path for a (root-stripped) row: title + chain root→leaf.
+static string ExpectedPath(
+    ManualCatalogPipeline.TocRow row, Dictionary<int, ManualCatalogPipeline.TocRow> byId, string title)
+{
+    var parts = new List<string>();
+    var cur = row;
+    var guard = 0;
+    while (cur is not null && guard++ < 64)
+    {
+        parts.Add(cur.Text);
+        cur = cur.ParentId is { } pid ? byId.GetValueOrDefault(pid) : null;
+    }
+    parts.Add(title);
+    parts.Reverse();
+    return string.Join(" / ", parts);
+}
+
+// ── --compare mode: old manual pipeline vs Lucene (informational) ───────────────
 
 if (compareQuery is not null)
 {
     Console.WriteLine();
-    Console.WriteLine($"=== ORDER COMPARISON: \"{compareQuery}\" ===");
+    Console.WriteLine($"=== ORDER COMPARISON (informational): \"{compareQuery}\" ===");
 
     var manual = ManualCatalogPipeline.Search(compareQuery, books, strippedRowsByBook);
-    var lucene = index.Search(compareQuery, dedupAncestors: true);
+    var lucene = index.Search(compareQuery);
 
-    var luceneRank = new Dictionary<(int, int), int>();
+    var luceneRank = new Dictionary<(int, string), int>();
     for (int i = 0; i < lucene.Count; i++)
-        if (lucene[i].Kind == "toc")
-            luceneRank.TryAdd((lucene[i].BookId, lucene[i].TocEntryId), i + 1);
+        luceneRank.TryAdd((lucene[i].BookId, lucene[i].FullTocPath), i + 1);
 
     Console.WriteLine();
     Console.WriteLine($"MANUAL ({manual.Trigger} trigger): {manual.MatchedBooks.Count} books, " +
@@ -216,122 +336,104 @@ if (compareQuery is not null)
     {
         var it = manual.TocItems[i];
         string title = bookById.GetValueOrDefault(it.BookId)?.Title ?? $"book {it.BookId}";
-        string lr = luceneRank.TryGetValue((it.BookId, it.TocEntryId), out int r) ? $"L#{r}" : "L:-";
-        Console.WriteLine($"  M#{i + 1,-3} [{lr,-6}] {title} / {it.TocPath}");
+        string full = $"{title} / {it.TocPath}";
+        string lr = luceneRank.TryGetValue((it.BookId, full), out int r) ? $"L#{r}" : "L:-";
+        Console.WriteLine($"  M#{i + 1,-3} [{lr,-6}] {full}");
     }
     if (manual.TocItems.Count > 30) Console.WriteLine($"  … {manual.TocItems.Count - 30} more");
 
     Console.WriteLine();
-    Console.WriteLine($"LUCENE: {lucene.Count} hits — top 30:");
-    var manualRank = new Dictionary<(int, int), int>();
-    for (int i = 0; i < manual.TocItems.Count; i++)
-        manualRank.TryAdd((manual.TocItems[i].BookId, manual.TocItems[i].TocEntryId), i + 1);
+    Console.WriteLine($"LUCENE: {lucene.Count} hits — top 30 (ordered by Level, book, word-order, TreeOrder):");
     for (int i = 0; i < Math.Min(30, lucene.Count); i++)
     {
         var h = lucene[i];
-        string mr = h.Kind == "book" ? "book " :
-            manualRank.TryGetValue((h.BookId, h.TocEntryId), out int r) ? $"M#{r,-3}" : "M:-  ";
-        Console.WriteLine($"  L#{i + 1,-3} [{mr}] {h.BookTitle}{(h.TocPath.Length > 0 ? " / " + h.TocPath : "")}");
+        Console.WriteLine($"  L#{i + 1,-4} lvl={h.Level} ord={(h.QueryInOrder ? 'y' : 'n')} {h.FullTocPath}");
     }
     if (lucene.Count > 30) Console.WriteLine($"  … {lucene.Count - 30} more");
+
+    // Show where the word-order tiebreak actually fired: (book, level) groups that
+    // contain BOTH in-order and out-of-order hits.
+    var mixed = lucene
+        .GroupBy(h => (h.BookId, h.Level))
+        .Where(g => g.Any(h => h.QueryInOrder) && g.Any(h => !h.QueryInOrder))
+        .Take(5)
+        .ToList();
+    Console.WriteLine();
+    Console.WriteLine($"mixed word-order groups (tiebreak applied): {mixed.Count} shown");
+    foreach (var g in mixed)
+    {
+        Console.WriteLine($"  book {g.Key.BookId} lvl={g.Key.Level}:");
+        foreach (var h in g.Take(6))
+            Console.WriteLine($"    ord={(h.QueryInOrder ? 'y' : 'n')} {h.FullTocPath}");
+    }
     return 0;
 }
 
-// ── First-line spot check for book docs ─────────────────────────────────────────
+// ── Tanach verse entries (generated from line text — not present in the DB TOC) ──
 
 {
-    var rng = new Random(7);
-    int checkedBooks = 0, flFails = 0;
-    using var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+    var verseCases = new (string Query, string ExpectedPath, int? ExpectedLineIndex)[]
     {
-        DataSource = dbPath,
-        Mode = SqliteOpenMode.ReadOnly,
-    }.ConnectionString);
-    conn.Open();
-    foreach (var b in books.OrderBy(_ => rng.Next()).Take(20))
+        ("בראשית פרק א פסוק ב", "בראשית / פרק א / פסוק ב", 3),
+        ("בראשית פרק א פסוק לא", "בראשית / פרק א / פסוק לא", null),
+        ("תהילים פרק כג פסוק א", "תהילים / פרק כג / פסוק א", null),
+        ("עובדיה פרק א פסוק ב", "עובדיה / פרק א / פסוק ב", 3),
+        ("שיר השירים פרק א פסוק ב", "שיר השירים / פרק א / פסוק ב", null),
+        ("דברי הימים ב פרק א פסוק ב", "דברי הימים ב / פרק א / פסוק ב", null),
+    };
+    int ok = 0;
+    foreach (var (q, path, lineIdx) in verseCases)
     {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT id FROM line WHERE bookId = @b ORDER BY lineIndex LIMIT 1";
-        cmd.Parameters.AddWithValue("@b", b.Id);
-        object? expected = cmd.ExecuteScalar();
-        if (expected is null) continue; // book with no lines — no doc-level claim to check
-
-        var hits = index.Search(b.Title, dedupAncestors: false);
-        var bookHit = hits.FirstOrDefault(h => h.Kind == "book" && h.BookId == b.Id);
-        checkedBooks++;
-        if (bookHit is null)
-        {
-            Console.Error.WriteLine($"  FIRSTLINE MISS: book {b.Id} '{b.Title}' — no book hit for its own title");
-            flFails++;
-        }
-        else if (bookHit.LineId != Convert.ToInt32(expected))
-        {
-            Console.Error.WriteLine(
-                $"  FIRSTLINE WRONG: book {b.Id} '{b.Title}' — lineId {bookHit.LineId}, expected {expected}");
-            flFails++;
-        }
+        var hits = index.Search(q);
+        var hit = hits.FirstOrDefault(h => h.FullTocPath == path);
+        if (hit is null) Fail($"tanach verse: q=\"{q}\" missing \"{path}\" ({hits.Count} hits)");
+        else if (lineIdx is { } li && hit.LineIndex != li)
+            Fail($"tanach verse: \"{path}\" lineIndex={hit.LineIndex}, expected {li}");
+        else ok++;
     }
-    Console.WriteLine($"book-doc first-line spot check: {checkedBooks - flFails}/{checkedBooks} OK");
-    if (flFails > 0) Console.Error.WriteLine($"  {flFails} first-line failures");
+    Console.WriteLine($"tanach verse checks: {ok}/{verseCases.Length} OK");
 }
 
-// ── Query corpus ────────────────────────────────────────────────────────────────
+// ── Query-token-order rule: TOC-path-scoped (catalog/title words exempt) ─────────
 
-var queries = new List<string>
 {
-    // curated — realistic catalog queries across trigger types and quirks
-    "בראשית פרק ד",
-    "בראשית פרק ד פסוק ב",
-    "שלחן ערוך אורח חיים סימן א",
-    "שו\"ע אורח חיים סימן קכח",
-    "שוע יורה דעה סימן א",
-    "שולחן ערוך אבן העזר",
-    "משנה תורה הלכות שבת",
-    "רמבם הלכות תשובה פרק ג",
-    "הרמבם הלכות תשובה",
-    "פסחים דף י",
-    "מסכת פסחים דף י:",
-    "פסחים דף ד.",
-    "שבת דף קנז",
-    "תהלים מזמור כג",
-    "תהילים מזמור קיט",
-    "משנה ברורה סימן א",
-    "טור יורה דעה סימן א",
-    "זוהר בראשית",
-    "רשי בראשית פרק א",
-    "רש\"י בראשית פרק א",
-    "אבן עזרא שמות פרק ב",
-    "ברכות פרק א משנה ב",
-    "משניות ברכות פרק א",
-    "שער הכוונות שער א",
-    "ילקוט שמעוני רמז א",
-    "מדרש רבה פרשה א",
-    "ספר החינוך מצוה א",
-    "חיי אדם כלל א",
-    "קיצור שלחן ערוך סימן א",
-    "נידה דף ב",
-    "נדה דף ב",
-    "שבועות פרק א",
-    "אגרת הרמבן",
-    "אורחות צדיקים שער א",
-    "מסילת ישרים פרק א",
-    "פרק א",              // no book part at all
-    "א",                   // single letter
-    "בראשית",             // pure book query (no toc trigger)
-    "ספר",                 // broad prefix
-};
+    // Catalog word (תנך) is not in any TOC path → exempt; [בראשית, ד, יד] must be in
+    // typed order → the reversed verse is discarded, the in-order one kept.
+    var ordered = index.Search("תנך בראשית ד יד");
+    bool hasInOrder = ordered.Any(h => h.FullTocPath == "בראשית / פרק ד / פסוק יד");
+    bool hasReversed = ordered.Any(h => h.FullTocPath == "בראשית / פרק יד / פסוק ד");
+    if (!hasInOrder) Fail("token-order: \"תנך בראשית ד יד\" missing בראשית / פרק ד / פסוק יד");
+    if (hasReversed) Fail("token-order: \"תנך בראשית ד יד\" did not discard בראשית / פרק יד / פסוק ד");
 
-var rngGen = new Random(20260717);
-var sampled = books.Where(b => strippedRowsByBook.TryGetValue(b.Id, out var r) && r.Count > 0)
+    // Title word order never filters: both orders return the same משנה תורה books.
+    var a = index.Search("משנה תורה הלכות שבת");
+    var b = index.Search("תורה משנה הלכות שבת");
+    if (a.Count != b.Count)
+        Fail($"token-order: משנה תורה vs תורה משנה result counts differ ({a.Count} vs {b.Count})");
+    Console.WriteLine($"token-order rule checks: in-order kept={hasInOrder}, reversed discarded={!hasReversed}, " +
+                      $"title-order-free counts {a.Count}=={b.Count}");
+}
+
+// ── 3+4+5. Self-recall, contains-all, ordering over a generated corpus ──────────
+
+var authorsByBook = books.ToDictionary(b => b.Id, b => b.Authors ?? "");
+var rngGen = new Random(20260718);
+
+var corpus = new List<(string Query, int BookId, string ExpectedPath)>();
+
+// Book-title queries (expect the level-0 doc).
+var sampledBooks = books.Where(b => serviceStrippedByBook.TryGetValue(b.Id, out var r) && r.Count > 0)
     .OrderBy(b => b.TreeOrder)
     .ToList();
-int step = Math.Max(1, sampled.Count / Math.Max(1, sampleBooks));
+int step = Math.Max(1, sampledBooks.Count / Math.Max(1, sampleBooks));
 var chosenBooks = new List<ManualCatalogPipeline.Book>();
-for (int i = 0; i < sampled.Count; i += step) chosenBooks.Add(sampled[i]);
+for (int i = 0; i < sampledBooks.Count; i += step) chosenBooks.Add(sampledBooks[i]);
 
 foreach (var book in chosenBooks)
 {
-    var rows = strippedRowsByBook[book.Id];
+    corpus.Add((book.Title, book.Id, book.Title));
+
+    var rows = serviceStrippedByBook[book.Id];
     var byId = rows.ToDictionary(r => r.Id);
     var indices = new HashSet<int> { 0, rows.Count / 2, rows.Count - 1 };
     while (indices.Count < Math.Min(entriesPerBook, rows.Count)) indices.Add(rngGen.Next(rows.Count));
@@ -340,117 +442,137 @@ foreach (var book in chosenBooks)
     {
         var row = rows[idx];
         if (string.IsNullOrWhiteSpace(row.Text)) continue;
-
-        queries.Add($"{book.Title} {row.Text}");
-        if (row.ParentId is { } pid && byId.TryGetValue(pid, out var parent) && !string.IsNullOrWhiteSpace(parent.Text))
-            queries.Add($"{book.Title} {parent.Text} {row.Text}");
-
-        // prefix truncation of the last word
-        var words = ManualCatalogPipeline.ToQueryWords($"{book.Title} {row.Text}");
-        if (words.Length > 0 && words[^1].Length >= 3)
-            queries.Add(string.Join(' ', words[..^1].Append(words[^1][..^1])));
+        corpus.Add(($"{book.Title} {row.Text}", book.Id, ExpectedPath(row, byId, book.Title)));
     }
 }
 
-queries = queries
-    .Select(q => q.Trim())
-    .Where(q => q.Length > 0)
-    .Distinct()
-    .Take(maxQueries)
-    .ToList();
-Console.WriteLine($"query corpus: {queries.Count} queries ({chosenBooks.Count} sampled books)");
+// Alt-TOC queries (expect the alt entry's doc).
+{
+    var altSample = altRowsByStructure.Keys.OrderBy(k => k).Where((_, i) => i % Math.Max(1, altRowsByStructure.Count / 40) == 0);
+    foreach (int structureId in altSample)
+    {
+        if (!altStructureBook.TryGetValue(structureId, out int bookId)) continue;
+        if (!bookById.TryGetValue(bookId, out var book)) continue;
+        var rows = ServiceStripTitleRoots(altRowsByStructure[structureId], book.Title);
+        if (rows.Count == 0) continue;
+        var byId = rows.ToDictionary(r => r.Id);
+        var row = rows[rows.Count - 1];
+        if (string.IsNullOrWhiteSpace(row.Text)) continue;
+        corpus.Add(($"{book.Title} {row.Text}", bookId, ExpectedPath(row, byId, book.Title)));
+    }
+}
 
-// ── Run the comparison ──────────────────────────────────────────────────────────
+Console.WriteLine($"query corpus: {corpus.Count} queries ({chosenBooks.Count} sampled books + alt structures)");
 
-int tocMisses = 0, bookMisses = 0, dedupViolations = 0;
-int queriesWithTocItems = 0;
-long manualItemsTotal = 0;
-double manualMsTotal = 0, luceneMsTotal = 0, luceneMsMax = 0;
-var missSamples = new List<string>();
+int recallMisses = 0, orderViolations = 0, containsAllViolations = 0;
+double luceneMsTotal = 0, luceneMsMax = 0;
 var swAll = Stopwatch.StartNew();
 
-for (int qi = 0; qi < queries.Count; qi++)
+for (int qi = 0; qi < corpus.Count; qi++)
 {
-    string q = queries[qi];
-
-    var swM = Stopwatch.StartNew();
-    var manual = ManualCatalogPipeline.Search(q, books, strippedRowsByBook);
-    manualMsTotal += swM.Elapsed.TotalMilliseconds;
+    var (query, expectedBookId, expectedPath) = corpus[qi];
 
     var swL = Stopwatch.StartNew();
-    var lucene = index.Search(q, dedupAncestors: false);
-    double lms = swL.Elapsed.TotalMilliseconds;
-    luceneMsTotal += lms;
-    if (lms > luceneMsMax) luceneMsMax = lms;
+    var hits = index.Search(query);
+    double ms = swL.Elapsed.TotalMilliseconds;
+    luceneMsTotal += ms;
+    if (ms > luceneMsMax) luceneMsMax = ms;
 
-    var luceneTocSet = new HashSet<(int, int)>();
-    var luceneBookSet = new HashSet<int>();
-    foreach (var h in lucene)
+    // 3. Self-recall — the entry's own doc must be present.
+    bool found = false;
+    foreach (var h in hits)
+        if (h.BookId == expectedBookId && h.FullTocPath == expectedPath) { found = true; break; }
+    if (!found)
     {
-        if (h.Kind == "toc") luceneTocSet.Add((h.BookId, h.TocEntryId));
-        else luceneBookSet.Add(h.BookId);
+        recallMisses++;
+        if (recallMisses <= 20)
+            Fail($"self-recall q=\"{query}\" missing book={expectedBookId} path=\"{expectedPath}\" ({hits.Count} hits)");
     }
 
-    // 1. TOC recall
-    if (manual.TocItems.Count > 0) queriesWithTocItems++;
-    manualItemsTotal += manual.TocItems.Count;
-    foreach (var item in manual.TocItems)
+    // 5. Ordering — strictly (Level, TreeOrder) non-decreasing, and the token-order
+    //    discard invariant: no (level, book) group may contain both an in-order and an
+    //    out-of-order hit (the out-of-order ones must have been discarded).
     {
-        if (!luceneTocSet.Contains((item.BookId, item.TocEntryId)))
+        for (int i = 1; i < hits.Count; i++)
         {
-            tocMisses++;
-            if (missSamples.Count < 40)
-                missSamples.Add($"TOC  q=\"{q}\" book={item.BookId} " +
-                    $"'{bookById.GetValueOrDefault(item.BookId)?.Title}' toc={item.TocEntryId} path=\"{item.TocPath}\"");
+            bool ok = hits[i - 1].Level < hits[i].Level
+                || (hits[i - 1].Level == hits[i].Level && hits[i - 1].TreeOrder <= hits[i].TreeOrder);
+            if (!ok)
+            {
+                orderViolations++;
+                if (orderViolations <= 5)
+                    Fail($"ordering q=\"{query}\" hit {i - 1}(lvl={hits[i - 1].Level},to={hits[i - 1].TreeOrder}) " +
+                         $"before {i}(lvl={hits[i].Level},to={hits[i].TreeOrder})");
+                break;
+            }
+        }
+
+        var qTokensOrdered = CatalogTocTextRules.Tokenize(query);
+        if (qTokensOrdered.Count >= 2)
+        {
+            // Same definition as the service: only query tokens PRESENT in the path
+            // participate; < 2 participants = trivially in order.
+            bool InOrder(CatalogTocHit h)
+            {
+                var pathTokens = CatalogTocTextRules.Tokenize(h.FullTocPath);
+                var pathSet = pathTokens.ToHashSet();
+                var participating = qTokensOrdered.Where(pathSet.Contains).ToList();
+                if (participating.Count < 2) return true;
+                int qi2 = 0;
+                foreach (var t in pathTokens)
+                    if (t == participating[qi2] && ++qi2 == participating.Count) return true;
+                return false;
+            }
+            foreach (var g in hits.GroupBy(h => (h.Level, h.TreeOrder >> 24)))
+            {
+                bool anyIn = false, anyOut = false;
+                foreach (var h in g)
+                    if (InOrder(h)) anyIn = true; else anyOut = true;
+                if (anyIn && anyOut)
+                {
+                    orderViolations++;
+                    if (orderViolations <= 5)
+                        Fail($"token-order discard q=\"{query}\": (lvl={g.Key.Item1}, book) group kept both orders");
+                    break;
+                }
+            }
         }
     }
 
-    // 2. Book recall
-    foreach (var mb in manual.MatchedBooks)
+    // 4. Contains-all — sampled hits must contain every query token in
+    //    catalog-path + path + authors (SearchText's exact composition).
+    var qTokens = CatalogTocTextRules.Tokenize(query);
+    int checkCount = Math.Min(hits.Count, 10);
+    for (int i = 0; i < checkCount; i++)
     {
-        if (!luceneBookSet.Contains(mb.Id))
-        {
-            bookMisses++;
-            if (missSamples.Count < 40)
-                missSamples.Add($"BOOK q=\"{q}\" book={mb.Id} '{mb.Title}' (path: {mb.ParentPath})");
-        }
+        var h = hits[rngGen.Next(hits.Count)];
+        string catalogPath = bookById.TryGetValue(h.BookId, out var hb) ? hb.ParentPath : "";
+        var docTokens = CatalogTocTextRules.Tokenize(
+                catalogPath + " " + h.FullTocPath + " " + authorsByBook.GetValueOrDefault(h.BookId, ""))
+            .ToHashSet();
+        foreach (var t in qTokens)
+            if (!docTokens.Contains(t))
+            {
+                containsAllViolations++;
+                if (containsAllViolations <= 10)
+                    Fail($"contains-all q=\"{query}\" token \"{t}\" not in \"{h.FullTocPath}\" (book={h.BookId})");
+                break;
+            }
     }
 
-    // 3. Dedup sanity (subsample — a second search per probe)
-    if (qi % 25 == 0)
-    {
-        var deduped = index.Search(q, dedupAncestors: true);
-        foreach (var h in deduped)
-        {
-            if (h.Kind == "toc" && !luceneTocSet.Contains((h.BookId, h.TocEntryId))) dedupViolations++;
-            if (h.Kind == "book" && !luceneBookSet.Contains(h.BookId)) dedupViolations++;
-        }
-    }
-
-    if ((qi + 1) % 200 == 0)
-        Console.WriteLine($"  {qi + 1}/{queries.Count} queries — misses so far: toc={tocMisses} book={bookMisses}");
+    if ((qi + 1) % 300 == 0)
+        Console.WriteLine($"  {qi + 1}/{corpus.Count} — recall misses={recallMisses} order={orderViolations} containsAll={containsAllViolations}");
 }
 
 // ── Report ──────────────────────────────────────────────────────────────────────
 
 Console.WriteLine();
 Console.WriteLine($"done in {swAll.Elapsed.TotalSeconds:F1}s");
-Console.WriteLine($"queries: {queries.Count} ({queriesWithTocItems} produced manual TOC items, " +
-                  $"{manualItemsTotal} manual TOC items total)");
-Console.WriteLine($"avg manual: {manualMsTotal / queries.Count:F1}ms   " +
-                  $"avg lucene: {luceneMsTotal / queries.Count:F1}ms   max lucene: {luceneMsMax:F0}ms");
-Console.WriteLine($"TOC recall misses:  {tocMisses}");
-Console.WriteLine($"book recall misses: {bookMisses}");
-Console.WriteLine($"dedup violations:   {dedupViolations}");
+Console.WriteLine($"queries: {corpus.Count}   avg search: {luceneMsTotal / corpus.Count:F1}ms   max: {luceneMsMax:F0}ms");
+Console.WriteLine($"self-recall misses:      {recallMisses}");
+Console.WriteLine($"ordering violations:     {orderViolations}");
+Console.WriteLine($"contains-all violations: {containsAllViolations}");
+Console.WriteLine($"total failures:          {failures}");
 
-if (missSamples.Count > 0)
-{
-    Console.WriteLine();
-    Console.WriteLine("miss samples:");
-    foreach (var s in missSamples) Console.WriteLine("  " + s);
-}
-
-bool ok = tocMisses == 0 && bookMisses == 0 && dedupViolations == 0;
-Console.WriteLine(ok ? "\nPARITY: PASS — Lucene returns everything the manual way returns."
-                     : "\nPARITY: FAIL");
-return ok ? 0 : 1;
+Console.WriteLine(failures == 0 ? "\nSPEC: PASS" : "\nSPEC: FAIL");
+return failures == 0 ? 0 : 1;

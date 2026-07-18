@@ -1,184 +1,108 @@
 namespace KitveiHakodeshService.Catalog;
 
 /// <summary>
-/// Text normalization + tokenization rules for the catalog TOC search index.
+/// The catalog TOC search normalization pipeline — applied IDENTICALLY at index time
+/// and query time (the whole point: both sides meet at the same tokens).
 ///
-/// Every rule here is a C# port of the frontend's manual catalog-search pipeline so the
-/// Lucene index matches at least everything the manual way matches:
-///   - Normalize            → normalizeText.ts normalize() (lowercase, strip quotes)
-///   - ApplyBookVariants    → bookCatalogSearchNormalizer.ts normalizeBookPath()
-///   - TokenizeSegmentText  → segmentSearchTree.ts tokenizeSegmentText() (keeps Talmud
-///                            page suffixes "י." / "י:" as single tokens)
-///   - StripHePrefix        → bookCatalogSearchNormalizer.ts stripHePrefix()
-///   - Skeleton             → bookCatalogSearchNormalizer.ts decomposeHebrewWord() skeleton
-///   - IsTitleVariant       → tocSearchUtils.ts isTitleVariant() (root stripping)
-///
-/// Index docs store an EXPANDED token set (raw + normalized + ה-stripped + חסר/מלא
-/// skeleton forms) so a prefix query over the plain query word forms is a superset of
-/// the manual matcher's exact/prefix/ה/skeleton tiers.
+/// Pipeline, in this exact order:
+///   1. Canonical normalization (token-based) — variant spellings map to one canonical
+///      token. This MUST run before punctuation stripping: שו"ע contains a quote, and
+///      once stripped it would become שוע and could no longer be recognized.
+///   2. Talmud page (amud) normalization — a token following דף that ends with the
+///      amud mark expands: "דף יד." → "דף יד עמוד א", "דף יד:" → "דף יד עמוד ב".
+///      This too MUST run before punctuation stripping (the mark IS the information).
+///   3. Strip all non-word characters (anything that is not a letter or digit).
+///   4. Tokenization (whitespace-separated; empty tokens dropped).
 /// </summary>
 public static class CatalogTocTextRules
 {
-    // ── normalize() ──────────────────────────────────────────────────────────────
-
-    /// <summary>Lowercase + strip quote characters (" ' ״ ׳) — normalizeText.ts.</summary>
-    public static string Normalize(string s)
+    /// <summary>Canonical token map. Key = the exact token as typed/stored (after
+    /// whitespace splitting, before any character stripping); value = canonical form.</summary>
+    private static readonly Dictionary<string, string> Canonical = new(StringComparer.Ordinal)
     {
-        var sb = new System.Text.StringBuilder(s.Length);
-        foreach (char c in s.ToLowerInvariant())
-            if (c is not ('"' or '\'' or '״' or '׳')) sb.Append(c);
-        return sb.ToString();
-    }
-
-    // ── normalizeBookPath() ─────────────────────────────────────────────────────
-
-    /// <summary>Canonicalize known title variants. Input must already be Normalize()'d
-    /// (quotes stripped), matching the frontend call order — so the שו"ע regex reduces
-    /// to a plain שוע replacement here.</summary>
-    public static string ApplyBookVariants(string normalized) =>
-        normalized.Replace("שוע", "שלחן ערוך").Replace("שולחן", "שלחן");
-
-    // ── tokenizeSegmentText() ───────────────────────────────────────────────────
+        ["שלחן"] = "שולחן",
+        ["שו\"ע"] = "שולחן",   // ASCII quote
+        ["שו״ע"] = "שולחן",    // Hebrew gershayim
+        ["שו''ע"] = "שולחן",   // doubled ASCII apostrophe
+        ["ש\"ע"] = "שולחן",    // short form, ASCII quote
+        ["ש״ע"] = "שולחן",     // short form, gershayim
+        ["ש''ע"] = "שולחן",    // short form, doubled ASCII apostrophe
+    };
 
     /// <summary>
-    /// Tokenize one text into lowercase tokens: letters/digits are word chars; '.' and ':'
-    /// stay attached to a preceding word char (Talmud "דף י." / "דף י:"); everything else
-    /// separates. Port of segmentSearchTree.ts tokenizeSegmentText().
+    /// Run the full pipeline on a text (a query, or a document's search text) and
+    /// return its tokens. Lowercases (Hebrew is unaffected; Latin becomes uniform).
     /// </summary>
-    public static List<string> TokenizeSegmentText(string text)
+    public static List<string> Tokenize(string text)
     {
-        string s = text.ToLowerInvariant();
         var tokens = new List<string>();
-        var token = new System.Text.StringBuilder();
-        bool prevIsWord = false;
-
-        for (int i = 0; i < s.Length; i++)
+        foreach (var raw in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
         {
-            char c = s[i];
+            // 1. Canonical normalization — token-based, tried on the raw token and on
+            //    the token with edge punctuation trimmed (so "(שו"ע)" still maps).
+            string tok = raw;
+            if (!Canonical.TryGetValue(tok, out var canonical))
+            {
+                string trimmed = TrimEdgeNonWord(tok);
+                if (trimmed.Length > 0 && Canonical.TryGetValue(trimmed, out canonical)) tok = canonical;
+                else canonical = null;
+            }
+            if (canonical is not null) tok = canonical;
 
-            // Surrogate pair — classify the full code point; never a "previous word char"
-            // for a following '.'/':' (mirrors the JS regex behavior).
-            if (char.IsHighSurrogate(c) && i + 1 < s.Length && char.IsLowSurrogate(s[i + 1]))
+            // 2. Amud normalization — right after a דף token, a trailing "." means
+            //    עמוד א and a trailing ":" means עמוד ב. Applies to any דף TOC (and to
+            //    queries typed the same way), and must see the mark before stripping.
+            string? amud = null;
+            if (tokens.Count > 0 && tokens[^1] == "דף" && tok.Length > 1)
             {
-                int cp = char.ConvertToUtf32(c, s[i + 1]);
-                var cat = System.Globalization.CharUnicodeInfo.GetUnicodeCategory(cp);
-                if (IsLetterOrNumberCategory(cat)) { token.Append(c).Append(s[i + 1]); }
-                else if (token.Length > 0) { tokens.Add(token.ToString()); token.Clear(); }
-                prevIsWord = false;
-                i++;
-                continue;
+                if (tok.EndsWith('.')) amud = "א";
+                else if (tok.EndsWith(':')) amud = "ב";
+                if (amud is not null) tok = tok[..^1];
             }
 
-            bool isWord = char.IsLetter(c) || char.IsNumber(c);
-            if (isWord || ((c == '.' || c == ':') && prevIsWord))
+            // 3. Strip all non-word characters. 4. Emit the token(s).
+            var sb = new System.Text.StringBuilder(tok.Length);
+            foreach (char c in tok)
+                if (char.IsLetter(c) || char.IsNumber(c))
+                    sb.Append(char.ToLowerInvariant(c));
+            if (sb.Length > 0) tokens.Add(sb.ToString());
+            else amud = null; // the mark stood alone — nothing to attach an amud to
+
+            if (amud is not null)
             {
-                token.Append(c);
+                tokens.Add("עמוד");
+                tokens.Add(amud);
             }
-            else if (token.Length > 0)
-            {
-                tokens.Add(token.ToString());
-                token.Clear();
-            }
-            prevIsWord = isWord;
         }
-        if (token.Length > 0) tokens.Add(token.ToString());
         return tokens;
     }
 
-    private static bool IsLetterOrNumberCategory(System.Globalization.UnicodeCategory cat) => cat
-        is System.Globalization.UnicodeCategory.UppercaseLetter
-        or System.Globalization.UnicodeCategory.LowercaseLetter
-        or System.Globalization.UnicodeCategory.TitlecaseLetter
-        or System.Globalization.UnicodeCategory.ModifierLetter
-        or System.Globalization.UnicodeCategory.OtherLetter
-        or System.Globalization.UnicodeCategory.DecimalDigitNumber
-        or System.Globalization.UnicodeCategory.LetterNumber
-        or System.Globalization.UnicodeCategory.OtherNumber;
-
-    // ── stripHePrefix() ─────────────────────────────────────────────────────────
-
-    /// <summary>Strip a leading ה when the remainder keeps ≥ 2 chars, else null.</summary>
-    public static string? StripHePrefix(string word) =>
-        word.Length >= 3 && word[0] == 'ה' ? word[1..] : null;
-
-    // ── decomposeHebrewWord() skeleton ──────────────────────────────────────────
-
-    private static bool IsHebrewLetter(char c) => c is >= 'א' and <= 'ת';
-
-    /// <summary>Consonantal skeleton: drop yod/vav that sit between two Hebrew letters
-    /// (matres lectionis). נידה → נדה, שבועות → שבעת.</summary>
-    public static string Skeleton(string word)
+    private static string TrimEdgeNonWord(string s)
     {
-        var sb = new System.Text.StringBuilder(word.Length);
-        for (int i = 0; i < word.Length; i++)
-        {
-            char c = word[i];
-            bool midVowel = (c == 'י' || c == 'ו')
-                && i > 0 && i < word.Length - 1
-                && IsHebrewLetter(word[i - 1]) && IsHebrewLetter(word[i + 1]);
-            if (!midVowel) sb.Append(c);
-        }
-        return sb.ToString();
+        int start = 0, end = s.Length - 1;
+        while (start <= end && !char.IsLetter(s[start]) && !char.IsNumber(s[start])) start++;
+        while (end >= start && !char.IsLetter(s[end]) && !char.IsNumber(s[end])) end--;
+        return start == 0 && end == s.Length - 1 ? s : s[start..(end + 1)];
     }
 
-    // ── Query words ─────────────────────────────────────────────────────────────
-
-    /// <summary>
-    /// A raw user query → the flat normalized word list the manual pipeline searches with:
-    /// normalizeBookPath(normalize(query)) split on whitespace, then TOC-tokenized so
-    /// punctuation splits the same way indexed path tokens did.
-    /// </summary>
-    public static List<string> QueryWords(string rawQuery)
-    {
-        string normalized = ApplyBookVariants(Normalize(rawQuery.Trim()));
-        var words = new List<string>();
-        foreach (var part in normalized.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
-            words.AddRange(TokenizeSegmentText(part));
-        return words;
-    }
-
-    // ── Index-side token expansion ──────────────────────────────────────────────
-
-    /// <summary>
-    /// Expand one text into every token form the index should answer for:
-    /// raw segment tokens (quotes split — ל"ב → ל, ב), normalized tokens (quotes
-    /// stripped — ל"ב → לב), book-variant tokens (שוע → שלחן ערוך), plus the
-    /// ה-stripped and skeleton form of each. Prefix search over the plain query word
-    /// forms then covers all manual matcher tiers.
-    /// </summary>
-    public static void ExpandIndexTokens(string text, HashSet<string> into)
-    {
-        string normalized = Normalize(text);
-        AddTokenForms(TokenizeSegmentText(text), into);
-        AddTokenForms(TokenizeSegmentText(normalized), into);
-        AddTokenForms(TokenizeSegmentText(ApplyBookVariants(normalized)), into);
-    }
-
-    private static void AddTokenForms(List<string> tokens, HashSet<string> into)
-    {
-        foreach (var tok in tokens)
-        {
-            into.Add(tok);
-            if (StripHePrefix(tok) is { } stripped) into.Add(stripped);
-            string skel = Skeleton(tok);
-            if (skel.Length > 0 && skel != tok) into.Add(skel);
-        }
-    }
-
-    // ── Title-variant root stripping (tocSearchUtils.ts) ────────────────────────
-
-    /// <summary>Book ids whose root TOC entry is a known title variant the fuzzy rule
-    /// misses — same list as tocSearchUtils.ts FORCE_STRIP_BOOK_IDS.</summary>
-    public static readonly HashSet<int> ForceStripBookIds = [6036, 6037, 6042, 6043, 6044];
+    // ── Title-variant root stripping (display-path construction only) ────────────
+    // A book whose root TOC entry just repeats the book title would render as
+    // "בראשית / בראשית / פרק א" — the root is dropped from the path like the catalog
+    // page always did. This affects the DISPLAY PATH construction, never result
+    // ordering. On the current DB the rule strips ~90% of roots (6,943 exact title
+    // duplicates + fuzzy variants); genuinely structural roots (חלק א, ספר names)
+    // are kept. No hardcoded book-id exception list — ids shift between DB versions.
 
     private const double TitleRatio = 0.6;
 
     private static List<string> NormTitleWords(string s)
     {
-        // TITLE_STRIP_RE: Hebrew geresh/gershayim, ASCII/curly quotes, maqaf, hyphen
+        // Strip quote-like chars before comparing: Hebrew geresh/gershayim, ASCII
+        // quote AND apostrophe (titles write ש"ע as ש''ע / ר' with plain apostrophes),
+        // curly quotes, maqaf, hyphen.
         var sb = new System.Text.StringBuilder(s.Length);
         foreach (char c in s)
-            if (c is not ('"' or '״' or '׳' or '“' or '”' or '‘' or '’' or '־' or '-'))
+            if (c is not ('"' or '\'' or '״' or '׳' or '“' or '”' or '‘' or '’' or '־' or '-'))
                 sb.Append(c);
         var words = new List<string>();
         foreach (var w in sb.ToString().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
