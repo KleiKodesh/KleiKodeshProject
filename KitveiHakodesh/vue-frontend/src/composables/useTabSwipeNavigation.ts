@@ -34,6 +34,28 @@ const REARM_SPIKE_RATIO = 2
 // harmless anyway — switching still needs a full TRACKPAD_DELTA_THRESHOLD of travel — this is
 // just tidiness.)
 const REARM_SPIKE_FLOOR_PX = 12
+// Deep-decay gate on the re-strike: the reference must have decayed to at most this
+// before a spike may re-arm. Calibrated from two REAL __tabSwipeTrace captures
+// (2026-07-19, user's precision touchpad in the demo app):
+//   • real repeat swipes re-struck off DEEPLY decayed tails — ref 3-6px, spikes 9-22×
+//     (3→62, 4→89, 6→55);
+//   • finger SPEED PULSES inside one continuous swipe rose off still-fat bases — ref
+//     17-34px, rises 1.9-3.9× (34→65, 22→73) — and were false-firing extra tab jumps.
+// Magnitude alone cannot tell a momentum tail from a smoothly slowing finger (both
+// decay at ~0.92-0.98/event at 16ms cadence — measured), so mid-tail rises are treated
+// as finger pulses and only deep-tail spikes as new swipes. This gate is what earlier
+// pattern-recognition attempts (à la wheel-gestures momentum detection) got wrong on
+// real hardware: a slowing finger produces the exact same "smooth decay" signature.
+const TAIL_DECAY_MAX_PX = 15
+// Runt immunity for the re-strike reference. Real WebView2 trackpad streams contain
+// isolated ~1px "runt" events sandwiched between large deltas (seen in a captured
+// __tabSwipeTrace: ...72, 71, 1, 72... mid-swipe). If the checks compared against the
+// runt alone, the next normal event would look like a huge strike off a dead tail and
+// falsely re-arm — one strong swipe then fired twice. So the reference is
+// max(prev, RUNT_DECAY × prevPrev): a single runt can't collapse a two-event memory,
+// while a GENUINE decay (two+ consecutive small events) still lowers it, keeping
+// legitimate deep-tail re-strikes (e.g. tail 4px → push 89px) fully sensitive.
+const RUNT_DECAY = 0.8
 // Wheel deltas are usually pixels (deltaMode 0), but mouse wheels report lines (1) or
 // pages (2). Approximate one line as this many px so a line-mode swipe still accumulates
 // toward the pixel threshold instead of never firing.
@@ -64,16 +86,16 @@ export interface TabSwipeGestureEventDetail {
  *   • direction reversal (you flicked back the other way — instant), or
  *   • a short quiet gap (> REARM_GAP_MS): one continuous swipe streams events with no
  *     gaps, so any gap means the finger lifted, or
- *   • a re-strike spike: one physical swipe is a single velocity hump whose momentum
- *     tail decays MONOTONICALLY (each event a fraction of the one before). So an event
- *     that jumps to more than REARM_SPIKE_RATIO× the previous event's magnitude can only
- *     be a fresh finger strike interrupting the tail — re-arm even if the stream never
- *     paused. Using a RATIO (not a fixed px jump) is what the `wheel-gestures` library
- *     does for this same problem; it adapts to swipe strength and, because a mid-swipe
- *     speed-up tops out well under 2×, a single variable-speed swipe still fires once.
- *     (An earlier attempt treated any speed dip as "finger lifted" and double-fired on
- *     long swipes — a monotonic tail never spikes UP, so the up-spike is the reliable
- *     boundary, not the dip.)
+ *   • a deep-tail re-strike: the momentum tail has decayed to nearly nothing
+ *     (runt-immune reference ≤ TAIL_DECAY_MAX_PX) and a new event spikes up
+ *     (> REARM_SPIKE_RATIO× the reference, ≥ REARM_SPIKE_FLOOR_PX) — a dead tail
+ *     never jumps back up, so that can only be a fresh finger strike; re-arm even
+ *     if the stream never paused. Both halves are required: real captures showed a
+ *     smoothly SLOWING FINGER inside one long swipe is indistinguishable from a
+ *     momentum tail by magnitude (both ~0.92-0.98/event), and its re-acceleration
+ *     (2-4× off a 17-34px base) false-fired extra tab jumps — while genuine repeat
+ *     swipes in practice land on single-digit tails with 9-22× spikes. Hence: spike
+ *     alone is not enough, the tail must be DEEP first.
  *
  * Direction (RTL — the tab list runs right-to-left, so "next" sits to the LEFT):
  *   scroll left  (deltaX < 0) → next tab
@@ -87,7 +109,8 @@ export function createWheelSwipeHandler(onSwipe: (direction: 'next' | 'previous'
   let lastWheelTime = 0
   let firedThisGesture = false
   let lastFiredSign = 0 // direction of the last switch (+1 previous / -1 next), for reversal detection
-  let prevAbsDeltaX = 0 // |deltaX| of the previous HORIZONTAL event, for the re-strike ratio test
+  let prevAbsDeltaX = 0 // |deltaX| of the previous HORIZONTAL event, for the re-strike checks
+  let prevPrevAbsDeltaX = 0 // one further back — runt immunity for the re-strike reference
 
   return (event: WheelEvent) => {
     const now = Date.now()
@@ -107,26 +130,34 @@ export function createWheelSwipeHandler(onSwipe: (direction: 'next' | 'previous'
     }
 
     // Ignore vertical-dominant scrolling. (Returning early leaves prevAbsDeltaX untouched,
-    // so the ratio test below always compares consecutive HORIZONTAL events.)
+    // so the ratio tests below always compare consecutive HORIZONTAL events.)
     if (Math.abs(deltaX) <= Math.abs(deltaY)) return
 
     const absDeltaX = Math.abs(deltaX)
     const prevAbs = prevAbsDeltaX
+    // Runt-immune reference (see RUNT_DECAY): a lone ~1px glitch event between large
+    // deltas must not collapse what the ratio tests compare against.
+    const refAbs = Math.max(prevAbs, prevPrevAbsDeltaX * RUNT_DECAY)
+    prevPrevAbsDeltaX = prevAbsDeltaX
     prevAbsDeltaX = absDeltaX
 
     if (firedThisGesture) {
       // Locked for the current push. Re-arm on any gesture-boundary signal (see doc
-      // comment): opposite-direction flick, post-fire quiet gap, or a re-strike spike
-      // (this event jumps to > REARM_SPIKE_RATIO× the previous — a monotonic momentum
-      // tail never does that, so it can only be a new finger push).
+      // comment): opposite-direction flick, post-fire quiet gap, or a deep-tail
+      // re-strike (tail decayed to ≤ TAIL_DECAY_MAX_PX, then a spike — mid-tail rises
+      // are finger speed pulses inside the SAME swipe and must stay locked).
       const reversed = lastFiredSign !== 0 && Math.sign(deltaX) === -lastFiredSign
       const quietGap = gap > REARM_GAP_MS
-      const reStrike = absDeltaX > Math.max(REARM_SPIKE_FLOOR_PX, prevAbs * REARM_SPIKE_RATIO)
+      const reStrike =
+        refAbs <= TAIL_DECAY_MAX_PX &&
+        absDeltaX > Math.max(REARM_SPIKE_FLOOR_PX, refAbs * REARM_SPIKE_RATIO)
       if (reversed || quietGap || reStrike) {
+        swipeTrace(`rearm ${reversed ? 'reversal' : quietGap ? `gap=${gap}ms` : `restrike ref=${refAbs.toFixed(0)}->${absDeltaX.toFixed(0)}`}`)
         firedThisGesture = false
         accumulatedDeltaX = 0
         // fall through — this event's delta opens the new count below
       } else {
+        swipeTrace(`locked dx=${deltaX.toFixed(0)} gap=${gap}ms ref=${refAbs.toFixed(0)}`)
         return
       }
     }
@@ -136,15 +167,40 @@ export function createWheelSwipeHandler(onSwipe: (direction: 'next' | 'previous'
       accumulatedDeltaX = 0
     }
     accumulatedDeltaX += deltaX
+    swipeTrace(`acc dx=${deltaX.toFixed(0)} gap=${gap}ms sum=${accumulatedDeltaX.toFixed(0)}`)
 
     if (Math.abs(accumulatedDeltaX) >= TRACKPAD_DELTA_THRESHOLD) {
       const direction = accumulatedDeltaX < 0 ? 'next' : 'previous'
       onSwipe(direction)
+      swipeTrace(`FIRE ${direction}`)
       firedThisGesture = true
       lastFiredSign = accumulatedDeltaX < 0 ? -1 : 1
       accumulatedDeltaX = 0
     }
   }
+}
+
+// ── Diagnostics ────────────────────────────────────────────────────────────────
+// Ring buffer of recent handler decisions, dumpable from DevTools with
+// window.__tabSwipeTrace(). Synthetic dev-rig streams have repeatedly differed from
+// real trackpad/WebView2 streams, so being able to capture the REAL stream (per-event
+// delta, gap, lock state, which signal re-armed) on an affected machine is what turns
+// tuning from guesswork into data. Strings only, capped — negligible overhead.
+const TRACE_MAX = 200
+const traceBuf: string[] = []
+
+function swipeTrace(msg: string) {
+  if (traceBuf.length >= TRACE_MAX) traceBuf.shift()
+  traceBuf.push(`${(performance.now() / 1000).toFixed(3)} ${msg}`)
+}
+
+declare global {
+  interface Window {
+    __tabSwipeTrace?: () => string[]
+  }
+}
+if (typeof window !== 'undefined') {
+  window.__tabSwipeTrace = () => [...traceBuf]
 }
 
 /**
