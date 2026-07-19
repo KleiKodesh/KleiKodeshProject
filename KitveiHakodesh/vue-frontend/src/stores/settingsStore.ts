@@ -69,6 +69,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
+  const dictionaryDisclaimerAccepted = ref(false)
   const searchContextMarginWords = ref(DEFAULTS.searchContextMarginWords)
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
@@ -155,6 +156,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
+    loadSetting(KEYS.SETTINGS_DICTIONARY_DISCLAIMER, dictionaryDisclaimerAccepted)
     loadSetting(KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN, searchContextMarginWords)
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
@@ -255,6 +257,11 @@ export const useSettingsStore = defineStore('settings', () => {
     lsSet(KEYS.SETTINGS_MIDOT_DISCLAIMER, true)
   }
 
+  function acceptDictionaryDisclaimer() {
+    dictionaryDisclaimerAccepted.value = true
+    lsSet(KEYS.SETTINGS_DICTIONARY_DISCLAIMER, true)
+  }
+
   function reset() {
     censorDivineNames.value = DEFAULTS.censorDivineNames
     diacriticsState.value = DEFAULTS.diacriticsState
@@ -300,7 +307,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
-    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
+    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, dictionaryDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
     copyAsBlob,
@@ -314,7 +321,7 @@ export const useSettingsStore = defineStore('settings', () => {
     compactMode,
     showRecentlyOpened,
     fileSearchSortOrder,
-    init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
+    init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer, acceptDictionaryDisclaimer,
   }
 })
   function normalizeNewTabPage(value: LegacyNewTabPage | null): NewTabPage | null {
