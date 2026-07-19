@@ -63,6 +63,20 @@ and a custom tokenizer.
     slow-written file still eventually rebuilds. Only on settle does each
     index recompute its stamp and rebuild if it genuinely changed — a
     spurious event that changed nothing costs one cheap stamp read.
+
+-   **Database switch (Otzaria ↔ Zayit).** The DB *path* is a user setting
+    that the host application can change directly (outside the search
+    service) while the service is running. The service's caches (catalog,
+    schema probes, index instances, the file watcher's folder) are all
+    per-process, so the correct response to a path switch is a **clean
+    service restart**, not in-place invalidation: an event-driven watch on
+    the settings store (Windows: `RegNotifyChangeKeyValue` — one parked
+    thread, no polling) re-resolves the path on every settings write and
+    restarts the service only when it actually changed. The fresh process
+    re-resolves everything; because both index change-stamps *include the
+    DB path*, both indexes detect the mismatch and reindex automatically —
+    and switching back to a database whose index stamp still matches costs
+    nothing.
 -   Rebuild runs on a dedicated background thread and never blocks the
     UI or searches.
 -   Searches remain available while rebuilding. The index is built **in
@@ -216,6 +230,30 @@ texts are compared as word sets after stripping quote-like characters
 subset of the longer with a length ratio ≥ 0.6. Genuinely structural roots
 (חלק א, a distinct work name) are kept. Avoid hardcoded book-id exception
 lists — ids shift between database versions.
+
+### Talmud Daf/Amud Hierarchy
+
+The Seforim DB stores Talmud pages as flat sibling entries `דף ב.` and
+`דף ב:`. Indexed as-is, the amud normalization flattens the mark into the
+entry's own tokens (`דף ב:` → `דף ב עמוד ב`) — and the injected amud letters
+א/ב then collide with real daf/siman/verse letters *at the same level*: a
+query like `שבת ב` would match every `דף X:` in the tractate through its
+עמוד-ב token, ranked equally with the real דף ב.
+
+The indexer therefore restructures such entries: each `דף X.`/`דף X:` pair
+becomes a synthetic parent **`דף X`** with children **`עמוד א`** and
+**`עמוד ב`** one level deeper:
+
+```text
+שבת / דף ב             (level 1 — navigates to the עמוד א line by default)
+שבת / דף ב / עמוד א    (level 2)
+שבת / דף ב / עמוד ב    (level 2)
+```
+
+The bare parent carries no amud token, so it is what a plain `שבת דף ב`
+query surfaces first; amud-letter collisions can only appear at the amud
+level, below every real daf-level match. Queries with an explicit amud —
+`שבת דף ב:` or `שבת דף ב עמוד ב` — resolve to the matching child.
 
 ### Alternative TOC Structures
 
@@ -419,16 +457,25 @@ of the same book, so the discard rule never fires on them.
 
 ### Amud (daf) equivalence
 
-`פסחים דף י:` and `פסחים דף י עמוד ב` are the same query:
+`פסחים דף י:` and `פסחים דף י עמוד ב` are the same query, resolving to the
+עמוד ב child:
 
 ```text
-פסחים / דף י:                            (level 1)
-רש"י על פסחים / דף י:
-תוספות על פסחים / דף י:
+פסחים / דף י / עמוד ב                    (level 2)
+רש"י על פסחים / דף י / עמוד ב
 …
 ```
 
-`פסחים דף י.` targets the עמוד א entries instead.
+`פסחים דף י.` targets the עמוד א children; the bare `פסחים דף י` surfaces
+the level-1 `פסחים / דף י` parents first (each navigating to its עמוד א
+line):
+
+```text
+פסחים / דף י                             (level 1)
+רש"י על פסחים / דף י
+תוספות על פסחים / דף י
+…
+```
 
 ### שולחן ערוך spelling variants
 
