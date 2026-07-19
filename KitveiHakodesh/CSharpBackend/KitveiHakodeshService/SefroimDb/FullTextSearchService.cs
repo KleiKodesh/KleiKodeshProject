@@ -16,6 +16,11 @@ namespace KitveiHakodeshService.SefroimDb;
 /// </summary>
 public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger, SeforimDbService seforim)
 {
+    /// <summary>Prefix for the fts.ver stamp. Bump when the FtsLib on-disk segment
+    /// format or the indexing pipeline changes, so existing indexes rebuild even when
+    /// the source DB is unchanged.</summary>
+    private const string FtsVersion = "fts1";
+
     private readonly string? _dbPath = SeforimDbLocator.Resolve();
     private readonly string _indexPath = ResolveIndexPath();
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
@@ -83,25 +88,26 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // the progress file on the next service start.
             if (_buildStarted) return;
 
-            // fts.ver records WHICH seforim DB the index was built from. If the user
-            // switched databases (settings page / wizard → registry → service restart),
-            // the old index answers for the wrong content — wipe and rebuild.
+            // fts.ver records the change-STAMP of the seforim DB the index was built
+            // from (Common.DbChangeStamp — path + content-free file metadata). If the
+            // user switched databases OR the DB file's content changed (same path,
+            // edited/replaced/updated), the stored stamp no longer matches the current
+            // one and the old index answers for the wrong content — wipe and rebuild.
             string verFile = Path.Combine(_indexPath, "fts.ver");
+            string currentStamp = Common.DbChangeStamp.Compute(_dbPath!, FtsVersion);
             if (File.Exists(verFile))
             {
                 string builtFrom = "";
                 try { builtFrom = File.ReadAllText(verFile).Trim(); } catch { }
-                if (!string.Equals(builtFrom, _dbPath, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(builtFrom, currentStamp, StringComparison.OrdinalIgnoreCase))
                 {
-                    logger.LogInformation(
-                        "FTS index was built from a different DB ({Old}) — wiping for rebuild against {New}",
-                        builtFrom, _dbPath);
+                    logger.LogInformation("FTS index is stale (seforim DB changed) — wiping for rebuild");
                     try { Directory.Delete(_indexPath, recursive: true); }
                     catch (Exception ex) { logger.LogError(ex, "FTS stale-index wipe failed"); }
                 }
             }
 
-            // A completed service-owned build → ready without rebuilding.
+            // A completed service-owned build against the CURRENT DB → ready, no rebuild.
             if (File.Exists(verFile) && SegmentsExist())
             {
                 _isReady = true;
@@ -160,8 +166,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
             if (ok)
             {
-                // Record the source DB so a later DB switch invalidates this index.
-                File.WriteAllText(Path.Combine(_indexPath, "fts.ver"), _dbPath ?? "");
+                // Record the source-DB change stamp so any later DB change (switch,
+                // edit, or replacement) invalidates this index on the next start.
+                File.WriteAllText(Path.Combine(_indexPath, "fts.ver"),
+                    Common.DbChangeStamp.Compute(_dbPath!, FtsVersion));
                 try { index.DeleteBuildProgressFile(); } catch { }
                 _pct = 100.0;
                 _isReady = true;
@@ -181,6 +189,31 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             _isIndexing = false;
             NotifyProgress();   // terminal (or failed) state — wake subscribers so streams close
         }
+    }
+
+    /// <summary>
+    /// Called by the DB change watcher while the service runs: if the seforim DB's
+    /// current change-stamp no longer matches what fts.ver recorded at build time, wipe
+    /// and rebuild the index in the background. Returns true if a rebuild was started.
+    /// A spurious call where nothing changed costs one cheap stamp read.
+    /// </summary>
+    public bool RebuildIfDbChanged()
+    {
+        if (_external || !HasDb) return false;
+
+        string verFile = Path.Combine(_indexPath, "fts.ver");
+        if (!File.Exists(verFile)) return false; // no completed build to invalidate yet
+
+        string builtFrom = "";
+        try { builtFrom = File.ReadAllText(verFile).Trim(); } catch { return false; }
+        string current;
+        try { current = Common.DbChangeStamp.Compute(_dbPath!, FtsVersion); } catch { return false; }
+        if (string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase))
+            return false; // unchanged
+
+        logger.LogInformation("FTS: seforim DB changed while running — wiping and rebuilding");
+        ResetIndex(); // cancels the in-flight build, wipes, re-arms, and rebuilds
+        return true;
     }
 
     /// <summary>Wipe the FTS index and rebuild it from scratch (dev "reset search index").

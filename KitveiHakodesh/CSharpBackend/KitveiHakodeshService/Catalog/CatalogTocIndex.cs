@@ -51,9 +51,19 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     private const string FieldLineIndex = "l";
     private const string FieldLevel = "v";
     private const string FieldTreeOrder = "o";
+    private const string FieldLevelDv = "vdv";     // numeric doc-values (sort key)
+    private const string FieldTreeOrderDv = "odv"; // numeric doc-values (sort key)
 
     /// <summary>Every indexed field, in the order the per-token OR probes them.</summary>
     private static readonly string[] IndexedFields = [FieldFullTocPath, FieldCatalog, FieldAuthor];
+
+    /// <summary>Materialization cap: after matching (uncapped) and ordering, only this
+    /// many documents have their stored fields read (the expensive step — see the
+    /// --bench probe). The match COUNT stays exact and uncapped; only the returned,
+    /// fully-built hit list is bounded. Generous enough that every real query's useful
+    /// results fit; broad one-word queries (tens of thousands of hits) stop after the
+    /// ordered top slice instead of materializing everything (~10s → tens of ms).</summary>
+    private const int MaterializeCap = 1000;
 
     private readonly object _lock = new();
     private FSDirectory? _dir;
@@ -74,21 +84,17 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// v11: title-variant root strip also folds ASCII apostrophes (ש''ע/ר' roots) and
     /// the stale hardcoded force-strip book-id list is gone.
     /// v12: ש"ע/ש''ע/שו''ע canonical variants; the DB stamp is a plain readable
-    /// composite (no pointless SHA-256 over 60 bytes of metadata).</summary>
-    public const string IndexFormatVersion = "v12";
+    /// composite (no pointless SHA-256 over 60 bytes of metadata).
+    /// v13: Level + TreeOrder also stored as numeric doc-values so ordering happens
+    /// before (and independently of) stored-field materialization, which is now capped.</summary>
+    public const string IndexFormatVersion = "v13";
 
-    /// <summary>
-    /// Fingerprint of the seforim DB the index answers for: format version + path +
-    /// file size + last-write time, as one readable string. Cheap (one stat call, no
-    /// file content read) and reliable: any change to the DB file — content written
-    /// (size/mtime move), file replaced, or the user switching databases (path) —
-    /// changes the stamp and triggers a full rebuild. Human-readable in the ver file.
-    /// </summary>
+    /// <summary>Fingerprint of the seforim DB the index answers for — the shared
+    /// content-free <see cref="Common.DbChangeStamp"/>, prefixed with this index's
+    /// format version so a schema/pipeline change also forces a rebuild. Any DB change
+    /// (or a format bump) changes the value. Human-readable in the ver file.</summary>
     public static string ComputeDbHash(string dbPath)
-    {
-        var info = new FileInfo(dbPath);
-        return $"{IndexFormatVersion}|{dbPath.ToLowerInvariant()}|{info.Length}|{info.LastWriteTimeUtc.Ticks}";
-    }
+        => Common.DbChangeStamp.Compute(dbPath, IndexFormatVersion);
 
     private string VerFile => Path.Combine(rootPath, "catalogtoc.ver");
 
@@ -529,6 +535,12 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             new StoredField(FieldLineIndex, lineIndex),
             new StoredField(FieldLevel, level),
             new StoredField(FieldTreeOrder, treeOrder),
+            // Level + TreeOrder ALSO as numeric doc-values: column-stored, so the sort
+            // that decides which docs to materialize can read them per-doc without
+            // decompressing the (expensive) stored-fields blob. This is what lets the
+            // fetch be bounded — see Search().
+            new NumericDocValuesField(FieldLevelDv, level),
+            new NumericDocValuesField(FieldTreeOrderDv, treeOrder),
         };
         if (catalogPath.Length > 0)
             doc.Add(new TextField(FieldCatalog, catalogPath, Field.Store.YES));
@@ -890,39 +902,48 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             if (searcher is null) return [];
         }
 
-        var bq = new BooleanQuery();
-        foreach (var token in tokens.Distinct())
+        var collector = new SortKeyCollector(ct);
+        searcher.Search(BuildQuery(tokens, fuzzy: false), collector);
+
+        // FUZZY FALLBACK: only when the exact search finds nothing. Fuzzy terms are
+        // tried on the catalog and author fields ONLY — never the TOC path, where a
+        // one-letter edit is a different chapter/verse — and only for tokens of 3+
+        // characters. Exact matching on all fields stays available for every token.
+        if (collector.Count == 0 && tokens.Any(t => t.Length >= 3))
         {
-            var perToken = new BooleanQuery();
-            foreach (var field in IndexedFields)
-                perToken.Add(new TermQuery(new Term(field, token)), Occur.SHOULD);
-            bq.Add(perToken, Occur.MUST);
+            collector = new SortKeyCollector(ct);
+            searcher.Search(BuildQuery(tokens, fuzzy: true), collector);
         }
+        if (collector.Count == 0) return [];
 
-        var collector = new AllDocsCollector(ct);
-        searcher.Search(bq, collector);
-        if (collector.DocIds.Count == 0) return [];
+        // Order EVERY match by (Level, TreeOrder). The keys come from column-stored
+        // doc-values captured during collection — no stored-field decompression yet,
+        // so this stays cheap even for tens of thousands of hits.
+        var ordered = collector.Ordered();
 
-        // Stored fields are read in docId order (collector order) — compressed
-        // stored-field chunks decompress once per neighborhood, not once per hit.
-        var hits = new List<CatalogTocHit>(collector.DocIds.Count);
-        foreach (int docId in collector.DocIds)
+        // Materialize (read stored fields — the expensive step) only the ordered top
+        // MaterializeCap. The cap is a PERFORMANCE bound and nothing more: matching and
+        // ordering above are uncapped, so this only limits how many already-ordered
+        // documents are turned into full hit objects (no one scrolls past ~1000).
+        int take = Math.Min(MaterializeCap, ordered.Count);
+        var hits = new List<CatalogTocHit>(take);
+        for (int i = 0; i < take; i++)
         {
             ct.ThrowIfCancellationRequested();
+            int docId = ordered[i].DocId;
             var doc = searcher.Doc(docId);
             hits.Add(new CatalogTocHit
             {
                 BookId = doc.GetField(FieldBookId)?.GetInt32Value() ?? 0,
                 LineIndex = doc.GetField(FieldLineIndex)?.GetInt32Value() ?? -1,
                 FullTocPath = doc.Get(FieldFullTocPath) ?? "",
-                Level = doc.GetField(FieldLevel)?.GetInt32Value() ?? 0,
-                TreeOrder = doc.GetField(FieldTreeOrder)?.GetInt64Value() ?? long.MaxValue,
+                Level = ordered[i].Level,
+                TreeOrder = ordered[i].TreeOrder,
             });
         }
 
-        // Query-token-order tiebreak: only meaningful for multi-token queries (a single
-        // token is trivially in order). Within each (level, book) group that has at
-        // least one in-order hit, the out-of-order hits are discarded.
+        // Query-token-order tiebreak: within each (level, book) group that has at least
+        // one in-order hit, drop the out-of-order ones.
         if (tokens.Count >= 2)
         {
             foreach (var h in hits)
@@ -936,12 +957,29 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
         }
 
-        hits.Sort(static (a, b) =>
-        {
-            int c = a.Level.CompareTo(b.Level);
-            return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
-        });
         return hits;
+    }
+
+    /// <summary>Per token: MUST(exact on path OR catalog OR author); in fuzzy mode,
+    /// tokens of 3+ chars additionally try fuzzy matches on catalog and author (edit
+    /// distance 1, or 2 for tokens longer than 5 chars) — never on the TOC path.</summary>
+    private static BooleanQuery BuildQuery(List<string> tokens, bool fuzzy)
+    {
+        var bq = new BooleanQuery();
+        foreach (var token in tokens.Distinct())
+        {
+            var perToken = new BooleanQuery();
+            foreach (var field in IndexedFields)
+                perToken.Add(new TermQuery(new Term(field, token)), Occur.SHOULD);
+            if (fuzzy && token.Length >= 3)
+            {
+                int maxEdits = token.Length <= 5 ? 1 : 2;
+                perToken.Add(new FuzzyQuery(new Term(FieldCatalog, token), maxEdits), Occur.SHOULD);
+                perToken.Add(new FuzzyQuery(new Term(FieldAuthor, token), maxEdits), Occur.SHOULD);
+            }
+            bq.Add(perToken, Occur.MUST);
+        }
+        return bq;
     }
 
     /// <summary>
@@ -969,20 +1007,55 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return false;
     }
 
-    /// <summary>Collects every matching docId, in order, no cap, no scores.</summary>
-    private sealed class AllDocsCollector(CancellationToken ct) : ICollector
+    /// <summary>
+    /// Collects every matching doc together with its (Level, TreeOrder) sort keys read
+    /// from column-stored doc-values — no stored-field decompression, so it scales to
+    /// tens of thousands of hits. <see cref="Ordered"/> returns the hits sorted by
+    /// (Level asc, TreeOrder asc). No cap, no relevance scores.
+    /// </summary>
+    private sealed class SortKeyCollector(CancellationToken ct) : ICollector
     {
-        public readonly List<int> DocIds = [];
+        public readonly struct Entry(int docId, int level, long treeOrder)
+        {
+            public readonly int DocId = docId;
+            public readonly int Level = level;
+            public readonly long TreeOrder = treeOrder;
+        }
+
+        private readonly List<Entry> _entries = [];
         private int _docBase;
+        private NumericDocValues? _levels;
+        private NumericDocValues? _treeOrders;
+
+        public int Count => _entries.Count;
 
         public void SetScorer(Scorer scorer) { /* scores are ignored by design */ }
-        public void SetNextReader(AtomicReaderContext context) => _docBase = context.DocBase;
+
+        public void SetNextReader(AtomicReaderContext context)
+        {
+            _docBase = context.DocBase;
+            _levels = context.AtomicReader.GetNumericDocValues(FieldLevelDv);
+            _treeOrders = context.AtomicReader.GetNumericDocValues(FieldTreeOrderDv);
+        }
+
         public bool AcceptsDocsOutOfOrder => true;
 
         public void Collect(int doc)
         {
-            if ((DocIds.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
-            DocIds.Add(_docBase + doc);
+            if ((_entries.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
+            int level = (int)(_levels?.Get(doc) ?? 0);
+            long treeOrder = _treeOrders?.Get(doc) ?? long.MaxValue;
+            _entries.Add(new Entry(_docBase + doc, level, treeOrder));
+        }
+
+        public List<Entry> Ordered()
+        {
+            _entries.Sort(static (a, b) =>
+            {
+                int c = a.Level.CompareTo(b.Level);
+                return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
+            });
+            return _entries;
         }
     }
 
