@@ -88,13 +88,21 @@ public sealed class IdleMemoryTrimmer(
         //     on the next catalog search. No-op while a build holds the reader.
         catalogToc.ReleaseIdleResources();
 
-        // 2. Full compacting GC, aggressive mode: also compacts the LOH and hands freed
-        //    heap segments back to the OS instead of retaining them for reuse.
+        // 2. Compact and DECOMMIT the managed heap back to the OS. Two aggressive GCs on
+        //    purpose: the decommit of freed segments (especially the LOH) is deferred to
+        //    the SECOND aggressive collection (dotnet/runtime#78679), so a single Collect
+        //    compacts but leaves the pages committed. Run the finalizer queue between them
+        //    so anything a finalizer frees is decommitted by the second pass. With
+        //    System.GC.RetainVM=false (see the csproj) the freed segments are handed back
+        //    to the OS instead of parked on a standby list — this is what actually drops
+        //    committed/idle RAM rather than merely paging it out.
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
         GC.WaitForPendingFinalizers();
+        GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
 
-        // 3. Move remaining resident pages to the OS standby list. They fault back in on
-        //    demand (standby pages are cheap to reclaim), so idle cost drops to a few MB.
+        // 3. Empty the working set: whatever pages remain resident (runtime, mapped index
+        //    files touched by the last search) move to the OS standby list and fault back
+        //    in on demand. Done AFTER the decommit so it only pushes out what truly stays.
         NativeMemory_.EmptyWorkingSet(NativeMemory_.GetCurrentProcess());
 
         logger.LogInformation("idle memory trim: working set {Before:N1} MB → {After:N1} MB",

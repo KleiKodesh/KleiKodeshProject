@@ -6,6 +6,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
     <PublishAot>true</PublishAot>
+
+    <!-- Idle-RAM tuning. The service spends most of its life idle between bursts of
+         search/index work; a heavy search grows the GC heap to hundreds of MB. These
+         make the runtime give that memory back to the OS instead of retaining it:
+           - Workstation, concurrent GC (the default, restated): the server GC keeps a
+             per-core heap and is far more memory-hungry — wrong for a mostly-idle helper.
+           - RetainVMGarbageCollection=false: decommit freed segments to the OS rather
+             than parking them on a standby list for reuse. This is THE switch that lets
+             idle RAM fall after the trim's GC, instead of staying committed.
+           - GCConserveMemory=9: bias every collection toward a small heap (compacts the
+             LOH when fragmented). Higher pause cost, which is irrelevant while idle. -->
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
+    <RetainVMGarbageCollection>false</RetainVMGarbageCollection>
     <!-- Required by the LibraryImport source generator (advapi32 SCM P/Invokes). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UserSecretsId>dotnet-KitveiHakodeshService-65893fd5-946c-4ba8-8798-4e827a79ea21</UserSecretsId>
