@@ -12,7 +12,7 @@
  *   For every node, walk the parentId chain to collect the full ancestor sequence.
  *   Each ancestor's text is tokenized (lowercase, punctuation-aware) into a segment.
  *   The result is segments[nodeId] = [[tok, tok, ...], [tok, ...], ...] root→leaf.
- *   Also build displayPaths[nodeId] = "root / parent / node" for rendering.
+ *   Also build displayPaths[nodeId] = "root · parent · node" for rendering.
  *
  * SEARCH (three passes):
  *
@@ -54,7 +54,7 @@
  *
  *   const tree = new SegmentSearchTree(nodes)
  *   const results = tree.search(leafNodes, query, 100)
- *   const path = tree.displayPaths.get(nodeId)   // "root / parent / node"
+ *   const path = tree.displayPaths.get(nodeId)   // "root · parent · node"
  *
  * Pass only the nodes you want as candidates to search() — typically leaf nodes
  * when you want to match books/entries rather than section headers.
@@ -169,7 +169,7 @@ export class SegmentSearchTree {
 
   /**
    * Human-readable display path per node, built during construction.
-   * Format: "root / parent / node" (original text, not lowercased).
+   * Format: "root · parent · node" (original text, not lowercased).
    * Used by callers to render the path subtitle under a search result.
    */
   readonly displayPaths: Map<number, string> = new Map()
@@ -204,7 +204,7 @@ export class SegmentSearchTree {
       const node = byId.get(id)
       if (!node) return ''
       const parent = node.parentId != null ? getDisplay(node.parentId) : ''
-      const result = parent ? `${parent} / ${node.text}` : node.text
+      const result = parent ? `${parent} · ${node.text}` : node.text
       displayCache.set(id, result)
       return result
     }

@@ -148,7 +148,7 @@ export function useAppTitleBarTocBreadcrumb(
     if (route === '/book-view') {
       const bridge = getTocBridge(currentTabId)
       if (!bridge) return []
-      const labels = tocPath.split(' / ')
+      const labels = tocPath.split(' · ')
       return resolveTocSegments(bridge.tocEntries, labels)
     }
 
