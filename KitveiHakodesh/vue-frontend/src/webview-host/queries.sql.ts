@@ -332,6 +332,31 @@ export const SQL = {
     WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
   `,
 
+  /**
+   * Portable fallback for DBs whose link table has NO targetLineIndex column (the
+   * Otzaria DB — Zayit denormalizes it). Joins line only for the integer lineIndex,
+   * still no content column. Selection between the two is done in seforimApi via
+   * HAS_LINK_TARGET_LINE_INDEX.
+   *
+   * NOTE: the schema difference was verified 2026-07-19 against both real DBs
+   * (Zayit: link.targetLineIndex present; Otzaria: absent). Both DB projects evolve
+   * independently — RE-VERIFY this assumption when either ships a new schema. The
+   * runtime probe adapts either way (an Otzaria DB that gains the column will take
+   * the fast path automatically), but the perf reasoning above may go stale.
+   */
+  GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE_JOIN: (count: number) => `
+    SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
+           ln.lineIndex
+    FROM link l
+    JOIN line ln ON ln.id = l.targetLineId
+    WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
+  `,
+
+  /** Schema probe: 1 row with n=1 when link.targetLineIndex exists (Zayit), n=0 otherwise (Otzaria). */
+  HAS_LINK_TARGET_LINE_INDEX: `
+    SELECT COUNT(*) AS n FROM pragma_table_info('link') WHERE name = 'targetLineIndex'
+  `,
+
   /** Content backfill for a batch of line ids (commentary lazy-content second phase). */
   GET_LINE_CONTENTS: (count: number) => `
     SELECT id, content FROM line WHERE id IN (${Array(count).fill('?').join(',')})

@@ -271,6 +271,10 @@ public sealed partial class SeforimDbService
 
     // ── Commentary / links ──────────────────────────────────────────────────────
 
+    // Whether link.targetLineIndex exists (Zayit: yes, Otzaria: no). Detected once —
+    // the seforim DB is static for the life of the process (see the catalog caches).
+    private bool? _linkHasTargetLineIndex;
+
     public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds)
     {
         var list = new List<CommentaryLinkRow>();
@@ -278,8 +282,9 @@ public sealed partial class SeforimDbService
         Run(() =>
         {
             using var conn = Open();
+            _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetCommentaryLinksForSourceLineRange(lineIds.Count);
+            cmd.CommandText = SeforimSql.GetCommentaryLinksForSourceLineRange(lineIds.Count, _linkHasTargetLineIndex.Value);
             BindList(cmd, "p", lineIds);
             using var r = cmd.ExecuteReader();
             while (r.Read())
