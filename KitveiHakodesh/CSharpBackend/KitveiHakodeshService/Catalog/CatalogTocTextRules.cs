@@ -85,6 +85,29 @@ public static class CatalogTocTextRules
         return start == 0 && end == s.Length - 1 ? s : s[start..(end + 1)];
     }
 
+    // ── Talmud daf entry parsing (TOC restructuring) ─────────────────────────────
+
+    /// <summary>
+    /// Recognize a Talmud page TOC entry text: "דף X." (amud א) or "דף X:" (amud ב).
+    /// Returns the core ("דף X") and which amud the mark denotes. Used by the indexer
+    /// to restructure such entries into a parent daf with עמוד א / עמוד ב children —
+    /// putting the amud level BELOW the daf level so the injected amud tokens (א/ב)
+    /// can never outrank a real daf/siman/verse match for those letters.
+    /// </summary>
+    public static bool TryParseDafText(string text, out string core, out bool isAmudB)
+    {
+        core = "";
+        isAmudB = false;
+        string t = text.Trim();
+        if (t.Length < 4 || !t.StartsWith("דף ", StringComparison.Ordinal)) return false;
+        char last = t[^1];
+        if (last != '.' && last != ':') return false;
+        core = t[..^1].TrimEnd();
+        if (core.Length <= 3) return false; // "דף" alone — no page designation
+        isAmudB = last == ':';
+        return true;
+    }
+
     // ── Title-variant root stripping (display-path construction only) ────────────
     // A book whose root TOC entry just repeats the book title would render as
     // "בראשית / בראשית / פרק א" — the root is dropped from the path like the catalog
