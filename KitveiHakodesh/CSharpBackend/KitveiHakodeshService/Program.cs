@@ -1,4 +1,5 @@
 using KitveiHakodeshService.Catalog;
+using KitveiHakodeshService.Common;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Ipc;
@@ -25,6 +26,9 @@ builder.Services.AddHostedService<PipeServer>();
 builder.Services.AddHostedService<FtsIndexingStarter>();
 builder.Services.AddHostedService<CatalogTocIndexingStarter>();
 builder.Services.AddHostedService<IdleMemoryTrimmer>();
+// Watches the seforim DB WHILE the service runs and rebuilds both indexes on an
+// in-place DB change (startup uses the one-shot stamp check; this covers live updates).
+builder.Services.AddHostedService<DbChangeWatcher>();
 
 var host = builder.Build();
 host.Run();

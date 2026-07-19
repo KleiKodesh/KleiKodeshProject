@@ -122,6 +122,36 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         }
     }
 
+    /// <summary>
+    /// Called by the DB change watcher while the service runs: if the seforim DB's
+    /// current change-stamp no longer matches the built index's stamp, kick off a
+    /// background rebuild (the old index keeps serving via the NRT reader meanwhile).
+    /// Returns true if a rebuild was started. A spurious call where nothing changed
+    /// costs one cheap stamp read and does nothing.
+    /// </summary>
+    public bool RebuildIfDbChanged()
+    {
+        if (!HasDb) return false;
+        string current;
+        try { current = CatalogTocIndex.ComputeDbHash(_dbPath!); }
+        catch { return false; }
+
+        lock (_lock)
+        {
+            // Already rebuilding for a change → don't stack another.
+            if (_isIndexing) return false;
+            string? active = GetIndex().ActiveHash;
+            if (string.Equals(active, current, StringComparison.OrdinalIgnoreCase))
+                return false; // unchanged — nothing to do
+
+            // Re-arm EnsureIndex to run again (it is latched to once-per-process), then
+            // let it do the stamp compare + background BuildAndSwitch it already knows.
+            _buildStarted = false;
+        }
+        EnsureIndex();
+        return true;
+    }
+
     /// <summary>Wipe and rebuild from scratch (dev reset). Returns immediately.</summary>
     public void ResetIndex()
     {

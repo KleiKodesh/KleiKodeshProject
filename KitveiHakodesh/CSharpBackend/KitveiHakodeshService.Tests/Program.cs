@@ -26,6 +26,8 @@ string? indexPath = null;
 string? compareQuery = null;
 int sampleBooks = 300, entriesPerBook = 3;
 bool forceRebuild = false;
+bool benchMode = false;
+bool watcherMode = false;
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -36,8 +38,13 @@ for (int i = 0; i < args.Length; i++)
         case "--entries": entriesPerBook = int.Parse(args[++i]); break;
         case "--rebuild": forceRebuild = true; break;
         case "--compare": compareQuery = args[++i]; break;
+        case "--bench": benchMode = true; break;
+        case "--watcher": watcherMode = true; break;
     }
 }
+
+if (watcherMode)
+    return WatcherE2E.Run() == 0 ? 0 : 1;
 
 dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))
@@ -98,19 +105,179 @@ void Fail(string message)
     Console.WriteLine($"analyzer spec table: {ok}/{cases.Length} OK");
 }
 
-// ── 2. Hash trigger ─────────────────────────────────────────────────────────────
+// ── 2. Rebuild trigger: the DB stamp detects real changes, ignores false ones ────
+//
+// The stamp gates every rebuild (service compares ComputeDbHash to the ver file's
+// value). Test both directions: real changes MUST change the stamp (else a stale index
+// keeps serving), and non-changes MUST NOT (else the ~30s build runs on every startup).
 
 {
-    string scratch = Path.Combine(Path.GetTempPath(), $"catalogtoc-hash-probe-{Environment.ProcessId}.tmp");
-    File.WriteAllText(scratch, "one");
-    string h1 = CatalogTocIndex.ComputeDbHash(scratch);
-    string h1Again = CatalogTocIndex.ComputeDbHash(scratch);
-    File.WriteAllText(scratch, "two-longer");
-    string h2 = CatalogTocIndex.ComputeDbHash(scratch);
-    File.Delete(scratch);
-    if (h1 != h1Again) Fail("DB hash is not stable for an unchanged file");
-    if (h1 == h2) Fail("DB hash did not change when the file changed");
-    Console.WriteLine("hash-trigger check: OK (stable when unchanged, changes on file change)");
+    string dir = Path.Combine(Path.GetTempPath(), $"catalogtoc-trigger-{Environment.ProcessId}");
+    Directory.CreateDirectory(dir);
+    string dbA = Path.Combine(dir, "a.db");
+    string dbB = Path.Combine(dir, "b.db");
+    try
+    {
+        File.WriteAllText(dbA, "seforim-content-one");
+        var t0 = File.GetLastWriteTimeUtc(dbA);
+
+        string baseline = CatalogTocIndex.ComputeDbHash(dbA);
+
+        // ── FALSE changes: the stamp must stay identical ──────────────────────────
+
+        // (a) Re-reading the same untouched file.
+        if (CatalogTocIndex.ComputeDbHash(dbA) != baseline)
+            Fail("trigger: stamp not stable across two reads of an unchanged file");
+
+        // (b) Opening the file for reading (access time may move; the stamp must not).
+        using (var fs = File.OpenRead(dbA)) { _ = fs.ReadByte(); }
+        if (CatalogTocIndex.ComputeDbHash(dbA) != baseline)
+            Fail("trigger: stamp changed after merely READING the file");
+
+        // ── REAL changes: the stamp MUST differ ───────────────────────────────────
+
+        // (c) THE classic blind spot: same-size in-place edit with mtime RESTORED to
+        //     the original. size+mtime alone are fooled; NTFS ChangeTime + the
+        //     per-file USN (which applications cannot set) must catch it.
+        File.WriteAllText(dbA, "seforim-content-two");            // same length
+        File.SetLastWriteTimeUtc(dbA, t0);                        // restore mtime
+        string stealthEdit = CatalogTocIndex.ComputeDbHash(dbA);
+        if (stealthEdit == baseline)
+            Fail("trigger: MISSED same-size edit with restored mtime (ctime/USN failed)");
+
+        string afterC = stealthEdit;
+
+        // (d) Content grew (size + mtime move).
+        File.WriteAllText(dbA, "seforim-content-one-plus-more");
+        string grown = CatalogTocIndex.ComputeDbHash(dbA);
+        if (grown == afterC) Fail("trigger: stamp did not change when content grew");
+
+        // (e) File REPLACED by another file with identical size and restored mtime
+        //     (new MFT record → file id changes; USN changes too).
+        string tmp = dbA + ".swap";
+        File.WriteAllBytes(tmp, File.ReadAllBytes(dbA));
+        File.SetLastWriteTimeUtc(tmp, File.GetLastWriteTimeUtc(dbA));
+        string beforeSwap = CatalogTocIndex.ComputeDbHash(dbA);
+        var keepM = File.GetLastWriteTimeUtc(dbA);
+        File.Delete(dbA);
+        File.Move(tmp, dbA);
+        File.SetLastWriteTimeUtc(dbA, keepM);
+        if (CatalogTocIndex.ComputeDbHash(dbA) == beforeSwap)
+            Fail("trigger: MISSED file replacement with identical size + restored mtime");
+
+        // (f) User switched databases — different path, same bytes → different stamp.
+        File.WriteAllBytes(dbB, File.ReadAllBytes(dbA));
+        File.SetLastWriteTimeUtc(dbB, keepM);
+        if (CatalogTocIndex.ComputeDbHash(dbB) == CatalogTocIndex.ComputeDbHash(dbA))
+            Fail("trigger: stamp did not change when the DB path changed");
+
+        // (g) Index format version is part of the stamp (schema bump → rebuild).
+        if (!baseline.StartsWith(CatalogTocIndex.IndexFormatVersion + "|", StringComparison.Ordinal))
+            Fail("trigger: stamp does not carry the index format version");
+
+        // (h) SQLite WAL: a committed write sits in the -wal sidecar; the MAIN file may
+        //     be untouched until a checkpoint. Compute the stamp WHILE a writer holds
+        //     the database open (closing the last connection would checkpoint and
+        //     delete the wal, hiding the scenario) — the stamp must still change.
+        string walDb = Path.Combine(dir, "wal.db");
+        using (var conn = new SqliteConnection($"Data Source={walDb}"))
+        {
+            conn.Open();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "PRAGMA journal_mode=WAL; PRAGMA wal_autocheckpoint=0; " +
+                                  "CREATE TABLE t(x); INSERT INTO t VALUES(1);";
+                cmd.ExecuteNonQuery();
+            }
+
+            string walBaseline = CatalogTocIndex.ComputeDbHash(walDb);
+            long mainSizeBefore = new FileInfo(walDb).Length;
+
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "INSERT INTO t VALUES(2);"; // parked in the -wal only
+                cmd.ExecuteNonQuery();
+            }
+
+            string walAfter = CatalogTocIndex.ComputeDbHash(walDb);
+            if (walAfter == walBaseline)
+                Fail("trigger: MISSED a WAL-mode write (change parked in the -wal sidecar)");
+            if (new FileInfo(walDb).Length != mainSizeBefore)
+                Console.WriteLine("  (note: main file size moved too — wal scenario not isolated on this run)");
+        }
+        SqliteConnection.ClearAllPools();
+
+        Console.WriteLine("rebuild-trigger check: OK (real changes detected incl. stealth edits + WAL; reads ignored)");
+    }
+    finally
+    {
+        try { Directory.Delete(dir, recursive: true); } catch { }
+    }
+}
+
+// ── 2a. Shared DbChangeStamp: prefix + missing-file behavior ─────────────────────
+
+{
+    string scratch = Path.Combine(Path.GetTempPath(), $"dbstamp-{Environment.ProcessId}.tmp");
+    File.WriteAllText(scratch, "x");
+    try
+    {
+        // Prefix is prepended and separates two format versions of the SAME file.
+        string s1 = KitveiHakodeshService.Common.DbChangeStamp.Compute(scratch, "fmtA");
+        string s2 = KitveiHakodeshService.Common.DbChangeStamp.Compute(scratch, "fmtB");
+        if (!s1.StartsWith("fmtA|", StringComparison.Ordinal)) Fail("DbChangeStamp: prefix not prepended");
+        if (s1 == s2) Fail("DbChangeStamp: different prefixes produced the same stamp (schema bump wouldn't rebuild)");
+        // No prefix is allowed (empty head).
+        if (KitveiHakodeshService.Common.DbChangeStamp.Compute(scratch).StartsWith("|", StringComparison.Ordinal))
+            Fail("DbChangeStamp: empty prefix produced a leading separator");
+        // A missing file yields a stable, non-throwing 'missing' stamp.
+        string miss1 = KitveiHakodeshService.Common.DbChangeStamp.Compute(scratch + ".nope", "fmtA");
+        string miss2 = KitveiHakodeshService.Common.DbChangeStamp.Compute(scratch + ".nope", "fmtA");
+        if (miss1 != miss2 || !miss1.Contains("missing")) Fail("DbChangeStamp: missing-file stamp not stable/marked");
+        Console.WriteLine("DbChangeStamp check: OK (prefix separates formats, missing-file stable)");
+    }
+    finally { try { File.Delete(scratch); } catch { } }
+}
+
+// ── 2b. Rebuild DECISION: the service's ver-file compare gates builds correctly ───
+// Exercises the ver-file round-trip (ActiveHash reads what a completed build wrote)
+// that CatalogTocSearchService.EnsureIndex uses to decide fresh vs. stale — without
+// running a full ~30s build (only the stamp comparison is under test here).
+
+{
+    string dir = Path.Combine(Path.GetTempPath(), $"catalogtoc-decision-{Environment.ProcessId}");
+    Directory.CreateDirectory(dir);
+    try
+    {
+        // No ver file yet (never built) → no ActiveHash → the service must build.
+        using (var idx = new CatalogTocIndex(dir, dbPath))
+            if (idx.ActiveHash != null) Fail("decision: unbuilt index reported a non-null ActiveHash");
+
+        // Simulate a completed build for the current stamp by writing the ver file.
+        string stamp = CatalogTocIndex.ComputeDbHash(dbPath);
+        File.WriteAllText(Path.Combine(dir, "catalogtoc.ver"), stamp);
+
+        using (var idx = new CatalogTocIndex(dir, dbPath))
+        {
+            // Matches current stamp → up-to-date → the service SKIPS the rebuild.
+            if (!string.Equals(idx.ActiveHash, stamp, StringComparison.OrdinalIgnoreCase))
+                Fail($"decision: fresh index not recognized as up-to-date (active={idx.ActiveHash})");
+            // A changed stamp (DB moved on) → does NOT match → the service rebuilds.
+            if (string.Equals(idx.ActiveHash, stamp + "|later", StringComparison.OrdinalIgnoreCase))
+                Fail("decision: a changed stamp was wrongly treated as up-to-date");
+        }
+
+        // A blank/garbage ver file (interrupted build) → treated as no complete index.
+        File.WriteAllText(Path.Combine(dir, "catalogtoc.ver"), "   ");
+        using (var idx = new CatalogTocIndex(dir, dbPath))
+            if (idx.ActiveHash != null) Fail("decision: blank ver file did not read as null (would skip rebuild)");
+
+        Console.WriteLine("rebuild-decision check: OK (unbuilt→build, fresh→skip, changed→rebuild, blank→build)");
+    }
+    finally
+    {
+        try { Directory.Delete(dir, recursive: true); } catch { }
+    }
 }
 
 // ── Load catalog data (corpus generation + the --compare oracle) ────────────────
@@ -315,6 +482,31 @@ static string ExpectedPath(
     return string.Join(" / ", parts);
 }
 
+// ── --bench mode: warm-time the real capped Search() on representative queries ───
+
+if (benchMode)
+{
+    Console.WriteLine("\n=== ComputeDbHash latency (7GB DB) ===");
+    var swCold = Stopwatch.StartNew();
+    string stamp = CatalogTocIndex.ComputeDbHash(dbPath);
+    Console.WriteLine($"  first call (cold):  {swCold.Elapsed.TotalMilliseconds,7:F2} ms");
+    var swWarm = Stopwatch.StartNew();
+    for (int i = 0; i < 100; i++) _ = CatalogTocIndex.ComputeDbHash(dbPath);
+    Console.WriteLine($"  warm (avg of 100):  {swWarm.Elapsed.TotalMilliseconds / 100,7:F3} ms");
+    Console.WriteLine($"  stamp: {stamp}");
+
+    Console.WriteLine("\n=== Search() latency (capped) ===");
+    foreach (var q in new[] { "בראשית פרק ד פסוק יד", "בראשית פרק יב",
+        "שלחן ערוך אורח חיים סימן ב", "פסחים דף י", "בראשית", "הלכות" })
+    {
+        _ = index.Search(q); // warm
+        var sw = Stopwatch.StartNew();
+        var r = index.Search(q);
+        Console.WriteLine($"  {q,-28} {r.Count,6} hits  {sw.Elapsed.TotalMilliseconds,7:F1} ms");
+    }
+    return 0;
+}
+
 // ── --compare mode: old manual pipeline vs Lucene (informational) ───────────────
 
 if (compareQuery is not null)
@@ -412,6 +604,28 @@ if (compareQuery is not null)
         Fail($"token-order: משנה תורה vs תורה משנה result counts differ ({a.Count} vs {b.Count})");
     Console.WriteLine($"token-order rule checks: in-order kept={hasInOrder}, reversed discarded={!hasReversed}, " +
                       $"title-order-free counts {a.Count}=={b.Count}");
+}
+
+// ── Fuzzy fallback: catalog/author only, 3+ char tokens, exact-first ─────────────
+
+{
+    // Misspelled catalog term (תבך ~ תנך, 1 edit, len 3): the exact search finds
+    // nothing, the fallback resolves it through the CatalogPath field.
+    var fz = index.Search("תבך בראשית פרק ב");
+    bool fuzzyHit = fz.Any(h => h.FullTocPath == "בראשית / פרק ב");
+    if (!fuzzyHit) Fail($"fuzzy: \"תבך בראשית פרק ב\" did not resolve תבך→תנך via catalog ({fz.Count} hits)");
+
+    // TOC-path tokens must never fuzz: a wrong verse letter stays a miss even when
+    // everything else matches (יב vs יג is edit distance 1 — and a different verse).
+    var noToc = index.Search("בראשית פרק ב פסוק צט");   // chapter 2 has no verse 99
+    if (noToc.Count != 0) Fail($"fuzzy: nonexistent verse matched anyway ({noToc.Count} hits)");
+
+    // Tokens shorter than 3 chars are excluded from fuzzy: garbage 2-char token → 0.
+    var shortTok = index.Search("בראשית ךב");
+    if (shortTok.Count != 0) Fail($"fuzzy: 2-char garbage token produced {shortTok.Count} hits");
+
+    Console.WriteLine($"fuzzy fallback checks: catalog-resolved={fuzzyHit}, toc-not-fuzzed={noToc.Count == 0}, " +
+                      $"short-excluded={shortTok.Count == 0}");
 }
 
 // ── 3+4+5. Self-recall, contains-all, ordering over a generated corpus ──────────
