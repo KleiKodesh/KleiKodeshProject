@@ -86,8 +86,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// v12: ש"ע/ש''ע/שו''ע canonical variants; the DB stamp is a plain readable
     /// composite (no pointless SHA-256 over 60 bytes of metadata).
     /// v13: Level + TreeOrder also stored as numeric doc-values so ordering happens
-    /// before (and independently of) stored-field materialization, which is now capped.</summary>
-    public const string IndexFormatVersion = "v13";
+    /// before (and independently of) stored-field materialization, which is now capped.
+    /// v14: Talmud "דף X." / "דף X:" entries restructured into a parent "דף X"
+    /// (→ עמוד א line) with עמוד א/עמוד ב children one level deeper.</summary>
+    public const string IndexFormatVersion = "v14";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// content-free <see cref="Common.DbChangeStamp"/>, prefixed with this index's
@@ -560,6 +562,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         Func<int, long> treeOrder, string catalogPath)
     {
         rows = StripTitleRoots(rows, book.Title, book.Id);
+        rows = ExpandDafAmudim(rows);
         var byId = rows.ToDictionary(r => r.Id);
 
         // Memoized (path, level) per entry, root→leaf.
@@ -644,6 +647,72 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             result.Add(r);
         }
         return result;
+    }
+
+    /// <summary>
+    /// Restructure Talmud page entries: sibling "דף X." / "דף X:" entries become a
+    /// synthetic parent "דף X" (navigating to the עמוד א line — the "." member) with
+    /// "עמוד א" / "עמוד ב" children one level deeper.
+    ///
+    /// Why: the amud punctuation used to be flattened into the daf entry's own tokens,
+    /// so the injected amud letters (א/ב) collided with real daf/siman/verse letters —
+    /// "שבת ב" matched every "דף X:" through its עמוד-ב token AT THE SAME LEVEL as the
+    /// real דף ב. With amudim as children, the bare "דף X" parent carries no amud token
+    /// and sits a level above; amud hits can only rank below the daf level. The default
+    /// navigation for "דף X" is עמוד א.
+    /// </summary>
+    private static List<TocRow> ExpandDafAmudim(List<TocRow> rows)
+    {
+        List<TocRow>? result = null;
+        Dictionary<(int? ParentId, string Core), TocRow>? parents = null;
+        int syntheticId = int.MinValue / 2;
+
+        for (int i = 0; i < rows.Count; i++)
+        {
+            var r = rows[i];
+            if (!CatalogTocTextRules.TryParseDafText(r.Text, out string core, out bool isAmudB))
+            {
+                result?.Add(r);
+                continue;
+            }
+
+            if (result is null)
+            {
+                // First daf entry found — start rewriting from here.
+                result = new List<TocRow>(rows.Count + 64);
+                for (int j = 0; j < i; j++) result.Add(rows[j]);
+                parents = [];
+            }
+
+            var key = (r.ParentId, core);
+            if (!parents!.TryGetValue(key, out var parent))
+            {
+                parent = new TocRow
+                {
+                    Id = syntheticId++,
+                    ParentId = r.ParentId,
+                    BookId = r.BookId,
+                    Text = core,
+                    LineIndex = r.LineIndex, // provisional — the "." member overrides below
+                };
+                parents[key] = parent;
+                result.Add(parent); // the parent takes its first member's position
+            }
+            if (!isAmudB) parent.LineIndex = r.LineIndex; // default navigation → עמוד א
+
+            // The original entry becomes the amud child (keeps its id so any children
+            // of the original entry stay attached beneath it).
+            result.Add(new TocRow
+            {
+                Id = r.Id,
+                ParentId = parent.Id,
+                BookId = r.BookId,
+                Text = isAmudB ? "עמוד ב" : "עמוד א",
+                LineIndex = r.LineIndex,
+            });
+        }
+
+        return result ?? rows;
     }
 
     // ── DB loading ──────────────────────────────────────────────────────────────

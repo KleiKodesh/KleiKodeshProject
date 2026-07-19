@@ -465,7 +465,8 @@ else
 
 // ── Helpers for expected paths ──────────────────────────────────────────────────
 
-// Full display path for a (root-stripped) row: title + chain root→leaf.
+// Full display path for a (root-stripped) row: title + chain root→leaf. Mirrors the
+// indexer's daf restructuring: a "דף X." / "דף X:" segment becomes "דף X / עמוד א|ב".
 static string ExpectedPath(
     ManualCatalogPipeline.TocRow row, Dictionary<int, ManualCatalogPipeline.TocRow> byId, string title)
 {
@@ -474,7 +475,9 @@ static string ExpectedPath(
     var guard = 0;
     while (cur is not null && guard++ < 64)
     {
-        parts.Add(cur.Text);
+        parts.Add(CatalogTocTextRules.TryParseDafText(cur.Text, out string core, out bool amudB)
+            ? $"{core} / {(amudB ? "עמוד ב" : "עמוד א")}"
+            : cur.Text);
         cur = cur.ParentId is { } pid ? byId.GetValueOrDefault(pid) : null;
     }
     parts.Add(title);
@@ -584,6 +587,43 @@ if (compareQuery is not null)
         else ok++;
     }
     Console.WriteLine($"tanach verse checks: {ok}/{verseCases.Length} OK");
+}
+
+// ── Talmud daf/amud hierarchy (v14 restructuring) ────────────────────────────────
+
+{
+    // Bare daf query → the synthetic level-1 parent leads; amud children are level 2.
+    var daf = index.Search("שבת דף ב");
+    if (daf.Count == 0 || daf[0].FullTocPath != "שבת / דף ב" || daf[0].Level != 1)
+        Fail($"daf: \"שבת דף ב\" top hit is not the level-1 parent " +
+             $"(got \"{(daf.Count > 0 ? daf[0].FullTocPath : "-")}\" lvl={(daf.Count > 0 ? daf[0].Level : -1)})");
+
+    var amudA = daf.FirstOrDefault(h => h.FullTocPath == "שבת / דף ב / עמוד א");
+    var amudB = daf.FirstOrDefault(h => h.FullTocPath == "שבת / דף ב / עמוד ב");
+    if (amudA is null || amudA.Level != 2) Fail("daf: עמוד א child missing or not level 2");
+    if (amudB is null || amudB.Level != 2) Fail("daf: עמוד ב child missing or not level 2");
+    // Default navigation: the parent points at the עמוד א line.
+    if (daf.Count > 0 && amudA is not null && daf[0].LineIndex != amudA.LineIndex)
+        Fail($"daf: parent lineIndex {daf[0].LineIndex} != עמוד א lineIndex {amudA.LineIndex}");
+
+    // Amud-specific queries resolve to the child.
+    var colon = index.Search("פסחים דף י:");
+    if (!colon.Any(h => h.FullTocPath == "פסחים / דף י / עמוד ב"))
+        Fail("daf: \"פסחים דף י:\" did not resolve to פסחים / דף י / עמוד ב");
+    var amudQuery = index.Search("פסחים דף י עמוד ב");
+    if (!amudQuery.Any(h => h.FullTocPath == "פסחים / דף י / עמוד ב"))
+        Fail("daf: \"פסחים דף י עמוד ב\" did not resolve to the עמוד ב child");
+
+    // The original motivating case: "שבת ב" — the amud-ב token of other dapim must not
+    // rank at the daf level. Every level-1 hit whose book is the Talmud שבת must be the
+    // real דף ב, not some דף X's second amud.
+    var loose = index.Search("שבת ב");
+    var talmudLvl1 = loose.Where(h => h.Level == 1 && h.FullTocPath.StartsWith("שבת / דף", StringComparison.Ordinal)).ToList();
+    if (talmudLvl1.Count != 1 || talmudLvl1[0].FullTocPath != "שבת / דף ב")
+        Fail($"daf: \"שבת ב\" level-1 Talmud hits should be exactly [שבת / דף ב], got " +
+             $"[{string.Join(", ", talmudLvl1.Select(h => h.FullTocPath))}]");
+
+    Console.WriteLine("daf/amud hierarchy checks: OK (parent level 1 → עמוד א line, children level 2, no amud-letter pollution at daf level)");
 }
 
 // ── Query-token-order rule: TOC-path-scoped (catalog/title words exempt) ─────────
