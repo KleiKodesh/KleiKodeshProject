@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { onLongPress } from '@vueuse/core'
+import { onLongPress, useTimeoutFn } from '@vueuse/core'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
@@ -11,6 +11,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import CommentaryHeader from './CommentaryHeader.vue'
 import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
+import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import type { CommentaryGroup } from './useCommentary'
 import type { CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
 import { isCommentaryItemVisible } from '../bookViewTypes'
@@ -332,6 +333,23 @@ defineExpose({
 const activeTocPath = computed(() =>
   activePinnedGroup.value ? props.commentaryTocPaths.get(activePinnedGroup.value.bookId) : undefined,
 )
+
+// Delayed loading spinner — the panel's original LoadingAnimation, mounted only
+// after loading has been in flight for a while. Fast (warm-cache) loads finish
+// inside the delay and never render or flash it, so it costs nothing on the
+// common path; only genuinely slow loads show the animation.
+const LOADING_SPINNER_DELAY_MS = 300
+const showLoadingSpinner = ref(false)
+const spinnerDelay = useTimeoutFn(
+  () => { showLoadingSpinner.value = true },
+  LOADING_SPINNER_DELAY_MS,
+  { immediate: false },
+)
+watch(() => props.loading, (loading) => {
+  spinnerDelay.stop()
+  showLoadingSpinner.value = false
+  if (loading) spinnerDelay.start()
+}, { immediate: true })
 </script>
 
 <template>
@@ -362,7 +380,9 @@ const activeTocPath = computed(() =>
           @open-book="(bookId, lineIndex) => emit('open-book', bookId, lineIndex)"
           @close="emit('close')"
         />
-        <div v-if="props.loading" class="loading-hint">בטעינה...</div>
+        <div v-if="props.loading" class="state-overlay">
+          <LoadingAnimation v-if="showLoadingSpinner" />
+        </div>
         <div v-else-if="!flatItems.length" class="state-overlay">
           <div class="hint-container">
             <div class="hint-title">{{
@@ -457,16 +477,6 @@ const activeTocPath = computed(() =>
   display: flex;
   align-items: center;
   justify-content: center;
-}
-.loading-hint {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  font-weight: 300;
-  color: var(--text-secondary);
-  opacity: 0.55;
 }
 .hint {
   font-size: 13px;
