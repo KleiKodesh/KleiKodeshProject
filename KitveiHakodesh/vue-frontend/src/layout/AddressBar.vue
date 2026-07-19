@@ -7,6 +7,12 @@
  * typing on the home page: instant catalog matches, debounced HebrewBooks/file
  * results, and Enter → full-text search in the active tab.
  *
+ * The dropdown doubles as the pane's tab list (replacing the old title-bar tab
+ * dropdown): it is open for the whole life of the address bar, showing the
+ * open tabs — with the recently-opened documents (the home-page tile
+ * collection) below them — whenever there are no search results: empty input,
+ * a too-short query, or a query that matched nothing. Results otherwise.
+ *
  * The title bar owns when this component is shown (search mode) and reuses the
  * pane it belongs to for all navigation, so results open in the right pane.
  */
@@ -22,6 +28,7 @@ import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
+import { useRecentlyOpenedStore, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 
@@ -73,7 +80,6 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
-  isLoadingAny,
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
@@ -81,18 +87,47 @@ const {
 
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
 
-// Open the dropdown as async sources resolve results after the debounce.
-watch([catalogTocResults, hebrewBooksResults, fileResults], () => {
-  if ((searchQuery.value ?? '').trim().length >= 2) {
-    if (hasAnyResults()) {
-      isDropdownOpen.value = true
-    } else if (!isLoadingAny()) {
-      isDropdownOpen.value = false
-    }
+// ── Tab list + recents (dropdown fallback content) ────────────────────────────
+// The dropdown shows the pane's open tabs — with the recently-opened documents
+// (the home-page tile collection) below them — whenever the search has nothing
+// to show: empty/short query or a query with no matches. Results otherwise.
+const visibleTabs = computed(() => pane.tabs.value.filter((t) => t.route !== '/settings'))
+const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
+
+const recentlyOpenedStore = useRecentlyOpenedStore()
+const recentEntries = ref<RecentlyOpenedEntry[]>([])
+recentlyOpenedStore.getList().then((list) => { recentEntries.value = list })
+const dropdownRecentEntries = computed(() => (hasAnyResults() ? [] : recentEntries.value))
+
+function onSelectTab(id: string) {
+  pane.switchTab(id)
+  close()
+}
+
+function onCloseTab(id: string) {
+  // Keep the dropdown open — closing tabs from the list is a batch gesture.
+  pane.closeTab(id)
+}
+
+// Recents open in a NEW tab (unlike search results, which navigate the current
+// tab). File entries follow the tabMirror flow: open a fresh tab, then let the
+// shared history-restore (openFromHistory) fill it in place.
+function onSelectRecent(entry: RecentlyOpenedEntry) {
+  if (entry.route === '/book-view' && entry.bookId !== undefined) {
+    pane.openTab({ route: '/book-view', title: entry.title, bookId: entry.bookId })
+  } else {
+    pane.openTab({ route: '/', title: entry.title })
+    localFileStore.openFromHistory(entry)
   }
-})
+  close()
+}
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
+// Width rule: on a narrow ("android-width") shell the dropdown fills the whole
+// shell; otherwise it matches the input. The SHELL's rect is what's measured —
+// not the viewport — because in split view each shell is only part of the window.
+const NARROW_SHELL_WIDTH = 600
+
 const anchorTop = ref(0)
 const anchorLeft = ref(0)
 const anchorRight = ref(0)
@@ -101,23 +136,22 @@ const maxHeight = ref(300)
 function computeAnchor() {
   if (!wrapperRef.value) return
   const rect = wrapperRef.value.getBoundingClientRect()
+  const shellRect = wrapperRef.value.closest('.app-shell')?.getBoundingClientRect()
+  const anchor = shellRect && shellRect.width <= NARROW_SHELL_WIDTH ? shellRect : rect
   anchorTop.value = rect.bottom + 6
-  anchorLeft.value = rect.left
-  anchorRight.value = window.innerWidth - rect.right
+  anchorLeft.value = anchor.left
+  anchorRight.value = window.innerWidth - anchor.right
   maxHeight.value = Math.max(120, window.innerHeight - rect.bottom - 12)
 }
 
 function onInput() {
-  const hasQuery = (searchQuery.value ?? '').trim().length >= 2
-  if (hasQuery) computeAnchor()
-  isDropdownOpen.value = hasQuery && (hasAnyResults() || isLoadingAny())
+  computeAnchor()
+  isDropdownOpen.value = true
 }
 
 function onFocus() {
-  if (hasAnyResults()) {
-    computeAnchor()
-    isDropdownOpen.value = true
-  }
+  computeAnchor()
+  isDropdownOpen.value = true
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -217,8 +251,13 @@ async function onSelectFile(fullPath: string, fileName: string) {
   close()
 }
 
-// Focus the field as soon as it mounts (search mode was just entered).
-nextTick(() => inputRef.value?.focus())
+// Focus the field as soon as it mounts (search mode was just entered) and open
+// the dropdown right away — with an empty query it shows the tab list.
+nextTick(() => {
+  inputRef.value?.focus()
+  computeAnchor()
+  isDropdownOpen.value = true
+})
 </script>
 
 <template>
@@ -258,11 +297,16 @@ nextTick(() => inputRef.value?.focus())
       :anchor-left="anchorLeft"
       :anchor-right="anchorRight"
       :max-height="maxHeight"
-      :min-width="320"
+      :tabs="dropdownTabs"
+      :active-tab-id="pane.activeTabId.value"
+      :recent-entries="dropdownRecentEntries"
       @select-catalog-book="onSelectCatalogBook"
       @select-catalog-toc="onSelectCatalogToc"
       @select-hebrew-book="onSelectHebrewBook"
       @select-file="onSelectFile"
+      @select-tab="onSelectTab"
+      @close-tab="onCloseTab"
+      @select-recent="onSelectRecent"
       @dropdown-focused="pauseSearch"
       @dropdown-blurred="resumeSearch"
     />

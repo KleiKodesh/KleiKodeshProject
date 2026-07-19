@@ -442,17 +442,6 @@ export function notifyTabsChanged(snapshot: TabsSnapshot): void {
 }
 
 /**
- * Ask the C# host to toggle the native chrome tab strip's tab-list dropdown
- * (the "לשוניות פתוחות" menu). Used by Ctrl+T in the standalone/demo app, where
- * the strip — not the Vue title bar — owns the tab list. Fire-and-forget; a
- * no-op when there is no native strip (VSTO / browser dev). Works in fullscreen.
- */
-export function toggleChromeTabList(): void {
-  if (typeof window.__webviewAction !== 'function') return
-  action('toggleChromeTabList').catch(() => {})
-}
-
-/**
  * Trigger a HebrewBooks PDF download to the cache, then open it.
  * If localFolder is provided, C# will first check for {localFolder}\{bookId}.pdf
  * before falling back to the download flow.

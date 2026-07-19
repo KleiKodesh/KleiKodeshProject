@@ -370,7 +370,7 @@ export default defineConfig({
         './src/layout/AppTitleBar.vue',
         './src/layout/AppPageView.vue',
         './src/layout/AppTitleBarNavDropdown.vue',
-        './src/layout/AppTitleBarTabDropdown.vue',
+        './src/layout/AddressBar.vue',
         './src/stores/tabStore.ts',
         './src/stores/settingsStore.ts',
         './src/stores/bookViewStore.ts',

@@ -10,7 +10,7 @@ There is exactly one shell component; split view renders it twice. `src/App.vue`
 
 **AppPageView.vue** — fills remaining height, renders the active page via a route → async-component map. Picks the active tab from its `paneId` (`activeTabForPane(2)` vs `activeTab`). book-view, search, and txt-view are keyed by the active tab id and remount on tab switch. Adding a new route means registering it here.
 
-**AppTitleBarTabDropdown.vue** — full tab list, opened by clicking the title bar center. Select and close only — there is no drag-reorder UI anywhere; tab order changes only via the MRU move-to-front in `tabStore`.
+**AddressBar.vue** — Explorer-style editable search field swapped into the title bar center on click (search mode). Reuses the home-page search engine (`useHomeSearch`) and dropdown (`HomeSearchDropdown`). The dropdown is open for the address bar's whole lifetime and doubles as the pane's tab list: it shows the open tabs — with the recently-opened documents (`recentlyOpenedStore`, the same collection as the home-page tiles) below them — whenever there are no search results (empty/short query, or a query that matched nothing) and the search results otherwise. Recent entries open in a new tab; search results navigate the current tab. There is no separate tab-list dropdown. Select and close only — there is no drag-reorder UI anywhere; tab order changes only via the MRU move-to-front in `tabStore`.
 
 **AppTitleBarNavDropdown.vue** — hamburger nav menu, anchored to the right edge of its button so it opens toward the screen center.
 
@@ -18,4 +18,4 @@ There is exactly one shell component; split view renders it twice. `src/App.vue`
 
 **AppTitleBarBreadcrumbChevronDropdown.vue** — teleported chevron dropdown that lists TOC sibling entries. Uses `useDropdownClose`, `<Teleport to="body">`, and `position: fixed` coordinates from `getBoundingClientRect`. Emits `select` with the chosen `TocEntry`.
 
-**useAppTitleBarTocBreadcrumb.ts** — parses `tab.tocPath` (a `" / "`-separated string) into `TocBreadcrumbSegment[]`. Reads `TocEntry[]` from the `TocBridge` registered in `bookViewStore` — never queries the database directly. Returns an empty array for non-book-view tabs or when no bridge is registered yet.
+**useAppTitleBarTocBreadcrumb.ts** — parses `tab.tocPath` (a `" · "`-separated string) into `TocBreadcrumbSegment[]`. Reads `TocEntry[]` from the `TocBridge` registered in `bookViewStore` — never queries the database directly. Returns an empty array for non-book-view tabs or when no bridge is registered yet.

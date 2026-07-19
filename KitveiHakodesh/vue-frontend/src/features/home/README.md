@@ -12,7 +12,7 @@ Home page with navigation tiles and a unified quick-search bar.
 
 **useHomeSearch.ts** — unified search composable. Takes the search query ref and fans it out across three sources simultaneously: book catalog (instant, title-only, in-memory), HebrewBooks catalog (debounced 300ms, async via C# bridge), and Document Locator file system search (debounced 300ms, async via C# bridge). HebrewBooks and file search only fire when `isHosted`. Each source writes to its own result ref so the dropdown renders partial results as they arrive. Each source is capped at 5 results. Minimum query length is 2 characters.
 
-**HomeSearchDropdown.vue** — results dropdown rendered below the search bar. Groups results into three sections (ספרים, היברו-בוקס, קבצים) with section headers and loading spinners. Shows only sections that have results or are loading. Emits `selectCatalogBook`, `selectHebrewBook`, `selectFile` — all navigation is handled by `HomePage.vue`, not the dropdown.
+**HomeSearchDropdown.vue** — results dropdown rendered below the search bar. Groups results into three sections (ספרים, היברו-בוקס, קבצים) with section headers and loading spinners. Shows only sections that have results or are loading. Emits `selectCatalogBook`, `selectHebrewBook`, `selectFile` — all navigation is handled by `HomePage.vue`, not the dropdown. Also accepts optional `tabs`/`activeTabId`/`recentEntries` props (used by the title-bar `AddressBar`, not by HomePage): when non-empty, an open-tabs section (לשוניות פתוחות) and a recently-opened section (נפתחו לאחרונה, `recentlyOpenedStore` entries) render above the search sections and emit `selectTab`/`closeTab`/`selectRecent`.
 
 ## Search bar wiring in HomePage.vue
 

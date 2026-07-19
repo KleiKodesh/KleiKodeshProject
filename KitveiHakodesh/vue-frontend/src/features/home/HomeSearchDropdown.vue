@@ -8,7 +8,16 @@ import {
   IconDocumentPdf20Filled,
   IconDocumentText20Filled,
   IconDocumentGlobe20Filled,
+  IconDismiss20Regular,
+  IconHome20Regular,
+  IconDocument20Regular,
+  IconDocumentText20Regular,
+  IconSearch20Regular,
+  IconLibrary20Regular,
+  IconDocumentPdf20Regular,
+  IconApps20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useListKeys } from '@/composables/useListKeyNav'
 import type {
   CatalogSearchResult,
@@ -18,6 +27,8 @@ import type {
 } from './useHomeSearch'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
+import type { Tab } from '@/stores/tabStore'
+import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
@@ -32,18 +43,27 @@ const props = defineProps<{
   isLoadingCatalogToc: boolean
   isLoadingHebrewBooks: boolean
   isLoadingFiles: boolean
-  // Position and size passed from parent via getBoundingClientRect
+  // Position and size passed from parent via getBoundingClientRect. The
+  // dropdown spans exactly the anchor width (left+right pinned) — the parent
+  // decides what to anchor to (the input, or the whole shell on narrow panes).
   anchorTop: number
   anchorLeft: number
   anchorRight: number
   maxHeight: number
   /**
-   * Optional minimum width (px). The dropdown normally spans exactly the anchor
-   * width (both left+right pinned). When minWidth is set and the anchor is
-   * narrower, the left edge is released so the box keeps its right edge on the
-   * anchor and grows leftward (RTL) up to at least minWidth.
+   * Optional open-tab list (address-bar mode). When provided (non-empty), a
+   * tab section renders above the search sections — the parent passes tabs
+   * only when it wants them shown (empty query / no search results), so in
+   * practice the dropdown shows either tabs or results, not both.
    */
-  minWidth?: number
+  tabs?: Tab[]
+  activeTabId?: string
+  /**
+   * Optional recently-opened documents (address-bar mode, same collection as
+   * the home-page tiles). Rendered below the tab section under the same
+   * show-only-when-no-results rule.
+   */
+  recentEntries?: RecentlyOpenedEntry[]
 }>()
 
 const emit = defineEmits<{
@@ -51,6 +71,9 @@ const emit = defineEmits<{
   selectCatalogToc: [item: TocFsItem]
   selectHebrewBook: [book: HebrewBook]
   selectFile: [fullPath: string, fileName: string]
+  selectTab: [id: string]
+  closeTab: [id: string]
+  selectRecent: [entry: RecentlyOpenedEntry]
   dropdownFocused: []
   dropdownBlurred: []
 }>()
@@ -58,31 +81,13 @@ const emit = defineEmits<{
 const dropdownRef = ref<HTMLElement | null>(null)
 
 // Positioning: pin left+right to the anchor so the dropdown spans exactly the
-// anchor width (the wide-screen case). If a minWidth is given and the anchor is
-// narrower, release the left edge and let the box grow leftward (RTL) from its
-// pinned right edge up to minWidth — but never past the viewport: max-width is
-// capped to the room from the anchor's right edge to the left margin, so on a
-// screen narrower than minWidth it fits with an 8px gutter for legibility.
-const VIEWPORT_GUTTER = 8
-const dropdownStyle = computed(() => {
-  const base: Record<string, string> = {
-    top: props.anchorTop + 'px',
-    right: props.anchorRight + 'px',
-    maxHeight: props.maxHeight + 'px',
-  }
-  const anchorWidth = window.innerWidth - props.anchorLeft - props.anchorRight
-  if (props.minWidth && anchorWidth < props.minWidth) {
-    // Grow leftward from the pinned right edge. Available room = everything from
-    // the right edge to the left gutter.
-    const available = window.innerWidth - props.anchorRight - VIEWPORT_GUTTER
-    base.left = 'auto'
-    base.minWidth = Math.min(props.minWidth, available) + 'px'
-    base.maxWidth = available + 'px'
-  } else {
-    base.left = props.anchorLeft + 'px'
-  }
-  return base
-})
+// anchor width.
+const dropdownStyle = computed(() => ({
+  top: props.anchorTop + 'px',
+  left: props.anchorLeft + 'px',
+  right: props.anchorRight + 'px',
+  maxHeight: props.maxHeight + 'px',
+}))
 
 // The three sections in priority order. The prioritized source comes first;
 // the other two follow in their natural default order.
@@ -94,11 +99,19 @@ const sectionOrder = computed<SearchSourcePriority[]>(() => {
 
 const allItems = computed(() => {
   const items: Array<
+    | { kind: 'tab'; id: string }
+    | { kind: 'recent'; entry: RecentlyOpenedEntry }
     | { kind: 'catalog'; bookId: number; title: string }
     | { kind: 'catalogToc'; item: TocFsItem }
     | { kind: 'hebrewBooks'; book: HebrewBook }
     | { kind: 'file'; fullPath: string; fileName: string }
   > = []
+  for (const tab of props.tabs ?? []) {
+    items.push({ kind: 'tab', id: tab.id })
+  }
+  for (const entry of props.recentEntries ?? []) {
+    items.push({ kind: 'recent', entry })
+  }
   for (const source of sectionOrder.value) {
     if (source === 'catalog') {
       for (const item of props.catalogResults) {
@@ -123,7 +136,9 @@ const allItems = computed(() => {
 function activateItem(index: number) {
   const item = allItems.value[index]
   if (!item) return
-  if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title)
+  if (item.kind === 'tab') emit('selectTab', item.id)
+  else if (item.kind === 'recent') emit('selectRecent', item.entry)
+  else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title)
   else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item)
   else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book)
   else emit('selectFile', item.fullPath, item.fileName)
@@ -169,6 +184,45 @@ function getFileIcon(fileName: string): FileIconInfo {
       return { component: IconDocument20Filled, color: '#3478f6' }
   }
 }
+
+// Route → icon for the recently-opened rows — the 20px versions of the
+// home-page tile icons (RECENTLY_OPENED_ICON_MAP), same colors.
+function getRecentIcon(route: RecentlyOpenedEntry['route']): FileIconInfo {
+  switch (route) {
+    case '/pdf-view':
+      return { component: IconDocumentPdf20Filled, color: '#F40F02' }
+    case '/html-view':
+      return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
+    case '/txt-view':
+      return { component: IconDocumentText20Filled, color: '#9e9e9e' }
+    default: // '/book-view'
+      return { component: IconBookRtl20, color: '#c1440e' }
+  }
+}
+
+// Route → icon for the open-tab rows (same mapping the old title-bar tab
+// dropdown used). The book icon keeps its warm accent color.
+function getTabIcon(route: string): FileIconInfo {
+  switch (route) {
+    case '/':
+      return { component: IconHome20Regular, color: '' }
+    case '/book-view':
+    case '/hebrewbooks':
+      return { component: IconBookRtl20, color: '#c1440e' }
+    case '/pdf-view':
+      return { component: IconDocumentPdf20Regular, color: '' }
+    case '/txt-view':
+      return { component: IconDocumentText20Regular, color: '' }
+    case '/search':
+      return { component: IconSearch20Regular, color: '' }
+    case '/books':
+      return { component: IconLibrary20Regular, color: '' }
+    case '/workspaces':
+      return { component: IconApps20Regular, color: '' }
+    default:
+      return { component: IconDocument20Regular, color: '' }
+  }
+}
 </script>
 
 <template>
@@ -182,6 +236,56 @@ function getFileIcon(fileName: string): FileIconInfo {
       @focus="onDropdownFocus"
       @blur="onDropdownBlur"
     >
+      <!-- ── Open tabs section (address-bar mode: empty query / no results) ── -->
+      <template v-if="tabs && tabs.length > 0">
+        <div class="home-search-dropdown__section-header">לשוניות פתוחות</div>
+        <div
+          v-for="tab in tabs"
+          :key="tab.id"
+          role="option"
+          class="home-search-dropdown__item"
+          :class="{
+            'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
+            'is-active-tab': tab.id === activeTabId,
+          }"
+          data-nav-item
+          @click="emit('selectTab', tab.id)"
+        >
+          <component
+            :is="getTabIcon(tab.route).component"
+            class="home-search-dropdown__item-icon"
+            :style="getTabIcon(tab.route).color ? { color: getTabIcon(tab.route).color } : undefined"
+          />
+          <span class="home-search-dropdown__item-title">
+            {{ tab.title }}<span v-if="tab.tocPath" class="home-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
+          </span>
+          <button class="home-search-dropdown__tab-close" title="סגור" @click.stop="emit('closeTab', tab.id)">
+            <IconDismiss20Regular />
+          </button>
+        </div>
+      </template>
+
+      <!-- ── Recently-opened section (address-bar mode, below the tabs) ── -->
+      <template v-if="recentEntries && recentEntries.length > 0">
+        <div class="home-search-dropdown__section-header">נפתחו לאחרונה</div>
+        <div
+          v-for="entry in recentEntries"
+          :key="entry.key"
+          role="option"
+          class="home-search-dropdown__item"
+          :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
+          data-nav-item
+          @click="emit('selectRecent', entry)"
+        >
+          <component
+            :is="getRecentIcon(entry.route).component"
+            class="home-search-dropdown__item-icon"
+            :style="{ color: getRecentIcon(entry.route).color }"
+          />
+          <span class="home-search-dropdown__item-title">{{ entry.title }}</span>
+        </div>
+      </template>
+
       <template v-for="source in sectionOrder" :key="source">
 
         <!-- ── Book catalog section ── -->
@@ -294,7 +398,7 @@ function getFileIcon(fileName: string): FileIconInfo {
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 28px;
+  height: 24px;
   padding: 0 12px;
   font-size: 11px;
   font-weight: 600;
@@ -318,7 +422,8 @@ function getFileIcon(fileName: string): FileIconInfo {
   align-items: center;
   gap: 8px;
   width: 100%;
-  height: 36px;
+  /* Row height tracks the title bar's density mode (32px compact / 40px normal). */
+  height: var(--title-bar-height);
   padding: 0 12px;
   text-align: right;
   background: transparent;
@@ -371,5 +476,35 @@ function getFileIcon(fileName: string): FileIconInfo {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ── Open-tab rows (address-bar mode) ── */
+.home-search-dropdown__item.is-active-tab {
+  background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+}
+
+/* TOC path after the tab title: greyed but the SAME size as the title. */
+.home-search-dropdown__item-toc {
+  color: var(--text-secondary);
+  opacity: 0.8;
+}
+
+.home-search-dropdown__tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+.home-search-dropdown__tab-close svg {
+  width: 16px;
+  height: 16px;
+}
+.home-search-dropdown__tab-close:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 </style>
