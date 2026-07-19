@@ -64,8 +64,8 @@ function renderSnippet(snippet: string): string {
 
 function resultTitle(result: FullTextSearchResult): string {
   const base = result.tocText
-    ? `${result.bookTitle} › ${result.tocText}\n\nלחץ לניווט למיקום`
-    : `${result.bookTitle}\n\nלחץ לניווט למיקום`
+    ? `${result.bookTitle} › ${result.tocText}\nלחץ לניווט למיקום`
+    : `${result.bookTitle}\nלחץ לניווט למיקום`
   return base
 }
 

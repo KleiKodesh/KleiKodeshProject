@@ -175,46 +175,61 @@ function onSelect(headword: string) {
 
 <template>
   <div class="dict-page">
-    <div class="dict-body">
-      <div v-if="searching" class="dict-state">מחפש...</div>
-
-      <DictionaryWordPage
-        v-else-if="pageData"
-        :data="pageData"
-        :font-px="fontPx"
-        @select="onSelect"
-      />
-
-      <div v-else class="dict-empty">
-        <IconSearch20Regular class="dict-empty-icon" />
+    <!-- First-use disclaimer -->
+    <div v-if="!settings.dictionaryDisclaimerAccepted" class="disclaimer-wrap">
+      <div class="disclaimer-box">
+        <p class="disclaimer-title">שימו לב</p>
+        <p class="disclaimer-body">
+          המילון מבוסס על מקורות לשוניים שונים. חלק מהפירושים לקוחים מהעברית המודרנית ועשויים
+          שלא לשקף את המשמעות המקורית של המילה במקורות הקדומים.
+        </p>
+        <p class="disclaimer-body">לכל שאלה הלכתית או לשונית יש לפנות לרב מוסמך.</p>
+        <button class="disclaimer-btn" @click="settings.acceptDictionaryDisclaimer()">הבנתי, המשך</button>
       </div>
     </div>
 
-    <div v-if="noResults" class="dict-no-results">
-      <template v-if="suggestions.length">
-        <span class="dict-suggestions-label">אולי התכוונת ל: </span>
-        <span v-for="(w, i) in suggestions" :key="w">
-          <button class="dict-suggestion-link" @click="onSelect(w)">{{ w }}</button><span v-if="i < suggestions.length - 1">, </span>
-        </span>
-      </template>
-      <span v-else>לא נמצאו תוצאות</span>
-    </div>
+    <template v-else>
+      <div class="dict-body">
+        <div v-if="searching" class="dict-state">מחפש...</div>
 
-    <BottomSearchBar>
-      <template #left>
-        <IconSearch20Regular class="search-icon" />
-      </template>
-      <input
-        ref="searchInputRef"
-        :value="searchQuery"
-        class="dict-search-input"
-        type="text"
-        placeholder="חפש מילה"
-        spellcheck="true"
-        autocomplete="on"
-        @input="searchQuery = ($event.target as HTMLInputElement).value"
-      />
-    </BottomSearchBar>
+        <DictionaryWordPage
+          v-else-if="pageData"
+          :data="pageData"
+          :font-px="fontPx"
+          @select="onSelect"
+        />
+
+        <div v-else class="dict-empty">
+          <IconSearch20Regular class="dict-empty-icon" />
+        </div>
+      </div>
+
+      <div v-if="noResults" class="dict-no-results">
+        <template v-if="suggestions.length">
+          <span class="dict-suggestions-label">אולי התכוונת ל: </span>
+          <span v-for="(w, i) in suggestions" :key="w">
+            <button class="dict-suggestion-link" @click="onSelect(w)">{{ w }}</button><span v-if="i < suggestions.length - 1">, </span>
+          </span>
+        </template>
+        <span v-else>לא נמצאו תוצאות</span>
+      </div>
+
+      <BottomSearchBar>
+        <template #left>
+          <IconSearch20Regular class="search-icon" />
+        </template>
+        <input
+          ref="searchInputRef"
+          :value="searchQuery"
+          class="dict-search-input"
+          type="text"
+          placeholder="חפש מילה"
+          spellcheck="true"
+          autocomplete="on"
+          @input="searchQuery = ($event.target as HTMLInputElement).value"
+        />
+      </BottomSearchBar>
+    </template>
   </div>
 </template>
 
@@ -276,4 +291,52 @@ function onSelect(headword: string) {
 }
 .dict-search-input::placeholder { color: var(--text-secondary); }
 .dict-search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
+
+/* Disclaimer */
+.disclaimer-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px clamp(16px, 4vw, 32px);
+}
+.disclaimer-box {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 360px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  direction: rtl;
+}
+.disclaimer-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+.disclaimer-body {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+.disclaimer-btn {
+  margin-top: 4px;
+  height: 36px;
+  background: var(--accent-color);
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.disclaimer-btn:hover {
+  opacity: 0.9;
+}
 </style>

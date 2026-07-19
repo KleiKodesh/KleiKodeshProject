@@ -241,6 +241,7 @@ export const KEYS = {
   SETTINGS_ZMANIM_CITY: 'zmanim.city',
   SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
+  SETTINGS_DICTIONARY_DISCLAIMER: 'dictionary.disclaimerAccepted',
   SETTINGS_DICTIONARY_ZOOM: 'dictionaryZoom',
   SETTINGS_SEARCH_CONTEXT_MARGIN: 'search.contextMargin',
   SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
