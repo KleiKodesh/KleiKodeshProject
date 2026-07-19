@@ -81,6 +81,13 @@ public sealed class IdleMemoryTrimmer(
         //    transparently on the next query.
         SqliteConnection.ClearAllPools();
 
+        // 1b. Drop the catalog TOC index's long-lived Lucene reader/searcher (segment
+        //     term indexes, doc-values, stored-field buffers). Unlike the FTS reader
+        //     (opened per search session, closed with it), this one stays open across
+        //     idle periods by design, so it must be released explicitly. Reopens lazily
+        //     on the next catalog search. No-op while a build holds the reader.
+        catalogToc.ReleaseIdleResources();
+
         // 2. Full compacting GC, aggressive mode: also compacts the LOH and hands freed
         //    heap segments back to the OS instead of retaining them for reuse.
         GC.Collect(GC.MaxGeneration, GCCollectionMode.Aggressive, blocking: true, compacting: true);
