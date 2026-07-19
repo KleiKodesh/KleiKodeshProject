@@ -167,6 +167,24 @@ function onClearSearch() {
   handleClearSearch()
 }
 
+// The address bar (and anything else outside this page) launches a search by
+// patching the tab's searchQuery. When the tab is already on /search the page
+// doesn't remount and restoreFromTab never re-runs, so watch the tab's saved
+// query and execute external changes here. The page's own onSearch also patches
+// the tab, but by then the local input already holds that value — the equality
+// guard skips those self-updates.
+watch(
+  () => paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery,
+  (q) => {
+    if (!q || q === searchQuery.value) return
+    searchQuery.value = q
+    const { term, atFilters: tokens } = parseSearchQuery(q)
+    setAtFilters(tokens)
+    paneNavigation.updateActiveTab({ title: `חיפוש: ${term || q}` })
+    if (term) handleSearch(term)
+  },
+)
+
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
   lastScrollIndex = pos.scrollIndex
   lastScrollOffset = pos.scrollOffset

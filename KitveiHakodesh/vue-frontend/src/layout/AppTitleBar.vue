@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, defineAsyncComponent } from 'vue'
 import { useEventListener, useWindowSize } from '@vueuse/core'
-import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useAppNavigation } from '@/composables/useAppNavigation'
@@ -20,9 +19,8 @@ import {
   IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
-// Both dropdowns are v-if — lazy-load them so their imports (including fluent-color icons)
-// don't add to the cold-start parse cost. They load on first open, which is imperceptible.
-const AppTitleBarTabDropdown = defineAsyncComponent(() => import('./AppTitleBarTabDropdown.vue'))
+// The dropdown is v-if — lazy-load it so its imports (including fluent-color icons)
+// don't add to the cold-start parse cost. It loads on first open, which is imperceptible.
 const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarNavDropdown.vue'))
 const AddressBar = defineAsyncComponent(() => import('./AddressBar.vue'))
 import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
@@ -32,7 +30,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { useThemeStore } from '@/theme/themeStore'
-import { toggleFullscreen, toggleChromeTabList, isVstoEnvironment as isVsto, hasNativeChromeTabs } from '@/webview-host/bridge'
+import { toggleFullscreen, isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -79,7 +77,6 @@ function isTitleBarButtonVisible(buttonId: string): boolean {
 }
 
 const activeTab = computed(() => pane.activeTab.value)
-const dropdownOpen = ref(false)
 const navDropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
 const navBtnRef = ref<HTMLElement | null>(null)
@@ -93,22 +90,16 @@ const isPdfTab = computed(
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
-// Interaction hint depends on the environment (single-click action differs),
-// but double-click always opens the quick-navigation flow. The Ctrl+E shortcut
-// (focus search) is appended to the end of the second line in both variants.
+// A click always enters search mode; the address-bar dropdown doubles as the
+// tab list (shown while the field is empty / has no results).
 // Each hint line is separated by a newline (tooltips render \n as line breaks).
-const barTitleHint = computed(() =>
-  hasNativeChromeTabs
-    ? 'לחץ לניווט מהיר\nלחיצה כפולה לניווט מהיר באפליקציה (Ctrl+E)'
-    : 'לחץ להצגת רשימת הלשוניות (Ctrl+T)\nלחיצה כפולה לניווט מהיר באפליקציה (Ctrl+E)',
-)
+const barTitleHint = 'לחץ לניווט מהיר ולרשימת הלשוניות (Ctrl+E)\nרשימת לשוניות (Ctrl+T)'
 
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
     ? activeTab.value.title + ' · ' + activeTab.value.tocPath
     : activeTab.value?.title
-  const hint = barTitleHint.value
-  return full ? full + '\n' + hint : hint
+  return full ? full + '\n' + barTitleHint : barTitleHint
 })
 
 const toolbarTitle = computed(() => {
@@ -122,27 +113,14 @@ const pdfFilterTitle = computed(() =>
   settingsStore.pdfPageFilters ? 'בטל החלת ערכת נושא על דפי PDF' : 'החל ערכת נושא על דפי PDF',
 )
 
-const { justClosed } = useDropdownClose(barRef, () => {
-  dropdownOpen.value = false
-})
-
-function toggleTabDropdown() {
-  if (justClosed.value) return
-  dropdownOpen.value = !dropdownOpen.value
-}
-
 // ── Title-bar search (Explorer-style address bar) ─────────────────────────────
 // The title becomes an editable search field, reusing the home-page search.
-// The gesture split depends on whether a native chrome tab strip is present:
-//   - Native strip present (standalone/demo): the strip already lists the tabs,
-//     so the Vue tab dropdown isn't used here — a single click on the Vue title
-//     bar switches straight to search mode.
-//   - No native strip (VSTO task pane AND the dev browser): single click opens
-//     the Vue tab-list dropdown; double-click switches to search mode.
+// A single click always enters search mode — the address bar's dropdown shows
+// the pane's tab list while the field is empty (or has no results), so it
+// replaces the old dedicated tab-list dropdown in every environment.
 const searchMode = ref(false)
 
 function enterSearchMode() {
-  dropdownOpen.value = false
   // The address bar lives inside the header — make sure it's visible first
   // (Ctrl+H may have hidden it).
   titleBarVisible.value = true
@@ -151,31 +129,11 @@ function enterSearchMode() {
 
 function onTitleBarClick() {
   if (searchMode.value) return
-  if (hasNativeChromeTabs) {
-    // Standalone/demo: single click = search mode.
-    enterSearchMode()
-  } else {
-    // VSTO / dev browser: single click = Vue tab list; search via double-click.
-    toggleTabDropdown()
-  }
-}
-
-function onTitleBarDblClick() {
-  // Double-click always enters search mode (the primary gesture where a single
-  // click opens the tab list, and a harmless equivalent to a single click where
-  // it already enters search mode).
-  if (!hasNativeChromeTabs) dropdownOpen.value = false
   enterSearchMode()
 }
 
 function toggleNavDropdown() {
   navDropdownOpen.value = !navDropdownOpen.value
-  dropdownOpen.value = false
-}
-
-function selectTab(id: string) {
-  pane.switchTab(id)
-  dropdownOpen.value = false
 }
 
 // Keyboard shortcuts — each pane installs its own handler.
@@ -263,11 +221,10 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       return
     } else if (e.ctrlKey && e.code === 'KeyT') {
       e.preventDefault()
-      // The standalone/demo app shows the tab list in the native chrome strip's
-      // dropdown (works in fullscreen); VSTO and the dev browser use the Vue
-      // title-bar dropdown.
-      if (hasNativeChromeTabs) toggleChromeTabList()
-      else toggleTabDropdown()
+      // Toggle the address bar in every environment — its dropdown doubles as
+      // the tab list (empty field = tab list).
+      if (searchMode.value) searchMode.value = false
+      else enterSearchMode()
       return
     } else if (e.ctrlKey && e.code === 'KeyE') {
       // Focus the address bar (Explorer/omnibox-style). Enters search mode; the
@@ -359,7 +316,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
 <template>
   <!-- Keyboard event listener is always active (above), but only render the visual header when titleBarVisible is true -->
   <div ref="barRef" class="title-bar-container" :class="{ hidden: !titleBarVisible }">
-    <header class="title-bar" @click="onTitleBarClick" @dblclick="onTitleBarDblClick">
+    <header class="title-bar" @click="onTitleBarClick">
     <div class="bar-start">
       <div class="nav-btn-wrap">
         <button
@@ -473,17 +430,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     </div>
 
   </header>
-
-  <!-- Tab dropdown — kept outside header so it stays visible when header is hidden -->
-  <AppTitleBarTabDropdown
-    v-if="dropdownOpen"
-    :tabs="pane.tabs.value"
-    :active-tab-id="pane.activeTabId.value"
-    @select="selectTab"
-    @close="pane.closeTab"
-    @dismiss="dropdownOpen = false"
-    @click.stop
-  />
 
   <!-- Nav dropdown — kept outside header so it stays visible when header is hidden -->
   <AppTitleBarNavDropdown
