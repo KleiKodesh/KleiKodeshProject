@@ -257,7 +257,10 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
 .sort-dropdown {
   position: absolute;
   bottom: calc(100% + 6px);
-  right: 0;
+  /* The sort toggle sits at the far-left corner of the (RTL) bar, so anchoring the
+     dropdown's right edge would push it off the left of the screen. Anchor its left
+     edge to the toggle's left edge instead, so it opens rightward into the viewport. */
+  left: 0;
   min-width: 140px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
