@@ -3,7 +3,7 @@ import AppShell from '@/layout/AppShell.vue'
 import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
-import { ref, computed, defineAsyncComponent, onMounted, watch } from 'vue'
+import { ref, computed, defineAsyncComponent, watch } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import { resetting } from '@/features/settings/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -42,10 +42,15 @@ watch(isSplitViewAvailable, (available) => {
   if (!available && bookViewStore.splitViewEnabled) bookViewStore.disableSplitView()
 })
 
-// Ensure pane 2 always has at least one tab when split view activates
-onMounted(() => {
-  if (bookViewStore.splitViewEnabled) tabStore.ensurePane2HasTab()
-})
+// Restoring with split view on: pane 2 must have a tab, and pane 1's restored
+// activeTabId must not point at a pane-2 tab (possible when the active tab at
+// exit was a non-persisted singleton and the persist fallback picked a pane-2
+// tab) — that would render the same tab in both panes. Runs synchronously at
+// setup, before either AppShell first renders.
+if (bookViewStore.splitViewEnabled) {
+  tabStore.reclaimPane1ActiveForSplit()
+  tabStore.ensurePane2HasTab()
+}
 
 // When split view is (re-)enabled, pane 2 takes its orphaned tabs back: pane 1 must
 // stop displaying an adopted orphan, and pane 2 must have at least one tab.

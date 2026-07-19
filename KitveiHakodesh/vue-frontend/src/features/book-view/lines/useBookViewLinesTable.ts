@@ -155,7 +155,11 @@ export function useLines(bookId: () => number | undefined) {
     activeWorkers = 0
     slotState = new Uint8Array(0)
 
-    const metadataPromise = getBookById(id).catch(() => undefined)
+    let metadataFailed = false
+    const metadataPromise = getBookById(id).catch(() => {
+      metadataFailed = true
+      return undefined
+    })
 
     // Kick off the first chunk immediately alongside metadata — don't wait.
     markRange(0, CHUNK_SIZE, SLOT_PENDING)
@@ -166,7 +170,11 @@ export function useLines(bookId: () => number | undefined) {
 
     const totalLines = book?.totalLines ?? 0
     hasTeamim.value = !!(book?.hasTeamim)
-    hasCommentaries.value = !!(
+    // Fail OPEN on a metadata error: false would silently disable the commentary
+    // buttons and force-close the panel with no indication anything went wrong
+    // (the panel itself surfaces load errors). False is reserved for a book that
+    // genuinely has no connections.
+    hasCommentaries.value = metadataFailed || !!(
       book?.hasTargumConnection ||
       book?.hasReferenceConnection ||
       book?.hasSourceConnection ||

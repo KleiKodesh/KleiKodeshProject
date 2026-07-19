@@ -108,6 +108,9 @@ export function useCommentary(
   const staticFilterGroups = ref<CommentaryGroup[]>([])
   const staticFilterGroupsLoaded = ref(false)
   const loading = ref(false)
+  // Set when load() fails (DB/bridge error, e.g. a seforim DB missing the links
+  // tables) — the panel shows an error message instead of a silent empty state.
+  const loadError = ref(false)
   const booksDataStore = useBooksDataStore()
   let staticFilterLoadToken = 0
   // Per-instance cache — scoped to this tab's book, cleared when the composable is destroyed
@@ -229,6 +232,7 @@ export function useCommentary(
     groups.value = []
     contentRequested.clear()
     loading.value = true
+    loadError.value = false
     try {
       // Fire all pre-flight work in parallel:
       // - catalog + commentary metadata (needed by allBooksMap for group building)
@@ -322,6 +326,11 @@ export function useCommentary(
           groups.value = updated
         }
       }
+    } catch {
+      // Link/content queries failed (older or mismatched seforim DB, service
+      // error). Without this catch the rejection was unhandled and the panel
+      // stayed empty forever with no indication anything went wrong.
+      if (loadedForLineId === lineId) loadError.value = true
     } finally {
       // Keep the spinner up if the effective ID set has already changed since this
       // load started — the fallback watcher is about to fire another load().
@@ -354,6 +363,7 @@ export function useCommentary(
         loadedForLineId = null
         loadedIdsSignature = null
         groups.value = []
+        loadError.value = false
         return
       }
       if (selectedLineIds() == null) await nextTick()
@@ -455,6 +465,7 @@ export function useCommentary(
     filterGroups,
     staticFilterGroups,
     loading,
+    loadError,
     staticFilterGroupsLoaded,
     ensureStaticFilterGroupsLoaded,
     requestContentPriority,

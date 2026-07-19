@@ -28,6 +28,9 @@ const props = defineProps<{
   hasToc: boolean
   hasCommentaries: boolean
   hasRelatedBooks: boolean
+  // This pane's active tab — zoom actions and the displayed percentages are
+  // scoped to it, so pane 2's toolbar never reads or writes pane 1's zoom.
+  tabId?: string
   bookId: number | undefined
   bookHasTeamim: boolean
   filterGroups: CommentaryGroup[]
@@ -69,16 +72,17 @@ const tocBtnRef = ref<HTMLElement | null>(null)
 let zoomInterval: ReturnType<typeof setInterval> | null = null
 let zoomDelayTimeout: ReturnType<typeof setTimeout> | null = null
 
+function zoomStep(direction: 'in' | 'out') {
+  if (direction === 'in') bookViewStore.zoomIn(props.tabId, props.bookId)
+  else bookViewStore.zoomOut(props.tabId, props.bookId)
+}
+
 function startContinuousZoom(direction: 'in' | 'out') {
   if (zoomInterval !== null || zoomDelayTimeout !== null) return
-  if (direction === 'in') bookViewStore.zoomIn()
-  else bookViewStore.zoomOut()
+  zoomStep(direction)
   zoomDelayTimeout = setTimeout(() => {
     zoomDelayTimeout = null
-    zoomInterval = setInterval(() => {
-      if (direction === 'in') bookViewStore.zoomIn()
-      else bookViewStore.zoomOut()
-    }, 80)
+    zoomInterval = setInterval(() => zoomStep(direction), 80)
   }, 400)
 }
 
@@ -99,12 +103,25 @@ const autoSelectTopLineTitle = computed(() =>
     : 'סנכרן מפרשים\nמפרשים יתעדכנו אוטומטית לפי השורה העליונה',
 )
 
+// Pane-scoped zoom percentages — the store's `zoom`/`commentaryZoom` computeds
+// always reflect pane 1's active tab, so read this tab's values directly.
+const linesZoomPct = computed(() =>
+  props.tabId != null && props.bookId != null
+    ? bookViewStore.getLinesZoom(props.tabId, props.bookId)
+    : zoom.value,
+)
+const commentaryZoomPct = computed(() =>
+  props.tabId != null && props.bookId != null
+    ? bookViewStore.getCommentaryZoom(props.tabId, props.bookId)
+    : commentaryZoom.value,
+)
+
 const zoomOutTitle = computed(
-  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(zoom.value)}% | מפרשים: ${Math.round(commentaryZoom.value)}%\nאיפוס: Ctrl+0`,
+  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${Math.round(commentaryZoomPct.value)}%\nאיפוס: Ctrl+0`,
 )
 
 const zoomInTitle = computed(
-  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(zoom.value)}% | מפרשים: ${Math.round(commentaryZoom.value)}%\nאיפוס: Ctrl+0`,
+  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${Math.round(commentaryZoomPct.value)}%\nאיפוס: Ctrl+0`,
 )
 
 const commentaryModeTitle = computed(() => {

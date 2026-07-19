@@ -230,17 +230,35 @@ export const useBookViewStore = defineStore('bookView', () => {
     lsSet(KEYS.SETTINGS_SPLIT_VIEW_FRACTION, fraction)
   }
 
-  function zoomIn() {
-    zoom.value = zoomInUtil(zoom.value)
-    commentaryZoom.value = zoomInUtil(commentaryZoom.value)
+  // Resolve which tab's zoom a zoom action targets. Callers inside a pane pass
+  // their own (tabId, bookId) so pane 2's controls change pane 2's book — the
+  // no-arg fallback (pane 1's active tab) exists for legacy callers only. An
+  // explicit tabId with no bookId means "this pane isn't showing a book": no-op,
+  // never fall through to pane 1.
+  function zoomTarget(tabId?: string, bookId?: number): { tabId: string; bookId: number } | null {
+    if (tabId != null) return bookId != null ? { tabId, bookId } : null
+    const tab = tabStore.activeTab
+    if (tab.route !== '/book-view' || tab.bookId == null) return null
+    return { tabId: tab.id, bookId: tab.bookId }
   }
-  function zoomOut() {
-    zoom.value = zoomOutUtil(zoom.value)
-    commentaryZoom.value = zoomOutUtil(commentaryZoom.value)
+
+  function zoomIn(tabId?: string, bookId?: number) {
+    const t = zoomTarget(tabId, bookId)
+    if (!t) return
+    setLinesZoom(t.tabId, t.bookId, zoomInUtil(getLinesZoom(t.tabId, t.bookId)))
+    setCommentaryZoom(t.tabId, t.bookId, zoomInUtil(getCommentaryZoom(t.tabId, t.bookId)))
   }
-  function resetZoom() {
-    zoom.value = resetZoomUtil()
-    commentaryZoom.value = resetZoomUtil()
+  function zoomOut(tabId?: string, bookId?: number) {
+    const t = zoomTarget(tabId, bookId)
+    if (!t) return
+    setLinesZoom(t.tabId, t.bookId, zoomOutUtil(getLinesZoom(t.tabId, t.bookId)))
+    setCommentaryZoom(t.tabId, t.bookId, zoomOutUtil(getCommentaryZoom(t.tabId, t.bookId)))
+  }
+  function resetZoom(tabId?: string, bookId?: number) {
+    const t = zoomTarget(tabId, bookId)
+    if (!t) return
+    setLinesZoom(t.tabId, t.bookId, resetZoomUtil())
+    setCommentaryZoom(t.tabId, t.bookId, resetZoomUtil())
   }
 
   // ── TOC bridge — per-tab registration for title bar navigation ────────────

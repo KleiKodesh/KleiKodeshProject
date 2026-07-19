@@ -15,6 +15,7 @@ import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useToc } from './toc/useBookViewToc'
 import { useLines } from './lines/useBookViewLinesTable'
@@ -115,6 +116,14 @@ export function useBookView(
   // resolve before any line-tap commentary load fires its reverse queries.
   void ensureConnectionTypeNamesLoaded()
 
+  // Warm the catalog + commentary metadata in the background too. The first
+  // commentary toggle otherwise pays for both (the app's biggest payloads)
+  // serialized before anything renders — the "first toggle hangs" report.
+  // Both are cached globally, so this is a no-op when already loaded.
+  const booksDataStore = useBooksDataStore()
+  void booksDataStore.ensureLoaded().catch(() => {})
+  void booksDataStore.ensureCommentaryMetadataLoaded().catch(() => {})
+
   const hasToc = computed(() => tocLoaded.value && tocEntries.value.length > 0)
 
   // ── Core reactive state ───────────────────────────────────────────────────
@@ -183,7 +192,7 @@ export function useBookView(
 
   // ── Commentary data ───────────────────────────────────────────────────────
 
-  const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, requestContentPriority } = useCommentary(
+  const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, loadError: commentaryLoadError, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, requestContentPriority } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
@@ -435,9 +444,9 @@ export function useBookView(
     commentaryScrollIndex: commentaryPanel.commentaryScrollIndex,
     commentaryScrollOffset: commentaryPanel.commentaryScrollOffset,
     // data
-    bookId,
+    tabId, bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, requestContentPriority,
+    groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
     altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
     // commentary annotation & render (hoisted — survive v-if toggle)

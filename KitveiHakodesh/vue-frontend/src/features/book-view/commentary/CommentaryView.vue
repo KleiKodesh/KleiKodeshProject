@@ -27,6 +27,9 @@ const props = defineProps<{
   selectedLineId: number | null
   groups: CommentaryGroup[]
   loading: boolean
+  // True when the commentary load failed (DB/bridge error) — show an error
+  // message instead of the misleading "no commentaries for this line".
+  loadError?: boolean
   visibilityList: CommentaryVisibilityItem[]
   // Hoisted annotation & render state — initialized in useBookView, survive v-if toggle
   getHighlightsForLine: (lineId: number) => Highlight[]
@@ -363,7 +366,9 @@ const activeTocPath = computed(() =>
         <div v-else-if="!flatItems.length" class="state-overlay">
           <div class="hint-container">
             <div class="hint-title">{{
-              props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו'
+              props.loadError
+                ? 'טעינת המפרשים נכשלה — ייתכן שמסד הספרים חסר או שאינו מעודכן'
+                : props.selectedLineId == null ? 'בחר שורה לצפייה במפרשים' : 'אין מפרשים לשורה זו'
             }}</div>
             <div v-if="props.selectedLineId == null" class="hint-instructions">
               <div class="hint-row">לחץ על שורה מהספר כדי להציג מפרשים</div>
