@@ -359,12 +359,20 @@ export const useLocalFileStore = defineStore('localFile', () => {
    * to the result — recents picked from pane 2 (address bar, home tiles) must not land
    * in pane 1. Follow-up patches after awaits go by tabId, not "whatever is active now".
    */
-  async function openFromHistory(entry: import('@/stores/recentlyOpenedStore').RecentlyOpenedEntry): Promise<void> {
+  async function openFromHistory(
+    entry: import('@/stores/recentlyOpenedStore').RecentlyOpenedEntry,
+    openInNewTab = false,
+  ): Promise<void> {
     const { route, title, localFilePath, localFileHbBookId, localFileHbBookTitle } = entry
+
+    // For a Ctrl/⌘-click, open a fresh tab in the target pane; otherwise navigate
+    // the active tab in place. Both return the id so post-await patches target it.
+    const placeTab = (fields: Omit<Tab, 'id' | 'pane'>): string =>
+      openInNewTab ? openInTargetPane(fields) : updateActiveInTargetPane(fields)
 
     if (localFileHbBookId) {
       const localFolder = useSettingsStore().hebrewBooksLocalFolder || undefined
-      const tabId = updateActiveInTargetPane({
+      const tabId = placeTab({
         route: '/pdf-view',
         title,
         localFileName: title,
@@ -390,12 +398,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (localFilePath) {
       const ext = localFilePath.substring(localFilePath.lastIndexOf('.')).toLowerCase()
       if (ext === '.txt') {
-        updateActiveInTargetPane({ route: '/txt-view', title, localFileName: entry.localFileName ?? title, localFilePath })
+        placeTab({ route: '/txt-view', title, localFileName: entry.localFileName ?? title, localFilePath })
         return
       }
       const isHtmlLike = ext === '.htm' || ext === '.html'
       const fileRoute: import('@/stores/tabStore').TabRoute = isHtmlLike ? '/html-view' : '/pdf-view'
-      const tabId = updateActiveInTargetPane({ route: fileRoute, title, localFileName: entry.localFileName ?? title, localFilePath, localFileVirtualUrl: undefined, localFileConverting: false })
+      const tabId = placeTab({ route: fileRoute, title, localFileName: entry.localFileName ?? title, localFilePath, localFileVirtualUrl: undefined, localFileConverting: false })
       const res = await restoreLocalFile(localFilePath)
       if (res) {
         tabStore.updateTab(tabId, { localFileVirtualUrl: res.url })
@@ -404,7 +412,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
     }
 
     // Dev mode: no real path, navigate directly (blob URL is gone — file must be re-opened)
-    updateActiveInTargetPane({ route, title, localFileName: entry.localFileName ?? title })
+    placeTab({ route, title, localFileName: entry.localFileName ?? title })
   }
 
   return {

@@ -14,7 +14,10 @@ const props = defineProps<{
   stickyHeaders?: boolean
 }>()
 
-defineEmits<{ toggle: []; select: [] }>()
+// `select` carries the originating MouseEvent when triggered by a click, so
+// consumers can honour Ctrl/⌘-click (open in new tab). Keyboard activation
+// (Space) emits no event — the payload is optional and undefined there.
+defineEmits<{ toggle: []; select: [event?: MouseEvent] }>()
 
 const indentPx = () => `${props.node.level * (props.indent ?? 10)}px`
 const rh = () => `${props.rowHeight ?? 28}px`
@@ -49,7 +52,11 @@ const fs = () => props.fontSize ?? '0.8rem'
       class="chevron-placeholder"
       :style="{ marginInlineStart: indentPx() }"
     />
-    <div class="tree-label" @click.stop="$emit('select')">
+    <div
+      class="tree-label"
+      @click.stop="$emit('select', $event)"
+      @auxclick.middle.stop="$emit('select', $event)"
+    >
       <slot>{{ node.text }}</slot>
     </div>
   </div>

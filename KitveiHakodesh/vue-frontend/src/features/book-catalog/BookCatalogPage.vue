@@ -136,22 +136,28 @@ onMounted(() => {
   nextTick(() => searchInputRef.value?.focus())
 })
 
-function onSelectBook(book: BookRow) {
-  paneNavigation.updateActiveTab({
-    title: book.title,
-    route: '/book-view',
-    bookId: book.id,
-    openToc: true,
-  })
+function onSelectBook(book: BookRow, openInNewTab = false) {
+  paneNavigation.openOrUpdateActiveTab(
+    {
+      title: book.title,
+      route: '/book-view',
+      bookId: book.id,
+      openToc: true,
+    },
+    openInNewTab,
+  )
 }
-function onSelectToc(item: TocFsItem) {
-  paneNavigation.updateActiveTab({
-    title: item.book.title,
-    route: '/book-view',
-    bookId: item.book.id,
-    openTocEntryId: item.tocEntryId,
-    openTocLineIndex: item.tocLineIndex ?? undefined,
-  })
+function onSelectToc(item: TocFsItem, openInNewTab = false) {
+  paneNavigation.openOrUpdateActiveTab(
+    {
+      title: item.book.title,
+      route: '/book-view',
+      bookId: item.book.id,
+      openTocEntryId: item.tocEntryId,
+      openTocLineIndex: item.tocLineIndex ?? undefined,
+    },
+    openInNewTab,
+  )
 }
 function onSearchEnter() {
   if (isSearching.value && searchItems.value.length === 1) onSelectBook(searchItems.value[0]!.book)
@@ -213,6 +219,8 @@ function onSearchEnter() {
           @select-book="onSelectBook"
           @enter-folder="enter"
         />
+        <!-- select-book/select-toc emit (item, openInNewTab) — the boolean is
+             forwarded straight through to the pane-navigation helper. -->
         <template v-if="isSearching">
           <LoadingAnimation v-if="tocSearching && !searchItems.length" />
           <BookCatalogSearch

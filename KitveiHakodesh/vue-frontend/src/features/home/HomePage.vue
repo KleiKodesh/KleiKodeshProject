@@ -31,6 +31,7 @@ import { navigateToDafYomi } from './dafYomiNavigation'
 import { useNextZman } from './useNextZman'
 import NextZmanPopup from './NextZmanPopup.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useTabStore } from '@/stores/tabStore'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
@@ -46,6 +47,7 @@ const TILE_GAP = 16
 
 const { navigate } = useAppNavigation()
 const paneNavigation = usePaneNavigation()
+const tabStore = useTabStore()
 const recentlyOpenedStore = useRecentlyOpenedStore()
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
@@ -310,26 +312,36 @@ function closeSearchDropdown() {
   homeSearchQuery.value = ''
 }
 
-function onSelectCatalogBook(bookId: number, bookTitle: string) {
+function onSelectCatalogBook(bookId: number, bookTitle: string, openInNewTab = false) {
   closeSearchDropdown()
-  paneNavigation.updateActiveTab({ route: '/book-view', title: bookTitle, bookId })
+  paneNavigation.openOrUpdateActiveTab(
+    { route: '/book-view', title: bookTitle, bookId },
+    openInNewTab,
+  )
 }
 
-function onSelectCatalogToc(item: TocFsItem) {
+function onSelectCatalogToc(item: TocFsItem, openInNewTab = false) {
   closeSearchDropdown()
-  paneNavigation.updateActiveTab({
-    route: '/book-view',
-    title: item.book.title,
-    bookId: item.book.id,
-    openTocEntryId: item.tocEntryId,
-    openTocLineIndex: item.tocLineIndex ?? undefined,
-  })
+  paneNavigation.openOrUpdateActiveTab(
+    {
+      route: '/book-view',
+      title: item.book.title,
+      bookId: item.book.id,
+      openTocEntryId: item.tocEntryId,
+      openTocLineIndex: item.tocLineIndex ?? undefined,
+    },
+    openInNewTab,
+  )
 }
 
-function onSelectHebrewBook(book: HebrewBook) {
+function onSelectHebrewBook(book: HebrewBook, openInNewTab = false) {
   closeSearchDropdown()
   hebrewBooksHistoryStore.trackAccess(book)
-  const tabId = paneNavigation.activeTabId
+  // Download lifecycle is tab-id-driven (see useHebrewBooks.openBook) — for a
+  // Ctrl/⌘-click open a fresh placeholder tab and target its id.
+  const tabId = openInNewTab
+    ? paneNavigation.openTab({ route: '/pdf-view', title: book.title }).id
+    : paneNavigation.activeTabId
   localFileStore.startHbDownload(book.title, tabId)
   triggerHbDownload(
     String(book.id),
@@ -341,7 +353,7 @@ function onSelectHebrewBook(book: HebrewBook) {
   ).catch(() => {})
 }
 
-async function onSelectFile(fullPath: string, fileName: string) {
+async function onSelectFile(fullPath: string, fileName: string, openInNewTab = false) {
   closeSearchDropdown()
   if (!isHosted) return
 
@@ -349,8 +361,18 @@ async function onSelectFile(fullPath: string, fileName: string) {
   const dotIndex = fileName.lastIndexOf('.')
   const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
 
+  const isHtmlLike = extension === '.htm' || extension === '.html'
+  const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+
+  // Capture the target tab id up front (a new tab for Ctrl/⌘-click, else the
+  // current active tab) and patch it by id — restoreLocalFile awaits, and the
+  // active tab may change during that await.
+  const targetTabId = openInNewTab
+    ? paneNavigation.openTab({ route, title: titleWithoutExtension }).id
+    : paneNavigation.activeTabId
+
   if (extension === '.txt') {
-    paneNavigation.updateActiveTab({
+    tabStore.updateTab(targetTabId, {
       route: '/txt-view',
       title: titleWithoutExtension,
       localFileName: fileName,
@@ -360,12 +382,10 @@ async function onSelectFile(fullPath: string, fileName: string) {
     return
   }
 
-  const isHtmlLike = extension === '.htm' || extension === '.html'
-  const route = isHtmlLike ? '/html-view' : '/pdf-view'
   const restored = await restoreLocalFile(fullPath)
   if (!restored?.url) return
 
-  paneNavigation.updateActiveTab({
+  tabStore.updateTab(targetTabId, {
     route,
     title: titleWithoutExtension,
     localFileName: fileName,
@@ -413,12 +433,15 @@ async function onTap(label: string) {
   await navigate(label)
 }
 
-function openRecentEntry(entry: RecentlyOpenedEntry) {
+function openRecentEntry(entry: RecentlyOpenedEntry, openInNewTab = false) {
   if (entry.route === '/book-view' && entry.bookId !== undefined) {
-    paneNavigation.updateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId })
+    paneNavigation.openOrUpdateActiveTab(
+      { route: '/book-view', title: entry.title, bookId: entry.bookId },
+      openInNewTab,
+    )
     return
   }
-  localFileStore.openFromHistory(entry)
+  localFileStore.openFromHistory(entry, openInNewTab)
 }
 
 // ── Recently-opened tile actions (pin / remove) ─────────────────────────────────
@@ -489,7 +512,7 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
           :color="RECENTLY_OPENED_ICON_MAP[entry.route]!.color"
           :pinned="entry.pinned"
           actions
-          @tap="openRecentEntry(entry)"
+          @tap="openRecentEntry(entry, $event)"
           @keydown="onTileKeydown($event, tiles.length + i)"
           @toggle-pin="onTogglePinRecent(entry)"
           @remove="onRemoveRecent(entry)"

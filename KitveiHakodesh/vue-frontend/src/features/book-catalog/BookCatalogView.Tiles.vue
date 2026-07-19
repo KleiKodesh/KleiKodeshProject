@@ -5,16 +5,19 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
-const emit = defineEmits<{ selectBook: [BookRow]; enterFolder: [CategoryNode] }>()
+const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
 
 const tilesEl = ref<HTMLElement | null>(null)
 
-function activateIndex(index: number) {
+function activateIndex(index: number, openInNewTab = false) {
   const item = props.items[index]
   if (!item) return
-  item.kind === 'folder' ? emit('enterFolder', item.node) : emit('selectBook', item.book)
+  item.kind === 'folder'
+    ? emit('enterFolder', item.node)
+    : emit('selectBook', item.book, openInNewTab)
 }
 
 function getTitle(item: FsItem) {
@@ -31,9 +34,9 @@ defineExpose({
   focusContainer: () => tilesEl.value?.focus(),
 })
 
-function selectItem(i: number) {
+function selectItem(i: number, event?: MouseEvent) {
   focusedIndex.value = i
-  activateIndex(i)
+  activateIndex(i, wantsNewTab(event))
 }
 </script>
 
@@ -47,7 +50,8 @@ function selectItem(i: number) {
       data-nav-item
       :class="{ 'is-focused': containerFocused && focusedIndex === i }"
       :title="getTitle(item)"
-      @click="selectItem(i)"
+      @click="selectItem(i, $event)"
+      @auxclick.middle="selectItem(i, $event)"
     >
       <div class="tile-icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
         <IconFolder20Filled v-if="item.kind === 'folder'" /><IconBookRtl20 v-else />

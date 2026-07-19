@@ -56,6 +56,16 @@ export function useAppShellPane(paneId: 1 | 2) {
     else tabStore.updatePane2ActiveTab(patch)
   }
 
+  /**
+   * Open a document in a new tab (and focus it) when `openInNewTab` is true —
+   * this is the Ctrl/⌘-click path — otherwise update the active tab in place.
+   * `openTab` requires title + route, so callers using this must supply them.
+   */
+  function openOrUpdateActiveTab(patch: Partial<Omit<Tab, 'id'>>, openInNewTab = false) {
+    if (openInNewTab) openTab(patch as Omit<Tab, 'id'>)
+    else updateActiveTab(patch)
+  }
+
   function openNewHomeTab() {
     if (paneId === 1) {
       tabStore.openNewHomeTab()
@@ -119,6 +129,7 @@ export function useAppShellPane(paneId: 1 | 2) {
     openNewTab,
     openNewHomeTab,
     updateActiveTab,
+    openOrUpdateActiveTab,
     navigateToSingleton,
     goHome,
     togglePdfViewerTitleBar,

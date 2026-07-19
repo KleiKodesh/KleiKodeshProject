@@ -16,7 +16,9 @@ const props = defineProps<{
   searchTree?: SearchableTree
 }>()
 
-const emit = defineEmits<{ select: [node: TreeNodeItem] }>()
+// The optional MouseEvent lets consumers honour Ctrl/⌘-click; it is undefined
+// for keyboard activation.
+const emit = defineEmits<{ select: [node: TreeNodeItem, event?: MouseEvent] }>()
 
 const expanded = ref<Set<number>>(new Set())
 const rowRefs = ref<Map<number, HTMLElement>>(new Map())
@@ -84,9 +86,9 @@ const { focusedIndex, containerFocused } = useListKeys(
   (i) => emit('select', visibleNodes.value[i]!),
 )
 
-function selectNode(i: number, node: TreeNodeItem) {
+function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
   focusedIndex.value = i
-  emit('select', node)
+  emit('select', node, event)
 }
 
 // Use the passed-in SearchableTree or build one lazily only when a filter is active
@@ -132,7 +134,7 @@ const visibleNodes = computed(() => {
       :font-size="fontSize"
       :sticky-headers="stickyHeaders !== false"
       @toggle="toggle(node)"
-      @select="selectNode(i, node)"
+      @select="selectNode(i, node, $event)"
     >
       {{ filter ? (activeTree.displayPaths.get(node.id) ?? node.text) : node.text }}
     </TreeNode>

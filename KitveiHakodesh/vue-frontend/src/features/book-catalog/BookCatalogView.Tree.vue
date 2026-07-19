@@ -6,8 +6,9 @@ import { storeToRefs } from 'pinia'
 import TreeView from '@/components/TreeView.vue'
 import type { TreeNodeItem } from '@/components/treeTypes'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
-const emit = defineEmits<{ selectBook: [BookRow] }>()
+const emit = defineEmits<{ selectBook: [BookRow, boolean?] }>()
 const store = useBooksDataStore()
 const { compactMode } = storeToRefs(useSettingsStore())
 const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
@@ -55,9 +56,11 @@ const flatNodes = computed<FlatNode[]>(() => {
   return out
 })
 
-function onSelect(node: TreeNodeItem) {
+function onSelect(node: TreeNodeItem, event?: MouseEvent) {
   const flat = node as FlatNode
-  flat._book ? emit('selectBook', flat._book) : treeViewRef.value?.toggleNode(node)
+  flat._book
+    ? emit('selectBook', flat._book, wantsNewTab(event))
+    : treeViewRef.value?.toggleNode(node)
 }
 
 function focusContainer() {
@@ -80,4 +83,5 @@ defineExpose({ focusContainer, reset })
     font-size="14px"
     @select="onSelect"
   />
+  <!-- @select forwards (node, MouseEvent) so Ctrl/⌘-click opens in a new tab -->
 </template>

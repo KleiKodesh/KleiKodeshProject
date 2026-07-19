@@ -60,9 +60,13 @@ onMounted(() => {
   searchInputRef.value?.focus()
 })
 
-function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
+function onBookClicked(
+  i: number,
+  book: (typeof displayedBooks.value)[number],
+  openInNewTab = false,
+) {
   focusedIndex.value = i
-  openBook(book)
+  openBook(book, openInNewTab)
 }
 </script>
 
@@ -98,7 +102,7 @@ function onBookClicked(i: number, book: (typeof displayedBooks.value)[number]) {
               :book="displayedBooks[vRow.index]!"
               :focused="containerFocused && focusedIndex === vRow.index"
               :has-local-file="localFileBookIds.has(String(displayedBooks[vRow.index]!.id))"
-              @book-clicked="onBookClicked(vRow.index, displayedBooks[vRow.index]!)"
+              @book-clicked="(book, openInNewTab) => onBookClicked(vRow.index, book, openInNewTab)"
               @download-clicked="downloadBook"
               @delete-clicked="deleteLocalFile"
               @reveal-clicked="revealInFolder"

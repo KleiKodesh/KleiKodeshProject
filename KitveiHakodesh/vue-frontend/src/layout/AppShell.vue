@@ -31,6 +31,7 @@ provide('paneId', props.paneId)
 provide(PANE_NAVIGATION_KEY, {
   updateActiveTab: pane.updateActiveTab,
   openTab: pane.openTab,
+  openOrUpdateActiveTab: pane.openOrUpdateActiveTab,
   navigateToSingleton: pane.navigateToSingleton,
   switchTab: pane.switchTab,
   get activeTabId() { return pane.activeTabId.value },

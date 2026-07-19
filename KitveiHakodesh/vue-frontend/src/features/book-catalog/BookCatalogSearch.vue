@@ -6,13 +6,17 @@ import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
   items: SearchFsItem[]
   view: 'list' | 'tiles' | 'tree'
   searching: boolean
 }>()
-const emit = defineEmits<{ selectBook: [BookRow]; selectToc: [TocFsItem] }>()
+const emit = defineEmits<{
+  selectBook: [BookRow, boolean?]
+  selectToc: [TocFsItem, boolean?]
+}>()
 
 const scrollEl = ref<HTMLElement | null>(null)
 const tilesEl = ref<HTMLElement | null>(null)
@@ -52,8 +56,10 @@ function itemTooltip(item: SearchFsItem): string {
   return parts.join('\n')
 }
 
-function onSelect(item: SearchFsItem) {
-  item.kind === 'toc' ? emit('selectToc', item) : emit('selectBook', item.book)
+function onSelect(item: SearchFsItem, openInNewTab = false) {
+  item.kind === 'toc'
+    ? emit('selectToc', item, openInNewTab)
+    : emit('selectBook', item.book, openInNewTab)
 }
 
 defineExpose({
@@ -63,14 +69,14 @@ defineExpose({
   },
 })
 
-function selectListItem(i: number) {
+function selectListItem(i: number, event?: MouseEvent) {
   listFocused.value = i
-  onSelect(props.items[i]!)
+  onSelect(props.items[i]!, wantsNewTab(event))
 }
 
-function selectTileItem(i: number) {
+function selectTileItem(i: number, event?: MouseEvent) {
   tilesFocused.value = i
-  onSelect(props.items[i]!)
+  onSelect(props.items[i]!, wantsNewTab(event))
 }
 </script>
 
@@ -99,7 +105,8 @@ function selectTileItem(i: number) {
             'is-focused': listContainerFocused && listFocused === vRow.index,
           }"
           :title="itemTooltip(items[vRow.index]!)"
-          @click="selectListItem(vRow.index)"
+          @click="selectListItem(vRow.index, $event)"
+          @auxclick.middle="selectListItem(vRow.index, $event)"
         >
           <span v-if="view !== 'tree'" class="icon"><IconBookRtl20 /></span>
           <span class="item-text">
@@ -125,7 +132,8 @@ function selectTileItem(i: number) {
       data-nav-item
       :class="{ 'is-focused': tilesContainerFocused && tilesFocused === i }"
       :title="itemTooltip(item)"
-      @click="selectTileItem(i)"
+      @click="selectTileItem(i, $event)"
+      @auxclick.middle="selectTileItem(i, $event)"
     >
       <div class="tile-icon"><IconBookRtl20 /></div>
       <span class="tile-label">{{ itemTitle(item) }}</span>
