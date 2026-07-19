@@ -11,6 +11,12 @@ import type { Tab } from '@/stores/tabStore'
 export interface PaneNavigation {
   updateActiveTab: (patch: Partial<Omit<Tab, 'id'>>) => void
   openTab: (partial: Omit<Tab, 'id'>) => Tab
+  /**
+   * Open a document either in a new tab or in-place in the active tab.
+   * When `openInNewTab` is true (e.g. the user Ctrl/⌘-clicked an item) a fresh
+   * tab is opened and focused; otherwise the active tab is updated in place.
+   */
+  openOrUpdateActiveTab: (patch: Partial<Omit<Tab, 'id'>>, openInNewTab?: boolean) => void
   navigateToSingleton: (route: import('@/stores/tabStore').TabRoute, openInNewTab?: boolean) => void
   switchTab: (id: string) => void
   readonly activeTabId: string
@@ -33,6 +39,7 @@ export function usePaneNavigation(): PaneNavigation {
   return {
     updateActiveTab: pane.updateActiveTab,
     openTab: pane.openTab,
+    openOrUpdateActiveTab: pane.openOrUpdateActiveTab,
     navigateToSingleton: pane.navigateToSingleton,
     switchTab: pane.switchTab,
     get activeTabId() { return pane.activeTabId.value },

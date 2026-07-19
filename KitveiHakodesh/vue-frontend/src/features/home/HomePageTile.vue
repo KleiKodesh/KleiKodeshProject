@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import type { Component } from 'vue'
 import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
   label: string
@@ -13,7 +14,9 @@ const props = defineProps<{
   /** When set, the tile shows pin/delete actions (recently-opened tiles). */
   actions?: boolean
 }>()
-const emit = defineEmits<{ tap: []; togglePin: []; remove: [] }>()
+// `tap` carries whether the user held Ctrl/⌘ (open in new tab). Recently-opened
+// tiles honour it; the static navigation tiles ignore the flag.
+const emit = defineEmits<{ tap: [openInNewTab: boolean]; togglePin: []; remove: [] }>()
 
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
@@ -114,7 +117,13 @@ function onRemove() {
     @click.capture="onClickCapture"
     @contextmenu="onContextMenu"
   >
-    <button class="tile" data-nav-item title="לחץ Tab למעבר בין האפשרויות, Enter לפתיחה" @click="$emit('tap')">
+    <button
+      class="tile"
+      data-nav-item
+      title="לחץ Tab למעבר בין האפשרויות, Enter לפתיחה"
+      @click="$emit('tap', wantsNewTab($event))"
+      @auxclick.middle="$emit('tap', wantsNewTab($event))"
+    >
       <div class="tile-icon">
         <component
           :is="icon"

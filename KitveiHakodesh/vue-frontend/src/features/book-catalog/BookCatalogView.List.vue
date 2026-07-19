@@ -5,16 +5,19 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useListKeys } from '@/composables/useListKeyNav'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
-const emit = defineEmits<{ selectBook: [BookRow]; enterFolder: [CategoryNode] }>()
+const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
 
-function activateIndex(index: number) {
+function activateIndex(index: number, openInNewTab = false) {
   const item = props.items[index]
   if (!item) return
-  item.kind === 'folder' ? emit('enterFolder', item.node) : emit('selectBook', item.book)
+  item.kind === 'folder'
+    ? emit('enterFolder', item.node)
+    : emit('selectBook', item.book, openInNewTab)
 }
 
 function getTitle(item: FsItem) {
@@ -31,9 +34,9 @@ defineExpose({
   focusContainer: () => scrollEl.value?.focus(),
 })
 
-function selectItem(index: number) {
+function selectItem(index: number, event?: MouseEvent) {
   focusedIndex.value = index
-  activateIndex(index)
+  activateIndex(index, wantsNewTab(event))
 }
 </script>
 
@@ -47,7 +50,8 @@ function selectItem(index: number) {
         class="fs-item"
         data-nav-item
         :class="{ 'is-focused': containerFocused && focusedIndex === index }"
-        @click="selectItem(index)"
+        @click="selectItem(index, $event)"
+        @auxclick.middle="selectItem(index, $event)"
       >
         <span class="icon" :class="item.kind === 'folder' ? 'folder-icon' : 'book-icon'">
           <IconFolder20Filled v-if="item.kind === 'folder'" />

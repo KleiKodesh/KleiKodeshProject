@@ -19,6 +19,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useListKeys } from '@/composables/useListKeyNav'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 import type {
   CatalogSearchResult,
   HebrewBooksSearchResult,
@@ -67,13 +68,13 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  selectCatalogBook: [bookId: number, bookTitle: string]
-  selectCatalogToc: [item: TocFsItem]
-  selectHebrewBook: [book: HebrewBook]
-  selectFile: [fullPath: string, fileName: string]
+  selectCatalogBook: [bookId: number, bookTitle: string, openInNewTab: boolean]
+  selectCatalogToc: [item: TocFsItem, openInNewTab: boolean]
+  selectHebrewBook: [book: HebrewBook, openInNewTab: boolean]
+  selectFile: [fullPath: string, fileName: string, openInNewTab: boolean]
   selectTab: [id: string]
   closeTab: [id: string]
-  selectRecent: [entry: RecentlyOpenedEntry]
+  selectRecent: [entry: RecentlyOpenedEntry, openInNewTab: boolean]
   dropdownFocused: []
   dropdownBlurred: []
 }>()
@@ -133,15 +134,15 @@ const allItems = computed(() => {
   return items
 })
 
-function activateItem(index: number) {
+function activateItem(index: number, openInNewTab = false) {
   const item = allItems.value[index]
   if (!item) return
   if (item.kind === 'tab') emit('selectTab', item.id)
-  else if (item.kind === 'recent') emit('selectRecent', item.entry)
-  else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title)
-  else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item)
-  else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book)
-  else emit('selectFile', item.fullPath, item.fileName)
+  else if (item.kind === 'recent') emit('selectRecent', item.entry, openInNewTab)
+  else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title, openInNewTab)
+  else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item, openInNewTab)
+  else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book, openInNewTab)
+  else emit('selectFile', item.fullPath, item.fileName, openInNewTab)
 }
 
 const { focusedIndex, containerFocused } = useListKeys(
@@ -275,7 +276,8 @@ function getTabIcon(route: string): FileIconInfo {
           class="home-search-dropdown__item"
           :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
           data-nav-item
-          @click="emit('selectRecent', entry)"
+          @click="emit('selectRecent', entry, wantsNewTab($event))"
+          @auxclick.middle="emit('selectRecent', entry, wantsNewTab($event))"
         >
           <component
             :is="getRecentIcon(entry.route).component"
@@ -301,7 +303,8 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalog' && i.bookId === item.book.id) }"
             data-nav-item
-            @click="emit('selectCatalogBook', item.book.id, item.book.title)"
+            @click="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
+            @auxclick.middle="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
           >
             <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
             <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
@@ -317,7 +320,8 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
             data-nav-item
-            @click="emit('selectCatalogToc', item)"
+            @click="emit('selectCatalogToc', item, wantsNewTab($event))"
+            @auxclick.middle="emit('selectCatalogToc', item, wantsNewTab($event))"
           >
             <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
             <span class="home-search-dropdown__item-title">{{ item.book.title }} {{ item.tocPath }}</span>
@@ -340,7 +344,8 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.book.id === item.book.id) }"
             data-nav-item
-            @click="emit('selectHebrewBook', item.book)"
+            @click="emit('selectHebrewBook', item.book, wantsNewTab($event))"
+            @auxclick.middle="emit('selectHebrewBook', item.book, wantsNewTab($event))"
           >
             <IconBookOpen20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
             <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
@@ -363,7 +368,8 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'file' && i.fullPath === item.fullPath) }"
             data-nav-item
-            @click="emit('selectFile', item.fullPath, item.fileName)"
+            @click="emit('selectFile', item.fullPath, item.fileName, wantsNewTab($event))"
+            @auxclick.middle="emit('selectFile', item.fullPath, item.fileName, wantsNewTab($event))"
           >
             <component
               :is="getFileIcon(item.fileName).component"

@@ -8,6 +8,7 @@ import {
   IconDocumentGlobe20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const props = defineProps<{
@@ -15,7 +16,7 @@ const props = defineProps<{
   searching: boolean
 }>()
 
-const emit = defineEmits<{ openFile: [LocalFileSearchResult] }>()
+const emit = defineEmits<{ openFile: [LocalFileSearchResult, boolean?] }>()
 
 const scrollElement = ref<HTMLElement | null>(null)
 
@@ -36,13 +37,13 @@ const { focusedIndex, containerFocused } = useVirtualListKeys(
   (index) => onSelect(props.items[index]!),
 )
 
-function onSelect(item: LocalFileSearchResult) {
-  emit('openFile', item)
+function onSelect(item: LocalFileSearchResult, openInNewTab = false) {
+  emit('openFile', item, openInNewTab)
 }
 
-function selectItem(index: number) {
+function selectItem(index: number, event?: MouseEvent) {
   focusedIndex.value = index
-  onSelect(props.items[index]!)
+  onSelect(props.items[index]!, wantsNewTab(event))
 }
 
 type FileIconInfo = { component: unknown; color: string }
@@ -102,7 +103,8 @@ defineExpose({
           data-nav-item
           :class="{ 'is-focused': containerFocused && focusedIndex === virtualRow.index }"
           :title="getTooltip(items[virtualRow.index]!)"
-          @click="selectItem(virtualRow.index)"
+          @click="selectItem(virtualRow.index, $event)"
+          @auxclick.middle="selectItem(virtualRow.index, $event)"
         >
           <span class="icon" :style="{ color: getFileIcon(items[virtualRow.index]!.fileName).color }">
             <component :is="getFileIcon(items[virtualRow.index]!.fileName).component" />

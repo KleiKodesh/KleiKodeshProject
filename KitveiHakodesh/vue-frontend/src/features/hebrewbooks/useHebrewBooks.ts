@@ -76,9 +76,15 @@ export function useHebrewBooks() {
     await history.trackAccess(book)
   }
 
-  function openBook(book: HebrewBook) {
+  function openBook(book: HebrewBook, openInNewTab = false) {
     trackAccess(book)
-    const tabId = paneNavigation.activeTabId
+    // The whole download→convert→navigate lifecycle is driven by tab id
+    // (startHbDownload / finishHbDownload / cancelHbDownload all target the tab
+    // via updateTab). For a Ctrl/⌘-click we open a fresh placeholder tab and
+    // hand its id to the download so the result lands there instead of here.
+    const tabId = openInNewTab
+      ? paneNavigation.openTab({ route: '/pdf-view', title: book.title }).id
+      : paneNavigation.activeTabId
     localFileStore.startHbDownload(book.title, tabId)
     triggerHbDownload(
       String(book.id),

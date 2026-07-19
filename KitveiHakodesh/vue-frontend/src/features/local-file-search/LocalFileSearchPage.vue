@@ -87,7 +87,7 @@ function focusResults() {
   resultsListElement.value?.focusContainer()
 }
 
-async function onOpenFile(item: LocalFileSearchResult) {
+async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
   if (!isHosted) return
 
   openingFile.value = true
@@ -97,8 +97,19 @@ async function onOpenFile(item: LocalFileSearchResult) {
     const dotIndex = item.fileName.lastIndexOf('.')
     const titleWithoutExtension = dotIndex > 0 ? item.fileName.substring(0, dotIndex) : item.fileName
 
+    const isHtmlLike = extension === '.htm' || extension === '.html'
+    const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+
+    // For a Ctrl/⌘-click, open a fresh tab up front and patch it by id. The PDF/
+    // HTML path awaits restoreLocalFile, during which the active tab may change,
+    // so we must never rely on "the active tab" after the await — always target
+    // the captured id. .txt has no async step but takes the same path for parity.
+    const targetTabId = openInNewTab
+      ? paneNavigation.openTab({ route, title: titleWithoutExtension }).id
+      : fileSearchTabId
+
     if (extension === '.txt') {
-      paneNavigation.updateActiveTab({
+      tabStore.updateTab(targetTabId, {
         route: '/txt-view',
         title: titleWithoutExtension,
         localFileName: item.fileName,
@@ -108,13 +119,10 @@ async function onOpenFile(item: LocalFileSearchResult) {
       return
     }
 
-    const isHtmlLike = extension === '.htm' || extension === '.html'
-    const route = isHtmlLike ? '/html-view' : '/pdf-view'
-
     const restored = await restoreLocalFile(item.fullPath)
     if (!restored?.url) return
 
-    paneNavigation.updateActiveTab({
+    tabStore.updateTab(targetTabId, {
       route,
       title: titleWithoutExtension,
       localFileName: item.fileName,

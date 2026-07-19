@@ -6,10 +6,11 @@ import {
   IconFolderOpen20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { HebrewBook } from './hebrewBooksCatalog'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean }>()
 const emit = defineEmits<{
-  'book-clicked': [book: HebrewBook]
+  'book-clicked': [book: HebrewBook, openInNewTab: boolean]
   'download-clicked': [book: HebrewBook]
   'delete-clicked': [book: HebrewBook]
   'reveal-clicked': [book: HebrewBook]
@@ -40,7 +41,8 @@ const tooltip = computed(() => {
     data-nav-item
     :class="{ 'is-focused': focused }"
     :title="tooltip"
-    @click="emit('book-clicked', book)"
+    @click="emit('book-clicked', book, wantsNewTab($event))"
+    @auxclick.middle="emit('book-clicked', book, wantsNewTab($event))"
   >
     <div class="row-top">
       <div class="title-line">
