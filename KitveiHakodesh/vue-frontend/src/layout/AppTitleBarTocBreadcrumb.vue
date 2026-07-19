@@ -101,8 +101,10 @@ function onSelectRootPdfEntry(item: { id: number; text: string }) {
           @select="onSelect(segment, $event)"
         />
 
+        <!-- bdi keeps natural RTL rendering while the outer LTR span anchors
+             the visible window to the END of the label (see CSS). -->
         <span class="breadcrumb-segment" :class="{ active: segment.isActive }">
-          {{ segment.label }}
+          <bdi>{{ segment.label }}</bdi>
         </span>
 
         <!-- Trailing chevron on the active segment when it has children -->
@@ -124,17 +126,24 @@ function onSelectRootPdfEntry(item: { id: number; text: string }) {
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   display: contents;
 }
 
+/* Truncation is INTENTIONALLY asymmetric across the breadcrumb, and
+   intentionally ellipsis-free (clip — the "…" wastes bar space):
+   - book title: clips the END of its text; the beginning identifies the book.
+   - TOC segments: clip the START; the tail (deepest location) is the
+     informative part.
+   Don't unify these two behaviors. */
 .breadcrumb-title-name {
   unicode-bidi: isolate;
+  /* direction: rtl keeps the title's beginning visible and clips its end. */
   direction: rtl;
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -142,12 +151,13 @@ function onSelectRootPdfEntry(item: { id: number; text: string }) {
   flex-shrink: 1;
   min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
-  /* direction: ltr makes ellipsis appear at the start (right side in RTL).
-     unicode-bidi: plaintext prevents bidi reordering so Hebrew + punctuation
-     renders in natural order rather than being forced LTR. */
+  text-overflow: clip;
+  /* TOC segments cut off the START of the label, keeping the tail visible —
+     deliberately the opposite of the title (see note above). The span is an
+     LTR paragraph, so overflow clips at the right edge — where the RTL text's
+     start lies — while the inner <bdi> keeps the Hebrew rendering in natural
+     order. */
   direction: ltr;
-  unicode-bidi: plaintext;
   opacity: 0.7;
   white-space: nowrap;
 }

@@ -92,8 +92,7 @@ const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
 // A click always enters search mode; the address-bar dropdown doubles as the
 // tab list (shown while the field is empty / has no results).
-// Each hint line is separated by a newline (tooltips render \n as line breaks).
-const barTitleHint = 'לחץ לניווט מהיר ולרשימת הלשוניות (Ctrl+E)\nרשימת לשוניות (Ctrl+T)'
+const barTitleHint = 'לחץ לניווט מהיר ולרשימת הלשוניות (Ctrl+T)'
 
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
@@ -225,12 +224,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
       // the tab list (empty field = tab list).
       if (searchMode.value) searchMode.value = false
       else enterSearchMode()
-      return
-    } else if (e.ctrlKey && e.code === 'KeyE') {
-      // Focus the address bar (Explorer/omnibox-style). Enters search mode; the
-      // AddressBar focuses its input on mount.
-      e.preventDefault()
-      enterSearchMode()
       return
     } else if (e.ctrlKey && e.code === 'KeyN') {
       e.preventDefault()
@@ -397,7 +390,7 @@ useEventListener('keydown', (e: KeyboardEvent) => {
         <template v-if="activeTab?.tocPath">
           <template v-for="segment in activeTab.tocPath.split(' · ')" :key="segment">
             <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
-            <span class="bar-toc-segment">{{ segment }}</span>
+            <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
           </template>
         </template>
       </template>
@@ -549,11 +542,17 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   color: var(--text-secondary);
   opacity: 0.7;
   overflow: hidden;
-  text-overflow: ellipsis;
+  text-overflow: clip;
   white-space: nowrap;
   flex-shrink: 1;
   min-width: 0;
   margin-inline-end: 2px;
+  /* Cut off the START of the segment, keeping the tail visible: LTR paragraph
+     clips at the right edge (the RTL text's start); the inner <bdi> keeps
+     natural Hebrew rendering. Same trick as .breadcrumb-segment — and, like
+     there, intentionally the opposite of the title, which clips its END
+     (see the truncation note in AppTitleBarTocBreadcrumb.vue). */
+  direction: ltr;
 }
 .bar-btn {
   display: flex;
