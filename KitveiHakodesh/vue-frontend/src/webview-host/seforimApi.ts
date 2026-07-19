@@ -101,11 +101,37 @@ export interface CommentaryLinkRow {
   content?: string
 }
 
+// Whether link.targetLineIndex exists in the hosted DB (Zayit: yes, Otzaria: no —
+// verified 2026-07-19 against both real DBs; both schemas evolve independently, so
+// RE-VERIFY when either DB project ships a new schema version).
+// Probed once per page load; the fast denormalized query is only valid when the
+// column exists — the probe, not the DB flavor, is what decides.
+let _linkHasTargetLineIndex: boolean | null = null
+async function linkHasTargetLineIndex(): Promise<boolean> {
+  if (_linkHasTargetLineIndex != null) return _linkHasTargetLineIndex
+  try {
+    const rows = await query<{ n: number }>(SQL.HAS_LINK_TARGET_LINE_INDEX)
+    _linkHasTargetLineIndex = (rows[0]?.n ?? 0) > 0
+  } catch {
+    _linkHasTargetLineIndex = false // the JOIN fallback works on every schema
+  }
+  return _linkHasTargetLineIndex
+}
+
 /** Links-only forward commentary for a range of source lines (content backfilled separately). */
 export async function getCommentaryLinksForSourceLineRange(lineIds: number[]): Promise<CommentaryLinkRow[]> {
   if (!isDbHosted())
     return (await serviceCall<{ rows: CommentaryLinkRow[] }>('getCommentaryLinksForSourceLineRange', { lineIds })).rows
-  return query<CommentaryLinkRow>(SQL.GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE(lineIds.length), lineIds)
+  if (await linkHasTargetLineIndex()) {
+    try {
+      return await query<CommentaryLinkRow>(SQL.GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE(lineIds.length), lineIds)
+    } catch {
+      // DB swapped under us (user picked a different seforim DB without a reload) —
+      // remember and fall through to the portable JOIN.
+      _linkHasTargetLineIndex = false
+    }
+  }
+  return query<CommentaryLinkRow>(SQL.GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE_JOIN(lineIds.length), lineIds)
 }
 
 /** Content backfill for a batch of line ids. */

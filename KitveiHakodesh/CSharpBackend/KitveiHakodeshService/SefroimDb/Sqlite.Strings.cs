@@ -119,11 +119,24 @@ internal static class SeforimSql
     // ── Commentary / links ─────────────────────────────────────────────────────
 
     /// <summary>Links-only (no content JOIN) for a range of source lines — group structure
-    /// renders from this; content is backfilled via GetLineContents.</summary>
-    public static string GetCommentaryLinksForSourceLineRange(int count) => $@"
+    /// renders from this; content is backfilled via GetLineContents.
+    /// The Zayit DB denormalizes link.targetLineIndex (verified identical to line.lineIndex);
+    /// the Otzaria DB has no such column, so it needs a JOIN to line just for the index —
+    /// pass hasTargetLineIndex from a ColumnExists check on the open DB.
+    /// NOTE: schema difference verified 2026-07-19 against both real DBs; both DB projects
+    /// evolve independently — RE-VERIFY when either ships a new schema. The ColumnExists
+    /// probe adapts at runtime either way; only the perf reasoning can go stale.</summary>
+    public static string GetCommentaryLinksForSourceLineRange(int count, bool hasTargetLineIndex) => hasTargetLineIndex
+        ? $@"
         SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
                l.targetLineIndex AS lineIndex
         FROM link l
+        WHERE l.sourceLineId IN ({InPlaceholders("p", count)})"
+        : $@"
+        SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
+               ln.lineIndex
+        FROM link l
+        JOIN line ln ON ln.id = l.targetLineId
         WHERE l.sourceLineId IN ({InPlaceholders("p", count)})";
 
     /// <summary>Content backfill for a batch of line ids.</summary>
