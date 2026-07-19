@@ -44,6 +44,27 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     /// fight it.</summary>
     public bool IsBusy => _isIndexing;
 
+    /// <summary>
+    /// Release the open Lucene reader/searcher so its retained memory is freed while the
+    /// service is idle — the catalog counterpart to dropping the SQLite pools. Called by
+    /// <see cref="Ipc.IdleMemoryTrimmer"/> during a trim. No-op (and safe) if no index is
+    /// open or a build is in flight; the next search reopens the reader lazily. Kept
+    /// cheap: it does not touch the index directory handle or trigger any rebuild.
+    /// </summary>
+    public void ReleaseIdleResources()
+    {
+        if (_isIndexing) return; // build owns the reader; leave it (trimmer also gates on IsBusy)
+        try
+        {
+            if (_index is not null && _index.ReleaseIdleReader())
+                logger.LogDebug("catalog TOC index: released idle reader");
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "catalog TOC index: idle reader release failed");
+        }
+    }
+
     private CatalogTocIndex GetIndex()
     {
         lock (_lock) { return _index ??= new CatalogTocIndex(_indexPath, _dbPath!); }

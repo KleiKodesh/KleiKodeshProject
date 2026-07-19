@@ -191,6 +191,32 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         lock (_lock) return _reader?.NumDocs ?? 0;
     }
 
+    /// <summary>
+    /// Drop the open reader/searcher so their retained state (segment term indexes,
+    /// doc-values, materialized stored-field buffers) is freed while the service is idle
+    /// — the catalog counterpart to clearing the SQLite pools. The next search reopens
+    /// the committed reader lazily via <see cref="TryOpenActive"/>; the OS file cache
+    /// still holds the hot index pages, so the reopen is cheap.
+    ///
+    /// A near-real-time reader off a LIVE build writer is left untouched — releasing it
+    /// mid-build would abandon partial results and the writer is still growing. So this
+    /// is a no-op while a build is in flight (the caller also gates on IsBusy). The
+    /// directory handle is kept: it is a handful of bytes and avoids re-probing the FS.
+    /// Returns true if a reader was actually released.
+    /// </summary>
+    public bool ReleaseIdleReader()
+    {
+        lock (_lock)
+        {
+            if (_writer is not null) return false; // build in flight — keep the NRT reader
+            if (_reader is null) return false;     // nothing open
+            _reader.Dispose();
+            _reader = null;
+            _searcher = null;
+            return true;
+        }
+    }
+
     public void Dispose()
     {
         lock (_lock)
