@@ -77,6 +77,14 @@ export interface Tab {
   // survives navigating away and back. Kept separate from searchQuery, which the FTS
   // page owns — sharing that field leaked an FTS query into the file-search input.
   fileSearchQuery?: string
+  // Query typed into the book-catalog page (route '/books'), saved so the input
+  // survives a tab switch and back. Cleared when the tab navigates in place to a
+  // book (see BookCatalogPage) — distinct from catalogQuery, which is a one-shot
+  // seed pushed from the VSTO host.
+  booksSearchQuery?: string
+  // Query typed into the HebrewBooks page (route '/hebrewbooks'), saved so the
+  // input survives a tab switch and back. Cleared when the tab navigates in place.
+  hebrewBooksSearchQuery?: string
   tocPath?: string
 }
 

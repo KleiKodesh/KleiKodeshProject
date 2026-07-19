@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBookCatalog } from './useBookCatalog'
@@ -37,6 +37,36 @@ const {
 const view = ref<'list' | 'tiles' | 'tree'>('list')
 onMounted(async () => {
   view.value = await tabStore.getBooksView()
+})
+
+// This tab's id, captured at mount. The catalog is NOT a singleton (multiple
+// '/books' tabs can coexist), so we persist against the specific tab, never the
+// "active" tab, which may change after we navigate away.
+const booksTabId = paneNavigation.activeTabId
+
+// ── Query persistence across navigation ────────────────────────────────────────
+// Restore the typed query saved on the tab (booksSearchQuery), so switching away
+// and back keeps the input. The VSTO host seed (catalogQuery) wins if present —
+// it's a one-shot search request, not a restored session. That seed watch runs
+// synchronously at setup (immediate), before this onMounted, and fills
+// searchQuery; so only restore when searchQuery is still empty.
+onMounted(() => {
+  if (!searchQuery.value) {
+    const saved = paneNavigation.activeTab.booksSearchQuery
+    if (saved) searchQuery.value = saved
+  }
+})
+
+// On unmount, mirror the file-search rule:
+//  • Tab still '/books' (tab switch, or a NEW tab opened via Ctrl+click) → save
+//    the query so it restores when the user returns to this tab.
+//  • Tab navigated in place to a book (route changed to '/book-view') → clear it.
+onBeforeUnmount(() => {
+  const tab = tabStore.tabs.find((t) => t.id === booksTabId)
+  const stillBooks = tab?.route === '/books'
+  tabStore.updateTab(booksTabId, {
+    booksSearchQuery: stillBooks ? searchQuery.value || undefined : undefined,
+  })
 })
 
 // Query pushed from the VSTO host ("חיפוש ספר בכתבי הקודש" context menu) arrives on
