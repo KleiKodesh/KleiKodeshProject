@@ -182,22 +182,33 @@ namespace KitveiHakodeshLib
             }
         }
 
-        // Matches any run of characters that are NOT a Hebrew letter, Latin letter, or
-        // digit. Hebrew niqqud and cantillation marks (U+0591–U+05C7) are intentionally
-        // NOT in the keep-set, so they collapse away too — the FTS/catalog indexes are
-        // unpointed, and a pointed selection must match against them.
+        // Intra-word marks that sit ON or BETWEEN letters and must be DELETED (no
+        // space), otherwise the surrounding word splits apart:
+        //   • gershayim/geresh + straight/typographic quotes ("'׳״‘’“”) — Hebrew
+        //     acronym/abbreviation marks, e.g. רשב"א → רשבא (not רשב א)
+        //   • Hebrew niqqud + cantillation (U+0591–U+05C7), e.g. שְׁמוֹת֙ → שמות
+        //     (the FTS/catalog indexes are unpointed, so pointed text must match them)
+        private static readonly Regex _intraWordMarks =
+            new Regex("[\"'׳״‘’“”֑-ׇ]", RegexOptions.Compiled);
+
+        // Anything else outside the keep-set (Hebrew letters, Latin letters, digits) —
+        // remaining punctuation, whitespace, newlines — collapses to a single space so
+        // real word boundaries are preserved.
         private static readonly Regex _nonWordRun =
             new Regex(@"[^א-תa-zA-Z0-9]+", RegexOptions.Compiled);
 
         /// <summary>
-        /// Strips a Word selection down to searchable words — removes punctuation,
-        /// niqqud/cantillation, newlines, and any other non-word characters, collapsing
-        /// each run to a single space. Returns null/empty when nothing searchable remains.
+        /// Strips a Word selection down to searchable words. Hebrew acronym marks and
+        /// quotes are removed in place (רשב"א → רשבא); every other non-word run
+        /// (punctuation, niqqud/cantillation, newlines, whitespace) collapses to a
+        /// single space. Returns null/empty when nothing searchable remains.
         /// </summary>
         private static string StripToSearchText(string raw)
         {
             if (string.IsNullOrWhiteSpace(raw)) return null;
-            string cleaned = _nonWordRun.Replace(raw, " ").Trim();
+            // Delete intra-word marks FIRST (no space), then collapse the rest to spaces.
+            string cleaned = _intraWordMarks.Replace(raw, "");
+            cleaned = _nonWordRun.Replace(cleaned, " ").Trim();
             return cleaned.Length == 0 ? null : cleaned;
         }
 
