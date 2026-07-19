@@ -11,6 +11,7 @@ import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useTxtViewSearch } from './useTxtViewSearch'
 import { useTxtViewCopyMenu, useTxtViewScopedCopy } from './useTxtViewCopyMenu'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
+import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { onLongPress } from '@vueuse/core'
 import { getTheme } from '@/theme/themes'
@@ -294,7 +295,9 @@ async function loadContent() {
       if (!response.ok) {
         error.value = 'שגיאה בטעינת הקובץ'
       } else {
-        rawContent.value = await response.text()
+        // Detect encoding rather than assuming UTF-8 — many Hebrew .txt files are
+        // legacy Windows-1255, which decodes as U+FFFD replacement chars under UTF-8.
+        rawContent.value = decodeTextDetectEncoding(await response.arrayBuffer())
       }
     } else {
       error.value = 'אין קובץ פתוח'
