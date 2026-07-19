@@ -155,7 +155,9 @@ export const useTabStore = defineStore('tabs', () => {
       ),
       activeTabId: persistable.some((t) => t.id === activeTabId.value)
         ? activeTabId.value
-        : (persistable[0]?.id ?? activeTabId.value),
+        // Fallback must prefer a pane-1 tab: restoring a pane-2 id as pane 1's
+        // active tab makes both panes render the same tab on next startup.
+        : (persistable.find((t) => t.pane !== 2)?.id ?? persistable[0]?.id ?? activeTabId.value),
       nextId,
     })
   }
@@ -485,9 +487,15 @@ export const useTabStore = defineStore('tabs', () => {
     // Sequential navigation (Ctrl+Tab, swipe) cycles by index, which only works
     // if a tab keeps its position; MRU reordering made "next" oscillate between
     // the two most-recent tabs instead of advancing through the list.
-    if (tabs.value.some((t) => t.id === id)) {
-      activeTabId.value = id
+    const tab = tabs.value.find((t) => t.id === id)
+    if (!tab) return
+    // While split view is open, pane 1 must never activate a pane-2 tab — both
+    // panes would render the same tab object. Route the switch to pane 2 instead.
+    if (tab.pane === 2 && useBookViewStore().splitViewEnabled) {
+      pane2ActiveTabId.value = id
+      return
     }
+    activeTabId.value = id
   }
 
   function closeAllTabs() {
@@ -517,6 +525,12 @@ export const useTabStore = defineStore('tabs', () => {
     const idx = tabs.value.findIndex((t) => t.id === id)
     if (idx === -1) return
     const tab = tabs.value[idx]!
+    // A pane-2 tab while split view is open must close through the pane-2 path,
+    // which keeps pane2ActiveTabId valid and pane 2 never empty.
+    if (tab.pane === 2 && useBookViewStore().splitViewEnabled) {
+      closePane2Tab(id)
+      return
+    }
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
     const wsId = useWorkspaceStore().activeId
     idbTabsDelete(KEYS.tab(wsId, id))
@@ -526,13 +540,24 @@ export const useTabStore = defineStore('tabs', () => {
       if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
     }
     dropUncheckedCommentaryForTab(id)
+    // The next active tab must be the closed tab's neighbor among the tabs pane 1
+    // can display — picking by index from the mixed array could land on a pane-2
+    // tab, making both panes render the same tab.
+    const visIdx = pane1Tabs.value.findIndex((t) => t.id === id)
     tabs.value.splice(idx, 1)
-    if (tabs.value.length === 0) {
+    if (activeTabId.value === id) {
+      const visible = pane1Tabs.value
+      if (visible.length > 0) {
+        activeTabId.value = visible[Math.min(Math.max(visIdx, 0), visible.length - 1)]!.id
+      } else {
+        const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
+        tabs.value.push(home)
+        activeTabId.value = home.id
+      }
+    } else if (tabs.value.length === 0) {
       const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
       tabs.value.push(home)
       activeTabId.value = home.id
-    } else if (activeTabId.value === id) {
-      activeTabId.value = tabs.value[Math.min(idx, tabs.value.length - 1)]!.id
     }
   }
 

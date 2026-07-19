@@ -91,9 +91,9 @@ const {
   selectedLineId, commentaryTreeState, searchMode,
   activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
   tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
-  bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+  tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
-  groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, requestContentPriority,
+  groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
@@ -171,6 +171,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       :has-toc="hasToc"
       :has-commentaries="hasCommentaries"
       :has-related-books="hasRelatedBooks"
+      :tab-id="tabId"
       :book-id="bookId"
       :book-has-teamim="bookHasTeamim"
       :filter-groups="staticFilterGroups"
@@ -197,6 +198,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         :has-toc="hasToc"
         :has-commentaries="hasCommentaries"
         :has-related-books="hasRelatedBooks"
+        :tab-id="tabId"
         :book-id="bookId"
         :book-has-teamim="bookHasTeamim"
         :filter-groups="staticFilterGroups"
@@ -275,6 +277,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :selected-line-id="selectedLineId"
                 :groups="groupsForDisplay"
                 :loading="commentaryLoading"
+                :load-error="commentaryLoadError"
                 :visibility-list="commentaryTreeState.visibilityList"
                 :pinned-group="pinnedCommentaryGroup"
                 :filter-visible="commentaryTreeVisible"
@@ -391,6 +394,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :selected-line-id="selectedLineId"
                 :groups="groupsForDisplay"
                 :loading="commentaryLoading"
+                :load-error="commentaryLoadError"
                 :visibility-list="commentaryTreeState.visibilityList"
                 :pinned-group="pinnedCommentaryGroup"
                 :filter-visible="commentaryTreeVisible"
@@ -478,6 +482,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       :has-toc="hasToc"
       :has-commentaries="hasCommentaries"
       :has-related-books="hasRelatedBooks"
+      :tab-id="tabId"
       :book-id="bookId"
       :book-has-teamim="bookHasTeamim"
       :filter-groups="staticFilterGroups"

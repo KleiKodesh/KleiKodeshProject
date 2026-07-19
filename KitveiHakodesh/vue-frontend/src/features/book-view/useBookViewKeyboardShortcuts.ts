@@ -64,8 +64,11 @@ export function useBookViewKeyboardShortcuts(
     // If a scroller owns focus, its own useZoomHandler handles the zoom — skip.
     if (focusInScroller) return
 
-    if (isZoomIn) bookViewStore.zoomIn()
-    else if (isZoomOut) bookViewStore.zoomOut()
-    else bookViewStore.resetZoom()
+    // Zoom this pane's own tab — the no-arg forms target pane 1's active tab,
+    // which is the wrong book when these shortcuts fire in pane 2.
+    const tab = paneNavigation.activeTab
+    if (isZoomIn) bookViewStore.zoomIn(tab.id, tab.bookId)
+    else if (isZoomOut) bookViewStore.zoomOut(tab.id, tab.bookId)
+    else bookViewStore.resetZoom(tab.id, tab.bookId)
   })
 }
