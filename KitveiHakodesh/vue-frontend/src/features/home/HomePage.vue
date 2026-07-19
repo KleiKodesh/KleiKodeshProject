@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useIntervalFn, useElementSize, useNow, useWindowSize, useResizeObserver } from '@vueuse/core'
+import { useIntervalFn, useElementSize, useNow, useWindowSize, useResizeObserver, useEventListener } from '@vueuse/core'
 import HomeTile from './HomePageTile.vue'
 import HomeSearchDropdown from './HomeSearchDropdown.vue'
 import { useHomeSearch } from './useHomeSearch'
@@ -423,10 +423,26 @@ const visibleRecentlyOpenedList = computed(() => {
 })
 
 
-onMounted(async () => {
+// On a cold start the hosting WebView2 may not hold OS focus yet when HomePage
+// mounts — the host only gives the web content OS focus on NavigationCompleted /
+// Form.Activated (see AppViewerFocus), which can land after us. focus() on an
+// element whose window lacks OS focus silently doesn't stick, which is why the
+// initial focus was unreliable on cold start but fine on later warm navigations.
+// Fix: focus now if we already own OS focus, otherwise focus once the window
+// gains it (the host's _webView.Focus() fires window's 'focus' event).
+function focusSearchInput() {
+  const input = searchBarInputRef.value
+  if (!input) return
+  if (document.hasFocus()) input.focus()
+  else useEventListener(window, 'focus', () => input.focus(), { once: true })
+}
+
+onMounted(() => {
   loadDateInfo()
-  recentlyOpenedList.value = await recentlyOpenedStore.getList()
-  nextTick(() => searchBarInputRef.value?.focus())
+  // Focus up front, independent of the getList() await below — on a cold start
+  // that first-run IndexedDB read is slow and must not delay the focus.
+  focusSearchInput()
+  recentlyOpenedStore.getList().then((list) => { recentlyOpenedList.value = list })
 })
 
 async function onTap(label: string) {
