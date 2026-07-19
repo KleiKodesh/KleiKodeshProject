@@ -77,10 +77,19 @@ onMounted(() => {
   nextTick(() => searchInputElement.value?.focus())
 })
 
-// The page unmounts on every switch away (tab switch or same-tab navigation) —
-// save once here rather than per keystroke.
+// The page unmounts on every switch away. Two cases:
+//  • Tab SWITCH — the tab is still a file-search tab, so persist the query and
+//    restore it when the user switches back.
+//  • In-place NAVIGATION (opened a file in this tab) — the tab's route has
+//    already changed to a viewer, so the query is stale and must be cleared, not
+//    saved. Opening in a NEW tab (Ctrl+click) leaves this tab a file-search tab
+//    with its query intact, which is the whole point of that path.
 onBeforeUnmount(() => {
-  tabStore.updateTab(fileSearchTabId, { fileSearchQuery: searchQuery.value || undefined })
+  const tab = tabStore.tabs.find((t) => t.id === fileSearchTabId)
+  const stillFileSearch = tab?.route === '/file-search'
+  tabStore.updateTab(fileSearchTabId, {
+    fileSearchQuery: stillFileSearch ? searchQuery.value || undefined : undefined,
+  })
 })
 
 function focusResults() {

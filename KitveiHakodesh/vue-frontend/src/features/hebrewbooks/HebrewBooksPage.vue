@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
@@ -9,10 +9,17 @@ import { useHebrewBooks } from './useHebrewBooks'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useLocalFileStore } from '@/stores/localFileStore'
+import { useTabStore } from '@/stores/tabStore'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { storeToRefs } from 'pinia'
 
 const localFileStore = useLocalFileStore()
+const tabStore = useTabStore()
+const paneNavigation = usePaneNavigation()
 const { downloadErrorMessage } = storeToRefs(localFileStore)
+
+// This tab's id, captured at mount, for per-tab query persistence.
+const hebrewBooksTabId = paneNavigation.activeTabId
 
 const {
   displayedBooks,
@@ -55,9 +62,26 @@ useVirtualScrollerKeys(
   () => displayedBooks.value.length,
 )
 
+// Restore the query saved on the tab so switching away and back keeps the input.
+// A non-empty saved query runs the catalog search; otherwise load() shows history.
 onMounted(() => {
-  load()
+  const saved = paneNavigation.activeTab.hebrewBooksSearchQuery
+  if (saved) search(saved)
+  else load()
   searchInputRef.value?.focus()
+})
+
+// On unmount, mirror the file-search / catalog rule:
+//  • Tab still '/hebrewbooks' (tab switch, or a NEW tab opened via Ctrl+click) →
+//    save the query so it restores when the user returns to this tab.
+//  • Tab navigated in place to a book (startHbDownload set route '/pdf-view') →
+//    clear it.
+onBeforeUnmount(() => {
+  const tab = tabStore.tabs.find((t) => t.id === hebrewBooksTabId)
+  const stillHebrewBooks = tab?.route === '/hebrewbooks'
+  tabStore.updateTab(hebrewBooksTabId, {
+    hebrewBooksSearchQuery: stillHebrewBooks ? searchTerm.value || undefined : undefined,
+  })
 })
 
 function onBookClicked(
