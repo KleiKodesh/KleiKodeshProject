@@ -26,19 +26,25 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
     private readonly ILogger<DbChangeWatcher> _logger;
     private readonly FullTextSearchService _fts;
     private readonly Catalog.CatalogTocSearchService _catalogToc;
+    private readonly IHostApplicationLifetime _lifetime;
     private readonly string? _dbPath;
 
     private FileSystemWatcher? _watcher;
     private SettleDetector? _settle;
+    private Thread? _registryThread;
+    private Microsoft.Win32.RegistryKey? _watchedRegKey;
+    private volatile bool _stopping;
 
     public DbChangeWatcher(
         ILogger<DbChangeWatcher> logger,
         FullTextSearchService fts,
-        Catalog.CatalogTocSearchService catalogToc)
+        Catalog.CatalogTocSearchService catalogToc,
+        IHostApplicationLifetime lifetime)
     {
         _logger = logger;
         _fts = fts;
         _catalogToc = catalogToc;
+        _lifetime = lifetime;
         _dbPath = SeforimDbLocator.Resolve();
     }
 
@@ -46,6 +52,12 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
     {
         if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(_dbPath))
             return Task.CompletedTask;
+
+        // Watch the DB-choice registry value too: the user can SWITCH databases
+        // (Otzaria ↔ Zayit) from the hosted app, which writes the registry directly —
+        // the service would otherwise keep serving the old DB from its per-process
+        // caches. See StartRegistryWatch for the response (clean restart).
+        StartRegistryWatch();
 
         string? folder = Path.GetDirectoryName(_dbPath);
         string name = Path.GetFileName(_dbPath);
@@ -102,6 +114,109 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
         }
     }
 
+    // ── Database SWITCH detection (registry watch) ─────────────────────────────
+    //
+    // The DB path is chosen via a registry value that BOTH the service RPC and the
+    // hosted app write. A switch made through the service already restarts it
+    // (Dispatcher.RestartSoon); a switch made OUTSIDE the service (hosted app settings,
+    // wizard, manual registry edit) used to go unnoticed — the running process kept its
+    // per-process caches (catalog cache, column probes, index instances, this watcher's
+    // folder) pointed at the OLD database.
+    //
+    // Response: a clean service restart, the same thing the RPC path does. That makes
+    // the "DB is static per process" invariant TRUE BY CONSTRUCTION instead of trying
+    // to invalidate every cache in place. The fresh process re-resolves the path, and
+    // because both index change-stamps INCLUDE the path, both the FTS and catalog
+    // indexes detect the mismatch and reindex automatically. (Switching back to a DB
+    // whose index stamp still matches costs nothing — the stamp matches, no rebuild.)
+    //
+    // Detection is event-driven: RegNotifyChangeKeyValue parks one background thread in
+    // the kernel until something under the key changes — no polling, no idle CPU. Each
+    // wake costs one registry read + string compare.
+
+    private void StartRegistryWatch()
+    {
+        _registryThread = new Thread(RegistryWatchLoop)
+        {
+            IsBackground = true,
+            Name = "khs-db-registry-watch",
+        };
+        _registryThread.Start();
+    }
+
+    private void RegistryWatchLoop()
+    {
+        const uint REG_NOTIFY_CHANGE_NAME = 0x1;      // subkey created/deleted
+        const uint REG_NOTIFY_CHANGE_LAST_SET = 0x4;  // value written
+
+        while (!_stopping)
+        {
+            Microsoft.Win32.RegistryKey? key = null;
+            try
+            {
+                key = OpenDeepestExistingAncestor(out bool watchSubtree);
+                if (key is null) return; // no HKCU\Software?? nothing to watch
+                _watchedRegKey = key;
+
+                // Blocks until a change under the key (or until the key is closed on stop).
+                int rc = RegNotifyChangeKeyValue(key.Handle, watchSubtree,
+                    REG_NOTIFY_CHANGE_NAME | REG_NOTIFY_CHANGE_LAST_SET, IntPtr.Zero, false);
+                if (_stopping) return;
+                if (rc != 0) { Thread.Sleep(30_000); continue; } // transient — re-arm
+
+                OnPossibleDbSwitch();
+                // Loop re-arms: the notification is one-shot, and re-opening the key
+                // also picks up a now-deeper existing ancestor (quieter watch).
+            }
+            catch
+            {
+                if (!_stopping) Thread.Sleep(30_000);
+            }
+            finally
+            {
+                _watchedRegKey = null;
+                key?.Dispose();
+            }
+        }
+    }
+
+    /// <summary>Open the deepest existing ancestor of the DB-choice key. Watching the
+    /// exact key (no subtree) is quietest; when it doesn't exist yet, watch the nearest
+    /// existing parent WITH subtree so we see the key being created.</summary>
+    private static Microsoft.Win32.RegistryKey? OpenDeepestExistingAncestor(out bool watchSubtree)
+    {
+        string path = SeforimDbLocator.RegistryKeyPath;
+        watchSubtree = false;
+        while (true)
+        {
+            var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(path);
+            if (key is not null) return key;
+            int cut = path.LastIndexOf('\\');
+            if (cut < 0) return Microsoft.Win32.Registry.CurrentUser.OpenSubKey("Software");
+            path = path[..cut];
+            watchSubtree = true; // an ancestor watch must see the subtree to catch creation
+        }
+    }
+
+    private void OnPossibleDbSwitch()
+    {
+        string current;
+        try { current = SeforimDbLocator.Resolve(); }
+        catch { return; }
+        if (string.Equals(current, _dbPath, StringComparison.OrdinalIgnoreCase)) return;
+
+        _logger.LogInformation(
+            "seforim DB switched outside the service ({Old} → {New}) — restarting so the fresh " +
+            "process re-resolves everything; both index stamps include the path, so both reindex",
+            _dbPath, current);
+        _lifetime.StopApplication();
+    }
+
+    [System.Runtime.InteropServices.DllImport("advapi32.dll")]
+    private static extern int RegNotifyChangeKeyValue(
+        Microsoft.Win32.SafeHandles.SafeRegistryHandle hKey, bool bWatchSubtree,
+        uint dwNotifyFilter, IntPtr hEvent, bool fAsynchronous);
+
     public Task StopAsync(CancellationToken cancellationToken)
     {
         Dispose();
@@ -110,10 +225,15 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
 
     public void Dispose()
     {
+        _stopping = true;
         _watcher?.Dispose();
         _watcher = null;
         _settle?.Dispose();
         _settle = null;
+        // Closing the watched key releases the blocked RegNotifyChangeKeyValue wait;
+        // the thread is background anyway, so it can never hold up process exit.
+        try { _watchedRegKey?.Dispose(); } catch { }
+        _watchedRegKey = null;
     }
 
     /// <summary>

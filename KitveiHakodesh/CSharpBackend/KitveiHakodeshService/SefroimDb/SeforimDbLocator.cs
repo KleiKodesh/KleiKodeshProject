@@ -18,7 +18,12 @@ namespace KitveiHakodeshService.SefroimDb;
 /// </summary>
 public static class SeforimDbLocator
 {
-    private const string RegistryKey = @"Software\VB and VBA Program Settings\KitveiHakodesh\Database";
+    /// <summary>The registry key holding the user's DB choice. Public so the DB change
+    /// watcher can subscribe to it — the HOSTED app writes this value directly (not via
+    /// the service RPC), so a switch can happen while the service is running.</summary>
+    public const string RegistryKeyPath = @"Software\VB and VBA Program Settings\KitveiHakodesh\Database";
+
+    private const string RegistryKey = RegistryKeyPath;
     private const string RegistryValue = "Path";
 
     /// <summary>The path the service should use right now (may not exist on disk).</summary>
