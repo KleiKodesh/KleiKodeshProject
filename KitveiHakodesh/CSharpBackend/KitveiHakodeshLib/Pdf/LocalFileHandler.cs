@@ -298,13 +298,77 @@ namespace KitveiHakodeshLib.LocalFile
                 string filePath = root.GetProperty("filePath").GetString();
                 if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
                 // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
-                string content = await Task.Run(() => File.ReadAllText(filePath, Encoding.UTF8)).ConfigureAwait(false);
+                // Detect the encoding — many Hebrew .txt files are legacy Windows-1255, not UTF-8;
+                // decoding those as UTF-8 fills the view with U+FFFD replacement chars (◇?).
+                string content = await Task.Run(() => ReadTextDetectEncoding(filePath)).ConfigureAwait(false);
                 _bridge.Reply(id, new { textContent = content });
             }
             catch (Exception ex)
             {
                 _bridge.Reply(id, new { error = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// Reads a text file, detecting its encoding rather than assuming UTF-8.
+        /// Honors a BOM if present (UTF-8 / UTF-16 LE / UTF-16 BE / UTF-32); otherwise
+        /// validates the bytes as UTF-8 and, if they are not valid UTF-8, falls back to
+        /// Windows-1255 (Hebrew ANSI) — the common legacy encoding for Hebrew .txt files.
+        /// </summary>
+        internal static string ReadTextDetectEncoding(string filePath)
+        {
+            byte[] bytes = File.ReadAllBytes(filePath);
+
+            // 1. BOM sniffing — a BOM is authoritative.
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+                return new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3);
+            if (bytes.Length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xFE && bytes[2] == 0x00 && bytes[3] == 0x00)
+                return new UTF32Encoding(false, false).GetString(bytes, 4, bytes.Length - 4);
+            if (bytes.Length >= 4 && bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0xFE && bytes[3] == 0xFF)
+                return new UTF32Encoding(true, false).GetString(bytes, 4, bytes.Length - 4);
+            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+                return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);       // UTF-16 LE
+            if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+                return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2); // UTF-16 BE
+
+            // 2. No BOM: if the bytes are valid UTF-8, decode as UTF-8; else Windows-1255.
+            return IsValidUtf8(bytes)
+                ? new UTF8Encoding(false).GetString(bytes)
+                : Encoding.GetEncoding(1255).GetString(bytes);
+        }
+
+        /// <summary>
+        /// True if <paramref name="bytes"/> is a well-formed UTF-8 sequence (pure ASCII
+        /// counts as valid). Used to distinguish UTF-8 without a BOM from single-byte
+        /// legacy codepages such as Windows-1255.
+        /// </summary>
+        private static bool IsValidUtf8(byte[] bytes)
+        {
+            int i = 0;
+            while (i < bytes.Length)
+            {
+                byte b = bytes[i];
+                int extra;          // continuation bytes expected after b
+                int min;            // lowest code point legal for this length (reject overlong)
+                if (b <= 0x7F) { i++; continue; }
+                else if ((b & 0xE0) == 0xC0) { extra = 1; min = 0x80; }
+                else if ((b & 0xF0) == 0xE0) { extra = 2; min = 0x800; }
+                else if ((b & 0xF8) == 0xF0) { extra = 3; min = 0x10000; }
+                else return false;  // 0x80-0xBF lead or 0xF8+ — not valid UTF-8
+
+                if (i + extra >= bytes.Length) return false;
+                int cp = b & (0x7F >> (extra + 1));
+                for (int k = 1; k <= extra; k++)
+                {
+                    byte c = bytes[i + k];
+                    if ((c & 0xC0) != 0x80) return false; // not a continuation byte
+                    cp = (cp << 6) | (c & 0x3F);
+                }
+                if (cp < min) return false;               // overlong encoding
+                if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false; // out of range / surrogate
+                i += extra + 1;
+            }
+            return true;
         }
 
         public void HandleDisposeLocalFileHost(JsonElement root, string id)
