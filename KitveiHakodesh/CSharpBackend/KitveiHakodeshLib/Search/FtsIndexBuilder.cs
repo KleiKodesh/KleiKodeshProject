@@ -102,7 +102,7 @@ namespace KitveiHakodeshLib.Search
 
             try
             {
-                bool ranToCompletion = index.BuildIndex(limit: 0, totalLines: totalLines, resumeOffset: resumeOffset, onProgress: (sessionCount) =>
+                bool ranToCompletion = index.BuildIndex(limit: 0, totalLines: totalLines, resumeOffset: resumeOffset, forceMergeOnComplete: true, onProgress: (sessionCount) =>
                 {
                     if (totalLines > 0 && sessionCount % 5000 == 0)
                     {
