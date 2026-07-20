@@ -460,6 +460,9 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   height: var(--title-bar-height);
   padding: var(--title-bar-padding);
   background: var(--bg-secondary);
+  /* Divider width is driven by the settings store: 0 when the content border is
+     on (seamless merge), 1px when off (title bar shows its own divider). */
+  border-bottom: var(--title-bar-divider-width, 0px) solid var(--border-color);
   position: relative;
   /* Regular arrow over the bar and the breadcrumb/title; only the buttons and
      breadcrumb chevrons use the pointer (hand). */

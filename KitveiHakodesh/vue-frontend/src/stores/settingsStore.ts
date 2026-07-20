@@ -45,6 +45,7 @@ const DEFAULTS = {
   commentaryMaxWidth: 0,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   compactMode: true,
+  contentBorder: true,
   showRecentlyOpened: true,
 }
 
@@ -85,6 +86,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const compactMode = ref(DEFAULTS.compactMode)
+  const contentBorder = ref(DEFAULTS.contentBorder)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const fileSearchSortOrder = ref<import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder>('relevance')
 
@@ -126,6 +128,12 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     document.documentElement.setAttribute('data-density', compactMode.value ? 'compact' : 'normal')
+    // Content-border toggle — zero the inset/border/radius (and re-show the title
+    // bar divider) when off; the app-shell / title-bar CSS reads these vars.
+    style.setProperty('--content-inset', contentBorder.value ? '3px' : '0px')
+    style.setProperty('--content-border-width', contentBorder.value ? '1px' : '0px')
+    style.setProperty('--content-border-radius', contentBorder.value ? '8px' : '0px')
+    style.setProperty('--title-bar-divider-width', contentBorder.value ? '0px' : '1px')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
@@ -176,6 +184,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
+    loadSetting(KEYS.SETTINGS_CONTENT_BORDER, contentBorder)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     applyCSSVariables()
@@ -217,6 +226,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
+  persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
 
@@ -290,6 +300,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     compactMode.value = DEFAULTS.compactMode
+    contentBorder.value = DEFAULTS.contentBorder
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     lsClearSettingsOnly()
     applyCSSVariables()
@@ -312,6 +323,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth,
     titleBarHiddenButtons,
     compactMode,
+    contentBorder,
     showRecentlyOpened,
     fileSearchSortOrder,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
