@@ -59,7 +59,9 @@ defineEmits<{
   align-items: stretch;
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-toolbar);
-  min-height: 32px;
+  /* Match the BookView toolbar height exactly (density-aware: 28px compact /
+     32px normal). Fixed height (border-box) so children can't push it taller. */
+  height: var(--toolbar-horizontal-height);
   position: relative;
   z-index: 10;
 }
@@ -92,7 +94,9 @@ defineEmits<{
   justify-content: center;
   width: 32px;
   height: 100%;
-  padding: 6px;
+  /* Trimmed vertical padding so the 16px icon + 2px active underline fit within
+     the compact toolbar height without forcing the bar taller. */
+  padding: 4px 6px;
   border-radius: 0;
   border-bottom: 2px solid transparent;
 }

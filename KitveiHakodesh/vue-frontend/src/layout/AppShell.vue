@@ -56,9 +56,20 @@ provide(PANE_NAVIGATION_KEY, {
   height: 100%;
   overflow: hidden;
   min-width: 0;
+  /* The chrome surface flows continuously from the title bar down around the
+     content panel's rounded corners — no separator line between them. */
+  background: var(--bg-secondary);
 }
 .app-shell-content {
   flex: 1;
   overflow: hidden;
+  /* Edge-style content panel: inset into the shared chrome surface by a small
+     margin on the sides and bottom, so the rounded border clearly frames the
+     page on all visible edges. The top has no margin — the chrome flows
+     straight from the title bar into the panel with no separator line. */
+  margin: 0 var(--content-inset, 3px) var(--content-inset, 3px);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-primary);
 }
 </style>
