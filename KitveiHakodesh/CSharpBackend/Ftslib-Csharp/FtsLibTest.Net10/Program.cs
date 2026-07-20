@@ -40,6 +40,7 @@ namespace FtsLibTest
                 case "trgmbench":         TrgmBench.Run(args); return;
                 case "trgmidx":           TrgmIdx.Run(args); return;
                 case "trgmlive":          TrgmLive.Run(args); return;
+                case "trgmfull":          TrgmFull.Run(args); return;
                 case "sortdiag":          SortDiag.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
                 case "ketivquery":        KetivQueryTest.Run(args); return;
