@@ -67,9 +67,12 @@ provide(PANE_NAVIGATION_KEY, {
      margin on the sides and bottom, so the rounded border clearly frames the
      page on all visible edges. The top has no margin — the chrome flows
      straight from the title bar into the panel with no separator line. */
+  /* The inset/border/radius are driven by CSS vars the settings store sets in
+     applyCSSVariables — turning the "content border" setting off zeroes them so
+     the content fills flush (and the title bar restores its own divider). */
   margin: 0 var(--content-inset, 3px) var(--content-inset, 3px);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border: var(--content-border-width, 1px) solid var(--border-color);
+  border-radius: var(--content-border-radius, 8px);
   background: var(--bg-primary);
 }
 </style>
