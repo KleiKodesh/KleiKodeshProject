@@ -65,6 +65,8 @@ namespace FtsLib.Indexing
 
                 _store.Wal.EndForceMerge();
                 FtsLog.Write("ForceMerger.Run", "WAL END_FORCE_MERGE written");
+
+                BuildTrigramSidecars();
             }
             finally
             {
@@ -105,6 +107,8 @@ namespace FtsLib.Indexing
                 _store.Wal.EndForceMerge();
                 FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL END_FORCE_MERGE written");
                 Console.WriteLine("[Recovery] Force merge resume complete.");
+
+                BuildTrigramSidecars();
             }
             catch (InvalidDataException ex)
             {
@@ -119,6 +123,29 @@ namespace FtsLib.Indexing
             {
                 _store.Wal.Clear();
                 FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL cleared");
+            }
+        }
+
+        // ── Trigram sidecar build (post-merge, best-effort) ───────────
+
+        /// <summary>
+        /// Builds a compact disk trigram sidecar (seg.tgm) for every live segment — done ONLY
+        /// after force-merge, over the immutable merged segments, so incremental index building
+        /// is never slowed. Best-effort: a failure just leaves search to fall back to SQLite LIKE.
+        /// </summary>
+        private void BuildTrigramSidecars()
+        {
+            foreach (var (dat, db) in _store.Live.GetLiveSegmentPaths())
+            {
+                try
+                {
+                    FtsLib.Search.TrigramIndex.BuildFromDb(db, FtsLib.Search.TrigramIndex.SidecarPath(dat));
+                    FtsLog.Write("ForceMerger.BuildTrigramSidecars", $"built {FtsLib.Search.TrigramIndex.SidecarPath(dat)}");
+                }
+                catch (Exception ex)
+                {
+                    FtsLog.Write("ForceMerger.BuildTrigramSidecars", $"skip {db}: {ex.Message}");
+                }
             }
         }
 
