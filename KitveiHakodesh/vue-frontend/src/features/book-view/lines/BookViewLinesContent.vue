@@ -10,7 +10,7 @@ import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '../toc/useBookViewToc'
 import type { CommentaryTreeState, PinnedCommentaryGroup } from '../bookViewTypes'
 import ContextMenu from '@/components/ContextMenu.vue'
-import { onLongPress } from '@vueuse/core'
+import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '@/composables/useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
@@ -186,7 +186,7 @@ useScopedCopy(
   isSelectAll,
   buildFormattedHtml,
 )
-onLongPress(scrollerEl, (event) => {
+useContextMenuLongPress(scrollerEl, (event) => {
   if (!scrollerEl.value) return
   // In RTL layout the scrollbar is on the physical LEFT side of the container.
   // clientWidth excludes the scrollbar track, so the scrollbar occupies the gap
@@ -215,8 +215,7 @@ function onLineClick(index: number, event: MouseEvent) {
   // A drag to select text ends with a `click` event too. Don't hijack it to change
   // the commentary line — the user only wants to select text. A plain click leaves
   // the selection collapsed; a drag-select leaves real (non-empty) text selected.
-  const selection = window.getSelection()
-  if (selection && !selection.isCollapsed && selection.toString().trim() !== '') return
+  if (hasActiveTextSelection()) return
   const line = props.lines[index]
   if (props.commentaryVisible && line) emit('lineSelected', line.id, event.ctrlKey || event.metaKey)
 }
