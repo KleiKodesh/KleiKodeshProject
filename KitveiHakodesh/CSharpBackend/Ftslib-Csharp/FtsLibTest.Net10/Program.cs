@@ -35,6 +35,7 @@ namespace FtsLibTest
                 case "tokdiag":           TokenDiag.Run(args); return;
                 case "tokbench":          TokBench.Run(args); return;
                 case "charbench":         CharBench.Run(args); return;
+                case "decodebench":       DecodeBench.Run(args); return;
                 case "sortdiag":          SortDiag.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
                 case "ketivquery":        KetivQueryTest.Run(args); return;
