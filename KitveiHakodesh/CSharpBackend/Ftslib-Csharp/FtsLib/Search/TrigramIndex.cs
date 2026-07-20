@@ -45,26 +45,31 @@ namespace FtsLib.Search
         }
 
         // ── Build ─────────────────────────────────────────────────────
+        /// <summary>Overload: posting id = index in the list (used by tests/benchmarks).</summary>
+        public static void Build(string path, IReadOnlyList<string> terms) => Build(path, terms, null);
+
         /// <summary>
-        /// Builds the sidecar at <paramref name="path"/> from <paramref name="terms"/>, where the
-        /// posting id of a term is its index in the list. Intended to run once per segment after
-        /// force-merge (segments are immutable ⇒ write-once).
+        /// Builds the sidecar at <paramref name="path"/>. The posting id of <c>terms[i]</c> is
+        /// <c>ids[i]</c> (e.g. the term_index rowid) when <paramref name="ids"/> is supplied,
+        /// else <c>i</c>. Intended to run once per segment after force-merge (immutable ⇒
+        /// write-once).
         /// </summary>
-        public static void Build(string path, IReadOnlyList<string> terms)
+        public static void Build(string path, IReadOnlyList<string> terms, IReadOnlyList<int> ids)
         {
             var map = new Dictionary<string, List<int>>(1 << 16, StringComparer.Ordinal);
             var grams = new List<string>(32);
             var seen = new HashSet<string>(StringComparer.Ordinal);
-            for (int id = 0; id < terms.Count; id++)
+            for (int i = 0; i < terms.Count; i++)
             {
-                string t = terms[id];
+                string t = terms[i];
                 if (t.Length < MinRun) continue;
+                int id = ids != null ? ids[i] : i;
                 grams.Clear(); seen.Clear();
                 AddTrigrams(t, grams, seen);
                 foreach (string g in grams)
                 {
                     if (!map.TryGetValue(g, out var l)) { l = new List<int>(); map[g] = l; }
-                    l.Add(id); // ascending id ⇒ posting stays sorted
+                    l.Add(id);
                 }
             }
 
@@ -75,13 +80,13 @@ namespace FtsLib.Search
             var blob = new MemoryStream(); var buf = new byte[8];
             foreach (var kv in map)
             {
-                var ids = kv.Value;
+                var post = kv.Value; post.Sort();   // ascending ⇒ non-negative deltas
                 uint off = (uint)blob.Length; int prev = 0;
-                foreach (int id in ids) { int d = id - prev; prev = id; int len = VarInt.Encode((uint)d, buf); blob.Write(buf, 0, len); }
+                foreach (int id in post) { int d = id - prev; prev = id; int len = VarInt.Encode((uint)d, buf); blob.Write(buf, 0, len); }
                 uint blen = (uint)blob.Length - off;
                 int slot = (int)(Hash(kv.Key) & mask);
                 while (fCnt[slot] != 0) slot = (int)((slot + 1) & mask);
-                fFinger[slot] = Finger(kv.Key); fOff[slot] = off; fCnt[slot] = (uint)ids.Count; fLen[slot] = blen;
+                fFinger[slot] = Finger(kv.Key); fOff[slot] = off; fCnt[slot] = (uint)post.Count; fLen[slot] = blen;
             }
 
             string tmp = path + ".tmp";
@@ -94,6 +99,31 @@ namespace FtsLib.Search
             }
             if (File.Exists(path)) File.Delete(path);
             File.Move(tmp, path); // atomic-ish publish
+        }
+
+        /// <summary>Sidecar path for a segment's .dat file (seg.dat → seg.tgm).</summary>
+        public static string SidecarPath(string datPath) => Path.ChangeExtension(datPath, ".tgm");
+
+        /// <summary>
+        /// Builds the sidecar for a segment by reading its term_index (rowid = posting id) from
+        /// <paramref name="dbPath"/>. Opens its own read-only connection; safe to call after a
+        /// force-merge on an immutable segment.
+        /// </summary>
+        public static void BuildFromDb(string dbPath, string outPath)
+        {
+            var terms = new List<string>(1 << 16);
+            var ids = new List<int>(1 << 16);
+            var csb = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
+            { DataSource = dbPath, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly };
+            using (var conn = new Microsoft.Data.Sqlite.SqliteConnection(csb.ConnectionString))
+            {
+                conn.Open();
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = "SELECT rowid, term FROM term_index ORDER BY rowid";
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) { ids.Add((int)r.GetInt64(0)); terms.Add(r.GetString(1)); }
+            }
+            Build(outPath, terms, ids);
         }
 
         // ── Read (seek+read, no mmap) ─────────────────────────────────
