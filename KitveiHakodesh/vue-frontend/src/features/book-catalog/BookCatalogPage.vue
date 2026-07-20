@@ -274,7 +274,7 @@ function onSearchEnter() {
         class="search-input"
         :placeholder="placeholder"
         spellcheck="true"
-        autocomplete="on"
+        autocomplete="off"
         @keydown.enter="onSearchEnter"
         @keydown.up.prevent="focusList"
         @keydown.down.prevent="focusList"

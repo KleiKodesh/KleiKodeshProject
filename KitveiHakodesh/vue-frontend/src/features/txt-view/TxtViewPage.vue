@@ -396,7 +396,7 @@ async function retry() {
             class="search-input"
             placeholder="חיפוש בטקסט..."
             spellcheck="true"
-            autocomplete="on"
+            autocomplete="off"
             @keydown="onSearchKeydown"
           />
           <span class="match-count" :class="{ 'no-match': searchQuery && matchCount === 0 }">

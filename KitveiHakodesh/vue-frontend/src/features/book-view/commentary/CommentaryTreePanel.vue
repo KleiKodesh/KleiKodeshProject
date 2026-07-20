@@ -194,7 +194,6 @@ function toggleItem(item: CommentaryVisibilityItem) {
           ref="searchInputRef"
           v-model="treeState.searchQuery"
           type="text"
-          name="commentary-tree-search"
           class="search-input"
           :placeholder="treeState.tokens.length ? '' : placeholder"
           @keydown="onKeydown"

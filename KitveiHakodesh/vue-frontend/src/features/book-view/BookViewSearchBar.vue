@@ -109,7 +109,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
           class="search-input"
           :placeholder="placeholder"
           spellcheck="true"
-          autocomplete="on"
+          autocomplete="off"
           @input="onInput"
           @keydown="onKeydown"
         />
