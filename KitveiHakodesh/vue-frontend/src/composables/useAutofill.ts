@@ -21,7 +21,7 @@
  *   //   @keydown="af.onKeydown" @blur="af.onBlur" />
  *   // commit an entry when the value is "submitted": af.record()
  */
-import { ref, computed, readonly, type Ref, type ComponentPublicInstance } from 'vue'
+import { ref, computed, readonly, nextTick, type Ref, type ComponentPublicInstance } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
 
 /** What a Vue template `:ref` callback receives. */
@@ -54,6 +54,13 @@ export interface AutofillController {
   activeIndex: Readonly<Ref<number>>
   /** Ref callback for the input element (used for positioning + focus). */
   setInput: (el: TemplateRefTarget) => void
+  /**
+   * Focus the input. With `{ silent: true }` the focus does NOT open the
+   * dropdown — for programmatic focus (e.g. session restore) where a suggestion
+   * bubble popping up unbidden would be jarring. A subsequent genuine focus,
+   * click, or keystroke opens it as usual.
+   */
+  focus: (opts?: { silent?: boolean }) => void
   /** The input element (for the dropdown to anchor to). */
   inputEl: Readonly<Ref<HTMLInputElement | null>>
   onFocus: () => void
@@ -81,6 +88,9 @@ export function useAutofill(opts: UseAutofillOptions): AutofillController {
   const open = ref(false)
   const activeIndex = ref(-1)
   const history = ref<string[]>(lsGet<string[]>(lsKey) ?? [])
+  // Set by focus({ silent: true }); consumed by the next onFocus so a programmatic
+  // focus (session restore) places the cursor without popping the suggestion bubble.
+  let suppressNextFocusOpen = false
 
   const suggestions = computed<string[]>(() => {
     const q = query.value.trim().toLowerCase()
@@ -105,8 +115,24 @@ export function useAutofill(opts: UseAutofillOptions): AutofillController {
     if (activeIndex.value >= suggestions.value.length) activeIndex.value = -1
   }
 
+  function focus(opts?: { silent?: boolean }) {
+    if (opts?.silent) {
+      suppressNextFocusOpen = true
+      // Safety net: if .focus() fires no focus event (input already focused, or not
+      // yet mounted) the flag would otherwise stay armed and swallow the next genuine
+      // focus. The synchronous focus event, when it fires, clears it first; this just
+      // disarms the leftover case on the next tick.
+      nextTick(() => { suppressNextFocusOpen = false })
+    }
+    inputEl.value?.focus()
+  }
+
   function onFocus() {
     activeIndex.value = -1
+    if (suppressNextFocusOpen) {
+      suppressNextFocusOpen = false
+      return
+    }
     refreshOpen()
   }
   function onInput() {
@@ -203,6 +229,7 @@ export function useAutofill(opts: UseAutofillOptions): AutofillController {
     activeIndex: readonly(activeIndex),
     setInput,
     inputEl: readonly(inputEl) as Readonly<Ref<HTMLInputElement | null>>,
+    focus,
     onFocus,
     onInput,
     onBlur,

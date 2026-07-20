@@ -276,7 +276,10 @@ onMounted(async () => {
   // read by finalizeSort() when that search completes.
   if (saved?.searchSortOrder) sortOrder.value = saved.searchSortOrder
 
-  searchBarRef.value?.focus()
+  // Silent focus: place the cursor in the search field on restore without popping the
+  // autofill bubble. The restored query is often a prefix of a longer recent search, so a
+  // non-silent focus would open the suggestion dropdown unbidden the moment the tab restores.
+  searchBarRef.value?.focus({ silent: true })
 })
 
 // Save filter state whenever the page goes hidden or is unmounted.
