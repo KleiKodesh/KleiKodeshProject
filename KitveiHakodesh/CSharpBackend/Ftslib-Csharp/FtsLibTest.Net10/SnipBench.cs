@@ -40,6 +40,14 @@ namespace FtsLibTest
             var prepared = PreparedQueryGroups.FromLiteralTerms(new[] { query });
             var builder = new SnippetBuilder();
 
+            // Content hash over ALL snippet HTML — a strong equivalence check across builds.
+            ulong hash = 14695981039346656037UL;
+            foreach (var ln in lines)
+            {
+                string h = builder.Build(ln, prepared).Html;
+                foreach (char ch in h) { hash ^= ch; hash *= 1099511628211UL; }
+            }
+            Console.WriteLine($"HASH(all snippet html) = {hash:X16}\n");
             long sink = 0;
             foreach (var ln in lines) sink += builder.Build(ln, prepared).Html.Length; // warmup
 
