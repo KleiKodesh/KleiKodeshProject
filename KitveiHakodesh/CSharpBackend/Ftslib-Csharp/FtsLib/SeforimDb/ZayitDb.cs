@@ -128,6 +128,94 @@ namespace FtsLib.SeforimDb
             }
         }
 
+        // ── Neighbor fetching (snippet embellishment) ─────────────────
+
+        /// <summary>
+        /// For each line id in <paramref name="ids"/>, fetches up to <paramref name="radius"/>
+        /// content lines immediately BEFORE and AFTER it WITHIN THE SAME BOOK (ordered by
+        /// lineIndex), returned as two space-joined strings (prev, next) in document order.
+        ///
+        /// One self-join query per chunk (≤ SQLite's 999-var limit) — the neighbors of a
+        /// whole batch of short lines cost a single round-trip, not one per line. The join
+        /// is bounded by bookId so it never crosses a book boundary, and by a lineIndex
+        /// window of ±radius so it reads at most radius rows per side per matched line.
+        ///
+        /// Missing entries (line at book edge, or id not found) simply yield empty strings.
+        /// </summary>
+        public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(
+            IReadOnlyList<int> ids, int radius)
+        {
+            var result = new Dictionary<int, (string Prev, string Next)>(ids?.Count ?? 0);
+            if (ids == null || ids.Count == 0 || radius <= 0) return result;
+            EnsureOpen();
+
+            // Accumulate neighbor lines per matched id, keyed by their lineIndex delta so
+            // we can join them back in document order (prev = negative deltas ascending,
+            // next = positive deltas ascending).
+            var prevParts = new Dictionary<int, SortedList<int, string>>();
+            var nextParts = new Dictionary<int, SortedList<int, string>>();
+
+            const int ChunkSize = 999;
+            using (var cmd = _connection.CreateCommand())
+            {
+                var paramNames = new string[ChunkSize];
+                for (int i = 0; i < ChunkSize; i++)
+                {
+                    paramNames[i] = $"@p{i}";
+                    cmd.Parameters.Add(paramNames[i], SqliteType.Integer);
+                }
+                var pRadius = cmd.Parameters.Add("@radius", SqliteType.Integer);
+                pRadius.Value = radius;
+
+                for (int start = 0; start < ids.Count; start += ChunkSize)
+                {
+                    int end   = Math.Min(start + ChunkSize, ids.Count);
+                    int count = end - start;
+
+                    var sb = new System.Text.StringBuilder(
+                        // m = the matched line; n = a neighbor in the same book within ±radius
+                        // rows by lineIndex (excluding the matched line itself). Returns the
+                        // matched id, the delta, and the neighbor content.
+                        "SELECT m.id, n.lineIndex - m.lineIndex AS delta, n.content" +
+                        " FROM line m JOIN line n" +
+                        " ON n.bookId = m.bookId" +
+                        " AND n.lineIndex BETWEEN m.lineIndex - @radius AND m.lineIndex + @radius" +
+                        " AND n.lineIndex <> m.lineIndex" +
+                        " WHERE m.id IN (");
+                    for (int i = 0; i < count; i++)
+                    {
+                        if (i > 0) sb.Append(',');
+                        sb.Append(paramNames[i]);
+                        cmd.Parameters[paramNames[i]].Value = ids[start + i];
+                    }
+                    sb.Append(")");
+                    cmd.CommandText = sb.ToString();
+
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read())
+                        {
+                            int matchedId = r.GetInt32(0);
+                            int delta     = r.GetInt32(1);
+                            string text   = r.IsDBNull(2) ? string.Empty : r.GetString(2);
+                            if (string.IsNullOrEmpty(text)) continue;
+
+                            var bucket = delta < 0 ? prevParts : nextParts;
+                            if (!bucket.TryGetValue(matchedId, out var list))
+                                bucket[matchedId] = list = new SortedList<int, string>();
+                            list[delta] = text;
+                        }
+                }
+            }
+
+            foreach (int id in ids)
+            {
+                string prev = prevParts.TryGetValue(id, out var pl) ? string.Join(" ", pl.Values) : string.Empty;
+                string next = nextParts.TryGetValue(id, out var nl) ? string.Join(" ", nl.Values) : string.Empty;
+                if (prev.Length > 0 || next.Length > 0) result[id] = (prev, next);
+            }
+            return result;
+        }
+
         // ── Search result fetching ────────────────────────────────────
 
         /// <summary>

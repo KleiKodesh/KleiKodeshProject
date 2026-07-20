@@ -34,12 +34,21 @@ namespace FtsLib.SeforimDb
         /// </summary>
         public bool IsMatch { get; }
 
-        public SnippetResult(string html, int score, int wordDistance, bool isMatch)
+        /// <summary>
+        /// Visible words in the rendered snippet window. Lets the caller tell that a
+        /// snippet is "short" (fewer words than the requested context) so it can be
+        /// re-rendered with surrounding lines. 0 when there is no match.
+        /// </summary>
+        public int WindowWordCount { get; }
+
+        public SnippetResult(string html, int score, int wordDistance, bool isMatch,
+            int windowWordCount = 0)
         {
-            Html         = html    ?? string.Empty;
-            Score        = score;
-            WordDistance = wordDistance;
-            IsMatch      = isMatch;
+            Html            = html    ?? string.Empty;
+            Score           = score;
+            WordDistance    = wordDistance;
+            IsMatch         = isMatch;
+            WindowWordCount = windowWordCount;
         }
 
         public static readonly SnippetResult NoMatch =
