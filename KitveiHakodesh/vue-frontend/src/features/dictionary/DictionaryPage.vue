@@ -211,7 +211,7 @@ function onSelect(headword: string) {
         type="text"
         placeholder="חפש מילה"
         spellcheck="true"
-        autocomplete="on"
+        autocomplete="off"
         @input="searchQuery = ($event.target as HTMLInputElement).value"
       />
     </BottomSearchBar>

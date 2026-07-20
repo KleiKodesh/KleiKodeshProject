@@ -11,6 +11,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useFtsSearchRecents } from './useFtsSearchRecents'
 import type { FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 const props = defineProps<{
@@ -39,6 +40,7 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const filterBtnRef = ref<HTMLElement | null>(null)
 const advancedBtnRef = ref<HTMLElement | null>(null)
 const localQuery = ref(props.searchQuery)
+const recentsListId = `fts-recents-${Math.random().toString(36).slice(2)}`
 
 // ── Sort dropdown ─────────────────────────────────────────────────────────────
 const SORT_OPTIONS: { value: FullTextSearchSortOrder; label: string }[] = [
@@ -101,8 +103,13 @@ watch(localQuery, (v) => (v ? pauseTyping() : resumeTyping()))
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 
+const { recents, record: recordRecent } = useFtsSearchRecents()
+
 function handleSearch() {
-  if (localQuery.value.trim()) emit('search', localQuery.value)
+  if (localQuery.value.trim()) {
+    recordRecent(localQuery.value)
+    emit('search', localQuery.value)
+  }
 }
 function handleClear() {
   localQuery.value = ''
@@ -139,15 +146,18 @@ defineExpose({ focus: () => inputRef.value?.focus(), filterBtnRef, advancedBtnRe
       ref="inputRef"
       v-model="localQuery"
       type="text"
-      name="full-text-search"
       class="search-input"
+      :list="recentsListId"
       :placeholder="placeholder"
       :disabled="disabled"
       spellcheck="true"
-      autocomplete="on"
+      autocomplete="off"
       @keydown.enter="handleSearch"
       @keydown.esc="handleClear"
     />
+    <datalist :id="recentsListId">
+      <option v-for="q in recents" :key="q" :value="q" />
+    </datalist>
     <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
       {{ resultCount.toLocaleString() }}
       <template v-if="!isSearching && resultCount < totalResultCount">

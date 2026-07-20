@@ -86,7 +86,6 @@ watch(searchQuery, (q) => {
             ref="searchRef"
             v-model="searchQuery"
             type="search"
-            name="toc-search"
             class="search-input"
             placeholder="&#x5D7;&#x5D9;&#x5E4;&#x5D5;&#x5E9;..."
             @keydown.up.prevent="focusTocList"

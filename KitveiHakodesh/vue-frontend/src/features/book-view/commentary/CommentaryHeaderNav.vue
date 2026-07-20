@@ -139,7 +139,6 @@ function handleKeydown(e: KeyboardEvent) {
       <input
         ref="inputRef"
         type="text"
-        name="commentary-search"
         class="search-input"
         :list="`commentary-list-${componentId}`"
         :placeholder="activeFullLabel || 'חפש מפרש...'"

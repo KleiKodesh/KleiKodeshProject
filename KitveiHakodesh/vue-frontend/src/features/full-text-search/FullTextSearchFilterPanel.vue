@@ -299,7 +299,6 @@ function onInputKeydown(e: KeyboardEvent) {
           ref="searchInputRef"
           v-model="inputText"
           type="text"
-          name="filter-book-search"
           class="search-input"
           :placeholder="atFilters.length ? '' : placeholder"
           @keydown="onInputKeydown"
