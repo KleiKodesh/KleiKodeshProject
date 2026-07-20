@@ -129,7 +129,7 @@ function onInputKeydown(e: KeyboardEvent) {
   else if (e.key === 'Escape') handleClear()
 }
 
-defineExpose({ focus: () => af.inputEl.value?.focus(), filterBtnRef, advancedBtnRef })
+defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
 </script>
 
 <template>
