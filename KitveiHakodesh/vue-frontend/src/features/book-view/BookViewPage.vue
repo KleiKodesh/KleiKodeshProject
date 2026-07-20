@@ -78,7 +78,9 @@ function cycleCommentaryMode() {
   if (commentaryMode.value === 'off') {
     commentaryMode.value = 'bottom'
   } else if (commentaryMode.value === 'bottom') {
-    commentaryMode.value = 'side'
+    // Side-by-side only fits a wide pane; on a narrow pane skip it and close,
+    // so we don't flash into a mode a watcher would immediately bounce back.
+    commentaryMode.value = isWideScreen.value ? 'side' : 'off'
   } else {
     commentaryMode.value = 'off'
   }
@@ -180,6 +182,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       :lines="lines"
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
       :commentary-mode="commentaryMode"
+      :can-use-side-by-side="isWideScreen"
       @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
@@ -208,6 +211,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
         :on-related-books-open="ensureStaticFilterGroupsLoaded"
         :commentary-mode="commentaryMode"
+        :can-use-side-by-side="isWideScreen"
         @cycle-commentary-mode="cycleCommentaryMode"
         @toggle-search="toggleSearch"
         @toggle-toc="toggleTocPanel"
@@ -491,6 +495,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       :lines="lines"
       :on-related-books-open="ensureStaticFilterGroupsLoaded"
       :commentary-mode="commentaryMode"
+      :can-use-side-by-side="isWideScreen"
       @cycle-commentary-mode="cycleCommentaryMode"
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
