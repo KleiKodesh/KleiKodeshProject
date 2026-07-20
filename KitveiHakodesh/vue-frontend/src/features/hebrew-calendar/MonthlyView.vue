@@ -210,7 +210,7 @@ const grid = computed<GridCell[]>(() => {
   background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
 }
 .cell.holiday {
-  background: color-mix(in srgb, #f0a500 6%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 6%, transparent);
 }
 .cell.today {
   border-color: var(--accent-color, #0078d4);
@@ -259,7 +259,7 @@ const grid = computed<GridCell[]>(() => {
   font-weight: 600;
 }
 .holiday {
-  color: #f0a500;
+  color: var(--status-warning);
   font-weight: 600;
 }
 .candle {

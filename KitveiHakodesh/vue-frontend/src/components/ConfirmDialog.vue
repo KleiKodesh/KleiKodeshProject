@@ -91,24 +91,24 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   padding: 0 14px;
   font-size: 12px;
   border: 1px solid var(--border-color);
-  background: var(--bg-toolbar);
+  background: var(--control-bg);
   color: var(--text-primary);
   border-radius: 4px;
 }
 .confirm-cancel-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar));
+  background: var(--control-bg-hover);
 }
 
 .confirm-ok-btn {
   height: 30px;
   padding: 0 14px;
   font-size: 12px;
-  color: #e53e3e;
-  border: 1px solid color-mix(in srgb, #e53e3e 40%, transparent);
-  background: color-mix(in srgb, #e53e3e 8%, transparent);
+  color: var(--status-danger);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 40%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
   border-radius: 4px;
 }
 .confirm-ok-btn:hover {
-  background: color-mix(in srgb, #e53e3e 16%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 16%, transparent);
 }
 </style>

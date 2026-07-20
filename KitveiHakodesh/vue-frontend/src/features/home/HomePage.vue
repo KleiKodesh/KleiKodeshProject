@@ -167,7 +167,7 @@ const tiles = computed(() => {
       ? { label: 'בחר מסד ספרים', icon: IconDatabase24Filled, color: '#3478f6' }
       : { label: 'חיפוש', icon: IconSearchSparkle24 },
     { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-    { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500' },
+    { label: 'פתח קובץ', icon: IconFolder24Filled, color: 'var(--status-warning)' },
     { label: 'חיפוש קבצים', icon: IconEverythingSearch, iconScale: 0.93 },
     { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
     { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },

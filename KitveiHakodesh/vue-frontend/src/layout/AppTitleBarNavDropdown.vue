@@ -36,7 +36,7 @@ const tiles = [
   { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B', shortcut: 'Ctrl+1' },
   { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined, shortcut: 'Ctrl+2' },
   { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E', shortcut: 'Ctrl+3' },
-  { label: 'פתח קובץ', icon: IconFolder24Filled, color: '#f0a500', shortcut: 'Ctrl+4' },
+  { label: 'פתח קובץ', icon: IconFolder24Filled, color: 'var(--status-warning)', shortcut: 'Ctrl+4' },
   { label: 'חיפוש קבצים', icon: IconEverythingSearch, color: undefined, shortcut: 'Ctrl+5' },
   { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7', shortcut: 'Ctrl+6' },
   { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32', shortcut: 'Ctrl+7' },

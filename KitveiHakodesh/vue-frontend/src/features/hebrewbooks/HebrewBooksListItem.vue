@@ -158,7 +158,7 @@ const tooltip = computed(() => {
   color: var(--text-primary);
 }
 .delete-btn:hover {
-  color: #e53e3e;
+  color: var(--status-danger);
 }
 .reveal-btn:hover {
   color: #3478f6;

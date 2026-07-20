@@ -184,8 +184,8 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .result-badge.is-ocr {
-  background: color-mix(in srgb, #f0a500 15%, transparent);
-  color: #f0a500;
+  background: color-mix(in srgb, var(--status-warning) 15%, transparent);
+  color: var(--status-warning);
 }
 
 .close-btn {
@@ -275,12 +275,12 @@ function onKeydown(event: KeyboardEvent) {
 
 .cancel-btn {
   border: 1px solid var(--border-color);
-  background: var(--bg-toolbar);
+  background: var(--control-bg);
   color: var(--text-primary);
 }
 
 .cancel-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar));
+  background: var(--control-bg-hover);
 }
 
 .copy-btn {
@@ -299,7 +299,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .copy-btn.copied {
-  background: #10b981;
+  background: var(--status-success);
   border: none;
   color: #fff;
   animation: pulse 300ms ease-out;
@@ -323,8 +323,8 @@ function onKeydown(event: KeyboardEvent) {
   gap: 6px;
   padding: 4px 10px;
   border-radius: 4px;
-  background: color-mix(in srgb, #f0a500 15%, transparent);
-  color: #f0a500;
+  background: color-mix(in srgb, var(--status-warning) 15%, transparent);
+  color: var(--status-warning);
   font-size: 12px;
   font-weight: 500;
 }
@@ -361,7 +361,7 @@ function onKeydown(event: KeyboardEvent) {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--accent-color), #10b981);
+  background: linear-gradient(90deg, var(--accent-color), var(--status-success));
   transition: width 150ms ease;
   border-radius: 2px;
   box-shadow: 0 0 8px rgba(0, 120, 212, 0.4);

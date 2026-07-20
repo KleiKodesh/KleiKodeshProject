@@ -101,7 +101,7 @@ function selectItem(index: number, event?: MouseEvent) {
   font-size: 20px;
 }
 .folder-icon svg {
-  color: #f0a500;
+  color: var(--status-warning);
 }
 .book-icon svg {
   color: #c1440e;

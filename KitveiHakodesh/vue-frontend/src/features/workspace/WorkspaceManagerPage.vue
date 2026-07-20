@@ -213,10 +213,10 @@ function startConfirmDelete(id: string) {
   height: 16px;
 }
 .icon-btn.danger {
-  color: #e53e3e;
+  color: var(--status-danger);
 }
 .icon-btn.danger:hover {
-  background: color-mix(in srgb, #e53e3e 12%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 12%, transparent);
 }
 .icon-btn:disabled {
   opacity: 0.3;
