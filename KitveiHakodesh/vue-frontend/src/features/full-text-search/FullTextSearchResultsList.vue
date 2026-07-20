@@ -297,7 +297,7 @@ defineExpose({ captureScrollPos, scrollToBook })
   color: var(--text-secondary);
 }
 .error-msg {
-  color: color-mix(in srgb, var(--text-primary) 70%, #e05252);
+  color: color-mix(in srgb, var(--text-primary) 70%, var(--status-danger));
 }
 .scroller {
   flex: 1;

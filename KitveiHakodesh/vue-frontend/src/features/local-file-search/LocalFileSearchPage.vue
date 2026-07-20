@@ -294,8 +294,8 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
   flex-shrink: 0;
 }
 .error-banner {
-  color: #ff3b30;
-  background: color-mix(in srgb, #ff3b30 8%, transparent);
+  color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
 }
 .banner-icon {
   flex-shrink: 0;

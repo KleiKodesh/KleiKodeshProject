@@ -205,8 +205,8 @@ async function onDelete() {
 }
 
 .delete-button:hover {
-  color: #e53935;
-  background: color-mix(in srgb, #e53935 10%, transparent);
+  color: var(--status-danger);
+  background: color-mix(in srgb, var(--status-danger) 10%, transparent);
 }
 
 .delete-button:active {
