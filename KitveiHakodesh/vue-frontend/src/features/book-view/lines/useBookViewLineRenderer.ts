@@ -124,8 +124,10 @@ function extractSnippetTerms(snippet: string): string[] {
 /**
  * Highlight all occurrences of the snippet's marked terms anywhere in the full line content.
  * Uses the same diacritic-aware, HTML-aware walk as highlightMatches.
+ * NOTE: also used by the full-text-search "הצג עוד" preview (useFullTextSearchPreview.ts) —
+ * keep it exported so both can share the same implementation.
  */
-function highlightFromSnippet(
+export function highlightFromSnippet(
   content: string,
   snippet: string,
 ): string {
