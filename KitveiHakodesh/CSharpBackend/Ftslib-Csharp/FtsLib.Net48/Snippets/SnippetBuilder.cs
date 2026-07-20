@@ -72,8 +72,13 @@ namespace FtsLib.Snippets
             if (score == int.MaxValue)
                 return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
 
-            var (snapStart, snapEnd) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
+            var (snapStart, snapEnd, sIdx, eIdx) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
             string html = RenderFromRaw(rawHtml, tokens, prepared, snapStart, snapEnd);
+
+            // Visible words actually shown in the window — lets the caller detect a
+            // "short" snippet for free (no re-scan, no DB), e.g. to embellish it with
+            // surrounding lines when it spans fewer words than the requested context.
+            int windowWords = eIdx - sIdx + 1;
 
             // WordDistance = extra words between matched slots (0 = all consecutive).
             // originalGroupCount overrides so skipped wildcards still count as a slot.
@@ -82,9 +87,9 @@ namespace FtsLib.Snippets
             if (wordDist < 0) wordDist = 0;
 
             if (requireOrdered && prepared.GroupCount > 1 && !HasOrderedMatch(tokens, prepared))
-                return new SnippetResult(html, score, wordDist, false);
+                return new SnippetResult(html, score, wordDist, false, windowWords);
 
-            return new SnippetResult(html, score, wordDist, true);
+            return new SnippetResult(html, score, wordDist, true, windowWords);
         }
 
         /// <summary>
@@ -209,13 +214,15 @@ namespace FtsLib.Snippets
         /// <see cref="SafetyCeiling"/> visible chars guards against pathological lines
         /// that have no word breaks; it never fires on normal Hebrew text.
         ///
-        /// Returns raw character positions (snapStart, snapEnd).
+        /// Returns raw character positions (snapStart, snapEnd) plus the token
+        /// indices (sIdx, eIdx) of the window bounds so the caller can report how
+        /// many words the window spans.
         /// </summary>
-        private (int snapStart, int snapEnd) ExpandWindow(
+        private (int snapStart, int snapEnd, int sIdx, int eIdx) ExpandWindow(
             List<TextToken> tokens, int rawLen, int iLeft, int iRight)
         {
             if (iLeft < 0 || iRight < 0 || tokens.Count == 0)
-                return (0, rawLen);
+                return (0, rawLen, 0, tokens.Count > 0 ? tokens.Count - 1 : 0);
 
             // Expand by word count on each side — exact, reads from the token list.
             int sIdx = System.Math.Max(0,              iLeft  - _contextWords);
@@ -248,7 +255,7 @@ namespace FtsLib.Snippets
             // cut the gap between the last word and whatever follows it.
             int snapEnd = eIdx + 1 < tokens.Count ? tokens[eIdx].RawEnd : rawLen;
 
-            return (System.Math.Max(0, snapStart), System.Math.Min(rawLen, snapEnd));
+            return (System.Math.Max(0, snapStart), System.Math.Min(rawLen, snapEnd), sIdx, eIdx);
         }
 
         // ── Single-pass renderer from raw HTML ────────────────────────

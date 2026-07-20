@@ -67,7 +67,7 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, queryGroups, requireOrdered, originalGroupCount);
-            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 
         /// <summary>
@@ -87,7 +87,42 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, prepared, requireOrdered, originalGroupCount);
-            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
+        }
+
+        /// <summary>
+        /// Embellished build: renders the snippet over the matched line PLUS the given
+        /// surrounding lines (already fetched, in document order). The neighbor text is
+        /// concatenated around the matched line with a single space separator, then the
+        /// normal single-pass builder runs — so the match is found in the matched line
+        /// and <c>contextWords</c> naturally expands into the neighbor text.
+        ///
+        /// Used only for lines whose own snippet came out shorter than the requested
+        /// context (see <see cref="SnippetResult.WindowWordCount"/>); every other line
+        /// keeps the plain single-line path with zero added cost.
+        /// </summary>
+        internal static SnippetResult GenerateWithNeighbors(
+            string              prevContent,
+            string              content,
+            string              nextContent,
+            PreparedQueryGroups prepared,
+            bool                requireOrdered     = false,
+            int                 originalGroupCount = 0,
+            int                 contextWords       = DefaultContextWords)
+        {
+            if (string.IsNullOrEmpty(content) || prepared == null || prepared.IsEmpty)
+                return SnippetResult.NoMatch;
+
+            // Concatenate around the matched line. A space keeps boundary words distinct
+            // (they must not fuse across a line break) and renders as a normal gap.
+            var sb = new System.Text.StringBuilder(
+                (prevContent?.Length ?? 0) + content.Length + (nextContent?.Length ?? 0) + 2);
+            if (!string.IsNullOrEmpty(prevContent)) sb.Append(prevContent).Append(' ');
+            sb.Append(content);
+            if (!string.IsNullOrEmpty(nextContent)) sb.Append(' ').Append(nextContent);
+
+            var inner = GetBuilder(contextWords).Build(sb.ToString(), prepared, requireOrdered, originalGroupCount);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 
         internal static SnippetResult Generate(
@@ -99,7 +134,7 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, queryTerms);
-            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch);
+            return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 
         // ── Fallback path: fetch content from DB ──────────────────────

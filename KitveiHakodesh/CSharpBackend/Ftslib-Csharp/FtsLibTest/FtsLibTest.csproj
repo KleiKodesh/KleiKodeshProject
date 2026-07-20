@@ -68,6 +68,7 @@
     <Compile Include="BuildIndex\CrashMergeTest.cs" />
     <Compile Include="BuildIndex\SearchDuringMergeTest.cs" />
     <!-- SearchIndex -->
+    <Compile Include="SearchIndex\EmbellishBenchTest.cs" />
     <Compile Include="SearchIndex\ProbeSearch.cs" />
     <Compile Include="SearchIndex\DumpIds.cs" />
     <Compile Include="SearchIndex\VerifyPrefixScan.cs" />
