@@ -123,8 +123,16 @@ namespace KitveiHakodeshLib.Search
                 FtsIndexState.DeleteFtsIndex();
 
             FtsIndexState.DeleteBloomIndexIfPresent();
-            _indexState.SetDatabase(dbPath,
-                new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
+            // Opening the index runs crash recovery / live-state rebuild synchronously
+            // here, and this is on the critical path to marking search "ready" — time it
+            // so a slow startup can be attributed (see FtsLib.log / console).
+            var openSw = System.Diagnostics.Stopwatch.StartNew();
+            var seforimIndex = new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath);
+            openSw.Stop();
+            Console.WriteLine($"[SearchHandler] SeforimIndex opened in {openSw.ElapsedMilliseconds} ms");
+            FtsLib.Indexing.FtsLog.Write("SearchHandler.ExecuteOnDbReady",
+                $"SeforimIndex opened in {openSw.ElapsedMilliseconds} ms");
+            _indexState.SetDatabase(dbPath, seforimIndex);
 
             string stampedVersion = FtsIndexState.ReadVersionStamp();
             if (stampedVersion != null)

@@ -76,6 +76,7 @@ namespace FtsLibTest
 
             // ── Queries ───────────────────────────────────────────────
             SeforimIndex index;
+            var openSw = Stopwatch.StartNew();
             try
             {
                 index = new SeforimIndex(indexDir, dbPath);
@@ -86,6 +87,8 @@ namespace FtsLibTest
                 Console.WriteLine("╚══════════════════════════════════════");
                 return;
             }
+            openSw.Stop();
+            Console.WriteLine($"║  Index opened in {openSw.ElapsedMilliseconds} ms  (recovery / read-only rebuild)");
 
             bool anyFail = false;
             foreach (var probe in Probes)
