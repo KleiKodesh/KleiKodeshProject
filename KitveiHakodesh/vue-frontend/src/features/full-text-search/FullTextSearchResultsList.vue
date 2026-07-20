@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconSearchSparkle24Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearchSparkle24Regular, IconEye24Regular, IconDismiss24Regular, IconArrowReset24Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useFullTextSearchCopyMenu, useFullTextSearchScopedCopy } from './useFullTextSearchCopyMenu'
+import { useFullTextSearchPreview } from './useFullTextSearchPreview'
+import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const props = defineProps<{
@@ -60,6 +62,24 @@ const virtualizer = useVirtualizer(
 function renderSnippet(snippet: string): string {
   if (!snippet) return snippet
   return settingsStore.censorDivineNames ? censorDivineNames(snippet) : snippet
+}
+
+// "הצג עוד" — per-result windowed live preview (replaces the clamped snippet).
+const { previewOf, togglePreview, loadAbove, loadBelow, clearPreviews } = useFullTextSearchPreview()
+watch(
+  () => props.searchQuery,
+  () => clearPreviews(),
+)
+
+// Open previews' component instances, keyed by lineId — the header recenter button
+// lives outside the preview component, so it reaches the scroll through this map.
+const previewRefs = new Map<number, InstanceType<typeof FullTextSearchResultPreview>>()
+function setPreviewRef(lineId: number, el: unknown) {
+  if (el) previewRefs.set(lineId, el as InstanceType<typeof FullTextSearchResultPreview>)
+  else previewRefs.delete(lineId)
+}
+function recenterPreview(result: FullTextSearchResult) {
+  previewRefs.get(result.lineId)?.recenter()
 }
 
 function resultTitle(result: FullTextSearchResult): string {
@@ -214,9 +234,33 @@ defineExpose({ captureScrollPos, scrollToBook })
                 <span v-if="results[vRow.index]!.tocText" class="toc-text">{{
                   results[vRow.index]!.tocText
                 }}</span>
+                <button
+                  v-if="previewOf(results[vRow.index]!)"
+                  class="preview-recenter-btn"
+                  title="חזרה לשורת התוצאה"
+                  @click.stop="recenterPreview(results[vRow.index]!)"
+                >
+                  <IconArrowReset24Regular />
+                </button>
+                <button
+                  class="preview-toggle-btn"
+                  :title="previewOf(results[vRow.index]!) ? 'סגור תצוגה מקדימה' : 'הצג עוד'"
+                  @click.stop="togglePreview(results[vRow.index]!)"
+                >
+                  <IconDismiss24Regular v-if="previewOf(results[vRow.index]!)" />
+                  <IconEye24Regular v-else />
+                </button>
               </div>
+              <FullTextSearchResultPreview
+                v-if="previewOf(results[vRow.index]!)"
+                :ref="(el) => setPreviewRef(results[vRow.index]!.lineId, el)"
+                :state="previewOf(results[vRow.index]!)!"
+                :render-html="renderSnippet"
+                :load-above="() => loadAbove(results[vRow.index]!)"
+                :load-below="() => loadBelow(results[vRow.index]!)"
+              />
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <div class="snippet" v-html="renderSnippet(results[vRow.index]!.snippet)" />
+              <div v-else class="snippet" v-html="renderSnippet(results[vRow.index]!.snippet)" />
             </div>
           </div>
         </div>
@@ -307,6 +351,47 @@ defineExpose({ captureScrollPos, scrollToBook })
   flex-shrink: 2;
   min-width: 0;
   user-select: text;
+}
+/* Header icon buttons (recenter + preview toggle), pushed together to the
+   inline-end (far left in RTL) of the header row. Only the toggle's icon
+   switches between its two states — no background change. */
+.preview-toggle-btn,
+.preview-recenter-btn {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 4px;
+  transition: color 120ms;
+}
+/* The auto margin sits on the first button of the group; the recenter button only
+   exists while the preview is open, so the toggle carries it when alone. */
+.preview-toggle-btn,
+.preview-recenter-btn {
+  margin-inline-start: auto;
+}
+.preview-recenter-btn + .preview-toggle-btn {
+  margin-inline-start: 0;
+}
+.preview-toggle-btn:hover,
+.preview-recenter-btn:hover {
+  color: var(--accent-color);
+}
+.preview-toggle-btn:active,
+.preview-recenter-btn:active {
+  color: color-mix(in srgb, var(--accent-color) 75%, black);
+}
+.preview-toggle-btn svg,
+.preview-recenter-btn svg {
+  width: 1.1em;
+  height: 1.1em;
+  display: block;
+  color: inherit; /* theme.css pins svg color globally — restore inheritance so hover shows */
 }
 .snippet {
   font-family: var(--text-font);
