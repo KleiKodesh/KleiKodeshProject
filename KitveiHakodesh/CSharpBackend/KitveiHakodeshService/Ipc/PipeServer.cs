@@ -19,10 +19,29 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
 {
     public const string PipeName = "KitveiHakodesh";
 
+    // Keep several listener instances armed at once. A single serial acceptor has a
+    // brief window with NO listening instance — between accepting one client and
+    // creating the next — during which a concurrent connect gets ENOENT ("all pipe
+    // instances are busy"). The frontend fires a burst of requests on load (warmup +
+    // catalog + page data), so run a small pool of independent acceptor loops: there
+    // is always a ready instance and bursts don't race into ENOENT.
+    private const int AcceptorCount = 4;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        logger.LogInformation(@"KitveiHakodesh pipe server listening on \\.\pipe\{Pipe}", PipeName);
+        logger.LogInformation(
+            @"KitveiHakodesh pipe server listening on \\.\pipe\{Pipe} ({N} acceptors)", PipeName, AcceptorCount);
 
+        var acceptors = new Task[AcceptorCount];
+        for (int i = 0; i < AcceptorCount; i++)
+            acceptors[i] = AcceptLoopAsync(stoppingToken);
+        await Task.WhenAll(acceptors);
+    }
+
+    /// <summary>One independent accept loop: wait for a client, hand it to a detached
+    /// handler, immediately loop to wait for the next. N of these run concurrently.</summary>
+    private async Task AcceptLoopAsync(CancellationToken stoppingToken)
+    {
         while (!stoppingToken.IsCancellationRequested)
         {
             NamedPipeServerStream? pipe = null;
@@ -31,8 +50,8 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
                 pipe = CreatePipe();
                 await pipe.WaitForConnectionAsync(stoppingToken);
 
-                // Hand off to a detached task so we can immediately accept the next
-                // client. Each connection serves exactly one request/response.
+                // Hand off to a detached task so this loop can immediately accept the
+                // next client. Each connection serves exactly one request/response.
                 var connected = pipe;
                 pipe = null;
                 _ = HandleClientAsync(connected, stoppingToken);

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using FtsLib.Indexing;
 using FtsLib.SeforimDb;
 
 namespace KitveiHakodeshService.SefroimDb;
@@ -141,28 +142,51 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
             logger.LogInformation("FTS build starting — index={Index} total≈{Total}", _indexPath, total);
 
-            bool ok = index.BuildIndex(
-                limit: 0,
-                onProgress: sessionCount =>
+            // A fast service restart (dev respawn) can begin the new build before the
+            // previous process has fully exited and released the OS write.lock — the
+            // acquisition then throws IndexWriteLockException. The stale lock clears the
+            // moment the old process dies (the OS releases it), so wait-and-retry a few
+            // times instead of abandoning the build. This is the ONLY place we can guard
+            // it without changing shared FtsLib (used by the hosted net48 path too).
+            bool ok = false;
+            const int lockRetries = 8;
+            for (int attempt = 0; ; attempt++)
+            {
+                ct.ThrowIfCancellationRequested();
+                try
                 {
-                    if (total > 0 && sessionCount % 5000 == 0)
-                    {
-                        long indexed = resumeOffset + sessionCount;
-                        _pct = Math.Min(99.9, indexed * 100.0 / total);
-                        _processed = (int)Math.Min(indexed, int.MaxValue);
-                        if (!_isReady && SegmentsExist()) _isReady = true; // first segment → searchable
-                        NotifyProgress();
-                    }
-                },
-                onFlush: () =>
+                    ok = index.BuildIndex(
+                        limit: 0,
+                        onProgress: sessionCount =>
+                        {
+                            if (total > 0 && sessionCount % 5000 == 0)
+                            {
+                                long indexed = resumeOffset + sessionCount;
+                                _pct = Math.Min(99.9, indexed * 100.0 / total);
+                                _processed = (int)Math.Min(indexed, int.MaxValue);
+                                if (!_isReady && SegmentsExist()) _isReady = true; // first segment → searchable
+                                NotifyProgress();
+                            }
+                        },
+                        onFlush: () =>
+                        {
+                            if (!_isReady && SegmentsExist()) _isReady = true;
+                            NotifyProgress();
+                        },
+                        totalLines: total,
+                        resumeOffset: resumeOffset,
+                        forceMergeOnComplete: true,
+                        ct: ct);
+                    break;
+                }
+                catch (IndexWriteLockException) when (attempt < lockRetries)
                 {
-                    if (!_isReady && SegmentsExist()) _isReady = true;
-                    NotifyProgress();
-                },
-                totalLines: total,
-                resumeOffset: resumeOffset,
-                forceMergeOnComplete: true,
-                ct: ct);
+                    logger.LogInformation(
+                        "FTS index write-lock held (attempt {Attempt}/{Max}) — a prior instance is still exiting; retrying",
+                        attempt + 1, lockRetries);
+                    Task.Delay(500, ct).GetAwaiter().GetResult();
+                }
+            }
 
             if (ok)
             {
@@ -179,6 +203,16 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         catch (OperationCanceledException)
         {
             logger.LogInformation("FTS build cancelled (reset)");
+        }
+        catch (IndexWriteLockException ex)
+        {
+            // Retries exhausted — the write lock is still held (unusually long-lived prior
+            // instance, or a genuinely concurrent writer). Re-arm the build latch so a later
+            // EnsureIndexing() (search / status poll / next start) can resume, rather than
+            // abandoning the index permanently and leaving every restart to re-resume a
+            // never-finishing build.
+            logger.LogWarning(ex, "FTS index write-lock still held after retries — will resume later");
+            lock (_lock) { _buildStarted = false; }
         }
         catch (Exception ex)
         {
