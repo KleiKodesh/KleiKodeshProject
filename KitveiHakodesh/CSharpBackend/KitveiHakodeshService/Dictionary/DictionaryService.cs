@@ -30,12 +30,28 @@ public sealed class DictionaryService(ILogger<DictionaryService> logger)
         "JOIN word w2 ON w2.id = l.target_id " +
         "JOIN link_kind lk ON lk.id = l.kind_id";
 
+    // Follows a spelling/inflection redirect: a variant word that has NO senses of
+    // its own but points (via a 'כתיב' link) at a base entry — resolve to the
+    // base's senses. Curated pairs only, so the resolved word is always the SAME
+    // word typed in a different spelling/inflection. Same column shape as SenseSelect.
+    private const string RedirectSelect =
+        "SELECT wbase.headword, s.nikud, s.text, sk.name AS source, s.source_id " +
+        "FROM word walias " +
+        "JOIN link l ON l.word_id = walias.id " +
+        "JOIN link_kind lk ON lk.id = l.kind_id AND lk.name = 'כתיב' " +
+        "JOIN word wbase ON wbase.id = l.target_id " +
+        "JOIN sense s ON s.word_id = wbase.id " +
+        "LEFT JOIN source_kind sk ON sk.id = s.source_id";
+
     // ── Tier queries (driven by the frontend combinedLookup) ───────────────────
 
     public DictExactResult Exact(string term)
     {
         var rows = QuerySenses(SenseSelect + " WHERE w.headword = @t LIMIT 100", ("@t", term));
         if (rows.Count > 0) return new DictExactResult { Rows = rows, IsExact = true };
+        // No direct senses — follow a curated spelling/inflection redirect to the base entry.
+        var redirect = QuerySenses(RedirectSelect + " WHERE walias.headword = @t LIMIT 100", ("@t", term));
+        if (redirect.Count > 0) return new DictExactResult { Rows = redirect, IsExact = true };
         bool exists = ScalarExists("SELECT 1 FROM word WHERE headword = @t LIMIT 1", ("@t", term));
         return new DictExactResult { Rows = [], IsExact = exists };
     }

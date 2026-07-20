@@ -25,6 +25,21 @@ export const SQL_DICT_CONTAINS = `
 export const SQL_DICT_EXACT_IN_WORD = `
   SELECT 1 FROM word WHERE headword = ? LIMIT 1`
 
+// Spelling/inflection redirect: a variant word with no senses of its own points
+// (via a 'כתיב' link) at a base entry — return the base's senses so a typed
+// variant spelling resolves to the real word. Curated same-word pairs only.
+// Sense-less variant words are invisible to the prefix/contains/spell tiers
+// (those INNER JOIN on sense), so this adds no result-list pollution.
+export const SQL_DICT_REDIRECT = `
+  SELECT wbase.headword, s.nikud, s.text, sk.name AS source, s.source_id
+  FROM word walias
+  JOIN link l ON l.word_id = walias.id
+  JOIN link_kind lk ON lk.id = l.kind_id AND lk.name = 'כתיב'
+  JOIN word wbase ON wbase.id = l.target_id
+  JOIN sense s ON s.word_id = wbase.id
+  LEFT JOIN source_kind sk ON sk.id = s.source_id
+  WHERE walias.headword = ? LIMIT 100`
+
 // %term% contains-match with no prefix exclusion — fallback tier for the
 // book-view abbreviation tooltip (unlike SQL_DICT_CONTAINS which excludes
 // prefix matches because they were already served by the prefix tier).
