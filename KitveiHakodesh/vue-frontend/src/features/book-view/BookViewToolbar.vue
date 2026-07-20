@@ -39,6 +39,9 @@ const props = defineProps<{
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
   commentaryMode?: 'off' | 'bottom' | 'side'
+  // Side-by-side commentary needs a pane wide enough; when the pane is narrow
+  // the toggle skips the 'side' stage, so the tooltip must too.
+  canUseSideBySide?: boolean
 }>()
 defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
 
@@ -126,7 +129,11 @@ const zoomInTitle = computed(
 
 const commentaryModeTitle = computed(() => {
   if (props.commentaryMode === 'off') return 'פאנל מפרשים (Ctrl+J)'
-  if (props.commentaryMode === 'bottom') return 'עבור לתצוגה צדדית'
+  // In 'bottom' mode the next press switches to side view — but only when the
+  // pane is wide enough for it; otherwise the press closes the panel.
+  if (props.commentaryMode === 'bottom') {
+    return props.canUseSideBySide ? 'עבור לתצוגה צדדית' : 'סגור פאנל מפרשים'
+  }
   return 'סגור פאנל מפרשים'
 })
 
