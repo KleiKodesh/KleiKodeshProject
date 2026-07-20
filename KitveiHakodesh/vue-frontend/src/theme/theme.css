@@ -4,7 +4,6 @@
   --bg-secondary: var(--bg-secondary-custom, #f8f8f8);
   --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 248, 248, 248);
   --bg-toolbar: var(--bg-toolbar-custom, #fcfcfc);
-  --bg-toolbar-rgb: var(--bg-toolbar-rgb-custom, 252, 252, 252);
   --border-color: var(--border-color-custom, #e5e5e5);
   --text-primary: var(--text-primary-custom, #1f1f1f);
   --text-secondary: var(--text-secondary-custom, #5a5a5a);
@@ -25,7 +24,6 @@
   --bg-secondary: var(--bg-secondary-custom, #2d2d2d);
   --bg-secondary-rgb: var(--bg-secondary-rgb-custom, 45, 45, 45);
   --bg-toolbar: var(--bg-toolbar-custom, #262626);
-  --bg-toolbar-rgb: var(--bg-toolbar-rgb-custom, 38, 38, 38);
   --border-color: var(--border-color-custom, #3b3b3b);
   --text-primary: var(--text-primary-custom, #d4d4d4);
   --text-secondary: var(--text-secondary-custom, #a6a6a6);

@@ -52,7 +52,6 @@ export function applyTheme(preset: ThemePreset) {
   const uiVars: [string, string][] = [
     ['--bg-primary-custom', ui.bgPrimary],
     ['--bg-secondary-custom', ui.bgSecondary],
-    ['--bg-tertiary-custom', ui.bgTertiary ?? ui.bgSecondary],
     // Fluent three-layer ramp: the toolbar (commanding layer) sits halfway
     // between the title bar (bgSecondary) and the content (bgPrimary) in every
     // theme — one step toward the content, never darker than the title bar.
