@@ -1,7 +1,7 @@
 /* KitveiHakodesh theme integration — CSS variable hooks injected by syncPdfViewerTheme() in themes.ts */
 
 :root {
-  --toolbar-bg-color: var(--bg-primary-custom, light-dark(rgb(249 249 250), rgb(56 56 61)));
+  --toolbar-bg-color: var(--bg-toolbar-custom, light-dark(rgb(249 249 250), rgb(56 56 61)));
   --toolbar-border-color: var(--border-color-custom, light-dark(rgb(184 184 184), rgb(92 92 97)));
   --main-color: var(--text-primary-custom, light-dark(rgb(12 12 13), rgb(249 249 250)));
   --body-bg-color: var(--bg-secondary-custom, light-dark(rgb(212 212 215), rgb(35 35 39)));
