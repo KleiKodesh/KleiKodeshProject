@@ -47,6 +47,10 @@ namespace FtsLibTest
                     BenchTest.Run(args);
                     return;
 
+                case "embellishbench":
+                    EmbellishBenchTest.Run(args);
+                    return;
+
                 case "query":
                     QueryTest.Run(args);
                     return;

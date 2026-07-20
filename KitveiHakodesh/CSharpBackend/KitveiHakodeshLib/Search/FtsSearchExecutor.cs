@@ -112,10 +112,36 @@ namespace KitveiHakodeshLib.Search
                 int doublingIndex = 0;          // index into doublingThresholds
                 bool useTimerOnly = false;
 
-                var     batch   = new List<object>(MemorySafetyCap);
+                var     batch   = new List<PendingHit>(MemorySafetyCap);
                 int     skipped = 0;
                 var     timer   = new Stopwatch();
                 timer.Start();
+
+                // Embellish the batch's short snippets over their surrounding lines, then
+                // project to the frontend shape and post. Runs once per flush; a batch with
+                // no short lines pays no DB cost (see EmbellishShortSnippets).
+                void EmbellishAndPost(List<PendingHit> b)
+                {
+                    if (b.Count == 0) return;
+                    EmbellishShortSnippets(index, b, requireOrdered, contextWords);
+                    var results = new object[b.Count];
+                    for (int i = 0; i < b.Count; i++)
+                    {
+                        var h = b[i];
+                        results[i] = new
+                        {
+                            lineId       = h.Result.LineId,
+                            bookId       = 0,
+                            bookTitle    = h.Result.BookTitle,
+                            tocText      = "",
+                            score        = h.Score,
+                            wordDistance = h.WordDistance,
+                            snippet      = h.Snippet,
+                            matchedTerms = h.MatchedTerms
+                        };
+                    }
+                    PostSearch(new { type = "searchBatch", searchId = searchId, results = results });
+                }
 
                 foreach (var result in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
                 {
@@ -138,16 +164,14 @@ namespace KitveiHakodeshLib.Search
                             if (!matchedTerms.Contains(term))
                                 matchedTerms.Add(term);
 
-                    batch.Add(new
+                    batch.Add(new PendingHit
                     {
-                        lineId       = result.LineId,
-                        bookId       = 0,
-                        bookTitle    = result.BookTitle,
-                        tocText      = "",
-                        score        = snippet.Score,
-                        wordDistance = snippet.WordDistance,
-                        snippet      = snippet.Html,
-                        matchedTerms = matchedTerms.ToArray()
+                        Result          = result,
+                        Score           = snippet.Score,
+                        WordDistance    = snippet.WordDistance,
+                        WindowWordCount = snippet.WindowWordCount,
+                        Snippet         = snippet.Html,
+                        MatchedTerms    = matchedTerms.ToArray()
                     });
                     totalResults++;
 
@@ -166,8 +190,7 @@ namespace KitveiHakodeshLib.Search
 
                     if (shouldFlush)
                     {
-                        PostSearch(new { type = "searchBatch", searchId = searchId,
-                                         results = batch.ToArray() });
+                        EmbellishAndPost(batch);
                         batch.Clear();
                         timer.Restart();
 
@@ -181,8 +204,7 @@ namespace KitveiHakodeshLib.Search
                 }
 
                 if (batch.Count > 0)
-                    PostSearch(new { type = "searchBatch", searchId = searchId,
-                                     results = batch.ToArray() });
+                    EmbellishAndPost(batch);
 
                 Console.WriteLine($"[FtsSearchExecutor] Search {searchId} complete — query=\"{query}\" results={totalResults} skipped={skipped}");
                 PostSearch(new { type = "searchComplete", searchId = searchId });
@@ -211,5 +233,60 @@ namespace KitveiHakodeshLib.Search
         }
 
         private void PostSearch(object payload) => _bridge.PushEvent(payload);
+
+        // ── Snippet embellishment ─────────────────────────────────────────────────
+
+        // A hit held until flush so its snippet can be embellished with surrounding
+        // lines before being projected to the frontend shape. Score/WordDistance are
+        // the relevance keys computed on the matched line itself and never change;
+        // only Snippet (the HTML) is swapped for the richer, neighbor-aware render.
+        private sealed class PendingHit
+        {
+            public SearchResult Result;
+            public int          Score;
+            public int          WordDistance;
+            public int          WindowWordCount;
+            public string       Snippet;
+            public string[]     MatchedTerms;
+        }
+
+        // How many lines of context to pull on each side when embellishing (same book).
+        // Mirrors the service path; two lines fills the snippet's visual space and reaches
+        // about the requested per-side word context for prose.
+        private const int NeighborLineRadius = 2;
+
+        /// <summary>Re-render the batch's short snippets — those whose window spans fewer
+        /// words than the requested context (<paramref name="contextWords"/>), i.e. the
+        /// matched line was too short to fill it — over their surrounding lines. One batched
+        /// neighbor fetch for the whole batch; re-render runs across cores. No-op — and no
+        /// DB hit — when nothing is short.</summary>
+        private static void EmbellishShortSnippets(SeforimIndex index, List<PendingHit> batch,
+            bool requireOrdered, int contextWords)
+        {
+            List<PendingHit> shortHits = null;
+            List<int>        shortIds  = null;
+            foreach (var h in batch)
+            {
+                if (h.WindowWordCount >= contextWords) continue;
+                if (shortHits == null) { shortHits = new List<PendingHit>(); shortIds = new List<int>(); }
+                shortHits.Add(h);
+                shortIds.Add(h.Result.LineId);
+            }
+            if (shortHits == null) return; // nothing short — zero extra cost
+
+            var neighbors = index.FetchNeighborContext(shortIds, NeighborLineRadius);
+            if (neighbors.Count == 0) return;
+
+            Parallel.ForEach(shortHits, h =>
+            {
+                if (!neighbors.TryGetValue(h.Result.LineId, out var ctx)) return;
+                var re = index.GenerateSnippetWithNeighbors(
+                    h.Result, ctx.Prev, ctx.Next, requireOrdered, contextWords);
+                // Keep the original relevance keys; only swap in the richer snippet HTML.
+                // Guard against a failed re-render (shouldn't happen — same terms).
+                if (re.IsMatch && !string.IsNullOrEmpty(re.Html))
+                    h.Snippet = re.Html;
+            });
+        }
     }
 }
