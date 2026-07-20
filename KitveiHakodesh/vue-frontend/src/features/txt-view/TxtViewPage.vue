@@ -13,7 +13,7 @@ import { useTxtViewCopyMenu, useTxtViewScopedCopy } from './useTxtViewCopyMenu'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
-import { onLongPress } from '@vueuse/core'
+import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { getTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
 import ContextMenu from '@/components/ContextMenu.vue'
@@ -59,7 +59,7 @@ const { items: contextMenuItems, buildFormattedHtml } = useTxtViewCopyMenu({
 })
 useTxtViewScopedCopy(scrollContainerRef, buildFormattedHtml)
 
-onLongPress(scrollContainerRef, (event) => {
+useContextMenuLongPress(scrollContainerRef, (event) => {
   contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
 })
 
