@@ -135,9 +135,9 @@ function confirmResetAll() {
   height: 28px;
   padding: 0 10px;
   font-size: 12px;
-  color: #e53e3e;
-  border: 1px solid color-mix(in srgb, #e53e3e 40%, transparent);
-  background: color-mix(in srgb, #e53e3e 8%, transparent);
+  color: var(--status-danger);
+  border: 1px solid color-mix(in srgb, var(--status-danger) 40%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
   border-radius: 4px;
   overflow: hidden;
   white-space: nowrap;
@@ -145,6 +145,6 @@ function confirmResetAll() {
 }
 
 .reset-btn:hover {
-  background: color-mix(in srgb, #e53e3e 16%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 16%, transparent);
 }
 </style>

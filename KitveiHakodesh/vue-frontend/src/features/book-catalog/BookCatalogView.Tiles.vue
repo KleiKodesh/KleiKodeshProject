@@ -113,7 +113,7 @@ function selectItem(i: number, event?: MouseEvent) {
   height: 22px;
 }
 .tile .folder-icon svg {
-  color: #f0a500;
+  color: var(--status-warning);
 }
 .tile .book-icon svg {
   color: #c1440e;

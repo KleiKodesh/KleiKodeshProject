@@ -371,9 +371,9 @@ button:disabled {
 
 /* ── Diacritics ── */
 .diacritics-btn.state-1 {
-  color: #ff8c00;
+  color: var(--diacritics-1);
 }
 .diacritics-btn.state-2 {
-  color: #ff4500;
+  color: var(--diacritics-2);
 }
 </style>

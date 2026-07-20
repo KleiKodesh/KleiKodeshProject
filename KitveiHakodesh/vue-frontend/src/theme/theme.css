@@ -14,6 +14,16 @@
   --accent-bg-light: rgba(0, 120, 212, 0.05);
   --input-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
   --input-bg-focus: color-mix(in srgb, var(--text-secondary) 15%, transparent);
+  /* Neutral control fill for standalone buttons — derived from the surface so it
+     tracks custom themes, decoupled from --bg-toolbar (a chrome-surface token). */
+  --control-bg: color-mix(in srgb, var(--text-primary) 5%, transparent);
+  --control-bg-hover: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  /* Semantic status colors — hand-tuned per theme, independent of the accent. */
+  --status-success: #10b981;
+  --status-warning: #d98200;
+  --status-danger: #e53e3e;
+  --diacritics-1: #e07800;
+  --diacritics-2: #e03e00;
   --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
   --text-font: 'Times New Roman', Times, serif;
 }
@@ -34,6 +44,14 @@
   --accent-bg-light: rgba(96, 205, 255, 0.08);
   --input-bg: color-mix(in srgb, var(--text-secondary) 10%, transparent);
   --input-bg-focus: color-mix(in srgb, var(--text-secondary) 15%, transparent);
+  --control-bg: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  --control-bg-hover: color-mix(in srgb, var(--text-primary) 14%, transparent);
+  /* Brighter/less-saturated on dark so status hues stay legible on #1e1e1e. */
+  --status-success: #34d399;
+  --status-warning: #f0a500;
+  --status-danger: #f26d6d;
+  --diacritics-1: #ff9d2e;
+  --diacritics-2: #ff6a3d;
 }
 
 * { 

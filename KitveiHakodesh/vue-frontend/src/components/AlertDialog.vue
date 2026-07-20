@@ -70,12 +70,12 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   padding: 0 20px;
   font-size: 12px;
   border: 1px solid var(--border-color);
-  background: var(--bg-toolbar);
+  background: var(--control-bg);
   color: var(--text-primary);
   border-radius: 4px;
 }
 
 .alert-ok-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-toolbar));
+  background: var(--control-bg-hover);
 }
 </style>

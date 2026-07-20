@@ -217,8 +217,8 @@ function onBookClicked(
   justify-content: space-between;
   gap: 8px;
   padding: 8px 12px;
-  background: color-mix(in srgb, #e53e3e 12%, var(--bg-secondary));
-  border-bottom: 1px solid color-mix(in srgb, #e53e3e 30%, transparent);
+  background: color-mix(in srgb, var(--status-danger) 12%, var(--bg-secondary));
+  border-bottom: 1px solid color-mix(in srgb, var(--status-danger) 30%, transparent);
   color: var(--text-primary);
   font-size: 13px;
 }

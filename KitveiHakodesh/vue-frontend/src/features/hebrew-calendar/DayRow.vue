@@ -159,7 +159,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
   background: color-mix(in srgb, var(--text-secondary) 5%, transparent);
 }
 .day-row.holiday {
-  background: color-mix(in srgb, #f0a500 6%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 6%, transparent);
 }
 .day-row.today {
   border-inline-start: 3px solid var(--accent-color, #0078d4);
@@ -235,7 +235,7 @@ const hasLearning = LEARNING_ROWS.some((r) => props.day.learning[r.key])
 }
 .ev.holiday {
   font-weight: 600;
-  color: #f0a500;
+  color: var(--status-warning);
 }
 .havdalah {
   font-weight: 600;
@@ -273,7 +273,7 @@ button.chip {
   color: var(--text-secondary);
 }
 .chip.holiday {
-  color: #f0a500;
+  color: var(--status-warning);
 }
 .chip.chanukah {
   color: #e8a020;
@@ -304,8 +304,8 @@ button.chip {
   font-size: 11px;
   font-weight: 600;
   color: #c8a000;
-  background: color-mix(in srgb, #f0a500 12%, transparent);
-  border: 1px solid color-mix(in srgb, #f0a500 40%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 40%, transparent);
   border-radius: 4px;
   padding: 5px 10px;
   margin: 0 0 8px;

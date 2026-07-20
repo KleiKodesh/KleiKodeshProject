@@ -383,9 +383,9 @@ function cancelConversion() {
 }
 
 .toggle-btn.active {
-  background: #f0a500;
+  background: var(--status-warning);
   color: #fff;
-  border-color: #f0a500;
+  border-color: var(--status-warning);
 }
 
 .close-btn {
