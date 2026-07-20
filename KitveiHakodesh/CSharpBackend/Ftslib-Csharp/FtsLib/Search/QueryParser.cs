@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using FtsLib.Tokenization;
 
 namespace FtsLib.Search
 {
@@ -177,26 +178,11 @@ namespace FtsLib.Search
             var sb = new StringBuilder(token.Length);
             foreach (char c in token)
             {
-                // Strip nikud (U+05B0–U+05C7) and cantillation (U+0591–U+05AF)
-                if (c >= '\u0591' && c <= '\u05C7') continue;
-
-                if (c == '*') { sb.Append('*'); continue; }
-                if (c == '?') { sb.Append('?'); continue; }
-
-                // Hebrew letters U+05D0–U+05EA
-                if (c >= '\u05D0' && c <= '\u05EA') { sb.Append(c); continue; }
-
-                // ASCII letters — lowercase
-                if (c >= 'A' && c <= 'Z') { sb.Append((char)(c | 32)); continue; }
-                if (c >= 'a' && c <= 'z') { sb.Append(c); continue; }
-
-                // Quote characters inside a word (e.g. רשב"א, רש"י) are transparent
-                // connectors — skip without breaking the accumulated token.
-                // U+0022 ASCII "  U+05F4 Hebrew gershayim  U+0027 ASCII '  U+05F3 Hebrew geresh
-                if ((c == '\u0022' || c == '\u05F4' || c == '\u0027' || c == '\u05F3')
-                    && sb.Length > 0) continue;
-
-                // Everything else (digits, punctuation, etc.) is dropped
+                if (HebrewChars.IsStrippableMark(c)) continue;          // nikud + cantillation
+                if (c == '*' || c == '?') { sb.Append(c); continue; }   // preserve wildcard chars
+                if (HebrewChars.IsLetter(c)) { sb.Append(HebrewChars.ToLowerAscii(c)); continue; }
+                if (HebrewChars.IsIntraWordQuote(c) && sb.Length > 0) continue; // transparent connector
+                // everything else (digits, punctuation, spaces) is dropped
             }
             return sb.ToString();
         }
