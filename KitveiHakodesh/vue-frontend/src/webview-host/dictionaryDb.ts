@@ -12,7 +12,7 @@ import {
 } from './dictionarySeforimDb'
 import {
   SQL_DICT_EXACT, SQL_DICT_PREFIX, SQL_DICT_CONTAINS, SQL_DICT_EXACT_IN_WORD,
-  SQL_DICT_ABBREV_CONTAINS,
+  SQL_DICT_REDIRECT, SQL_DICT_ABBREV_CONTAINS,
   SQL_DICT_LINKS, SQL_DICT_SYNONYMS, SQL_DICT_VARIANTS,
   SQL_DICT_SPELL_CANDIDATES_FRAG2, SQL_DICT_SPELL_CANDIDATES_FRAG3,
   buildKetivExistsQuery,
@@ -58,6 +58,9 @@ async function dictExact(term: string): Promise<{ rows: SenseRow[]; isExact: boo
     return serviceCall<{ rows: SenseRow[]; isExact: boolean }>('dictExact', { term })
   const rows = await queryDictHosted<SenseRow>(SQL_DICT_EXACT, [term])
   if (rows.length > 0) return { rows, isExact: true }
+  // No direct senses — follow a curated spelling/inflection redirect to the base entry.
+  const redirect = await queryDictHosted<SenseRow>(SQL_DICT_REDIRECT, [term])
+  if (redirect.length > 0) return { rows: redirect, isExact: true }
   const hit = await queryDictHosted<{ '1': number }>(SQL_DICT_EXACT_IN_WORD, [term])
   return { rows: [], isExact: hit.length > 0 }
 }
