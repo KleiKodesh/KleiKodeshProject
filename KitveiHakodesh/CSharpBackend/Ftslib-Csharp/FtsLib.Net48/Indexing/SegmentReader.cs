@@ -19,6 +19,10 @@ namespace FtsLib.Indexing
     /// </summary>
     internal sealed class SegmentReader : System.IDisposable
     {
+        // Default read-ahead buffer. Large because the hot search/merge paths stream
+        // whole segments sequentially and benefit from big sequential reads.
+        internal const int DefaultBufferSize = 4 * 1024 * 1024;
+
         private readonly FileStream   _fs;
         private readonly BinaryReader _br;
 
@@ -35,10 +39,13 @@ namespace FtsLib.Indexing
         public int    CurrentSkipLen     { get; private set; }
         public bool   Done               { get; private set; }
 
-        public SegmentReader(string path)
+        /// <param name="bufferSize">Read-ahead buffer size. Leave at the default for
+        /// sequential streaming; pass a small value (e.g. 64 KB) when only the first
+        /// record is needed — a startup readability probe reads far less cold data.</param>
+        public SegmentReader(string path, int bufferSize = DefaultBufferSize)
         {
             _fs = new FileStream(path, FileMode.Open, FileAccess.Read,
-                                 FileShare.Read, bufferSize: 4 * 1024 * 1024);
+                                 FileShare.Read, bufferSize: bufferSize);
             _br = new BinaryReader(_fs, Encoding.UTF8, leaveOpen: false);
         }
 

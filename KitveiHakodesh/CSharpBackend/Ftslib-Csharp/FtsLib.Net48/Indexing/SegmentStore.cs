@@ -424,6 +424,45 @@ namespace FtsLib.Indexing
         }
 
         /// <summary>
+        /// Shallow, non-mutating readability probe of every live segment: confirms
+        /// each .dat/.db pair exists and the .dat's first record parses. Reads only a
+        /// small buffer per segment (not the 4 MB streaming buffer), so it is cheap
+        /// even cold. Returns false on the first unreadable segment.
+        ///
+        /// Used by the finalized-clean fast path in <see cref="SeforimIndex"/>: if the
+        /// probe fails, the caller falls through to full <see cref="Recover"/>, which
+        /// diagnoses and heals (wipe + rebuild) exactly as before. This preserves the
+        /// startup self-heal for a finalized index whose files went bad after a clean
+        /// close, without paying the full recovery cost when nothing is wrong.
+        /// Must be called before any background tasks start — not thread-safe.
+        /// </summary>
+        internal bool TryProbeLiveSegments()
+        {
+            const int ProbeBufferSize = 64 * 1024;
+            foreach (var (dat, db) in Live.GetLiveSegmentPaths())
+            {
+                if (!File.Exists(dat) || !File.Exists(db))
+                {
+                    FtsLog.Write("SegmentStore.TryProbeLiveSegments",
+                        $"missing file for {Path.GetFileName(dat)} — probe failed");
+                    return false;
+                }
+                try
+                {
+                    using (var reader = new SegmentReader(dat, ProbeBufferSize))
+                        reader.MoveNext();
+                }
+                catch (Exception ex)
+                {
+                    FtsLog.Write("SegmentStore.TryProbeLiveSegments",
+                        $"{Path.GetFileName(dat)} unreadable: {ex.GetType().Name}: {ex.Message}");
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
         /// Scans all segment files (including .tmp) for the highest segment ID ever
         /// allocated, so _nextSegId never reuses an ID even after .tmp cleanup.
         /// </summary>

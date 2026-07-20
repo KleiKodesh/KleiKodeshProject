@@ -66,14 +66,42 @@ namespace FtsLib.SeforimDb
 
             _store = new SegmentStore(_indexPath);
 
-            bool needsRecovery =
-                System.IO.Directory.GetFiles(_indexPath, "seg_*.dat").Length > 0 ||
-                System.IO.File.Exists(System.IO.Path.Combine(_indexPath, "wal.log"));
+            bool hasSegments = System.IO.Directory.GetFiles(_indexPath, "seg_*.dat").Length > 0;
+            bool hasWal      = System.IO.File.Exists(System.IO.Path.Combine(_indexPath, "wal.log"));
 
-            if (!needsRecovery)
+            if (!hasSegments && !hasWal)
             {
                 FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore", "no segments and no WAL — skipping recovery");
                 return;
+            }
+
+            // Fast path — a fully finalized, cleanly-closed index needs no crash
+            // recovery. "Finalized + clean" means segments exist AND there is no
+            // interrupted-work artifact of any kind:
+            //   • no wal.log        → no interrupted level / force merge
+            //   • no *.tmp          → no interrupted segment write
+            //   • no build.progress → the build ran to completion (not paused mid-way)
+            //   • no *.del          → no legacy tombstones awaiting cleanup
+            // In that state the mutating Recover() below would only re-scan, re-validate
+            // and re-clear an already-consistent directory — pure startup tax, and it
+            // cold-reads a 4 MB buffer per segment just to validate headers. Instead we
+            // rebuild the live segment state read-only (directory enumeration only) and
+            // do a shallow readability probe. If the probe fails (a finalized index
+            // whose files went bad after close), we fall through to full recovery, which
+            // diagnoses and heals exactly as before — so no self-heal is lost.
+            if (hasSegments && !hasWal && IsFinalizedClean())
+            {
+                _store.RecoverReadOnly();
+                if (_store.TryProbeLiveSegments())
+                {
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore",
+                        "finalized-clean index — skipped full recovery (read-only open)");
+                    return;
+                }
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore",
+                    "finalized-clean probe FAILED — falling through to full recovery");
+                // Reset the store so full recovery starts from a fresh live state.
+                _store = new SegmentStore(_indexPath);
             }
 
             // Crash recovery MUTATES the index directory: it deletes .tmp files and
@@ -108,6 +136,30 @@ namespace FtsLib.SeforimDb
                 FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureStore",
                     "CorruptIndexException during recovery — directory wiped, starting clean: " + ex.Message);
                 _store = new SegmentStore(_indexPath);
+            }
+        }
+
+        /// <summary>
+        /// True when the index directory contains no interrupted-work artifacts —
+        /// no incomplete segment writes (*.tmp), no legacy tombstones (*.del), and no
+        /// in-progress build (build.progress). Combined with "segments exist and no
+        /// wal.log", this identifies a build that ran to completion and shut down
+        /// cleanly, so full crash recovery can be safely skipped. See EnsureStore.
+        /// </summary>
+        private bool IsFinalizedClean()
+        {
+            try
+            {
+                if (System.IO.Directory.GetFiles(_indexPath, "*.tmp").Length > 0) return false;
+                if (System.IO.Directory.GetFiles(_indexPath, "*.del").Length > 0) return false;
+                if (System.IO.File.Exists(System.IO.Path.Combine(_indexPath, "build.progress"))) return false;
+                return true;
+            }
+            catch
+            {
+                // If we can't inspect the directory, don't take the fast path — let
+                // full recovery run and surface any real problem.
+                return false;
             }
         }
 
