@@ -89,7 +89,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-content-border" data-nav-label="מסגרת אזור התוכן" label="מסגרת אזור התוכן" hint="מסגרת מעוגלת סביב אזור התוכן, בסגנון Edge">
+    <SettingRow id="nav-content-border" data-nav-label="מסגרת סביב התוכן" label="מסגרת סביב התוכן" hint="מציג מסגרת מעוגלת עדינה סביב אזור התצוגה">
       <ToggleGroup
         v-model="contentBorder"
         :options="[
