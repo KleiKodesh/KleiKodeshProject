@@ -23,6 +23,19 @@ export function darken(color: string, amount: number): string {
   return lighten(color, -amount)
 }
 
+/** Channel-wise linear mix of two hex colors; t=0 → a, t=1 → b. */
+export function mixHex(a: string, b: string, t: number): string {
+  const ca = hexToRgbObj(a)
+  const cb = hexToRgbObj(b)
+  const ch = (x: number, y: number) => Math.round(x + (y - x) * t)
+  return (
+    '#' +
+    [ch(ca.r, cb.r), ch(ca.g, cb.g), ch(ca.b, cb.b)]
+      .map((x) => x.toString(16).padStart(2, '0'))
+      .join('')
+  )
+}
+
 export function isDarkColor(hex: string): boolean {
   const { r, g, b } = hexToRgbObj(hex)
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5
