@@ -173,6 +173,10 @@ namespace FtsLib.Search
         /// mapping each term to its total document count (summed across segments).
         /// Uses UNION strategy (OR across n-grams) to maximise recall.
         /// </summary>
+        /// <summary>Above this many union candidates the full LIKE scan is comparable, so the
+        /// sidecar is skipped and the scan runs (mirrors HebrewWildcardExpander's routing).</summary>
+        private const int TrigramCandidateCap = 8000;
+
         private static Dictionary<string, long> QueryByNgrams(
             List<string>                 ngrams,
             IReadOnlyList<SegmentHandle> segments,
@@ -180,22 +184,37 @@ namespace FtsLib.Search
         {
             var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
 
-            // Build SQL once — parameter names match list indices exactly.
+            // Whether the sidecar is usable: n-grams must be trigrams (the sidecar's key length).
+            // The 3-char-word case uses BIGRAMS (see Expand) which the trigram sidecar cannot
+            // serve — those fall through to the scan below, unchanged.
+            bool ngramsAreTrigrams = ngrams.Count > 0 && ngrams[0].Length == TrigramIndex.MinRun;
+
+            // Build the OR-LIKE confirm SQL once — parameter names match list indices exactly.
             // Chunk metadata is piggybacked so resolve skips its point SELECTs (F01).
             var sb = new StringBuilder(
                 "SELECT term, skip_offset, skip_count, offset, length, count FROM term_index WHERE ");
+            int likeStart = sb.Length;
             for (int i = 0; i < ngrams.Count; i++)
             {
                 if (i > 0) sb.Append(" OR ");
                 sb.Append("term LIKE @t").Append(i).Append(" ESCAPE '\\'");
             }
-            string sql = sb.ToString();
+            string likeClause = sb.ToString(likeStart, sb.Length - likeStart);
+            string scanSql = sb.ToString();
 
             foreach (var seg in segments)
             {
                 using (var cmd = seg.Conn.CreateCommand())
                 {
-                    cmd.CommandText = sql;
+                    // Trigram route: UNION the sidecar posting lists (OR semantics), then let
+                    // SQLite confirm the SAME OR-LIKE on just those rowids. Identical results,
+                    // no full scan. Falls back to the scan if the sidecar is absent, the n-grams
+                    // aren't trigrams, or the union isn't selective enough.
+                    bool routed = ngramsAreTrigrams && seg.Trigram != null &&
+                                  TrySetupNgramConfirm(seg.Trigram, ngrams, likeClause, cmd);
+                    if (!routed)
+                        cmd.CommandText = scanSql;
+
                     // Add parameters in the same order as the SQL — list guarantees this.
                     for (int i = 0; i < ngrams.Count; i++)
                         cmd.Parameters.Add($"@t{i}", System.Data.DbType.String).Value
@@ -219,6 +238,35 @@ namespace FtsLib.Search
             }
 
             return results;
+        }
+
+        /// <summary>
+        /// Sets <paramref name="cmd"/> to a rowid-restricted OR-LIKE confirm over the UNION of the
+        /// trigrams' sidecar posting lists, or returns false to use the full scan. The union is a
+        /// superset of the OR-LIKE matches (a term matching %g% contains g, so it is in g's
+        /// posting list), and the same OR-LIKE confirms — so results are identical.
+        /// </summary>
+        private static bool TrySetupNgramConfirm(TrigramIndex.Reader tr, List<string> ngrams,
+                                                 string likeClause, SQLiteCommand cmd)
+        {
+            var union = new HashSet<int>();
+            foreach (var g in ngrams)
+            {
+                int[] l = tr.Lookup(g);
+                for (int i = 0; i < l.Length; i++) union.Add(l[i]);
+                if (union.Count > TrigramCandidateCap) return false; // not selective enough → scan
+            }
+
+            const string cols = "SELECT term, skip_offset, skip_count, offset, length, count FROM term_index WHERE ";
+            if (union.Count == 0) { cmd.CommandText = cols + "0"; return true; } // no candidates
+
+            var sb = new StringBuilder(cols, cols.Length + union.Count * 7 + likeClause.Length + 16);
+            sb.Append("rowid IN (");
+            bool first = true;
+            foreach (int id in union) { if (!first) sb.Append(','); first = false; sb.Append(id); }
+            sb.Append(") AND (").Append(likeClause).Append(')');
+            cmd.CommandText = sb.ToString();
+            return true;
         }
 
         /// <summary>

@@ -201,6 +201,18 @@ namespace FtsLib.Search
             string likePattern = useRange ? null : ToLikePattern(pattern);
             var    raw         = new Dictionary<string, long>(StringComparer.Ordinal);
 
+            // Trigram anchor for the leading-star (infix/suffix) LIKE case: the literal core with
+            // no internal wildcard. When a segment has a trigram sidecar and the anchor is a
+            // single ≥3-char run, we pre-filter candidate rowids from the sidecar and let SQLite
+            // confirm with its OWN LIKE on just those rows (identical semantics, no full scan).
+            string trgAnchor = null;
+            if (!useRange)
+            {
+                string core = pattern.Trim('*');
+                if (core.Length >= TrigramIndex.MinRun && core.IndexOf('*') < 0 && core.IndexOf('?') < 0)
+                    trgAnchor = core;
+            }
+
             foreach (var seg in segments)
             {
                 using (var cmd = seg.Conn.CreateCommand())
@@ -214,6 +226,13 @@ namespace FtsLib.Search
                             "FROM term_index WHERE term >= @lo AND term < @hi";
                         cmd.Parameters.Add("@lo", SqliteType.Text).Value = rangeLo;
                         cmd.Parameters.Add("@hi", SqliteType.Text).Value = rangeHi;
+                    }
+                    else if (trgAnchor != null && seg.Trigram != null &&
+                             TrySetupTrigramConfirm(seg.Trigram, trgAnchor, likePattern, cmd))
+                    {
+                        // cmd is now a rowid-restricted LIKE confirm — falls through to the
+                        // identical consume loop below. (Routing: selective candidates only;
+                        // TrySetupTrigramConfirm returns false to use the full scan instead.)
                     }
                     else
                     {
@@ -275,6 +294,55 @@ namespace FtsLib.Search
             }
 
             return results;
+        }
+
+        // ── Trigram pre-filter (sidecar) ──────────────────────────────
+
+        /// <summary>Above this many trigram candidates a full LIKE scan is comparable, so we
+        /// skip the sidecar and let the scan run (the routing "not selective enough" case).</summary>
+        private const int TrigramCandidateCap = 8000;
+
+        /// <summary>
+        /// Sets <paramref name="cmd"/> to a rowid-restricted LIKE confirm over the trigram
+        /// candidates for <paramref name="anchor"/>, or returns false to use the full scan.
+        /// Candidates are a superset of the LIKE matches (a term matching %anchor% contains all
+        /// of the anchor's trigrams), and SQLite's own LIKE confirms — so results are identical.
+        /// </summary>
+        private static bool TrySetupTrigramConfirm(TrigramIndex.Reader tr, string anchor,
+                                                   string likePattern, SqliteCommand cmd)
+        {
+            var grams = new List<string>(); var seen = new HashSet<string>(StringComparer.Ordinal);
+            TrigramIndex.AddTrigrams(anchor, grams, seen);
+            if (grams.Count == 0) return false;
+
+            int[] acc = null;
+            foreach (var g in grams)
+            {
+                int[] l = tr.Lookup(g);
+                if (l.Length == 0) { acc = System.Array.Empty<int>(); break; } // gram absent ⇒ no match
+                acc = acc == null ? l : Inter(acc, l);
+                if (acc.Length == 0) break;
+            }
+            if (acc == null) return false;
+            if (acc.Length > TrigramCandidateCap) return false; // not selective enough → full scan
+
+            const string cols = "SELECT term, skip_offset, skip_count, offset, length, count FROM term_index WHERE ";
+            if (acc.Length == 0) { cmd.CommandText = cols + "0"; return true; } // no candidates
+
+            var sb = new System.Text.StringBuilder(cols, cols.Length + acc.Length * 7);
+            sb.Append("rowid IN (");
+            for (int i = 0; i < acc.Length; i++) { if (i > 0) sb.Append(','); sb.Append(acc[i]); }
+            sb.Append(") AND term LIKE @p ESCAPE '\\'");
+            cmd.CommandText = sb.ToString();
+            cmd.Parameters.Add("@p", SqliteType.Text).Value = likePattern;
+            return true;
+        }
+
+        private static int[] Inter(int[] a, int[] b)
+        {
+            var r = new List<int>(System.Math.Min(a.Length, b.Length)); int i = 0, j = 0;
+            while (i < a.Length && j < b.Length) { int x = a[i], y = b[j]; if (x == y) { r.Add(x); i++; j++; } else if (x < y) i++; else j++; }
+            return r.ToArray();
         }
 
         // ── Expansion cap ─────────────────────────────────────────────
