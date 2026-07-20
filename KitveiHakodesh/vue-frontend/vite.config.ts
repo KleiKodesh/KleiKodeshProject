@@ -4,6 +4,7 @@ import { fileURLToPath, URL } from 'node:url'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import type { Plugin } from 'vite'
 import path from 'node:path'
+import fs from 'node:fs'
 import { fileURLToPath as toPath } from 'node:url'
 import net from 'node:net'
 import { spawn, exec, execFile, type ChildProcess } from 'node:child_process'
@@ -15,27 +16,42 @@ import { encode as mpEncode } from '@msgpack/msgpack'
 // all backend knowledge (DocumentLocator delegation now; SQLite/FTS later) — this
 // middleware is a dumb proxy with no per-op logic.
 const KHS_PIPE = '\\\\.\\pipe\\KitveiHakodesh'
-const KHS_PROJECT = path.resolve(
+const KHS_DIR = path.resolve(
   path.dirname(toPath(import.meta.url)),
-  '../CSharpBackend/KitveiHakodeshService/KitveiHakodeshService.csproj',
+  '../CSharpBackend/KitveiHakodeshService',
 )
+const KHS_PROJECT = path.join(KHS_DIR, 'KitveiHakodeshService.csproj')
+// The FtsLib project reference — its source affects the built exe, so it counts
+// toward the "needs rebuild?" staleness check below.
+const KHS_FTSLIB_DIR = path.resolve(
+  path.dirname(toPath(import.meta.url)),
+  '../CSharpBackend/Ftslib-Csharp/FtsLib',
+)
+// The already-built Release exe. We spawn THIS directly (not `dotnet run`): a warm
+// `dotnet run` costs ~4s to pipe-ready (SDK host + MSBuild up-to-date check on every
+// launch) versus ~385ms for the prebuilt exe — a ~3.6s tax paid on every dev start.
+const KHS_EXE = path.join(KHS_DIR, 'bin', 'Release', 'net10.0', 'KitveiHakodeshService.exe')
 const KHS_CONNECT_TIMEOUT_MS = 2_000
-const KHS_STARTUP_TIMEOUT_MS = 120_000 // first `dotnet run` may build from cold
-const KHS_STARTUP_POLL_MS = 500
+const KHS_STARTUP_TIMEOUT_MS = 120_000 // a cold rebuild can take a while
+const KHS_STARTUP_POLL_MS = 250
 
-/** One request/response round-trip over a named pipe using 4-byte LE length framing. */
+/** One request/response round-trip over a named pipe using 4-byte LE length framing.
+ *  A rejected error carries `.connected` = whether the socket ever connected, so callers
+ *  can tell a (retryable) pre-connect failure from a mid-stream one. */
 function callPipe(pipePath: string, requestBody: Buffer, connectTimeoutMs: number): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(pipePath)
+    let connected = false
     const connectTimer = setTimeout(() => {
       socket.destroy()
-      reject(Object.assign(new Error('pipe connection timed out'), { code: 'ETIMEDOUT' }))
+      reject(Object.assign(new Error('pipe connection timed out'), { code: 'ETIMEDOUT', connected }))
     }, connectTimeoutMs)
 
     let responseBuffer = Buffer.alloc(0)
     let expectedLength = -1
 
     socket.on('connect', () => {
+      connected = true
       clearTimeout(connectTimer)
       // The channel is MessagePack now — frame the raw binary body verbatim (4-byte LE length).
       const header = Buffer.alloc(4)
@@ -57,9 +73,34 @@ function callPipe(pipePath: string, requestBody: Buffer, connectTimeoutMs: numbe
 
     socket.on('error', (err) => {
       clearTimeout(connectTimer)
-      reject(err)
+      reject(Object.assign(err as Error, { connected }))
     })
   })
+}
+
+/**
+ * callPipe with a few fast retries for TRANSIENT pre-connect failures. A serial pipe
+ * accept loop briefly has no listening instance between accepting one client and
+ * creating the next, and during service boot the pipe doesn't exist yet — both surface
+ * as ENOENT/ETIMEDOUT on connect. Retrying the connection a handful of times (short
+ * backoff) rides those out WITHOUT tearing down and rebuilding a healthy service, which
+ * is what the caller's `ensureKhsService()` fallback would otherwise do. A failure that
+ * happens AFTER connecting is a real error and is thrown immediately (no retry).
+ */
+async function callPipeWithRetry(requestBody: Buffer, attempts = 6): Promise<Buffer> {
+  let lastErr: any
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await callPipe(KHS_PIPE, requestBody, KHS_CONNECT_TIMEOUT_MS)
+    } catch (err: any) {
+      lastErr = err
+      // Only retry a pre-connect transient; a mid-stream failure means the service
+      // took the request and something went wrong downstream — don't replay it.
+      if (err?.connected) throw err
+      await new Promise((r) => setTimeout(r, 30 + i * 40))
+    }
+  }
+  throw lastErr
 }
 
 /** Build a MessagePack request frame body: { Op, Args } with Args = nested msgpack of the args
@@ -139,28 +180,73 @@ function killKhsProcesses(): Promise<void> {
 }
 
 /**
- * Ensure exactly one, freshly-built service is running. Always kills any existing
- * instance first (so C# edits take effect on every dev launch), then spawns a new
- * one via `dotnet run` — which rebuilds. Never leaves duplicates behind.
+ * Newest mtime (ms) among the service's own source files AND its FtsLib project
+ * reference — everything that, if edited, means the built exe is stale. Walks the
+ * two source trees skipping bin/obj. Returns 0 if nothing is found.
  */
-async function ensureKhsService(): Promise<void> {
-  if (khsProc) {
-    // A spawn from this session is already in flight — don't start a second.
-    console.log('[khs] service is already starting — waiting for it')
-    await waitForKhsPipe()
-    return
+function newestSourceMtimeMs(): number {
+  let newest = 0
+  const walk = (dir: string) => {
+    let entries: fs.Dirent[]
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }) } catch { return }
+    for (const e of entries) {
+      if (e.isDirectory()) {
+        if (e.name === 'bin' || e.name === 'obj' || e.name === '.vs') continue
+        walk(path.join(dir, e.name))
+      } else if (/\.(cs|csproj|json|props|targets)$/i.test(e.name)) {
+        try {
+          const m = fs.statSync(path.join(dir, e.name)).mtimeMs
+          if (m > newest) newest = m
+        } catch { /* ignore unreadable */ }
+      }
+    }
   }
-  // Replace any running/orphaned service with a fresh build every launch — but stop
-  // the old one GRACEFULLY first so its FTS build isn't hard-killed mid-merge (which
-  // corrupts the index). Force-kill only stragglers that ignored the graceful stop.
-  console.log('[khs] stopping any existing service instance...')
-  await gracefulStopKhs()
-  await killKhsProcesses()
-  console.log('[khs] starting fresh service via `dotnet run`...')
-  // Release: the service is the dev's entire data layer — running it as a Debug JIT
-  // build made every query slower than the in-app C# host (the "dev lag"). Release
-  // costs a slightly longer first build, cached by dotnet afterwards.
-  khsProc = spawn('dotnet', ['run', '--project', KHS_PROJECT, '-c', 'Release'], {
+  walk(KHS_DIR)
+  walk(KHS_FTSLIB_DIR)
+  return newest
+}
+
+/**
+ * True when the built Release exe is missing or OLDER than the newest service/FtsLib
+ * source file — i.e. an edit was made and we must rebuild. A pure-mtime check in Node
+ * (a few ms) instead of `dotnet build`'s own up-to-date check (~2.3s even for a no-op),
+ * so an unchanged tree skips the build entirely.
+ */
+function serviceNeedsBuild(): boolean {
+  let exeMtime: number
+  try { exeMtime = fs.statSync(KHS_EXE).mtimeMs } catch { return true } // no exe yet → build
+  return newestSourceMtimeMs() > exeMtime
+}
+
+/** Build the service (Release, incremental). Resolves on success, rejects on failure. */
+function buildKhsService(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    console.log('[khs] source changed — building service (dotnet build -c Release)...')
+    const t0 = Date.now()
+    const proc = spawn('dotnet', ['build', KHS_PROJECT, '-c', 'Release', '-v', 'q', '--nologo'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    })
+    let tail = ''
+    proc.stdout?.on('data', (d: Buffer) => { tail += d.toString(); if (tail.length > 4000) tail = tail.slice(-4000) })
+    proc.stderr?.on('data', (d: Buffer) => { tail += d.toString(); if (tail.length > 4000) tail = tail.slice(-4000) })
+    proc.on('error', reject)
+    proc.on('exit', (code) => {
+      if (code === 0) {
+        console.log(`[khs] build complete (${((Date.now() - t0) / 1000).toFixed(1)}s)`)
+        resolve()
+      } else {
+        console.error(`[khs] build FAILED (exit ${code}):\n${tail}`)
+        reject(new Error(`service build failed (exit ${code})`))
+      }
+    })
+  })
+}
+
+/** Spawn the prebuilt Release exe DIRECTLY (no `dotnet run` host) and wait for the pipe. */
+async function spawnKhsExe(): Promise<void> {
+  console.log('[khs] starting service (prebuilt exe)...')
+  khsProc = spawn(KHS_EXE, [], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
     env: {
@@ -174,6 +260,50 @@ async function ensureKhsService(): Promise<void> {
   khsProc.on('exit', (code) => { console.log(`[khs] service exited (${code})`); khsProc = null })
   await waitForKhsPipe()
   console.log('[khs] service ready')
+}
+
+/**
+ * Ensure exactly one, up-to-date service is running — with the minimum work:
+ *   • REUSE   — if a healthy service is already answering and no source changed,
+ *               keep it (near-instant; C# edits force a rebuild+restart instead).
+ *   • REBUILD — only when a service/FtsLib source file is newer than the built exe.
+ *   • RESPAWN — spawn the PREBUILT exe directly (~385ms), never `dotnet run` (~4s).
+ * Any restart stops the old instance GRACEFULLY first (so its FTS build isn't
+ * hard-killed mid-merge, which corrupts the index), then force-kills stragglers.
+ */
+async function ensureKhsService(): Promise<void> {
+  if (khsProc) {
+    // A spawn from this session is already in flight — don't start a second.
+    console.log('[khs] service is already starting — waiting for it')
+    await waitForKhsPipe()
+    return
+  }
+
+  const needsBuild = serviceNeedsBuild()
+  const alreadyUp = await khsPipeIsUp()
+
+  // Fast path: a service is already answering and nothing changed → reuse it as-is.
+  // This is the common case for a re-run/HMR restart and costs a single pipe probe.
+  if (alreadyUp && !needsBuild) {
+    console.log('[khs] existing service is up and current — reusing it')
+    return
+  }
+
+  // We must (re)start. Stop any existing instance GRACEFULLY first, then force-kill
+  // stragglers, so the exe is unlocked (a rebuild would fail to overwrite it otherwise).
+  if (alreadyUp) {
+    console.log('[khs] stopping existing service instance...')
+    await gracefulStopKhs()
+  }
+  await killKhsProcesses()
+
+  if (needsBuild) {
+    await buildKhsService()
+  } else {
+    console.log('[khs] service is up-to-date — skipping build')
+  }
+
+  await spawnKhsExe()
 }
 
 /** Kill the spawned service (and its child `dotnet` host) on dev-server shutdown. */
@@ -320,12 +450,14 @@ function devSqlitePlugin(): Plugin {
               if (khsReady) await khsReady
               let response: Buffer
               try {
-                response = await callPipe(KHS_PIPE, body, KHS_CONNECT_TIMEOUT_MS)
+                // Ride out transient pre-connect ENOENT (accept-loop gap / boot window)
+                // WITHOUT restarting a healthy service.
+                response = await callPipeWithRetry(body)
               } catch {
-                // Service may have died mid-session — try to (re)start once, then retry.
+                // Retries exhausted — the service is genuinely down. (Re)start it, then retry.
                 khsReady = ensureKhsService()
                 await khsReady
-                response = await callPipe(KHS_PIPE, body, KHS_CONNECT_TIMEOUT_MS)
+                response = await callPipeWithRetry(body)
               }
               if (!res.headersSent) {
                 res.writeHead(200, { 'Content-Type': 'application/octet-stream' })
