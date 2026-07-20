@@ -153,6 +153,6 @@ watch(searchQuery, (q) => {
 }
 
 .toc-state.error {
-  color: #ff3b30;
+  color: var(--status-danger);
 }
 </style>

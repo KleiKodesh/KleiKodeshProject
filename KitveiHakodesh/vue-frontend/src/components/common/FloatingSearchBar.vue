@@ -139,7 +139,7 @@ defineExpose({ focus: () => inputRef.value?.focus() })
   text-align: end;
 }
 
-.match-count.no-match { color: #e05252; }
+.match-count.no-match { color: var(--status-danger); }
 
 .sep {
   width: 1px;

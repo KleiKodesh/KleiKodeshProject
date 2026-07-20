@@ -71,17 +71,10 @@ onBeforeUnmount(dismissToast)
   color: var(--accent-color);
 }
 .toast-success .toast-icon {
-  color: #2e7d4f;
+  color: var(--status-success);
 }
 .toast-error .toast-icon {
-  color: #c4314b;
-}
-
-:root.dark .toast-success .toast-icon {
-  color: #6ccb96;
-}
-:root.dark .toast-error .toast-icon {
-  color: #f1707f;
+  color: var(--status-danger);
 }
 
 .toast-text {

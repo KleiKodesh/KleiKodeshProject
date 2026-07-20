@@ -750,7 +750,7 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
 }
 .zman--imminent,
 .zman--imminent .bar-lbl {
-  color: #d64545;
+  color: var(--status-danger);
   opacity: 1;
   font-weight: 700;
 }

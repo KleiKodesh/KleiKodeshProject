@@ -316,7 +316,7 @@ function onSearchEnter() {
 .state.error {
   padding: 32px 16px;
   text-align: center;
-  color: #ff3b30;
+  color: var(--status-danger);
   font-size: 15px;
 }
 .error-msg {
@@ -379,11 +379,11 @@ function onSearchEnter() {
   white-space: nowrap;
 }
 .val-error {
-  color: #ff3b30;
+  color: var(--status-danger);
   font-weight: 600;
 }
 .val-ok {
-  color: #34c759;
+  color: var(--status-success);
 }
 .diag-copy-btn {
   margin-top: 8px;

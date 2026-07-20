@@ -269,7 +269,7 @@ function onRemove() {
   color: var(--text-secondary);
 }
 .tile-action--remove:hover {
-  color: #e5484d;
+  color: var(--status-danger);
 }
 /* A pinned tile keeps its pin badge visible even when not hovering. */
 .tile-action--pin.is-active {
