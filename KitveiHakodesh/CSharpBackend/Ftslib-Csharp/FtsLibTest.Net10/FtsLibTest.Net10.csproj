@@ -26,7 +26,7 @@
          obj/bin, Properties (SDK generates assembly info), and every file that touches
          System.Data.SQLite / SegmentHandle SQLite types directly (net48-only diagnostics). -->
     <Compile Include="..\FtsLibTest\**\*.cs"
-             Exclude="..\FtsLibTest\Program.cs;..\FtsLibTest\obj\**\*.cs;..\FtsLibTest\bin\**\*.cs;..\FtsLibTest\Properties\**\*.cs;..\FtsLibTest\DbQuery.cs;..\FtsLibTest\Shared\DiffIds.cs;..\FtsLibTest\SearchIndex\ExpandDiag.cs;..\FtsLibTest\SearchIndex\LookupDiag.cs;..\FtsLibTest\SearchIndex\PrefixLenDiag.cs;..\FtsLibTest\SearchIndex\VerifyPrefixScan.cs;..\FtsLibTest\SearchIndex\WildcardDiag.cs;..\FtsLibTest\SearchIndex\FstSizeDiag.cs;..\FtsLibTest\SearchIndex\FileLoadDiag.cs">
+             Exclude="..\FtsLibTest\Program.cs;..\FtsLibTest\obj\**\*.cs;..\FtsLibTest\bin\**\*.cs;..\FtsLibTest\Properties\**\*.cs;..\FtsLibTest\DbQuery.cs;..\FtsLibTest\Shared\DiffIds.cs;..\FtsLibTest\SearchIndex\ExpandDiag.cs;..\FtsLibTest\SearchIndex\LookupDiag.cs;..\FtsLibTest\SearchIndex\PrefixLenDiag.cs;..\FtsLibTest\SearchIndex\VerifyPrefixScan.cs;..\FtsLibTest\SearchIndex\WildcardDiag.cs;..\FtsLibTest\SearchIndex\FstSizeDiag.cs;..\FtsLibTest\SearchIndex\FileLoadDiag.cs;..\FtsLibTest\TrgmV48.cs">
       <Link>shared\%(RecursiveDir)%(Filename)%(Extension)</Link>
     </Compile>
   </ItemGroup>
