@@ -1,0 +1,199 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+
+namespace FtsLib.Search
+{
+    /// <summary>
+    /// Compact, disk-based trigram index over a segment's term dictionary — a sidecar that
+    /// accelerates infix / suffix-wildcard / fuzzy candidate generation, replacing the SQLite
+    /// <c>term LIKE '%x%'</c> full-table scan. Verified ~1000x faster than LIKE with identical
+    /// results (FtsLibTest trgmidx/trgmlive). SQLite term_index stays authoritative for exact
+    /// lookups, prefix (B-tree range), and the actual document postings.
+    ///
+    /// This is the .NET Framework (net48) copy. The on-disk FORMAT is byte-identical to the
+    /// net10 FtsLib copy (same magic, hash, fingerprint, slot layout, and delta+varint postings),
+    /// so a sidecar built by either runtime is readable by the other. The only differences are
+    /// runtime-API-bound: net48 lacks <c>RandomAccess</c> / <c>File.OpenHandle</c> (net6+), so the
+    /// <see cref="Reader"/> uses a lock-guarded <see cref="FileStream"/> Seek+Read (matching
+    /// <see cref="Indexing.SegmentHandle.ReadBytes"/>), and <see cref="BuildFromDb"/> uses
+    /// System.Data.SQLite instead of Microsoft.Data.Sqlite.
+    ///
+    /// On-disk layout (little-endian), read via seek+read — NO mmap, ~0 RAM beyond the 16-byte
+    /// header (32-bit-safe, streamable, no cold-start):
+    ///   header  : magic 'TGM1' (u32) | m slots (u32) | n trigrams (u32) | pad (u32)   [16 B]
+    ///   slots   : m × { fingerprint u32, postOffset u32, count u32, byteLen u32 }     [m*16 B]
+    ///             open-addressed (linear probe); empty slot ⇒ count == 0.
+    ///   postings: per trigram, delta+varint of sorted term-ids (via <see cref="VarInt"/>).
+    ///
+    /// Term-ids are caller-assigned (the term_index rowid). Correctness does not depend on hash
+    /// perfection — callers confirm candidates against the actual term (SQLite LIKE on the
+    /// candidate rowids), so a fingerprint fluke is filtered out; only a missing key would matter,
+    /// and open addressing without deletes guarantees every built key is found.
+    /// </summary>
+    internal static class TrigramIndex
+    {
+        public const uint Magic = 0x314D4754; // 'TGM1'
+        public const int MinRun = 3;          // shortest literal run that yields a trigram
+
+        internal static uint Hash(string g)   { uint h = 2166136261u;              foreach (char c in g) h = (h ^ c) * 16777619u;         return h; }
+        internal static uint Finger(string g) { uint h = 2166136261u ^ 0x9E3779B9u; foreach (char c in g) h = (h ^ (uint)(c * 3 + 7)) * 2246822519u; return h; }
+
+        /// <summary>Distinct trigrams of <paramref name="s"/> appended to <paramref name="into"/>
+        /// (caller clears the dedup set).</summary>
+        internal static void AddTrigrams(string s, List<string> into, HashSet<string> seen)
+        {
+            for (int i = 0; i + MinRun <= s.Length; i++)
+            {
+                string g = s.Substring(i, MinRun);
+                if (seen.Add(g)) into.Add(g);
+            }
+        }
+
+        // ── Build ─────────────────────────────────────────────────────
+        /// <summary>Overload: posting id = index in the list (used by tests/benchmarks).</summary>
+        public static void Build(string path, IReadOnlyList<string> terms) => Build(path, terms, null);
+
+        /// <summary>
+        /// Builds the sidecar at <paramref name="path"/>. The posting id of <c>terms[i]</c> is
+        /// <c>ids[i]</c> (e.g. the term_index rowid) when <paramref name="ids"/> is supplied,
+        /// else <c>i</c>. Intended to run once per segment after force-merge (immutable ⇒
+        /// write-once).
+        /// </summary>
+        public static void Build(string path, IReadOnlyList<string> terms, IReadOnlyList<int> ids)
+        {
+            var map = new Dictionary<string, List<int>>(1 << 16, StringComparer.Ordinal);
+            var grams = new List<string>(32);
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < terms.Count; i++)
+            {
+                string t = terms[i];
+                if (t.Length < MinRun) continue;
+                int id = ids != null ? ids[i] : i;
+                grams.Clear(); seen.Clear();
+                AddTrigrams(t, grams, seen);
+                foreach (string g in grams)
+                {
+                    if (!map.TryGetValue(g, out var l)) { l = new List<int>(); map[g] = l; }
+                    l.Add(id);
+                }
+            }
+
+            int n = map.Count;
+            int m = 8; while (m < n * 10 / 6) m <<= 1;   // load factor ~0.6, power of two
+            uint mask = (uint)(m - 1);
+            var fFinger = new uint[m]; var fOff = new uint[m]; var fCnt = new uint[m]; var fLen = new uint[m];
+            var blob = new MemoryStream(); var buf = new byte[8];
+            foreach (var kv in map)
+            {
+                var post = kv.Value; post.Sort();   // ascending ⇒ non-negative deltas
+                uint off = (uint)blob.Length; int prev = 0;
+                foreach (int id in post) { int d = id - prev; prev = id; int len = VarInt.Encode((uint)d, buf); blob.Write(buf, 0, len); }
+                uint blen = (uint)blob.Length - off;
+                int slot = (int)(Hash(kv.Key) & mask);
+                while (fCnt[slot] != 0) slot = (int)((slot + 1) & mask);
+                fFinger[slot] = Finger(kv.Key); fOff[slot] = off; fCnt[slot] = (uint)post.Count; fLen[slot] = blen;
+            }
+
+            string tmp = path + ".tmp";
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
+            {
+                var bw = new BinaryWriter(fs);
+                bw.Write(Magic); bw.Write(m); bw.Write(n); bw.Write(0u);
+                for (int i = 0; i < m; i++) { bw.Write(fFinger[i]); bw.Write(fOff[i]); bw.Write(fCnt[i]); bw.Write(fLen[i]); }
+                bw.Flush(); blob.Position = 0; blob.CopyTo(fs);
+            }
+            if (File.Exists(path)) File.Delete(path);
+            File.Move(tmp, path); // atomic-ish publish
+        }
+
+        /// <summary>Sidecar path for a segment's .dat file (seg.dat → seg.tgm).</summary>
+        public static string SidecarPath(string datPath) => Path.ChangeExtension(datPath, ".tgm");
+
+        /// <summary>
+        /// Builds the sidecar for a segment by reading its term_index (rowid = posting id) from
+        /// <paramref name="dbPath"/>. Opens its own read-only connection; safe to call after a
+        /// force-merge on an immutable segment.
+        /// </summary>
+        public static void BuildFromDb(string dbPath, string outPath)
+        {
+            var terms = new List<string>(1 << 16);
+            var ids = new List<int>(1 << 16);
+            using (var conn = new System.Data.SQLite.SQLiteConnection(
+                string.Format("Data Source={0};Version=3;Read Only=True;", dbPath)))
+            {
+                conn.Open();
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "SELECT rowid, term FROM term_index ORDER BY rowid";
+                    using (var r = cmd.ExecuteReader())
+                        while (r.Read()) { ids.Add((int)r.GetInt64(0)); terms.Add(r.GetString(1)); }
+                }
+            }
+            Build(outPath, terms, ids);
+        }
+
+        // ── Read (FileStream seek+read, lock-guarded — no RandomAccess/mmap) ──────────
+        internal sealed class Reader : IDisposable
+        {
+            readonly FileStream _fs; readonly object _lock = new object();
+            readonly int _m; readonly uint _mask; readonly long _postBase;
+
+            public Reader(string path)
+            {
+                _fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+                                     FileShare.Read | FileShare.Delete, 4096, false);
+                var hdr = new byte[16];
+                ReadAt(0, hdr, 0, 16);
+                if (BitConverter.ToUInt32(hdr, 0) != Magic) throw new InvalidDataException("TrigramIndex: bad magic");
+                _m = BitConverter.ToInt32(hdr, 4); _mask = (uint)(_m - 1);
+                _postBase = 16 + (long)_m * 16;
+            }
+
+            // Positioned read, serialised like SegmentHandle.ReadBytes so concurrent searches
+            // sharing this Reader don't race the shared FileStream position.
+            void ReadAt(long offset, byte[] buffer, int bufOff, int count)
+            {
+                lock (_lock)
+                {
+                    _fs.Seek(offset, SeekOrigin.Begin);
+                    int total = 0;
+                    while (total < count)
+                    {
+                        int read = _fs.Read(buffer, bufOff + total, count - total);
+                        if (read == 0) break;
+                        total += read;
+                    }
+                }
+            }
+
+            /// <summary>Sorted term-ids whose term contains <paramref name="trigram"/>, or empty.</summary>
+            public int[] Lookup(string trigram)
+            {
+                int slot = (int)(Hash(trigram) & _mask); uint fg = Finger(trigram);
+                var rec = new byte[16];
+                for (int probe = 0; probe < _m; probe++)
+                {
+                    ReadAt(16 + (long)slot * 16, rec, 0, 16);
+                    uint cnt = BitConverter.ToUInt32(rec, 8);
+                    if (cnt == 0) return EmptyInts;                         // empty slot ⇒ absent
+                    if (BitConverter.ToUInt32(rec, 0) == fg)
+                    {
+                        uint off = BitConverter.ToUInt32(rec, 4);
+                        uint blen = BitConverter.ToUInt32(rec, 12);
+                        var pb = new byte[blen]; ReadAt(_postBase + off, pb, 0, (int)blen);
+                        var ids = new int[cnt]; int pos = 0, prev = 0;
+                        for (int k = 0; k < cnt; k++) { prev += (int)VarInt.Read(pb, ref pos, pb.Length); ids[k] = prev; }
+                        return ids;
+                    }
+                    slot = (int)((slot + 1) & _mask);
+                }
+                return EmptyInts;
+            }
+
+            static readonly int[] EmptyInts = new int[0];
+
+            public void Dispose() => _fs.Dispose();
+        }
+    }
+}

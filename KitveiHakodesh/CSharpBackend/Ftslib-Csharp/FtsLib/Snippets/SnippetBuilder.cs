@@ -130,7 +130,7 @@ namespace FtsLib.Snippets
 
             for (int R = 0; R < tokens.Count; R++)
             {
-                if (prepared.TryGetGroups(tokens[R].Normalized, out int[] rGroups))
+                if (prepared.TryGetGroups(tokens[R].NormSpan, out int[] rGroups))
                 {
                     foreach (int rg in rGroups)
                         if (_groupCount[rg]++ == 0) covered++;
@@ -146,7 +146,7 @@ namespace FtsLib.Snippets
                         bestILeft  = L;
                         bestIRight = R;
                     }
-                    if (prepared.TryGetGroups(tokens[L].Normalized, out int[] lGroups))
+                    if (prepared.TryGetGroups(tokens[L].NormSpan, out int[] lGroups))
                     {
                         foreach (int lg in lGroups)
                             if (--_groupCount[lg] == 0) covered--;
@@ -180,7 +180,7 @@ namespace FtsLib.Snippets
             // Try every starting token that belongs to group 0.
             for (int start = 0; start < tokens.Count; start++)
             {
-                if (!prepared.TryGetGroups(tokens[start].Normalized, out int[] startGroups)
+                if (!prepared.TryGetGroups(tokens[start].NormSpan, out int[] startGroups)
                     || System.Array.IndexOf(startGroups, 0) < 0)
                     continue;
 
@@ -189,7 +189,7 @@ namespace FtsLib.Snippets
                 int nextGroup = 1;
                 while (nextGroup < numGroups && pos < tokens.Count)
                 {
-                    if (prepared.TryGetGroups(tokens[pos].Normalized, out int[] tGroups)
+                    if (prepared.TryGetGroups(tokens[pos].NormSpan, out int[] tGroups)
                         && System.Array.IndexOf(tGroups, nextGroup) >= 0)
                         nextGroup++;
                     pos++;
@@ -234,13 +234,13 @@ namespace FtsLib.Snippets
             while (sIdx < eIdx)
             {
                 int visStart = tokens[sIdx].VisibleStart;
-                int visEnd   = tokens[eIdx].VisibleStart + tokens[eIdx].Normalized.Length;
+                int visEnd   = tokens[eIdx].VisibleStart + tokens[eIdx].NormLen;
                 if (visEnd - visStart <= SafetyCeiling) break;
                 bool canTrimLeft  = sIdx < iLeft;
                 bool canTrimRight = eIdx > iRight;
                 if (!canTrimLeft && !canTrimRight) break; // match itself exceeds ceiling — show it anyway
                 int trimLeft  = canTrimLeft  ? tokens[sIdx + 1].VisibleStart - visStart : int.MaxValue;
-                int trimRight = canTrimRight ? visEnd - (tokens[eIdx - 1].VisibleStart + tokens[eIdx - 1].Normalized.Length) : int.MaxValue;
+                int trimRight = canTrimRight ? visEnd - (tokens[eIdx - 1].VisibleStart + tokens[eIdx - 1].NormLen) : int.MaxValue;
                 if (trimLeft <= trimRight) sIdx++;
                 else                      eIdx--;
             }
@@ -276,7 +276,7 @@ namespace FtsLib.Snippets
             {
                 if (tok.RawEnd   <= snapStart) continue;
                 if (tok.RawStart >= snapEnd)   break;
-                if (!prepared.ContainsTerm(tok.Normalized)) continue;
+                if (!prepared.ContainsTerm(tok.NormSpan)) continue;
 
                 AppendRawStripped(rawHtml, pos, tok.RawStart, snapEnd);
                 pos = tok.RawStart;

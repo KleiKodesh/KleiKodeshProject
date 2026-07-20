@@ -32,6 +32,15 @@ namespace FtsLibTest
                 case "worddist":          WordDistanceTest.Run(args); return;
                 case "snippettest":       SnippetTest.Run(args); return;
                 case "snippetdiag":       SnippetDiag.Run(args); return;
+                case "tokdiag":           TokenDiag.Run(args); return;
+                case "tokbench":          TokBench.Run(args); return;
+                case "charbench":         CharBench.Run(args); return;
+                case "decodebench":       DecodeBench.Run(args); return;
+                case "snipbench":         SnipBench.Run(args); return;
+                case "trgmbench":         TrgmBench.Run(args); return;
+                case "trgmidx":           TrgmIdx.Run(args); return;
+                case "trgmlive":          TrgmLive.Run(args); return;
+                case "trgmfull":          TrgmFull.Run(args); return;
                 case "sortdiag":          SortDiag.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
                 case "ketivquery":        KetivQueryTest.Run(args); return;

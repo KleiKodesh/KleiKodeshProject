@@ -60,6 +60,25 @@ namespace FtsLib.Indexing
         private readonly FileStream _datStream;
         private readonly object     _readLock = new object();
 
+        // Lazily-opened trigram sidecar (seg.tgm). null when absent → callers fall back to
+        // SQLite LIKE. Opened once on first access; disposed with the handle.
+        private FtsLib.Search.TrigramIndex.Reader _trigram;
+        private bool _trigramProbed;
+        public FtsLib.Search.TrigramIndex.Reader Trigram
+        {
+            get
+            {
+                if (!_trigramProbed)
+                {
+                    _trigramProbed = true;
+                    string p = FtsLib.Search.TrigramIndex.SidecarPath(DatPath);
+                    if (File.Exists(p))
+                        try { _trigram = new FtsLib.Search.TrigramIndex.Reader(p); } catch { _trigram = null; }
+                }
+                return _trigram;
+            }
+        }
+
         public SegmentHandle(string datPath, string dbPath)
         {
             DatPath = datPath;
@@ -129,6 +148,7 @@ namespace FtsLib.Indexing
 
         public void Dispose()
         {
+            _trigram?.Dispose();
             Lookup?.Dispose();
             Conn?.Dispose();
             _datStream?.Dispose();

@@ -85,20 +85,24 @@ namespace FtsLib.Tokenization
                 }
 
                 // ── NIKUD + CANTILLATION REMOVAL ─────────────────────
-                if (c >= '\u0591' && c <= '\u05C7'
-                    && c != '\u05C0'   // paseq ׀
-                    && c != '\u05C3'   // sof pasuq ׃
-                    && c != '\u05C6')  // nun hafukha
+                if (HebrewChars.IsStrippableMark(c))
                     continue;
 
                 if (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
                     continue;
 
                 // ── WORD BUILDING ────────────────────────────────────
-                if (IsLetter(c))
+                if (HebrewChars.IsLetter(c))
                 {
-                    if (c >= 'A' && c <= 'Z')
-                        c = (char)(c | 32);
+                    c = HebrewChars.ToLowerAscii(c);
+
+                    // Script-boundary split: a Hebrew↔Latin transition inside a letter run is a
+                    // word boundary. Prevents mixed-script blobs — OCR bleed (bדה), a Hebrew
+                    // prefix on a foreign word (הOU), or entity residue (בשבת&amp) — from being
+                    // indexed as one unsearchable token. Same-script runs are unaffected.
+                    if (_buffer.Length > 0
+                        && HebrewChars.IsLatinLower(c) != HebrewChars.IsLatinLower(_buffer[0]))
+                        Flush(i); // emits the completed run (if len 2..29), resets the buffer
 
                     if (_buffer.Length == 0)
                         _wordStart = i; // first letter of a new word
@@ -106,7 +110,7 @@ namespace FtsLib.Tokenization
                     _buffer.Append(c);
                     _visibleCount++;
                 }
-                else if (IsIntraWordQuote(c) && _buffer.Length > 0)
+                else if (HebrewChars.IsIntraWordQuote(c) && _buffer.Length > 0)
                 {
                     // Hebrew geresh/gershayim and ASCII quotes appearing inside a word
                     // (e.g. רשב"א, רש"י) are transparent connectors — skip without
@@ -160,22 +164,8 @@ namespace FtsLib.Tokenization
         // ── Shared letter test (used by SnippetBuilder for boundary snapping) ──
 
         /// <summary>Returns true for Hebrew letters (alef–tav) and ASCII a–z / A–Z.</summary>
-        internal static bool IsLetter(char c)
-            => (c >= 'a' && c <= 'z')
-            || (c >= 'A' && c <= 'Z')
-            || (c >= '\u05D0' && c <= '\u05EA');
+        internal static bool IsLetter(char c) => HebrewChars.IsLetter(c);
 
-        /// <summary>
-        /// Returns true for quote characters that may appear inside a Hebrew word
-        /// (e.g. רשב"א, רש"י) and should be treated as transparent connectors
-        /// rather than word separators.
-        ///   U+0022 — ASCII quotation mark   "
-        ///   U+05F4 — Hebrew gershayim       ״
-        ///   U+0027 — ASCII apostrophe       '
-        ///   U+05F3 — Hebrew geresh          ׳
-        /// </summary>
-        private static bool IsIntraWordQuote(char c)
-            => c == '\u0022' || c == '\u05F4'
-            || c == '\u0027' || c == '\u05F3';
+
     }
 }
