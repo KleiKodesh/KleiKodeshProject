@@ -92,34 +92,8 @@ namespace FtsLibTest
                 Console.WriteLine("query parity: " + (q_bad == 0 ? "all OK" : q_bad + " mismatch"));
             }
 
-            // Fuzzy routing parity: real net48 FuzzyExpander with sidecar present (routes through
-            // the sidecar) vs sidecar renamed away (scans) — must be identical.
-            {
-                FtsLib.Search.FuzzyExpander.MaxExpandedTerms = 0;
-                string dat = Path.ChangeExtension(db, ".dat");
-                string tgm = TrigramIndex.SidecarPath(dat);
-                // outPath is seg_net48.tgm; the expander looks for <dat>.tgm — build it there.
-                if (File.Exists(dat)) TrigramIndex.BuildFromDb(db, tgm);
-                string[] fz = { "יצחק", "תורה", "יסראל", "אברהם" };
-                int f_bad = 0;
-                foreach (var term in fz)
-                {
-                    List<string> withT, noT;
-                    using (var seg = new FtsLib.Indexing.SegmentHandle(dat, db))
-                        withT = FtsLib.Search.FuzzyExpander.Expand(term, 2, new[] { seg });
-                    string hidden = tgm + ".hidden"; bool moved = File.Exists(tgm);
-                    if (moved) File.Move(tgm, hidden);
-                    try { using (var seg = new FtsLib.Indexing.SegmentHandle(dat, db)) noT = FtsLib.Search.FuzzyExpander.Expand(term, 2, new[] { seg }); }
-                    finally { if (moved) File.Move(hidden, tgm); }
-                    bool ok = new HashSet<string>(withT, StringComparer.Ordinal).SetEquals(new HashSet<string>(noT, StringComparer.Ordinal));
-                    if (!ok) f_bad++;
-                    Console.WriteLine("fuzzy " + term.PadRight(7) + withT.Count.ToString("N0").PadLeft(6) + "  " + (ok ? "OK" : "MISMATCH " + withT.Count + "/" + noT.Count));
-                }
-                Console.WriteLine("fuzzy parity: " + (f_bad == 0 ? "all OK" : f_bad + " mismatch"));
-                if (File.Exists(tgm)) File.Delete(tgm);
-            }
-
-            // Cross-runtime byte-compare
+            // Cross-runtime byte-compare — done BEFORE the fuzzy block, which builds/deletes the
+            // canonical <dat>.tgm (== args[2] when pointed at the same segment) and would clobber it.
             if (args.Length > 2 && File.Exists(args[2]))
             {
                 byte[] a = File.ReadAllBytes(outPath), b = File.ReadAllBytes(args[2]);
@@ -127,6 +101,37 @@ namespace FtsLibTest
                 Console.WriteLine("\ncross-runtime byte-compare vs " + Path.GetFileName(args[2]) + ": " +
                                   (same ? "BYTE-IDENTICAL ✓ (net48 build == net10 build)"
                                         : "DIFFER (net48 " + a.Length + " B vs net10 " + b.Length + " B)"));
+            }
+
+            // Fuzzy routing parity: real net48 FuzzyExpander with sidecar present (routes through
+            // the sidecar) vs sidecar renamed away (scans) — must be identical. Builds/deletes the
+            // canonical <dat>.tgm, so it runs AFTER the byte-compare above.
+            {
+                FtsLib.Search.FuzzyExpander.MaxExpandedTerms = 0;
+                string dat = Path.ChangeExtension(db, ".dat");
+                string tgm = TrigramIndex.SidecarPath(dat);
+                bool preexisting = File.Exists(tgm); // don't destroy a sidecar we didn't create
+                if (File.Exists(dat) && !preexisting) TrigramIndex.BuildFromDb(db, tgm);
+                if (File.Exists(dat))
+                {
+                    string[] fz = { "יצחק", "תורה", "יסראל", "אברהם" };
+                    int f_bad = 0;
+                    foreach (var term in fz)
+                    {
+                        List<string> withT, noT;
+                        using (var seg = new FtsLib.Indexing.SegmentHandle(dat, db))
+                            withT = FtsLib.Search.FuzzyExpander.Expand(term, 2, new[] { seg });
+                        string hidden = tgm + ".hidden"; bool moved = File.Exists(tgm);
+                        if (moved) File.Move(tgm, hidden);
+                        try { using (var seg = new FtsLib.Indexing.SegmentHandle(dat, db)) noT = FtsLib.Search.FuzzyExpander.Expand(term, 2, new[] { seg }); }
+                        finally { if (moved) File.Move(hidden, tgm); }
+                        bool ok = new HashSet<string>(withT, StringComparer.Ordinal).SetEquals(new HashSet<string>(noT, StringComparer.Ordinal));
+                        if (!ok) f_bad++;
+                        Console.WriteLine("fuzzy " + term.PadRight(7) + withT.Count.ToString("N0").PadLeft(6) + "  " + (ok ? "OK" : "MISMATCH " + withT.Count + "/" + noT.Count));
+                    }
+                    Console.WriteLine("fuzzy parity: " + (f_bad == 0 ? "all OK" : f_bad + " mismatch"));
+                    if (!preexisting && File.Exists(tgm)) File.Delete(tgm); // restore state we found
+                }
             }
         }
 
