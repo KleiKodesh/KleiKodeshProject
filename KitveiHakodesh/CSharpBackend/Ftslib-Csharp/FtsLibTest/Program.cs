@@ -35,6 +35,10 @@ namespace FtsLibTest
                     BuildTest.Run(args);
                     return;
 
+                case "trgmv48":
+                    TrgmV48.Run(args);
+                    return;
+
                 case "search":
                     SearchTest.Run(args);
                     return;

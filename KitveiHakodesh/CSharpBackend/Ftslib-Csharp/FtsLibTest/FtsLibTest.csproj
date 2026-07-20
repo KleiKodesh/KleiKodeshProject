@@ -55,6 +55,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="TrgmV48.cs" />
     <Compile Include="BenchTest.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <!-- Shared -->
