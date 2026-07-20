@@ -307,7 +307,6 @@ defineExpose({ captureScrollPos, scrollToBook })
 }
 .result-item {
   padding: 8px 14px;
-  border-bottom: 1px solid var(--border-color);
 }
 .result-header {
   display: flex;
@@ -367,7 +366,8 @@ defineExpose({ captureScrollPos, scrollToBook })
   cursor: pointer;
   padding: 2px;
   border-radius: 4px;
-  transition: color 120ms;
+  opacity: 0.55;
+  transition: color 120ms, opacity 120ms;
 }
 /* The auto margin sits on the first button of the group; the recenter button only
    exists while the preview is open, so the toggle carries it when alone. */
@@ -381,6 +381,7 @@ defineExpose({ captureScrollPos, scrollToBook })
 .preview-toggle-btn:hover,
 .preview-recenter-btn:hover {
   color: var(--accent-color);
+  opacity: 1;
 }
 .preview-toggle-btn:active,
 .preview-recenter-btn:active {
@@ -399,7 +400,7 @@ defineExpose({ captureScrollPos, scrollToBook })
   line-height: var(--line-height, 1.5);
   color: var(--text-secondary);
   direction: rtl;
-  text-align: justify;
+  text-align: right;
   user-select: text;
   display: -webkit-box;
   -webkit-line-clamp: 4;
