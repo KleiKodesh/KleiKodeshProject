@@ -460,7 +460,6 @@ useEventListener('keydown', (e: KeyboardEvent) => {
   height: var(--title-bar-height);
   padding: var(--title-bar-padding);
   background: var(--bg-secondary);
-  border-bottom: 1px solid var(--border-color);
   position: relative;
   /* Regular arrow over the bar and the breadcrumb/title; only the buttons and
      breadcrumb chevrons use the pointer (hand). */

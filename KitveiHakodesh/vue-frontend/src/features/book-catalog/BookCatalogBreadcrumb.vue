@@ -52,7 +52,9 @@ defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: C
   display: flex;
   align-items: center;
   padding-inline: 4px;
-  height: 32px;
+  /* Fill the toolbar height (set by the parent .titlebar) rather than a fixed
+     value, so the catalog toolbar matches the BookView toolbar in every density. */
+  height: 100%;
   flex: 1;
   min-width: 0;
   overflow: hidden;

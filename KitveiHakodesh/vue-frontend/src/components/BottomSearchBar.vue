@@ -10,16 +10,21 @@
 
 <style scoped>
 .bottom-search-bar {
-  padding: 5px 10px 6px;
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
+  padding: 4px 10px;
+  /* Match the BookView toolbar surface so the search bars read as toolbars. */
+  background: var(--bg-toolbar);
+  /* Softer hairline divider (Fluent in-flow chrome) rather than a hard full-color line. */
+  border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   flex-shrink: 0;
 }
+/* The pill shape/border come from the global `.search-inner` rule (main.css).
+   Here we add the bottom-bar rhythm and override the fill to the toolbar color so
+   the field matches the BookView toolbar surface (not the default gray --input-bg).
+   Scoped, so the other search bars (home, TOC, commentary, filters) are untouched. */
 .search-inner {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
+  gap: 6px;
+  padding: 3px 12px;
+  background: var(--bg-toolbar);
 }
 .slot-left {
   display: flex;
