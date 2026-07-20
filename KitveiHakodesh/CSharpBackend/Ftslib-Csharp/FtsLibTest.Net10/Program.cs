@@ -18,6 +18,7 @@ namespace FtsLibTest
             switch (cmd)
             {
                 case "bench":             BenchTest.Run(args); return;
+                case "embellishbench":    EmbellishBenchTest.Run(args); return;
                 case "fetchbench":        FetchBenchTest.Run(args); return;
                 case "forcemergebug":     ForceMergeBugTest.Run(args); return;
                 case "build":             BuildTest.Run(args); return;

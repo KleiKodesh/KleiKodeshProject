@@ -313,13 +313,25 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         try
         {
             var index = GetIndex();
+            // Buffer in batches and reuse BuildBatch so the one-shot path gets the same
+            // parallel snippeting, short-snippet embellishment, and enrichment as streaming.
+            const int SnippetBatch = 256;
+            var batch = new List<SearchResult>(SnippetBatch);
+            bool capped = false;
             foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv))
             {
-                if (TryBuildHit(index, hit, requireOrdered, contextWords, maxWordDistance, out var built))
-                    result.Results.Add(built!);
-                if (cap > 0 && result.Results.Count >= cap) break;
+                batch.Add(hit);
+                if (batch.Count >= SnippetBatch)
+                {
+                    result.Results.AddRange(BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, default));
+                    batch.Clear();
+                    if (cap > 0 && result.Results.Count >= cap) { capped = true; break; }
+                }
             }
-            EnrichHits(result.Results);   // fill bookId + toc path server-side (self-contained results)
+            if (!capped && batch.Count > 0)
+                result.Results.AddRange(BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, default));
+            if (cap > 0 && result.Results.Count > cap)
+                result.Results.RemoveRange(cap, result.Results.Count - cap);
         }
         catch (Exception ex)
         {
@@ -427,22 +439,82 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
     /// <summary>Snippet-generate a batch across all cores (thread-safe: FtsLib's
     /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, and enrich the
-    /// passing hits (bookId + toc path) server-side.</summary>
+    /// passing hits (bookId + toc path) server-side.
+    ///
+    /// Short snippets — fewer visible words than the requested context (contextWords per
+    /// side) because the matched line is itself short — are then EMBELLISHED with their
+    /// surrounding lines: the whole batch's short lines get their neighbors in one batched
+    /// query, and only those hits are re-rendered. Lines that already fill the context are
+    /// untouched, so a batch with no short lines pays nothing extra.</summary>
     private List<FtsHit> BuildBatch(SeforimIndex index, IReadOnlyList<SearchResult> results,
         bool requireOrdered, int contextWords, int maxWordDistance, CancellationToken ct)
     {
-        var built = new FtsHit?[results.Count];
+        var built     = new FtsHit?[results.Count];
+        var wordCount = new int[results.Count];   // window word count of each passing hit (0 = didn't pass)
         Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = ct }, i =>
         {
-            if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance, out var h))
-                built[i] = h;
+            if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance,
+                            out var h, out int words))
+            {
+                built[i]     = h;
+                wordCount[i] = words;
+            }
         });
+
+        EmbellishShortSnippets(index, results, built, wordCount, requireOrdered, contextWords, ct);
 
         var passing = new List<FtsHit>(results.Count);
         for (int i = 0; i < built.Length; i++)
             if (built[i] is { } hit) passing.Add(hit);
         EnrichHits(passing);
         return passing;
+    }
+
+    // How many lines of context to pull on each side when embellishing (same book). Two
+    // lines is enough to fill the snippet's visual space (~4 clamped lines) and reach about
+    // the requested per-side word context for prose; benchmarking showed radius 2 costs
+    // roughly half of radius 3 (it re-tokenizes fewer neighbor lines). See EmbellishBenchTest.
+    private const int NeighborLineRadius = 2;
+
+    /// <summary>Re-render the batch's short snippets — those whose window spans fewer words
+    /// than the requested context (<paramref name="contextWords"/>), i.e. the matched line
+    /// was too short to fill it — over their surrounding lines. One batched neighbor fetch
+    /// for the whole batch; re-render runs across cores. No-op — and no DB hit — when nothing
+    /// is short (a broad query's typical batch has only ~1 in 6 short lines).</summary>
+    private static void EmbellishShortSnippets(
+        SeforimIndex index, IReadOnlyList<SearchResult> results,
+        FtsHit?[] built, int[] wordCount, bool requireOrdered, int contextWords,
+        CancellationToken ct)
+    {
+        // "Smaller than the setting": a snippet whose window holds fewer words than the
+        // context the user asked for on one side didn't have room to show full context, so
+        // its matched line is short enough to enrich with neighbors.
+        int target = contextWords;
+
+        List<int>? shortIdx = null;
+        List<int>? shortIds = null;
+        for (int i = 0; i < built.Length; i++)
+        {
+            if (built[i] == null || wordCount[i] >= target) continue;
+            (shortIdx ??= new List<int>()).Add(i);
+            (shortIds ??= new List<int>()).Add(results[i].LineId);
+        }
+        if (shortIds == null) return; // nothing short — zero extra cost
+
+        var neighbors = index.FetchNeighborContext(shortIds, NeighborLineRadius);
+        if (neighbors.Count == 0) return;
+
+        Parallel.ForEach(shortIdx!, new ParallelOptions { CancellationToken = ct }, i =>
+        {
+            if (!neighbors.TryGetValue(results[i].LineId, out var ctx)) return;
+            var re = index.GenerateSnippetWithNeighbors(
+                results[i], ctx.Prev, ctx.Next, requireOrdered, contextWords);
+            // Keep the original word-distance/score (relevance keys computed on the line
+            // itself); only swap in the richer snippet HTML. Guard against a failed
+            // re-render (shouldn't happen — same terms) by keeping the original.
+            if (re.IsMatch && !string.IsNullOrEmpty(re.Html) && built[i] is { } h)
+                h.Snippet = re.Html;
+        });
     }
 
     /// <summary>
@@ -550,12 +622,15 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     /// <summary>Generate the snippet, apply the match / word-distance filter, and build the
     /// frontend hit. Returns false for hits that don't pass. Shared by one-shot + streaming.</summary>
     private static bool TryBuildHit(SeforimIndex index, SearchResult hit,
-        bool requireOrdered, int contextWords, int maxWordDistance, out FtsHit? built)
+        bool requireOrdered, int contextWords, int maxWordDistance, out FtsHit? built,
+        out int windowWordCount)
     {
         built = null;
+        windowWordCount = 0;
         var snippet = index.GenerateSnippet(hit, requireOrdered, contextWords);
         if (!snippet.IsMatch) return false;
         if (snippet.WordDistance > maxWordDistance) return false;
+        windowWordCount = snippet.WindowWordCount;
 
         var matchedTerms = new List<string>();
         foreach (var group in hit.MatchedGroups)

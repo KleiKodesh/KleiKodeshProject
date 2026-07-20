@@ -286,6 +286,22 @@ namespace FtsLib.SeforimDb
             return SnippetPipeline.GenerateFromDb(lineId, terms, _dbPath);
         }
 
+        /// <summary>
+        /// Batch-fetches the surrounding-line context (up to <paramref name="radius"/>
+        /// lines each side, same book) for the given matched line ids — one query per
+        /// chunk. Returns id → (prevText, nextText); ids at a book edge or not found are
+        /// simply absent. Used to embellish snippets that came out shorter than the
+        /// requested context. Opening the read-only DB is a cheap pooled checkout.
+        /// </summary>
+        public System.Collections.Generic.Dictionary<int, (string Prev, string Next)>
+            FetchNeighborContext(System.Collections.Generic.IReadOnlyList<int> lineIds, int radius)
+        {
+            if (lineIds == null || lineIds.Count == 0 || radius <= 0)
+                return new System.Collections.Generic.Dictionary<int, (string, string)>();
+            using (var db = new ZayitDb(_dbPath))
+                return db.FetchNeighborContext(lineIds, radius);
+        }
+
         public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
             int contextWords = DefaultContextWords)
         {
@@ -300,6 +316,33 @@ namespace FtsLib.SeforimDb
 
             return SnippetPipeline.Generate(
                 result.Content,
+                prepared,
+                requireOrdered,
+                result.OriginalGroupCount,
+                contextWords);
+        }
+
+        /// <summary>
+        /// Like <see cref="GenerateSnippet(SearchResult,bool,int)"/> but renders the
+        /// snippet over the matched line plus the supplied surrounding lines. Use this
+        /// only for results whose plain snippet was shorter than the requested context
+        /// (<see cref="SnippetResult.WindowWordCount"/> below <c>contextWords</c>) — the
+        /// caller batch-fetches the neighbors, so no per-line DB round-trip happens here.
+        /// </summary>
+        public SnippetResult GenerateSnippetWithNeighbors(SearchResult result,
+            string prevContent, string nextContent,
+            bool requireOrdered = false, int contextWords = DefaultContextWords)
+        {
+            if (result == null) return SnippetResult.NoMatch;
+            if (result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
+
+            var prepared = result.Prepared
+                ?? FtsLib.Snippets.PreparedQueryGroups.FromGroups(result.MatchedGroups);
+
+            return SnippetPipeline.GenerateWithNeighbors(
+                prevContent,
+                result.Content,
+                nextContent,
                 prepared,
                 requireOrdered,
                 result.OriginalGroupCount,
