@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import { applyTheme, getTheme, toggleThemeMode, type ThemePreset } from './themes'
+import { darken, lighten } from './themeColorUtils'
 import { setTheme } from '@/webview-host/bridge'
 export type { ThemePreset } from './themes'
 
@@ -59,12 +60,26 @@ export const useThemeStore = defineStore('theme', () => {
   }
 
   // Notify the C# host so it can update the WinForms title bar (DarkNet) and the
-  // native chrome tab strip. The strip derives its palette from the theme's
-  // title-bar background (ui.bgSecondary — the same color the Vue title bar uses);
-  // the accent drives the active-tab indicator in the native tab-list dropdown.
+  // native chrome tab strip. The accent drives the active-tab indicator in the
+  // native tab-list dropdown.
+  //
+  // The strip does NOT use ui.bgSecondary directly (the app's own title-bar
+  // surface). Browser convention makes the tab strip a slightly MORE toned
+  // surface, so the OS chrome reads as a recessed frame rather than blending
+  // flat into the app. We push one step further from the content in the theme's
+  // own direction — darker on light themes, lighter on dark. FluentChromeTabs
+  // then derives the active tab as ~halfway back toward the content, which lands
+  // near bgSecondary again: the active tab connects to the Vue title-bar row just
+  // below the strip while the inactive strip sits behind it.
   function syncHostTheme() {
-    const ui = getTheme(themePreset.value)?.ui
-    setTheme(themePreset.value.includes('-dark'), ui?.bgSecondary, ui?.accentColor, ui?.borderColor)
+    const theme = getTheme(themePreset.value)
+    const ui = theme?.ui
+    const chromeStrip = ui
+      ? theme!.isDark
+        ? lighten(ui.bgSecondary, 6)
+        : darken(ui.bgSecondary, 8)
+      : undefined
+    setTheme(themePreset.value.includes('-dark'), chromeStrip, ui?.accentColor, ui?.borderColor)
   }
 
   // Apply defaults immediately (before async init) so the UI doesn't flash
