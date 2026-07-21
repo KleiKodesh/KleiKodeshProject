@@ -90,13 +90,22 @@ export function useFullTextSearchFilters(
     return result
   }
 
+  function rebuildResultCounts(raw: FullTextSearchResult[]) {
+    const m = new Map<number, number>()
+    for (const r of raw) m.set(r.bookId, (m.get(r.bookId) ?? 0) + 1)
+    resultCounts.value = m
+  }
+
   function applyFilter(ids: Set<number>) {
     const raw = results()
     const isEffectivelyAll = atFilters.value.length === 0 && ids.size === booksStore.allBooks.length
     filteredResults.value = isEffectivelyAll ? raw : raw.filter((r) => ids.has(r.bookId))
-    const m = new Map<number, number>()
-    for (const r of raw) m.set(r.bookId, (m.get(r.bookId) ?? 0) + 1)
-    resultCounts.value = m
+    // resultCounts (per-book/category tallies) drives ONLY the filter panel, which is
+    // rendered solely while it's open. Rebuilding the map is a full O(n) scan over every
+    // result; running it on each streaming flush of a high-frequency word (e.g. "כי",
+    // hundreds of thousands of hits) is O(n²) over the stream and freezes the page.
+    // Skip it while the panel is closed — the watch below recomputes once when it opens.
+    if (isFilterOpen.value) rebuildResultCounts(raw)
   }
 
   function updateFilter(checked: Set<number>, tokens: string[]) {
@@ -113,6 +122,13 @@ export function useFullTextSearchFilters(
 
   // Results streaming → re-apply current filter (ids already known, just a Set lookup)
   watch(() => results(), () => applyFilter(effectiveBookIds.value))
+
+  // Panel opened → its per-book counts were skipped while it was closed (see applyFilter).
+  // Compute them once now from the current result set; while it stays open, applyFilter
+  // keeps them live on each flush.
+  watch(isFilterOpen, (open) => {
+    if (open) rebuildResultCounts(results())
+  })
 
   // ── Public mutations ─────────────────────────────────────────────────────────
 
