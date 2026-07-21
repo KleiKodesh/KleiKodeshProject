@@ -17,14 +17,15 @@
   border-top: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
   flex-shrink: 0;
 }
-/* The pill shape/border come from the global `.search-inner` rule (main.css).
-   Here we add the bottom-bar rhythm and override the fill to the toolbar color so
-   the field matches the BookView toolbar surface (not the default gray --input-bg).
-   Scoped, so the other search bars (home, TOC, commentary, filters) are untouched. */
+/* The pill shape/fill/border come from the global `.search-inner` rule (main.css):
+   the field keeps its standard --input-bg fill so it reads as a distinct control
+   against the --bg-toolbar band (theme-aware, matching the app's other search
+   fields), plus a subtle inset for depth. Scoped, so the other search bars
+   (home, TOC, commentary, filters) are untouched. */
 .search-inner {
   gap: 6px;
   padding: 3px 12px;
-  background: var(--bg-toolbar);
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .slot-left {
   display: flex;
