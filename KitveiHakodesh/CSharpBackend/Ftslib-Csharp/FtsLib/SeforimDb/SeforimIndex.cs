@@ -55,6 +55,77 @@ namespace FtsLib.SeforimDb
             // Initialise the store eagerly so crash recovery runs once at startup
             // and the live segment state is ready before the first search.
             EnsureStore();
+
+            // Self-heal trigram sidecars. The .tgm file's presence (and being newer
+            // than its .db) IS the durable "built" marker — the WAL can't carry that
+            // signal (it is cleared after every op, so it only ever means "an op was
+            // INTERRUPTED", never "never built"). This covers: an index built before
+            // trigrams existed; a build that finished but the process died before/while
+            // sidecars were generated; and a per-segment gap if a multi-segment build
+            // was interrupted. Build() writes .tmp then atomically renames, so a
+            // half-written sidecar never appears as a complete seg.tgm — a partial
+            // crash leaves only a .tmp, which this treats as "not built" and rebuilds.
+            EnsureSidecars();
+        }
+
+        /// <summary>
+        /// Builds any missing or stale trigram sidecar for the live segments. Runs under
+        /// the index write lock (skips silently if another process holds it — that process's
+        /// force-merge, or the next open, will build them). Best-effort per segment: a
+        /// failure just leaves that segment on the SQLite LIKE fallback. A sidecar is
+        /// considered stale (and rebuilt) if it is older than its source .db.
+        /// </summary>
+        private void EnsureSidecars()
+        {
+            System.Collections.Generic.List<(string dat, string db)> live;
+            try { live = _store.GetLiveSegmentPaths(); }
+            catch { return; } // store not in a queryable state — nothing to do
+
+            // Cheap pre-check with no lock: is anything actually missing/stale?
+            bool anyNeeded = false;
+            foreach (var (dat, db) in live)
+            {
+                string tgm = FtsLib.Search.TrigramIndex.SidecarPath(dat);
+                if (NeedsSidecar(tgm, db)) { anyNeeded = true; break; }
+            }
+            if (!anyNeeded) return;
+
+            try
+            {
+                using (new IndexWriteLock(_indexPath))
+                {
+                    // Re-read live paths under the lock — recovery/merge may have changed them.
+                    foreach (var (dat, db) in _store.GetLiveSegmentPaths())
+                    {
+                        string tgm = FtsLib.Search.TrigramIndex.SidecarPath(dat);
+                        if (!NeedsSidecar(tgm, db)) continue;
+                        try
+                        {
+                            FtsLib.Search.TrigramIndex.BuildFromDb(db, tgm);
+                            FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureSidecars", "built " + tgm);
+                        }
+                        catch (System.Exception ex)
+                        {
+                            FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureSidecars", "skip " + db + ": " + ex.Message);
+                        }
+                    }
+                }
+            }
+            catch (IndexWriteLockException)
+            {
+                FtsLib.Indexing.FtsLog.Write("SeforimIndex.EnsureSidecars",
+                    "write lock busy — another process is building; deferring sidecar build");
+            }
+        }
+
+        /// <summary>A sidecar must be (re)built when it is absent, or older than the source
+        /// .db (a newer .db means the segment was rebuilt/merged since the sidecar).</summary>
+        private static bool NeedsSidecar(string tgm, string db)
+        {
+            if (!System.IO.File.Exists(tgm)) return true;
+            if (!System.IO.File.Exists(db)) return false; // no source — leave whatever exists
+            try { return System.IO.File.GetLastWriteTimeUtc(tgm) < System.IO.File.GetLastWriteTimeUtc(db); }
+            catch { return false; }
         }
 
         // ── Store lifecycle ───────────────────────────────────────────
