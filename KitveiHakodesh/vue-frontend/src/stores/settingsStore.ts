@@ -45,7 +45,7 @@ const DEFAULTS = {
   commentaryMaxWidth: 0,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   compactMode: true,
-  contentBorder: true,
+  contentBorder: false,
   showRecentlyOpened: true,
 }
 
