@@ -73,6 +73,20 @@ onWebviewEvent((msg) => {
   }
 })
 
+// Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
+// O(n) for the array copy AND makes @tanstack/vue-virtual rebuild its ENTIRE measurements
+// array (memoized on `count`; when the viewport is at the top `min` is 0, so it recomputes
+// every row 0..count — see virtual-core getMeasurements). Flushing every 150ms while the
+// set grows into the hundreds-of-thousands (e.g. a high-frequency word like "כי") makes
+// that O(n²) and freezes the page. So: flush fast while the list is small (snappy first
+// paint), then back off sharply so the expensive rebuilds happen only a handful of times.
+// Results are never capped — everything still streams in; only the paint cadence changes.
+function _flushDelayFor(count: number): number {
+  if (count < 5_000) return 150
+  if (count < 50_000) return 600
+  return 2000
+}
+
 // FTS results are never capped, so the line-id list handed to enrichment can be
 // huge (tens of thousands). SQLite caps parameters per statement (~32766), so a
 // single IN(...) query silently returns nothing past that — split into chunks.
@@ -163,10 +177,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // the service's cancel signal (no cancel op, no polling).
   let _devStreamAbort: AbortController | null = null
 
-  // Accumulation buffer — batches are held here and flushed to `results` at most
-  // every FLUSH_INTERVAL_MS. This prevents Vue from re-rendering on every C#
-  // batch when the result set is large.
-  const FLUSH_INTERVAL_MS = 150
+  // Accumulation buffer — batches are held here and flushed to `results` on an
+  // adaptive cadence (see _flushDelayFor). This prevents Vue from re-rendering on
+  // every C# batch, and backs off as the set grows so large searches don't freeze.
   let _pendingBuffer: FullTextSearchResult[] = []
   let _flushTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -184,7 +197,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       const flushed = _pendingBuffer
       _pendingBuffer = []
       results.value = [...results.value, ...flushed]
-    }, FLUSH_INTERVAL_MS)
+    }, _flushDelayFor(results.value.length + _pendingBuffer.length))
   }
 
   function _flushNow() {
@@ -462,6 +475,20 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           expandKetiv: settings.searchExpandKetiv,
         }, abort.signal)
 
+        // Flush the accumulator into the reactive ref on the adaptive cadence
+        // (_flushDelayFor). Each flush copies the whole accumulator (a new array is
+        // required to trigger reactivity) and forces a full virtualizer measurement
+        // rebuild, so flushing on every pushed frame is O(n²) over the stream and
+        // freezes the page for high-frequency words (e.g. "כי"). Backing off as the set
+        // grows bounds those rebuilds; `dirty` tracks pending hits so the last isn't lost.
+        let lastFlushAt = 0
+        let dirty = false
+        const flushDev = () => {
+          results.value = acc.slice()
+          dirty = false
+          lastFlushAt = performance.now()
+        }
+
         for await (const chunk of stream) {
           if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
           if (chunk.ready === false) {
@@ -473,13 +500,16 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
             // Hits arrive fully enriched (bookId + tocText) from the service — no
             // client-side enrichment round-trip.
             for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
-            results.value = acc.slice() // one flush per pushed frame — the service paces the cadence
+            dirty = true
+            if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flushDev()
           }
           if (chunk.error) {
+            if (dirty) flushDev() // surface whatever streamed before the error
             if (!acc.length) searchError.value = 'searchFailed'
             break
           }
           if (chunk.done) {
+            if (dirty) flushDev() // final trailing flush before sorting
             // Search complete — apply the sort now (no-op for 'lineId').
             // Done here rather than in `finally` so it runs only on genuine completion,
             // not when the loop exits early via supersession/error.
@@ -487,6 +517,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
             break
           }
         }
+        // Safety: if the iterator completed without a done/error frame, surface any
+        // hits that were still pending under the flush throttle.
+        if (dirty && executedQuery.value === q) flushDev()
       } catch (err) {
         // An aborted stream is a cancel (new search / navigation), not a failure.
         if (!abort.signal.aborted) {

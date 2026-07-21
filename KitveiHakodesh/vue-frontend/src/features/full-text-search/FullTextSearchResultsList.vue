@@ -49,14 +49,37 @@ const fontPx = computed(() => {
 })
 let programmaticScrolling = false
 
+// Progressive render window. All results stream into props.results (never capped), but we
+// only ever hand the virtualizer a slice of them — grown as the user scrolls toward its end.
+// This keeps the virtualizer's per-count measurement rebuild cheap no matter how many
+// hundreds of thousands of results exist, and stops the list from churning while results
+// stream in: the window stays put, only the result-count badge climbs. (No fetch on grow —
+// the data is already in memory; we're just revealing more of it.)
+const RENDER_PAGE = 200
+const renderCount = ref(RENDER_PAGE)
+const renderLimit = computed(() => Math.min(props.results.length, renderCount.value))
+
 const virtualizer = useVirtualizer(
   computed(() => ({
-    count: props.results.length,
+    count: renderLimit.value,
     getScrollElement: () => scrollEl.value,
     estimateSize: () => 80,
     overscan: 8,
     getItemKey: (index) => props.results[index]?.lineId ?? index,
   })),
+)
+
+// Reveal another page once the viewport reaches the end of the current window and more
+// results are available. Runs on every scroll (getVirtualItems changes), but the check is O(1).
+watch(
+  () => virtualizer.value.getVirtualItems(),
+  (items) => {
+    const last = items[items.length - 1]
+    if (!last) return
+    if (last.index >= renderLimit.value - 1 && renderCount.value < props.results.length) {
+      renderCount.value = Math.min(props.results.length, renderCount.value + RENDER_PAGE)
+    }
+  },
 )
 
 function renderSnippet(snippet: string): string {
@@ -68,7 +91,10 @@ function renderSnippet(snippet: string): string {
 const { previewOf, togglePreview, loadAbove, loadBelow, clearPreviews } = useFullTextSearchPreview()
 watch(
   () => props.searchQuery,
-  () => clearPreviews(),
+  () => {
+    clearPreviews()
+    renderCount.value = RENDER_PAGE // new search → collapse the window to the first page
+  },
 )
 
 // Open previews' component instances, keyed by lineId — the header recenter button
@@ -135,7 +161,12 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
         return
       }
       stopWatch()
-      nextTick(() => restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0))
+      nextTick(() => {
+        // The saved index may be far below the initial window — widen it enough to
+        // contain the target before scrolling, or scrollToIndex has nothing to land on.
+        renderCount.value = Math.max(renderCount.value, props.initialScrollIndex! + RENDER_PAGE)
+        restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0)
+      })
     },
     { flush: 'post', immediate: true },
   )
@@ -161,12 +192,16 @@ useVirtualScrollerKeys(
   scrollEl,
   () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => props.results.length,
+  // Keyboard nav (PageDown/End) stays within the revealed window; scrolling to its end
+  // triggers the grow watcher above, so holding PageDown progressively loads more.
+  () => renderLimit.value,
 )
 
 function scrollToBook(bookId: number) {
   const index = props.results.findIndex((r) => r.bookId === bookId)
   if (index < 0) return
+  // Make sure the target is inside the render window before scrolling to it.
+  if (index >= renderCount.value) renderCount.value = index + RENDER_PAGE
   programmaticScrolling = true
   virtualizer.value.scrollToIndex(index, { align: 'start' })
   let attempts = 0
