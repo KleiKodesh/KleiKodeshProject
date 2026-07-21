@@ -144,5 +144,54 @@
 			<menuSeparator id="KleiKodeshContextSeparatorHl"
 						   insertBeforeMso="Cut"/>
 		</contextMenu>
+
+		<!-- Numbered- and bulleted-list paragraphs use their OWN context menus
+		     (ContextMenuListsNumbering / ContextMenuListsBullets), NOT
+		     ContextMenuText, so right-clicking a list item never shows the items
+		     above. Office has no "all menus" hook — the search items must be
+		     repeated per menu, with globally-unique ids (the -Num / -Bul suffixes).
+		     contextMenu_Click / getContextVisible key off "Catalog" in the id, so
+		     the suffix does not change their behaviour. -->
+		<contextMenu idMso="ContextMenuListsNumbering">
+			<button id="SearchFtsFromSelectionNum"
+					label="העתק לחיפוש בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"
+					insertBeforeMso="Cut"/>
+			<button id="SearchCatalogFromSelectionNum"
+					label="חיפוש ספר בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"
+					insertBeforeMso="Cut"/>
+			<button id="OpenLinkInKitveiHakodeshNum"
+					label="פתח קישור בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"
+					insertBeforeMso="Cut"/>
+			<menuSeparator id="KleiKodeshContextSeparatorNum"
+						   insertBeforeMso="Cut"/>
+		</contextMenu>
+
+		<contextMenu idMso="ContextMenuListsBullets">
+			<button id="SearchFtsFromSelectionBul"
+					label="העתק לחיפוש בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"
+					insertBeforeMso="Cut"/>
+			<button id="SearchCatalogFromSelectionBul"
+					label="חיפוש ספר בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"
+					insertBeforeMso="Cut"/>
+			<button id="OpenLinkInKitveiHakodeshBul"
+					label="פתח קישור בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"
+					insertBeforeMso="Cut"/>
+			<menuSeparator id="KleiKodeshContextSeparatorBul"
+						   insertBeforeMso="Cut"/>
+		</contextMenu>
 	</contextMenus>
 </customUI>
