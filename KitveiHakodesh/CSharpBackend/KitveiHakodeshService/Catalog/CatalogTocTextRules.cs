@@ -120,9 +120,12 @@ public static class CatalogTocTextRules
     /// <summary>Greedy longest-match abbreviation lookup starting at raw token
     /// <paramref name="start"/>. Tries the longest window first (up to
     /// <see cref="MaxKeyWords"/>), so a multi-word key (משנה תורה, שו"ע הגר"ז) wins over
-    /// its first word alone. Each window is tried as typed and edge-trimmed (so "(שו"ע)"
-    /// still maps). On a hit, <paramref name="consumed"/> is the number of raw tokens the
-    /// key spans.</summary>
+    /// its first word alone. Each window is tried as typed, edge-trimmed (so "(שו"ע)"
+    /// still maps), and — if the window's FIRST word carries a leading ה — with that ה
+    /// stripped too (so a key like "יד החזקה" also matches when typed "היד החזקה"; ה is
+    /// the definite article and only ever attaches to the leading word of a phrase, so
+    /// only that position is tried). On a hit, <paramref name="consumed"/> is the number
+    /// of raw tokens the key spans.</summary>
     private static bool TryMatchAbbrev(string[] raws, int start, out string[][] alts, out int consumed)
     {
         int maxWindow = Math.Min(MaxKeyWords, raws.Length - start);
@@ -139,6 +142,23 @@ public static class CatalogTocTextRules
             {
                 consumed = w;
                 return true;
+            }
+
+            string? heStripped = StripHePrefix(raws[start]);
+            if (heStripped is not null)
+            {
+                string heCandidate = w == 1 ? heStripped : heStripped + " " + string.Join(' ', raws, start + 1, w - 1);
+                if (Abbrev.TryGetValue(heCandidate, out alts!))
+                {
+                    consumed = w;
+                    return true;
+                }
+                string heTrimmed = TrimEdgeNonWord(heCandidate);
+                if (heTrimmed.Length > 0 && heTrimmed.Length != heCandidate.Length && Abbrev.TryGetValue(heTrimmed, out alts!))
+                {
+                    consumed = w;
+                    return true;
+                }
             }
         }
         alts = null!;
@@ -233,6 +253,77 @@ public static class CatalogTocTextRules
         core = t[..^1].TrimEnd();
         if (core.Length <= 3) return false; // "דף" alone — no page designation
         isAmudB = last == ':';
+        return true;
+    }
+
+    // ── ה-prefix stripping (ported from the Vue frontend's bookCatalogSearchNormalizer) ──
+    // Symmetric definite-article folding so הרמבן and רמבן resolve to the same match:
+    // the index adds the stripped form as an extra token at the same position, and the
+    // query side probes both the typed word and its stripped form (see WordClause).
+
+    /// <summary>Strip the definite article ה from the start of a word, if present. Returns
+    /// null when the word doesn't start with ה or the remainder is under 2 characters (too
+    /// short to strip meaningfully). Does not check whether the remainder is a real word —
+    /// the index carries both forms, so הלכה stays findable as הלכה; a query for לכה
+    /// simply finds nothing, which is correct.</summary>
+    public static string? StripHePrefix(string word)
+    {
+        if (word.Length == 0 || word[0] != 'ה') return null;
+        string remainder = word[1..];
+        return remainder.Length >= 2 ? remainder : null;
+    }
+
+    // ── חסר/מלא skeleton decomposition (ported from decomposeHebrewWord) ─────────
+    // A mid-word י/ו (between two Hebrew letters) is a vowel letter (mater lectionis) that
+    // may or may not be written out — נידה vs נדה. Stripping it to a bare consonantal
+    // skeleton plus a positional vowel-set lets two spellings of the same word compare
+    // equal when one vowel-set is a subset of the other (see AreSkeletonVariants).
+
+    private static bool IsHebrewLetter(char c) => c is >= 'א' and <= 'ת';
+
+    /// <summary>A word decomposed into its consonantal skeleton and the set of
+    /// "position:letter" keys for the mid-word mater-lectionis (י/ו) characters removed.</summary>
+    public readonly struct DecomposedWord
+    {
+        public readonly string Skeleton;
+        public readonly HashSet<string> VowelSet;
+        public DecomposedWord(string skeleton, HashSet<string> vowelSet) { Skeleton = skeleton; VowelSet = vowelSet; }
+    }
+
+    /// <summary>Decompose a word into its skeleton (מלא letters י/ו stripped when they sit
+    /// strictly between two Hebrew consonants) and the stripped positions' letters.</summary>
+    public static DecomposedWord DecomposeSkeleton(string word)
+    {
+        var skeleton = new System.Text.StringBuilder(word.Length);
+        var vowelSet = new HashSet<string>();
+        int skelIndex = 0;
+        for (int i = 0; i < word.Length; i++)
+        {
+            char c = word[i];
+            bool isMater = (c == 'י' || c == 'ו')
+                && i > 0 && i < word.Length - 1
+                && IsHebrewLetter(word[i - 1]) && IsHebrewLetter(word[i + 1]);
+            if (isMater)
+            {
+                vowelSet.Add(skelIndex + ":" + c);
+            }
+            else
+            {
+                skeleton.Append(c);
+                skelIndex++;
+            }
+        }
+        return new DecomposedWord(skeleton.ToString(), vowelSet);
+    }
+
+    /// <summary>True when two decomposed words are חסר/מלא spelling variants: same
+    /// consonantal skeleton, and one's vowel-set is a subset of the other's.</summary>
+    public static bool AreSkeletonVariants(DecomposedWord a, DecomposedWord b)
+    {
+        if (a.Skeleton != b.Skeleton) return false;
+        var (smaller, larger) = a.VowelSet.Count <= b.VowelSet.Count ? (a.VowelSet, b.VowelSet) : (b.VowelSet, a.VowelSet);
+        foreach (var key in smaller)
+            if (!larger.Contains(key)) return false;
         return true;
     }
 

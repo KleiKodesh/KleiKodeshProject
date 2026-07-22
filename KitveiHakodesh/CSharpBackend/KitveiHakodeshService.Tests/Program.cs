@@ -28,6 +28,8 @@ int sampleBooks = 300, entriesPerBook = 3;
 bool forceRebuild = false;
 bool benchMode = false;
 bool watcherMode = false;
+bool variantMode = false;
+var ktivSimQueries = new List<string>();
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i])
@@ -40,11 +42,15 @@ for (int i = 0; i < args.Length; i++)
         case "--compare": compareQuery = args[++i]; break;
         case "--bench": benchMode = true; break;
         case "--watcher": watcherMode = true; break;
+        case "--variant": variantMode = true; break;
+        case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
     }
 }
 
 if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
+if (variantMode)
+    return VariantVerify.Run();
 
 dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))
@@ -60,6 +66,9 @@ if (!File.Exists(dbPath))
     return 2;
 }
 indexPath ??= Path.Combine(AppContext.BaseDirectory, "CatalogTocIndex.test");
+
+if (ktivSimQueries.Count > 0)
+    return KtivTiebreakSim.Run(dbPath, indexPath, ktivSimQueries.ToArray());
 
 Console.WriteLine($"db:    {dbPath}");
 Console.WriteLine($"index: {indexPath}");
@@ -78,16 +87,16 @@ void Fail(string message)
     {
         ("שלחן ערוך", "שולחן ערוך"),
         ("שולחן ערוך", "שולחן ערוך"),
-        ("שו\"ע", "שולחן"),
-        ("שו״ע", "שולחן"),
-        ("שו''ע", "שולחן"),
-        ("ש\"ע", "שולחן"),
-        ("ש״ע", "שולחן"),
-        ("ש''ע", "שולחן"),
-        ("קיצור ש''ע ילקוט יוסף", "קיצור שולחן ילקוט יוסף"),
+        ("שו\"ע", "שולחן ערוך"),
+        ("שו״ע", "שולחן ערוך"),
+        ("שו''ע", "שולחן ערוך"),
+        ("ש\"ע", "שולחן ערוך"),
+        ("ש״ע", "שולחן ערוך"),
+        ("ש''ע", "שולחן ערוך"),
+        ("קיצור ש''ע ילקוט יוסף", "קיצור שולחן ערוך ילקוט שמעוני יוסף"),
         ("שלחן", "שולחן"),
-        ("פירוש שו\"ע אבן העזר", "פירוש שולחן אבן העזר"),
-        ("הלכות שו\"ע החדשות", "הלכות שולחן החדשות"),
+        ("פירוש שו\"ע אבן העזר", "פירוש שולחן ערוך אבן העזר"),
+        ("הלכות שו\"ע החדשות", "הלכות שולחן ערוך החדשות"),
         ("רש\"י, על בראשית!", "רשי על בראשית"),   // non-word chars stripped
         ("דף יד.", "דף יד עמוד א"),                 // amud mark → עמוד, before stripping
         ("דף יד:", "דף יד עמוד ב"),
@@ -668,6 +677,64 @@ if (compareQuery is not null)
                       $"short-excluded={shortTok.Count == 0}");
 }
 
+// ── Sparse-fuzzy append: when normal hits < 10, append fuzzy-only hits AFTER ─────
+
+{
+    // (a) Zero exact (pure typo on a fuzzable token) still returns fuzzy results — the
+    //     old "exact found nothing" fallback, now subsumed by the < 10 sparse rule.
+    var zero = index.Search("רמבם הלכות שבתת");   // שבתת ~ שבת (fuzzable author/catalog token)
+    bool fromZero = zero.Count > 0 && zero.All(h => !h.IsLiteral);
+    if (!fromZero) Fail($"sparse-fuzzy: pure-typo query returned no fuzzy results ({zero.Count} hits)");
+
+    // (b) Any appended fuzzy hit is non-literal and sits strictly AFTER every literal
+    //     hit — never interleaved (checked across a batch of sparse queries).
+    int interleave = 0;
+    foreach (var q in new[] { "רמבם הלכות שבתת", "תבך בראשית פרק ב" })
+    {
+        var h = index.Search(q);
+        int firstVar = h.FindIndex(x => !x.IsLiteral);
+        int lastLit = h.FindLastIndex(x => x.IsLiteral);
+        if (firstVar >= 0 && lastLit >= 0 && firstVar < lastLit) interleave++;
+    }
+    if (interleave > 0) Fail($"sparse-fuzzy: appended fuzzy hits interleaved with literal hits ({interleave} queries)");
+
+    // (c) An ABUNDANT query (>= 10 exact literal hits) must NOT be padded with fuzzy —
+    //     the append only fires when results are sparse. "שבת" has thousands of exact
+    //     hits; every returned hit must be literal (no fuzzy pollution).
+    var abundant = index.Search("שבת");
+    bool noPollution = abundant.Count >= 10 && abundant.All(h => h.IsLiteral);
+    if (!noPollution)
+        Fail($"sparse-fuzzy: abundant query polluted with fuzzy ({abundant.Count} hits, " +
+             $"{abundant.Count(h => !h.IsLiteral)} non-literal)");
+
+    Console.WriteLine($"sparse-fuzzy append checks: from-zero={fromZero}, no-interleave={interleave == 0}, " +
+                      $"abundant-not-polluted={noPollution}");
+}
+
+// ── Accuracy-first ordering: literal (exact) matches rank ahead of variant ones ──
+
+{
+    // עדות is a חסר spelling that also skeleton-matches מלא spellings (עדיות) in the
+    // corpus, so a query for "עדות" yields both literal-עדות hits and variant-only hits.
+    // Every literal hit MUST precede every variant hit (strategy A).
+    int ordViol = 0;
+    foreach (var q in new[] { "עדות", "מזוזה", "עדיות משנה ב" })
+    {
+        var hits = index.Search(q);
+        int firstVariant = hits.FindIndex(h => !h.IsLiteral);
+        int lastLiteral = hits.FindLastIndex(h => h.IsLiteral);
+        // OK when there is no variant, no literal, or the whole literal block precedes
+        // the whole variant block.
+        if (firstVariant >= 0 && lastLiteral >= 0 && firstVariant < lastLiteral)
+        {
+            ordViol++;
+            Fail($"accuracy-first: q=\"{q}\" a variant hit (#{firstVariant + 1}) precedes a literal hit (#{lastLiteral + 1})");
+        }
+    }
+    if (ordViol == 0)
+        Console.WriteLine("accuracy-first ordering checks: OK (every literal match ranks ahead of every variant match)");
+}
+
 // ── 3+4+5. Self-recall, contains-all, ordering over a generated corpus ──────────
 
 var authorsByBook = books.ToDictionary(b => b.Id, b => b.Authors ?? "");
@@ -743,20 +810,27 @@ for (int qi = 0; qi < corpus.Count; qi++)
             Fail($"self-recall q=\"{query}\" missing book={expectedBookId} path=\"{expectedPath}\" ({hits.Count} hits)");
     }
 
-    // 5. Ordering — strictly (Level, TreeOrder) non-decreasing, and the token-order
-    //    discard invariant: no (level, book) group may contain both an in-order and an
-    //    out-of-order hit (the out-of-order ones must have been discarded).
+    // 5. Ordering — accuracy first, then catalog position: (IsLiteral desc, Level asc,
+    //    TreeOrder asc) non-decreasing. A literal (exact) hit never sits below a variant/
+    //    fuzzy-matched one; within a literalness block, (Level, TreeOrder) is monotonic.
+    //    Plus the token-order discard invariant: no (level, book) group may contain both
+    //    an in-order and an out-of-order hit (the out-of-order ones must have been dropped).
     {
         for (int i = 1; i < hits.Count; i++)
         {
-            bool ok = hits[i - 1].Level < hits[i].Level
-                || (hits[i - 1].Level == hits[i].Level && hits[i - 1].TreeOrder <= hits[i].TreeOrder);
+            var prev = hits[i - 1];
+            var cur = hits[i];
+            bool ok =
+                (prev.IsLiteral && !cur.IsLiteral) ||                    // literal block ends before variant block
+                (prev.IsLiteral == cur.IsLiteral && (                    // within the same block: (Level, TreeOrder)
+                    prev.Level < cur.Level ||
+                    (prev.Level == cur.Level && prev.TreeOrder <= cur.TreeOrder)));
             if (!ok)
             {
                 orderViolations++;
                 if (orderViolations <= 5)
-                    Fail($"ordering q=\"{query}\" hit {i - 1}(lvl={hits[i - 1].Level},to={hits[i - 1].TreeOrder}) " +
-                         $"before {i}(lvl={hits[i].Level},to={hits[i].TreeOrder})");
+                    Fail($"ordering q=\"{query}\" hit {i - 1}(lit={prev.IsLiteral},lvl={prev.Level},to={prev.TreeOrder}) " +
+                         $"before {i}(lit={cur.IsLiteral},lvl={cur.Level},to={cur.TreeOrder})");
                 break;
             }
         }
@@ -794,7 +868,9 @@ for (int qi = 0; qi < corpus.Count; qi++)
     }
 
     // 4. Contains-all — sampled hits must contain every query token in
-    //    catalog-path + path + authors (SearchText's exact composition).
+    //    catalog-path + path + authors, OR a variant of it that CatalogTocIndex.Search
+    //    itself accepts as a match (חסר/מלא skeleton, ה-prefix, or the fuzzy-fallback
+    //    edit-distance threshold) — see ContainsAllMatcher, which mirrors WordClause.
     var qTokens = CatalogTocTextRules.Tokenize(query);
     int checkCount = Math.Min(hits.Count, 10);
     for (int i = 0; i < checkCount; i++)
@@ -805,7 +881,7 @@ for (int qi = 0; qi < corpus.Count; qi++)
                 catalogPath + " " + h.FullTocPath + " " + authorsByBook.GetValueOrDefault(h.BookId, ""))
             .ToHashSet();
         foreach (var t in qTokens)
-            if (!docTokens.Contains(t))
+            if (!ContainsAllMatcher.TokenMatches(t, docTokens))
             {
                 containsAllViolations++;
                 if (containsAllViolations <= 10)
