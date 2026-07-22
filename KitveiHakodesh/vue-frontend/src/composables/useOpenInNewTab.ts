@@ -13,15 +13,18 @@ export function wantsNewTab(event?: MouseEvent | KeyboardEvent | null): boolean 
 }
 
 /**
- * Hover-tooltip hint (Hebrew) teaching the open-in-new-tab shortcut. Appended as
- * its own line to the content tooltip of every clickable item that can open a
- * document, so the wording stays identical across the app. Kept here beside
- * wantsNewTab — the single source of truth for the new-tab gesture.
+ * Hover-tooltip hint (Hebrew) teaching how to open an item, one gesture per line
+ * so the current-tab vs new-tab distinction is explicit. Appended below the
+ * content tooltip of every clickable item that can open a document, so the
+ * wording stays identical across the app. Kept here beside wantsNewTab — the
+ * single source of truth for the new-tab gesture.
  *
- * "Click to open • Ctrl+click / Ctrl+Enter — new tab"
+ *   Click / Enter — open in the current tab
+ *   Ctrl+click / Ctrl+Enter — open in a new tab
  */
 export const OPEN_IN_NEW_TAB_HINT =
-  'לחיצה לפתיחה • Ctrl+לחיצה / Ctrl+Enter — כרטיסייה חדשה'
+  'לחיצה / Enter — פתיחה בכרטיסייה הנוכחית\n' +
+  'Ctrl+לחיצה / Ctrl+Enter — פתיחה בכרטיסייה חדשה'
 
 /** Append the new-tab hint as a trailing line to an existing content tooltip. */
 export function withNewTabHint(tooltip: string): string {

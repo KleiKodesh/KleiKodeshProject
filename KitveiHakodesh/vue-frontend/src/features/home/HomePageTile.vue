@@ -21,13 +21,15 @@ const emit = defineEmits<{ tap: [openInNewTab: boolean]; togglePin: []; remove: 
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
 
-// Tooltip: the item label plus the keyboard/mouse hint. Only the recently-opened
-// tiles (actions:true) honour Ctrl+click / Ctrl+Enter, so only they advertise it;
-// the static navigation tiles keep the plain Tab/Enter hint.
-const tileTooltip = computed(() => {
-  const base = `${props.label}\nלחץ Tab למעבר בין האפשרויות, Enter לפתיחה`
-  return props.actions ? `${base}\n${OPEN_IN_NEW_TAB_HINT}` : base
-})
+// Tooltip: the item label plus a keyboard/mouse hint. Only the recently-opened
+// tiles (actions:true) honour Ctrl+click / Ctrl+Enter, so they show the full
+// current-tab/new-tab hint (which already covers click + Enter). The static
+// navigation tiles just get the Tab/Enter navigation hint.
+const tileTooltip = computed(() =>
+  props.actions
+    ? `${props.label}\n${OPEN_IN_NEW_TAB_HINT}`
+    : `${props.label}\nלחץ Tab למעבר בין האפשרויות, Enter לפתיחה`,
+)
 
 // ── Touch: long-press reveals the actions (touch has no hover) ──────────────────
 // Detected via Pointer Events at runtime rather than an @media (hover) query, so
