@@ -77,6 +77,77 @@ namespace FtsLibTest
                 groups:  G("שישים", "גבורים"));
 
             // ─────────────────────────────────────────────────────────
+            // 3b. INLINE TAGS & ENTITIES — tokenizer word-boundary rules
+            //     (regression for the 2026-07-22 scanner fixes: inline
+            //     formatting is word-TRANSPARENT, block tags and sup/sub
+            //     break words, every entity is a separator)
+            // ─────────────────────────────────────────────────────────
+
+            // A word interrupted by <b> emphasis is ONE word (previously it was
+            // shredded into unfindable fragments — ~1% of corpus lines).
+            CheckMatch(ref passed, ref failed,
+                name:    "word split by <b> tokenizes as one word",
+                content: "ורא<b>ה</b> מן המקום",
+                groups:  G("וראה"),
+                expectMatch: true);
+
+            // The highlight around a tag-spanning token strips the inner tags —
+            // no unbalanced <b> may leak into the snippet HTML.
+            CheckContains(ref passed, ref failed,
+                name:    "tag-spanning token highlighted with tags stripped",
+                content: "ורא<b>ה</b> מן המקום",
+                groups:  G("וראה"),
+                mustContain: "<mark>וראה</mark>");
+
+            CheckMatch(ref passed, ref failed,
+                name:    "word starting inside <b> tokenizes as one word",
+                content: "נזכר ב<b>תוספות</b> שם",
+                groups:  G("בתוספות"),
+                expectMatch: true);
+
+            // sup/sub content is a footnote marker, NOT part of the word.
+            CheckMatch(ref passed, ref failed,
+                name:    "<sup> footnote marker does not join the word",
+                content: "אורות<sup>ב</sup> גדולים",
+                groups:  G("אורות"),
+                expectMatch: true);
+
+            CheckNoMatch(ref passed, ref failed,
+                name:    "<sup> content not glued onto preceding word",
+                content: "אורות<sup>ב</sup> גדולים",
+                groups:  G("אורותב"));
+
+            // Block-level tags still break words.
+            CheckNoMatch(ref passed, ref failed,
+                name:    "<br> still breaks the word",
+                content: "שב<br>ת קודש",
+                groups:  G("שבת"));
+
+            // Entities are separators — never invisible joiners.
+            CheckMatch(ref passed, ref failed,
+                name:    "&nbsp; separates words",
+                content: "שלום&nbsp;תורה",
+                groups:  G("שלום", "תורה"),
+                expectMatch: true);
+
+            CheckMatch(ref passed, ref failed,
+                name:    "&thinsp; separates words (was invisible → joined)",
+                content: "שלום&thinsp;תורה",
+                groups:  G("שלום", "תורה"),
+                expectMatch: true);
+
+            CheckMatch(ref passed, ref failed,
+                name:    "&amp; separates words (was invisible → joined)",
+                content: "שלום&amp;תורה",
+                groups:  G("שלום", "תורה"),
+                expectMatch: true);
+
+            CheckNoMatch(ref passed, ref failed,
+                name:    "entity no longer glues fragments into one term",
+                content: "שלום&amp;תורה",
+                groups:  G("שלוםתורה"));
+
+            // ─────────────────────────────────────────────────────────
             // 4. NIKUD IN CONTENT — tokenizer strips nikud, terms match
             // ─────────────────────────────────────────────────────────
 

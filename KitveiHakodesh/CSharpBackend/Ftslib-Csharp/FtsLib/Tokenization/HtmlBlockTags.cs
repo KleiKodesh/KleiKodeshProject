@@ -108,11 +108,43 @@ namespace FtsLib.Tokenization
         }
 
         /// <summary>
-        /// Handles an HTML entity starting at <paramref name="i"/>+1.
-        /// Advances <paramref name="i"/> past the closing ';'.
-        /// Returns true if the entity is a whitespace separator (caller should flush word).
+        /// Tags that END the current word: every block-level element, plus sup/sub —
+        /// their content (footnote and reference markers) is a separate logical token,
+        /// not part of the word they interrupt. All other tags are TRANSPARENT: inline
+        /// formatting (&lt;b&gt;, &lt;i&gt;, &lt;small&gt;, &lt;span&gt;, …) interrupts
+        /// words mid-letter in ~1% of corpus lines (emphasised letters, e.g.
+        /// ורא&lt;b&gt;ה&lt;/b&gt;), and breaking the word there indexed unfindable
+        /// fragments (corpus verified 2026-07-22: ~1,450 of 130k sampled lines).
         /// </summary>
-        internal static bool IsWhitespaceEntity(string text, int len, ref int i)
+        internal static bool IsWordBreakTag(char[] name, int len)
+        {
+            if (IsBlockTag(name, len)) return true;
+
+            int start = (len > 0 && (name[0] == '/' || name[0] == '!')) ? 1 : 0;
+            int tlen  = len - start;
+            if (tlen != 3) return false;
+
+            char c0 = name[start];     if (c0 >= 'A' && c0 <= 'Z') c0 = (char)(c0 | 32);
+            char c1 = name[start + 1]; if (c1 >= 'A' && c1 <= 'Z') c1 = (char)(c1 | 32);
+            char c2 = name[start + 2]; if (c2 >= 'A' && c2 <= 'Z') c2 = (char)(c2 | 32);
+            return c0 == 's' && c1 == 'u' && (c2 == 'p' || c2 == 'b'); // sup, sub
+        }
+
+        /// <summary>
+        /// Advances <paramref name="i"/> past a well-formed entity's closing ';'
+        /// (entity = '&amp;' at <paramref name="i"/>, then a ≤10-char name/number,
+        /// then ';'). Leaves <paramref name="i"/> unchanged when malformed, so the
+        /// caller consumes just the '&amp;'.
+        ///
+        /// No whitespace-vs-other classification: the scanner treats EVERY entity
+        /// as a word separator. Corpus verified 2026-07-22 — there are no letter
+        /// entities at all (zero '&amp;#…;' lines); real occurrences are whitespace
+        /// (&amp;nbsp;, &amp;thinsp;) or punctuation (&amp;amp;, &amp;lt;, &amp;gt;),
+        /// all of which separate words. The old classifier let non-whitespace
+        /// entities pass INVISIBLY, joining the fragments around them into one
+        /// unfindable term.
+        /// </summary>
+        internal static void SkipEntity(string text, int len, ref int i)
         {
             int start = i + 1;
             int end   = start;
@@ -120,44 +152,8 @@ namespace FtsLib.Tokenization
             while (end < len && end - start < 10 && text[end] != ';')
                 end++;
 
-            if (end >= len || text[end] != ';')
-                return false; // malformed — leave i unchanged, treat '&' as separator
-
-            i = end; // advance past ';'
-
-            int elen = end - start;
-            if (elen == 0) return false;
-
-            char e0 = text[start];
-
-            if (e0 == 'n' && elen == 4
-                && text[start+1]=='b' && text[start+2]=='s' && text[start+3]=='p')
-                return true; // &nbsp;
-
-            if (e0 == 'e' && elen == 4
-                && text[start+1]=='n' && text[start+2]=='s' && text[start+3]=='p')
-                return true; // &ensp;
-
-            if (e0 == 'e' && elen == 4
-                && text[start+1]=='m' && text[start+2]=='s' && text[start+3]=='p')
-                return true; // &emsp;
-
-            // Numeric whitespace entities: &#160; &#8194; &#8195; &#8201;
-            if (e0 == '#' && elen > 1)
-            {
-                int val = 0;
-                bool ok = true;
-                for (int k = start + 1; k < end; k++)
-                {
-                    char d = text[k];
-                    if (d < '0' || d > '9') { ok = false; break; }
-                    val = val * 10 + (d - '0');
-                }
-                if (ok && (val == 160 || val == 8194 || val == 8195 || val == 8201))
-                    return true;
-            }
-
-            return false; // all other entities are invisible
+            if (end < len && text[end] == ';' && end > start)
+                i = end; // advance past ';'
         }
     }
 }

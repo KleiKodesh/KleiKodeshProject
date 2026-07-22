@@ -125,7 +125,8 @@ namespace FtsLib.Search
         /// </summary>
         private static string SplitOnIndexSeparators(string query)
         {
-            StringBuilder sb = null; // allocated only when a replacement is needed
+            StringBuilder sb = null;      // allocated only when a replacement is needed
+            char prevLetter  = '\0';      // last kept letter, '\0' after any word break
             for (int i = 0; i < query.Length; i++)
             {
                 char c = query[i];
@@ -148,12 +149,36 @@ namespace FtsLib.Search
 
                 if (keep)
                 {
+                    if (HebrewChars.IsLetter(c))
+                    {
+                        // Script-boundary split, mirroring the indexer: a Hebrew↔Latin
+                        // transition inside a letter run starts a NEW word at index
+                        // time (HtmlWordScanner), so a mixed-script query token like
+                        // "bדה" could never match — the index holds "דה". Letters are
+                        // only Hebrew (≥ U+05D0) or ASCII, so one compare decides.
+                        if (prevLetter != '\0' && (c >= 'א') != (prevLetter >= 'א'))
+                        {
+                            if (sb == null) sb = new StringBuilder(query, 0, i, query.Length + 8);
+                            sb.Append(' ');
+                        }
+                        prevLetter = c;
+                    }
+                    else if (!(HebrewChars.IsStrippableMark(c)
+                            || HebrewChars.IsIntraWordQuote(c)
+                            || (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)))
+                    {
+                        // Whitespace / query syntax chars end the letter run;
+                        // transparent marks and quotes do not.
+                        prevLetter = '\0';
+                    }
+
                     sb?.Append(c);
                 }
                 else
                 {
-                    if (sb == null) sb = new StringBuilder(query, 0, i, query.Length);
+                    if (sb == null) sb = new StringBuilder(query, 0, i, query.Length + 8);
                     sb.Append(' ');
+                    prevLetter = '\0';
                 }
             }
             return sb == null ? query : sb.ToString();

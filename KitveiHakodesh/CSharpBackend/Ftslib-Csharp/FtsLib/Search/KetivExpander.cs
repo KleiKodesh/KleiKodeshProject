@@ -83,7 +83,10 @@ namespace FtsLib.Search
         /// </summary>
         public static List<string> Expand(string term, int maxVariants = MaxVariants)
         {
-            if (string.IsNullOrEmpty(term) || term.Length < 2)
+            // Below 3 letters there is no meaningful ketiv variation — inserting a
+            // vowel letter into a 2-letter word (כי → כוי) fabricates a different
+            // word, not a spelling variant.
+            if (string.IsNullOrEmpty(term) || term.Length < 3)
                 return new List<string>();
 
             // Step 1: detect and strip a grammatical suffix
@@ -234,6 +237,11 @@ namespace FtsLib.Search
 
                 foreach (char ch in new[] { Vav, Yod })
                 {
+                    // Re-check the cap per insertion: the outer loop's check alone
+                    // let this pass add TWO variants from count == maxVariants-1,
+                    // overshooting the hard cap by one.
+                    if (variants.Count >= maxVariants) break;
+
                     // Skip if this exact character already follows — identical adjacent pair
                     if (stem[i + 1] == ch) continue;
 
