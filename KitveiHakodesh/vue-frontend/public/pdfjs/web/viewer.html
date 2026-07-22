@@ -137,6 +137,15 @@ See https://github.com/adobe-type-tools/cmap-resources
                     <div id="viewsManagerStatus">
                       <div id="viewsManagerStatusAction">
                         <span id="viewsManagerStatusActionLabelContainer" class="viewsManagerStatusLabel">
+                          <!-- CUSTOM: select-all checkbox — one click selects/deselects every page.
+                               Sits before the status label ("בחירת עמודים" / "N נבחרו"), which acts as its caption. -->
+                          <input
+                            id="viewsManagerSelectAllCheckbox"
+                            type="checkbox"
+                            tabindex="0"
+                            title="בחר / בטל בחירת כל העמודים"
+                            aria-label="בחר / בטל בחירת כל העמודים"
+                          />
                           <button
                             id="viewsManagerStatusActionDeselectButton"
                             class="hidden"
