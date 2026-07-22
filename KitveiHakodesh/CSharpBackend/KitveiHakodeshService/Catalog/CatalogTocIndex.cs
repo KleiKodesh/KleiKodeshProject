@@ -21,8 +21,12 @@ namespace KitveiHakodeshService.Catalog;
 ///     text), the catalog (category) path, and the author names. The rest is
 ///     stored-only metadata.
 ///   - Search is contains-all: per query token, a MUST over (path OR catalog OR
-///     author). No scoring, no boosting, no fuzzy/phrase/proximity/wildcard queries,
-///     and results are NEVER capped.
+///     author), plus ה-prefix and חסר/מלא skeleton variants found in the actual
+///     indexed vocabulary (see VariantIndex — ported from the Vue frontend's
+///     book-catalog search, always active) and, only as a last-resort fallback when
+///     the exact search finds nothing, Lucene FuzzyQuery on catalog/author. No
+///     scoring, no boosting, no phrase/proximity/wildcard queries, and results are
+///     NEVER capped.
 ///   - Ordering ignores Lucene relevance entirely: Level ascending (book title = 0,
 ///     then TOC depth), then TreeOrder ascending (catalog tree order, then the
 ///     original TOC order within the book). Nothing else affects ordering.
@@ -70,6 +74,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     private DirectoryReader? _reader;
     private IndexSearcher? _searcher;
     private IndexWriter? _writer;   // non-null only while a build is in flight
+    private VariantIndex? _variants; // lazily (re)built off the current reader — see GetVariantsLocked
 
     public string RootPath => rootPath;
 
@@ -94,8 +99,16 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// ambiguous abbreviations (מג"א → מגן אברהם / מגיני ארץ). Index-side tokenization is
     /// unchanged in practice (real titles carry no abbreviations), but the format bump
     /// forces a clean rebuild so any stray abbreviation-shaped indexed text re-tokenizes
-    /// under the new table.</summary>
-    public const string IndexFormatVersion = "v15";
+    /// under the new table.
+    /// v16: query-time ה-prefix and חסר/מלא skeleton variant matching (ported from the
+    /// Vue frontend's book-catalog search — see VariantIndex), and the abbreviation
+    /// matcher now also tries a candidate window's leading word with its ה stripped
+    /// (so "היד החזקה" resolves through the same key as "יד החזקה"). "משנה תורה" is no
+    /// longer its own abbreviation row (dropped — was colliding with "יד החזקה" via a
+    /// shared רמבם target and breaking title word-order independence); "יד החזקה" now
+    /// expands to "משנה תורה" instead of "רמבם". No index-side tokenization changed,
+    /// but the format bump forces a rebuild so results reflect the corrected mapping.</summary>
+    public const string IndexFormatVersion = "v16";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// content-free <see cref="Common.DbChangeStamp"/>, prefixed with this index's
@@ -187,7 +200,32 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         _dir = dir;
         _reader = reader;
         _searcher = new IndexSearcher(reader);
+        _variants = null; // stale — rebuilt lazily off the new reader on next use
         if (!ReferenceEquals(old, reader)) old?.Dispose();
+    }
+
+    /// <summary>
+    /// ה-prefix and חסר/מלא skeleton variant lookup tables, built once per reader
+    /// generation from the actual indexed vocabulary (TOC path + catalog + author
+    /// fields) — the query-time-only port of the Vue frontend's book-catalog search
+    /// (bookCatalogSearchNormalizer.ts): no index-time changes, no fuzzy/edit-distance
+    /// matching, just the two symmetric normalization rules. Rebuilding is a single
+    /// term-dictionary scan (cheap relative to a full build) and is skipped entirely
+    /// while a build is in flight — the NRT reader refreshes too often mid-build for
+    /// this to be worth redoing on every refresh tick, and the exact fallback still
+    /// finds everything on the first search after a build (which invalidates and
+    /// rebuilds it once).
+    /// </summary>
+    private VariantIndex? GetVariantsLocked()
+    {
+        if (_variants is not null) return _variants;
+        if (_reader is null) return null;
+        try
+        {
+            _variants = VariantIndex.Build(_reader, IndexedFields);
+        }
+        catch { /* best effort — searches still work via exact + fuzzy */ }
+        return _variants;
     }
 
     /// <summary>Total docs in the open index (0 when none is open).</summary>
@@ -976,9 +1014,11 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// Contains-all search: every query token (same normalization pipeline as indexing)
     /// must appear in ONE of the document's indexed fields — TOC path, catalog path, or
     /// author. Results are NEVER capped. Lucene relevance is ignored — ordering is
-    /// Level ascending (book title = 0, then TOC depth), then TreeOrder ascending
-    /// (catalog book position, then the original TOC order). Nothing else affects
-    /// ordering.
+    /// accuracy first, then catalog position: IsLiteral descending (a hit that matched
+    /// every word LITERALLY, i.e. without any כתיב/ה-prefix variant or fuzzy edit, ranks
+    /// ahead of one that needed a variant to match), then Level ascending (book title =
+    /// 0, then TOC depth), then TreeOrder ascending (catalog book position, then the
+    /// original TOC order). Nothing else affects ordering.
     ///
     /// Query token order (final tie-breaker, never a relevance score): the test runs
     /// against the TOC-PATH FIELD ONLY — query tokens present among the path's tokens
@@ -1003,23 +1043,75 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             if (searcher is null) return [];
         }
 
-        var collector = new SortKeyCollector(ct);
-        searcher.Search(BuildQuery(tokens, fuzzy: false), collector);
+        VariantIndex? variants;
+        lock (_lock) variants = GetVariantsLocked();
 
-        // FUZZY FALLBACK: only when the exact search finds nothing. Fuzzy terms are
-        // tried on the catalog and author fields ONLY — never the TOC path, where a
-        // one-letter edit is a different chapter/verse — and only for tokens of 3+
-        // characters. Exact matching on all fields stays available for every token.
-        if (collector.Count == 0 && tokens.Any(HasFuzzyableWord))
+        // Accuracy-first ranking (see SortKeyCollector): literal (exact / non-variant)
+        // matches rank ahead of variant/fuzzy-only ones. To tag each hit BEFORE the
+        // materialization cap, run the strict literal query (no variants, no fuzzy) into
+        // a doc-ID set; a hit is literal iff it is in that set. When variant expansion
+        // adds nothing (no variants available), the two queries are identical and every
+        // hit is literal, so the literal pass is skipped.
+        HashSet<int>? literalDocIds = null;
+        if (variants is not null)
         {
-            collector = new SortKeyCollector(ct);
-            searcher.Search(BuildQuery(tokens, fuzzy: true), collector);
+            var litCollector = new DocIdSetCollector(ct);
+            searcher.Search(BuildQuery(tokens, fuzzy: false, variants: null), litCollector);
+            literalDocIds = litCollector.Ids;
         }
+
+        // Word list for the query-token-order tiebreak (see RunPass).
+        var orderWords = new List<string>(tokens.Count);
+        foreach (var t in tokens) orderWords.AddRange(t.Alternatives[0]);
+
+        // Normal pass: exact + כתיב/ה-prefix variants (never fuzzy).
+        var hits = RunPass(searcher, tokens, variants, fuzzy: false, literalDocIds, orderWords, ct);
+
+        // SPARSE-FUZZY APPEND: when the normal result set is sparse (fewer than
+        // SparseFuzzyThreshold hits — which subsumes the old "exact found nothing"
+        // fallback), run a fuzzy pass and APPEND the hits it found that the normal pass
+        // did not. Fuzzy edits are tried on the catalog and author fields ONLY — never
+        // the TOC path, where a one-letter edit is a different chapter/verse — and only
+        // for tokens of 3+ characters. The appended hits are fuzzy-only (never literal),
+        // so they sit strictly AFTER every normal hit; ordered among themselves by
+        // (Level, TreeOrder). This is a "did you mean" tail, not a reranking of the
+        // confident results above it.
+        if (hits.Count < SparseFuzzyThreshold && tokens.Any(HasFuzzyableWord))
+        {
+            var fuzzyHits = RunPass(searcher, tokens, variants, fuzzy: true, literalDocIds, orderWords, ct);
+            var seen = new HashSet<(int, string)>(hits.Count);
+            foreach (var h in hits) seen.Add((h.BookId, h.FullTocPath));
+            foreach (var fh in fuzzyHits)
+                if (seen.Add((fh.BookId, fh.FullTocPath)))
+                    hits.Add(fh);
+        }
+
+        return hits;
+    }
+
+    /// <summary>Fewer than this many normal hits triggers the sparse-fuzzy append (also
+    /// covers the count==0 case the old fuzzy fallback handled).</summary>
+    private const int SparseFuzzyThreshold = 10;
+
+    /// <summary>
+    /// One search pass: run the query (optionally fuzzy), order by (IsLiteral desc,
+    /// Level asc, TreeOrder asc), materialize the ordered top <see cref="MaterializeCap"/>,
+    /// and apply the query-token-order discard. Returns the resulting hit list (empty when
+    /// nothing matched). Used for both the normal pass and the fuzzy append pass.
+    /// </summary>
+    private List<CatalogTocHit> RunPass(
+        IndexSearcher searcher, List<CatalogTocTextRules.QueryToken> tokens, VariantIndex? variants,
+        bool fuzzy, HashSet<int>? literalDocIds, List<string> orderWords, CancellationToken ct)
+    {
+        var collector = new SortKeyCollector(ct, literalDocIds);
+        searcher.Search(BuildQuery(tokens, fuzzy, variants), collector);
         if (collector.Count == 0) return [];
 
-        // Order EVERY match by (Level, TreeOrder). The keys come from column-stored
-        // doc-values captured during collection — no stored-field decompression yet,
-        // so this stays cheap even for tens of thousands of hits.
+        // Order EVERY match by (IsLiteral, Level, TreeOrder): literal (exact / non-
+        // variant) matches first, then catalog order within each block. The keys come
+        // from column-stored doc-values + the literal doc-ID set captured during
+        // collection — no stored-field decompression yet, so this stays cheap even for
+        // tens of thousands of hits.
         var ordered = collector.Ordered();
 
         // Materialize (read stored fields — the expensive step) only the ordered top
@@ -1040,6 +1132,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 FullTocPath = doc.Get(FieldFullTocPath) ?? "",
                 Level = ordered[i].Level,
                 TreeOrder = ordered[i].TreeOrder,
+                IsLiteral = ordered[i].IsLiteral,
             });
         }
 
@@ -1047,8 +1140,6 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         // one in-order hit, drop the out-of-order ones. The order test runs on the flat
         // word sequence (an abbreviation contributes its first/canonical alternative's
         // words in order); ambiguity in an alternative doesn't change the typed order.
-        var orderWords = new List<string>(tokens.Count);
-        foreach (var t in tokens) orderWords.AddRange(t.Alternatives[0]);
         if (orderWords.Count >= 2)
         {
             foreach (var h in hits)
@@ -1079,14 +1170,14 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// author (edit distance 1, or 2 for words longer than 5 chars) — never on the TOC
     /// path. Applies inside alternatives too.
     /// </summary>
-    private static BooleanQuery BuildQuery(List<CatalogTocTextRules.QueryToken> tokens, bool fuzzy)
+    private static BooleanQuery BuildQuery(List<CatalogTocTextRules.QueryToken> tokens, bool fuzzy, VariantIndex? variants)
     {
         var bq = new BooleanQuery();
         foreach (var token in tokens)
         {
             if (token.IsPlain)
             {
-                bq.Add(WordClause(token.Word, fuzzy), Occur.MUST);
+                bq.Add(WordClause(token.Word, fuzzy, variants), Occur.MUST);
                 continue;
             }
 
@@ -1099,7 +1190,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 // one word clause; Lucene flattens the one-child BooleanQuery.
                 var altAnd = new BooleanQuery();
                 foreach (var word in alt)
-                    altAnd.Add(WordClause(word, fuzzy), Occur.MUST);
+                    altAnd.Add(WordClause(word, fuzzy, variants), Occur.MUST);
                 anyAlt.Add(altAnd, Occur.SHOULD);
             }
             bq.Add(anyAlt, Occur.MUST);
@@ -1108,12 +1199,23 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     }
 
     /// <summary>One word matched on any indexed field: (path OR catalog OR author), plus
-    /// fuzzy catalog/author when requested and the word is long enough.</summary>
-    private static BooleanQuery WordClause(string word, bool fuzzy)
+    /// ה-prefix and חסר/מלא skeleton variants found in the actual index vocabulary (see
+    /// <see cref="VariantIndex"/> — ported from the Vue frontend's book-catalog search,
+    /// always active, not gated on the fuzzy fallback), plus fuzzy catalog/author when
+    /// requested and the word is long enough.</summary>
+    private static BooleanQuery WordClause(string word, bool fuzzy, VariantIndex? variants)
     {
         var perWord = new BooleanQuery();
         foreach (var field in IndexedFields)
             perWord.Add(new TermQuery(new Term(field, word)), Occur.SHOULD);
+
+        if (variants is not null)
+        {
+            foreach (var variant in variants.Lookup(word))
+                foreach (var field in IndexedFields)
+                    perWord.Add(new TermQuery(new Term(field, variant)), Occur.SHOULD);
+        }
+
         if (fuzzy && word.Length >= 3)
         {
             int maxEdits = word.Length <= 5 ? 1 : 2;
@@ -1158,19 +1260,47 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return false;
     }
 
+    /// <summary>Collects just the global doc-IDs a query matched, into a set. Used to
+    /// run the strict LITERAL query (no כתיב/ה-prefix variants, no fuzzy) alongside the
+    /// full one, so each hit can be tagged literal-or-variant BEFORE the materialization
+    /// cap is applied — see <see cref="SortKeyCollector"/> and the accuracy-first sort.</summary>
+    private sealed class DocIdSetCollector(CancellationToken ct) : ICollector
+    {
+        private readonly HashSet<int> _ids = [];
+        private int _docBase;
+
+        public HashSet<int> Ids => _ids;
+
+        public void SetScorer(Scorer scorer) { }
+        public void SetNextReader(AtomicReaderContext context) => _docBase = context.DocBase;
+        public bool AcceptsDocsOutOfOrder => true;
+
+        public void Collect(int doc)
+        {
+            if ((_ids.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
+            _ids.Add(_docBase + doc);
+        }
+    }
+
     /// <summary>
     /// Collects every matching doc together with its (Level, TreeOrder) sort keys read
     /// from column-stored doc-values — no stored-field decompression, so it scales to
     /// tens of thousands of hits. <see cref="Ordered"/> returns the hits sorted by
-    /// (Level asc, TreeOrder asc). No cap, no relevance scores.
+    /// (IsLiteral desc, Level asc, TreeOrder asc): every literal (exact / non-variant)
+    /// match ranks ahead of every variant/fuzzy-only match — the accuracy-first rule —
+    /// and within each block the catalog order (Level, then TreeOrder) is preserved.
+    /// Ranking happens BEFORE the materialization cap, so a literal hit deep in catalog
+    /// order is still promoted (and materialized) ahead of earlier variant hits. No cap
+    /// on matching/ordering, no relevance scores.
     /// </summary>
-    private sealed class SortKeyCollector(CancellationToken ct) : ICollector
+    private sealed class SortKeyCollector(CancellationToken ct, HashSet<int>? literalDocIds) : ICollector
     {
-        public readonly struct Entry(int docId, int level, long treeOrder)
+        public readonly struct Entry(int docId, int level, long treeOrder, bool isLiteral)
         {
             public readonly int DocId = docId;
             public readonly int Level = level;
             public readonly long TreeOrder = treeOrder;
+            public readonly bool IsLiteral = isLiteral;
         }
 
         private readonly List<Entry> _entries = [];
@@ -1194,15 +1324,22 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         public void Collect(int doc)
         {
             if ((_entries.Count & 0x3FFF) == 0) ct.ThrowIfCancellationRequested();
+            int globalDoc = _docBase + doc;
             int level = (int)(_levels?.Get(doc) ?? 0);
             long treeOrder = _treeOrders?.Get(doc) ?? long.MaxValue;
-            _entries.Add(new Entry(_docBase + doc, level, treeOrder));
+            // Literal when there is no literal set (variant search never ran, so every
+            // hit is by definition literal) or the doc is in it.
+            bool isLiteral = literalDocIds is null || literalDocIds.Contains(globalDoc);
+            _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral));
         }
 
         public List<Entry> Ordered()
         {
             _entries.Sort(static (a, b) =>
             {
+                // Accuracy-first: literal matches (exact / non-variant) ahead of variant-
+                // or fuzzy-only matches. Then the existing catalog order within each block.
+                if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
                 int c = a.Level.CompareTo(b.Level);
                 return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
             });
@@ -1247,6 +1384,113 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             _pos = 0;
         }
     }
+
+    // ── Query-time variant lookup (ה-prefix + חסר/מלא skeleton) ──────────────────
+
+    /// <summary>
+    /// Query-time-only port of the Vue frontend's book-catalog search normalization
+    /// (bookCatalogSearchNormalizer.ts) — NOT fuzzy/edit-distance matching. Built once per
+    /// reader generation from the actual indexed vocabulary of <see cref="IndexedFields"/>:
+    ///
+    ///   - ה-prefix: a query word starting with ה also probes its stripped form, and a
+    ///     query word without ה also probes its ה-prefixed form — either direction fires
+    ///     as soon as THAT SPECIFIC indexed term exists (הרמבן ↔ רמבן; querying "רמבן"
+    ///     finds a book indexed as "הרמבן" even though "רמבן" itself is never indexed).
+    ///   - חסר/מלא skeleton: a query word's consonantal skeleton (mid-word י/ו stripped)
+    ///     is matched against every indexed word sharing that skeleton with a compatible
+    ///     (subset) vowel-set — נידה ↔ נדה, but not שבועות ↔ שביעית (incompatible vowel
+    ///     sets). The query word itself need not be indexed anywhere.
+    ///
+    /// <see cref="Lookup"/> returns the extra literal terms (beyond the typed word itself)
+    /// that should also be probed — always applied, on every search, not gated behind the
+    /// fuzzy fallback (mirrors the frontend, where these are SCORE_EXACT tiers).
+    /// </summary>
+    private sealed class VariantIndex
+    {
+        /// <summary>Every distinct indexed word (across the three indexed fields).</summary>
+        private readonly HashSet<string> _vocab;
+        /// <summary>skeleton → every distinct indexed word sharing it, pre-decomposed.
+        /// Mirrors the frontend's `skeleton` map, EXCEPT the frontend keys it by book —
+        /// here it's by literal word, since Lucene terms (not per-book token lists) are
+        /// what a TermQuery needs.</summary>
+        private readonly Dictionary<string, List<(string Word, CatalogTocTextRules.DecomposedWord Decomp)>> _bySkeleton;
+
+        private VariantIndex(
+            HashSet<string> vocab,
+            Dictionary<string, List<(string Word, CatalogTocTextRules.DecomposedWord Decomp)>> bySkeleton)
+        {
+            _vocab = vocab;
+            _bySkeleton = bySkeleton;
+        }
+
+        /// <summary>
+        /// Extra literal terms to also search for the given typed word (may be empty).
+        /// Computed live against the prebuilt vocabulary/skeleton tables — mirrors the
+        /// frontend's _lookupWord, which decomposes the QUERY word on every call and
+        /// matches it against whatever is indexed, rather than requiring both spellings
+        /// to already be paired up ahead of time (a word is reachable by its skeleton
+        /// even when no other indexed word happens to share it — the query word itself
+        /// supplies the other half of the pair).
+        /// </summary>
+        public IEnumerable<string> Lookup(string word)
+        {
+            HashSet<string>? extra = null;
+            void Add(string term)
+            {
+                if (term == word) return;
+                extra ??= new HashSet<string>(StringComparer.Ordinal);
+                extra.Add(term);
+            }
+
+            // ה-prefix: word itself might BE a stripped form (query "רמבן" should also
+            // probe "הרמבן" if that's indexed) — check every ה-prefixed vocab word whose
+            // stripped form equals the query word. And the reverse: if the query word
+            // itself starts with ה, its stripped form might be indexed directly.
+            string? stripped = CatalogTocTextRules.StripHePrefix(word);
+            if (stripped is not null && _vocab.Contains(stripped)) Add(stripped);
+            string withHe = "ה" + word;
+            if (_vocab.Contains(withHe)) Add(withHe);
+
+            // חסר/מלא skeleton: decompose the query word live (it need not itself be
+            // indexed) and match against every indexed word sharing its skeleton.
+            var decomp = CatalogTocTextRules.DecomposeSkeleton(word);
+            if (_bySkeleton.TryGetValue(decomp.Skeleton, out var group))
+            {
+                foreach (var (candidate, candidateDecomp) in group)
+                    if (CatalogTocTextRules.AreSkeletonVariants(decomp, candidateDecomp))
+                        Add(candidate);
+            }
+
+            return (IEnumerable<string>?)extra ?? [];
+        }
+
+        /// <summary>Scan the term dictionary of every field in <paramref name="fields"/> and
+        /// build the vocabulary + skeleton grouping. Cheap relative to a full index build
+        /// (a single pass over already-sorted per-field term enums).</summary>
+        public static VariantIndex Build(DirectoryReader reader, string[] fields)
+        {
+            var vocab = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var field in fields)
+            {
+                var terms = MultiFields.GetTerms(reader, field);
+                if (terms is null) continue;
+                var te = terms.GetEnumerator();
+                while (te.MoveNext())
+                    vocab.Add(te.Term.Utf8ToString());
+            }
+
+            var bySkeleton = new Dictionary<string, List<(string Word, CatalogTocTextRules.DecomposedWord Decomp)>>(StringComparer.Ordinal);
+            foreach (var word in vocab)
+            {
+                var decomp = CatalogTocTextRules.DecomposeSkeleton(word);
+                if (!bySkeleton.TryGetValue(decomp.Skeleton, out var list))
+                    bySkeleton[decomp.Skeleton] = list = new List<(string, CatalogTocTextRules.DecomposedWord)>();
+                list.Add((word, decomp));
+            }
+
+            return new VariantIndex(vocab, bySkeleton);
+        }
+    }
 }
 
 /// <summary>One catalog TOC search hit. Level 0 = a book-title hit (LineIndex is the
@@ -1261,8 +1505,14 @@ public sealed class CatalogTocHit
     public string FullTocPath { get; set; } = "";
     /// <summary>0 = book title, 1+ = TOC depth. First sort key.</summary>
     public int Level { get; set; }
-    /// <summary>Catalog tree position + original TOC order. Second sort key.</summary>
+    /// <summary>Catalog tree position + original TOC order. Third sort key.</summary>
     public long TreeOrder { get; set; }
+    /// <summary>True when this hit matched every query word LITERALLY (exact / non-
+    /// variant) — false when at least one word only matched through a כתיב/ה-prefix
+    /// variant or the fuzzy fallback. The PRIMARY sort key: literal matches rank ahead
+    /// of variant ones (accuracy first), before Level and TreeOrder.</summary>
+    [MessagePack.IgnoreMember]
+    public bool IsLiteral { get; set; }
     /// <summary>Internal (not on the wire): query tokens appear in typed order in the
     /// path — the last tiebreak within a (book, level) group.</summary>
     [MessagePack.IgnoreMember]
