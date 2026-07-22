@@ -74,6 +74,43 @@ namespace FtsLib.Indexing
                     string p = FtsLib.Search.TrigramIndex.SidecarPath(DatPath);
                     if (File.Exists(p))
                         try { _trigram = new FtsLib.Search.TrigramIndex.Reader(p); } catch { _trigram = null; }
+
+                    // Content-binding check: the sidecar must have been built from
+                    // THIS term_index. Timestamps alone don't prove that (a backup
+                    // restore can preserve them), and a stale sidecar maps trigram
+                    // hits to the wrong rowids — candidate loss that survives the
+                    // LIKE confirm. Mismatch (incl. pre-binding sidecars, which
+                    // carry 0) → fall back to LIKE until the next force merge
+                    // rebuilds the sidecar.
+                    if (_trigram != null)
+                    {
+                        try
+                        {
+                            using (var cmd = Conn.CreateCommand())
+                            {
+                                cmd.CommandText =
+                                    "SELECT COUNT(*), COALESCE(MAX(rowid),0) FROM term_index";
+                                using (var r = cmd.ExecuteReader())
+                                {
+                                    r.Read();
+                                    uint expected = FtsLib.Search.TrigramIndex.ComputeBinding(
+                                        r.GetInt64(0), r.GetInt64(1));
+                                    if (_trigram.Binding != expected)
+                                    {
+                                        FtsLog.Write("SegmentHandle.Trigram",
+                                            $"sidecar binding mismatch for {Path.GetFileName(p)} — falling back to LIKE");
+                                        _trigram.Dispose();
+                                        _trigram = null;
+                                    }
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            _trigram?.Dispose();
+                            _trigram = null;
+                        }
+                    }
                 }
                 return _trigram;
             }

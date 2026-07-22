@@ -239,6 +239,16 @@ namespace FtsLibTest
                 query: "רש\"י",
                 expected: new[] { new[] { "רשי" } });
 
+            Check(ref passed, ref failed,
+                "mixed-script token splits at the script boundary",
+                query: "abדה",
+                expected: new[] { new[] { "ab" }, new[] { "דה" } });
+
+            Check(ref passed, ref failed,
+                "1-char script fragment dropped after the split",
+                query: "bדה",
+                expected: new[] { new[] { "דה" } });
+
             // ── Unindexable-length literals dropped (regression) ──────
             // The index stores only 2..29-letter words; a 1-char (or ≥30-char)
             // literal can never match and used to poison the whole AND query

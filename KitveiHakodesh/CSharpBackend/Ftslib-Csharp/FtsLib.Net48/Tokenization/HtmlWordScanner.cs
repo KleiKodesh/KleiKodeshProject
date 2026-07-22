@@ -21,6 +21,7 @@ namespace FtsLib.Tokenization
         private readonly char[] _tagName = new char[16];
         private int  _tagLen;
         private bool _inTag;
+        private bool _tagNameDone;   // first space seen — attribute chars must not join the name
         private int  _wordStart;     // raw index of first letter in current word
         private int  _visibleCount;  // cumulative visible chars up to current position
 
@@ -31,6 +32,7 @@ namespace FtsLib.Tokenization
             _buffer.Clear();
             _tagLen       = 0;
             _inTag        = false;
+            _tagNameDone  = false;
             _wordStart    = -1;
             _visibleCount = 0;
 
@@ -45,34 +47,50 @@ namespace FtsLib.Tokenization
                 {
                     if (c == '>')
                     {
-                        if (HtmlBlockTags.IsBlockTag(_tagName, _tagLen))
+                        if (HtmlBlockTags.IsWordBreakTag(_tagName, _tagLen))
                             Flush(i);
                         _inTag  = false;
                         _tagLen = 0;
                     }
-                    else if (_tagLen < 16 && c != ' ' && c != '\t' && c != '/')
+                    else if (!_tagNameDone)
                     {
-                        _tagName[_tagLen++] = c;
+                        // Stop accumulating at the first space — everything after
+                        // it is attributes, which must not corrupt the tag name
+                        // the flush decision below depends on.
+                        if (c == ' ' || c == '\t') _tagNameDone = true;
+                        else if (_tagLen < 16 && c != '/') _tagName[_tagLen++] = c;
                     }
                     continue;
                 }
 
                 if (c == '<')
                 {
-                    Flush(i);
-                    _inTag  = true;
-                    _tagLen = 0;
+                    // Word building continues ACROSS the tag — no flush here.
+                    // Inline formatting (<b>, <i>, <small>, <span>…) interrupts
+                    // words mid-letter (emphasised letters, e.g. ורא<b>ה</b>);
+                    // flushing on every '<' indexed those words as unfindable
+                    // fragments. The flush decision is deferred to '>' above,
+                    // once the tag name is known: block tags and sup/sub break
+                    // the word, everything else is transparent.
+                    _inTag       = true;
+                    _tagLen      = 0;
+                    _tagNameDone = false;
                     continue;
                 }
 
                 // ── HTML ENTITIES ────────────────────────────────────
                 if (c == '&')
                 {
-                    if (HtmlBlockTags.IsWhitespaceEntity(text, len, ref i))
-                    {
-                        Flush(i);
-                        _visibleCount++; // whitespace entity counts as one visible char
-                    }
+                    // Every entity — well-formed or a bare '&' — is a word
+                    // separator: the corpus has no letter entities (verified
+                    // 2026-07-22), only whitespace (&nbsp;, &thinsp;) and
+                    // punctuation (&amp;, &lt;, &gt;) forms, all of which end
+                    // the word. The old classifier consumed non-whitespace
+                    // entities INVISIBLY, joining the surrounding fragments
+                    // into one term that exists nowhere.
+                    HtmlBlockTags.SkipEntity(text, len, ref i);
+                    Flush(i);
+                    _visibleCount++; // the entity renders as one visible char
                     continue;
                 }
 

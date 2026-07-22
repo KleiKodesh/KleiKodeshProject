@@ -55,12 +55,28 @@ namespace FtsLib.Search
         public static void Build(string path, IReadOnlyList<string> terms) => Build(path, terms, null);
 
         /// <summary>
+        /// Content-binding fingerprint tying a sidecar to the term_index it was built
+        /// from, stored in the header's spare u32 and validated when the sidecar is
+        /// opened next to its .db (see SegmentHandle). Guards against a stale .tgm
+        /// paired with a different term_index — e.g. a backup restore that preserves
+        /// file timestamps — which would silently map trigram hits to the WRONG
+        /// rowids (candidate loss survives the LIKE confirm). Sidecars written before
+        /// this field carry 0 and simply fail validation → LIKE fallback until the
+        /// next force merge rebuilds them.
+        /// </summary>
+        internal static uint ComputeBinding(long termCount, long maxRowId)
+            => (uint)((ulong)termCount * 2654435761UL) ^ (uint)((ulong)maxRowId * 0x9E3779B9UL) ^ Magic;
+
+        /// <summary>
         /// Builds the sidecar at <paramref name="path"/>. The posting id of <c>terms[i]</c> is
         /// <c>ids[i]</c> (e.g. the term_index rowid) when <paramref name="ids"/> is supplied,
         /// else <c>i</c>. Intended to run once per segment after force-merge (immutable ⇒
         /// write-once).
         /// </summary>
         public static void Build(string path, IReadOnlyList<string> terms, IReadOnlyList<int> ids)
+            => Build(path, terms, ids, binding: 0);
+
+        public static void Build(string path, IReadOnlyList<string> terms, IReadOnlyList<int> ids, uint binding)
         {
             var map = new Dictionary<string, List<int>>(1 << 16, StringComparer.Ordinal);
             var grams = new List<string>(32);
@@ -99,7 +115,7 @@ namespace FtsLib.Search
             using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 20))
             {
                 var bw = new BinaryWriter(fs);
-                bw.Write(Magic); bw.Write(m); bw.Write(n); bw.Write(0u);
+                bw.Write(Magic); bw.Write(m); bw.Write(n); bw.Write(binding);
                 for (int i = 0; i < m; i++) { bw.Write(fFinger[i]); bw.Write(fOff[i]); bw.Write(fCnt[i]); bw.Write(fLen[i]); }
                 bw.Flush(); blob.Position = 0; blob.CopyTo(fs);
             }
@@ -119,6 +135,7 @@ namespace FtsLib.Search
         {
             var terms = new List<string>(1 << 16);
             var ids = new List<int>(1 << 16);
+            long maxRowId = 0;
             using (var conn = new System.Data.SQLite.SQLiteConnection(
                 string.Format("Data Source={0};Version=3;Read Only=True;", dbPath)))
             {
@@ -127,10 +144,15 @@ namespace FtsLib.Search
                 {
                     cmd.CommandText = "SELECT rowid, term FROM term_index ORDER BY rowid";
                     using (var r = cmd.ExecuteReader())
-                        while (r.Read()) { ids.Add((int)r.GetInt64(0)); terms.Add(r.GetString(1)); }
+                        while (r.Read())
+                        {
+                            long id = r.GetInt64(0);
+                            if (id > maxRowId) maxRowId = id;
+                            ids.Add((int)id); terms.Add(r.GetString(1));
+                        }
                 }
             }
-            Build(outPath, terms, ids);
+            Build(outPath, terms, ids, ComputeBinding(terms.Count, maxRowId));
         }
 
         // ── Read (FileStream seek+read, lock-guarded — no RandomAccess/mmap) ──────────
@@ -138,6 +160,10 @@ namespace FtsLib.Search
         {
             readonly FileStream _fs; readonly object _lock = new object();
             readonly int _m; readonly uint _mask; readonly long _postBase;
+
+            /// <summary>Content-binding fingerprint stored at build time — see
+            /// <see cref="TrigramIndex.ComputeBinding"/>. 0 in pre-binding sidecars.</summary>
+            public uint Binding { get; private set; }
 
             public Reader(string path)
             {
@@ -147,6 +173,7 @@ namespace FtsLib.Search
                 ReadAt(0, hdr, 0, 16);
                 if (BitConverter.ToUInt32(hdr, 0) != Magic) throw new InvalidDataException("TrigramIndex: bad magic");
                 _m = BitConverter.ToInt32(hdr, 4); _mask = (uint)(_m - 1);
+                Binding = BitConverter.ToUInt32(hdr, 12);
                 _postBase = 16 + (long)_m * 16;
             }
 
@@ -167,16 +194,27 @@ namespace FtsLib.Search
                 }
             }
 
-            /// <summary>Sorted term-ids whose term contains <paramref name="trigram"/>, or empty.</summary>
+            /// <summary>
+            /// Sorted term-ids whose term contains <paramref name="trigram"/>, or empty.
+            ///
+            /// Collects EVERY fingerprint-matching slot on the probe path (up to the
+            /// terminating empty slot), not just the first: two different trigrams can
+            /// share both a probe path and a 32-bit fingerprint (~2⁻³² per pair), and
+            /// returning only the first match let the earlier entry SHADOW the true
+            /// one — its false-positive ids are LIKE-confirmed away downstream, but
+            /// the shadowed trigram's ids were silently lost (false negatives). The
+            /// union is a superset, which the caller's LIKE confirm already handles.
+            /// </summary>
             public int[] Lookup(string trigram)
             {
                 int slot = (int)(Hash(trigram) & _mask); uint fg = Finger(trigram);
                 var rec = new byte[16];
+                int[] first = null; List<int[]> more = null;
                 for (int probe = 0; probe < _m; probe++)
                 {
                     ReadAt(16 + (long)slot * 16, rec, 0, 16);
                     uint cnt = BitConverter.ToUInt32(rec, 8);
-                    if (cnt == 0) return EmptyInts;                         // empty slot ⇒ absent
+                    if (cnt == 0) break;                                    // empty slot ⇒ end of probe path
                     if (BitConverter.ToUInt32(rec, 0) == fg)
                     {
                         uint off = BitConverter.ToUInt32(rec, 4);
@@ -184,11 +222,29 @@ namespace FtsLib.Search
                         var pb = new byte[blen]; ReadAt(_postBase + off, pb, 0, (int)blen);
                         var ids = new int[cnt]; int pos = 0, prev = 0;
                         for (int k = 0; k < cnt; k++) { prev += (int)VarInt.Read(pb, ref pos, pb.Length); ids[k] = prev; }
-                        return ids;
+                        if (first == null) first = ids;
+                        else
+                        {
+                            if (more == null) { more = new List<int[]>(); more.Add(first); }
+                            more.Add(ids);
+                        }
                     }
                     slot = (int)((slot + 1) & _mask);
                 }
-                return EmptyInts;
+
+                if (more == null) return first ?? EmptyInts;
+
+                // Fingerprint collision on the probe path — vanishingly rare, so a
+                // simple concat + sort + dedup is fine.
+                int total = 0; foreach (var a in more) total += a.Length;
+                var merged = new int[total]; int w = 0;
+                foreach (var a in more) { Array.Copy(a, 0, merged, w, a.Length); w += a.Length; }
+                Array.Sort(merged);
+                int u = 0;
+                for (int k = 0; k < merged.Length; k++)
+                    if (k == 0 || merged[k] != merged[k - 1]) merged[u++] = merged[k];
+                if (u != merged.Length) Array.Resize(ref merged, u);
+                return merged;
             }
 
             static readonly int[] EmptyInts = new int[0];

@@ -20,7 +20,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     /// <summary>Prefix for the fts.ver stamp. Bump when the FtsLib on-disk segment
     /// format or the indexing pipeline changes, so existing indexes rebuild even when
     /// the source DB is unchanged.</summary>
-    private const string FtsVersion = "fts1";
+    // fts2 (2026-07-22): tokenizer change — inline tags (<b>, <small>, …) are now
+    // word-transparent and HTML entities are word separators, so indexed terms
+    // differ from fts1 indexes; the stamp mismatch forces a clean rebuild.
+    private const string FtsVersion = "fts2";
 
     private readonly string? _dbPath = SeforimDbLocator.Resolve();
     private readonly string _indexPath = ResolveIndexPath();

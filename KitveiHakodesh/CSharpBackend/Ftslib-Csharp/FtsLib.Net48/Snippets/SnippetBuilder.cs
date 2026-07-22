@@ -283,7 +283,12 @@ namespace FtsLib.Snippets
 
                 _renderBuf.Append(_preTag);
                 int tokEnd = tok.RawEnd < snapEnd ? tok.RawEnd : snapEnd;
-                _renderBuf.Append(rawHtml, tok.RawStart, tokEnd - tok.RawStart);
+                // The token's raw span can cross inline tags (word-transparent
+                // formatting, e.g. ורא<b>ה</b>) — strip them instead of copying
+                // raw: a pair that closes beyond the token would emit an
+                // unbalanced opener inside <mark> and bleed formatting over the
+                // rest of the snippet. Nikud and letters pass through untouched.
+                AppendRawStripped(rawHtml, tok.RawStart, tokEnd, snapEnd);
                 _renderBuf.Append(_postTag);
                 pos = tok.RawEnd;
             }
