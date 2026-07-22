@@ -601,6 +601,58 @@ namespace FtsLib.Indexing
             FtsLog.Write("SegmentStore.WipeIndexDirectory", "wipe complete");
         }
 
+        // ── Resume support ────────────────────────────────────────────
+
+        /// <summary>
+        /// Highest doc (line) ID recorded in any live segment's <c>segment_meta</c>
+        /// table, or -1 when no live segment carries one (segments written before
+        /// this metadata existed).
+        ///
+        /// Used at build-resume time: the build.progress file lags the background
+        /// flush and (in older builds) was not written atomically, so after a hard
+        /// kill it can point BELOW lines already durably flushed — resuming there
+        /// would re-index those lines into a second segment, and overlapping doc
+        /// ranges silently corrupt AND-search results (non-ascending concatenated
+        /// posting streams). The segments themselves are the source of truth.
+        /// </summary>
+        internal int MaxSegmentLastDoc()
+        {
+            int max = -1;
+            foreach (var (dat, db) in Live.GetLiveSegmentPaths())
+            {
+                try
+                {
+                    // Pooling=false: a pooled handle would outlive this using-block
+                    // and block a later merge's File.Delete of the segment.
+                    using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+                           {
+                               DataSource = db,
+                               Mode       = SqliteOpenMode.ReadOnly,
+                               Pooling    = false,
+                           }.ConnectionString))
+                    {
+                        conn.Open();
+                        using (var cmd = conn.CreateCommand())
+                        {
+                            cmd.CommandText = "SELECT value FROM segment_meta WHERE key='last_doc'";
+                            object r = cmd.ExecuteScalar();
+                            if (r != null && r != DBNull.Value)
+                            {
+                                int v = (int)Convert.ToInt64(r);
+                                if (v > max) max = v;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Segment predates segment_meta, or a transient open failure —
+                    // skip it; the caller falls back to the progress file.
+                }
+            }
+            return max;
+        }
+
         // ── Flush ─────────────────────────────────────────────────────
 
         /// <summary>

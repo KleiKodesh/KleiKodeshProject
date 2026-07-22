@@ -53,6 +53,14 @@ namespace FtsLib.Indexing
             _store != null ? _store.LastFlushedLineId : int.MinValue;
 
         /// <summary>
+        /// Highest line ID durably recorded in any live segment on disk (from the
+        /// segments' own <c>segment_meta</c>), or -1 when unknown. The reliable
+        /// resume floor after a hard kill — see <see cref="SegmentStore.MaxSegmentLastDoc"/>.
+        /// </summary>
+        public int MaxFlushedDocIdOnDisk() =>
+            _store != null ? _store.MaxSegmentLastDoc() : -1;
+
+        /// <summary>
         /// First exception thrown by a background segment write, or null if the
         /// pipeline is healthy. When non-null, some lines the caller handed in were
         /// never written to disk — the build must not be stamped complete, and the
@@ -220,10 +228,34 @@ namespace FtsLib.Indexing
 
             Console.WriteLine($"[IndexWriter] Purging {_deletes.Count:N0} deleted doc(s)...");
             _store.SetDeleteSet(_deletes);
-            _store.MergeAll();
+            try
+            {
+                // MergeAll's purge mode rewrites EVERY live segment — including
+                // levels that already collapsed to a single segment (see
+                // ForceMerger.MergeLevelsIncremental) — so no deleted doc's
+                // postings survive on disk. Without the single-segment rewrite,
+                // clearing the delete set below resurrected those docs in every
+                // future search (a purge on an Optimize'd one-segment index was
+                // a complete no-op that still deleted deletes.bin).
+                _store.MergeAll();
+            }
+            finally
+            {
+                _store.SetDeleteSet(null);
+            }
+
+            // Clear the delete set only when the purge actually converged. A
+            // shutdown abort stops MergeAll between passes — segments may still
+            // contain deleted docs, and clearing now would resurrect them once
+            // the search-time filter is gone. (An exception above skips this too.)
+            if (_mergeAbortToken.IsCancellationRequested)
+            {
+                Console.WriteLine("[IndexWriter] Purge aborted by shutdown — delete set retained.");
+                return;
+            }
+
             _deletes.Clear();
             _deletes.Save(DeletesFile); // removes the file
-            _store.SetDeleteSet(null);
             Console.WriteLine("[IndexWriter] Purge complete.");
         }
 

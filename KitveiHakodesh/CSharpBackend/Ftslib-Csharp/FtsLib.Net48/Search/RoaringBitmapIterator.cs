@@ -114,5 +114,16 @@ namespace FtsLib.Search
         {
             while (MoveNext()) yield return Current;
         }
+
+        public override void DrainInto(RoaringBitmap bitmap)
+        {
+            // Must be overridden: the base implementation reads the base class's
+            // private decode state, which a wrapper constructed via the protected
+            // ctor leaves permanently "done" — it would silently drain NOTHING.
+            // (PostingIntersector prefers the SIMD RoaringBitmap.Or fast path over
+            // this; the override is the correctness backstop for any other caller.)
+            while (MoveNext())
+                bitmap.Add(Current);
+        }
     }
 }

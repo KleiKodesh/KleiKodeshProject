@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Text;
 using FtsLib.Tokenization;
 
@@ -40,7 +41,12 @@ namespace FtsLib.Search
             if (string.IsNullOrWhiteSpace(query))
                 return new ParsedQuery(groups);
 
-            // Pre-process: pad every '|' character with spaces so that "א|ב" and
+            // Pre-process 1: replace every character the INDEXER treats as a word
+            // separator with a space, so query tokenisation matches index
+            // tokenisation (see SplitOnIndexSeparators for the full rationale).
+            query = SplitOnIndexSeparators(query);
+
+            // Pre-process 2: pad every '|' character with spaces so that "א|ב" and
             // "א | ב" are treated identically.  This lets users omit spaces around
             // the pipe without affecting the tokenisation logic below.
             query = query.Replace("|", " | ");
@@ -90,6 +96,67 @@ namespace FtsLib.Search
                 groups.Add(new QueryGroup(pendingGroup));
 
             return new ParsedQuery(groups);
+        }
+
+        // ── Index-separator pre-pass ──────────────────────────────────
+
+        /// <summary>
+        /// Replaces every character that the indexer's <see cref="HtmlWordScanner"/>
+        /// treats as a word SEPARATOR with a space, so query tokenisation splits
+        /// exactly where index tokenisation split.
+        ///
+        /// Normalise used to silently DELETE these characters instead, which JOINED
+        /// the surrounding fragments into one term that cannot exist in the index —
+        /// e.g. pasted "יום־טוב" (maqaf, standard Tanakh orthography) became the
+        /// unfindable single term "יוםטוב" while the index holds "יום" and "טוב",
+        /// so the query returned zero results for text that visibly contains it.
+        /// The same applied to hyphens, mid-word digits, and all punctuation.
+        ///
+        /// Kept verbatim (NOT separators):
+        ///   - whitespace (the tokeniser splits on it anyway)
+        ///   - letters (Hebrew + ASCII)
+        ///   - strippable nikud/cantillation marks (Normalise removes them, matching
+        ///     the scanner) — EXCEPT maqaf U+05BE, which is inside the strippable
+        ///     range but is explicitly a separator in the scanner (checked first)
+        ///   - other Unicode non-spacing marks (transparent in the scanner too)
+        ///   - intra-word quotes (transparent connectors on both sides, e.g. רש"י)
+        ///   - query syntax characters: '*' '?' '~' '%' '|'
+        ///   - a digit directly after '~' (the fuzzy-distance suffix, e.g. "שלום~2")
+        /// </summary>
+        private static string SplitOnIndexSeparators(string query)
+        {
+            StringBuilder sb = null; // allocated only when a replacement is needed
+            for (int i = 0; i < query.Length; i++)
+            {
+                char c = query[i];
+
+                bool keep;
+                if (c == '־')
+                {
+                    keep = false; // maqaf — the scanner splits on it before its strippable-range check
+                }
+                else
+                {
+                    keep = char.IsWhiteSpace(c)
+                        || HebrewChars.IsLetter(c)
+                        || HebrewChars.IsStrippableMark(c)
+                        || HebrewChars.IsIntraWordQuote(c)
+                        || c == '*' || c == '?' || c == '~' || c == '%' || c == '|'
+                        || (c >= '0' && c <= '9' && i > 0 && query[i - 1] == '~')
+                        || (c > 127 && CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark);
+                }
+
+                if (keep)
+                {
+                    sb?.Append(c);
+                }
+                else
+                {
+                    if (sb == null) sb = new StringBuilder(query, 0, i, query.Length);
+                    sb.Append(' ');
+                }
+            }
+            return sb == null ? query : sb.ToString();
         }
 
         // ── Token parsing ─────────────────────────────────────────────
@@ -158,6 +225,16 @@ namespace FtsLib.Search
             // '*' overrides '%': if the token is a wildcard the grammar flags are ignored.
             if (isWildcard)
                 grammarPrefix = grammarSuffix = false;
+
+            // The index only stores words of 2..29 letters (HtmlWordScanner.Flush).
+            // A shorter or longer LITERAL can never match anything; keeping it would
+            // poison the whole AND query into guaranteed-zero results with no signal.
+            // Treat it like the index does — as a non-word — and drop the token.
+            // Wildcard/fuzzy/grammar tokens keep their own expansion semantics
+            // (e.g. "א~1" can legitimately match the 2-letter index term "אב").
+            if (!isWildcard && !isFuzzy && !grammarPrefix && !grammarSuffix &&
+                (normalised.Length < 2 || normalised.Length >= 30))
+                return null;
 
             return new SubPattern(normalised, isWildcard, isFuzzy, fuzzyDist,
                                   grammarExpandPrefixes: grammarPrefix,

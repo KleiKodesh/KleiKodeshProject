@@ -84,60 +84,62 @@ namespace FtsLibTest
                 expected: new string[0][]);
 
             // ── OR: basic two-alternative group ──────────────────────
+            // (Placeholder tokens are 2 letters: the parser now drops literals
+            //  shorter than the index's 2-char minimum — tested separately below.)
 
             Check(ref passed, ref failed,
                 "two alternatives: a | b",
-                query: "א | ב",
-                expected: new[] { new[] { "א", "ב" } });
+                query: "אב | בג",
+                expected: new[] { new[] { "אב", "בג" } });
 
             Check(ref passed, ref failed,
                 "three alternatives: a | b | c",
-                query: "א | ב | ג",
-                expected: new[] { new[] { "א", "ב", "ג" } });
+                query: "אב | בג | גד",
+                expected: new[] { new[] { "אב", "בג", "גד" } });
 
             // ── OR: mixed with AND ────────────────────────────────────
 
             Check(ref passed, ref failed,
                 "OR group then AND term: a | b c",
-                query: "א | ב ג",
-                expected: new[] { new[] { "א", "ב" }, new[] { "ג" } });
+                query: "אב | בג גד",
+                expected: new[] { new[] { "אב", "בג" }, new[] { "גד" } });
 
             Check(ref passed, ref failed,
                 "AND term then OR group: a b | c",
-                query: "א ב | ג",
-                expected: new[] { new[] { "א" }, new[] { "ב", "ג" } });
+                query: "אב בג | גד",
+                expected: new[] { new[] { "אב" }, new[] { "בג", "גד" } });
 
             Check(ref passed, ref failed,
                 "AND term, OR group, AND term: a b | c d",
-                query: "א ב | ג ד",
-                expected: new[] { new[] { "א" }, new[] { "ב", "ג" }, new[] { "ד" } });
+                query: "אב בג | גד דה",
+                expected: new[] { new[] { "אב" }, new[] { "בג", "גד" }, new[] { "דה" } });
 
             Check(ref passed, ref failed,
                 "two separate OR groups: a | b c | d",
-                query: "א | ב ג | ד",
-                expected: new[] { new[] { "א", "ב" }, new[] { "ג", "ד" } });
+                query: "אב | בג גד | דה",
+                expected: new[] { new[] { "אב", "בג" }, new[] { "גד", "דה" } });
 
             Check(ref passed, ref failed,
                 "three-word OR group between two literals: x a | b | c y",
-                query: "ת א | ב | ג ד",
-                expected: new[] { new[] { "ת" }, new[] { "א", "ב", "ג" }, new[] { "ד" } });
+                query: "תו אב | בג | גד דה",
+                expected: new[] { new[] { "תו" }, new[] { "אב", "בג", "גד" }, new[] { "דה" } });
 
             // ── OR: edge cases ────────────────────────────────────────
 
             Check(ref passed, ref failed,
                 "leading pipe ignored: | a b",
-                query: "| א ב",
-                expected: new[] { new[] { "א" }, new[] { "ב" } });
+                query: "| אב בג",
+                expected: new[] { new[] { "אב" }, new[] { "בג" } });
 
             Check(ref passed, ref failed,
                 "trailing pipe ignored: a b |",
-                query: "א ב |",
-                expected: new[] { new[] { "א" }, new[] { "ב" } });
+                query: "אב בג |",
+                expected: new[] { new[] { "אב" }, new[] { "בג" } });
 
             Check(ref passed, ref failed,
                 "double pipe treated as one separator: a || b",
-                query: "א || ב",
-                expected: new[] { new[] { "א", "ב" } });
+                query: "אב || בג",
+                expected: new[] { new[] { "אב", "בג" } });
 
             Check(ref passed, ref failed,
                 "pipe-only query → no groups",
@@ -151,35 +153,35 @@ namespace FtsLibTest
 
             Check(ref passed, ref failed,
                 "single token with surrounding pipes: | a |",
-                query: "| א |",
-                expected: new[] { new[] { "א" } });
+                query: "| אב |",
+                expected: new[] { new[] { "אב" } });
 
             // ── OR: with wildcards and fuzzy ──────────────────────────
 
             Check(ref passed, ref failed,
                 "wildcard in OR group: a* | b",
-                query: "א* | ב",
-                expected: new[] { new[] { "א*", "ב" } },
+                query: "א* | בג",
+                expected: new[] { new[] { "א*", "בג" } },
                 checkWildcard: new[] { true, false });
 
             Check(ref passed, ref failed,
                 "fuzzy in OR group: a~ | b",
-                query: "א~ | ב",
-                expected: new[] { new[] { "א", "ב" } },
+                query: "אב~ | בג",
+                expected: new[] { new[] { "אב", "בג" } },
                 checkFuzzy: new[] { true, false });
 
             Check(ref passed, ref failed,
                 "wildcard and fuzzy in same OR group: a* | b~2",
-                query: "א* | ב~2",
-                expected: new[] { new[] { "א*", "ב" } },
+                query: "א* | בג~2",
+                expected: new[] { new[] { "א*", "בג" } },
                 checkWildcard:  new[] { true,  false },
                 checkFuzzy:     new[] { false, true  },
                 checkFuzzyDist: new[] { 1,     2     });
 
             Check(ref passed, ref failed,
                 "OR group with AND literal: a* | b~ c",
-                query: "א* | ב~ ג",
-                expected: new[] { new[] { "א*", "ב" }, new[] { "ג" } },
+                query: "א* | בג~ גד",
+                expected: new[] { new[] { "א*", "בג" }, new[] { "גד" } },
                 checkWildcard: new[] { true, false, false },
                 checkFuzzy:    new[] { false, true, false });
 
@@ -196,8 +198,67 @@ namespace FtsLibTest
             // Verify the parser faithfully preserves both (dedup is the expander's job).
             Check(ref passed, ref failed,
                 "duplicate alternatives kept by parser: a | a",
-                query: "א | א",
-                expected: new[] { new[] { "א", "א" } });
+                query: "אב | אב",
+                expected: new[] { new[] { "אב", "אב" } });
+
+            // ── Index-separator parity (regression: maqaf query mismatch) ──
+            // The indexer SPLITS words on maqaf, hyphens, digits, and punctuation;
+            // the parser used to DELETE these mid-token, gluing the fragments into
+            // one term that cannot exist in the index (pasted "יום־טוב" returned
+            // zero results). The parser must split exactly where the indexer does.
+
+            Check(ref passed, ref failed,
+                "maqaf splits into two AND groups",
+                query: "יום־טוב",
+                expected: new[] { new[] { "יום" }, new[] { "טוב" } });
+
+            Check(ref passed, ref failed,
+                "ASCII hyphen splits into two AND groups",
+                query: "יום-טוב",
+                expected: new[] { new[] { "יום" }, new[] { "טוב" } });
+
+            Check(ref passed, ref failed,
+                "mid-token digits split like the indexer",
+                query: "אב3גד",
+                expected: new[] { new[] { "אב" }, new[] { "גד" } });
+
+            Check(ref passed, ref failed,
+                "surrounding punctuation stripped as separators",
+                query: "(שלום)",
+                expected: new[] { new[] { "שלום" } });
+
+            Check(ref passed, ref failed,
+                "maqaf inside a fuzzy token: fuzzy applies to the last fragment",
+                query: "יום־טוב~2",
+                expected: new[] { new[] { "יום" }, new[] { "טוב" } },
+                checkFuzzy:     new[] { false, true },
+                checkFuzzyDist: new[] { 1,     2    });
+
+            Check(ref passed, ref failed,
+                "intra-word quote is transparent (matches the indexer)",
+                query: "רש\"י",
+                expected: new[] { new[] { "רשי" } });
+
+            // ── Unindexable-length literals dropped (regression) ──────
+            // The index stores only 2..29-letter words; a 1-char (or ≥30-char)
+            // literal can never match and used to poison the whole AND query
+            // into guaranteed-zero results.
+
+            Check(ref passed, ref failed,
+                "1-char literal dropped, rest of query survives",
+                query: "ב שלום",
+                expected: new[] { new[] { "שלום" } });
+
+            Check(ref passed, ref failed,
+                "30-char literal dropped, rest of query survives",
+                query: new string('א', 30) + " שלום",
+                expected: new[] { new[] { "שלום" } });
+
+            Check(ref passed, ref failed,
+                "1-char FUZZY token kept (can match 2-char index terms)",
+                query: "א~ שלום",
+                expected: new[] { new[] { "א" }, new[] { "שלום" } },
+                checkFuzzy: new[] { true, false });
 
             // ── Summary ───────────────────────────────────────────────
 

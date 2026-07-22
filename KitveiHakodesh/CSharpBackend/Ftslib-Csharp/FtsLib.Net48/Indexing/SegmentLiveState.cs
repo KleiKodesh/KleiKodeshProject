@@ -86,6 +86,23 @@ namespace FtsLib.Indexing
             }
         }
 
+        /// <summary>
+        /// Returns all level numbers that currently have at least one live segment,
+        /// ascending. Used by the purge pass to find single-segment levels that
+        /// still need a delete-applying rewrite.
+        /// </summary>
+        internal List<int> GetPopulatedLevels()
+        {
+            lock (_lock)
+            {
+                var result = new List<int>();
+                foreach (var kv in _liveSegs)
+                    if (kv.Value.Count > 0) result.Add(kv.Key);
+                result.Sort();
+                return result;
+            }
+        }
+
         internal List<int> GetLiveSegIds(int level)
         {
             lock (_lock)

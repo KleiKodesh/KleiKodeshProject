@@ -149,7 +149,12 @@ namespace FtsLib.Search
                         // pre-advanced contract expected by PostingMatcher.Intersect
                         // and DrainStarted.
                         var union = new UnionIterator(started.ToArray());
-                        if (!union.MoveNext()) continue; // all sub-iterators exhausted
+                        // Unreachable today (started iterators are pre-advanced, so the
+                        // union's first MoveNext always succeeds) — but if it ever fires,
+                        // an empty OR group makes the whole AND intersection empty.
+                        // (`continue` here would silently DROP the group, broadening
+                        // the query.)
+                        if (!union.MoveNext()) return Enumerable.Empty<int>();
                         groupIter = union;
                     }
                 }

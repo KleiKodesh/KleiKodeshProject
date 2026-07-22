@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 
@@ -8,10 +9,11 @@ namespace FtsLib.Indexing
     /// Owns all logic for the force merge operation: incremental LSM-tree
     /// merge, WAL bookkeeping, and crash recovery/resume.
     ///
-    /// Force merge collapses every level of the LSM tree into a single segment,
-    /// working bottom-up one level at a time. Each level merge is its own
-    /// atomic WAL-protected commit so a crash at any point is fully recoverable
-    /// without losing data.
+    /// Force merge collapses the whole LSM tree into ONE segment, working
+    /// bottom-up one level at a time; a single segment stranded on a lower level
+    /// (e.g. the build's tail flush) is laddered upward until it meets the rest.
+    /// Each level merge is its own atomic WAL-protected commit so a crash at any
+    /// point is fully recoverable without losing data.
     ///
     /// WAL protocol:
     ///   BEGIN_FORCE_MERGE          — written once when the session starts
@@ -67,13 +69,27 @@ namespace FtsLib.Indexing
                 FtsLog.Write("ForceMerger.Run", "WAL END_FORCE_MERGE written");
 
                 BuildTrigramSidecars();
-            }
-            finally
-            {
-                FtsLog.Write("ForceMerger.Run",
-                    $"force merge finished — totalLiveSegs={_store.Live.TotalLiveSegs()}");
+
+                // Success ONLY: clear the WAL. Clearing it on the failure path (the
+                // old `finally`) destroyed exactly the record recovery needs — a
+                // fault mid merge-commit (e.g. an AV or another process holding a
+                // source .db open during deletion) left the renamed target AND the
+                // surviving sources on disk with no pending BEGIN_MERGE, so the next
+                // startup registered BOTH as live: duplicate doc ranges, silently
+                // wrong AND results, baked in permanently by the next merge.
+                // With the WAL preserved, normal recovery (generalized Case B / A)
+                // finishes or redoes the interrupted level merge correctly.
                 _store.Wal.Clear();
-                FtsLog.Write("ForceMerger.Run", "WAL cleared — force merge complete");
+                FtsLog.Write("ForceMerger.Run",
+                    $"WAL cleared — force merge complete, totalLiveSegs={_store.Live.TotalLiveSegs()}");
+            }
+            catch
+            {
+                // Release the file handle but keep wal.log for startup recovery.
+                _store.Wal.Close();
+                FtsLog.Write("ForceMerger.Run",
+                    "force merge FAILED — WAL preserved for startup recovery");
+                throw;
             }
         }
 
@@ -109,6 +125,10 @@ namespace FtsLib.Indexing
                 Console.WriteLine("[Recovery] Force merge resume complete.");
 
                 BuildTrigramSidecars();
+
+                // Success only — see Run() for why the failure path must NOT clear.
+                _store.Wal.Clear();
+                FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL cleared");
             }
             catch (InvalidDataException ex)
             {
@@ -119,10 +139,12 @@ namespace FtsLib.Indexing
                 throw new CorruptIndexException(
                     "Corrupt segment during force merge recovery — index wiped for rebuild.", ex);
             }
-            finally
+            catch
             {
-                _store.Wal.Clear();
-                FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL cleared");
+                _store.Wal.Close();
+                FtsLog.Write("ForceMerger.ResumeForceMerge",
+                    "resume FAILED — WAL preserved for the next startup's recovery");
+                throw;
             }
         }
 
@@ -163,12 +185,21 @@ namespace FtsLib.Indexing
         /// </summary>
         internal void MergeLevelsIncremental()
         {
-            int pass = 0;
-            bool anyProgress;
-            do
-            {
-                anyProgress = false;
+            // Purge (delete-set) mode: deleted docs are only physically removed
+            // when a segment is REWRITTEN. The multi-segment loop below never
+            // touches a level that already collapsed to one segment — and
+            // IndexWriter.Purge clears the delete set afterwards, which would
+            // resurrect every deleted doc still sitting in such a segment. So in
+            // purge mode, each PRE-EXISTING single segment gets one 1-source
+            // rewrite; segments created during this run had the delete set applied
+            // as they were written and are tracked in `cleaned`.
+            var  deletes = _store.GetDeleteSet();
+            bool purging = deletes != null && !deletes.IsEmpty;
+            var  cleaned = purging ? new HashSet<int>() : null;
 
+            int pass = 0;
+            while (true)
+            {
                 // Shutdown requested — stop between level merges. Every completed
                 // pass is fully committed, so stopping here leaves a valid
                 // (just not fully collapsed) index.
@@ -179,30 +210,90 @@ namespace FtsLib.Indexing
                     break;
                 }
 
-                var levels = _store.Live.GetLevelsWithMultiple();
-                if (levels.Count == 0) break;
+                var  levels = _store.Live.GetLevelsWithMultiple();
+                int  level;
+                bool single = false;
 
-                // Always merge the lowest level first — bottom-up strategy
-                levels.Sort();
-                int level = levels[0];
+                if (levels.Count > 0)
+                {
+                    // Always merge the lowest level first — bottom-up strategy
+                    levels.Sort();
+                    level = levels[0];
+                }
+                else if (purging && TryFindUnpurgedSingleLevel(cleaned, out level))
+                {
+                    single = true;
+                }
+                else if (TryFindStrandedSingleLevel(out level))
+                {
+                    // Final collapse: per-level convergence can strand single
+                    // segments on DIFFERENT levels — e.g. the build's tail RAM
+                    // batch flushes a lone L0 after the lower levels were already
+                    // consumed, leaving L0(1) + L3(1) "converged" at two segments.
+                    // ForceMerge's contract is ONE segment total (search cost and
+                    // the trigram sidecar are per-segment), so ladder the lowest
+                    // stranded segment up one level at a time until it meets the
+                    // next populated level, where the ≥2 rule above merges them.
+                    single = true;
+                }
+                else break;
+
                 pass++;
 
                 int srcCount = _store.Live.LiveSegCount(level);
                 FtsLog.Write("ForceMerger.MergeLevelsIncremental",
-                    $"pass {pass}: merging L{level} ({srcCount} segs) → L{level + 1}");
+                    $"pass {pass}: merging L{level} ({srcCount} segs{(single ? ", purge rewrite" : "")}) → L{level + 1}");
                 Console.WriteLine($"[ForceMerge] Pass {pass}: L{level} ({srcCount} segs) → L{level + 1}");
 
                 _store.Live.EnsureLevel(level + 1);
-                _store.Merger.MergeLevel(level);
-                anyProgress = true;
+                int target = _store.Merger.MergeLevelCore(level, null, allowSingle: single);
+                // Any segment written by this run already has the delete set applied.
+                if (target >= 0) cleaned?.Add(target);
 
                 FtsLog.Write("ForceMerger.MergeLevelsIncremental",
                     $"pass {pass}: complete — totalLiveSegs={_store.Live.TotalLiveSegs()}");
             }
-            while (anyProgress);
 
             FtsLog.Write("ForceMerger.MergeLevelsIncremental",
                 $"all levels converged after {pass} pass(es) — totalLiveSegs={_store.Live.TotalLiveSegs()}");
+        }
+
+        /// <summary>
+        /// Finds the lowest populated level when MORE THAN ONE level still holds a
+        /// segment after per-level convergence (each necessarily a single segment,
+        /// since no level has two). Returns false once a single populated level
+        /// remains — the fully collapsed end state.
+        /// </summary>
+        private bool TryFindStrandedSingleLevel(out int level)
+        {
+            var populated = _store.Live.GetPopulatedLevels();
+            if (populated.Count < 2)
+            {
+                level = -1;
+                return false;
+            }
+            level = populated[0];
+            return true;
+        }
+
+        /// <summary>
+        /// Finds the lowest level holding exactly one live segment whose content
+        /// has NOT yet been rewritten with the delete set applied. Returns false
+        /// when every single-segment level is already clean.
+        /// </summary>
+        private bool TryFindUnpurgedSingleLevel(HashSet<int> cleaned, out int level)
+        {
+            foreach (int lvl in _store.Live.GetPopulatedLevels())
+            {
+                var ids = _store.Live.GetLiveSegIds(lvl);
+                if (ids.Count == 1 && !cleaned.Contains(ids[0]))
+                {
+                    level = lvl;
+                    return true;
+                }
+            }
+            level = -1;
+            return false;
         }
     }
 }

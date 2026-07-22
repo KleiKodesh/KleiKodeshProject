@@ -294,10 +294,20 @@ namespace FtsLib.SeforimDb
         /// Expands all OR alternatives in <paramref name="group"/> into a single
         /// deduplicated list of concrete index terms.
         ///
-        /// <paramref name="hardMiss"/> is set to true when a fuzzy alternative
-        /// produced zero candidates — the caller should abort the whole query
-        /// (no results possible).  Wildcard alternatives that produce zero results
-        /// are silently skipped (anchor too short or no matches).
+        /// Zero-expansion semantics (one consistent rule): an alternative that
+        /// expands to nothing simply contributes nothing to the group. If the WHOLE
+        /// group ends up empty even though it contained at least one real constraint
+        /// (a literal, fuzzy, grammar, or supported-wildcard alternative), the group
+        /// is unsatisfiable and <paramref name="hardMiss"/> is set — AND semantics
+        /// require the whole query to return no results. Only a group consisting
+        /// entirely of REJECTED wildcard patterns (unsupported: anchor too short /
+        /// too many '?' operators — see <see cref="HebrewWildcardExpander"/>) is
+        /// skipped as an AND slot, the documented behaviour for unsupported patterns.
+        ///
+        /// (Previously an empty FUZZY alternative aborted the whole query even when
+        /// an OR sibling had matches, while empty wildcard/grammar alternatives
+        /// silently DROPPED the AND slot — broadening the query instead of
+        /// returning the correct empty result.)
         /// </summary>
         private static List<string> ExpandGroup(
             QueryGroup        group,
@@ -322,8 +332,14 @@ namespace FtsLib.SeforimDb
                 return result;
             }
 
-            var seen   = new HashSet<string>(System.StringComparer.Ordinal);
-            var list   = new List<string>();
+            var seen = new HashSet<string>(System.StringComparer.Ordinal);
+            var list = new List<string>();
+
+            // True once any alternative was a genuine constraint (everything except
+            // a REJECTED wildcard pattern). Literals count even when absent from the
+            // index — the intersection layer's missing-term contract yields the
+            // correct empty result for those.
+            bool anyRealConstraint = false;
 
             foreach (var alt in group.Alternatives)
             {
@@ -333,20 +349,19 @@ namespace FtsLib.SeforimDb
 
                 if (alt.IsFuzzy)
                 {
+                    anyRealConstraint = true;
                     expanded = reader.ExpandFuzzy(alt.Pattern, alt.FuzzyDistance);
-                    if (expanded.Count == 0)
-                    {
-                        hardMiss = true;
-                        return list;
-                    }
+                    if (expanded.Count == 0) continue;
                 }
                 else if (alt.IsWildcard)
                 {
-                    expanded = reader.ExpandWildcard(alt.Pattern);
+                    expanded = reader.ExpandWildcard(alt.Pattern, out bool rejected);
+                    if (!rejected) anyRealConstraint = true;
                     if (expanded.Count == 0) continue;
                 }
                 else if (alt.IsGrammar)
                 {
+                    anyRealConstraint = true;
                     expanded = reader.ExpandGrammar(alt.Pattern,
                                                     alt.GrammarExpandPrefixes,
                                                     alt.GrammarExpandSuffixes);
@@ -355,6 +370,7 @@ namespace FtsLib.SeforimDb
                 else
                 {
                     // Literal alternative — add כתיב variants if requested.
+                    anyRealConstraint = true;
                     expanded = new List<string> { alt.Pattern };
                     if (expandKetiv)
                         foreach (var variant in KetivExpander.Expand(alt.Pattern))
@@ -365,6 +381,10 @@ namespace FtsLib.SeforimDb
                     if (seen.Add(term))
                         list.Add(term);
             }
+
+            // A group whose real constraints all matched nothing is unsatisfiable.
+            if (list.Count == 0 && anyRealConstraint)
+                hardMiss = true;
 
             return list;
         }

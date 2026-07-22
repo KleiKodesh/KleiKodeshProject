@@ -14,12 +14,20 @@ namespace FtsLib.Search
     ///      segment's term_index with LIKE '%ngram%'. Uses UNION (OR) across all
     ///      n-grams to maximise recall.
     ///
-    ///      N-gram size by term length:
-    ///        ≤ 2 chars  → substring LIKE scan (no n-grams possible)
-    ///        3 chars    → bigrams  (2-char substrings) — a 3-char word has only one
-    ///                     trigram (itself), which misses 1-edit neighbours; bigrams
-    ///                     give much better recall
-    ///        ≥ 4 chars  → trigrams (3-char substrings)
+    ///      SOUNDNESS RULE (q-gram lower bound): a term within d edits of an
+    ///      L-char query shares at least (L - n + 1) - d·n of the query's
+    ///      n-grams — each edit destroys at most n grams. Requiring ≥1 shared
+    ///      gram is therefore only sound when L ≥ n·(d+1). Below that the filter
+    ///      EXCLUDES true matches: e.g. trigrams on a 4-5 letter word at d=1 —
+    ///      one mid-word substitution destroys every trigram, so distance-1
+    ///      neighbours of the dominant Hebrew word length silently vanished
+    ///      (שלום~1 could never find שלים).
+    ///
+    ///      N-gram size by term length L and distance d:
+    ///        L ≥ 3(d+1)  → trigrams
+    ///        L ≥ 2(d+1)  → bigrams
+    ///        otherwise   → no gram filter is sound; scan the ±d length window
+    ///                      (a Levenshtein-d match differs by ≤ d chars in length)
     ///
     ///   2. Levenshtein confirm — filter candidates to those whose edit distance
     ///      from the query term is ≤ maxDistance (clamped to 3).
@@ -79,26 +87,18 @@ namespace FtsLib.Search
             if (maxDistance > MaxAllowedDistance) maxDistance = MaxAllowedDistance;
             if (maxDistance < 1)                  maxDistance = 1;
 
-            Dictionary<string, long> candidates;
+            // Pick the largest n-gram size that is SOUND for this term length and
+            // distance (see the class doc's q-gram lower bound): requiring ≥1
+            // shared gram only guarantees no false negatives when L ≥ n·(d+1).
+            // When no gram size qualifies, scan the ±d length window with no gram
+            // filter at all — the Levenshtein confirm below does the real work.
+            int n = 0;
+            if      (term.Length >= 3 * (maxDistance + 1)) n = 3;
+            else if (term.Length >= 2 * (maxDistance + 1)) n = 2;
 
-            if (term.Length >= 4)
-            {
-                // Standard trigram filter
-                var ngrams = BuildNgrams(term, 3);
-                candidates = QueryByNgrams(ngrams, segments, cache);
-            }
-            else if (term.Length == 3)
-            {
-                // Bigram filter: a 3-char word has only one trigram (itself), which
-                // misses 1-edit neighbours. Bigrams give much better recall.
-                var ngrams = BuildNgrams(term, 2);
-                candidates = QueryByNgrams(ngrams, segments, cache);
-            }
-            else
-            {
-                // ≤ 2 chars: no n-grams possible, fall back to infix LIKE scan.
-                candidates = QueryBySubstring(term, segments, cache);
-            }
+            Dictionary<string, long> candidates = n > 0
+                ? QueryByNgrams(BuildNgrams(term, n), segments, cache)
+                : QueryByLengthWindow(term, maxDistance, segments, cache);
 
             // Phase 2: Levenshtein confirmation. The actual distance is kept so
             // the cap can prefer the closest matches.
@@ -270,24 +270,37 @@ namespace FtsLib.Search
         }
 
         /// <summary>
-        /// Fallback for terms of 2 chars or fewer: queries with a simple infix LIKE.
+        /// Prefilter-free candidate source for terms too short for any SOUND n-gram
+        /// filter: every index term whose character length is within ±maxDistance of
+        /// the query's (a Levenshtein-d match can differ by at most d characters in
+        /// length, so the window loses nothing). The Levenshtein confirm in
+        /// <see cref="Expand"/> does the real filtering.
+        ///
+        /// Replaces the old substring-LIKE fallback, which required candidates to
+        /// CONTAIN the whole query — "אב~1" could match superstrings like "אבג" but
+        /// never the equally-close substitution "אג".
         /// </summary>
-        private static Dictionary<string, long> QueryBySubstring(
+        private static Dictionary<string, long> QueryByLengthWindow(
             string                       term,
+            int                          maxDistance,
             IReadOnlyList<SegmentHandle> segments,
             TermChunkCache               cache)
         {
             var results = new Dictionary<string, long>(System.StringComparer.Ordinal);
-            string pattern = "%" + EscapeLike(term) + "%";
+            int lo = term.Length - maxDistance; if (lo < 1) lo = 1;
+            int hi = term.Length + maxDistance;
 
             foreach (var seg in segments)
             {
                 using (var cmd = seg.Conn.CreateCommand())
                 {
+                    // SQLite length() counts characters for TEXT; index terms are
+                    // BMP-only (Hebrew + ASCII letters), so it equals C# .Length.
                     cmd.CommandText =
                         "SELECT term, skip_offset, skip_count, offset, length, count " +
-                        "FROM term_index WHERE term LIKE @p ESCAPE '\\'";
-                    cmd.Parameters.Add("@p", SqliteType.Text).Value = pattern;
+                        "FROM term_index WHERE length(term) BETWEEN @lo AND @hi";
+                    cmd.Parameters.Add("@lo", SqliteType.Integer).Value = lo;
+                    cmd.Parameters.Add("@hi", SqliteType.Integer).Value = hi;
 
                     using (var reader = cmd.ExecuteReader())
                         while (reader.Read())
