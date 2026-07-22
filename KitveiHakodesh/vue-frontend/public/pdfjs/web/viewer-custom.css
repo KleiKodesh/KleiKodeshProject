@@ -324,3 +324,21 @@
 #viewsManager #viewsManagerHeader #viewsManagerStatus > div {
   min-height: 42px;
 }
+
+/* --- Pages panel: space between the selection count and the Manage dropdown ---
+   The Manage button (#actionSelector) sizes to its hidden popup menu, whose long
+   "ייצוא הפריטים שנבחרו…" item inflates it to ~158px. In a ~270px sidebar that
+   leaves the count label ("573 נבחרו") almost touching the button (~2px gap).
+   Cap the button to its own content width so space-between restores a real gap,
+   keep a 12px floor, and never squeeze the count itself. The popup menu is
+   absolutely positioned, so it still opens at its full width. */
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction {
+  gap: 12px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #viewsManagerStatusActionLabelContainer {
+  flex: 0 0 auto;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #actionSelector {
+  min-width: 0;
+  max-width: 100px;
+}

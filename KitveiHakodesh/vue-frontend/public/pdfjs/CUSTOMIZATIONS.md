@@ -1063,6 +1063,37 @@ Live-measured result: title bar ~56px → 42px, status bar 64px → 42px.
 
 ---
 
+## Pages panel — gap between the selection count and the Manage dropdown
+
+The status bar lays out `#viewsManagerStatusActionLabelContainer` (the select-all checkbox +
+`N נבחרו` count) and `#actionSelector` (the Manage dropdown) with `justify-content:
+space-between`. But `#actionSelector` sizes to its **hidden popup menu** — whose longest item
+is `ייצוא הפריטים שנבחרו…` ("Export selected…") — so it renders ~158px wide. In a ~270px
+sidebar that leaves almost no room, and the count label ends up ~2px from the button.
+
+Cap `#actionSelector` to its own button's content width so `space-between` restores a proper
+gap; keep a 12px floor and never let the count label shrink. The popup menu is absolutely
+positioned, so it still opens at its full width (verified). Add to `web/viewer-custom.css`
+(selectors use 5 IDs to match/beat PDF.js's generated `#actionSelector` rule):
+
+```css
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction {
+  gap: 12px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #viewsManagerStatusActionLabelContainer {
+  flex: 0 0 auto;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus #viewsManagerStatusAction #actionSelector {
+  min-width: 0;
+  max-width: 100px;
+}
+```
+
+Live-measured result: Manage button 158px → 100px, gap between count and button 2px → ~41–48px;
+`ניהול` not clipped; Manage menu still opens at full 158px.
+
+---
+
 ## Vue App Integration (no changes needed on upgrade)
 
 These live in the Vue app and do not need to be re-applied to PDF.js:
