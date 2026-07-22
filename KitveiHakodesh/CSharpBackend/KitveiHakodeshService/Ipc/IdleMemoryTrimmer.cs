@@ -34,6 +34,14 @@ public sealed class IdleMemoryTrimmer(
     private const int DefaultIdleSeconds = 120;
     private const int PollSeconds = 15;
 
+    // Adaptive fast path: a heavy search leaves ~300 MB of reclaimable garbage (snippet
+    // strings, result batches, SQLite page caches) sitting in Task Manager for the full
+    // 120s idle window — long enough to read as a leak. When the working set is large,
+    // trim after a much shorter idle instead; light usage (small working set) keeps the
+    // gentle 120s cadence so pools aren't churned between ordinary page navigations.
+    private const int HeavyIdleSeconds = 20;
+    private const long HeavyWorkingSetBytes = 150L * 1024 * 1024;
+
     // Last RPC activity, in UTC ticks. Touched by the dispatcher on every request.
     private static long _lastActivityTicks = DateTime.UtcNow.Ticks;
 
@@ -56,7 +64,12 @@ public sealed class IdleMemoryTrimmer(
             catch (OperationCanceledException) { break; }
 
             long last = Interlocked.Read(ref _lastActivityTicks);
-            bool idleLongEnough = (DateTime.UtcNow.Ticks - last) >= TimeSpan.FromSeconds(IdleSeconds).Ticks;
+            // Large working set → use the short threshold (never longer than the configured
+            // one, so a small KHS_IDLE_TRIM_SECONDS override still wins).
+            int idleThreshold = Environment.WorkingSet >= HeavyWorkingSetBytes
+                ? Math.Min(HeavyIdleSeconds, IdleSeconds)
+                : IdleSeconds;
+            bool idleLongEnough = (DateTime.UtcNow.Ticks - last) >= TimeSpan.FromSeconds(idleThreshold).Ticks;
             bool alreadyTrimmed = last == lastTrimmedActivity;
 
             if (!idleLongEnough || alreadyTrimmed || fts.IsBusy || catalogToc.IsBusy) continue;

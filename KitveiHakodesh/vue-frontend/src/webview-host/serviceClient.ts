@@ -1,14 +1,16 @@
 /**
  * Dev-only clean client for the KitveiHakodesh service.
  *
- * The app asks the service for *what it needs* by op name — it never constructs
- * SQL, opens pipes, or knows which backend answers. In dev the courier is the
- * Vite middleware at `/khs`, which forwards the request frame over the
- * `KitveiHakodesh` named pipe. In hosted mode the C# host is the courier instead,
- * so this module is never used there (callers guard on `window.__webviewAction`).
+ * The app asks the service for *what it needs* by op name — it never constructs SQL, opens
+ * sockets, or knows which backend answers. In dev the browser talks DIRECTLY to the service's
+ * loopback HTTP host at `<base>/rpc`. That base is discovered at runtime from the dev server's
+ * `/khs-endpoint` route: the service's port is PRIVATE (handed to the dev server over an ACL'd
+ * named pipe, never a file), and the dev server relays only the port — not the data. In hosted
+ * mode the C# host is the courier instead, so this module is never used there (callers guard on
+ * `window.__webviewAction`).
  *
- * Wire format: **MessagePack** (compact binary — smaller + faster than JSON,
- * which matters most for the large FTS result sets).
+ * Wire format: **MessagePack** (compact binary — smaller + faster than JSON, which matters
+ * most for the large FTS result sets).
  *   request  → msgpack { Op, Args }   where Args = nested msgpack bytes of the args object
  *   response ← msgpack { Ok, Result?, Error? }   where Result = nested msgpack bytes
  *
@@ -16,6 +18,74 @@
  * transforms keys transparently so the rest of the app stays camelCase.
  */
 import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+
+// Cached endpoint of the service's HTTP host — base URL + the per-instance bearer token every
+// data request must carry (the host 401s without it) — discovered once from /khs-endpoint and
+// reused. Invalidated on failure so a service restart (new port AND new token) is picked up.
+interface KhsEndpoint { base: string; token: string }
+let khsEndpoint: KhsEndpoint | null = null
+let khsEndpointPending: Promise<KhsEndpoint> | null = null
+
+async function discoverEndpoint(): Promise<KhsEndpoint> {
+  // The dev server answers 503 until the service has reported its endpoint over the pipe; retry.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetch('/khs-endpoint', { cache: 'no-store' })
+      if (res.ok) {
+        const { base, token } = (await res.json()) as { base: string; token: string }
+        if (base && token) return { base, token }
+      }
+    } catch { /* dev server momentarily unreachable — retry */ }
+    await new Promise((r) => setTimeout(r, Math.min(1000, 100 + attempt * 100)))
+    if (attempt > 80) throw new Error('KitveiHakodesh service endpoint never became available')
+  }
+}
+
+function getEndpoint(): Promise<KhsEndpoint> {
+  if (khsEndpoint) return Promise.resolve(khsEndpoint)
+  return (khsEndpointPending ??= discoverEndpoint().then((e) => {
+    khsEndpoint = e
+    khsEndpointPending = null
+    return e
+  }))
+}
+
+/**
+ * POST a request body to the service, riding out a brief outage. The service can be momentarily
+ * down — its own setSeforimDbPath self-restart, or the dev supervisor respawning it (which also
+ * changes the ephemeral port AND the bearer token) — during which a direct fetch to the loopback
+ * host rejects with a TypeError. A 401 means our token is stale (new service instance). Either
+ * way we invalidate the cached endpoint, re-discover, and retry. A retried fetch replays the
+ * same ArrayBuffer body safely (it is not a consumed stream).
+ */
+async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Promise<Response> {
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 6; attempt++) {
+    try {
+      const { base, token } = await getEndpoint()
+      const res = await fetch(`${base}${path}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream', 'X-KHS-Token': token },
+        body,
+        signal,
+      })
+      if (res.status === 401) {
+        // Stale token (service restarted onto the same port) — re-discover and retry.
+        khsEndpoint = null
+        lastErr = new Error('service rejected the token (401)')
+        await new Promise((r) => setTimeout(r, 60 + attempt * 80))
+        continue
+      }
+      return res
+    } catch (err) {
+      if (signal?.aborted) throw err // a real cancel, not a transient outage — don't retry
+      lastErr = err
+      khsEndpoint = null // force re-discovery — port/token may have changed on a respawn
+      await new Promise((r) => setTimeout(r, 60 + attempt * 80))
+    }
+  }
+  throw lastErr
+}
 
 const lowerFirst = (k: string) => (k ? k.charAt(0).toLowerCase() + k.slice(1) : k)
 const upperFirst = (k: string) => (k ? k.charAt(0).toUpperCase() + k.slice(1) : k)
@@ -52,11 +122,7 @@ interface Envelope {
 
 /** Call a service op and return its result, throwing on a service-side error. */
 export async function serviceCall<T = unknown>(op: string, args: object = {}): Promise<T> {
-  const res = await fetch('/khs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: encodeRequest(op, args),
-  })
+  const res = await postRpc('/rpc', encodeRequest(op, args))
   if (!res.ok) throw new Error(`service '${op}' failed: ${res.status} ${res.statusText}`)
   const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
   if (!env.Ok) throw new Error(env.Error || `service '${op}' error`)
@@ -66,11 +132,7 @@ export async function serviceCall<T = unknown>(op: string, args: object = {}): P
 
 /** Fire-and-forget variant (warmups etc.) — swallows every error. */
 export function serviceCallVoid(op: string, args: object = {}): void {
-  fetch('/khs', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: encodeRequest(op, args),
-  }).catch(() => {})
+  postRpc('/rpc', encodeRequest(op, args)).catch(() => {})
 }
 
 /**
@@ -86,12 +148,7 @@ export async function* serviceStream<T = unknown>(
   args: object = {},
   signal?: AbortSignal,
 ): AsyncGenerator<T, void, void> {
-  const res = await fetch('/khs-stream', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: encodeRequest(op, args),
-    signal,
-  })
+  const res = await postRpc('/rpc-stream', encodeRequest(op, args), signal)
   if (!res.ok || !res.body) throw new Error(`service '${op}' stream failed: ${res.status} ${res.statusText}`)
 
   const reader = res.body.getReader()
