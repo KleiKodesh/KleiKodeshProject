@@ -182,6 +182,14 @@ if (-not $AnyCpuOnly) {
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 
+# Stable, version-independent copy of the AnyCPU installer. Lets the website link to
+# https://github.com/KleiKodesh/KleiKodeshProject/releases/latest/download/KleiKodeshSetup.exe
+# — a direct download that needs NO api.github.com call, so it works behind content
+# filters / anonymous rate limits where the JS-driven link used to fail.
+$installerStable = Join-Path $ReleasesDir "KleiKodeshSetup.exe"
+Copy-Item $installerAny $installerStable -Force
+Write-Host "OK: $(Split-Path -Leaf $installerStable) (stable-named copy of AnyCPU)" -ForegroundColor Green
+
 Write-Host ""
 Write-Host "All variants built successfully." -ForegroundColor Green
 
@@ -256,7 +264,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-foreach ($asset in @($installerX64, $installerX86, $installerAny, $portableZip) | Where-Object { $_ }) {
+foreach ($asset in @($installerX64, $installerX86, $installerAny, $installerStable, $portableZip) | Where-Object { $_ }) {
     Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
     gh release upload $version $asset --repo KleiKodesh/KleiKodeshProject --clobber
     if ($LASTEXITCODE -ne 0) {
