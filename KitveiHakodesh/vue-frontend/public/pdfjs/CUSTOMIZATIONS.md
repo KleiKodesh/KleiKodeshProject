@@ -447,6 +447,20 @@ pdfjs-page-scale-auto = אוטומטי
 
 ---
 
+### Outline (table of contents) label
+
+The default Hebrew for the outline view title and its view-selector option is the
+verbose "תוכן העניינים של המסמך". Shorten both to "תוכן עניינים" (keep the `.title`
+double-click hint, just drop "של המסמך"):
+
+```
+pdfjs-views-manager-outlines-title1 = תוכן עניינים
+    .title = הצגת תוכן העניינים (יש ללחוץ לחיצה כפולה כדי להרחיב או לצמצם את כל הפריטים)
+pdfjs-views-manager-outlines-option-label = תוכן עניינים
+```
+
+---
+
 ### 0a. Partial render delay (jump performance)
 
 Search for:
@@ -821,6 +835,231 @@ The badge is hidden by default and shown only when the toolbar is in compact mod
   #pageCountBadge:not(:empty) { display: block; }
 }
 ```
+
+---
+
+## Pages panel — "select all" checkbox
+
+Adds a tri-state **select-all checkbox** to the pages-manager (`viewsManager`) status
+bar, so the user can select or deselect every page with one click instead of ticking
+each thumbnail. It sits immediately before the existing status label
+(`pdfjs-views-manager-pages-status-none-action-label` = "בחירת עמודים" / "N נבחרו"),
+which acts as its caption. State mirrors the selection: **unchecked** (none),
+**indeterminate** (some), **checked** (all). Clicking it selects all pages, or clears
+them when all are already selected. This supersedes PDF.js's own tiny deselect
+icon-button (`#viewsManagerStatusActionDeselectButton`), which is hidden in CSS.
+
+Requires `enableSplitMerge: true` (see the feature-flags section) — the whole
+pages-manager UI, per-page checkboxes, and status bar only exist when it is enabled.
+
+### `web/viewer.html` — checkbox element
+
+Inside `<span id="viewsManagerStatusActionLabelContainer">`, add the checkbox as the
+**first child**, immediately before `<button id="viewsManagerStatusActionDeselectButton" …>`:
+
+```html
+<!-- CUSTOM: select-all checkbox — one click selects/deselects every page.
+     Sits before the status label ("בחירת עמודים" / "N נבחרו"), which acts as its caption. -->
+<input
+  id="viewsManagerSelectAllCheckbox"
+  type="checkbox"
+  tabindex="0"
+  title="בחר / בטל בחירת כל העמודים"
+  aria-label="בחר / בטל בחירת כל העמודים"
+/>
+```
+
+### `web/viewer.mjs` — wiring (4 edits)
+
+**1. Register the element in `getViewerConfiguration()`.** In the `viewsManagerStatusBar`
+object (alongside `viewsManagerStatusActionLabel`), add:
+
+```js
+viewsManagerStatusActionSelectAllCheckbox: document.getElementById("viewsManagerSelectAllCheckbox")
+```
+
+**2. In `class PDFThumbnailViewer`**, add a private field next to `#deselectButton = null;`:
+
+```js
+#selectAllCheckbox = null;
+```
+
+and, in the constructor next to `this.#deselectButton = statusBar?.viewsManagerStatusActionDeselectButton || null;`, add:
+
+```js
+this.#selectAllCheckbox = statusBar?.viewsManagerStatusActionSelectAllCheckbox || null;
+```
+
+**3. Wire the change listener** immediately after `this.#deselectButton.classList.toggle("hidden", true);`
+(inside the `if (this.#enableSplitMerge && manageMenu) { … }` block):
+
+```js
+this.#selectAllCheckbox?.addEventListener("change", this.#toggleSelectAll.bind(this));
+```
+
+**4. Add three methods** immediately after `#selectPage(pageNumber, checked) { … }`:
+
+```js
+// CUSTOM: select-all checkbox in the pages panel status bar.
+// Tri-state: unchecked (nothing selected) / indeterminate (some) / checked (all).
+// Toggling it selects or deselects every page at once.
+#toggleSelectAll() {
+  if (!this.#enableSplitMerge || !this._thumbnails?.length) {
+    return;
+  }
+  if (this.#selectAllCheckbox?.checked) {
+    this.#selectAllPages();
+  } else {
+    this.#clearSelection();
+  }
+  this.#updateMenuEntries();
+  this.#updateStatus("select");
+}
+#selectAllPages() {
+  if (this.#hasUndoBarVisible) {
+    this.#dismissUndo(false);
+  }
+  const set = this.#selectedPages ??= new Set();
+  for (let i = 0, ii = this._thumbnails.length; i < ii; i++) {
+    this._thumbnails[i].toggleSelected(true);
+    set.add(i + 1);
+  }
+}
+#updateSelectAllState() {
+  const checkbox = this.#selectAllCheckbox;
+  if (!checkbox) {
+    return;
+  }
+  const total = this._thumbnails?.length || 0;
+  const size = this.#selectedPages?.size || 0;
+  checkbox.disabled = total === 0;
+  checkbox.indeterminate = size > 0 && size < total;
+  checkbox.checked = total > 0 && size >= total;
+}
+```
+
+Then call `this.#updateSelectAllState();` from the two methods that run on every
+selection change, so the checkbox stays in sync:
+
+- at the end of `#updateMenuEntries()`;
+- inside `#updateStatus(type)`, in the `if (type === "select") { … }` branch, immediately
+  before its `return;`.
+
+### `web/viewer-custom.css` — styling
+
+```css
+#viewsManagerSelectAllCheckbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  accent-color: var(--accent-color-custom, #0a84ff);
+}
+#viewsManagerSelectAllCheckbox:disabled { cursor: default; opacity: 0.5; }
+#viewsManagerSelectAllCheckbox:not(:disabled):hover {
+  outline: 1px solid var(--accent-color-custom, #0a84ff);
+  outline-offset: 1px;
+}
+/* Keep the status caption on one line — the checkbox now shares its row. */
+#viewsManagerStatusActionLabel { white-space: nowrap; }
+/* Hide PDF.js's built-in deselect icon-button — the checkbox supersedes it. */
+#viewsManagerStatusActionDeselectButton { display: none !important; }
+```
+
+### No locale change needed
+
+The checkbox's `title` / `aria-label` are hardcoded Hebrew (`בחר / בטל בחירת כל העמודים`)
+and it has **no** `data-l10n-id`, so nothing needs adding to `web/locale/**/viewer.ftl`.
+Its visible caption is the pre-existing, already-translated status label next to it.
+This matches the app's Hebrew-first convention (the iframe is always loaded with
+`?locale=he`) and keeps the patch self-contained.
+
+Verified live in Chromium against the 14-page sample PDF: select-all checks every page
+(status → `N נבחרו`, Export enabled); unchecking one page flips the checkbox to
+indeterminate; clicking it again re-selects all; clicking when fully checked clears the
+selection (status → `בחירת עמודים`).
+
+---
+
+## Pages panel — default to the outline when the document has one
+
+By default the side panel always opens to the pages/thumbnail view (`SidebarView.THUMBS`).
+This makes the **outline** (`תוכן עניינים`) the default view instead — but only when the
+document actually has a table of contents, and only when neither the PDF's page mode nor a
+stored preference explicitly asked for a specific view. If the document has no outline it
+stays on pages; an explicit choice is always respected.
+
+All edits are in `web/viewer.mjs`, in `class ViewsManager extends Sidebar`.
+
+**1. Add a private field** immediately after `#hasAnimations = …;`:
+
+```js
+// CUSTOM: true when the PDF's page mode or a stored preference explicitly picked
+// a sidebar view — used so the "default to outline" logic below never overrides
+// a deliberate choice.
+#initialViewWasExplicit = false;
+```
+
+**2. In `reset()`**, add after `this.isInitialEventDispatched = false;`:
+
+```js
+this.#initialViewWasExplicit = false;
+```
+
+**3. In `setInitialView(view = SidebarView.NONE)`**, record whether the view was explicit.
+After `this.isInitialViewSet = true;` and before the `if (view === SidebarView.NONE …)` guard:
+
+```js
+// CUSTOM: record whether an explicit sidebar view was requested (vs. the -1
+// "unknown" default) so a later-loaded outline can safely become the default.
+this.#initialViewWasExplicit = view !== SidebarView.NONE && view !== SidebarView.UNKNOWN;
+```
+
+**4. In `#addEventListeners()`**, inside the `eventBus._on("outlineloaded", …)` handler,
+immediately after the `onTreeLoaded(evt.outlineCount, this.outlineButton, SidebarView.OUTLINE);` line:
+
+```js
+// CUSTOM: when the document has a table of contents (תוכן עניינים) and no
+// view was explicitly requested by the PDF/prefs, make the outline the
+// default view instead of the pages thumbnails. If the sidebar is closed
+// this simply sets the view shown the next time the user opens it.
+if (evt.outlineCount > 0 && !this.#initialViewWasExplicit && this.active === SidebarView.THUMBS) {
+  this.switchView(SidebarView.OUTLINE);
+}
+```
+
+`outlineloaded` fires after the outline DOM is rendered and (in this app's flow) after
+`setInitialView` runs, so the `#initialViewWasExplicit` flag is already set. When the sidebar
+is closed (the common case — `sidebarViewOnLoad` defaults to `-1`), `switchView(OUTLINE)` only
+updates `active`; the outline is shown the next time the user opens the panel. Even if the
+event ever arrives before `setInitialView`, a later explicit view still wins.
+
+Verified live in Chromium: a PDF with a 2-item outline defaults to the outline view
+(`active === OUTLINE`, header label `תוכן עניינים`, outline shown on open); the no-outline
+sample stays on the pages view.
+
+---
+
+## Pages panel — tighter header bars
+
+PDF.js's default views-manager header wastes vertical space: the title bar uses 12px
+top/bottom padding and the status bar has a 64px `min-height`. Trim both. In
+`web/viewer-custom.css` (loads after `viewer.css`, so equal-specificity selectors win by
+load order — the selectors below deliberately use 3 IDs, +1 descendant for `> div`, to match
+PDF.js's own generated specificity):
+
+```css
+#viewsManager #viewsManagerHeader #viewsManagerTitle {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus > div {
+  min-height: 42px;
+}
+```
+
+Live-measured result: title bar ~56px → 42px, status bar 64px → 42px.
 
 ---
 

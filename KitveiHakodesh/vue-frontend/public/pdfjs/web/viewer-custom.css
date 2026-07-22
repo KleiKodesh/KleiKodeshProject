@@ -276,3 +276,51 @@
     display: block;
   }
 }
+
+/* --- Pages panel: "select all" checkbox ---
+   A tri-state checkbox in the pages-manager status bar, placed right before the
+   status label ("בחירת עמודים" / "N נבחרו") so that label reads as its caption.
+   One click selects every page; when all pages are already selected it deselects
+   them. It reflects the current state: unchecked (none), indeterminate (some),
+   checked (all). It supersedes PDF.js's own tiny deselect icon-button (hidden). */
+#viewsManagerSelectAllCheckbox {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
+  cursor: pointer;
+  accent-color: var(--accent-color-custom, #0a84ff);
+}
+#viewsManagerSelectAllCheckbox:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+#viewsManagerSelectAllCheckbox:not(:disabled):hover {
+  outline: 1px solid var(--accent-color-custom, #0a84ff);
+  outline-offset: 1px;
+}
+
+/* Keep the status caption on one line — the checkbox now shares its row, and
+   the bidi-isolated page count ("14 נבחרו") would otherwise wrap after the number. */
+#viewsManagerStatusActionLabel {
+  white-space: nowrap;
+}
+
+/* Hide PDF.js's built-in deselect icon-button — the select-all checkbox now
+   owns both selecting and clearing, so the extra indicator is redundant. */
+#viewsManagerStatusActionDeselectButton {
+  display: none !important;
+}
+
+/* --- Pages panel: tighter header bars ---
+   PDF.js's default title bar (12px vertical padding) and status bar (64px
+   min-height) waste a lot of vertical space above the thumbnails/outline.
+   Trim both. Selectors match PDF.js's own specificity (3 IDs, +1 for `> div`)
+   and win by load order (viewer-custom.css loads after viewer.css). */
+#viewsManager #viewsManagerHeader #viewsManagerTitle {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+#viewsManager #viewsManagerHeader #viewsManagerStatus > div {
+  min-height: 42px;
+}

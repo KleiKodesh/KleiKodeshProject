@@ -10361,6 +10361,7 @@ class PDFThumbnailViewer {
   #statusLabel = null;
   #statusBar = null;
   #deselectButton = null;
+  #selectAllCheckbox = null;
   #undoBar = null;
   #undoLabel = null;
   #undoButton = null;
@@ -10399,6 +10400,7 @@ class PDFThumbnailViewer {
     this.#enableSplitMerge = enableSplitMerge || false;
     this.#statusLabel = statusBar?.viewsManagerStatusActionLabel || null;
     this.#deselectButton = statusBar?.viewsManagerStatusActionDeselectButton || null;
+    this.#selectAllCheckbox = statusBar?.viewsManagerStatusActionSelectAllCheckbox || null;
     this.#statusBar = statusBar?.viewsManagerStatusAction || null;
     this.#undoBar = undoBar?.viewsManagerStatusUndo || null;
     this.#undoLabel = undoBar?.viewsManagerStatusUndoLabel || null;
@@ -10476,6 +10478,7 @@ class PDFThumbnailViewer {
         this.#updateStatus("select");
       });
       this.#deselectButton.classList.toggle("hidden", true);
+      this.#selectAllCheckbox?.addEventListener("change", this.#toggleSelectAll.bind(this));
       if (this.#enableMerge && addFileComponent) {
         const {
           picker,
@@ -11116,6 +11119,7 @@ class PDFThumbnailViewer {
     const size = this.#selectedPages?.size || 0;
     this.#manageExportButton.disabled = this.#manageCopyButton.disabled = !size;
     this.#manageDeleteButton.disabled = this.#manageCutButton.disabled = !this.#canDelete();
+    this.#updateSelectAllState();
   }
   #toggleMenuEntries(enable) {
     this.#manageExportButton.disabled = this.#manageDeleteButton.disabled = this.#manageCopyButton.disabled = this.#manageCutButton.disabled = !enable;
@@ -11130,6 +11134,7 @@ class PDFThumbnailViewer {
       this.#toggleBar("status", "", count ? {
         count
       } : null);
+      this.#updateSelectAllState();
       return;
     }
     let l10nId;
@@ -11367,6 +11372,42 @@ class PDFThumbnailViewer {
     }
     this.#updateMenuEntries();
     this.#updateStatus("select");
+  }
+  // CUSTOM: select-all checkbox in the pages panel status bar.
+  // Tri-state: unchecked (nothing selected) / indeterminate (some) / checked (all).
+  // Toggling it selects or deselects every page at once.
+  #toggleSelectAll() {
+    if (!this.#enableSplitMerge || !this._thumbnails?.length) {
+      return;
+    }
+    if (this.#selectAllCheckbox?.checked) {
+      this.#selectAllPages();
+    } else {
+      this.#clearSelection();
+    }
+    this.#updateMenuEntries();
+    this.#updateStatus("select");
+  }
+  #selectAllPages() {
+    if (this.#hasUndoBarVisible) {
+      this.#dismissUndo(false);
+    }
+    const set = this.#selectedPages ??= new Set();
+    for (let i = 0, ii = this._thumbnails.length; i < ii; i++) {
+      this._thumbnails[i].toggleSelected(true);
+      set.add(i + 1);
+    }
+  }
+  #updateSelectAllState() {
+    const checkbox = this.#selectAllCheckbox;
+    if (!checkbox) {
+      return;
+    }
+    const total = this._thumbnails?.length || 0;
+    const size = this.#selectedPages?.size || 0;
+    checkbox.disabled = total === 0;
+    checkbox.indeterminate = size > 0 && size < total;
+    checkbox.checked = total > 0 && size >= total;
   }
   #addDragListeners() {
     if (!this.#enableSplitMerge) {
@@ -17652,6 +17693,10 @@ const UI_NOTIFICATION_CLASS = "pdfSidebarNotification";
 class ViewsManager extends Sidebar {
   static #l10nDescription = null;
   #hasAnimations = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  // CUSTOM: true when the PDF's page mode or a stored preference explicitly picked
+  // a sidebar view — used so the "default to outline" logic below never overrides
+  // a deliberate choice.
+  #initialViewWasExplicit = false;
   constructor({
     elements: {
       outerContainer,
@@ -17731,6 +17776,7 @@ class ViewsManager extends Sidebar {
   reset() {
     this.isInitialViewSet = false;
     this.isInitialEventDispatched = false;
+    this.#initialViewWasExplicit = false;
     this.#hideUINotification(true);
     this.switchView(SidebarView.THUMBS);
     this.outlineButton.disabled = this.attachmentsButton.disabled = this.layersButton.disabled = false;
@@ -17744,6 +17790,9 @@ class ViewsManager extends Sidebar {
       return;
     }
     this.isInitialViewSet = true;
+    // CUSTOM: record whether an explicit sidebar view was requested (vs. the -1
+    // "unknown" default) so a later-loaded outline can safely become the default.
+    this.#initialViewWasExplicit = view !== SidebarView.NONE && view !== SidebarView.UNKNOWN;
     if (view === SidebarView.NONE || view === SidebarView.UNKNOWN) {
       this.#dispatchEvent();
       return;
@@ -17939,6 +17988,13 @@ class ViewsManager extends Sidebar {
     };
     eventBus._on("outlineloaded", evt => {
       onTreeLoaded(evt.outlineCount, this.outlineButton, SidebarView.OUTLINE);
+      // CUSTOM: when the document has a table of contents (תוכן עניינים) and no
+      // view was explicitly requested by the PDF/prefs, make the outline the
+      // default view instead of the pages thumbnails. If the sidebar is closed
+      // this simply sets the view shown the next time the user opens it.
+      if (evt.outlineCount > 0 && !this.#initialViewWasExplicit && this.active === SidebarView.THUMBS) {
+        this.switchView(SidebarView.OUTLINE);
+      }
       evt.currentOutlineItemPromise.then(enabled => {
         if (!this.isInitialViewSet) {
           return;
@@ -20255,7 +20311,8 @@ function getViewerConfiguration() {
       viewsManagerStatusBar: {
         viewsManagerStatusAction: document.getElementById("viewsManagerStatusAction"),
         viewsManagerStatusActionDeselectButton: document.getElementById("viewsManagerStatusActionDeselectButton"),
-        viewsManagerStatusActionLabel: document.getElementById("viewsManagerStatusActionLabel")
+        viewsManagerStatusActionLabel: document.getElementById("viewsManagerStatusActionLabel"),
+        viewsManagerStatusActionSelectAllCheckbox: document.getElementById("viewsManagerSelectAllCheckbox")
       },
       viewsManagerUndoBar: {
         viewsManagerStatusUndo: document.getElementById("viewsManagerStatusUndo"),
