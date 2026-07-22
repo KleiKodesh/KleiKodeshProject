@@ -20,6 +20,15 @@ using KitveiHakodeshService.UserSettings;
 
 var builder = Host.CreateApplicationBuilder(args);
 
+// One shared HttpClient for outbound fetches (HebrewBooks PDF download). A single long-lived
+// instance is the recommended pattern; a generous timeout covers large scanned-book PDFs, and a
+// UA header keeps download.hebrewbooks.org from treating us as a bot.
+builder.Services.AddSingleton(_ =>
+{
+    var client = new HttpClient { Timeout = TimeSpan.FromMinutes(5) };
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("KitveiHakodesh/1.0");
+    return client;
+});
 builder.Services.AddSingleton<DocumentLocatorService>();
 builder.Services.AddSingleton<HebrewBooksService>();
 builder.Services.AddSingleton<DictionaryService>();

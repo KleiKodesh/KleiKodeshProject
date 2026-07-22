@@ -176,6 +176,77 @@ public sealed class HbSearchResult
     public List<HebrewBook> Books { get; set; } = new();
 }
 
+/// <summary>Args for <c>triggerHbDownload</c> / <c>restoreHbPdf</c> — download/serve a book's PDF
+/// entirely in the service. <c>AllowDownload</c> false = restore-only (report a miss instead of
+/// fetching), <c>IsOnline</c> false = skip the network attempt and report no-internet.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbDownloadArgs
+{
+    public string? BookId { get; set; }
+    public string? LocalFolder { get; set; }
+    public bool AllowDownload { get; set; } = true;
+    public bool IsOnline { get; set; } = true;
+}
+
+/// <summary>Result of <c>triggerHbDownload</c> / <c>restoreHbPdf</c>: a capability <see cref="Handle"/>
+/// for <c>GET /file/{h}</c> when the PDF resolved, or one of the miss reasons. <c>Redownload</c> is
+/// set by restore when nothing is cached and the caller must re-run the download flow.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbDownloadResult
+{
+    public string Handle { get; set; } = "";
+    public bool NotFound { get; set; }
+    public bool NoInternet { get; set; }
+    public bool Redownload { get; set; }
+    public string? Error { get; set; }
+}
+
+/// <summary>Args for <c>checkHbLocalFiles</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbCheckLocalArgs
+{
+    public List<string>? BookIds { get; set; }
+    public string? LocalFolder { get; set; }
+}
+
+/// <summary>Result of <c>checkHbLocalFiles</c>: the subset of ids present on disk.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbCheckLocalResult
+{
+    public List<string> ExistingIds { get; set; } = new();
+}
+
+/// <summary>Args for <c>deleteHbLocalFile</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbDeleteLocalArgs
+{
+    public string? BookId { get; set; }
+    public string? LocalFolder { get; set; }
+}
+
+/// <summary>Result of <c>deleteHbLocalFile</c>.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbDeleteLocalResult
+{
+    public bool Ok { get; set; }
+    public bool NotFound { get; set; }
+    public string? Error { get; set; }
+}
+
+/// <summary>Generic single-string arg (e.g. <c>setHbLocalFolder</c>).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class StringArg
+{
+    public string? Value { get; set; }
+}
+
+/// <summary>Generic single-string result (e.g. <c>getHbLocalFolder</c>).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class StringResult
+{
+    public string Value { get; set; } = "";
+}
+
 // ── Dictionary (KitveiHakodesh_dictionary.db) ──────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -267,6 +338,14 @@ internal static class RpcResponse
 [JsonSerializable(typeof(HbSearchArgs))]
 [JsonSerializable(typeof(HebrewBook))]
 [JsonSerializable(typeof(HbSearchResult))]
+[JsonSerializable(typeof(HbDownloadArgs))]
+[JsonSerializable(typeof(HbDownloadResult))]
+[JsonSerializable(typeof(HbCheckLocalArgs))]
+[JsonSerializable(typeof(HbCheckLocalResult))]
+[JsonSerializable(typeof(HbDeleteLocalArgs))]
+[JsonSerializable(typeof(HbDeleteLocalResult))]
+[JsonSerializable(typeof(StringArg))]
+[JsonSerializable(typeof(StringResult))]
 [JsonSerializable(typeof(DictTermArgs))]
 [JsonSerializable(typeof(DictCandidatesArgs))]
 [JsonSerializable(typeof(SenseRow))]
