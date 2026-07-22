@@ -70,8 +70,16 @@ namespace FtsLib.SeforimDb
             try
             {
                 string path = Path.Combine(indexPath, ProgressFileName);
-                File.WriteAllText(path,
+                // Write-to-tmp + atomic swap: a direct File.WriteAllText is
+                // truncate-then-write, so a crash mid-write left an empty/partial
+                // file that parsed as lineId=0 — the resumed build then re-indexed
+                // the whole corpus ON TOP of the live segments (overlapping doc
+                // ranges silently corrupt AND searches).
+                string tmp = path + ".tmp";
+                File.WriteAllText(tmp,
                     lineId.ToString() + "\n" + totalLines.ToString() + "\n" + resumeOffset.ToString());
+                if (File.Exists(path)) File.Replace(tmp, path, null);
+                else                   File.Move(tmp, path);
                 FtsLib.Indexing.FtsLog.Write("IndexingPipeline.WriteProgressFile",
                     $"wrote lineId={lineId} totalLines={totalLines} resumeOffset={resumeOffset} path={path}");
             }
@@ -252,6 +260,24 @@ namespace FtsLib.SeforimDb
             // (leaving only .tmp garbage — never touching source segments), so
             // Dispose/StopAll never blocks for minutes behind a merge.
             writer.MergeAbortToken = ct;
+
+            // Resume floor: the progress file lags the background flush and can be
+            // stale after a hard kill (the flush completed, the progress write did
+            // not). The flushed segments record their own last doc ID atomically
+            // with the segment (segment_meta) — trust whichever is HIGHER, because
+            // resuming below a flushed segment's last line re-indexes those lines
+            // into a second segment, and overlapping doc ranges silently corrupt
+            // AND-search results. This also rescues an unreadable/deleted progress
+            // file: with live segments present, resume continues from the segments
+            // instead of re-indexing the whole corpus on top of them.
+            int maxOnDisk = writer.MaxFlushedDocIdOnDisk();
+            if (maxOnDisk > resumeLineId)
+            {
+                FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
+                    $"progress file (lineId={resumeLineId}) LAGS flushed segments — resuming from segment_meta lineId={maxOnDisk}");
+                Console.WriteLine($"[IndexingPipeline] Progress file lags flushed segments — resuming from line id {maxOnDisk} (segment metadata)");
+                resumeLineId = maxOnDisk;
+            }
 
             // Initialize progress tracking after the catch block so they reflect
             // the correct resumeLineId (0 if we wiped the index, or the original

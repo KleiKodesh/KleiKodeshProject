@@ -165,6 +165,16 @@ namespace FtsLib.Search
         public List<string> ExpandWildcard(string pattern)
             => HebrewWildcardExpander.Expand(pattern, _segments, _chunkCache);
 
+        /// <summary>
+        /// As <see cref="ExpandWildcard(string)"/>, additionally reporting whether
+        /// the pattern was REJECTED as unsupported (anchor too short / too many '?'
+        /// operators) rather than merely matching nothing — the two cases demand
+        /// opposite handling from the query pipeline (skip the slot vs. whole-query
+        /// empty result).
+        /// </summary>
+        public List<string> ExpandWildcard(string pattern, out bool rejected)
+            => HebrewWildcardExpander.Expand(pattern, _segments, _chunkCache, out rejected);
+
         // ── Grammar expansion ─────────────────────────────────────────
 
         /// <summary>

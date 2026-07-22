@@ -62,6 +62,13 @@ namespace FtsLib.Indexing
             {
                 var meta = new List<(string term, long skipOffset, int skipCount, long offset, int length, int count)>(sortedTerms.Count);
 
+                // Highest doc (line) ID in the segment = the max over all terms of
+                // each term's LAST posting. Encoded values order exactly like doc
+                // IDs (uint bias), so tracking the max encoded value suffices.
+                // Recorded in the .db's segment_meta table for build-resume.
+                uint maxLastEncoded = 0;
+                bool anyPosting     = false;
+
                 using (var fs = new FileStream(tmpDat, FileMode.Create,
                                                FileAccess.Write, FileShare.None,
                                                bufferSize: 4 * 1024 * 1024))
@@ -77,6 +84,13 @@ namespace FtsLib.Indexing
                         byte[] postBuf   = entry.Stream.Buffer;
                         int    postLen   = entry.Stream.ByteLength;
                         int    skipCount = entry.SkipLen / 3;
+
+                        if (entry.Stream.Count > 0 &&
+                            (!anyPosting || entry.Stream.LastEncoded > maxLastEncoded))
+                        {
+                            maxLastEncoded = entry.Stream.LastEncoded;
+                            anyPosting     = true;
+                        }
 
                         bw.Write(termByteLen);
                         bw.Write(termBytes, 0, termByteLen);
@@ -99,13 +113,26 @@ namespace FtsLib.Indexing
 
                         ArrayPool<byte>.Shared.Return(termBytes);
                     }
+
+                    // Push file data to stable storage BEFORE the rename below: on
+                    // power loss NTFS can persist the rename while the data is still
+                    // in the OS cache, and recovery treats a torn segment at a final
+                    // path as index-wide corruption (wipe + full rebuild).
+                    bw.Flush();
+                    fs.Flush(flushToDisk: true);
                 }
 
-                WriteMetaDb(tmpDb, meta);
+                long lastDoc = anyPosting ? (long)maxLastEncoded + int.MinValue : long.MinValue;
+                WriteMetaDb(tmpDb, meta, lastDoc);
 
-                // Both files are fully written — rename atomically to final paths.
-                File.Move(tmpDat, datPath);
-                File.Move(tmpDb,  dbPath);
+                // Both files are fully written — rename to their final paths, replacing
+                // any stale leftover already there (e.g. an unregistered segment file
+                // whose id was re-allocated after an interrupted run's .tmp cleanup).
+                // A plain File.Move would throw "Cannot create a file when that file
+                // already exists"; the leftover is not a live segment, so replacing
+                // it is safe.
+                MoveReplace(tmpDat, datPath);
+                MoveReplace(tmpDb,  dbPath);
             }
             catch
             {
@@ -117,12 +144,40 @@ namespace FtsLib.Indexing
         }
 
         /// <summary>
+        /// Move <paramref name="src"/> to <paramref name="dst"/>, replacing a stale file
+        /// already at <paramref name="dst"/> (and its SQLite -wal/-shm sidecars). Behaves
+        /// exactly like File.Move when nothing is there — this only rescues the interrupted-
+        /// build case where a leftover unregistered file occupies the target path.
+        /// </summary>
+        internal static void MoveReplace(string src, string dst)
+        {
+            if (File.Exists(dst))
+            {
+                File.Delete(dst);
+                if (File.Exists(dst + "-wal")) File.Delete(dst + "-wal");
+                if (File.Exists(dst + "-shm")) File.Delete(dst + "-shm");
+            }
+            File.Move(src, dst);
+        }
+
+        /// <summary>
         /// Writes a SQLite term-index (.db) file from a pre-built metadata list.
         /// Used by SegmentMerger after writing the merged .dat file.
+        ///
+        /// <paramref name="lastDocId"/> (when not <see cref="long.MinValue"/>) is
+        /// recorded in a small <c>segment_meta</c> table as the segment's highest
+        /// doc (line) ID. Build-resume reads it as the source of truth for where
+        /// indexing actually got to: the build.progress file LAGS the background
+        /// flush and is not crash-atomic, so after a hard kill it can point below
+        /// lines already durably flushed — resuming there re-indexes those lines
+        /// into a second segment, and overlapping doc ranges silently corrupt
+        /// AND-search results. Older segments without the table simply fall back
+        /// to the progress file (no worse than before).
         /// </summary>
         internal static void WriteMetaDb(
             string path,
-            List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> rows)
+            List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> rows,
+            long lastDocId = long.MinValue)
         {
             string connStr = $"Data Source={path};Version=3;Page Size=65536;Cache Size=8000;";
             using (var conn = new SQLiteConnection(connStr))
@@ -160,6 +215,17 @@ namespace FtsLib.Indexing
                     }
                     tx.Commit();
                 }
+                if (lastDocId != long.MinValue)
+                {
+                    Exec(conn, "CREATE TABLE segment_meta(key TEXT PRIMARY KEY, value INTEGER NOT NULL);");
+                    using (var ins = conn.CreateCommand())
+                    {
+                        ins.CommandText = "INSERT INTO segment_meta(key,value) VALUES('last_doc',@v)";
+                        ins.Parameters.Add("@v", System.Data.DbType.Int64).Value = lastDocId;
+                        ins.ExecuteNonQuery();
+                    }
+                }
+
                 Exec(conn, "CREATE UNIQUE INDEX idx_term ON term_index(term);ANALYZE;");
 
                 // Checkpoint the WAL and switch back to DELETE journal mode so no
@@ -174,6 +240,11 @@ namespace FtsLib.Indexing
             // handle is transiently open).
             try { if (File.Exists(path + "-shm")) File.Delete(path + "-shm"); } catch { }
             try { if (File.Exists(path + "-wal")) File.Delete(path + "-wal"); } catch { }
+
+            // Same rationale as the .dat fsync in WriteSegment: force the finished
+            // .db's data to stable storage before the caller renames it into place.
+            using (var f = new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                f.Flush(flushToDisk: true);
         }
 
         private static void Exec(SQLiteConnection conn, string sql)

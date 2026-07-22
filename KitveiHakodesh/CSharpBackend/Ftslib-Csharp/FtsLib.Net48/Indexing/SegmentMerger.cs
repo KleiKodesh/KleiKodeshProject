@@ -61,12 +61,29 @@ namespace FtsLib.Indexing
 
         public void MergeLevel(int level, int? targetSegId)
         {
+            MergeLevelCore(level, targetSegId, allowSingle: false);
+        }
+
+        /// <summary>
+        /// Merges all live segments of <paramref name="level"/> into one new segment
+        /// at level+1 and returns the new segment's ID, or -1 when the level had too
+        /// few segments to process.
+        ///
+        /// <paramref name="allowSingle"/> permits a 1-source "merge" — a plain
+        /// rewrite of the segment into the level above. Used by the purge pass:
+        /// applying the delete set requires physically rewriting the postings, and
+        /// a level that already collapsed to a single segment is otherwise never
+        /// rewritten, so its deleted docs would survive the purge (and resurrect
+        /// once the delete set is cleared).
+        /// </summary>
+        public int MergeLevelCore(int level, int? targetSegId, bool allowSingle)
+        {
             var segIds = _store.Live.GetLiveSegIds(level);
-            if (segIds.Count < 2)
+            if (segIds.Count < (allowSingle ? 1 : 2))
             {
                 FtsLog.Write("SegmentMerger",
                     $"MergeLevel(L{level}) skipped — only {segIds.Count} segment(s) at this level");
-                return;
+                return -1;
             }
 
             int    newSegId  = targetSegId ?? _store.Live.NextSegId();
@@ -107,6 +124,7 @@ namespace FtsLib.Indexing
 
             SegmentReader[] readers = null;
             List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> entries = null;
+            long mergedLastDoc = long.MinValue;
 
             try
             {
@@ -115,7 +133,7 @@ namespace FtsLib.Indexing
                     $"opened {readers.Length} readers — beginning k-way merge → {System.IO.Path.GetFileName(tmpDat)}");
 
                 var sw = System.Diagnostics.Stopwatch.StartNew();
-                entries = WriteMergedDat(level, nextLevel, readers, tmpDat);
+                entries = WriteMergedDat(level, nextLevel, readers, tmpDat, out mergedLastDoc);
                 sw.Stop();
                 FtsLog.Write("SegmentMerger",
                     $"WriteMergedDat complete: {entries.Count:N0} terms in {sw.ElapsedMilliseconds}ms " +
@@ -154,7 +172,7 @@ namespace FtsLib.Indexing
             {
                 FtsLog.Write("SegmentMerger",
                     $"writing meta DB → {System.IO.Path.GetFileName(tmpDb)}");
-                SegmentWriter.WriteMetaDb(tmpDb, entries);
+                SegmentWriter.WriteMetaDb(tmpDb, entries, mergedLastDoc);
                 long dbSzTmp = File.Exists(tmpDb) ? new System.IO.FileInfo(tmpDb).Length : -1;
                 FtsLog.Write("SegmentMerger",
                     $"WriteMetaDb complete: tmpDb size={dbSzTmp:N0}B");
@@ -187,9 +205,12 @@ namespace FtsLib.Indexing
                     "COMMIT step 1: renaming .tmp → final  (crash point B: if we crash here, target may be partial)");
                 try
                 {
-                    File.Move(tmpDat, outDat);
+                    // Replace any stale leftover at the target path (interrupted prior
+                    // merge that re-runs to the same target id) — a plain File.Move would
+                    // throw "Cannot create a file when that file already exists".
+                    SegmentWriter.MoveReplace(tmpDat, outDat);
                     FtsLog.Write("SegmentMerger", $"  renamed tmpDat → {System.IO.Path.GetFileName(outDat)}  size={new System.IO.FileInfo(outDat).Length:N0}B");
-                    File.Move(tmpDb, outDb);
+                    SegmentWriter.MoveReplace(tmpDb, outDb);
                     FtsLog.Write("SegmentMerger", $"  renamed tmpDb  → {System.IO.Path.GetFileName(outDb)}  size={new System.IO.FileInfo(outDb).Length:N0}B");
                 }
                 catch (Exception ex)
@@ -255,6 +276,8 @@ namespace FtsLib.Indexing
 
             // Log current directory state after merge
             LogDirState("after MergeLevel L" + level + "→L" + nextLevel);
+
+            return newSegId;
         }
 
         /// <summary>
@@ -301,10 +324,17 @@ namespace FtsLib.Indexing
         private List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> WriteMergedDat(
             int srcLevel, int dstLevel,
             SegmentReader[] readers,
-            string outPath)
+            string outPath,
+            out long lastDocId)
         {
             var entries = new List<(string, long, int, long, int, int)>();
             int  written  = 0;
+
+            // Highest doc ID across the merged segment = max over terms of each
+            // term's last posting (encoded values order exactly like doc IDs).
+            // Recorded in segment_meta for build-resume — see WriteMetaDb.
+            uint maxLastEncoded = 0;
+            bool anyPosting     = false;
 
             // Reusable merge buffer — grown as needed, never shrunk.
             // Avoids one MemoryStream allocation per term (1.4M+ over a full merge).
@@ -340,6 +370,12 @@ namespace FtsLib.Indexing
                     // Skip terms whose entire posting list was purged
                     if (totalCount == 0) continue;
 
+                    if (!anyPosting || lastEncoded > maxLastEncoded)
+                    {
+                        maxLastEncoded = lastEncoded;
+                        anyPosting     = true;
+                    }
+
                     int    termByteLen = Encoding.UTF8.GetByteCount(minTerm);
                     byte[] termBytes   = ArrayPool<byte>.Shared.Rent(termByteLen);
                     Encoding.UTF8.GetBytes(minTerm, 0, minTerm.Length, termBytes, 0);
@@ -368,8 +404,14 @@ namespace FtsLib.Indexing
 
                     written++;
                 }
+
+                // Push the merged data to stable storage before the commit renames
+                // it into place (same power-loss rationale as SegmentWriter).
+                bw.Flush();
+                outFs.Flush(flushToDisk: true);
             }
 
+            lastDocId = anyPosting ? (long)maxLastEncoded + int.MinValue : long.MinValue;
             return entries;
         }
 
@@ -503,12 +545,24 @@ namespace FtsLib.Indexing
             }
         }
 
+        // .NET's Array.MaxLength for byte[] — the hard ceiling for one term's
+        // merged posting chunk (also expressible as an int, which the on-disk
+        // chunkLen field requires).
+        private const int MaxChunkBytes = 0x7FFFFFC7;
+
         private static void EnsureCapacity(ref byte[] buf, int required)
         {
+            // required < 0 means the caller's `pos + len` overflowed int — a single
+            // term's merged chunk crossed 2 GB. Fail loudly instead of corrupting;
+            // the old doubling loop span forever on overflow.
+            if (required < 0)
+                throw new InvalidDataException(
+                    "Merged posting chunk for a single term exceeds the 2 GB format limit.");
             if (required <= buf.Length) return;
-            int newSize = buf.Length;
+            long newSize = buf.Length;
             while (newSize < required) newSize *= 2;
-            Array.Resize(ref buf, newSize);
+            if (newSize > MaxChunkBytes) newSize = MaxChunkBytes;
+            Array.Resize(ref buf, (int)newSize);
         }
 
         // ── Helpers ──────────────────────────────────────────────────

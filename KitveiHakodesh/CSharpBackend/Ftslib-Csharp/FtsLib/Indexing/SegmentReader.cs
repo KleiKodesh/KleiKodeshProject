@@ -61,13 +61,24 @@ namespace FtsLib.Indexing
             byte[] termBytes = _br.ReadBytes(termLen);
 
             int chunkLen = _br.ReadInt32();
-            if (chunkLen < 0 || chunkLen > 64 * 1024 * 1024)
+            // Sanity bound: the chunk cannot extend past the end of the file. (The
+            // previous fixed 64 MB ceiling misclassified a legitimately large merged
+            // term — reachable at ~10-20x the current corpus — as corruption, which
+            // recovery answers by wiping the whole index and rebuilding into the
+            // very same state: a permanent wipe/rebuild loop.)
+            long remaining = _fs.Length - _fs.Position;
+            if (chunkLen < 0 || chunkLen > remaining)
                 throw new InvalidDataException(
-                    $"Corrupt segment: invalid chunkLen {chunkLen} at offset {_fs.Position - 4}");
+                    $"Corrupt segment: invalid chunkLen {chunkLen} at offset {_fs.Position - 4} (remaining {remaining})");
 
             int    count       = _br.ReadInt32();
             uint   lastEncoded = _br.ReadUInt32();
             int    skipCount   = _br.ReadInt32();
+            // Same bound for the skip table (12 bytes per entry precede the chunk).
+            remaining = _fs.Length - _fs.Position;
+            if (skipCount < 0 || (long)skipCount * 12 + chunkLen > remaining)
+                throw new InvalidDataException(
+                    $"Corrupt segment: invalid skipCount {skipCount} at offset {_fs.Position - 4} (chunkLen {chunkLen}, remaining {remaining})");
 
             int[]  skip    = null;
             int    skipLen = skipCount * 3;

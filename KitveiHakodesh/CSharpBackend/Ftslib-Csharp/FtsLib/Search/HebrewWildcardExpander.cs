@@ -25,8 +25,10 @@ namespace FtsLib.Search
     ///
     ///   MinAnchorLength (2): the non-wildcard anchor must be at least 2 chars.
     ///   Patterns like "*ל" or "מ*" are rejected immediately — they would expand
-    ///   to tens of thousands of terms.  The caller receives an empty list and
-    ///   should skip the group rather than killing the whole query.
+    ///   to tens of thousands of terms.  Rejection is reported via the
+    ///   <c>out bool rejected</c> overload of <see cref="Expand(string,IReadOnlyList{SegmentHandle},TermChunkCache,out bool)"/>:
+    ///   the caller skips a REJECTED pattern's group, but treats a supported
+    ///   pattern that matched nothing as an unsatisfiable constraint.
     ///
     ///   MaxPrefixWildcardChars (3) / MaxSuffixWildcardChars (4):
     ///   After the DB query, expanded terms are filtered by how many characters the
@@ -120,18 +122,43 @@ namespace FtsLib.Search
         /// </summary>
         public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments,
                                           TermChunkCache cache = null)
+            => Expand(pattern, segments, cache, out _);
+
+        /// <summary>
+        /// As <see cref="Expand(string,IReadOnlyList{SegmentHandle},TermChunkCache)"/>,
+        /// additionally reporting via <paramref name="rejected"/> whether the pattern
+        /// was UNSUPPORTED (anchor shorter than <see cref="MinAnchorLength"/>, or more
+        /// than <see cref="MaxOptionalChars"/> '?' operators) — the documented
+        /// "skip this AND slot" cases — as opposed to a supported pattern that simply
+        /// matched nothing, which is a real constraint the caller must treat as an
+        /// unsatisfiable group (whole query returns empty), never as a slot to drop.
+        /// </summary>
+        public static List<string> Expand(string pattern, IReadOnlyList<SegmentHandle> segments,
+                                          TermChunkCache cache, out bool rejected)
         {
+            rejected = false;
             bool hasOptional = pattern.IndexOf('?') >= 0;
-            bool hasStar     = pattern.IndexOf('*') >= 0;
 
             if (!hasOptional)
-                return ExpandStar(pattern, segments, cache);   // fast path — original behaviour
+            {
+                // Fast path — original behaviour, with the short-anchor rejection
+                // surfaced instead of buried inside ExpandStarCore's empty result.
+                if (AnchorLength(pattern) < MinAnchorLength)
+                {
+                    rejected = true;
+                    return new List<string>();
+                }
+                return ExpandStar(pattern, segments, cache);
+            }
 
             // Count '?' operators (after normalising away no-op ones).
             // We count positions where '?' has a real preceding letter.
             int optCount = CountEffectiveOptionals(pattern);
             if (optCount > MaxOptionalChars)
+            {
+                rejected = true;
                 return new List<string>();
+            }
 
             // Generate all sub-patterns by including/excluding each optional char.
             var subPatterns = new HashSet<string>(StringComparer.Ordinal);
@@ -142,8 +169,14 @@ namespace FtsLib.Search
             // term_index rows, so its total is identical either way.
             var merged = new Dictionary<string, long>(StringComparer.Ordinal);
 
+            bool anyEligible = false;
             foreach (var sub in subPatterns)
             {
+                // A variant that falls under the anchor floor is individually
+                // unsupported — skip it without letting it decide the outcome.
+                if (AnchorLength(sub) < MinAnchorLength) continue;
+                anyEligible = true;
+
                 if (sub.IndexOf('*') >= 0)
                 {
                     foreach (var kv in ExpandStarCore(sub, segments, cache))
@@ -155,6 +188,14 @@ namespace FtsLib.Search
                 {
                     merged[sub] = count;
                 }
+            }
+
+            // Every generated variant was under the anchor floor — the pattern as a
+            // whole is unsupported, same as the '*'-only short-anchor case above.
+            if (!anyEligible)
+            {
+                rejected = true;
+                return new List<string>();
             }
 
             // The cap is applied once on the merged set (not per sub-pattern) so
@@ -415,13 +456,21 @@ namespace FtsLib.Search
             }
 
             // c == '?'
-            // Determine whether the preceding character in `current` is a real letter
-            // (not a wildcard) that can be made optional.
+            // A '?' is effective only when the PATTERN character immediately before
+            // it is a real letter — not another '?' (a run of '?'s collapses to one
+            // toggle) and not '*' (wildcards cannot be made optional). This mirrors
+            // CountEffectiveOptionals exactly. Deciding from the BUILT buffer here
+            // (as this used to) made a '?' after an effective '?' toggle the SAME
+            // letter again — producing sub-patterns the user never wrote (e.g.
+            // "אבגד??" also generated bare "אב") and branching once per raw '?',
+            // which bypassed the MaxOptionalChars gate (it counts a '?' run as one)
+            // and let a long pattern with many '?'s explode into millions of
+            // recursive calls, hanging the search thread.
             bool hasOptionalTarget =
-                current.Length > 0 &&
-                current[current.Length - 1] != '*';
-            // (A preceding '?' was already consumed as a letter or dropped, so the
-            //  last char in `current` at this point is always a real letter or '*'.)
+                pos > 0 &&
+                pattern[pos - 1] != '?' &&
+                pattern[pos - 1] != '*' &&
+                current.Length > 0;
 
             if (!hasOptionalTarget)
             {
