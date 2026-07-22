@@ -5,7 +5,7 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
@@ -22,6 +22,11 @@ function activateIndex(index: number, openInNewTab = false) {
 
 function getTitle(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : item.book.title
+}
+
+// Books open in a tab (so they get the new-tab hint); folders just navigate in.
+function getTooltip(item: FsItem) {
+  return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
 }
 
 const { focusedIndex, containerFocused } = useTilesKeys(
@@ -49,7 +54,7 @@ function selectItem(i: number, event?: MouseEvent) {
       class="tile"
       data-nav-item
       :class="{ 'is-focused': containerFocused && focusedIndex === i }"
-      :title="getTitle(item)"
+      :title="getTooltip(item)"
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
     >

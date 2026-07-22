@@ -56,7 +56,7 @@ const flatNodes = computed<FlatNode[]>(() => {
   return out
 })
 
-function onSelect(node: TreeNodeItem, event?: MouseEvent) {
+function onSelect(node: TreeNodeItem, event?: MouseEvent | KeyboardEvent) {
   const flat = node as FlatNode
   flat._book
     ? emit('selectBook', flat._book, wantsNewTab(event))

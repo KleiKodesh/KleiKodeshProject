@@ -8,7 +8,7 @@ import {
   IconDocumentGlobe20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const props = defineProps<{
@@ -34,7 +34,7 @@ const { focusedIndex, containerFocused } = useVirtualListKeys(
   scrollElement,
   () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => props.items.length,
-  (index) => onSelect(props.items[index]!),
+  (index, openInNewTab) => onSelect(props.items[index]!, openInNewTab),
 )
 
 function onSelect(item: LocalFileSearchResult, openInNewTab = false) {
@@ -72,9 +72,9 @@ function formatDate(unixMs: number): string {
 }
 
 function getTooltip(item: LocalFileSearchResult): string {
-  return [item.fileName, item.path, formatDate(item.modifiedDate)]
-    .filter(Boolean)
-    .join('\n')
+  return withNewTabHint(
+    [item.fileName, item.path, formatDate(item.modifiedDate)].filter(Boolean).join('\n'),
+  )
 }
 
 defineExpose({

@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 import type { Ref } from 'vue'
 
 // SCROLL DEBUGGING NOTE (HomeSearchDropdown, 2026):
@@ -16,7 +17,7 @@ import type { Ref } from 'vue'
 export function useListKeys(
   containerEl: Ref<HTMLElement | null>,
   getCount: () => number,
-  onActivate?: (index: number) => void,
+  onActivate?: (index: number, openInNewTab: boolean, event: KeyboardEvent) => void,
   options?: { itemSelector?: string },
 ) {
   const selector = options?.itemSelector ?? '[data-nav-item]'
@@ -62,7 +63,8 @@ export function useListKeys(
     } else if (e.code === 'Enter' || e.code === 'Space') {
       if (focusedIndex.value >= 0 && onActivate) {
         e.preventDefault()
-        onActivate(focusedIndex.value)
+        // Ctrl/⌘+Enter opens the focused item in a new tab (mirrors Ctrl+click).
+        onActivate(focusedIndex.value, wantsNewTab(e), e)
       }
     } else if (e.code === 'Home') {
       e.preventDefault()

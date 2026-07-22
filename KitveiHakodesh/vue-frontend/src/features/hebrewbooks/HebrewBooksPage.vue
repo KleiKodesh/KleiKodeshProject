@@ -52,7 +52,7 @@ const { focusedIndex, containerFocused } = useVirtualListKeys(
   () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => displayedBooks.value.length,
-  (i) => openBook(displayedBooks.value[i]!),
+  (i, openInNewTab) => openBook(displayedBooks.value[i]!, openInNewTab),
 )
 
 useVirtualScrollerKeys(

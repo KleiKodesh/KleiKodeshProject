@@ -16,9 +16,10 @@ const props = defineProps<{
   searchTree?: SearchableTree
 }>()
 
-// The optional MouseEvent lets consumers honour Ctrl/⌘-click; it is undefined
-// for keyboard activation.
-const emit = defineEmits<{ select: [node: TreeNodeItem, event?: MouseEvent] }>()
+// The optional event lets consumers honour Ctrl/⌘-click (mouse) or Ctrl/⌘+Enter
+// (keyboard) — both flow through wantsNewTab. It is undefined only for
+// programmatic selection.
+const emit = defineEmits<{ select: [node: TreeNodeItem, event?: MouseEvent | KeyboardEvent] }>()
 
 const expanded = ref<Set<number>>(new Set())
 const rowRefs = ref<Map<number, HTMLElement>>(new Map())
@@ -83,7 +84,9 @@ defineExpose({ toggleNode: toggle, reset, containerRef })
 const { focusedIndex, containerFocused } = useListKeys(
   containerRef,
   () => visibleNodes.value.length,
-  (i) => emit('select', visibleNodes.value[i]!),
+  // Forward the KeyboardEvent so consumers see Ctrl/⌘+Enter (via wantsNewTab),
+  // mirroring the MouseEvent they already get from a click.
+  (i, _openInNewTab, event) => emit('select', visibleNodes.value[i]!, event),
 )
 
 function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {

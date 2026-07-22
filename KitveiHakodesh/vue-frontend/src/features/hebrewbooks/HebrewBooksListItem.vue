@@ -6,7 +6,7 @@ import {
   IconFolderOpen20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import type { HebrewBook } from './hebrewBooksCatalog'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean }>()
 const emit = defineEmits<{
@@ -31,7 +31,7 @@ const tooltip = computed(() => {
   if (props.book.pages) lines.push(`📄 ${props.book.pages}`)
   if (props.book.printingYear) lines.push(`📅 ${props.book.printingYear}`)
   if (props.book.printingPlace) lines.push(`📍 ${props.book.printingPlace}`)
-  return lines.join('\n')
+  return withNewTabHint(lines.join('\n'))
 })
 </script>
 

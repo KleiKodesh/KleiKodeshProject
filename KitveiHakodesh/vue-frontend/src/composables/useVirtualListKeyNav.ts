@@ -7,7 +7,7 @@ export function useVirtualListKeys(
   scrollerEl: Ref<HTMLElement | null>,
   getVirtualizer: () => Virtualizer<Element, Element>,
   getCount: () => number,
-  onActivate?: (index: number) => void,
+  onActivate?: (index: number, openInNewTab: boolean) => void,
 ) {
   const focusedIndex = ref(-1)
   const containerFocused = ref(false)
@@ -52,7 +52,8 @@ export function useVirtualListKeys(
     } else if (e.code === 'Enter' || e.code === 'Space') {
       if (focusedIndex.value >= 0 && onActivate) {
         e.preventDefault()
-        onActivate(focusedIndex.value)
+        // Ctrl/⌘+Enter opens the focused item in a new tab (mirrors Ctrl+click).
+        onActivate(focusedIndex.value, ctrl)
       }
     } else if (ctrl && e.code === 'Home') {
       e.preventDefault()
