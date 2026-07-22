@@ -1094,6 +1094,23 @@ Live-measured result: Manage button 158px → 100px, gap between count and butto
 
 ---
 
+## Hide the file-loading progress bar
+
+The thin 4px bar under the toolbar (`#loadingBar`) that fills as a PDF loads is not wanted.
+It is absolutely positioned, so hiding it has no layout effect, and PDF.js keeps updating it
+internally without error — only the visual is removed. Add to `web/viewer-custom.css`:
+
+```css
+#loadingBar {
+  display: none !important;
+}
+```
+
+Verified live: `#loadingBar` computes to `display: none` (0×0) throughout load, the PDF still
+loads normally, and there are no console errors.
+
+---
+
 ## Vue App Integration (no changes needed on upgrade)
 
 These live in the Vue app and do not need to be re-applied to PDF.js:

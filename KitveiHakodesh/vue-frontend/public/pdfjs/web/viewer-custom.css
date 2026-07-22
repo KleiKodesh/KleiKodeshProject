@@ -342,3 +342,11 @@
   min-width: 0;
   max-width: 100px;
 }
+
+/* --- Hide the file-loading progress bar ---
+   The thin bar under the toolbar that fills as a PDF loads. It is absolutely
+   positioned, so hiding it has no layout effect; PDF.js still updates it
+   internally (harmlessly) — we only remove the visual. */
+#loadingBar {
+  display: none !important;
+}

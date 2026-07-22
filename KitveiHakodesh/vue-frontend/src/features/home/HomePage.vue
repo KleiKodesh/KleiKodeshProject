@@ -355,7 +355,8 @@ function onSelectHebrewBook(book: HebrewBook, openInNewTab = false) {
 
 async function onSelectFile(fullPath: string, fileName: string, openInNewTab = false) {
   closeSearchDropdown()
-  if (!isHosted) return
+  // Dev opens local files too now: restoreLocalFile authorizes the path with the service and
+  // serves it through the same-origin /khs-file proxy (hosted keeps its C# path).
 
   const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
   const dotIndex = fileName.lastIndexOf('.')
@@ -384,9 +385,12 @@ async function onSelectFile(fullPath: string, fileName: string, openInNewTab = f
 
   const restored = await restoreLocalFile(fullPath)
   if (!restored?.url) return
+  // Route by what is actually served (dev Word docs may render to HTML via the fallback).
+  const servedRoute =
+    restored.kind === 'html' ? '/html-view' : restored.kind === 'pdf' ? '/pdf-view' : route
 
   tabStore.updateTab(targetTabId, {
-    route,
+    route: servedRoute,
     title: titleWithoutExtension,
     localFileName: fileName,
     localFilePath: fullPath,

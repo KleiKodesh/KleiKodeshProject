@@ -22,6 +22,13 @@ namespace KitveiHakodeshLib.LocalFile
         private static readonly string WordCacheDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "word-cache");
 
+        // Document types we deliberately DO NOT support (dropped): MS Works, MHTML web
+        // archives, XPS. Rejected at every open entry point (pick / Open-With / restore) so
+        // they can't reach the Word converter even via the picker's "All files" option or a
+        // stale restored tab. Also removed from the picker filter and the DocumentLocator index.
+        private static readonly HashSet<string> UnsupportedExtensions =
+            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".wps", ".mht", ".mhtml", ".xps" };
+
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
         private readonly Dictionary<string, FolderMapping> _hosts =
@@ -66,6 +73,12 @@ namespace KitveiHakodeshLib.LocalFile
                 }
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+                if (UnsupportedExtensions.Contains(ext))
+                {
+                    _bridge.PushEvent(new { @event = "localFileError", message = "סוג קובץ זה אינו נתמך: " + ext, filePath });
+                    return;
+                }
 
                 if (ext == ".txt")
                 {
@@ -187,11 +200,17 @@ namespace KitveiHakodeshLib.LocalFile
                     using (var dlg = new OpenFileDialog())
                     {
                         dlg.Title  = "פתח קובץ";
-                        dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.mht;*.mhtml;*.odt;*.rtf;*.txt;*.wps;*.xps)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.mht;*.mhtml;*.odt;*.rtf;*.txt;*.wps;*.xps|כל הקבצים (*.*)|*.*";
+                        dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|כל הקבצים (*.*)|*.*";
                         if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
 
                         string filePath = dlg.FileName;
                         string ext = Path.GetExtension(filePath).ToLowerInvariant();
+
+                        if (UnsupportedExtensions.Contains(ext))
+                        {
+                            _bridge.Reply(id, new { error = "סוג קובץ זה אינו נתמך: " + ext });
+                            return;
+                        }
 
                         if (ext == ".txt")
                         {
@@ -266,6 +285,7 @@ namespace KitveiHakodeshLib.LocalFile
                 if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
+                if (UnsupportedExtensions.Contains(ext)) { _bridge.Reply(id, new { error = "סוג קובץ זה אינו נתמך" }); return; }
                 if (ext == ".txt")
                 {
                     // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
@@ -289,6 +309,34 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 _bridge.Reply(id, new { error = ex.Message });
             }
+        }
+
+        /// <summary>
+        /// Opens a file in the system's default program for its type (Word for .docx,
+        /// Acrobat for .pdf, etc.) — the equivalent of double-clicking it in Explorer.
+        /// UseShellExecute = true so the shell resolves the registered handler.
+        /// Any file type is allowed here (unlike the in-app viewer's allow-list): the user
+        /// is deliberately handing the file off to whatever program the OS associates with it.
+        /// </summary>
+        public void HandleOpenInDefaultApp(JsonElement root, string id)
+        {
+            try
+            {
+                string filePath = root.GetProperty("filePath").GetString();
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
+                {
+                    _bridge.Reply(id, new { error = "הקובץ לא נמצא" });
+                    return;
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = filePath,
+                    UseShellExecute = true,
+                });
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         public async Task HandleReadTxtFileContent(JsonElement root, string id)

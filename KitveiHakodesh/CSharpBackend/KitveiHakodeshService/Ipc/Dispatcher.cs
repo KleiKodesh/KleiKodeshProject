@@ -23,6 +23,8 @@ public sealed class Dispatcher(
     CatalogTocSearchService catalogToc,
     UserSettingsService userSettings,
     HttpHostState httpState,
+    LocalFileGrants localFileGrants,
+    KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     IHostApplicationLifetime lifetime)
 {
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
@@ -61,6 +63,65 @@ public sealed class Dispatcher(
                         Port = await httpState.GetPortAsync(ct),
                         Token = httpState.Token,
                     }));
+
+                // Authorize a local file for serving over GET /file. Fully validates the path
+                // (absolute, no traversal, no UNC/device, allowed extension, exists) and mints
+                // an unguessable capability handle — the ONLY way a path becomes servable. This
+                // op is token-gated on the HTTP host, so a caller must already be authenticated
+                // to obtain a handle; GET /file then serves strictly by handle (no raw paths).
+                case "openLocalFile":
+                {
+                    var a = MsgPack.De<OpenLocalFileArgs>(req.Args);
+                    if (!localFileGrants.TryValidateSource(a.Path, out string full, out bool needsConvert, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Error = error }));
+
+                    // Word-family types are rendered first — PDF via Word, or the Office-free
+                    // OOXML→HTML fallback (wiki-style footnotes) when Word is unavailable. The
+                    // FileName's extension (.pdf/.html) tells the client which viewer to use.
+                    string servePath = full;
+                    string fileName = System.IO.Path.GetFileName(full);
+                    if (needsConvert)
+                    {
+                        bool isHtml;
+                        try { (servePath, isHtml) = await wordConversion.RenderAsync(full, ct); }
+                        catch (Exception ex)
+                        {
+                            return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }));
+                        }
+                        fileName = System.IO.Path.GetFileNameWithoutExtension(full) + (isHtml ? ".html" : ".pdf");
+                    }
+
+                    return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult
+                    {
+                        Handle = localFileGrants.Grant(servePath),
+                        FileName = fileName,
+                    }));
+                }
+
+                // Hand a local file off to the OS's registered default program (shell-execute) —
+                // the dev-mode equivalent of the hosted app's "openInDefaultApp" bridge action.
+                // Token-gated like every /rpc op; the path is validated (absolute, canonical, no
+                // UNC/device, exists) but ANY extension is allowed since the user is deliberately
+                // launching the associated program. No bytes are served over HTTP as a result.
+                case "openFileInDefaultApp":
+                {
+                    var a = MsgPack.De<OpenInDefaultAppArgs>(req.Args);
+                    if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
+                    try
+                    {
+                        using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = full,
+                            UseShellExecute = true,
+                        });
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Ok = true }));
+                    }
+                    catch (Exception ex)
+                    {
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = ex.Message }));
+                    }
+                }
 
                 // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
                 // cancels the build cleanly (aborts any merge, releases the index lock)

@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Document-conversion library, reusable across the solution's projects (the same
+       multi-target pattern as FtsLib: the net10.0 leg serves the native-AOT
+       KitveiHakodeshService, the net48 leg the hosted KitveiHakodeshLib/VSTO world).
+
+       Contents:
+         • OoxmlHtmlConverter  (both targets) — Office-free .docx→HTML renderer with
+           Wikipedia-style footnotes/endnotes; fully AOT-safe, zero dependencies.
+         • AotWordConverter    (net10.0 only) — Word→PDF via manual COM/IDispatch,
+           the native-AOT-compatible route. net48 consumers already have the richer
+           PIA-based WordToPdfConverter in KitveiHakodeshLib, so they don't need it. -->
+  <PropertyGroup>
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsAotCompatible Condition="'$(TargetFramework)'=='net10.0'">true</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='net48'">
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
+</Project>

@@ -29,7 +29,8 @@ namespace KitveiHakodeshService.Http;
 ///   OPTIONS *         → CORS preflight (the dev app is a cross-origin localhost page).
 /// </summary>
 public sealed class HttpHostServer(
-    Dispatcher dispatcher, HttpHostState state, ILogger<HttpHostServer> logger) : BackgroundService
+    Dispatcher dispatcher, HttpHostState state, LocalFileGrants localFileGrants,
+    ILogger<HttpHostServer> logger) : BackgroundService
 {
     private TcpListener? _listener;
 
@@ -97,6 +98,18 @@ public sealed class HttpHostServer(
                 if (req.Method == "OPTIONS")
                 {
                     await HttpProtocol.WritePreflightAsync(stream, req.Origin, ct);
+                    return;
+                }
+
+                // GET /file/<handle> is gated by an unguessable CAPABILITY handle (minted only
+                // via the token-gated openLocalFile op), not by the bearer token — so pdf.js can
+                // range-fetch it with no header. The handle proves prior authentication; an
+                // unknown handle is a plain 404. The endpoint NEVER accepts a raw path; the
+                // handle rides in the PATH (hex, URL-safe) so it survives the pdf.js viewer's
+                // file= param round-trip without query-string re-encoding.
+                if (req.Method == "GET" && req.Path.StartsWith("/file/", StringComparison.Ordinal))
+                {
+                    await ServeFileAsync(stream, req, ct);
                     return;
                 }
 
@@ -176,4 +189,110 @@ public sealed class HttpHostServer(
             await HttpProtocol.WriteBufferedAsync(stream, 200, "OK", "application/octet-stream", resp, req.Origin, ct);
         }
     }
+
+    /// <summary>Serve a previously-authorized local file by its capability handle, honoring the
+    /// Range header. The file is opened read/shared and streamed in 64 KB slices — the whole
+    /// file is never buffered (constant service memory), and Range means pdf.js pulls only the
+    /// pages it renders. An unknown handle or a vanished file is a plain 404.</summary>
+    private async Task ServeFileAsync(NetworkStream stream, HttpProtocol.Request req, CancellationToken ct)
+    {
+        // Handle is the path segment after "/file/" (strip any trailing query).
+        string tail = req.Path["/file/".Length..];
+        int q = tail.IndexOf('?');
+        string handle = q >= 0 ? tail[..q] : tail;
+        if (!localFileGrants.TryResolve(handle, out string path))
+        {
+            await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
+            return;
+        }
+
+        FileStream fs;
+        long length;
+        try
+        {
+            fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete, 64 * 1024, useAsync: true);
+            length = fs.Length;
+        }
+        catch
+        {
+            await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
+            return;
+        }
+
+        await using (fs)
+        {
+            string contentType = ContentTypeFor(path);
+            (long start, long end)? range = ParseRange(req.Range, length);
+            if (range is (long s, long e))
+            {
+                long count = e - s + 1;
+                await HttpProtocol.WriteFileHeadAsync(stream, 206, "Partial Content", contentType,
+                    count, $"bytes {s}-{e}/{length}", req.Origin, ct);
+                fs.Seek(s, SeekOrigin.Begin);
+                await CopyExactAsync(fs, stream, count, ct);
+            }
+            else
+            {
+                await HttpProtocol.WriteFileHeadAsync(stream, 200, "OK", contentType, length, null, req.Origin, ct);
+                await CopyExactAsync(fs, stream, length, ct);
+            }
+        }
+    }
+
+    private static async Task CopyExactAsync(Stream src, Stream dst, long count, CancellationToken ct)
+    {
+        byte[] buf = new byte[64 * 1024];
+        long remaining = count;
+        while (remaining > 0)
+        {
+            int want = (int)Math.Min(buf.Length, remaining);
+            int n = await src.ReadAsync(buf.AsMemory(0, want), ct);
+            if (n <= 0) break;
+            await dst.WriteAsync(buf.AsMemory(0, n), ct);
+            remaining -= n;
+        }
+        await dst.FlushAsync(ct);
+    }
+
+    /// <summary>Parse a single-range "bytes=start-end" / "bytes=start-" / "bytes=-suffix"
+    /// header against the file length. Returns null (→ serve the whole file) if absent or
+    /// unsatisfiable.</summary>
+    private static (long start, long end)? ParseRange(string? header, long length)
+    {
+        if (string.IsNullOrEmpty(header) || length <= 0 ||
+            !header.StartsWith("bytes=", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        string spec = header["bytes=".Length..].Trim();
+        int dash = spec.IndexOf('-');
+        if (dash < 0) return null;
+        string a = spec[..dash].Trim(), b = spec[(dash + 1)..].Trim();
+
+        long start, end;
+        if (a.Length == 0)
+        {
+            if (!long.TryParse(b, out long suffix) || suffix <= 0) return null;
+            start = Math.Max(0, length - suffix);
+            end = length - 1;
+        }
+        else
+        {
+            if (!long.TryParse(a, out start) || start < 0 || start >= length) return null;
+            if (b.Length == 0) end = length - 1;
+            else if (!long.TryParse(b, out end)) return null;
+            if (end >= length) end = length - 1;
+            if (end < start) return null;
+        }
+        return (start, end);
+    }
+
+    private static string ContentTypeFor(string path) =>
+        Path.GetExtension(path).ToLowerInvariant() switch
+        {
+            ".pdf" => "application/pdf",
+            ".htm" or ".html" => "text/html; charset=utf-8",
+            ".txt" => "text/plain; charset=utf-8",
+            _ => "application/octet-stream",
+        };
 }

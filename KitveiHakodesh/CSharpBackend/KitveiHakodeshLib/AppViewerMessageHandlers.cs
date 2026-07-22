@@ -58,6 +58,7 @@ namespace KitveiHakodeshLib
                         case "pickFile": _localFile.HandlePickFile(id, this); break;
                         case "pickFolder": _localFile.HandlePickFolder(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
+                        case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;
                         case "readTxtFileContent": await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
