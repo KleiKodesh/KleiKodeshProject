@@ -53,6 +53,7 @@ export interface Tab {
   localFileHbBookTitle?: string // persisted — HebrewBooks book title (used as cache filename)
   localFileConverting?: boolean // in-memory only — true while Word conversion is in progress
   localFileLoadingType?: 'converting' | 'downloading' // in-memory only — drives placeholder message
+  localFileDownloadProgress?: string // in-memory only — live HB download progress text (e.g. "6.2 / 13.2 MB · 47%")
   pdfViewerTitleBarVisible?: boolean // persisted — whether to show PDF.js viewer title bar (default true)
   // Kiwix ZIM state — removed; feature deferred to a later stage
   // Book reader state

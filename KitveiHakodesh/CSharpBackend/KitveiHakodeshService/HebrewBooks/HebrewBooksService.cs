@@ -38,6 +38,17 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
     /// Exactly one of Path / NotFound / Error is meaningful.</summary>
     public readonly record struct HbAcquireResult(string? Path, bool NotFound, string? Error);
 
+    /// <summary>Live download progress for the <c>hbDownloadProgress</c> poll op: bytes received so
+    /// far and the total when the server sent a Content-Length (0 = unknown). Keyed by book id;
+    /// entries live only while a download is in flight (removed on completion/failure), so a poll
+    /// that finds nothing means "not downloading" (already done, or never started).</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long received, long total)> _progress = new();
+
+    /// <summary>Bytes received / total for an in-flight download of <paramref name="bookId"/>,
+    /// or null when no download is active for it.</summary>
+    public (long received, long total)? GetProgress(string bookId) =>
+        _progress.TryGetValue(bookId, out var p) ? p : null;
+
     public HbSearchResult Search(string query, string? localFolder, int limit)
     {
         var result = new HbSearchResult();
@@ -141,7 +152,11 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
 
         if (!allowDownload) return new(null, false, null); // restore w/o network: report miss, caller re-triggers
 
-        // 3. Download in-process.
+        // 3. Download in-process, STREAMED — we never buffer the whole PDF in memory (a scanned
+        // book is 10-40 MB) and we publish live byte progress for the hbDownloadProgress poll op.
+        // Written to a .part temp first, then atomically moved into place, so a cancelled/failed
+        // download never leaves a truncated PDF that a later cache-hit check would trust.
+        string? partPath = null;
         try
         {
             string url = "https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId;
@@ -149,11 +164,24 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
             if (!resp.IsSuccessStatusCode)
                 return new(null, resp.StatusCode == System.Net.HttpStatusCode.NotFound, $"download failed (HTTP {(int)resp.StatusCode})");
 
-            byte[] bytes = await resp.Content.ReadAsByteArrayAsync(ct);
-            // A missing book returns an HTML message page / redirect, not a PDF — detect by magic.
-            if (bytes.Length < 5 || bytes[0] != '%' || bytes[1] != 'P' || bytes[2] != 'D' || bytes[3] != 'F' || bytes[4] != '-')
+            long total = resp.Content.Headers.ContentLength ?? 0; // 0 = server didn't say
+            _progress[bookId] = (0, total);
+
+            using var src = await resp.Content.ReadAsStreamAsync(ct);
+
+            // Peek the first bytes to verify the %PDF- magic WITHOUT buffering the whole body —
+            // a missing book returns an HTML message page / redirect instead of a PDF.
+            byte[] head = new byte[5];
+            int headLen = 0;
+            while (headLen < head.Length)
             {
-                logger.LogInformation("HebrewBooks {Id}: server returned a non-PDF body ({Len}B) — treating as not found", bookId, bytes.Length);
+                int r = await src.ReadAsync(head.AsMemory(headLen, head.Length - headLen), ct);
+                if (r == 0) break;
+                headLen += r;
+            }
+            if (headLen < 5 || head[0] != '%' || head[1] != 'P' || head[2] != 'D' || head[3] != 'F' || head[4] != '-')
+            {
+                logger.LogInformation("HebrewBooks {Id}: server returned a non-PDF body ({Len}B head) — treating as not found", bookId, headLen);
                 return new(null, true, null);
             }
 
@@ -166,7 +194,25 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
             }
             if (dest == cached) Directory.CreateDirectory(CacheDir);
 
-            await File.WriteAllBytesAsync(dest, bytes, ct);
+            partPath = dest + ".part";
+            long received = headLen;
+            using (var dst = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
+            {
+                await dst.WriteAsync(head.AsMemory(0, headLen), ct);
+                _progress[bookId] = (received, total);
+
+                byte[] buf = new byte[1 << 16]; // 64 KB
+                int n;
+                while ((n = await src.ReadAsync(buf, ct)) > 0)
+                {
+                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                    received += n;
+                    _progress[bookId] = (received, total);
+                }
+            }
+
+            File.Move(partPath, dest, overwrite: true); // atomic swap into the real name
+            partPath = null;
             if (dest == cached) EvictCache(); // never touch the user's own folder
             return new(dest, false, null);
         }
@@ -180,6 +226,11 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
         {
             logger.LogError(ex, "HebrewBooks {Id} download failed", bookId);
             return new(null, false, ex.Message);
+        }
+        finally
+        {
+            _progress.TryRemove(bookId, out _);
+            if (partPath != null) try { File.Delete(partPath); } catch { /* best effort */ }
         }
     }
 

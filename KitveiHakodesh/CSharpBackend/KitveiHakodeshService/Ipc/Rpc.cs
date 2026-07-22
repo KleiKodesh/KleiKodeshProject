@@ -233,6 +233,24 @@ public sealed class HbDeleteLocalResult
     public string? Error { get; set; }
 }
 
+/// <summary>Args for <c>hbDownloadProgress</c> — the book id whose in-flight download to poll.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbProgressArgs
+{
+    public string? BookId { get; set; }
+}
+
+/// <summary>Result of <c>hbDownloadProgress</c>. <c>Active</c> is false when no download is in
+/// flight (done, or never started). <c>Total</c> 0 means the server sent no Content-Length, so
+/// only <c>Received</c> is meaningful (show MB, not %).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class HbProgressResult
+{
+    public bool Active { get; set; }
+    public long Received { get; set; }
+    public long Total { get; set; }
+}
+
 /// <summary>Generic single-string arg (e.g. <c>setHbLocalFolder</c>).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class StringArg
@@ -344,6 +362,8 @@ internal static class RpcResponse
 [JsonSerializable(typeof(HbCheckLocalResult))]
 [JsonSerializable(typeof(HbDeleteLocalArgs))]
 [JsonSerializable(typeof(HbDeleteLocalResult))]
+[JsonSerializable(typeof(HbProgressArgs))]
+[JsonSerializable(typeof(HbProgressResult))]
 [JsonSerializable(typeof(StringArg))]
 [JsonSerializable(typeof(StringResult))]
 [JsonSerializable(typeof(DictTermArgs))]

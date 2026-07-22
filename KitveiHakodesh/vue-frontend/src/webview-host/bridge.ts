@@ -585,6 +585,28 @@ export function triggerHbDownload(
 }
 
 /**
+ * Poll the live byte progress of an in-flight HebrewBooks download (dev only — the download runs
+ * in the service, streamed). Returns { active, received, total } where total 0 means the server
+ * sent no Content-Length (show MB, not %), or null when nothing is downloading / in hosted mode
+ * (the WebView2 download has its own native dialog).
+ */
+export async function getHbDownloadProgress(
+  bookId: string,
+): Promise<{ active: boolean; received: number; total: number } | null> {
+  if (typeof window.__webviewAction === 'function') return null
+  try {
+    const r = await serviceCall<{ active?: boolean; received?: number; total?: number }>(
+      'hbDownloadProgress',
+      { bookId },
+    )
+    if (!r) return null
+    return { active: !!r.active, received: r.received || 0, total: r.total || 0 }
+  } catch {
+    return null
+  }
+}
+
+/**
  * Check which of the supplied book IDs have a {bookId}.pdf in the local folder.
  * Returns the subset of IDs that exist on disk. Batch call — send all visible IDs at once.
  */

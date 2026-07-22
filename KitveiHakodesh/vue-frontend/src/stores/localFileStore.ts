@@ -7,6 +7,7 @@ import {
   disposeLocalFileHost,
   restoreLocalFile,
   restoreHbPdf,
+  getHbDownloadProgress,
   pendingPickOpenInNewTab,
 } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
@@ -62,6 +63,33 @@ export const useLocalFileStore = defineStore('localFile', () => {
 
   // Set of tabIds currently converting — used to ignore results after cancel/navigate/close
   const _converting = new Set<string>()
+
+  // Active HB download progress pollers, keyed by tabId (dev only — the C# service streams the
+  // download and we poll its byte progress to update the loading text under the spinner).
+  const _hbProgressTimers = new Map<string, ReturnType<typeof setInterval>>()
+
+  function stopHbProgressPoll(tabId: string) {
+    const t = _hbProgressTimers.get(tabId)
+    if (t) { clearInterval(t); _hbProgressTimers.delete(tabId) }
+  }
+
+  /** Poll the service's live download progress and update the tab's loading text (keeps the
+   *  spinner ring; only the sub-text changes). No-op in hosted mode (getHbDownloadProgress → null). */
+  function startHbProgressPoll(tabId: string, bookId: string) {
+    stopHbProgressPoll(tabId)
+    const fmtMb = (b: number) => (b / (1024 * 1024)).toFixed(1)
+    const timer = setInterval(async () => {
+      // Stop if the tab is no longer downloading (finished / cancelled / navigated away).
+      if (!_converting.has(tabId)) { stopHbProgressPoll(tabId); return }
+      const p = await getHbDownloadProgress(bookId)
+      if (!p || !p.active) return // not started yet, or briefly between poll and completion
+      const text = p.total > 0
+        ? `${fmtMb(p.received)} / ${fmtMb(p.total)} MB · ${Math.floor((p.received / p.total) * 100)}%`
+        : `${fmtMb(p.received)} MB`
+      tabStore.updateTab(tabId, { localFileDownloadProgress: text })
+    }, 300)
+    _hbProgressTimers.set(tabId, timer)
+  }
 
   // Listen for C# push events
   onWebviewEvent((msg: any) => {
@@ -160,7 +188,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
         const wasRemoved = !currentIds.has(tabId)
         const route = current.find((t) => t.id === tabId)?.route
         const navigatedAway = route !== '/pdf-view' && route !== '/html-view' && route !== '/txt-view'
-        if (wasRemoved || navigatedAway) _converting.delete(tabId)
+        if (wasRemoved || navigatedAway) { _converting.delete(tabId); stopHbProgressPoll(tabId) }
       }
     },
   )
@@ -254,8 +282,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
     })
   }
 
-  /** Navigate a tab to /pdf-view placeholder while a HebrewBooks download is in progress. */
-    function startHbDownload(bookTitle: string, tabId: string) {
+  /** Navigate a tab to /pdf-view placeholder while a HebrewBooks download is in progress.
+   *  When a bookId is given (dev), start polling the service for live download progress so the
+   *  loading text under the spinner shows MB / %. */
+  function startHbDownload(bookTitle: string, tabId: string, bookId?: string) {
     _converting.add(tabId)
     tabStore.updateTab(tabId, {
       route: '/pdf-view',
@@ -263,12 +293,15 @@ export const useLocalFileStore = defineStore('localFile', () => {
       localFileName: bookTitle,
       localFileConverting: true,
       localFileLoadingType: 'downloading',
+      localFileDownloadProgress: undefined,
       localFileVirtualUrl: undefined,
     })
+    if (bookId) startHbProgressPoll(tabId, bookId)
   }
 
   /** Called when hbPdfReady fires — ignored if tab was closed/navigated away. */
   function finishHbDownload(tabId: string, url: string, bookTitle: string, bookId: string) {
+    stopHbProgressPoll(tabId)
     if (!_converting.has(tabId)) return
     _converting.delete(tabId)
     tabStore.updateTab(tabId, {
@@ -279,11 +312,13 @@ export const useLocalFileStore = defineStore('localFile', () => {
       localFileHbBookId: bookId,
       localFileHbBookTitle: bookTitle,
       localFileConverting: false,
+      localFileDownloadProgress: undefined,
     })
   }
 
   /** Called on hbPdfCancelled — closes the tab. Shows an error if the book was not found. */
   function cancelHbDownload(tabId: string, notFound = false, noInternet = false) {
+    stopHbProgressPoll(tabId)
     _converting.delete(tabId)
     if (noInternet || notFound) {
       // Navigate back to the HebrewBooks page so the user sees the error banner
@@ -323,11 +358,15 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const localFolder = useSettingsStore().hebrewBooksLocalFolder || undefined
       tabStore.updateTab(tabId, { localFileConverting: true, localFileLoadingType: 'downloading' })
       _converting.add(tabId)
+      // If restore misses and re-downloads, show live progress under the spinner (dev).
+      startHbProgressPoll(tabId, tab.localFileHbBookId)
       const res = await restoreHbPdf(tab.localFileHbBookId, tab.localFileHbBookTitle ?? '', tabId, localFolder)
       if (!res) {
+        stopHbProgressPoll(tabId)
         _converting.delete(tabId)
         tabStore.closeTab(tabId)
       } else if ('url' in res) {
+        stopHbProgressPoll(tabId) // local/cache hit — no download happened
         _converting.delete(tabId)
         tabStore.updateTab(tabId, {
           localFileVirtualUrl: res.url,
@@ -335,7 +374,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
           localFileLoadingType: undefined,
         })
       }
-      // redownload: true — stays in _converting, hbPdfReady push event will finish it
+      // redownload: true — stays in _converting, poller runs, hbPdfReady push event will finish it
     } else if (tab.localFilePath) {
       const ext = tab.localFilePath.substring(tab.localFilePath.lastIndexOf('.')).toLowerCase()
       if (ext === '.txt') {
@@ -385,15 +424,18 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFileVirtualUrl: undefined,
       })
       _converting.add(tabId)
+      startHbProgressPoll(tabId, localFileHbBookId)
       const res = await restoreHbPdf(localFileHbBookId, localFileHbBookTitle ?? '', tabId, localFolder)
       if (!res) {
+        stopHbProgressPoll(tabId)
         _converting.delete(tabId)
         tabStore.updateTab(tabId, { route: '/', title: 'בית', localFileConverting: false })
       } else if ('url' in res) {
+        stopHbProgressPoll(tabId)
         _converting.delete(tabId)
         tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, localFileConverting: false, localFileLoadingType: undefined })
       }
-      // redownload: true — hbPdfReady push event will finish it
+      // redownload: true — poller runs, hbPdfReady push event will finish it
       return
     }
 

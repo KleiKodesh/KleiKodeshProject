@@ -85,7 +85,7 @@ export function useHebrewBooks() {
     const tabId = openInNewTab
       ? paneNavigation.openTab({ route: '/pdf-view', title: book.title }).id
       : paneNavigation.activeTabId
-    localFileStore.startHbDownload(book.title, tabId)
+    localFileStore.startHbDownload(book.title, tabId, String(book.id))
     triggerHbDownload(
       String(book.id),
       book.title,
