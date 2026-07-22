@@ -257,9 +257,12 @@ async function onSelectFile(fullPath: string, fileName: string, openInNewTab = f
 
   const restored = await restoreLocalFile(fullPath)
   if (!restored?.url) { close(); return }
+  // Route by what is actually served (dev Word docs may render to HTML via the fallback).
+  const servedRoute =
+    restored.kind === 'html' ? '/html-view' : restored.kind === 'pdf' ? '/pdf-view' : route
 
   tabStore.updateTab(targetTabId, {
-    route: route as '/html-view' | '/pdf-view',
+    route: servedRoute as '/html-view' | '/pdf-view',
     title: titleWithoutExtension,
     localFileName: fileName,
     localFilePath: fullPath,

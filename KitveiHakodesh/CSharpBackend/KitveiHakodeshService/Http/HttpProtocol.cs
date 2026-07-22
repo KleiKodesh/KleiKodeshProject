@@ -32,6 +32,9 @@ internal static class HttpProtocol
         /// <summary>The X-KHS-Token bearer header, or null when absent. Verified by the host
         /// against the per-instance token before any data op runs.</summary>
         public string? Token { get; init; }
+        /// <summary>The Range request header (e.g. "bytes=0-1023"), or null. Used by GET /file
+        /// so pdf.js loads a PDF progressively instead of fetching the whole file.</summary>
+        public string? Range { get; init; }
         public byte[] Body { get; init; } = [];
     }
 
@@ -63,6 +66,7 @@ internal static class HttpProtocol
         int contentLength = 0;
         string? origin = null;
         string? token = null;
+        string? range = null;
         for (int i = 1; i < lines.Length; i++)
         {
             int c = lines[i].IndexOf(':');
@@ -75,6 +79,8 @@ internal static class HttpProtocol
                 origin = value;
             else if (name.Equals("X-KHS-Token", StringComparison.OrdinalIgnoreCase))
                 token = value;
+            else if (name.Equals("Range", StringComparison.OrdinalIgnoreCase))
+                range = value;
         }
         if (contentLength < 0 || contentLength > MaxBodyBytes)
             throw new InvalidDataException($"Bad Content-Length: {contentLength}");
@@ -92,7 +98,28 @@ internal static class HttpProtocol
             read += n;
         }
 
-        return new Request { Method = reqLine[0], Path = reqLine[1], Origin = origin, Token = token, Body = body };
+        return new Request { Method = reqLine[0], Path = reqLine[1], Origin = origin, Token = token, Range = range, Body = body };
+    }
+
+    /// <summary>Writes the headers for a file response (200 or 206), advertising byte-range
+    /// support so pdf.js loads progressively. The caller then streams the body from disk in
+    /// small buffers — the whole file is never held in memory on either side.</summary>
+    public static async Task WriteFileHeadAsync(
+        Stream stream, int status, string reason, string contentType,
+        long contentLength, string? contentRange, string? origin, CancellationToken ct)
+    {
+        string head =
+            $"HTTP/1.1 {status} {reason}\r\n" +
+            $"Content-Type: {contentType}\r\n" +
+            $"Content-Length: {contentLength}\r\n" +
+            "Accept-Ranges: bytes\r\n" +
+            (contentRange is null ? "" : $"Content-Range: {contentRange}\r\n") +
+            "Cache-Control: no-store\r\n" +
+            Cors(origin) +
+            "Access-Control-Expose-Headers: Content-Range, Accept-Ranges, Content-Length\r\n" +
+            "Connection: close\r\n\r\n";
+        await stream.WriteAsync(Encoding.ASCII.GetBytes(head), ct);
+        await stream.FlushAsync(ct);
     }
 
     /// <summary>Writes a complete buffered response (status + headers + Content-Length body).</summary>
@@ -135,7 +162,7 @@ internal static class HttpProtocol
             "HTTP/1.1 204 No Content\r\n" +
             Cors(origin) +
             "Access-Control-Allow-Methods: POST, GET, OPTIONS\r\n" +
-            "Access-Control-Allow-Headers: Content-Type, X-KHS-Token\r\n" +
+            "Access-Control-Allow-Headers: Content-Type, X-KHS-Token, Range\r\n" +
             "Access-Control-Allow-Private-Network: true\r\n" +
             "Access-Control-Max-Age: 86400\r\n" +
             "Content-Length: 0\r\n" +

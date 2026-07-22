@@ -29,6 +29,42 @@ public sealed class LocateDocumentsArgs
     public int Max { get; set; }
 }
 
+/// <summary>Args for <c>openLocalFile</c> — a local file path to authorize for serving.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class OpenLocalFileArgs
+{
+    public string? Path { get; set; }
+}
+
+/// <summary>Result of <c>openLocalFile</c>: an opaque capability <see cref="Handle"/> for
+/// <c>GET /file?h=</c> (empty when rejected), the file's display name, and an error message
+/// when the path failed validation.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class OpenLocalFileResult
+{
+    public string Handle { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public string? Error { get; set; }
+}
+
+/// <summary>Args for <c>openFileInDefaultApp</c> — a local file path to hand off to the OS's
+/// registered default program (shell-execute). Unlike <c>openLocalFile</c>, this does not serve
+/// any bytes over HTTP; it only launches the associated program on the service's machine.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class OpenInDefaultAppArgs
+{
+    public string? Path { get; set; }
+}
+
+/// <summary>Result of <c>openFileInDefaultApp</c>: <see cref="Ok"/> true when the launch was
+/// requested, or an <see cref="Error"/> message on validation/launch failure.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class OpenInDefaultAppResult
+{
+    public bool Ok { get; set; }
+    public string? Error { get; set; }
+}
+
 /// <summary>Parameterized SQL (positional '?') for the generic user-settings read/write ops.
 /// The bind values are inherently dynamic (string | number | null) and the rows come back in
 /// arbitrary shapes, so this path stays JSON — there is no point re-encoding already-JSON,

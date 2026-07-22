@@ -7,6 +7,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { fileURLToPath as toPath } from 'node:url'
 import net from 'node:net'
+import http from 'node:http'
 import { spawn, exec, type ChildProcess } from 'node:child_process'
 import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
 
@@ -418,6 +419,29 @@ function devSqlitePlugin(): Plugin {
           }
           return
         }
+
+        // SAME-ORIGIN streaming proxy for local files → pdf.js loads them by URL and
+        // range-fetches (progressive; never the whole file in memory). Serving via this vite
+        // route (not the service's cross-origin port directly) keeps the viewer's file URL
+        // same-origin — it passes pdf.js's file-origin check with no viewer patch and no CORS.
+        // Node PIPES the service's response (forwarding Range/206), so it holds no file bytes.
+        // The service's GET /file is capability-gated by the ?h= handle (minted only via the
+        // token-gated openLocalFile op), so no token is needed on this hop.
+        if (req.method === 'GET' && typeof req.url === 'string' && req.url.startsWith('/khs-file/')) {
+          // Handle rides in the PATH (hex, URL-safe) — survives pdf.js's file= param round-trip.
+          const h = req.url.slice('/khs-file/'.length).split('?')[0].split('/')[0]
+          if (!khsHttpPort || !h) { res.writeHead(502); res.end(); return }
+          const headers: Record<string, string> = {}
+          if (req.headers.range) headers.Range = req.headers.range as string
+          const proxy = http.request(
+            { host: KHS_HOST, port: khsHttpPort, path: `/file/${h}`, method: 'GET', headers },
+            (pres) => { res.writeHead(pres.statusCode || 502, pres.headers); pres.pipe(res) },
+          )
+          proxy.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end() } })
+          proxy.end()
+          return
+        }
+
         // Don't cache pdf.js assets. All DATA flows browser → service HTTP host directly.
         if (req.url?.startsWith('/pdfjs/')) res.setHeader('Cache-Control', 'no-store')
         next()

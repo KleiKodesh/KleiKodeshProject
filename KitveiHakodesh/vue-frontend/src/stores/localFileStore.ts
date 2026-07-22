@@ -344,7 +344,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
       } else {
         const res = await restoreLocalFile(tab.localFilePath)
         if (res) {
-          const isHtmlLike = ext === '.htm' || ext === '.html'
+          // Route by what is actually served: dev Word docs may come back as HTML
+          // (Office-free fallback) — res.kind reports it. Fall back to the extension.
+          const isHtmlLike = res.kind === 'html' || (!res.kind && (ext === '.htm' || ext === '.html'))
           const route = isHtmlLike ? '/html-view' : '/pdf-view'
           tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
         }
@@ -406,7 +408,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const tabId = placeTab({ route: fileRoute, title, localFileName: entry.localFileName ?? title, localFilePath, localFileVirtualUrl: undefined, localFileConverting: false })
       const res = await restoreLocalFile(localFilePath)
       if (res) {
-        tabStore.updateTab(tabId, { localFileVirtualUrl: res.url })
+        // Dev may serve a Word doc as HTML (Office-free fallback) — follow the served kind.
+        const route = res.kind === 'html' ? '/html-view' : res.kind === 'pdf' ? '/pdf-view' : fileRoute
+        tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
       }
       return
     }

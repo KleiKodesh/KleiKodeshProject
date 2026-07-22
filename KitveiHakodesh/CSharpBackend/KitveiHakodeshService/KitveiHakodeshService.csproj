@@ -87,5 +87,8 @@
        leg is referenced here so the service can run FTS searches in-process. -->
   <ItemGroup>
     <ProjectReference Include="..\Ftslib-Csharp\FtsLib\FtsLib.csproj" />
+    <!-- Document conversion (Word→PDF via AOT-safe COM; OOXML→HTML fallback with
+         wiki-style footnotes). Multi-targets net48;net10.0 — the net10.0 leg is used here. -->
+    <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
   </ItemGroup>
 </Project>
