@@ -6,9 +6,11 @@ import {
   IconDocumentPdf20Filled,
   IconDocumentText20Filled,
   IconDocumentGlobe20Filled,
+  IconWindowArrowUp20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
+import { openFileInDefaultApp } from '@/webview-host/bridge'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
 
 const props = defineProps<{
@@ -44,6 +46,13 @@ function onSelect(item: LocalFileSearchResult, openInNewTab = false) {
 function selectItem(index: number, event?: MouseEvent) {
   focusedIndex.value = index
   onSelect(props.items[index]!, wantsNewTab(event))
+}
+
+// Hand the file off to the OS's default program (Word for .docx, Acrobat for .pdf, …).
+// Guarded so the row's open-in-viewer click never also fires.
+function openInDefaultApp(item: LocalFileSearchResult, event: MouseEvent) {
+  event.stopPropagation()
+  void openFileInDefaultApp(item.fullPath)
 }
 
 type FileIconInfo = { component: unknown; color: string }
@@ -119,6 +128,16 @@ defineExpose({
             </span>
             <span class="item-path" dir="ltr">{{ items[virtualRow.index]!.path }}</span>
           </span>
+          <button
+            class="open-in-app-button"
+            type="button"
+            title="פתח בתוכנת ברירת המחדל"
+            @click="openInDefaultApp(items[virtualRow.index]!, $event)"
+            @auxclick.stop
+            @mousedown.stop
+          >
+            <IconWindowArrowUp20Regular />
+          </button>
         </div>
       </div>
     </div>
@@ -207,5 +226,32 @@ defineExpose({
   padding: 0 6px;
   line-height: 1.5;
   white-space: nowrap;
+}
+/* "Open in default program" — a direct child of .file-item at the far inline end (physical
+   left in RTL), vertically CENTERED against the whole row by the row's own align-items:center —
+   mirroring the file-type icon on the opposite (physical-right) edge. It sits OUTSIDE the
+   title/path text block on purpose: inside the baseline-aligned title row the button rode high
+   and read as disconnected. .item-text's flex:1 consumes the middle and lands the button at the
+   edge, so no auto-margin (and no interaction with the date pill) is needed. */
+.open-in-app-button {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  transition: background 0.1s, color 0.1s;
+}
+.open-in-app-button svg {
+  width: 18px;
+  height: 18px;
+  color: inherit;
+}
+.open-in-app-button:hover {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+  color: var(--accent-color, #0078d4);
 }
 </style>
