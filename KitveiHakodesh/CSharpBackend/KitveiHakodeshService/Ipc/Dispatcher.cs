@@ -2,6 +2,7 @@ using System.Text.Json;
 using KitveiHakodeshService.Catalog;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
+using KitveiHakodeshService.Http;
 using KitveiHakodeshService.LocalFiles;
 using KitveiHakodeshService.SefroimDb;
 using KitveiHakodeshService.UserSettings;
@@ -21,6 +22,7 @@ public sealed class Dispatcher(
     FullTextSearchService fts,
     CatalogTocSearchService catalogToc,
     UserSettingsService userSettings,
+    HttpHostState httpState,
     IHostApplicationLifetime lifetime)
 {
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
@@ -45,6 +47,20 @@ public sealed class Dispatcher(
             {
                 case "ping":
                     return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+
+                // The loopback HTTP host's port AND bearer token, handed to the spawner over
+                // this PRIVATE pipe (never a file). Awaits the bind so an early call doesn't
+                // see 0. The pipe's ACL is what scopes who can get these; the token is then
+                // required on every HTTP data request, making the localhost endpoint an
+                // enforced boundary. NOTE: this op must never be exposed over HTTP itself —
+                // it is, but answering it requires already having the token, so it leaks
+                // nothing new to an unauthenticated caller (the 401 gate runs first).
+                case "getHttpPort":
+                    return RpcResponse.Ok(MsgPack.Ser(new HttpPortResult
+                    {
+                        Port = await httpState.GetPortAsync(ct),
+                        Token = httpState.Token,
+                    }));
 
                 // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
                 // cancels the build cleanly (aborts any merge, releases the index lock)

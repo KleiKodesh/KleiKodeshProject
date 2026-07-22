@@ -47,3 +47,8 @@ public sealed class RpcEnvelope
 [MessagePackObject(keyAsPropertyName: true)] public sealed class StartedResult { public bool Started { get; set; } = true; }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class ResetResult { public bool Reset { get; set; } = true; }
 [MessagePackObject(keyAsPropertyName: true)] public sealed class CancelledResult { public bool Cancelled { get; set; } = true; }
+// getHttpPort result: the loopback HTTP endpoint's port AND its per-instance bearer token.
+// Both travel ONLY over the ACL'd pipe — the token is what makes the localhost port an
+// enforced boundary rather than mere obscurity (any local process/web page can reach
+// loopback TCP; only holders of the token pass the host's 401 gate).
+[MessagePackObject(keyAsPropertyName: true)] public sealed class HttpPortResult { public int Port { get; set; } public string Token { get; set; } = ""; }

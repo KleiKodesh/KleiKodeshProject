@@ -17,7 +17,14 @@ namespace KitveiHakodeshService.Ipc;
 /// </summary>
 public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger) : BackgroundService
 {
-    public const string PipeName = "KitveiHakodesh";
+    public const string DefaultPipeName = "KitveiHakodesh";
+
+    // Per-spawn pipe name: a spawner (the Vite dev plugin, or any app) passes a UNIQUE name via
+    // KHS_PIPE_NAME so each spawned instance has its own private pipe — that's how a client
+    // reaches ITS instance's HTTP port (getHttpPort) instead of some other instance sharing a
+    // fixed name. Falls back to the fixed default for the installed-service / standalone case.
+    private readonly string _pipeName =
+        Environment.GetEnvironmentVariable("KHS_PIPE_NAME") is { Length: > 0 } n ? n : DefaultPipeName;
 
     // Keep several listener instances armed at once. A single serial acceptor has a
     // brief window with NO listening instance — between accepting one client and
@@ -30,7 +37,7 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation(
-            @"KitveiHakodesh pipe server listening on \\.\pipe\{Pipe} ({N} acceptors)", PipeName, AcceptorCount);
+            @"KitveiHakodesh pipe server listening on \\.\pipe\{Pipe} ({N} acceptors)", _pipeName, AcceptorCount);
 
         var acceptors = new Task[AcceptorCount];
         for (int i = 0; i < AcceptorCount; i++)
@@ -47,7 +54,7 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
             NamedPipeServerStream? pipe = null;
             try
             {
-                pipe = CreatePipe();
+                pipe = CreatePipe(_pipeName);
                 await pipe.WaitForConnectionAsync(stoppingToken);
 
                 // Hand off to a detached task so this loop can immediately accept the
@@ -70,8 +77,8 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
         }
     }
 
-    private static NamedPipeServerStream CreatePipe() =>
-        new(PipeName,
+    private static NamedPipeServerStream CreatePipe(string pipeName) =>
+        new(pipeName,
             PipeDirection.InOut,
             NamedPipeServerStream.MaxAllowedServerInstances,
             PipeTransmissionMode.Byte,
