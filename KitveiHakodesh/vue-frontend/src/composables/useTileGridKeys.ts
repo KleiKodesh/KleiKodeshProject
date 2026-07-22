@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { wantsNewTab } from '@/composables/useOpenInNewTab'
 import type { Ref } from 'vue'
 
 const TILE_WIDTH = 72 + 20 // tile width + gap (matches .home-grid CSS)
@@ -7,7 +8,7 @@ const TILE_WIDTH = 72 + 20 // tile width + gap (matches .home-grid CSS)
 export function useTilesKeys(
   containerEl: Ref<HTMLElement | null>,
   getCount: () => number,
-  onActivate?: (index: number) => void,
+  onActivate?: (index: number, openInNewTab: boolean) => void,
 ) {
   const focusedIndex = ref(-1)
   const containerFocused = ref(false)
@@ -71,7 +72,8 @@ export function useTilesKeys(
     } else if (e.code === 'Enter' || e.code === 'Space') {
       if (focusedIndex.value >= 0 && onActivate) {
         e.preventDefault()
-        onActivate(focusedIndex.value)
+        // Ctrl/⌘+Enter opens the focused item in a new tab (mirrors Ctrl+click).
+        onActivate(focusedIndex.value, wantsNewTab(e))
       }
     } else if (e.code === 'Home') {
       e.preventDefault()

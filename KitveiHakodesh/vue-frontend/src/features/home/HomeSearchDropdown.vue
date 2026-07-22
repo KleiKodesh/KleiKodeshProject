@@ -19,7 +19,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useListKeys } from '@/composables/useListKeyNav'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type {
   CatalogSearchResult,
   HebrewBooksSearchResult,
@@ -276,6 +276,7 @@ function getTabIcon(route: string): FileIconInfo {
           class="home-search-dropdown__item"
           :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
           data-nav-item
+          :title="withNewTabHint(entry.title)"
           @click="emit('selectRecent', entry, wantsNewTab($event))"
           @auxclick.middle="emit('selectRecent', entry, wantsNewTab($event))"
         >
@@ -303,6 +304,7 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalog' && i.bookId === item.book.id) }"
             data-nav-item
+            :title="withNewTabHint(item.book.parentPath ? `${item.book.title}\n${item.book.parentPath}` : item.book.title)"
             @click="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
             @auxclick.middle="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
           >
@@ -320,6 +322,7 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
             data-nav-item
+            :title="withNewTabHint(`${item.book.title} ${item.tocPath}`)"
             @click="emit('selectCatalogToc', item, wantsNewTab($event))"
             @auxclick.middle="emit('selectCatalogToc', item, wantsNewTab($event))"
           >
@@ -344,6 +347,7 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.book.id === item.book.id) }"
             data-nav-item
+            :title="withNewTabHint(item.book.author ? `${item.book.title}\n${item.book.author}` : item.book.title)"
             @click="emit('selectHebrewBook', item.book, wantsNewTab($event))"
             @auxclick.middle="emit('selectHebrewBook', item.book, wantsNewTab($event))"
           >
@@ -368,6 +372,7 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item"
             :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'file' && i.fullPath === item.fullPath) }"
             data-nav-item
+            :title="withNewTabHint(`${item.fileName}\n${item.fullPath}`)"
             @click="emit('selectFile', item.fullPath, item.fileName, wantsNewTab($event))"
             @auxclick.middle="emit('selectFile', item.fullPath, item.fileName, wantsNewTab($event))"
           >

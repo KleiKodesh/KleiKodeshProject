@@ -23,9 +23,9 @@ import HomeSearchDropdown from '@/features/home/HomeSearchDropdown.vue'
 import { useHomeSearch } from '@/features/home/useHomeSearch'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppShellPane } from '@/composables/useAppShellPane'
-import { isHosted } from '@/webview-host/seforimDb'
 import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
 import { useLocalFileStore } from '@/stores/localFileStore'
+import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { useRecentlyOpenedStore, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
@@ -37,6 +37,7 @@ const emit = defineEmits<{ close: [] }>()
 
 const pane = useAppShellPane(props.paneId)
 const localFileStore = useLocalFileStore()
+const tabStore = useTabStore()
 const settingsStore = useSettingsStore()
 const hebrewBooksHistoryStore = useHebrewBooksHistoryStore()
 
@@ -109,15 +110,15 @@ function onCloseTab(id: string) {
   pane.closeTab(id)
 }
 
-// Recents open in a NEW tab (unlike search results, which navigate the current
-// tab). File entries follow the tabMirror flow: open a fresh tab, then let the
-// shared history-restore (openFromHistory) fill it in place.
-function onSelectRecent(entry: RecentlyOpenedEntry) {
+// Recents navigate the CURRENT tab (like search results); a Ctrl/⌘/middle-click
+// opens a new tab instead (openInNewTab, mirroring HomePage). File entries
+// follow the tabMirror flow: place the tab, then let the shared history-restore
+// (openFromHistory) fill it in.
+function onSelectRecent(entry: RecentlyOpenedEntry, openInNewTab = false) {
   if (entry.route === '/book-view' && entry.bookId !== undefined) {
-    pane.openTab({ route: '/book-view', title: entry.title, bookId: entry.bookId })
+    pane.openOrUpdateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId }, openInNewTab)
   } else {
-    pane.openTab({ route: '/', title: entry.title })
-    localFileStore.openFromHistory(entry)
+    localFileStore.openFromHistory(entry, openInNewTab)
   }
   close()
 }
@@ -187,25 +188,33 @@ function close() {
 }
 
 // ── Result selection — mirrors HomePage, routed through this pane ─────────────
-function onSelectCatalogBook(bookId: number, bookTitle: string) {
-  pane.updateActiveTab({ route: '/book-view', title: bookTitle, bookId })
+// A Ctrl/⌘/middle-click opens a new tab (openInNewTab); a plain click navigates
+// the active tab in place. For the async cases (HebrewBook, File) the target tab
+// id is captured up front and patched by id, because the awaited work can change
+// which tab is active.
+function onSelectCatalogBook(bookId: number, bookTitle: string, openInNewTab = false) {
+  pane.openOrUpdateActiveTab({ route: '/book-view', title: bookTitle, bookId }, openInNewTab)
   close()
 }
 
-function onSelectCatalogToc(item: TocFsItem) {
-  pane.updateActiveTab({
+function onSelectCatalogToc(item: TocFsItem, openInNewTab = false) {
+  pane.openOrUpdateActiveTab({
     route: '/book-view',
     title: item.book.title,
     bookId: item.book.id,
     openTocEntryId: item.tocEntryId,
     openTocLineIndex: item.tocLineIndex ?? undefined,
-  })
+  }, openInNewTab)
   close()
 }
 
-function onSelectHebrewBook(book: HebrewBook) {
+function onSelectHebrewBook(book: HebrewBook, openInNewTab = false) {
   hebrewBooksHistoryStore.trackAccess(book)
-  const tabId = pane.activeTabId.value
+  // Download lifecycle is tab-id-driven — for a Ctrl/⌘-click open a fresh
+  // placeholder tab and target its id.
+  const tabId = openInNewTab
+    ? pane.openTab({ route: '/pdf-view', title: book.title }).id
+    : pane.activeTabId.value
   localFileStore.startHbDownload(book.title, tabId)
   triggerHbDownload(
     String(book.id),
@@ -218,14 +227,24 @@ function onSelectHebrewBook(book: HebrewBook) {
   close()
 }
 
-async function onSelectFile(fullPath: string, fileName: string) {
-  if (!isHosted) { close(); return }
+async function onSelectFile(fullPath: string, fileName: string, openInNewTab = false) {
+  // Dev opens local files too now (restoreLocalFile → service capability + /khs-file proxy).
   const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
   const dotIndex = fileName.lastIndexOf('.')
   const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
 
+  const isHtmlLike = extension === '.htm' || extension === '.html'
+  const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
+
+  // Capture the target tab id up front (a new tab for Ctrl/⌘-click, else the
+  // active tab) and patch it by id — restoreLocalFile awaits, and the active tab
+  // may change during that await.
+  const targetTabId = openInNewTab
+    ? pane.openTab({ route, title: titleWithoutExtension }).id
+    : pane.activeTabId.value
+
   if (extension === '.txt') {
-    pane.updateActiveTab({
+    tabStore.updateTab(targetTabId, {
       route: '/txt-view',
       title: titleWithoutExtension,
       localFileName: fileName,
@@ -236,12 +255,10 @@ async function onSelectFile(fullPath: string, fileName: string) {
     return
   }
 
-  const isHtmlLike = extension === '.htm' || extension === '.html'
-  const route = isHtmlLike ? '/html-view' : '/pdf-view'
   const restored = await restoreLocalFile(fullPath)
   if (!restored?.url) { close(); return }
 
-  pane.updateActiveTab({
+  tabStore.updateTab(targetTabId, {
     route: route as '/html-view' | '/pdf-view',
     title: titleWithoutExtension,
     localFileName: fileName,

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { Component } from 'vue'
 import { IconPin12Filled, IconDelete16Filled } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, OPEN_IN_NEW_TAB_HINT } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
   label: string
@@ -20,6 +20,14 @@ const emit = defineEmits<{ tap: [openInNewTab: boolean]; togglePin: []; remove: 
 
 const isRemoving = ref(false)
 const isPinPopping = ref(false)
+
+// Tooltip: the item label plus the keyboard/mouse hint. Only the recently-opened
+// tiles (actions:true) honour Ctrl+click / Ctrl+Enter, so only they advertise it;
+// the static navigation tiles keep the plain Tab/Enter hint.
+const tileTooltip = computed(() => {
+  const base = `${props.label}\nלחץ Tab למעבר בין האפשרויות, Enter לפתיחה`
+  return props.actions ? `${base}\n${OPEN_IN_NEW_TAB_HINT}` : base
+})
 
 // ── Touch: long-press reveals the actions (touch has no hover) ──────────────────
 // Detected via Pointer Events at runtime rather than an @media (hover) query, so
@@ -120,7 +128,7 @@ function onRemove() {
     <button
       class="tile"
       data-nav-item
-      title="לחץ Tab למעבר בין האפשרויות, Enter לפתיחה"
+      :title="tileTooltip"
       @click="$emit('tap', wantsNewTab($event))"
       @auxclick.middle="$emit('tap', wantsNewTab($event))"
     >

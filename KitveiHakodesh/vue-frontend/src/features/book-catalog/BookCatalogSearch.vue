@@ -6,7 +6,7 @@ import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { useTilesKeys } from '@/composables/useTileGridKeys'
-import { wantsNewTab } from '@/composables/useOpenInNewTab'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
   items: SearchFsItem[]
@@ -36,13 +36,13 @@ const { focusedIndex: listFocused, containerFocused: listContainerFocused } = us
   () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
   () => (props.view !== 'tiles' ? props.items.length : 0),
-  (i) => onSelect(props.items[i]!),
+  (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
 )
 
 const { focusedIndex: tilesFocused, containerFocused: tilesContainerFocused } = useTilesKeys(
   tilesEl,
   () => (props.view === 'tiles' ? props.items.length : 0),
-  (i) => onSelect(props.items[i]!),
+  (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
 )
 
 const itemTitle = (item: SearchFsItem) =>
@@ -53,7 +53,7 @@ function itemTooltip(item: SearchFsItem): string {
   const parts = [title]
   if (item.book.authors) parts.push(item.book.authors)
   if (item.book.parentPath) parts.push(item.book.parentPath)
-  return parts.join('\n')
+  return withNewTabHint(parts.join('\n'))
 }
 
 function onSelect(item: SearchFsItem, openInNewTab = false) {
