@@ -209,6 +209,74 @@ public sealed class Dispatcher(
                         MsgPack.Ser(result));
                 }
 
+                // Acquire a HebrewBooks PDF ENTIRELY in the service (HttpClient, no browser
+                // download interception) and hand back a GET /file capability handle. Lookup
+                // order = user's local folder → app cache → download. A missing book (server
+                // returns a non-PDF body) comes back as NotFound; a network error as NoInternet.
+                // The folder falls back to the shared registry value when the client sends none.
+                case "triggerHbDownload":
+                {
+                    var a = MsgPack.De<HbDownloadArgs>(req.Args);
+                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
+                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                    if (!a.IsOnline)
+                    {
+                        // No connectivity — only a local/cache hit can satisfy; otherwise report offline.
+                        var offline = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: false, ct);
+                        return RpcResponse.Ok(MsgPack.Ser(offline.Path is null
+                            ? new HbDownloadResult { NoInternet = true }
+                            : new HbDownloadResult { Handle = localFileGrants.Grant(offline.Path) }));
+                    }
+                    var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: true, ct);
+                    if (r.Path != null) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Handle = localFileGrants.Grant(r.Path) }));
+                    if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true }));
+                    if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true }));
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed" }));
+                }
+
+                // Restore a persisted HB tab: local/cache only, no download. A hit returns a
+                // handle; a miss returns Redownload=true so the client re-runs triggerHbDownload.
+                case "restoreHbPdf":
+                {
+                    var a = MsgPack.De<HbDownloadArgs>(req.Args);
+                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
+                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                    var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: false, ct);
+                    return RpcResponse.Ok(MsgPack.Ser(r.Path != null
+                        ? new HbDownloadResult { Handle = localFileGrants.Grant(r.Path) }
+                        : new HbDownloadResult { Redownload = true }));
+                }
+
+                case "checkHbLocalFiles":
+                {
+                    var a = MsgPack.De<HbCheckLocalArgs>(req.Args);
+                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
+                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                    var existing = hebrewBooks.CheckLocalFiles(a.BookIds ?? new(), folder);
+                    return RpcResponse.Ok(MsgPack.Ser(new HbCheckLocalResult { ExistingIds = existing }));
+                }
+
+                case "deleteHbLocalFile":
+                {
+                    var a = MsgPack.De<HbDeleteLocalArgs>(req.Args);
+                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
+                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                    var (ok, notFound, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder);
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, Error = error }));
+                }
+
+                // HB local folder in the SHARED registry (same key the hosted AppSettings uses),
+                // so dev and the hosted app agree on where books are saved.
+                case "getHbLocalFolder":
+                    return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHbLocalFolder() }));
+
+                case "setHbLocalFolder":
+                {
+                    var a = MsgPack.De<StringArg>(req.Args);
+                    AppSettingsRegistry.SetHbLocalFolder(a.Value ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHbLocalFolder() }));
+                }
+
                 // ── Dictionary (KitveiHakodesh_dictionary.db) ──────────────────
                 case "dictExact":
                     return RpcResponse.Ok(MsgPack.Ser(dictionary.Exact(Term(req.Args))));

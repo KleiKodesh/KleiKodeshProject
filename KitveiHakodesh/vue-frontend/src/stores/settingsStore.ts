@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
+import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
@@ -180,6 +181,16 @@ export const useSettingsStore = defineStore('settings', () => {
     if (!hebrewBooksLocalFolder.value && window.__webviewHbLocalFolder) {
       hebrewBooksLocalFolder.value = window.__webviewHbLocalFolder
     }
+    // In dev, the HB folder lives in the SHARED registry (HKCU\...\KitveiHakodesh\HebrewBooks\
+    // LocalFolder) so dev and the hosted app agree. Seed from there when localStorage is empty;
+    // the persist watcher below writes user changes back to the same registry value.
+    if (!hebrewBooksLocalFolder.value) {
+      getHbLocalFolderFromRegistry()
+        .then((folder) => {
+          if (folder && !hebrewBooksLocalFolder.value) hebrewBooksLocalFolder.value = folder
+        })
+        .catch(() => {})
+    }
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
@@ -221,7 +232,11 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
   persistSetting(copyWithNotes, KEYS.SETTINGS_COPY_WITH_NOTES)
   persistSetting(copyAsSourceWithQuotation, KEYS.SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION)
-  persistSetting(hebrewBooksLocalFolder, KEYS.SETTINGS_HB_LOCAL_FOLDER)
+  persistSetting(hebrewBooksLocalFolder, KEYS.SETTINGS_HB_LOCAL_FOLDER, () => {
+    // Mirror the folder into the shared registry (dev only; hosted persists via the C# host),
+    // so the hosted app and dev read the same HKCU value.
+    setHbLocalFolderInRegistry(hebrewBooksLocalFolder.value || '')
+  })
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)

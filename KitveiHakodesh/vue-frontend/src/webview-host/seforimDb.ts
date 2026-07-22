@@ -60,6 +60,17 @@ export function onWebviewEvent(fn: EventListener): () => void {
   }
 }
 
+/**
+ * Dispatch a push event to all listeners locally. In hosted mode C# owns this channel
+ * (window.__onWebviewEvent); in DEV there is no C# push side, so bridge functions that
+ * replicate a hosted push-based flow (e.g. the HebrewBooks download, which the hosted app
+ * finishes with an hbPdfReady/hbPdfCancelled push) call this after their service round-trip
+ * so the existing store listeners fire unchanged. No-op semantics are identical to a C# push.
+ */
+export function emitWebviewEvent(msg: Record<string, unknown>): void {
+  for (const fn of _listeners) fn(msg)
+}
+
 if (isHosted) {
   window.__onWebviewEvent = (msg) => {
     for (const fn of _listeners) fn(msg)

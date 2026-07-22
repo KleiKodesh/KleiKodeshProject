@@ -6,7 +6,7 @@
  * Push events from C# arrive via window.__onWebviewEvent (registered in db.ts).
  */
 
-import { isHosted } from './seforimDb'
+import { isHosted, emitWebviewEvent } from './seforimDb'
 import { devPickPdf } from './devFallbacks'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
@@ -230,7 +230,27 @@ export async function restoreHbPdf(
   tabId: string,
   localFolder?: string,
 ): Promise<{ url: string } | { redownload: true } | null> {
-  if (!isHosted) return null
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: local/cache-only lookup via the service (no download). A miss returns redownload —
+    // and, matching the hosted HandleRestoreHbPdf (which self-initiates the re-download and
+    // finishes via an hbPdfReady push), we kick off the in-service download here and replay the
+    // hbPdfReady/hbPdfCancelled events so the store's _converting tab is resolved.
+    try {
+      const r = await serviceCall<{ handle?: string; redownload?: boolean; error?: string }>(
+        'restoreHbPdf',
+        { bookId, localFolder: localFolder || '' },
+      )
+      if (r?.handle) return { url: `/khs-file/${r.handle}` }
+      if (r?.redownload) {
+        // The service builds its own download URL from the book id, so the url arg is unused here.
+        triggerHbDownload(bookId, bookTitle, '', tabId, localFolder, navigator.onLine)
+        return { redownload: true }
+      }
+      return null
+    } catch {
+      return null
+    }
+  }
   const res = await action<{ url?: string; redownload?: boolean; error?: string }>('restoreHbPdf', {
     bookId,
     bookTitle,
@@ -524,6 +544,36 @@ export function triggerHbDownload(
   localFolder?: string,
   isOnline?: boolean,
 ): Promise<{ ok?: boolean }> {
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: the service downloads the PDF ENTIRELY in C# (HttpClient — no browser download
+    // interception) and returns a GET /file capability handle. The hosted app finishes this
+    // flow with an hbPdfReady/hbPdfCancelled PUSH; dev has no C# push channel, so we replay
+    // the same events locally (emitWebviewEvent) after the round-trip. localFileStore's
+    // finishHbDownload/cancelHbDownload listeners then run unchanged.
+    ;(async () => {
+      try {
+        const r = await serviceCall<{
+          handle?: string
+          notFound?: boolean
+          noInternet?: boolean
+          error?: string
+        }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
+        if (r?.handle) {
+          emitWebviewEvent({ event: 'hbPdfReady', url: `/khs-file/${r.handle}`, bookId, bookTitle, tabId })
+        } else {
+          emitWebviewEvent({
+            event: 'hbPdfCancelled',
+            tabId,
+            notFound: !!r?.notFound,
+            noInternet: !!r?.noInternet,
+          })
+        }
+      } catch {
+        emitWebviewEvent({ event: 'hbPdfCancelled', tabId, noInternet: !navigator.onLine })
+      }
+    })()
+    return Promise.resolve({ ok: true })
+  }
   return action<{ ok?: boolean }>('triggerHbDownload', {
     bookId,
     bookTitle,
@@ -542,6 +592,12 @@ export function checkHbLocalFiles(
   bookIds: string[],
   localFolder: string,
 ): Promise<{ existingIds?: string[]; error?: string }> {
+  if (typeof window.__webviewAction !== 'function') {
+    return serviceCall<{ existingIds?: string[]; error?: string }>('checkHbLocalFiles', {
+      bookIds,
+      localFolder,
+    }).catch(() => ({ existingIds: [] }))
+  }
   return action<{ existingIds?: string[]; error?: string }>('checkHbLocalFiles', {
     bookIds,
     localFolder,
@@ -557,6 +613,12 @@ export function deleteHbLocalFile(
   bookId: string,
   localFolder: string,
 ): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
+  if (typeof window.__webviewAction !== 'function') {
+    return serviceCall<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
+      bookId,
+      localFolder,
+    })
+  }
   return action<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
     bookId,
     localFolder,
@@ -573,10 +635,39 @@ export function revealHbLocalFile(
   bookId: string,
   localFolder: string,
 ): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: no WinForms "reveal in Explorer" path. Hand the file to the OS default program via
+    // the service's openFileInDefaultApp (same op the "open in default program" button uses).
+    const sep = localFolder.endsWith('\\') || localFolder.endsWith('/') ? '' : '\\'
+    return serviceCall<{ ok?: boolean; error?: string }>('openFileInDefaultApp', {
+      path: `${localFolder}${sep}${bookId}.pdf`,
+    }).catch(() => ({ error: 'failed' }))
+  }
   return action<{ ok?: boolean; notFound?: boolean; error?: string }>('revealHbLocalFile', {
     bookId,
     localFolder,
   })
+}
+
+/**
+ * Get/set the HebrewBooks local download folder in the SHARED registry
+ * (HKCU\...\KitveiHakodesh\HebrewBooks\LocalFolder — the exact key the hosted app's AppSettings
+ * uses). This keeps dev and the hosted app agreeing on the folder. Hosted mode reads the value
+ * injected as window.__webviewHbLocalFolder and persists via the C# host, so these are dev-only.
+ */
+export async function getHbLocalFolderFromRegistry(): Promise<string> {
+  if (typeof window.__webviewAction === 'function') return window.__webviewHbLocalFolder || ''
+  try {
+    const r = await serviceCall<{ value?: string }>('getHbLocalFolder')
+    return r?.value || ''
+  } catch {
+    return ''
+  }
+}
+
+export function setHbLocalFolderInRegistry(path: string): void {
+  if (typeof window.__webviewAction === 'function') return
+  serviceCallVoid('setHbLocalFolder', { value: path })
 }
 
 /**
@@ -587,6 +678,23 @@ export function triggerHbSaveAs(
   bookTitle: string,
   url: string,
 ): Promise<{ ok?: boolean }> {
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: no native Save As dialog. Fetch the book into the configured local folder (or the
+    // app cache) via the same in-service download, then reveal it so the user can find/move it.
+    ;(async () => {
+      try {
+        const r = await serviceCall<{ handle?: string }>('triggerHbDownload', {
+          bookId,
+          localFolder: '',
+          isOnline: navigator.onLine,
+        })
+        if (r?.handle) window.open(`/khs-file/${r.handle}`, '_blank')
+      } catch {
+        /* ignore — dev convenience only */
+      }
+    })()
+    return Promise.resolve({ ok: true })
+  }
   return action<{ ok?: boolean }>('triggerHbSaveAs', { bookId, bookTitle, url })
 }
 
@@ -596,7 +704,12 @@ export function triggerHbSaveAs(
  * Only available in hosted mode; returns null in dev mode.
  */
 export async function pickFolder(): Promise<string | null> {
-  if (typeof window.__webviewAction !== 'function') return null
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: no native folder dialog. The browser's directory picker can't hand back an absolute
+    // filesystem path (only a directory handle + name), so it can't feed the service's
+    // folder-based lookup. Return null and let the settings UI's text input take the path.
+    return null
+  }
   const result = await action<{ folderPath?: string; cancelled?: boolean; error?: string }>('pickFolder')
   if (result.cancelled || result.error || !result.folderPath) return null
   return result.folderPath
@@ -661,7 +774,11 @@ export async function clearDbPath(): Promise<string | null> {
  * Clear the persisted HebrewBooks local folder setting (saves an empty string to the registry).
  */
 export async function clearHbLocalFolder(): Promise<void> {
-  if (typeof window.__webviewAction !== 'function') return
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: clear the shared registry value (empty string) so the hosted app agrees.
+    setHbLocalFolderInRegistry('')
+    return
+  }
   await action('clearHbLocalFolder').catch(() => {})
 }
 
