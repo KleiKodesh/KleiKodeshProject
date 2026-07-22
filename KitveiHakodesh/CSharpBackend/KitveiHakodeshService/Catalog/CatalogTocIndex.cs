@@ -88,8 +88,14 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// v13: Level + TreeOrder also stored as numeric doc-values so ordering happens
     /// before (and independently of) stored-field materialization, which is now capped.
     /// v14: Talmud "דף X." / "דף X:" entries restructured into a parent "דף X"
-    /// (→ עמוד א line) with עמוד א/עמוד ב children one level deeper.</summary>
-    public const string IndexFormatVersion = "v14";
+    /// (→ עמוד א line) with עמוד א/עמוד ב children one level deeper.
+    /// v15: abbreviation map moved to the generated CatalogAbbreviations table (author/
+    /// book/tractate acronyms from the Otzaria set), and the query side OR-expands
+    /// ambiguous abbreviations (מג"א → מגן אברהם / מגיני ארץ). Index-side tokenization is
+    /// unchanged in practice (real titles carry no abbreviations), but the format bump
+    /// forces a clean rebuild so any stray abbreviation-shaped indexed text re-tokenizes
+    /// under the new table.</summary>
+    public const string IndexFormatVersion = "v15";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// content-free <see cref="Common.DbChangeStamp"/>, prefixed with this index's
@@ -985,7 +991,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// </summary>
     public List<CatalogTocHit> Search(string query, CancellationToken ct = default)
     {
-        var tokens = CatalogTocTextRules.Tokenize(query);
+        var tokens = CatalogTocTextRules.TokenizeQuery(query);
         if (tokens.Count == 0) return [];
 
         IndexSearcher? searcher;
@@ -1004,7 +1010,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         // tried on the catalog and author fields ONLY — never the TOC path, where a
         // one-letter edit is a different chapter/verse — and only for tokens of 3+
         // characters. Exact matching on all fields stays available for every token.
-        if (collector.Count == 0 && tokens.Any(t => t.Length >= 3))
+        if (collector.Count == 0 && tokens.Any(HasFuzzyableWord))
         {
             collector = new SortKeyCollector(ct);
             searcher.Search(BuildQuery(tokens, fuzzy: true), collector);
@@ -1038,11 +1044,15 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         }
 
         // Query-token-order tiebreak: within each (level, book) group that has at least
-        // one in-order hit, drop the out-of-order ones.
-        if (tokens.Count >= 2)
+        // one in-order hit, drop the out-of-order ones. The order test runs on the flat
+        // word sequence (an abbreviation contributes its first/canonical alternative's
+        // words in order); ambiguity in an alternative doesn't change the typed order.
+        var orderWords = new List<string>(tokens.Count);
+        foreach (var t in tokens) orderWords.AddRange(t.Alternatives[0]);
+        if (orderWords.Count >= 2)
         {
             foreach (var h in hits)
-                h.QueryInOrder = ContainsInQueryOrder(h.FullTocPath, tokens);
+                h.QueryInOrder = ContainsInQueryOrder(h.FullTocPath, orderWords);
 
             var groupsWithInOrder = new HashSet<(int Level, long Book)>();
             foreach (var h in hits)
@@ -1055,26 +1065,72 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return hits;
     }
 
-    /// <summary>Per token: MUST(exact on path OR catalog OR author); in fuzzy mode,
-    /// tokens of 3+ chars additionally try fuzzy matches on catalog and author (edit
-    /// distance 1, or 2 for tokens longer than 5 chars) — never on the TOC path.</summary>
-    private static BooleanQuery BuildQuery(List<string> tokens, bool fuzzy)
+    /// <summary>
+    /// Build the contains-all query from the structured query tokens.
+    ///
+    /// Plain word → MUST(word matched on path OR catalog OR author). An abbreviation
+    /// carrying alternatives → MUST( OR over its alternatives ), where each alternative
+    /// is the AND of its words, each word matched on (path OR catalog OR author). So
+    /// מג"א → MUST( (מגן AND אברהם) OR (מגיני AND ארץ) ) and the two candidate books
+    /// both qualify. A single-alternative abbreviation (או"ח → אורח חיים) reduces to a
+    /// plain AND of its words, exactly as before.
+    ///
+    /// Fuzzy mode: a WORD of 3+ chars additionally tries fuzzy matches on catalog and
+    /// author (edit distance 1, or 2 for words longer than 5 chars) — never on the TOC
+    /// path. Applies inside alternatives too.
+    /// </summary>
+    private static BooleanQuery BuildQuery(List<CatalogTocTextRules.QueryToken> tokens, bool fuzzy)
     {
         var bq = new BooleanQuery();
-        foreach (var token in tokens.Distinct())
+        foreach (var token in tokens)
         {
-            var perToken = new BooleanQuery();
-            foreach (var field in IndexedFields)
-                perToken.Add(new TermQuery(new Term(field, token)), Occur.SHOULD);
-            if (fuzzy && token.Length >= 3)
+            if (token.IsPlain)
             {
-                int maxEdits = token.Length <= 5 ? 1 : 2;
-                perToken.Add(new FuzzyQuery(new Term(FieldCatalog, token), maxEdits), Occur.SHOULD);
-                perToken.Add(new FuzzyQuery(new Term(FieldAuthor, token), maxEdits), Occur.SHOULD);
+                bq.Add(WordClause(token.Word, fuzzy), Occur.MUST);
+                continue;
             }
-            bq.Add(perToken, Occur.MUST);
+
+            // Abbreviation: MUST( OR over alternatives ). One alternative that fully
+            // matches satisfies the clause.
+            var anyAlt = new BooleanQuery();
+            foreach (var alt in token.Alternatives)
+            {
+                // Alternative = AND of its words. A single-word alternative collapses to
+                // one word clause; Lucene flattens the one-child BooleanQuery.
+                var altAnd = new BooleanQuery();
+                foreach (var word in alt)
+                    altAnd.Add(WordClause(word, fuzzy), Occur.MUST);
+                anyAlt.Add(altAnd, Occur.SHOULD);
+            }
+            bq.Add(anyAlt, Occur.MUST);
         }
         return bq;
+    }
+
+    /// <summary>One word matched on any indexed field: (path OR catalog OR author), plus
+    /// fuzzy catalog/author when requested and the word is long enough.</summary>
+    private static BooleanQuery WordClause(string word, bool fuzzy)
+    {
+        var perWord = new BooleanQuery();
+        foreach (var field in IndexedFields)
+            perWord.Add(new TermQuery(new Term(field, word)), Occur.SHOULD);
+        if (fuzzy && word.Length >= 3)
+        {
+            int maxEdits = word.Length <= 5 ? 1 : 2;
+            perWord.Add(new FuzzyQuery(new Term(FieldCatalog, word), maxEdits), Occur.SHOULD);
+            perWord.Add(new FuzzyQuery(new Term(FieldAuthor, word), maxEdits), Occur.SHOULD);
+        }
+        return perWord;
+    }
+
+    /// <summary>True when a query token has any word of 3+ chars — the threshold that
+    /// makes the fuzzy fallback worthwhile.</summary>
+    private static bool HasFuzzyableWord(CatalogTocTextRules.QueryToken token)
+    {
+        foreach (var alt in token.Alternatives)
+            foreach (var word in alt)
+                if (word.Length >= 3) return true;
+        return false;
     }
 
     /// <summary>

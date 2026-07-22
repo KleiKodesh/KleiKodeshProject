@@ -46,6 +46,35 @@
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
   </ItemGroup>
 
+  <!-- Catalog abbreviation table. catalog_abbreviations.json is the hand-audited source;
+       Catalog/CatalogAbbreviations.g.cs is generated from it (build-time codegen keeps the
+       map as compiled data — no runtime JSON parse, AOT-clean). The JSON is not compiled,
+       only tracked; this target fails the build if the generated file is stale so the two
+       never drift. Regenerate with scripts/gen_catalog_abbreviations. -->
+  <ItemGroup>
+    <None Include="Catalog\catalog_abbreviations.json" />
+  </ItemGroup>
+  <Target Name="CheckCatalogAbbreviationsFresh" BeforeTargets="CoreCompile">
+    <!-- Pull the two files' last-write times into item metadata (MSBuild populates
+         %(ModifiedTime) for file items); compare as sortable yyyyMMddHHmmss strings.
+         GetLastWriteTimeUtc is not on MSBuild's property-function allowlist, so this
+         item-metadata route is the supported way to compare file timestamps. -->
+    <ItemGroup>
+      <_AbbrevJson Include="Catalog\catalog_abbreviations.json" Condition="Exists('Catalog\catalog_abbreviations.json')" />
+      <_AbbrevGen Include="Catalog\CatalogAbbreviations.g.cs" Condition="Exists('Catalog\CatalogAbbreviations.g.cs')" />
+    </ItemGroup>
+    <Error
+      Condition="Exists('Catalog\catalog_abbreviations.json') AND !Exists('Catalog\CatalogAbbreviations.g.cs')"
+      Text="Catalog/CatalogAbbreviations.g.cs is missing — regenerate it from catalog_abbreviations.json (scripts/gen_catalog_abbreviations.py)." />
+    <PropertyGroup>
+      <_AbbrevJsonStamp>@(_AbbrevJson->'%(ModifiedTime)')</_AbbrevJsonStamp>
+      <_AbbrevGenStamp>@(_AbbrevGen->'%(ModifiedTime)')</_AbbrevGenStamp>
+    </PropertyGroup>
+    <Error
+      Condition="'$(_AbbrevJsonStamp)' != '' AND '$(_AbbrevGenStamp)' != '' AND $([System.String]::Compare('$(_AbbrevJsonStamp)', '$(_AbbrevGenStamp)')) &gt; 0"
+      Text="Catalog/CatalogAbbreviations.g.cs is STALE (older than catalog_abbreviations.json) — regenerate it (scripts/gen_catalog_abbreviations.py)." />
+  </Target>
+
   <!-- Lucene discovers codecs/postings/doc-values formats via reflection (NamedSPILoader +
        Activator.CreateInstance). Root the assembly so ILC keeps that metadata under native
        AOT — without this the published exe throws MissingMethodException on first use

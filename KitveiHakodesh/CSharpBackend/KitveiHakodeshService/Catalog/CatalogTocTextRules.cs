@@ -18,100 +18,191 @@ namespace KitveiHakodeshService.Catalog;
 /// </summary>
 public static class CatalogTocTextRules
 {
-    /// <summary>Canonical token map. Key = the exact token as typed/stored (after
-    /// whitespace splitting, before any character stripping); value = the canonical
-    /// token(s) it expands to. Most entries map to a single token (spelling variants);
-    /// the Shulchan Aruch / Tur section abbreviations expand to their full two-word
-    /// names so the abbreviation matches the same tokens the spelled-out section does.
-    /// Each abbreviation is listed in three quote flavours: ASCII quote, Hebrew
-    /// gershayim, and doubled ASCII apostrophe.</summary>
-    private static readonly Dictionary<string, string[]> Canonical = new(StringComparer.Ordinal)
+    /// <summary>Non-abbreviation spelling normalizations (כתיב חסר → מלא): a bare word
+    /// that the DB and queries may spell either way, folded to one canonical spelling so
+    /// index and query meet. Kept tiny and separate from the abbreviation map — these
+    /// carry no quote mark and are not acronyms.</summary>
+    private static readonly Dictionary<string, string> Spelling = new(StringComparer.Ordinal)
     {
-        ["שלחן"] = ["שולחן"],
-        ["שו\"ע"] = ["שולחן"],   // ASCII quote
-        ["שו״ע"] = ["שולחן"],    // Hebrew gershayim
-        ["שו''ע"] = ["שולחן"],   // doubled ASCII apostrophe
-        ["ש\"ע"] = ["שולחן"],    // short form, ASCII quote
-        ["ש״ע"] = ["שולחן"],     // short form, gershayim
-        ["ש''ע"] = ["שולחן"],    // short form, doubled ASCII apostrophe
-
-        // אורח חיים
-        ["או\"ח"] = ["אורח", "חיים"],
-        ["או״ח"] = ["אורח", "חיים"],
-        ["או''ח"] = ["אורח", "חיים"],
-
-        // חושן משפט
-        ["חו\"מ"] = ["חושן", "משפט"],
-        ["חו״מ"] = ["חושן", "משפט"],
-        ["חו''מ"] = ["חושן", "משפט"],
-
-        // יורה דעה — both the long (יור"ד) and the common short (יו"ד) abbreviations
-        ["יור\"ד"] = ["יורה", "דעה"],
-        ["יור״ד"] = ["יורה", "דעה"],
-        ["יור''ד"] = ["יורה", "דעה"],
-        ["יו\"ד"] = ["יורה", "דעה"],
-        ["יו״ד"] = ["יורה", "דעה"],
-        ["יו''ד"] = ["יורה", "דעה"],
-
-        // אבן העזר
-        ["אבהע\"ז"] = ["אבן", "העזר"],
-        ["אבהע״ז"] = ["אבן", "העזר"],
-        ["אבהע''ז"] = ["אבן", "העזר"],
+        ["שלחן"] = "שולחן",
     };
 
+    /// <summary>The abbreviation map (generated from Catalog/catalog_abbreviations.json).
+    /// Key = a typed abbreviation in one quote flavour (single word like שו"ע, or a
+    /// multi-word phrase like משנה תורה / שו"ע הגר"ז); value = alternatives, each an
+    /// ordered word list that is AND-matched. More than one alternative = an ambiguous
+    /// abbreviation that OR-expands (only used on the QUERY side — see
+    /// <see cref="TokenizeQuery"/>).</summary>
+    private static readonly Dictionary<string, string[][]> Abbrev = CatalogAbbreviations.Map;
+
+    /// <summary>Largest key word-count in <see cref="Abbrev"/> — the lookahead window
+    /// for greedy multi-word matching. Computed once from the generated map.</summary>
+    private static readonly int MaxKeyWords = ComputeMaxKeyWords();
+
+    private static int ComputeMaxKeyWords()
+    {
+        int max = 1;
+        foreach (var key in Abbrev.Keys)
+        {
+            int words = 1;
+            foreach (char c in key) if (c == ' ') words++;
+            if (words > max) max = words;
+        }
+        return max;
+    }
+
     /// <summary>
-    /// Run the full pipeline on a text (a query, or a document's search text) and
-    /// return its tokens. Lowercases (Hebrew is unaffected; Latin becomes uniform).
+    /// Run the full pipeline on a text (a document's search text, or the order-rule
+    /// reference) and return its tokens. This is the INDEX-side / plain tokenizer: an
+    /// abbreviation expands to its FIRST alternative's words (indexed text is real book
+    /// titles that virtually never contain abbreviations, and the first alternative is
+    /// the canonical reading). The query side uses <see cref="TokenizeQuery"/>, which
+    /// preserves all alternatives for OR-expansion. Lowercases (Hebrew is unaffected;
+    /// Latin becomes uniform).
     /// </summary>
     public static List<string> Tokenize(string text)
     {
         var tokens = new List<string>();
-        foreach (var raw in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        var raws = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < raws.Length; )
         {
-            // 1. Canonical normalization — token-based, tried on the raw token and on
-            //    the token with edge punctuation trimmed (so "(שו"ע)" still maps).
-            if (!Canonical.TryGetValue(raw, out var expansion))
+            if (TryMatchAbbrev(raws, i, out var alts, out int consumed))
             {
-                string trimmed = TrimEdgeNonWord(raw);
-                if (trimmed.Length > 0) Canonical.TryGetValue(trimmed, out expansion);
-            }
-            if (expansion is not null)
-            {
-                // The canonical tokens are already clean Hebrew (no punctuation) and an
-                // abbreviation never carries a daf/amud mark, so they bypass the amud and
-                // strip steps and are emitted verbatim.
-                tokens.AddRange(expansion);
+                // Abbreviation words are already clean Hebrew (no punctuation) and never
+                // carry a daf/amud mark, so they bypass the amud and strip steps. The
+                // index/plain tokenizer takes the first (canonical) alternative.
+                tokens.AddRange(alts[0]);
+                i += consumed;
                 continue;
             }
 
-            string tok = raw;
-
-            // 2. Amud normalization — right after a דף token, a trailing "." means
-            //    עמוד א and a trailing ":" means עמוד ב. Applies to any דף TOC (and to
-            //    queries typed the same way), and must see the mark before stripping.
-            string? amud = null;
-            if (tokens.Count > 0 && tokens[^1] == "דף" && tok.Length > 1)
-            {
-                if (tok.EndsWith('.')) amud = "א";
-                else if (tok.EndsWith(':')) amud = "ב";
-                if (amud is not null) tok = tok[..^1];
-            }
-
-            // 3. Strip all non-word characters. 4. Emit the token(s).
-            var sb = new System.Text.StringBuilder(tok.Length);
-            foreach (char c in tok)
-                if (char.IsLetter(c) || char.IsNumber(c))
-                    sb.Append(char.ToLowerInvariant(c));
-            if (sb.Length > 0) tokens.Add(sb.ToString());
-            else amud = null; // the mark stood alone — nothing to attach an amud to
-
-            if (amud is not null)
-            {
-                tokens.Add("עמוד");
-                tokens.Add(amud);
-            }
+            EmitNormalizedToken(raws[i], tokens);
+            i++;
         }
         return tokens;
+    }
+
+    /// <summary>
+    /// The QUERY-side tokenizer. Identical to <see cref="Tokenize"/> except an
+    /// abbreviation is emitted as an <see cref="QueryToken"/> carrying ALL its
+    /// alternatives, so an ambiguous abbreviation (מג"א → מגן אברהם / מגיני ארץ) can be
+    /// OR-expanded by the query builder. Plain words become single-alternative,
+    /// single-word tokens.
+    /// </summary>
+    public static List<QueryToken> TokenizeQuery(string text)
+    {
+        var result = new List<QueryToken>();
+        // A scratch list reused for the daf/amud lookback: the amud rule keys off the
+        // PREVIOUS emitted plain token being "דף".
+        var flat = new List<string>();
+        var raws = text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < raws.Length; )
+        {
+            if (TryMatchAbbrev(raws, i, out var alts, out int consumed))
+            {
+                result.Add(new QueryToken(alts));
+                // An abbreviation's expansion is never "דף", so the amud lookback below
+                // simply sees a non-"דף" previous token.
+                flat.Add(alts[0].Length > 0 ? alts[0][^1] : "");
+                i += consumed;
+                continue;
+            }
+
+            int before = flat.Count;
+            EmitNormalizedToken(raws[i], flat);
+            for (int j = before; j < flat.Count; j++)
+                result.Add(new QueryToken(flat[j]));
+            i++;
+        }
+        return result;
+    }
+
+    /// <summary>Greedy longest-match abbreviation lookup starting at raw token
+    /// <paramref name="start"/>. Tries the longest window first (up to
+    /// <see cref="MaxKeyWords"/>), so a multi-word key (משנה תורה, שו"ע הגר"ז) wins over
+    /// its first word alone. Each window is tried as typed and edge-trimmed (so "(שו"ע)"
+    /// still maps). On a hit, <paramref name="consumed"/> is the number of raw tokens the
+    /// key spans.</summary>
+    private static bool TryMatchAbbrev(string[] raws, int start, out string[][] alts, out int consumed)
+    {
+        int maxWindow = Math.Min(MaxKeyWords, raws.Length - start);
+        for (int w = maxWindow; w >= 1; w--)
+        {
+            string candidate = w == 1 ? raws[start] : string.Join(' ', raws, start, w);
+            if (Abbrev.TryGetValue(candidate, out alts!))
+            {
+                consumed = w;
+                return true;
+            }
+            string trimmed = TrimEdgeNonWord(candidate);
+            if (trimmed.Length > 0 && trimmed.Length != candidate.Length && Abbrev.TryGetValue(trimmed, out alts!))
+            {
+                consumed = w;
+                return true;
+            }
+        }
+        alts = null!;
+        consumed = 0;
+        return false;
+    }
+
+    /// <summary>The amud + strip + spelling-fold steps for a single non-abbreviation
+    /// token, appending the resulting token(s) to <paramref name="tokens"/>.</summary>
+    private static void EmitNormalizedToken(string raw, List<string> tokens)
+    {
+        string tok = raw;
+
+        // Amud normalization — right after a דף token, a trailing "." means עמוד א and a
+        // trailing ":" means עמוד ב. Applies to any דף TOC (and to queries typed the same
+        // way), and must see the mark before stripping.
+        string? amud = null;
+        if (tokens.Count > 0 && tokens[^1] == "דף" && tok.Length > 1)
+        {
+            if (tok.EndsWith('.')) amud = "א";
+            else if (tok.EndsWith(':')) amud = "ב";
+            if (amud is not null) tok = tok[..^1];
+        }
+
+        // Strip all non-word characters, then fold known spelling variants.
+        var sb = new System.Text.StringBuilder(tok.Length);
+        foreach (char c in tok)
+            if (char.IsLetter(c) || char.IsNumber(c))
+                sb.Append(char.ToLowerInvariant(c));
+        if (sb.Length > 0)
+        {
+            string clean = sb.ToString();
+            tokens.Add(Spelling.TryGetValue(clean, out var folded) ? folded : clean);
+        }
+        else
+        {
+            amud = null; // the mark stood alone — nothing to attach an amud to
+        }
+
+        if (amud is not null)
+        {
+            tokens.Add("עמוד");
+            tokens.Add(amud);
+        }
+    }
+
+    /// <summary>One query token: either a plain word, or an abbreviation carrying its
+    /// alternatives. Each alternative is an ordered word list that is AND-matched; more
+    /// than one alternative means the abbreviation OR-expands.</summary>
+    public readonly struct QueryToken
+    {
+        /// <summary>Alternatives; each is an ordered AND-group of words. A plain word is
+        /// a single alternative of a single word.</summary>
+        public readonly string[][] Alternatives;
+
+        /// <summary>True when the token is a plain single word (exactly one alternative
+        /// of one word) — the common case, matched like any indexed term.</summary>
+        public bool IsPlain => Alternatives.Length == 1 && Alternatives[0].Length == 1;
+
+        /// <summary>The plain word (valid only when <see cref="IsPlain"/>).</summary>
+        public string Word => Alternatives[0][0];
+
+        public QueryToken(string word) => Alternatives = [[word]];
+        public QueryToken(string[][] alternatives) => Alternatives = alternatives;
     }
 
     private static string TrimEdgeNonWord(string s)
