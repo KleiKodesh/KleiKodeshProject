@@ -5,9 +5,11 @@ namespace KitveiHakodeshService.Catalog;
 /// and query time (the whole point: both sides meet at the same tokens).
 ///
 /// Pipeline, in this exact order:
-///   1. Canonical normalization (token-based) — variant spellings map to one canonical
-///      token. This MUST run before punctuation stripping: שו"ע contains a quote, and
-///      once stripped it would become שוע and could no longer be recognized.
+///   1. Canonical normalization (token-based) — variant spellings and abbreviations map
+///      to one or more canonical tokens (שו"ע → שולחן; the Shulchan Aruch section
+///      abbreviations או"ח / חו"מ / יו"ד / אבהע"ז expand to their full two-word names).
+///      This MUST run before punctuation stripping: the abbreviations contain a quote,
+///      and once stripped they could no longer be recognized.
 ///   2. Talmud page (amud) normalization — a token following דף that ends with the
 ///      amud mark expands: "דף יד." → "דף יד עמוד א", "דף יד:" → "דף יד עמוד ב".
 ///      This too MUST run before punctuation stripping (the mark IS the information).
@@ -17,16 +19,44 @@ namespace KitveiHakodeshService.Catalog;
 public static class CatalogTocTextRules
 {
     /// <summary>Canonical token map. Key = the exact token as typed/stored (after
-    /// whitespace splitting, before any character stripping); value = canonical form.</summary>
-    private static readonly Dictionary<string, string> Canonical = new(StringComparer.Ordinal)
+    /// whitespace splitting, before any character stripping); value = the canonical
+    /// token(s) it expands to. Most entries map to a single token (spelling variants);
+    /// the Shulchan Aruch / Tur section abbreviations expand to their full two-word
+    /// names so the abbreviation matches the same tokens the spelled-out section does.
+    /// Each abbreviation is listed in three quote flavours: ASCII quote, Hebrew
+    /// gershayim, and doubled ASCII apostrophe.</summary>
+    private static readonly Dictionary<string, string[]> Canonical = new(StringComparer.Ordinal)
     {
-        ["שלחן"] = "שולחן",
-        ["שו\"ע"] = "שולחן",   // ASCII quote
-        ["שו״ע"] = "שולחן",    // Hebrew gershayim
-        ["שו''ע"] = "שולחן",   // doubled ASCII apostrophe
-        ["ש\"ע"] = "שולחן",    // short form, ASCII quote
-        ["ש״ע"] = "שולחן",     // short form, gershayim
-        ["ש''ע"] = "שולחן",    // short form, doubled ASCII apostrophe
+        ["שלחן"] = ["שולחן"],
+        ["שו\"ע"] = ["שולחן"],   // ASCII quote
+        ["שו״ע"] = ["שולחן"],    // Hebrew gershayim
+        ["שו''ע"] = ["שולחן"],   // doubled ASCII apostrophe
+        ["ש\"ע"] = ["שולחן"],    // short form, ASCII quote
+        ["ש״ע"] = ["שולחן"],     // short form, gershayim
+        ["ש''ע"] = ["שולחן"],    // short form, doubled ASCII apostrophe
+
+        // אורח חיים
+        ["או\"ח"] = ["אורח", "חיים"],
+        ["או״ח"] = ["אורח", "חיים"],
+        ["או''ח"] = ["אורח", "חיים"],
+
+        // חושן משפט
+        ["חו\"מ"] = ["חושן", "משפט"],
+        ["חו״מ"] = ["חושן", "משפט"],
+        ["חו''מ"] = ["חושן", "משפט"],
+
+        // יורה דעה — both the long (יור"ד) and the common short (יו"ד) abbreviations
+        ["יור\"ד"] = ["יורה", "דעה"],
+        ["יור״ד"] = ["יורה", "דעה"],
+        ["יור''ד"] = ["יורה", "דעה"],
+        ["יו\"ד"] = ["יורה", "דעה"],
+        ["יו״ד"] = ["יורה", "דעה"],
+        ["יו''ד"] = ["יורה", "דעה"],
+
+        // אבן העזר
+        ["אבהע\"ז"] = ["אבן", "העזר"],
+        ["אבהע״ז"] = ["אבן", "העזר"],
+        ["אבהע''ז"] = ["אבן", "העזר"],
     };
 
     /// <summary>
@@ -40,14 +70,21 @@ public static class CatalogTocTextRules
         {
             // 1. Canonical normalization — token-based, tried on the raw token and on
             //    the token with edge punctuation trimmed (so "(שו"ע)" still maps).
-            string tok = raw;
-            if (!Canonical.TryGetValue(tok, out var canonical))
+            if (!Canonical.TryGetValue(raw, out var expansion))
             {
-                string trimmed = TrimEdgeNonWord(tok);
-                if (trimmed.Length > 0 && Canonical.TryGetValue(trimmed, out canonical)) tok = canonical;
-                else canonical = null;
+                string trimmed = TrimEdgeNonWord(raw);
+                if (trimmed.Length > 0) Canonical.TryGetValue(trimmed, out expansion);
             }
-            if (canonical is not null) tok = canonical;
+            if (expansion is not null)
+            {
+                // The canonical tokens are already clean Hebrew (no punctuation) and an
+                // abbreviation never carries a daf/amud mark, so they bypass the amud and
+                // strip steps and are emitted verbatim.
+                tokens.AddRange(expansion);
+                continue;
+            }
+
+            string tok = raw;
 
             // 2. Amud normalization — right after a דף token, a trailing "." means
             //    עמוד א and a trailing ":" means עמוד ב. Applies to any דף TOC (and to
