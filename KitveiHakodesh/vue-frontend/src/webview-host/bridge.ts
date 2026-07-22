@@ -9,6 +9,7 @@
 import { isHosted } from './seforimDb'
 import { devPickPdf } from './devFallbacks'
 import { serviceCall, serviceCallVoid } from './serviceClient'
+import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 
 declare global {
   interface Window {
@@ -80,6 +81,10 @@ export interface LocalFileResult {
 
 export interface LocalFileRestoreResult {
   url: string
+  /** Dev only: what the service actually serves for this file. Word-family docs render to
+   *  'pdf' (Word conversion) or 'html' (Office-free fallback with wiki-style footnotes) —
+   *  the caller must route /html-view for 'html'. Undefined in hosted mode (always PDF). */
+  kind?: 'pdf' | 'html'
 }
 
 // ── Hosted actions ────────────────────────────────────────────────────────────
@@ -127,23 +132,88 @@ export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResu
 }
 
 /**
- * Restore a local file tab from a persisted file path.
- * C# re-registers the virtual host and returns the URL.
+ * Restore/open a local file tab from a file PATH.
+ *
+ * Hosted: C# re-registers the virtual host and returns the URL.
+ * Dev: authorize the path with the KitveiHakodesh service — it validates the path and mints
+ * an unguessable capability handle — then serve it through the same-origin `/khs-file` proxy,
+ * which range-streams it so pdf.js loads the PDF progressively (never the whole file in
+ * memory). Because we persist the PATH (not the URL) and rebuild this on every open, session
+ * reload and recents work even though the service's port/token change each restart.
  */
 export async function restoreLocalFile(filePath: string): Promise<LocalFileRestoreResult | null> {
-  if (!isHosted) return null
+  // Dev is detected by the ABSENCE of the C# bridge (isHosted is also true in dev, so it can't
+  // distinguish — see pickLocalFile). In dev, authorize the path with the service and serve it
+  // via the same-origin /khs-file proxy.
+  if (typeof window.__webviewAction !== 'function') {
+    try {
+      const r = await serviceCall<{ handle: string; fileName: string; error?: string }>(
+        'openLocalFile',
+        { path: filePath },
+      )
+      if (!r?.handle) return null
+      // The service reports what it will actually serve: a converted Word doc comes back as
+      // *.pdf (Word) or *.html (Office-free fallback) — the viewer route must follow suit.
+      const kind = r.fileName?.toLowerCase().endsWith('.html') ? ('html' as const) : ('pdf' as const)
+      return { url: `/khs-file/${r.handle}`, kind }
+    } catch {
+      return null
+    }
+  }
   const res = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath })
   if (res.error || !res.url) return null
   return { url: res.url }
 }
 
 /**
- * Read a .txt file from disk and return its raw UTF-8 content.
+ * Open a local file in the system's default program for its type (Word for .docx,
+ * Acrobat/Reader for .pdf, the browser for .html, …) — the equivalent of double-clicking
+ * the file in Explorer. Any file type is allowed (unlike the in-app viewer's allow-list):
+ * the user is deliberately handing the file off to whatever program the OS associates with it.
+ *
+ * Hosted: the C# host shell-executes the path (`openInDefaultApp`).
+ * Dev: the KitveiHakodesh service validates the path and shell-executes it on its machine
+ * (`openFileInDefaultApp`) — the service runs on the same box as the dev browser.
+ * Returns true when the launch was requested, false on any error/unavailable bridge.
+ */
+export async function openFileInDefaultApp(filePath: string): Promise<boolean> {
+  if (typeof window.__webviewAction !== 'function') {
+    try {
+      const r = await serviceCall<{ ok?: boolean; error?: string }>('openFileInDefaultApp', {
+        path: filePath,
+      })
+      return !!r?.ok
+    } catch {
+      return false
+    }
+  }
+  try {
+    const res = await action<{ ok?: boolean; error?: string }>('openInDefaultApp', { filePath })
+    return !!res?.ok
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Read a .txt file from disk and return its content (string).
  * Used by TxtViewPage to load content on mount and on session restore.
- * In dev mode, returns null — the dev file picker provides content directly via blob URL.
  */
 export async function readTxtFileContent(filePath: string): Promise<string | null> {
-  if (!isHosted) return null
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: authorize + fetch the .txt through the same capability-gated /khs-file proxy, then
+    // decode with the shared encoding-detection util (BOM → UTF-8 → Windows-1255 fallback), the
+    // same detection the hosted lib uses — a naive UTF-8 decode garbles legacy Hebrew .txt.
+    try {
+      const r = await serviceCall<{ handle: string; error?: string }>('openLocalFile', { path: filePath })
+      if (!r?.handle) return null
+      const res = await fetch(`/khs-file/${r.handle}`, { cache: 'no-store' })
+      if (!res.ok) return null
+      return decodeTextDetectEncoding(await res.arrayBuffer())
+    } catch {
+      return null
+    }
+  }
   const res = await action<{ textContent?: string; error?: string }>('readTxtFileContent', { filePath })
   if (res.error || !res.textContent) return null
   return res.textContent
