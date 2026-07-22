@@ -234,6 +234,18 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed" }));
                 }
 
+                // Poll the live byte progress of an in-flight HB download (streamed in the service).
+                // The frontend calls this every ~300ms while a book tab is in the downloading state
+                // and updates the loading text; Active=false means the download already finished.
+                case "hbDownloadProgress":
+                {
+                    var a = MsgPack.De<HbProgressArgs>(req.Args);
+                    var p = hebrewBooks.GetProgress(a.BookId ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(p is null
+                        ? new HbProgressResult { Active = false }
+                        : new HbProgressResult { Active = true, Received = p.Value.received, Total = p.Value.total }));
+                }
+
                 // Restore a persisted HB tab: local/cache only, no download. A hit returns a
                 // handle; a miss returns Redownload=true so the client re-runs triggerHbDownload.
                 case "restoreHbPdf":

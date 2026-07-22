@@ -179,6 +179,14 @@ const iframeSrc = computed(() => {
 const converting = computed(() => paneNavigation.activeTab.localFileConverting ?? false)
 const loadingType = computed(() => paneNavigation.activeTab.localFileLoadingType ?? 'converting')
 const fileName = computed(() => paneNavigation.activeTab.localFileName ?? null)
+// Live HebrewBooks download progress text (e.g. "6.2 / 13.2 MB · 47%"), when available.
+const downloadProgress = computed(() => paneNavigation.activeTab.localFileDownloadProgress ?? null)
+const loadingSubText = computed(() => {
+  if (loadingType.value !== 'downloading') return 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
+  return downloadProgress.value
+    ? `מוריד את הספר — ${downloadProgress.value}`
+    : 'מוריד את הספר — אנא המתן'
+})
 
 function cancelConversion() {
   localFileStore.cancelConversion(paneNavigation.activeTabId)
@@ -192,13 +200,7 @@ function cancelConversion() {
       <div class="converting-card">
         <LoadingAnimation />
         <div class="converting-name">{{ fileName }}</div>
-        <div class="converting-sub">
-          {{
-            loadingType === 'downloading'
-              ? 'מוריד את הספר — אנא המתן'
-              : 'ממיר לקובץ PDF — התהליך עשוי לארוך זמן מה'
-          }}
-        </div>
+        <div class="converting-sub">{{ loadingSubText }}</div>
         <button class="cancel-btn" @click="cancelConversion">
           <IconDismiss20Regular />
           <span>ביטול</span>
