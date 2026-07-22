@@ -214,7 +214,10 @@ defineExpose({
   direction: ltr;
   text-align: right;
 }
-/* Pill pushed to the far inline end of the title row (physical left in RTL) */
+/* Date pill pushed to the far inline-end of the title row (physical left in RTL) so its
+   left edge lines up vertically with the path row's left edge below it — the two-line item
+   then reads as a tidy left-aligned column (pill over path), with the title on the right and
+   the open-in-app button just outside to the far physical-left. */
 .item-date-pill {
   margin-inline-start: auto;
   flex-shrink: 0;
