@@ -453,6 +453,10 @@ watch(() => props.loading, (loading) => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Named container so the reading column widens its side padding based on the
+     commentary panel's OWN width, not the whole pane (it's usually a narrower
+     side/split panel). */
+  container: commentary-view / inline-size;
 }
 .body {
   flex: 1;
@@ -531,6 +535,13 @@ watch(() => props.loading, (loading) => {
   line-height: var(--commentary-line-height, 1.7);
   color: var(--text-primary);
   text-align: justify;
+}
+/* On a wide commentary panel give the text a bit more breathing room from the
+   edges (רווח נוסף מהצדדים במסך רחב), matching the lines view. */
+@container commentary-view (min-width: 600px) {
+  .line {
+    padding-inline: 22px;
+  }
 }
 .line :deep(h1),
 .line :deep(h2),

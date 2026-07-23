@@ -347,6 +347,14 @@ defineExpose({ captureScrollPos, scrollToBook })
   max-width: var(--lines-content-max-width, none);
   margin-inline: auto;
 }
+/* On a wide pane give the results a bit more breathing room from the edges
+   (רווח נוסף מהצדדים במסך רחב). Container query on the app-shell pane, so it
+   reacts to THIS pane's width, not the viewport (split-shell aware). */
+@container app-shell (min-width: 600px) {
+  .result-item {
+    padding-inline: 24px;
+  }
+}
 .result-header {
   display: flex;
   align-items: center;

@@ -332,6 +332,14 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
   text-align: justify;
   position: relative;
 }
+/* On a wide pane give the reading column a bit more breathing room from the
+   edges (רווח נוסף מהצדדים במסך רחב). Container query on the app-shell pane, so
+   it reacts to THIS pane's width, not the viewport (split-shell aware). */
+@container app-shell (min-width: 600px) {
+  .line {
+    padding-inline: 22px;
+  }
+}
 .line.placeholder {
   height: 28px;
   max-width: var(--lines-content-max-width, none);

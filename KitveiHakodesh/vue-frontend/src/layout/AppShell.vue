@@ -63,6 +63,10 @@ provide(PANE_NAVIGATION_KEY, {
 .app-shell-content {
   flex: 1;
   overflow: hidden;
+  /* Named container so page content (lines view, search results) can widen its
+     side padding based on THIS pane's width, not the whole viewport — matters
+     for split-shell where each pane is only part of the window. */
+  container: app-shell / inline-size;
   /* Edge-style content panel: inset into the shared chrome surface by a small
      margin on the sides and bottom, so the rounded border clearly frames the
      page on all visible edges. The top has no margin — the chrome flows
