@@ -232,8 +232,11 @@ export const useLocalFileStore = defineStore('localFile', () => {
 
     _converting.delete(tabId)
     if (result) {
+      // Route by what was actually produced: hosted conversions are always PDF, but the dev
+      // service may render Word docs to HTML (Office-free fallback) — the served name says.
+      const isHtml = /\.html?$/i.test(result.fileName)
       tabStore.updateTab(tabId, {
-        route: '/pdf-view',
+        route: isHtml ? '/html-view' : '/pdf-view',
         title: stripFileExtension(result.fileName),
         localFileVirtualUrl: result.url,
         localFileName: result.fileName,

@@ -50,6 +50,17 @@ public sealed class OpenLocalFileResult
     public string? Error { get; set; }
 }
 
+/// <summary>Result of <c>pickLocalFile</c>: the absolute path the user chose in the native
+/// open-file dialog (empty + <see cref="Cancelled"/> when dismissed). The client follows up with
+/// <c>openLocalFile</c> on the path — picking grants nothing by itself.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class PickLocalFileResult
+{
+    public string Path { get; set; } = "";
+    public string FileName { get; set; } = "";
+    public bool Cancelled { get; set; }
+}
+
 /// <summary>Args for <c>openFileInDefaultApp</c> — a local file path to hand off to the OS's
 /// registered default program (shell-execute). Unlike <c>openLocalFile</c>, this does not serve
 /// any bytes over HTTP; it only launches the associated program on the service's machine.</summary>
@@ -370,6 +381,7 @@ internal static class RpcResponse
 [JsonSerializable(typeof(HbDeleteLocalResult))]
 [JsonSerializable(typeof(HbProgressArgs))]
 [JsonSerializable(typeof(HbProgressResult))]
+[JsonSerializable(typeof(PickLocalFileResult))]
 [JsonSerializable(typeof(StringArg))]
 [JsonSerializable(typeof(StringResult))]
 [JsonSerializable(typeof(DictTermArgs))]

@@ -103,6 +103,19 @@ public sealed class Dispatcher(
                     }));
                 }
 
+                // Show the NATIVE open-file dialog on the service's desktop (dev's replacement for
+                // the browser <input type=file>, which yields only a blob — no absolute path, so no
+                // reload persistence). Returns just the chosen PATH; the client then authorizes it
+                // through the normal openLocalFile op, so the capability model is unchanged —
+                // picking a file grants nothing by itself.
+                case "pickLocalFile":
+                {
+                    string? picked = await LocalFiles.NativeFilePicker.PickAsync();
+                    return RpcResponse.Ok(MsgPack.Ser(picked is null
+                        ? new PickLocalFileResult { Cancelled = true }
+                        : new PickLocalFileResult { Path = picked, FileName = System.IO.Path.GetFileName(picked) }));
+                }
+
                 // Hand a local file off to the OS's registered default program (shell-execute) —
                 // the dev-mode equivalent of the hosted app's "openInDefaultApp" bridge action.
                 // Token-gated like every /rpc op; the path is validated (absolute, canonical, no

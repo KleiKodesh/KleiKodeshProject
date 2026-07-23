@@ -7,7 +7,6 @@
  */
 
 import { isHosted, emitWebviewEvent } from './seforimDb'
-import { devPickPdf } from './devFallbacks'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 
@@ -114,7 +113,66 @@ export function pendingPickOpenInNewTab(): boolean | null {
  * localFileConversionReady push). Returns null if the user cancels.
  */
 export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResult | null> {
-  if (typeof window.__webviewAction !== 'function') return devPickPdf()
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: the SERVICE's native C# open-file dialog replaces the browser <input type=file>.
+    // The browser picker only yields a blob (no absolute path), so picked files could never
+    // persist across reloads; the native dialog returns the real PATH, which we then authorize
+    // via openLocalFile (capability handle) exactly like a search-opened file — same-origin
+    // /khs-file streaming, Word→PDF/HTML conversion, and reload persistence all apply.
+    // Navigation reuses the store's hosted push-event handlers by replaying the same events
+    // (emitWebviewEvent), so pane-targeting/placeholder/new-tab behavior stays identical.
+    _pendingPickOpenInNewTab = openInNewTab
+    try {
+      const picked = await serviceCall<{ path?: string; fileName?: string; cancelled?: boolean }>(
+        'pickLocalFile',
+      )
+      if (!picked?.path || picked.cancelled) return null
+      const filePath = picked.path
+      const fileName =
+        picked.fileName || filePath.substring(Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/')) + 1)
+      const ext = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
+
+      if (ext === '.txt') {
+        // .txt opens in /txt-view straight off the path (TxtViewPage reads it via the bridge).
+        emitWebviewEvent({ event: 'localFileTxtReady', fileName, filePath, openInNewTab })
+        return { url: '', fileName, filePath }
+      }
+
+      const isDirect = ext === '.pdf' || ext === '.htm' || ext === '.html'
+      // Word-family docs convert in the service (~4s cold Word) — show the converting
+      // placeholder first, exactly as the hosted localFileConversionStarted push does.
+      if (!isDirect) emitWebviewEvent({ event: 'localFileConversionStarted', fileName, filePath, openInNewTab })
+
+      const r = await serviceCall<{
+        handle?: string
+        fileName?: string
+        cancelled?: boolean
+        error?: string
+      }>('openLocalFile', { path: filePath })
+      if (!r?.handle) {
+        if (r?.cancelled) return null // user pressed ביטול — tab already reset, stay quiet
+        if (!isDirect)
+          emitWebviewEvent({ event: 'localFileError', filePath, message: r?.error || 'פתיחת הקובץ נכשלה' })
+        return null
+      }
+
+      const url = `/khs-file/${r.handle}`
+      // The service reports what it will actually serve (docx → .pdf via Word, or .html via
+      // the Office-free fallback) — the served name drives the viewer route.
+      const servedName = r.fileName || fileName
+      if (isDirect) {
+        emitWebviewEvent({ event: 'localFileReady', url, fileName, filePath, openInNewTab })
+        return { url, fileName, filePath }
+      }
+      // Converted: the caller finalizes the placeholder from this reply
+      // (finalizeConvertingFromReply), mirroring the hosted cached-conversion path.
+      return { url, fileName: servedName, filePath }
+    } catch {
+      return null
+    } finally {
+      _pendingPickOpenInNewTab = null
+    }
+  }
   _pendingPickOpenInNewTab = openInNewTab
   try {
     const res = await action<{
