@@ -121,7 +121,32 @@ export const useBookViewStore = defineStore('bookView', () => {
     setLinesZoom(tabId, bookId, value)
   }
 
-  // Prune zoom entries for tabs that no longer exist
+  // ── In-book search query (in-session, per-tab, never persisted) ────────────
+  // The Ctrl+F search input text is kept alive across close/reopen of the search
+  // bar (and across tab switches, which remount BookViewPage) so reopening shows
+  // the last query. It is deliberately NOT persisted to IDB/localStorage and is
+  // NOT part of the "save last position" persistence — a fresh session always
+  // starts empty. Cleared automatically on tab close by the prune watch below.
+  // Keyed by tabId (not tabId:bookId): the query follows the tab, not the book.
+  const searchQueryByTabId = ref<Map<string, string>>(new Map())
+  const commentarySearchQueryByTabId = ref<Map<string, string>>(new Map())
+
+  function getSearchQuery(tabId: string): string {
+    return searchQueryByTabId.value.get(tabId) ?? ''
+  }
+  function setSearchQuery(tabId: string, value: string) {
+    if (value) searchQueryByTabId.value.set(tabId, value)
+    else searchQueryByTabId.value.delete(tabId)
+  }
+  function getCommentarySearchQuery(tabId: string): string {
+    return commentarySearchQueryByTabId.value.get(tabId) ?? ''
+  }
+  function setCommentarySearchQuery(tabId: string, value: string) {
+    if (value) commentarySearchQueryByTabId.value.set(tabId, value)
+    else commentarySearchQueryByTabId.value.delete(tabId)
+  }
+
+  // Prune per-tab entries for tabs that no longer exist (zoom + in-session search)
   watch(
     () => tabStore.tabs.map((t) => t.id),
     (currentIds) => {
@@ -133,6 +158,12 @@ export const useBookViewStore = defineStore('bookView', () => {
       for (const key of commentaryZoomMap.value.keys()) {
         const tabId = key.split(':')[0]!
         if (!idSet.has(tabId)) commentaryZoomMap.value.delete(key)
+      }
+      for (const tabId of searchQueryByTabId.value.keys()) {
+        if (!idSet.has(tabId)) searchQueryByTabId.value.delete(tabId)
+      }
+      for (const tabId of commentarySearchQueryByTabId.value.keys()) {
+        if (!idSet.has(tabId)) commentarySearchQueryByTabId.value.delete(tabId)
       }
     },
   )
@@ -327,6 +358,10 @@ export const useBookViewStore = defineStore('bookView', () => {
     autoSelectTopLine,
     toggleAutoSelectTopLine,
     setAutoSelectTopLine,
+    getSearchQuery,
+    setSearchQuery,
+    getCommentarySearchQuery,
+    setCommentarySearchQuery,
     init,
     toggleToolbar,
     setToolbarPosition,
