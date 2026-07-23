@@ -342,6 +342,10 @@ defineExpose({ captureScrollPos, scrollToBook })
 }
 .result-item {
   padding: 8px 14px;
+  /* Mirror the book view's text-column width cap (רוחב מקסימלי עבור עמודת הטקסט).
+     Centering keeps the result block aligned under the same reading measure. */
+  max-width: var(--lines-content-max-width, none);
+  margin-inline: auto;
 }
 .result-header {
   display: flex;
