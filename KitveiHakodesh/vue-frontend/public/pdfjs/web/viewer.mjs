@@ -15446,12 +15446,22 @@ class PDFViewer {
         console.error(`scrollPageIntoView: "${destArray[1].name}" is not a valid destination type.`);
         return;
     }
-    if (!ignoreDestinationZoom) {
+    // PATCH: preserve the current zoom on every destination jump. These Hebrew
+    // (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and outline
+    // destinations, so PDF.js was snapping to page-fit on reload and on TOC/
+    // outline clicks (scroll and thumbnail nav were unaffected — they carry no
+    // destArray). Forcing ignoreDestinationZoom here jumps to the right page but
+    // keeps whatever scale the user set. We only adopt a scale when none exists
+    // yet (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
+    const ignoreZoom = true; // was: !ignoreDestinationZoom
+    if (!ignoreZoom) {
       if (scale && scale !== this._currentScale) {
         this.currentScaleValue = scale;
       } else if (this._currentScale === UNKNOWN_SCALE) {
         this.currentScaleValue = DEFAULT_SCALE_VALUE;
       }
+    } else if (this._currentScale === UNKNOWN_SCALE) {
+      this.currentScaleValue = DEFAULT_SCALE_VALUE;
     }
     if (scale === "page-fit" && !destArray[4]) {
       this.#scrollIntoView(pageView);

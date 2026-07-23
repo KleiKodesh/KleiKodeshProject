@@ -331,6 +331,53 @@ Keyboard zoom (`Ctrl++`/`Ctrl+-`) needs no change — those keycodes call `zoomI
 
 ---
 
+### 0y. Preserve zoom on destination jumps (ignore baked-in `/Fit`)
+
+Our Hebrew, ABBYY-produced PDFs bake a `/Fit` (fit-page) zoom into both their
+OpenAction and their outline/named destinations. PDF.js honors that zoom in
+`PDFViewer.scrollPageIntoView`, so the view snapped to **page-fit** on every
+destination jump — on reload (OpenAction) and on TOC/outline clicks (named
+dest). Scroll and thumbnail navigation were unaffected because they pass no
+`destArray` and return early.
+
+Fix: always ignore the destination-supplied zoom so a jump changes the page but
+keeps the user's current scale. Only adopt a scale when none exists yet
+(`UNKNOWN_SCALE`, i.e. the first paint), so the initial view still gets `"auto"`.
+
+In `PDFViewer.scrollPageIntoView`, search for:
+```js
+    if (!ignoreDestinationZoom) {
+      if (scale && scale !== this._currentScale) {
+        this.currentScaleValue = scale;
+      } else if (this._currentScale === UNKNOWN_SCALE) {
+        this.currentScaleValue = DEFAULT_SCALE_VALUE;
+      }
+    }
+```
+
+Replace with:
+```js
+    // PATCH: preserve the current zoom on every destination jump. These Hebrew
+    // (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and outline
+    // destinations, so PDF.js was snapping to page-fit on reload and on TOC/
+    // outline clicks (scroll and thumbnail nav were unaffected — they carry no
+    // destArray). Forcing ignoreDestinationZoom here jumps to the right page but
+    // keeps whatever scale the user set. We only adopt a scale when none exists
+    // yet (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
+    const ignoreZoom = true; // was: !ignoreDestinationZoom
+    if (!ignoreZoom) {
+      if (scale && scale !== this._currentScale) {
+        this.currentScaleValue = scale;
+      } else if (this._currentScale === UNKNOWN_SCALE) {
+        this.currentScaleValue = DEFAULT_SCALE_VALUE;
+      }
+    } else if (this._currentScale === UNKNOWN_SCALE) {
+      this.currentScaleValue = DEFAULT_SCALE_VALUE;
+    }
+```
+
+---
+
 ### 0z. Zoom step
 
 Search for: `const DEFAULT_SCALE_DELTA = 1.1;`
