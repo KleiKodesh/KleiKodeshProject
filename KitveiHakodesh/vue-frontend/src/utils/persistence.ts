@@ -283,6 +283,9 @@ export function idbSet<T>(key: string, value: T): Promise<void> {
 export function idbDelete(key: string): Promise<void> {
   return dbDelete('app-search-cache', key)
 }
+export function idbDeleteByPrefix(prefix: string): Promise<void> {
+  return dbDeleteByPrefix('app-search-cache', prefix)
+}
 
 // ── Dictionary cache DB ──────────────────────────────────────────────────────
 
