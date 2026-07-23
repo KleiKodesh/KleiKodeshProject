@@ -128,6 +128,10 @@ function onSelectRecent(entry: RecentlyOpenedEntry, openInNewTab = false) {
 // shell; otherwise it matches the input. The SHELL's rect is what's measured —
 // not the viewport — because in split view each shell is only part of the window.
 const NARROW_SHELL_WIDTH = 600
+// The dropdown never grows past this — enough for a comfortable list of rows
+// while leaving the field feeling like an address bar, not a full-height panel.
+// It still shrinks below this to fit the viewport when space is tight.
+const MAX_DROPDOWN_HEIGHT = 440
 
 const anchorTop = ref(0)
 const anchorLeft = ref(0)
@@ -142,7 +146,7 @@ function computeAnchor() {
   anchorTop.value = rect.bottom + 6
   anchorLeft.value = anchor.left
   anchorRight.value = window.innerWidth - anchor.right
-  maxHeight.value = Math.max(120, window.innerHeight - rect.bottom - 12)
+  maxHeight.value = Math.min(MAX_DROPDOWN_HEIGHT, Math.max(120, window.innerHeight - rect.bottom - 12))
 }
 
 function onInput() {
