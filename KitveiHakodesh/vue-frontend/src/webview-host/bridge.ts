@@ -556,10 +556,14 @@ export function triggerHbDownload(
           handle?: string
           notFound?: boolean
           noInternet?: boolean
+          cancelled?: boolean
           error?: string
         }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
         if (r?.handle) {
           emitWebviewEvent({ event: 'hbPdfReady', url: `/khs-file/${r.handle}`, bookId, bookTitle, tabId })
+        } else if (r?.cancelled) {
+          // User pressed ביטול — the tab was already reset by cancelConversion; nothing to show.
+          emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
         } else {
           emitWebviewEvent({
             event: 'hbPdfCancelled',
@@ -604,6 +608,26 @@ export async function getHbDownloadProgress(
   } catch {
     return null
   }
+}
+
+/**
+ * Abort an in-flight HebrewBooks download (the ביטול button). Dev only — trips the service's
+ * per-book cancellation so the streamed download stops and its partial file is cleaned up.
+ * Fire-and-forget. Hosted mode uses the WebView2 download's own cancel, so this is a no-op there.
+ */
+export function cancelHbDownload(bookId: string): void {
+  if (typeof window.__webviewAction === 'function' || !bookId) return
+  serviceCallVoid('cancelHbDownload', { bookId })
+}
+
+/**
+ * Abort an in-flight Word/document conversion (the ביטול button). Dev only — trips the service's
+ * per-source cancellation so it discards the result and deletes the partial cache file (Word
+ * self-quits, no orphan). Fire-and-forget. Hosted mode has its own conversion-cancel path.
+ */
+export function cancelLocalFileConversion(sourcePath: string): void {
+  if (typeof window.__webviewAction === 'function' || !sourcePath) return
+  serviceCallVoid('cancelConversion', { path: sourcePath })
 }
 
 /**

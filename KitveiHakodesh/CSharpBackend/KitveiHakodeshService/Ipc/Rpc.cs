@@ -44,6 +44,9 @@ public sealed class OpenLocalFileResult
 {
     public string Handle { get; set; } = "";
     public string FileName { get; set; } = "";
+    /// <summary>The conversion was aborted by the user (ביטול) — the caller closes the tab quietly,
+    /// no error dialog.</summary>
+    public bool Cancelled { get; set; }
     public string? Error { get; set; }
 }
 
@@ -198,6 +201,9 @@ public sealed class HbDownloadResult
     public bool NotFound { get; set; }
     public bool NoInternet { get; set; }
     public bool Redownload { get; set; }
+    /// <summary>The download was aborted by the user (ביטול) — the caller closes the tab quietly,
+    /// no error banner.</summary>
+    public bool Cancelled { get; set; }
     public string? Error { get; set; }
 }
 

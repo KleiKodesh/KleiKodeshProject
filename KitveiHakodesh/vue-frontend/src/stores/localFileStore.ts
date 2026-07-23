@@ -8,6 +8,11 @@ import {
   restoreLocalFile,
   restoreHbPdf,
   getHbDownloadProgress,
+  // Aliased: the store's own cancelHbDownload (the hbPdfCancelled handler below) would otherwise
+  // SHADOW this import inside the defineStore scope — silently turning the service abort into a
+  // no-op (legal JS, no TS error). Keep the distinct name.
+  cancelHbDownload as cancelHbDownloadInService,
+  cancelLocalFileConversion,
   pendingPickOpenInNewTab,
 } from '@/webview-host/bridge'
 import { onWebviewEvent } from '@/webview-host/seforimDb'
@@ -266,19 +271,31 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (convertingTabId) finishLocalFileConversion(convertingTabId, result)
   }
 
-  /** Cancel an in-progress conversion — resets the tab to home. */
+  /** Cancel an in-progress conversion or HB download — aborts the work in the service
+   *  (real cancellation + cleanup, not just a UI dismiss) and resets the tab to home. */
   function cancelConversion(tabId: string) {
     _converting.delete(tabId)
-    // Dispose the virtual host before clearing localFilePath so the mapping is released.
     const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (tab?.localFilePath) disposeLocalFileHost(tab.localFilePath)
+    // HebrewBooks download in flight → tell the service to abort it (deletes the partial file).
+    if (tab?.localFileHbBookId) {
+      stopHbProgressPoll(tabId)
+      cancelHbDownloadInService(tab.localFileHbBookId)
+    }
+    // Word/document conversion in flight → tell the service to abort it (kills Word, deletes partial).
+    else if (tab?.localFilePath) {
+      cancelLocalFileConversion(tab.localFilePath)
+      // Dispose the virtual host before clearing localFilePath so the mapping is released.
+      disposeLocalFileHost(tab.localFilePath)
+    }
     tabStore.updateTab(tabId, {
       route: '/',
       title: 'בית',
       localFileVirtualUrl: undefined,
       localFileName: undefined,
       localFilePath: undefined,
+      localFileHbBookId: undefined,
       localFileConverting: false,
+      localFileDownloadProgress: undefined,
     })
   }
 
@@ -291,6 +308,11 @@ export const useLocalFileStore = defineStore('localFile', () => {
       route: '/pdf-view',
       title: bookTitle,
       localFileName: bookTitle,
+      // Stamp the book id NOW (not only on success) so ביטול mid-download can identify this as a
+      // HB download and abort it in the service. Without this the cancel branch is skipped and the
+      // download runs to completion in the background.
+      localFileHbBookId: bookId,
+      localFileHbBookTitle: bookTitle,
       localFileConverting: true,
       localFileLoadingType: 'downloading',
       localFileDownloadProgress: undefined,
