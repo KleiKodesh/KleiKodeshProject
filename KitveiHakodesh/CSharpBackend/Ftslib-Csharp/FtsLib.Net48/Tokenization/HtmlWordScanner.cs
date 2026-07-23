@@ -88,8 +88,16 @@ namespace FtsLib.Tokenization
                     // the word. The old classifier consumed non-whitespace
                     // entities INVISIBLY, joining the surrounding fragments
                     // into one term that exists nowhere.
-                    HtmlBlockTags.SkipEntity(text, len, ref i);
+                    //
+                    // Flush at the '&' (the entity is the separator, so it is NOT
+                    // part of the word's raw span). Flushing AFTER SkipEntity used
+                    // the ';' as rawEnd, which pulled the entity BODY (&thinsp,
+                    // minus its ';') into the token span — the snippet renderer
+                    // then copied that incomplete entity verbatim and v-html showed
+                    // it as literal text (e.g. "…ידעתיו&thinsp;למען…"). Ending the
+                    // word at '&' keeps the whole entity outside every token span.
                     Flush(i);
+                    HtmlBlockTags.SkipEntity(text, len, ref i);
                     _visibleCount++; // the entity renders as one visible char
                     continue;
                 }
