@@ -31,30 +31,13 @@ export function useAppNavigation() {
   async function handleFilePicker(newTab: boolean): Promise<void> {
     const result = await pickLocalFile(newTab)
     if (!result) return
-    // Hosted mode: the C# push events drive navigation (pane-aware in localFileStore,
-    // so the file opens only in the pane that initiated the pick). We must NOT navigate
-    // again here or the file would also open in pane 1. The reply is used only to finish
-    // a cached Word conversion, which produces no localFileConversionReady push.
-    if (typeof window.__webviewAction === 'function') {
-      useLocalFileStore().finalizeConvertingFromReply(result)
-      return
-    }
-    // Dev mode: no push events — navigate directly with the blob URL (pane-aware).
-    const fn = result.fileName ?? ''
-    const ext = fn.substring(fn.lastIndexOf('.')).toLowerCase()
-    const isTxt = ext === '.txt'
-    const isHtmlLike = ext === '.htm' || ext === '.html'
-    const route = isTxt ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
-    const tabData = {
-      route: route as TabRoute,
-      title: fn.substring(0, fn.lastIndexOf('.') > 0 ? fn.lastIndexOf('.') : fn.length),
-      localFileName: result.fileName,
-      localFilePath: result.filePath,
-      localFileVirtualUrl: result.url,
-      localFileConverting: false,
-    }
-    if (newTab) pane.openTab(tabData)
-    else pane.updateActiveTab(tabData)
+    // Navigation is driven by push events in BOTH modes (pane-aware in localFileStore, so
+    // the file opens only in the pane that initiated the pick): hosted gets real C# pushes,
+    // dev replays the same events after its service round-trips (see pickLocalFile). We must
+    // NOT navigate again here or the file would also open in pane 1. The reply finalizes a
+    // conversion whose placeholder is still up (cached hosted conversions push no
+    // conversionReady; dev conversions finalize from the reply by design).
+    useLocalFileStore().finalizeConvertingFromReply(result)
   }
 
   // NOTE: "זית" (Zayit) here refers to the external Zayit app (zayitapp.com) — a separate
