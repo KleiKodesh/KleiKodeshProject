@@ -69,16 +69,23 @@ const virtualizer = useVirtualizer(
   })),
 )
 
-// Reveal another page once the viewport reaches the end of the current window and more
-// results are available. Runs on every scroll (getVirtualItems changes), but the check is O(1).
+// Keep the render window large enough to cover the current viewport. Growing only in
+// small steps as the viewport reaches the window's END (the old behaviour) lags behind a
+// fast/far scroll: getTotalSize() — hence the scrollbar extent — is derived from renderLimit,
+// so the track only ever represents the revealed rows. A fast drag then saturates at the
+// window's end, captureScrollPos records an index capped to that partial window, and the
+// saved position is wrong (this is the "scroll far outside the current range → restore lands
+// wrong" bug). Instead, grow the window so it always reaches a full RENDER_PAGE beyond the
+// furthest visible row: the window tracks the scroll position rather than trailing it, so the
+// captured index is always a real index into the full result set. Still windowed (we never
+// hand the virtualizer all N rows at once), just position-driven instead of end-triggered.
 watch(
   () => virtualizer.value.getVirtualItems(),
   (items) => {
     const last = items[items.length - 1]
     if (!last) return
-    if (last.index >= renderLimit.value - 1 && renderCount.value < props.results.length) {
-      renderCount.value = Math.min(props.results.length, renderCount.value + RENDER_PAGE)
-    }
+    const needed = Math.min(props.results.length, last.index + 1 + RENDER_PAGE)
+    if (needed > renderCount.value) renderCount.value = needed
   },
 )
 
@@ -149,24 +156,46 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 }
 
 {
-  // Restore scroll once results are populated — don't gate on isSearching because
-  // loadCachedResults can set isSearching=true while simultaneously populating results
-  // (partial cache + resume stream). We restore as soon as we have results to scroll into.
-  const stopWatch = watch(
-    () => props.results.length,
-    (len) => {
-      if (!len) return
-      if (props.initialScrollIndex == null) {
-        stopWatch()
-        return
-      }
-      stopWatch()
-      nextTick(() => {
-        // The saved index may be far below the initial window — widen it enough to
-        // contain the target before scrolling, or scrollToIndex has nothing to land on.
-        renderCount.value = Math.max(renderCount.value, props.initialScrollIndex! + RENDER_PAGE)
-        restoreScrollPos(props.initialScrollIndex!, props.initialScrollOffset ?? 0)
-      })
+  // Restore scroll once the target row is actually reachable. This is the tricky case on
+  // reload: results stream in over time (fresh re-search) or arrive as a partial cache
+  // prefix that then resumes streaming (loadCachedResults sets isSearching=true while
+  // populating). The saved index can therefore be far beyond what has arrived so far.
+  //
+  // A one-shot restore against the first batch fails: restoreScrollPos would exhaust its
+  // fixed retry budget long before index N streams in, then give up near the top and never
+  // re-run. So instead we re-attempt on every results growth until the target index exists
+  // in props.results — only THEN do we widen the render window to include it and scroll.
+  // We stop when we've either restored, run out of a target, or the stream finished and the
+  // saved index is past the (now final) result count — in which case we clamp to the last row.
+  let restored = false
+  const tryRestore = () => {
+    if (restored) return true
+    const target = props.initialScrollIndex
+    if (target == null) return true // nothing to restore
+    const len = props.results.length
+    if (!len) return false // no results yet — wait for more
+    // If the target hasn't streamed in yet, keep waiting — UNLESS the stream is done, in
+    // which case the target is unreachable (fewer results than when it was saved, e.g. the
+    // filter/sort produced a shorter set); clamp to the last available row rather than
+    // waiting forever.
+    if (target >= len) {
+      if (props.isSearching) return false // more may still arrive — keep waiting
+    }
+    const index = Math.min(target, len - 1)
+    restored = true
+    nextTick(() => {
+      // Widen the render window to include the target before scrolling, or the virtualizer
+      // has no row there to land on.
+      renderCount.value = Math.max(renderCount.value, index + RENDER_PAGE)
+      restoreScrollPos(index, props.initialScrollOffset ?? 0)
+    })
+    return true
+  }
+  let stopWatch = () => {}
+  stopWatch = watch(
+    [() => props.results.length, () => props.isSearching],
+    () => {
+      if (tryRestore()) stopWatch()
     },
     { flush: 'post', immediate: true },
   )
