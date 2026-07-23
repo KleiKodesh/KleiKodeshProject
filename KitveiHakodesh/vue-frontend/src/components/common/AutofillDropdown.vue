@@ -13,6 +13,7 @@
  */
 import { computed, watch, nextTick, ref } from 'vue'
 import { useElementBounding, useWindowSize, onClickOutside } from '@vueuse/core'
+import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import type { AutofillController } from '@/composables/useAutofill'
 
 const props = defineProps<{ controller: AutofillController }>()
@@ -86,6 +87,20 @@ watch(
       :class="openUp ? 'up' : 'down'"
       :style="style"
     >
+      <div class="autofill-header">
+        <span class="autofill-title">חיפושים אחרונים</span>
+        <button
+          class="autofill-close"
+          type="button"
+          tabindex="-1"
+          title="סגור"
+          aria-label="סגור"
+          @mousedown.prevent.stop
+          @click.stop="af.onBlur()"
+        >
+          <IconDismiss12Regular />
+        </button>
+      </div>
       <ul ref="listRef" class="autofill-list" :style="{ maxHeight: `${listMaxHeight}px` }" role="listbox">
         <li
           v-for="(item, i) in af.suggestions.value"
@@ -148,11 +163,11 @@ watch(
 }
 .autofill-item {
   display: block;
-  height: 32px;
-  line-height: 32px;
+  height: 26px;
+  line-height: 26px;
   padding: 0 12px;
   border-radius: 8px;
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-primary);
   cursor: default;
   white-space: nowrap;
@@ -170,6 +185,50 @@ watch(
 }
 .af-tail {
   font-weight: 700;
+}
+
+/* Header — a title on the leading (RTL: right) side and a close button on the
+   trailing side, with a separator line beneath it before the list. */
+.autofill-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  height: 24px;
+  padding: 0 8px 0 4px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--border-color);
+}
+.autofill-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.autofill-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: none;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  opacity: 0.7;
+}
+.autofill-close:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--text-primary) 12%, transparent);
+  color: var(--text-primary);
+}
+.autofill-close svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Reserve room on the notch side so no row ever sits under the notch's
