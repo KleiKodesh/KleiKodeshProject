@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'
@@ -247,6 +247,21 @@ function isMultiSelected(lineIndex: number): boolean {
 function focusScroller() {
   scrollerEl.value?.focus({ preventScroll: true })
 }
+
+// Focus the lines view once it has loaded (this component only mounts once
+// scrollStateReady is true), so the arrow keys / PageUp-PageDown drive the
+// reader immediately without a click. Guard against stealing focus from a
+// background pane in split view, or from an input the user is already typing
+// in (e.g. an open search bar).
+const paneId = inject<1 | 2>('paneId', 1)
+onMounted(() => {
+  nextTick(() => {
+    if (bookViewStore.splitViewEnabled && bookViewStore.focusedPaneId !== paneId) return
+    const focused = document.activeElement as HTMLElement | null
+    if (focused && (focused.tagName === 'INPUT' || focused.tagName === 'TEXTAREA' || focused.isContentEditable)) return
+    focusScroller()
+  })
+})
 
 defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPos })
 </script>
