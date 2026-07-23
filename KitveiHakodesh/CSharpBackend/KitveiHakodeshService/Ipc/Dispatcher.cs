@@ -84,6 +84,11 @@ public sealed class Dispatcher(
                     {
                         bool isHtml;
                         try { (servePath, isHtml) = await wordConversion.RenderAsync(full, ct); }
+                        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                        {
+                            // User pressed ביטול — abort quietly (partial output already deleted).
+                            return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Cancelled = true }));
+                        }
                         catch (Exception ex)
                         {
                             return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }));
@@ -230,6 +235,7 @@ public sealed class Dispatcher(
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: true, ct);
                     if (r.Path != null) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Handle = localFileGrants.Grant(r.Path) }));
                     if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true }));
+                    if (r.Error == "cancelled") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Cancelled = true }));
                     if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true }));
                     return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed" }));
                 }
@@ -244,6 +250,26 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(p is null
                         ? new HbProgressResult { Active = false }
                         : new HbProgressResult { Active = true, Received = p.Value.received, Total = p.Value.total }));
+                }
+
+                // Abort an in-flight HB download (the ביטול button). Trips the per-book cancellation
+                // source so the streamed copy unwinds and its .part temp is deleted — a real abort,
+                // not just a UI dismiss. Idempotent: reports Ok even when nothing was running.
+                case "cancelHbDownload":
+                {
+                    var a = MsgPack.De<HbProgressArgs>(req.Args);
+                    bool cancelled = hebrewBooks.Cancel(a.BookId ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = cancelled }));
+                }
+
+                // Abort an in-flight Word/document conversion (the ביטול button). Trips the
+                // per-source cancellation so RenderAsync discards the result and deletes the partial
+                // cache file; Word self-Quits inside the converter, so nothing orphans. Idempotent.
+                case "cancelConversion":
+                {
+                    var a = MsgPack.De<OpenLocalFileArgs>(req.Args);
+                    bool cancelled = wordConversion.Cancel(a.Path ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = cancelled }));
                 }
 
                 // Restore a persisted HB tab: local/cache only, no download. A hit returns a

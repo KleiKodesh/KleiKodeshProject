@@ -44,10 +44,29 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
     /// that finds nothing means "not downloading" (already done, or never started).</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, (long received, long total)> _progress = new();
 
+    /// <summary>Cancellation source per in-flight download, keyed by book id. <see cref="Cancel"/>
+    /// (the cancelHbDownload op) trips it so the streamed copy aborts at its next chunk and the
+    /// .part temp is cleaned up — a real abort, not just a UI dismiss. Removed when the download
+    /// ends.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, CancellationTokenSource> _downloads = new();
+
     /// <summary>Bytes received / total for an in-flight download of <paramref name="bookId"/>,
     /// or null when no download is active for it.</summary>
     public (long received, long total)? GetProgress(string bookId) =>
         _progress.TryGetValue(bookId, out var p) ? p : null;
+
+    /// <summary>Abort an in-flight download of <paramref name="bookId"/> if one is running.
+    /// Returns true when a download was actually cancelled. Safe to call when nothing is running.</summary>
+    public bool Cancel(string bookId)
+    {
+        if (_downloads.TryGetValue(bookId, out var cts))
+        {
+            logger.LogInformation("HebrewBooks {Id}: user cancel — aborting in-flight download", bookId);
+            try { cts.Cancel(); } catch { /* already disposed/cancelled */ }
+            return true;
+        }
+        return false;
+    }
 
     public HbSearchResult Search(string query, string? localFolder, int limit)
     {
@@ -135,8 +154,14 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
     /// A server "not found" (non-PDF body) is reported without caching. Never throws for the
     /// normal failure modes — they come back as <see cref="HbAcquireResult"/> fields.
     /// </summary>
+    // Set once we've swept stale .part files (leftovers from a crash/kill mid-download) — cheap,
+    // done lazily on the first acquire so a killed service self-heals on next launch.
+    private int _sweptStaleParts;
+
     public async Task<HbAcquireResult> AcquireAsync(string bookId, string? localFolder, bool allowDownload, CancellationToken ct)
     {
+        if (Interlocked.Exchange(ref _sweptStaleParts, 1) == 0) SweepStaleParts();
+
         if (string.IsNullOrWhiteSpace(bookId)) return new(null, false, "empty book id");
         // Book ids are numeric on hebrewbooks.org — reject anything else so a caller can't
         // steer the request URL or the on-disk filename.
@@ -156,18 +181,27 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
         // book is 10-40 MB) and we publish live byte progress for the hbDownloadProgress poll op.
         // Written to a .part temp first, then atomically moved into place, so a cancelled/failed
         // download never leaves a truncated PDF that a later cache-hit check would trust.
+        //
+        // A CancellationTokenSource linked to the request ct is registered per book id so the
+        // separate cancelHbDownload op (the ביטול button) can abort THIS in-flight download — the
+        // streamed ReadAsync/WriteAsync below observe it at the next chunk and unwind, deleting the
+        // .part. A cancel is reported as Error "cancelled" (not NotFound), which the caller maps to
+        // a silent tab close.
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        _downloads[bookId] = linked;
+        var dct = linked.Token;
         string? partPath = null;
         try
         {
             string url = "https://download.hebrewbooks.org/downloadhandler.ashx?req=" + bookId;
-            using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var resp = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, dct);
             if (!resp.IsSuccessStatusCode)
                 return new(null, resp.StatusCode == System.Net.HttpStatusCode.NotFound, $"download failed (HTTP {(int)resp.StatusCode})");
 
             long total = resp.Content.Headers.ContentLength ?? 0; // 0 = server didn't say
             _progress[bookId] = (0, total);
 
-            using var src = await resp.Content.ReadAsStreamAsync(ct);
+            using var src = await resp.Content.ReadAsStreamAsync(dct);
 
             // Peek the first bytes to verify the %PDF- magic WITHOUT buffering the whole body —
             // a missing book returns an HTML message page / redirect instead of a PDF.
@@ -175,7 +209,7 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
             int headLen = 0;
             while (headLen < head.Length)
             {
-                int r = await src.ReadAsync(head.AsMemory(headLen, head.Length - headLen), ct);
+                int r = await src.ReadAsync(head.AsMemory(headLen, head.Length - headLen), dct);
                 if (r == 0) break;
                 headLen += r;
             }
@@ -198,14 +232,14 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
             long received = headLen;
             using (var dst = new FileStream(partPath, FileMode.Create, FileAccess.Write, FileShare.None, 1 << 16, useAsync: true))
             {
-                await dst.WriteAsync(head.AsMemory(0, headLen), ct);
+                await dst.WriteAsync(head.AsMemory(0, headLen), dct);
                 _progress[bookId] = (received, total);
 
                 byte[] buf = new byte[1 << 16]; // 64 KB
                 int n;
-                while ((n = await src.ReadAsync(buf, ct)) > 0)
+                while ((n = await src.ReadAsync(buf, dct)) > 0)
                 {
-                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                    await dst.WriteAsync(buf.AsMemory(0, n), dct);
                     received += n;
                     _progress[bookId] = (received, total);
                 }
@@ -216,7 +250,14 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
             if (dest == cached) EvictCache(); // never touch the user's own folder
             return new(dest, false, null);
         }
-        catch (OperationCanceledException) { throw; }
+        catch (OperationCanceledException) when (linked.IsCancellationRequested && !ct.IsCancellationRequested)
+        {
+            // Cancelled via the ביטול button (not a host shutdown) — report it so the caller
+            // closes the tab quietly. The .part is deleted in finally.
+            logger.LogInformation("HebrewBooks {Id} download cancelled by user", bookId);
+            return new(null, false, "cancelled");
+        }
+        catch (OperationCanceledException) { throw; } // host shutdown / request abort — let it propagate
         catch (HttpRequestException ex)
         {
             logger.LogWarning(ex, "HebrewBooks {Id} download network error", bookId);
@@ -230,7 +271,10 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
         finally
         {
             _progress.TryRemove(bookId, out _);
-            if (partPath != null) try { File.Delete(partPath); } catch { /* best effort */ }
+            _downloads.TryRemove(bookId, out _);
+            // Delete the partial download. On cancel the FileStream's async write unwinds and the OS
+            // may hold the handle for a brief moment, so retry a few times before giving up.
+            if (partPath != null) await DeleteWithRetryAsync(partPath);
         }
     }
 
@@ -287,6 +331,32 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
                 try { files[i].Delete(); } catch { /* in use / gone */ }
         }
         catch (Exception ex) { logger.LogDebug(ex, "hb-cache eviction failed"); }
+    }
+
+    /// <summary>Remove any *.part temp files left in the cache by a download that was killed (not
+    /// cleanly cancelled) — the service crashing / being taskkilled mid-write. Runs once, lazily.</summary>
+    private void SweepStaleParts()
+    {
+        try
+        {
+            if (!Directory.Exists(CacheDir)) return;
+            foreach (var f in Directory.EnumerateFiles(CacheDir, "*.part"))
+                try { File.Delete(f); } catch { /* in use / gone */ }
+        }
+        catch (Exception ex) { logger.LogDebug(ex, "stale .part sweep failed"); }
+    }
+
+    /// <summary>Delete a file, retrying briefly — a just-cancelled async FileStream can leave the OS
+    /// handle closing for a few ms, so a single Delete races it. Best-effort; never throws.</summary>
+    private static async Task DeleteWithRetryAsync(string path)
+    {
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            try { if (File.Exists(path)) File.Delete(path); return; }
+            catch (IOException) { await Task.Delay(50); }
+            catch (UnauthorizedAccessException) { await Task.Delay(50); }
+            catch { return; } // any other error — give up quietly
+        }
     }
 
     /// <summary>Lowercase + strip Hebrew nikud (U+05B0–U+05C2), matching the Vue/C# normalizer.</summary>
