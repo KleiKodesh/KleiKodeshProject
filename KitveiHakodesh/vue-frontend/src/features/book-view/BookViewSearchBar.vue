@@ -78,7 +78,9 @@ const matchLabel = computed(() => {
 })
 
 function onClose() {
-  inputValue.value = ''
+  // Keep inputValue as-is: the query is an in-session, per-tab value that must
+  // survive closing the bar so reopening restores it. Only the tab close (or a
+  // fresh session) discards it. Clearing here would emit queryChange('') and wipe it.
   emit('close')
 }
 

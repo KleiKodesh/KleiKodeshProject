@@ -264,6 +264,16 @@ export function useBookView(
     },
   )
 
+  // In-session search query: restore the last query for this tab (kept in the
+  // bookViewStore, never persisted across sessions) so reopening the search bar
+  // shows it again, then keep the store in sync as the user types. Cleared on
+  // tab close by the store's prune watch. Results are only *shown* while the
+  // search bar is visible — see the searchVisible-gated props in BookViewPage.
+  contentSearch.query.value = bookViewStore.getSearchQuery(tabId)
+  commentarySearch.query.value = bookViewStore.getCommentarySearchQuery(tabId)
+  watch(contentSearch.query, (q) => bookViewStore.setSearchQuery(tabId, q))
+  watch(commentarySearch.query, (q) => bookViewStore.setCommentarySearchQuery(tabId, q))
+
   // ── Side panel + commentary panel ─────────────────────────────────────────
   // commentaryPanel is instantiated first because sidePanel takes commentaryVisible
   // as a parameter. The closeSidePanel callback is deferred via a wrapper object.
@@ -415,9 +425,9 @@ export function useBookView(
     bookViewStore.unregisterTocBridge(tabId)
   })
 
-  watch(searchPanel.searchVisible, (visible) => {
-    if (!visible) { contentSearch.clear(); commentarySearch.clear() }
-  })
+  // The search query intentionally survives closing the search bar (in-session,
+  // per-tab) so reopening restores it. Results are hidden while the bar is closed
+  // via the searchVisible-gated props in BookViewPage, so no clear() here.
 
   // ── Public API ────────────────────────────────────────────────────────────
 
