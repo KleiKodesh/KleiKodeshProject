@@ -345,5 +345,8 @@ function onRemove() {
   overflow: hidden;
   white-space: normal;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
 }
 </style>
