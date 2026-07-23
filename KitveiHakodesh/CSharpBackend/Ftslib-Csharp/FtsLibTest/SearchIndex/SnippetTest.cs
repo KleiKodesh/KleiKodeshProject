@@ -147,6 +147,38 @@ namespace FtsLibTest
                 content: "שלום&amp;תורה",
                 groups:  G("שלוםתורה"));
 
+            // REGRESSION (2026-07-23): an entity that ENDS the matched word must not
+            // leak into the snippet as a truncated entity. SkipEntity advanced the raw
+            // cursor to the ';', and Flush used that as the word's RawEnd — so the token
+            // span pulled in the entity body WITHOUT its ';' (e.g. "&thinsp"), which the
+            // renderer copied verbatim and v-html then showed as literal text. The '&'
+            // must end the word so the WHOLE entity stays outside every token span.
+            CheckContains(ref passed, ref failed,
+                name:    "entity after matched word: full &thinsp; survives in snippet",
+                content: "וראה כי ידעתיו&thinsp;למען אשר יצוה",
+                groups:  G("ידעתיו"),
+                mustContain: "&thinsp;");
+
+            CheckContains(ref passed, ref failed,
+                name:    "entity after matched word: match closes before the '&'",
+                content: "וראה כי ידעתיו&thinsp;למען אשר יצוה",
+                groups:  G("ידעתיו"),
+                mustContain: "<mark>ידעתיו</mark>");
+
+            CheckNotContains(ref passed, ref failed,
+                name:    "entity after matched word: no truncated entity inside <mark>",
+                content: "וראה כי ידעתיו&thinsp;למען אשר יצוה",
+                groups:  G("ידעתיו"),
+                mustNotContain: "&thinsp</mark>");
+
+            // The word BEFORE the entity is the last context token at the window edge:
+            // snapEnd = RawEnd must sit at the '&', so no partial entity is appended.
+            CheckNotContains(ref passed, ref failed,
+                name:    "entity at trailing window edge: no bare '&thinsp' without ';'",
+                content: "ראש שני שלישי רביעי חמישי ידעתיו&thinsp;",
+                groups:  G("ראש"),
+                mustNotContain: "&thinsp<");
+
             // ─────────────────────────────────────────────────────────
             // 4. NIKUD IN CONTENT — tokenizer strips nikud, terms match
             // ─────────────────────────────────────────────────────────
