@@ -65,7 +65,34 @@ const clockTime = computed(() =>
 )
 const showBarClock = computed(() => !(showClock.value && isFullscreen.value))
 
-const { next: nextZman, displayTime: nextZmanTime, rows: zmanRows, city: zmanCity } = useNextZman()
+const { next: nextZman, displayTime: nextZmanTime, tzeit: zmanTzeit, now: zmanNow, rows: zmanRows, city: zmanCity } = useNextZman()
+
+// The Hebrew date/daf yomi rolls over at צאת הכוכבים, not civil midnight. Reuse
+// the zmanim engine's tzeit (single source of truth) rather than recomputing:
+// once `now` is past today's tzeit, render the *next* civil day. Reactive on
+// tzeit + now, so it rolls over the moment we cross nightfall.
+const dateReference = computed(() => {
+  const ref = new Date(zmanNow.value)
+  const t = zmanTzeit.value
+  if (t && zmanNow.value.getTime() >= t.getTime()) ref.setDate(ref.getDate() + 1)
+  return ref
+})
+// Key on the calendar day so the 30s `now` tick doesn't re-render the date;
+// only an actual day change (incl. crossing tzeit) reloads.
+watch(() => dateReference.value.toDateString(), () => loadDateInfo(dateReference.value), {
+  immediate: true,
+})
+
+// "בעוד ..." phrasing: minutes only under an hour, otherwise hours (+ minutes).
+const nextZmanCountdown = computed(() => {
+  const total = nextZman.value?.minutesUntil ?? 0
+  if (total < 60) return `בעוד ${total} דקות`
+  const hours = Math.floor(total / 60)
+  const minutes = total % 60
+  const hoursText = hours === 1 ? 'שעה' : hours === 2 ? 'שעתיים' : `${hours} שעות`
+  if (minutes === 0) return `בעוד ${hoursText}`
+  return `בעוד ${hoursText} ו-${minutes} דקות`
+})
 
 // The date bar never wraps. When it can't fit on one line we drop optional
 // items by priority — clock first (level ≥ 1), then the nearest-zman
@@ -442,7 +469,7 @@ function focusSearchInput() {
 }
 
 onMounted(() => {
-  loadDateInfo()
+  // Hebrew date now loads via the dateReference watch (immediate) above.
   // Focus up front, independent of the getList() await below — on a cold start
   // that first-run IndexedDB read is slow and must not delay the focus.
   focusSearchInput()
@@ -551,7 +578,7 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
             ref="zmanButtonRef"
             class="bar-item bar-item--btn zman"
             :class="[`zman--${nextZman.urgency}`, { on: isZmanPopupOpen, 'zman--flash': nextZman.flash }]"
-            :title="`בעוד ${nextZman.minutesUntil} דקות · לחץ לכל הזמנים`"
+            :title="`${nextZmanCountdown} · לחץ לכל הזמנים`"
             @click="toggleZmanPopup"
           >
             <span class="bar-lbl">{{ nextZman.label }}:</span> {{ nextZmanTime }}

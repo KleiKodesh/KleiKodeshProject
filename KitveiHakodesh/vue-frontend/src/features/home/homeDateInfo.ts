@@ -11,17 +11,23 @@ const MONTH_NAMES: Record<number, string> = {
 }
 
 function stripGeresh(s: string): string {
-  return s.replace(/[\u05F3\u05F4]/g, '')
+  return s.replace(/[׳״]/g, '')
 }
 
 export const dateInfo = ref<HomeDateInfo>({ hebrewDate: '', dafYomi: null })
 
-/** Call once from onMounted — defers hebcal/hdate parse until after first render. */
-export async function loadDateInfo(): Promise<void> {
+/**
+ * Recompute the displayed Hebrew date + daf yomi for a given reference date.
+ *
+ * The halachic day rolls at צאת הכוכבים (nightfall), not civil midnight — so the
+ * caller passes a reference already advanced by a day once we're past today's
+ * tzeit. Tzeit itself comes from useNextZman (single zmanim source of truth), so
+ * this stays a pure calendar render with no zmanim engine of its own.
+ */
+export async function loadDateInfo(reference: Date = new Date()): Promise<void> {
   const { HDate } = await import('@hebcal/hdate')
 
-  const today = new Date()
-  const hd = new HDate(today)
+  const hd = new HDate(reference)
   const parts = hd.renderGematriya().split(' ')
   const day = stripGeresh(parts[0] ?? '')
   const year = parts[parts.length - 1] ?? ''
@@ -33,7 +39,7 @@ export async function loadDateInfo(): Promise<void> {
   const { DafYomi } = await import('@hebcal/learning')
   let dafYomi: string | null = null
   try {
-    dafYomi = new DafYomi(hd).render('he').replace(/[\u05F3\u05F4]/g, '')
+    dafYomi = new DafYomi(hd).render('he').replace(/[׳״]/g, '')
   } catch {}
 
   dateInfo.value = { hebrewDate: `${day} ${monthName} ${year}`, dafYomi }

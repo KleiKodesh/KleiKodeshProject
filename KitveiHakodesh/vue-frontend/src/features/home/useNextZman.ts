@@ -159,6 +159,16 @@ export function useNextZman() {
 
   const displayTime = computed(() => (next.value ? fmt(next.value.time) : null))
 
+  /**
+   * Today's צאת הכוכבים — exposed so the home date bar can roll the Hebrew date
+   * over at nightfall (single source of truth; no second zmanim computation).
+   */
+  const tzeit = computed<Date | null>(() => {
+    if (!ready.value) return null
+    ensureDay(now.value)
+    return cachedToday?.tzeit ?? null
+  })
+
   /** Full day table for the popup — every zman, marking the next + the passed. */
   const rows = computed<ZmanRow[]>(() => {
     if (!ready.value || !cachedToday) return []
@@ -222,5 +232,5 @@ export function useNextZman() {
     now.value = new Date()
   }, 30_000)
 
-  return { next, displayTime, rows, city }
+  return { next, displayTime, tzeit, rows, city, now }
 }
