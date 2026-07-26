@@ -88,6 +88,42 @@ interface SelectionResult {
   firstLineIndex: number | null
 }
 
+/**
+ * Resolves the source `lineIndex` of the FIRST selected line from a live range.
+ *
+ * Virtualization-safe: a Range's boundary containers are always live DOM nodes —
+ * if a line scrolled out of the virtualized DOM, the browser would have clamped the
+ * selection at that boundary. So `range.startContainer` reliably belongs to the true
+ * first line of the *current* selection. We walk up from it to the nearest
+ * [data-index] row and map that array index to lines[idx].lineIndex.
+ *
+ * Falls back to the old intersect-scan over rendered .line nodes only if the walk-up
+ * fails (e.g. the start boundary sits on the scroller container itself, not a row).
+ */
+function resolveFirstLineIndex(
+  scrollerEl: HTMLElement | null,
+  range: Range,
+  lines: LineItem[],
+): number | null {
+  const indexFromNode = (node: Node | null): number | null => {
+    const el = node instanceof Element ? node : node?.parentElement ?? null
+    const row = el?.closest('[data-index]') as HTMLElement | null
+    const dataIndex = row?.dataset['index']
+    if (dataIndex == null) return null
+    return lines[parseInt(dataIndex, 10)]?.lineIndex ?? null
+  }
+
+  const fromStart = indexFromNode(range.startContainer)
+  if (fromStart != null) return fromStart
+
+  if (scrollerEl) {
+    for (const el of Array.from(scrollerEl.querySelectorAll('.line'))) {
+      if (range.intersectsNode(el)) return indexFromNode(el)
+    }
+  }
+  return null
+}
+
 function extractSelection(
   scrollerEl: HTMLElement | null,
   lines: LineItem[],
@@ -116,18 +152,7 @@ function extractSelection(
   if (!joined) joined = tmp.innerHTML
   if (!joined.trim()) return null
 
-  let firstLineIndex: number | null = null
-  if (scrollerEl) {
-    for (const el of Array.from(scrollerEl.querySelectorAll('.line'))) {
-      if (range.intersectsNode(el)) {
-        const dataIndex = (el.closest('[data-index]') as HTMLElement | null)?.dataset['index']
-        if (dataIndex != null) {
-          firstLineIndex = lines[parseInt(dataIndex, 10)]?.lineIndex ?? null
-        }
-        break
-      }
-    }
-  }
+  const firstLineIndex = resolveFirstLineIndex(scrollerEl, range, lines)
 
   return { joined, firstLineIndex }
 }
@@ -249,42 +274,25 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       tmp.appendChild(fragment)
       joined = tmp.innerHTML
       if (!joined.trim()) return null
-      // Resolve firstLineIndex from the DOM for source building
-      if (scrollerEl.value) {
-        for (const el of Array.from(scrollerEl.value.querySelectorAll('.line'))) {
-          if (range.intersectsNode(el)) {
-            const dataIndex = (el.closest('[data-index]') as HTMLElement | null)?.dataset['index']
-            if (dataIndex != null) {
-              firstLineIndex = lines()[parseInt(dataIndex, 10)]?.lineIndex ?? null
-            }
-            break
-          }
-        }
-      }
+      // Resolve firstLineIndex from the selection anchor (virtualization-safe).
+      firstLineIndex = resolveFirstLineIndex(scrollerEl.value, range, lines())
     }
 
     // ── Step 1: note markers ─────────────────────────────────────────────────
     let html: string
     let endnotesHtml = ''
     if (settingsStore.copyWithNotes) {
+      // Resolve a note by its (globally-unique) id by scanning the lines model, not
+      // the DOM. Note markers in `joined` only ever come from rendered lines, but the
+      // note *data* lives in the model — so scanning lines() works identically whether
+      // the owning row is currently virtualized in or out, and needs no DOM round-trip.
       function resolveNote(noteId: number): { noteText: string; quote: string } | undefined {
         if (!options.getNotesForLine) return undefined
-        if (isSelectAll.value) {
-          for (const lineItem of lines()) {
-            const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-            if (found) return { noteText: found.note, quote: found.quote }
-          }
-          return undefined
+        for (const lineItem of lines()) {
+          const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
+          if (found) return { noteText: found.note, quote: found.quote }
         }
-        if (!scrollerEl.value) return undefined
-        const markerEl = scrollerEl.value.querySelector(`[data-note-id="${noteId}"]`) as HTMLElement | null
-        if (!markerEl) return undefined
-        const rowEl = markerEl.closest('[data-index]') as HTMLElement | null
-        if (!rowEl) return undefined
-        const lineItem = lines()[parseInt(rowEl.dataset['index'] ?? '', 10)]
-        if (!lineItem) return undefined
-        const found = options.getNotesForLine(lineItem.id).find((n) => n.id === noteId)
-        return found ? { noteText: found.note, quote: found.quote } : undefined
+        return undefined
       }
       const { html: extracted, endnotes } = extractEndnotes(joined, resolveNote)
       html = extracted
