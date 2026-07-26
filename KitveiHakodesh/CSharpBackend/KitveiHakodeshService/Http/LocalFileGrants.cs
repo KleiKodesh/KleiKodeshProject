@@ -9,10 +9,19 @@ namespace KitveiHakodeshService.Http;
 /// (e.g. the DocumentLocator index).
 ///
 /// A path becomes servable only by first passing the token-gated <c>openLocalFile</c> op,
-/// which fully validates it (see <see cref="TryGrant"/>) and mints an unguessable 128-bit
-/// handle. <c>GET /file</c> then serves STRICTLY by handle — it never accepts a raw path, so
-/// it has no path-traversal or arbitrary-file surface of its own. The handle IS the
-/// capability: possessing a valid one proves it was minted through the authenticated op.
+/// which fully validates it and mints an unguessable 128-bit handle. <c>GET /file</c> then
+/// serves STRICTLY by handle — it never accepts a raw path, so it has no path-traversal or
+/// arbitrary-file surface of its own. The handle IS the capability: possessing a valid one
+/// proves it was minted through the authenticated op.
+///
+/// Two grant kinds:
+///   • File grant  — <see cref="Grant"/> / <see cref="TryResolve"/> — serves one specific file.
+///     Used for PDFs and single-file direct-serve types where no sibling assets are needed.
+///   • Folder grant — <see cref="GrantFolder"/> / <see cref="TryResolveFolder"/> — serves ANY
+///     file inside a specific folder (and its sub-directories), validated to prevent traversal
+///     outside the root. Used for HTML files so their sibling CSS/JS/image assets load at
+///     /file/&lt;folderHandle&gt;/relative/path. The capability covers the entire folder tree that
+///     was opened, matching the hosted mode's SetVirtualHostNameToFolderMapping behaviour.
 ///
 /// Handles are per service instance (they die on restart — the client re-opens by path to get
 /// a fresh one) and the store is bounded (FIFO eviction), so a caller can't grow it without
@@ -29,7 +38,10 @@ public sealed class LocalFileGrants
     private static readonly string[] ConvertExtensions =
         [".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm", ".odt", ".rtf"];
 
+    // File handles: handle → absolute file path.
     private readonly ConcurrentDictionary<string, string> _byHandle = new(StringComparer.Ordinal);
+    // Folder handles: handle → absolute folder path (trailing backslash normalised away).
+    private readonly ConcurrentDictionary<string, string> _folderByHandle = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<string> _order = new();
 
     /// <summary>
@@ -92,11 +104,25 @@ public sealed class LocalFileGrants
     /// endpoint serves strictly by handle, so it never sees a raw client path.</summary>
     public string Grant(string canonicalPath)
     {
-        string handle = Convert.ToHexString(RandomNumberGenerator.GetBytes(16)); // 128-bit, unguessable
+        string handle = MintHandle();
         _byHandle[handle] = canonicalPath;
         _order.Enqueue(handle);
-        while (_order.Count > MaxGrants && _order.TryDequeue(out string? old) && old is not null)
-            _byHandle.TryRemove(old, out _);
+        Evict();
+        return handle;
+    }
+
+    /// <summary>Mint an unguessable capability handle for a folder. The GET /file endpoint can
+    /// serve any file within (and below) this folder using the path
+    /// <c>/file/&lt;handle&gt;/relative/path</c>. Traversal outside the root is rejected by
+    /// <see cref="TryResolveFolder"/>.</summary>
+    public string GrantFolder(string canonicalFolderPath)
+    {
+        // Normalise: strip trailing separator so prefix-check in TryResolveFolder is consistent.
+        string folder = canonicalFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string handle = MintHandle();
+        _folderByHandle[handle] = folder;
+        _order.Enqueue(handle);
+        Evict();
         return handle;
     }
 
@@ -106,5 +132,50 @@ public sealed class LocalFileGrants
         path = "";
         if (string.IsNullOrEmpty(handle)) return false;
         return _byHandle.TryGetValue(handle, out path!) && !string.IsNullOrEmpty(path);
+    }
+
+    /// <summary>Resolve a folder handle + a relative path segment to a canonical file path,
+    /// rejecting traversal attempts that would escape the folder root. Returns false when the
+    /// handle is unknown/evicted, the relative path is empty or invalid, or the resolved path
+    /// would lie outside the folder.</summary>
+    public bool TryResolveFolder(string? handle, string? relativePath, out string fullPath)
+    {
+        fullPath = "";
+        if (string.IsNullOrEmpty(handle) || string.IsNullOrEmpty(relativePath)) return false;
+        if (!_folderByHandle.TryGetValue(handle, out string? root) || string.IsNullOrEmpty(root)) return false;
+
+        // Normalise the relative path: replace forward slashes, strip leading separator.
+        string rel = relativePath.Replace('/', Path.DirectorySeparatorChar)
+                                 .TrimStart(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrEmpty(rel)) return false;
+
+        // Resolve to an absolute path and ensure it lives strictly inside the root.
+        // GetFullPath collapses any '..' segments, so a traversal attempt like
+        // '../../Windows/System32/calc.exe' resolves to something outside root and is rejected.
+        string candidate;
+        try { candidate = Path.GetFullPath(Path.Combine(root, rel)); }
+        catch { return false; }
+
+        // The candidate must start with the root path followed by a separator (or equal it
+        // exactly for a file right in the root). This prevents a handle for 'C:\foo' from
+        // serving 'C:\foobar\secret.txt' via a crafted relative path.
+        if (!candidate.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(candidate, root, StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        fullPath = candidate;
+        return true;
+    }
+
+    private static string MintHandle() =>
+        Convert.ToHexString(RandomNumberGenerator.GetBytes(16)); // 128-bit, unguessable
+
+    private void Evict()
+    {
+        while (_order.Count > MaxGrants && _order.TryDequeue(out string? old) && old is not null)
+        {
+            _byHandle.TryRemove(old, out _);
+            _folderByHandle.TryRemove(old, out _);
+        }
     }
 }

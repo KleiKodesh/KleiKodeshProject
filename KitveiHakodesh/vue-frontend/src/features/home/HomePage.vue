@@ -20,6 +20,7 @@ import {
   IconDocumentPdf24Filled,
   IconDocumentText24Filled,
   IconDocumentGlobe24Filled,
+  IconPuzzlePiece24Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
 import IconBookRtl24 from '@/components/IconBookRtl24.vue'
@@ -182,6 +183,12 @@ const RECENTLY_OPENED_ICON_MAP: Record<string, { icon: Component; color: string 
   '/pdf-view': { icon: IconDocumentPdf24Filled, color: '#F40F02' },
   '/html-view': { icon: IconDocumentGlobe24Filled, color: '#0097fb' },
   '/txt-view': { icon: IconDocumentText24Filled, color: '#9e9e9e' },
+}
+
+function getRecentTileIcon(entry: RecentlyOpenedEntry): { icon: Component; color: string } {
+  if (entry.route === '/html-view' && entry.isOtzariaAddin)
+    return { icon: IconPuzzlePiece24Regular, color: '#7b5ea7' }
+  return RECENTLY_OPENED_ICON_MAP[entry.route]!
 }
 
 const tiles = computed(() => {
@@ -555,8 +562,8 @@ function onRemoveRecent(entry: RecentlyOpenedEntry) {
           v-for="(entry, i) in visibleRecentlyOpenedList"
           :key="entry.key"
           :label="entry.title"
-          :icon="RECENTLY_OPENED_ICON_MAP[entry.route]!.icon"
-          :color="RECENTLY_OPENED_ICON_MAP[entry.route]!.color"
+          :icon="getRecentTileIcon(entry).icon"
+          :color="getRecentTileIcon(entry).color"
           :pinned="entry.pinned"
           actions
           @tap="openRecentEntry(entry, $event)"

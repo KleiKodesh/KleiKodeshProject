@@ -95,14 +95,8 @@ namespace KitveiHakodeshLib.LocalFile
                 else if (ext == ".pdf" || ext == ".htm" || ext == ".html")
                 {
                     string url = RegisterFolder(filePath);
-                    _bridge.PushEvent(new
-                    {
-                        @event = "localFileReady",
-                        url,
-                        fileName = Path.GetFileName(filePath),
-                        filePath,
-                        openInNewTab = true,
-                    });
+                    bool isOtzariaAddin = File.Exists(Path.Combine(Path.GetDirectoryName(filePath) ?? "", "manifest.json"));
+                    _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath, openInNewTab = true, isOtzariaAddin });
                 }
                 else
                 {
@@ -221,7 +215,8 @@ namespace KitveiHakodeshLib.LocalFile
                         else if (ext == ".pdf" || ext == ".htm" || ext == ".html")
                         {
                             string url = RegisterFolder(filePath);
-                            _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath });
+                            bool isOtzariaAddin = File.Exists(Path.Combine(Path.GetDirectoryName(filePath) ?? "", "manifest.json"));
+                            _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath, isOtzariaAddin });
                             _bridge.Reply(id, new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
                         }
                         else

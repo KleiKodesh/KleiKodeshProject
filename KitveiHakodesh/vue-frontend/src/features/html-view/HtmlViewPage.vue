@@ -9,6 +9,8 @@ import type { ThemePreset } from '@/theme/themeTypes'
 import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
 import { useSwipe } from '@vueuse/core'
 import { shallowRef } from 'vue'
+import { useOtzariaAddinBridge } from './useOtzariaAddinBridge'
+import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
@@ -26,6 +28,21 @@ let loadTimeoutId: number | null = null
 
 const tabId = paneNavigation.activeTabId
 let scrollSaveTimer: number | null = null
+
+// When isOtzariaAddin is set on the tab, activate the bridge after iframe load.
+// The addin id used to scope IDB storage is derived from localFilePath (the folder
+// name is unique enough) since we don't parse the manifest on the Vue side.
+const isOtzariaAddin = computed(() => !!(paneNavigation.activeTab as any).isOtzariaAddin)
+const addinIdRef = computed(() => {
+  const filePath = (paneNavigation.activeTab as any).localFilePath as string | undefined
+  if (!filePath) return ''
+  // Use the parent folder name as the storage key — simple and stable.
+  const sep = filePath.includes('\\') ? '\\' : '/'
+  const parts = filePath.split(sep)
+  return parts[parts.length - 2] ?? parts[parts.length - 1] ?? ''
+})
+
+const bridge = useOtzariaAddinBridge(iframeRef, addinIdRef)
 
 // ── Load handling ─────────────────────────────────────────────────────────────
 
@@ -63,6 +80,34 @@ function onIframeLoad() {
   attachIframeWheelRelay()
   sendThemeToIframe()
   restoreScrollPosition()
+  if (isOtzariaAddin.value) bridge.onIframeLoaded()
+
+  // Use the HTML page's <title> as the tab title — this is meaningful for multi-file
+  // HTML pages (addins, exported documents) where the entry point is always index.html
+  // and the file name itself carries no useful information.
+  const pageTitle = iframeRef.value?.contentDocument?.title?.trim()
+  if (pageTitle) {
+    tabStore.updateTab(tabId, { title: pageTitle })
+    // Patch the recently opened entry for this file so the home page dropdown and
+    // native chrome dropdown show the page title rather than the file name.
+    // trackNavigation performs an in-place LRU bump keyed on localFilePath, so calling
+    // it again with the corrected title replaces the existing entry without adding a duplicate.
+    const tab = paneNavigation.activeTab
+    const filePath = tab.localFilePath
+    if (filePath) {
+      const recentlyOpenedStore = useRecentlyOpenedStore()
+      recentlyOpenedStore.trackNavigation(
+        '/html-view',
+        pageTitle,
+        undefined,
+        filePath,
+        undefined,
+        undefined,
+        tab.localFileName,
+        !!(tab as any).isOtzariaAddin,
+      )
+    }
+  }
 }
 
 async function retry() {

@@ -120,7 +120,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
       _converting.delete(tabId)
     }
     if (msg.event === 'localFileReady') {
-      // HTML and PDF files — served via virtual host URL
+      // HTML and PDF files — served via virtual host URL.
+      // isOtzariaAddin is set by C#/dev-service when it detects a manifest.json
+      // next to the HTML file — HtmlViewPage checks this flag to activate the bridge.
       const path = (msg.filePath as string) ?? ''
       const extension = path.substring(path.lastIndexOf('.')).toLowerCase()
       const isHtmlLike = extension === '.htm' || extension === '.html'
@@ -132,6 +134,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFilePath: msg.filePath as string,
         localFileVirtualUrl: msg.url as string,
         localFileConverting: false,
+        ...(isHtmlLike && msg.isOtzariaAddin ? { isOtzariaAddin: true } : {}),
       }
       const tabId = resolveOpenInNewTab(msg.openInNewTab)
         ? openInTargetPane(tabFields)

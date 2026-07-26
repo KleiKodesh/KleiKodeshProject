@@ -429,12 +429,15 @@ function devSqlitePlugin(): Plugin {
         // token-gated openLocalFile op), so no token is needed on this hop.
         if (req.method === 'GET' && typeof req.url === 'string' && req.url.startsWith('/khs-file/')) {
           // Handle rides in the PATH (hex, URL-safe) — survives pdf.js's file= param round-trip.
-          const h = req.url.slice('/khs-file/'.length).split('?')[0].split('/')[0]
-          if (!khsHttpPort || !h) { res.writeHead(502); res.end(); return }
+          // URL form 1: /khs-file/<fileHandle>           — single-file grant (PDF etc.)
+          // URL form 2: /khs-file/<folderHandle>/rel/path — folder grant (HTML + siblings)
+          // In both cases the service path is /file/<rest-of-url-after-/khs-file/>.
+          const rest = req.url.slice('/khs-file/'.length).split('?')[0]
+          if (!khsHttpPort || !rest) { res.writeHead(502); res.end(); return }
           const headers: Record<string, string> = {}
           if (req.headers.range) headers.Range = req.headers.range as string
           const proxy = http.request(
-            { host: KHS_HOST, port: khsHttpPort, path: `/file/${h}`, method: 'GET', headers },
+            { host: KHS_HOST, port: khsHttpPort, path: `/file/${rest}`, method: 'GET', headers },
             (pres) => { res.writeHead(pres.statusCode || 502, pres.headers); pres.pipe(res) },
           )
           proxy.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end() } })

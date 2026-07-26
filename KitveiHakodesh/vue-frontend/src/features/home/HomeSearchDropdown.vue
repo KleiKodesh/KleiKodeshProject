@@ -16,6 +16,7 @@ import {
   IconLibrary20Regular,
   IconDocumentPdf20Regular,
   IconApps20Regular,
+  IconPuzzlePiece20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useListKeys } from '@/composables/useListKeyNav'
@@ -188,8 +189,10 @@ function getFileIcon(fileName: string): FileIconInfo {
 
 // Route → icon for the recently-opened rows — the 20px versions of the
 // home-page tile icons (RECENTLY_OPENED_ICON_MAP), same colors.
-function getRecentIcon(route: RecentlyOpenedEntry['route']): FileIconInfo {
-  switch (route) {
+function getRecentIcon(entry: RecentlyOpenedEntry): FileIconInfo {
+  if (entry.route === '/html-view' && entry.isOtzariaAddin)
+    return { component: IconPuzzlePiece20Regular, color: '#7b5ea7' }
+  switch (entry.route) {
     case '/pdf-view':
       return { component: IconDocumentPdf20Filled, color: '#F40F02' }
     case '/html-view':
@@ -281,9 +284,9 @@ function getTabIcon(route: string): FileIconInfo {
           @auxclick.middle="emit('selectRecent', entry, wantsNewTab($event))"
         >
           <component
-            :is="getRecentIcon(entry.route).component"
+            :is="getRecentIcon(entry).component"
             class="home-search-dropdown__item-icon"
-            :style="{ color: getRecentIcon(entry.route).color }"
+            :style="{ color: getRecentIcon(entry).color }"
           />
           <span class="home-search-dropdown__item-title">{{ entry.title }}</span>
         </div>

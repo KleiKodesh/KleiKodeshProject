@@ -87,6 +87,8 @@ export interface Tab {
   // input survives a tab switch and back. Cleared when the tab navigates in place.
   hebrewBooksSearchQuery?: string
   tocPath?: string
+  /** Persisted — true when this /html-view tab is hosting an Otzaria addin (manifest.json detected next to the HTML file). */
+  isOtzariaAddin?: boolean
 }
 
 interface PersistedTabList {
