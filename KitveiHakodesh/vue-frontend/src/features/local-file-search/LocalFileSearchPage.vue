@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
   IconWarning20Regular,
@@ -68,12 +69,40 @@ function selectSortOrder(value: LocalFileSearchSortOrder) {
   isSortDropdownOpen.value = false
 }
 
+// ── Animated placeholder ──────────────────────────────────────────────────────
+// Same typewriter treatment the full-text search bar uses, so the two search
+// pages advertise their query syntax the same way.
+
+const PLACEHOLDERS = [
+  'חפש קבצים לפי שם או לפי תיקייה...',
+  'הקלד תוספים: עבור תוספי אוצריא',
+]
+const placeholder = ref(PLACEHOLDERS[0]!)
+let phraseIdx = 0, charIdx = 0, pauseTicks = 0
+
+const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
+  if (pauseTicks > 0) { pauseTicks--; return }
+  const target = PLACEHOLDERS[phraseIdx]!
+  if (charIdx < target.length) {
+    placeholder.value = target.slice(0, ++charIdx)
+  } else {
+    pauseTicks = 12
+    phraseIdx = (phraseIdx + 1) % PLACEHOLDERS.length
+    charIdx = 0
+  }
+}, 80)
+
+watch(searchQuery, (v) => (v ? pauseTyping() : resumeTyping()))
+
 // ── Query persistence across navigation ───────────────────────────────────────
 
 // Restore from the tab object on mount (singleton route — mounted once)
 onMounted(() => {
   const savedQuery = paneNavigation.activeTab.fileSearchQuery
-  if (savedQuery) searchQuery.value = savedQuery
+  if (savedQuery) {
+    searchQuery.value = savedQuery
+    pauseTyping() // the watch above only fires on change, not on this initial set
+  }
   nextTick(() => searchInputElement.value?.focus())
 })
 
@@ -234,7 +263,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
         v-model="searchQuery"
         type="search"
         class="search-input"
-        placeholder="חפש קבצים לפי שם או לפי תיקייה..."
+        :placeholder="placeholder"
         spellcheck="false"
         autocomplete="off"
         @keydown.up.prevent="focusResults"
