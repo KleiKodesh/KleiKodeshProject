@@ -225,8 +225,12 @@ const allRelated = computed(() => [
 </template>
 
 <style scoped>
+/* No horizontal padding here — the scrolling children (.defs-section,
+   .related-section) must span the full pane width so their scrollbars sit at
+   the page edge, not floating beside the text. Each child insets its own
+   content instead. */
 .word-page {
-  padding: 12px 16px;
+  padding: 12px 0;
   direction: rtl;
   display: flex;
   flex-direction: column;
@@ -244,6 +248,7 @@ const allRelated = computed(() => [
   font-size: 1.69em;
   font-weight: 700;
   margin: 0 0 8px;
+  padding-inline: 16px;
   line-height: 1.2;
   flex-shrink: 0;
 }
@@ -261,6 +266,7 @@ const allRelated = computed(() => [
 .defs-section {
   padding-bottom: 8px;
   padding-top: 8px;
+  padding-inline: 16px;
   border-bottom: 1px solid color-mix(in srgb, var(--border-color) 50%, transparent);
   flex: 1 1 0;
   min-height: 80px;
@@ -295,6 +301,8 @@ const allRelated = computed(() => [
   line-height: 1.6;
   color: color-mix(in srgb, var(--text-primary) 80%, var(--text-secondary));
   overflow-wrap: break-word;
+  text-align: justify;
+  text-align-last: right;
 }
 
 .def-source {
@@ -314,6 +322,7 @@ const allRelated = computed(() => [
   flex-direction: column;
   gap: 6px;
   padding-top: 8px;
+  padding-inline: 16px;
   max-height: 25%;
   overflow-y: auto;
   scrollbar-width: thin;
@@ -325,6 +334,8 @@ const allRelated = computed(() => [
   margin: 0;
   font-size: 0.92em;
   line-height: 1.6;
+  text-align: justify;
+  text-align-last: right;
 }
 
 .comma { color: var(--text-secondary); }
@@ -350,6 +361,8 @@ const allRelated = computed(() => [
   line-height: 1.6;
   color: color-mix(in srgb, var(--text-primary) 80%, var(--text-secondary));
   overflow-wrap: break-word;
+  text-align: justify;
+  text-align-last: right;
   cursor: default;
   margin-top: 6px;
   padding-top: 6px;
@@ -365,6 +378,7 @@ const allRelated = computed(() => [
 
 .special-entry-label {
   display: block;
+  text-align: right;
   font-size: 0.77em;
   font-weight: 700;
   color: var(--text-secondary);
