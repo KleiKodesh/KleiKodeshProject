@@ -2,7 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   censorDivineNames,
   normalizeDivineNameMode,
+  normalizeElokimMode,
+  normalizeOtherNamesMode,
   DEFAULT_DIVINE_NAME_MODE,
+  DEFAULT_ELOKIM_MODE,
+  DEFAULT_OTHER_NAMES_MODE,
 } from './censorDivineNames'
 
 // Vocalized tetragrammaton variants. Written with explicit escapes where the
@@ -142,6 +146,138 @@ describe('the separator is non-breaking', () => {
   it('renders the same glyph a reader would expect from a hyphen', () => {
     // Sanity check on the codepoint itself, so a stray edit to SEP is caught.
     expect(NBHY.codePointAt(0)).toBe(0x2011)
+  })
+})
+
+describe('elokim mode (the אלהים family)', () => {
+  // Each entry: source, hyphen result, kuf result, daled result.
+  const FAMILY: [string, string, string, string][] = [
+    ['אֱלֹהִים', 'אֱ' + NBHY + 'לֹהִים', 'אֱלֹקִים', 'אֱלֹדִים'],
+    ['אֱלוֹהִים', 'אֱ' + NBHY + 'לוֹהִים', 'אֱלוֹקִים', 'אֱלוֹדִים'],
+    ['אֱלֹהֵי', 'אֱ' + NBHY + 'לֹהֵי', 'אֱלֹקֵי', 'אֱלֹדֵי'],
+    ['אֱלוֹהַ', 'אֱ' + NBHY + 'לוֹהַ', 'אֱלוֹקַ', 'אֱלוֹדַ'],
+  ]
+
+  it('separates with a non-breaking hyphen in hyphen mode', () => {
+    for (const [source, hyphen] of FAMILY) {
+      expect(censorDivineNames(source, { elokim: 'hyphen' })).toBe(hyphen)
+    }
+  })
+
+  it('swaps the ה for ק in kuf mode, keeping points and te\'amim in place', () => {
+    for (const [source, , kuf] of FAMILY) {
+      expect(censorDivineNames(source, { elokim: 'kuf' })).toBe(kuf)
+    }
+  })
+
+  it('swaps the ה for ד in daled mode', () => {
+    for (const [source, , , daled] of FAMILY) {
+      expect(censorDivineNames(source, { elokim: 'daled' })).toBe(daled)
+    }
+  })
+
+  it('inserts no separator when substituting a letter', () => {
+    for (const mode of ['kuf', 'daled'] as const) {
+      for (const [source] of FAMILY) {
+        expect(censorDivineNames(source, { elokim: mode })).not.toContain(NBHY)
+      }
+    }
+  })
+
+  it('still exempts אלהים אחרים under substitution', () => {
+    const text = 'אֱלֹהִים אחרים'
+    for (const mode of ['hyphen', 'kuf', 'daled'] as const) {
+      expect(censorDivineNames(text, { elokim: mode })).toBe(text)
+    }
+  })
+
+  it('defaults to hyphen', () => {
+    expect(DEFAULT_ELOKIM_MODE).toBe('hyphen')
+    expect(censorDivineNames('אֱלֹהִים')).toBe('אֱ' + NBHY + 'לֹהִים')
+  })
+
+  it('does not reach יה, which always hyphenates', () => {
+    for (const mode of ['hyphen', 'kuf', 'daled'] as const) {
+      expect(censorDivineNames('יָהּ', { elokim: mode })).toBe('יָ' + NBHY + 'הּ')
+    }
+  })
+})
+
+describe('otherNames mode (אדני, אל, שדי — no ה to swap)', () => {
+  const NO_HE: [string, string][] = [
+    ['אֲדֹנָי', 'אֲדֹנָ' + NBHY + 'י'],
+    ['אֵל', 'אֵ' + NBHY + 'ל'],
+    ['שַׁדַּי', 'שַׁ' + NBHY + 'דַּי'],
+  ]
+
+  it('separates them in hyphen mode', () => {
+    for (const [source, expected] of NO_HE) {
+      expect(censorDivineNames(source, { otherNames: 'hyphen' })).toBe(expected)
+    }
+  })
+
+  it('leaves them fully uncensored in none mode', () => {
+    for (const [source] of NO_HE) {
+      expect(censorDivineNames(source, { otherNames: 'none' })).toBe(source)
+    }
+  })
+
+  it('is independent of the elokim setting', () => {
+    // אלהים substituted, but the no-ה names left alone.
+    const out = censorDivineNames('אֱלֹהִים אֲדֹנָי', { elokim: 'kuf', otherNames: 'none' })
+    expect(out).toBe('אֱלֹקִים אֲדֹנָי')
+  })
+
+  it('defaults to hyphen', () => {
+    expect(DEFAULT_OTHER_NAMES_MODE).toBe('hyphen')
+    expect(censorDivineNames('אֵל')).toBe('אֵ' + NBHY + 'ל')
+  })
+})
+
+describe('the three settings compose', () => {
+  const SENTENCE = 'וַיֹּאמֶר יְהוָה אֱלֹהִים אֲדֹנָי שַׁדַּי אֵל יָהּ'
+
+  it('applies each group according to its own setting', () => {
+    const out = censorDivineNames(SENTENCE, {
+      mode: 'yudKuf',
+      elokim: 'kuf',
+      otherNames: 'none',
+    })
+    expect(out).toContain('יְקוָק')      // tetragrammaton → יקוק
+    expect(out).toContain('אֱלֹקִים')    // אלהים → אלקים
+    expect(out).toContain('אֲדֹנָי')     // untouched
+    expect(out).toContain('שַׁדַּי')     // untouched
+    expect(out).toContain('יָ' + NBHY + 'הּ') // יה always hyphenated
+  })
+
+  it("mode 'none' is the master off switch, overriding the other two", () => {
+    expect(
+      censorDivineNames(SENTENCE, { mode: 'none', elokim: 'kuf', otherNames: 'hyphen' }),
+    ).toBe(SENTENCE)
+  })
+
+  it('a bare mode string still works and uses the group defaults', () => {
+    expect(censorDivineNames(SENTENCE, 'yudDaled')).toBe(censorDivineNames(SENTENCE))
+  })
+})
+
+describe('normalizeElokimMode / normalizeOtherNamesMode', () => {
+  it('passes valid values through', () => {
+    expect(normalizeElokimMode('hyphen')).toBe('hyphen')
+    expect(normalizeElokimMode('kuf')).toBe('kuf')
+    expect(normalizeElokimMode('daled')).toBe('daled')
+    expect(normalizeOtherNamesMode('hyphen')).toBe('hyphen')
+    expect(normalizeOtherNamesMode('none')).toBe('none')
+  })
+
+  it('rejects unknown values so the caller keeps its default', () => {
+    for (const bad of ['bogus', '', null, undefined, true, 3]) {
+      expect(normalizeElokimMode(bad)).toBeNull()
+      expect(normalizeOtherNamesMode(bad)).toBeNull()
+    }
+    // Cross-contamination guard: these enums do not share all their values.
+    expect(normalizeElokimMode('none')).toBeNull()
+    expect(normalizeOtherNamesMode('kuf')).toBeNull()
   })
 })
 
