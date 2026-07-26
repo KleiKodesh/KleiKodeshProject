@@ -92,10 +92,11 @@ const dropdownStyle = computed(() => ({
 }))
 
 // The three sections in priority order. The prioritized source comes first;
-// the other two follow in their natural default order.
+// the other two follow in their natural default order — local file results
+// rank above HebrewBooks, which is the remote/last-resort source.
 const sectionOrder = computed<SearchSourcePriority[]>(() => {
   const priority = props.sourcePriority
-  const all: SearchSourcePriority[] = ['catalog', 'hebrewbooks', 'files']
+  const all: SearchSourcePriority[] = ['catalog', 'files', 'hebrewbooks']
   return [priority, ...all.filter((source) => source !== priority)]
 })
 
