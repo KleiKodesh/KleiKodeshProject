@@ -8,6 +8,7 @@ import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { escapeHtml, htmlToText } from '@/utils/htmlText'
+import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { triggerCopy } from '@/composables/useLineCopy'
@@ -234,6 +235,28 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
 
+  /**
+   * Applies one copy-flag toggle through the shared exclusivity model and writes
+   * the enforced result back to the store. All four exclusivity-governed checkboxes
+   * go through here so the rules live in ONE place (copyFlagExclusivity.ts) and the
+   * lines + commentary menus can't drift apart. See that file for the rule rationale
+   * (notably: notes ⊗ END-source is intentional, notes + start-source is allowed).
+   */
+  function toggleCopyFlag(toggle: CopyExclusivityToggle, value: boolean): void {
+    const next = applyCopyExclusivity(
+      {
+        copySourcePosition: settingsStore.copySourcePosition,
+        copyWithNotes: settingsStore.copyWithNotes,
+        copyAsSourceWithQuotation: settingsStore.copyAsSourceWithQuotation,
+      },
+      toggle,
+      value,
+    )
+    settingsStore.copySourcePosition = next.copySourcePosition
+    settingsStore.copyWithNotes = next.copyWithNotes
+    settingsStore.copyAsSourceWithQuotation = next.copyAsSourceWithQuotation
+  }
+
   function buildSource(firstLineIndex: number | null, includeComma: boolean = true): string {
     const separator = includeComma ? ', ' : ' '
     // TOC paths are stored with " · " between segments (search-UI display format).
@@ -414,48 +437,32 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         get checked() { return settingsStore.copyJoinLines },
         onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
       },
-      // Radio pair — checking one unchecks the other (both off is valid)
+      // start/end are a mutually-exclusive pair rendered as two checkboxes (ticking
+      // one clears the other). All exclusivity is enforced by toggleCopyFlag →
+      // copyFlagExclusivity.ts; do not add ad-hoc clears here.
       {
         type: 'checkbox',
         label: 'העתק עם מקור בהתחלה',
         get checked() { return settingsStore.copySourcePosition === 'start' },
-        onChange: (value: boolean) => {
-          settingsStore.copySourcePosition = value ? 'start' : null
-          if (value) settingsStore.copyAsSourceWithQuotation = false
-        },
+        onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
       },
       {
         type: 'checkbox',
         label: 'העתק עם מקור בסוף',
         get checked() { return settingsStore.copySourcePosition === 'end' },
-        onChange: (value: boolean) => {
-          settingsStore.copySourcePosition = value ? 'end' : null
-          // מקור בסוף is incompatible with הערות — clear notes when end-source is enabled
-          if (value) settingsStore.copyWithNotes = false
-          if (value) settingsStore.copyAsSourceWithQuotation = false
-        },
+        onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
       },
       {
         type: 'checkbox',
         label: 'העתק מקור עם ציטוט',
         get checked() { return settingsStore.copyAsSourceWithQuotation },
-        onChange: (value: boolean) => {
-          settingsStore.copyAsSourceWithQuotation = value
-          if (value) settingsStore.copySourcePosition = null
-          if (value) settingsStore.copyWithNotes = false
-        },
+        onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
       },
-      // Independent checkboxes
       {
         type: 'checkbox',
         label: 'העתק עם הערות',
         get checked() { return settingsStore.copyWithNotes },
-        onChange: (value: boolean) => {
-          settingsStore.copyWithNotes = value
-          // הערות is incompatible with מקור בסוף — clear end-source when notes are enabled
-          if (value && settingsStore.copySourcePosition === 'end') settingsStore.copySourcePosition = null
-          if (value) settingsStore.copyAsSourceWithQuotation = false
-        },
+        onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
       },
       {
         type: 'checkbox',
