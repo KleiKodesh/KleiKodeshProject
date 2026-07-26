@@ -70,6 +70,18 @@ const HWB = '(?![\\u05D0-\\u05EA\\u0591-\\u05C7])'
 /** Four capture groups: י, ה, ו, ה — each with its trailing marks. */
 const TETRA_RE = new RegExp(`(י${D})(ה${D})(ו${D})(ה${D})${HWB}`, 'g')
 
+/**
+ * U+2011 NON-BREAKING HYPHEN — the separator used inside censored names
+ * (א‑להים, ק‑ל, ש‑די).
+ *
+ * A plain hyphen-minus (U+002D) is a line-break opportunity, so a censored name
+ * could wrap mid-word and end up split across two lines — unacceptable for a
+ * divine name. U+2011 renders identically but forbids the break, and unlike a
+ * CSS nowrap rule it travels with the text, so copy-to-clipboard and paste into
+ * Word keep the name whole.
+ */
+const SEP = '‑'
+
 /** Keep only the cantillation marks from a group, dropping the letter and its vowels. */
 function teamimOf(group: string): string {
   return group.match(TEAMIM_RE)?.join('') ?? ''
@@ -145,20 +157,20 @@ function otherNameRules(): Rule[] {
     // Must come after the יהוה rule so it never fires mid-match on the four-letter name.
     {
       regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
-      replacement: (_m: string, y: string, h: string) => y + '-' + h,
+      replacement: (_m: string, y: string, h: string) => y + SEP + h,
     },
     // אדני → אדנ-י
     // Only censor when the נ carries a kamatz (ָ), which identifies the divine name אֲדֹנָי.
     // Any other vowel on the נ (chirik, patach, etc.) is a regular word — skip.
     {
       regex: new RegExp(`(א${D})(ד${D})(נ[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
-      replacement: '$1$2$3-$4',
+      replacement: `$1$2$3${SEP}$4`,
     },
     // אלהים → א-להים (not followed by אחרים)
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string, m: string) =>
-        a + '-' + l + h + y + m,
+        a + SEP + l + h + y + m,
     },
     // אלוהים → א-לוהים (not followed by אחרים)
     {
@@ -167,19 +179,19 @@ function otherNameRules(): Rule[] {
         'g',
       ),
       replacement: (_m: string, a: string, l: string, v: string, h: string, y: string, m: string) =>
-        a + '-' + l + v + h + y + m,
+        a + SEP + l + v + h + y + m,
     },
     // אלהי → א-להי
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string) =>
-        a + '-' + l + h + y,
+        a + SEP + l + h + y,
     },
     // אלוה → א-לוה
     {
       regex: new RegExp(`(א${D})(ל${D})(ו${D})(ה${D})${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, v: string, h: string) =>
-        a + '-' + l + v + h,
+        a + SEP + l + v + h,
     },
     // אל with tsere (צרה) → א-ל
     // Tsere is ֵ. Only censor when אל stands as its own word — meaning the character
@@ -195,18 +207,18 @@ function otherNameRules(): Rule[] {
         'gm',
       ),
       replacement: (_m: string, prefix: string | undefined, a: string, l: string) =>
-        (prefix ?? '') + a + '-' + l,
+        (prefix ?? '') + a + SEP + l,
     },
     // שדי with patach under shin and kamatz under dalet → ש-די
     // Patach = ַ, Kamatz = ָ
     {
       regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
-      replacement: (_m: string, sh: string, d: string, y: string) => sh + '-' + d + y,
+      replacement: (_m: string, sh: string, d: string, y: string) => sh + SEP + d + y,
     },
     // שדי with patach under shin and patach under dalet → ש-די
     {
       regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B7[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
-      replacement: (_m: string, sh: string, d: string, y: string) => sh + '-' + d + y,
+      replacement: (_m: string, sh: string, d: string, y: string) => sh + SEP + d + y,
     },
   ]
 }
