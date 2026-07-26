@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
@@ -23,10 +23,11 @@
     <!-- Required by the LibraryImport source generator (advapi32 SCM P/Invokes). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UserSecretsId>dotnet-KitveiHakodeshService-65893fd5-946c-4ba8-8798-4e827a79ea21</UserSecretsId>
-    <!-- Embed the UAC manifest requesting Administrator elevation. Needed for USN journal
-         access (FSCTL_READ_USN_JOURNAL) used by the DocumentLocator PathIndex for live
-         file-system index updates. Without elevation PathIndex falls back to a directory
-         walk and live USN updates are skipped. -->
+    <!-- Embed the UAC manifest. It requests asInvoker, NOT elevation: admin rights only buy
+         the USN journal fast path (FSCTL_READ_USN_JOURNAL) for DocumentLocator's PathIndex,
+         and PathIndex degrades cleanly without them (FallbackCrawler build, no live updates).
+         requireAdministrator here would make CreateProcess fail with ERROR_ELEVATION_REQUIRED
+         for any non-elevated parent, which breaks `npm run dev` from a normal terminal. -->
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
 

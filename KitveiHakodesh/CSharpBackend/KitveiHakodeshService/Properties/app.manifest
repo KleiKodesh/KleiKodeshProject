@@ -5,16 +5,28 @@
     <security>
       <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
         <!--
-          requireAdministrator: the service needs Administrator rights for:
+          asInvoker — deliberately NOT requireAdministrator.
+
+          Administrator rights are a pure OPTIMIZATION here, never a requirement:
             - NTFS USN journal access (FSCTL_READ_USN_JOURNAL, FSCTL_ENUM_USN_DATA)
-              for the DocumentLocator file-system index (PathIndex / MftCrawler)
-            - Starting/querying the DocumentLocator Windows service via the SCM
-          Without elevation, PathIndex falls back to a slow directory-walk build and
-          live USN journal updates are unavailable.
-          Windows will UAC-prompt once when the process is first spawned; the prompt
-          does not repeat until the exe is replaced or the token expires.
+              gives PathIndex a fast MFT index build + live file-system updates.
+          Both degrade cleanly when they're unavailable:
+            - PathIndex.Build falls back to FallbackCrawler (directory walk), which
+              indexes the same extensions and skips the same folders, so the index is
+              equivalent — just slower to build the first time.
+            - PathIndex.StartLiveUpdates pre-flights UsnJournal.CanOpenVolume and exits
+              silently when the volume handle is refused; searches keep working against
+              the built index, they just don't see files created while we run.
+
+          requireAdministrator was tried and REVERTED: a hard elevation request makes
+          CreateProcess fail outright with ERROR_ELEVATION_REQUIRED (-4094) from any
+          non-elevated parent. That broke `npm run dev` from a normal terminal — vite
+          spawns this exe, the spawn failed, so /khs-endpoint 503'd forever and the whole
+          dev data path was dead unless the terminal itself was restarted elevated.
+          asInvoker means we inherit the parent's token: elevated parent → USN fast path
+          and live updates; normal parent → fallback crawl. Either way we always START.
         -->
-        <requestedExecutionLevel level="requireAdministrator" uiAccess="false"/>
+        <requestedExecutionLevel level="asInvoker" uiAccess="false"/>
       </requestedPrivileges>
     </security>
   </trustInfo>
