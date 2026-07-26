@@ -260,6 +260,30 @@ useVirtualScrollerKeys(
 
 // ── Context menu ──────────────────────────────────────────────────────────────
 
+// Whole-document copy source for "בחר הכל" → copy. Built from the model (every
+// visible group's lines), NOT the DOM, so a copy-all is not truncated to the
+// virtualized-in lines. Each line is a <div class="line" data-line-id> block with
+// note markers rendered in; the copy builder strips markers when notes are off and
+// flattens blocks when copyJoinLines is on.
+function buildAllCommentaryContentHtml(): string {
+  const parts: string[] = []
+  // flatIndex must track the real flatItems indexing (one header entry per group,
+  // then one entry per line) so renderContent's per-flatIndex cache is reused rather
+  // than fought — both iterate visibleGroups in the same order.
+  let flatIndex = 0
+  for (const g of visibleGroups.value) {
+    // Header line so the copied text keeps its per-commentary structure.
+    parts.push(`<div class="line">${g.bookTitle}</div>`)
+    flatIndex++
+    for (const l of g.lines) {
+      const rendered = props.renderContent(l.content, flatIndex, l.lineId, props.searchQuery)
+      parts.push(`<div class="line" data-line-id="${l.lineId}">${rendered}</div>`)
+      flatIndex++
+    }
+  }
+  return parts.join('')
+}
+
 const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
@@ -288,6 +312,8 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onPa
       })
     }),
   props.getNotesForLine,
+  isSelectAll,
+  buildAllCommentaryContentHtml,
 )
 useScopedCopy(
   scrollerEl,

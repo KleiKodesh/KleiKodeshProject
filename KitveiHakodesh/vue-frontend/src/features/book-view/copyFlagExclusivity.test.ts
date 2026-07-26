@@ -44,27 +44,48 @@ describe('applyCopyExclusivity', () => {
     expect(fromStart.copyWithNotes).toBe(true)
   })
 
-  it('quotation ⊗ {start, end, notes} — enabling quotation clears all three', () => {
-    const r = applyCopyExclusivity(
-      { copySourcePosition: 'start', copyWithNotes: true, copyAsSourceWithQuotation: false },
-      'sourceWithQuotation',
-      true,
-    )
+  it('enabling quotation with no position defaults to start and clears notes', () => {
+    const r = applyCopyExclusivity({ ...NONE, copyWithNotes: true }, 'sourceWithQuotation', true)
     expect(r.copyAsSourceWithQuotation).toBe(true)
-    expect(r.copySourcePosition).toBe(null)
+    expect(r.copySourcePosition).toBe('start')
     expect(r.copyWithNotes).toBe(false)
   })
 
-  it('enabling start/end/notes clears quotation', () => {
-    const base = { ...NONE, copyAsSourceWithQuotation: true }
-    expect(applyCopyExclusivity(base, 'sourceStart', true).copyAsSourceWithQuotation).toBe(false)
-    expect(applyCopyExclusivity(base, 'sourceEnd', true).copyAsSourceWithQuotation).toBe(false)
-    expect(applyCopyExclusivity(base, 'withNotes', true).copyAsSourceWithQuotation).toBe(false)
+  it('enabling quotation KEEPS an already-set position (end stays end)', () => {
+    const r = applyCopyExclusivity({ ...NONE, copySourcePosition: 'end' }, 'sourceWithQuotation', true)
+    expect(r.copyAsSourceWithQuotation).toBe(true)
+    expect(r.copySourcePosition).toBe('end')
   })
 
-  it('turning a flag OFF never forces anything else on/off', () => {
+  it('quotation requires a position — start/end act as a radio while it is on', () => {
+    const on = { copySourcePosition: 'start' as const, copyWithNotes: false, copyAsSourceWithQuotation: true }
+    // switching between positions works
+    expect(applyCopyExclusivity(on, 'sourceEnd', true).copySourcePosition).toBe('end')
+    // unchecking the active position flips to the other, never both off
+    expect(applyCopyExclusivity(on, 'sourceStart', false).copySourcePosition).toBe('end')
+    const onEnd = { ...on, copySourcePosition: 'end' as const }
+    expect(applyCopyExclusivity(onEnd, 'sourceEnd', false).copySourcePosition).toBe('start')
+  })
+
+  it('enabling start or end while quotation is on does NOT clear quotation', () => {
+    const on = { copySourcePosition: 'start' as const, copyWithNotes: false, copyAsSourceWithQuotation: true }
+    expect(applyCopyExclusivity(on, 'sourceEnd', true).copyAsSourceWithQuotation).toBe(true)
+  })
+
+  it('enabling notes clears quotation', () => {
+    const on = { copySourcePosition: 'start' as const, copyWithNotes: false, copyAsSourceWithQuotation: true }
+    const r = applyCopyExclusivity(on, 'withNotes', true)
+    expect(r.copyWithNotes).toBe(true)
+    expect(r.copyAsSourceWithQuotation).toBe(false)
+    expect(r.copySourcePosition).toBe('start') // start survives notes
+  })
+
+  it('turning a position OFF clears it when quotation is off', () => {
     const start = applyCopyExclusivity({ ...NONE, copySourcePosition: 'start' }, 'sourceStart', false)
     expect(start).toEqual(NONE)
+  })
+
+  it('turning notes OFF never forces anything else on/off', () => {
     const notes = applyCopyExclusivity({ ...NONE, copyWithNotes: true }, 'withNotes', false)
     expect(notes).toEqual(NONE)
   })
@@ -82,10 +103,19 @@ describe('normalizeCopyFlags', () => {
     expect(normalizeCopyFlags(valid)).toEqual(valid)
   })
 
-  it('repairs quotation coexisting with source + notes (quotation wins)', () => {
+  it('quotation drops notes but KEEPS the position', () => {
     const bad = { copySourcePosition: 'end' as const, copyWithNotes: true, copyAsSourceWithQuotation: true }
     expect(normalizeCopyFlags(bad)).toEqual({
-      copySourcePosition: null,
+      copySourcePosition: 'end',
+      copyWithNotes: false,
+      copyAsSourceWithQuotation: true,
+    })
+  })
+
+  it('quotation with no position defaults to start', () => {
+    const bad = { copySourcePosition: null, copyWithNotes: false, copyAsSourceWithQuotation: true }
+    expect(normalizeCopyFlags(bad)).toEqual({
+      copySourcePosition: 'start',
       copyWithNotes: false,
       copyAsSourceWithQuotation: true,
     })
