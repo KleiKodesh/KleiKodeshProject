@@ -8,8 +8,8 @@
  *      contains a structural TOC keyword ("משנה תורה הלכות שבת"), the TOC
  *      results are additionally shown below the book results. Results share
  *      the catalog page's IDB LRU cache.
- *   2. HebrewBooks  — async, only when isHosted
- *   3. Document Locator (file system) — async, only when isHosted
+ *   2. Document Locator (file system) — async, only when isHosted
+ *   3. HebrewBooks  — async, only when isHosted
  *
  * Each source resolves independently and writes to its own ref so the
  * dropdown can render partial results as they arrive.
