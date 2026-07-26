@@ -107,91 +107,122 @@
 		</tabs>
 	</ribbon>
 
+	<!-- Word swaps in a DIFFERENT context menu depending on what is under the
+	     cursor, and Office has no "all menus" hook — so every item has to be
+	     repeated per menu, with globally-unique ids (the -Hl / -Num / -Bul / -Sp /
+	     -Gr suffixes). contextMenu_Click / getContextVisible key off "Catalog" in
+	     the id, so the suffix does not change their behaviour.
+
+	     No insertBeforeMso/insertAfterMso anchors anywhere: an anchor naming a
+	     control that is not present on a given menu (or in a given Word build)
+	     makes Office drop the item SILENTLY. Unanchored items append to the end of
+	     the menu — less prominent, but they always show up. -->
 	<contextMenus>
 		<contextMenu idMso="ContextMenuText">
+			<menuSeparator id="KleiKodeshContextSeparator"/>
 			<button id="SearchFtsFromSelection"
 					label="העתק לחיפוש בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
-					onAction="contextMenu_Click"
-					insertBeforeMso="Cut"/>
+					onAction="contextMenu_Click"/>
 			<button id="SearchCatalogFromSelection"
 					label="חיפוש ספר בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
-					onAction="contextMenu_Click"
-					insertBeforeMso="Cut"/>
+					onAction="contextMenu_Click"/>
 			<button id="OpenLinkInKitveiHakodesh"
 					label="פתח קישור בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
 					onAction="openLink_Click"
-					getVisible="getContextVisible"
-					insertBeforeMso="Cut"/>
-			<menuSeparator id="KleiKodeshContextSeparator"
-						   insertBeforeMso="Cut"/>
+					getVisible="getContextVisible"/>
 		</contextMenu>
 
 		<!-- Right-clicking ON a hyperlink swaps in the hyperlink-specific menu
 		     (ContextMenuHyperlink) — NOT ContextMenuText. Only the open-link item
-		     belongs here (the two search items require selected text). Anchored before
-		     "Cut" — the first built-in control on this menu — so it sits at the very top
-		     (anchoring before HyperlinkEdit put it below Cut/Copy/Paste). -->
+		     belongs here (the two search items require selected text). -->
 		<contextMenu idMso="ContextMenuHyperlink">
+			<menuSeparator id="KleiKodeshContextSeparatorHl"/>
 			<button id="OpenLinkInKitveiHakodeshHl"
 					label="פתח קישור בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
 					onAction="openLink_Click"
-					getVisible="getContextVisible"
-					insertBeforeMso="Cut"/>
-			<menuSeparator id="KleiKodeshContextSeparatorHl"
-						   insertBeforeMso="Cut"/>
+					getVisible="getContextVisible"/>
 		</contextMenu>
 
 		<!-- Numbered- and bulleted-list paragraphs use their OWN context menus
 		     (ContextMenuListsNumbering / ContextMenuListsBullets), NOT
 		     ContextMenuText, so right-clicking a list item never shows the items
-		     above. Office has no "all menus" hook — the search items must be
-		     repeated per menu, with globally-unique ids (the -Num / -Bul suffixes).
-		     contextMenu_Click / getContextVisible key off "Catalog" in the id, so
-		     the suffix does not change their behaviour. -->
+		     above. -->
 		<contextMenu idMso="ContextMenuListsNumbering">
+			<menuSeparator id="KleiKodeshContextSeparatorNum"/>
 			<button id="SearchFtsFromSelectionNum"
 					label="העתק לחיפוש בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
-					onAction="contextMenu_Click"
-					insertBeforeMso="Cut"/>
+					onAction="contextMenu_Click"/>
 			<button id="SearchCatalogFromSelectionNum"
 					label="חיפוש ספר בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
-					onAction="contextMenu_Click"
-					insertBeforeMso="Cut"/>
+					onAction="contextMenu_Click"/>
 			<button id="OpenLinkInKitveiHakodeshNum"
 					label="פתח קישור בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
 					onAction="openLink_Click"
-					getVisible="getContextVisible"
-					insertBeforeMso="Cut"/>
-			<menuSeparator id="KleiKodeshContextSeparatorNum"
-						   insertBeforeMso="Cut"/>
+					getVisible="getContextVisible"/>
 		</contextMenu>
 
 		<contextMenu idMso="ContextMenuListsBullets">
+			<menuSeparator id="KleiKodeshContextSeparatorBul"/>
 			<button id="SearchFtsFromSelectionBul"
 					label="העתק לחיפוש בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
-					onAction="contextMenu_Click"
-					insertBeforeMso="Cut"/>
+					onAction="contextMenu_Click"/>
 			<button id="SearchCatalogFromSelectionBul"
 					label="חיפוש ספר בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
-					onAction="contextMenu_Click"
-					insertBeforeMso="Cut"/>
+					onAction="contextMenu_Click"/>
 			<button id="OpenLinkInKitveiHakodeshBul"
 					label="פתח קישור בכתבי הקודש"
 					getImage="getKitveiHakodeshIcon"
 					onAction="openLink_Click"
-					getVisible="getContextVisible"
-					insertBeforeMso="Cut"/>
-			<menuSeparator id="KleiKodeshContextSeparatorBul"
-						   insertBeforeMso="Cut"/>
+					getVisible="getContextVisible"/>
+		</contextMenu>
+
+		<!-- A word Word flags as a misspelling gets ContextMenuSpell (the
+		     suggestions / Ignore All / Add to Dictionary menu) instead of
+		     ContextMenuText. Hebrew text wrapped in apostrophes or gershayim
+		     (וכו' , ר' , 'שלום') is almost never in the proofing dictionary, so this
+		     is the menu users actually hit there. ContextMenuGrammar covers the
+		     blue/green grammar-and-style squiggles. -->
+		<contextMenu idMso="ContextMenuSpell">
+			<menuSeparator id="KleiKodeshContextSeparatorSp"/>
+			<button id="SearchFtsFromSelectionSp"
+					label="העתק לחיפוש בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="SearchCatalogFromSelectionSp"
+					label="חיפוש ספר בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="OpenLinkInKitveiHakodeshSp"
+					label="פתח קישור בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"/>
+		</contextMenu>
+
+		<contextMenu idMso="ContextMenuGrammar">
+			<menuSeparator id="KleiKodeshContextSeparatorGr"/>
+			<button id="SearchFtsFromSelectionGr"
+					label="העתק לחיפוש בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="SearchCatalogFromSelectionGr"
+					label="חיפוש ספר בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="OpenLinkInKitveiHakodeshGr"
+					label="פתח קישור בכתבי הקודש"
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"/>
 		</contextMenu>
 	</contextMenus>
 </customUI>
