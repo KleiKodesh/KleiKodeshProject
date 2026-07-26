@@ -279,17 +279,29 @@ async function spawnKhsExe(): Promise<void> {
   })
   khsProc.stdout?.on('data', (d: Buffer) => process.stdout.write(`[khs] ${d}`))
   khsProc.stderr?.on('data', (d: Buffer) => process.stderr.write(`[khs] ${d}`))
-  // Detect elevation failure: if the exe has requireAdministrator in its manifest and
-  // this terminal is not elevated, spawn succeeds but the process exits immediately with
-  // code null or a Windows error code. Surface a clear message instead of a cryptic hang.
-  khsProc.on('error', (err: NodeJS.ErrnoException) => {
-    if (err.code === 'UNKNOWN' || (err as any).errno === -4094 /* ERROR_ELEVATION_REQUIRED */) {
+  // A spawn that never started (bad path, or a manifest demanding elevation we don't have —
+  // ERROR_ELEVATION_REQUIRED surfaces as code UNKNOWN / errno -4094). CLEAR khsProc: 'error'
+  // fires INSTEAD OF 'exit' when the process never launched, so leaving the handle set would
+  // make ensureKhsService believe a spawn is still in flight and block on waitForKhsPipe for
+  // the full startup timeout. Rejecting here instead gives the real reason immediately.
+  const spawnFailed = new Promise<never>((_, reject) => {
+    khsProc!.on('error', (err: NodeJS.ErrnoException) => {
+      khsProc = null
+      const elevation = err.code === 'UNKNOWN' || (err as any).errno === -4094
       console.error(
-        '[khs] ERROR: KitveiHakodeshService requires Administrator privileges (for NTFS USN journal access).\n' +
-        '      Restart your terminal as Administrator and run npm run dev again.',
+        elevation
+          ? '[khs] ERROR: Windows refused to start the service without elevation.\n' +
+            `      The manifest should request asInvoker — check ${path.relative(process.cwd(), path.join(KHS_DIR, 'Properties', 'app.manifest'))}\n` +
+            '      and rebuild (the exe embeds it, so a stale exe keeps the old request).'
+          : `[khs] ERROR: could not start the service: ${err.message}`,
       )
-    }
+      reject(err)
+    })
   })
+  // If the pipe wins the race below, nobody is awaiting spawnFailed any more — a later 'error'
+  // would surface as an unhandled rejection and take the dev server down. The console.error
+  // above already reported it, so swallow it here.
+  spawnFailed.catch(() => {})
   khsProc.on('exit', (code) => {
     console.log(`[khs] service exited (${code})`)
     khsProc = null
@@ -311,7 +323,9 @@ async function spawnKhsExe(): Promise<void> {
       khsReady = ensureKhsService().catch((e: any) => console.error('[khs] respawn failed:', e?.message))
     }, 400)
   })
-  await waitForKhsPipe()
+  // Race the pipe wait against a hard spawn failure so we surface the real error at once
+  // rather than polling a pipe that can never appear until the 120s timeout expires.
+  await Promise.race([waitForKhsPipe(), spawnFailed])
   ;({ port: khsHttpPort, token: khsHttpToken } = await fetchHttpEndpointOverPipe())
   console.log(`[khs] service ready — HTTP host on http://${KHS_HOST}:${khsHttpPort} (endpoint learned over the private pipe)`)
 }
