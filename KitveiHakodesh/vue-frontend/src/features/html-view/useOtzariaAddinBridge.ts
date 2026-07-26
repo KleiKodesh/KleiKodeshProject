@@ -284,8 +284,8 @@ export function useOtzariaAddinBridge(
   }
 
   const SAFE_SETTINGS: Record<string, () => unknown> = {
-    'reading.fontSize': () => settingsStore.mainFontSize,
-    'reading.lineSpacing': () => settingsStore.lineSpacing,
+    'reading.fontSize': () => settingsStore.fontSize,
+    'reading.lineSpacing': () => settingsStore.linePadding,
     'app.isDark': () => document.documentElement.getAttribute('data-theme-preset')?.includes('dark') ?? true,
   }
 
