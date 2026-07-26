@@ -2,6 +2,8 @@ import { stripNikkudFromHtml } from './hebrewTextProcessing'
 
 const CODE_HEBREW_START = 0x05D0
 const CODE_HEBREW_END = 0x05EA
+const CODE_DIGIT_START = 0x30
+const CODE_DIGIT_END = 0x39
 const CODE_TAB = 0x09
 const CODE_LF = 0x0A
 const CODE_CR = 0x0D
@@ -11,6 +13,17 @@ function isHebrewLetter(ch: string | undefined): boolean {
   if (ch === undefined) return false
   const code = ch.charCodeAt(0)
   return code >= CODE_HEBREW_START && code <= CODE_HEBREW_END
+}
+
+// A colon flanked on both sides by these is a citation separator (chapter:verse,
+// e.g. ט:יג / ח:טו / 12:5), never a vowel-pointing artifact.
+function isCitationChar(ch: string | undefined): boolean {
+  if (ch === undefined) return false
+  const code = ch.charCodeAt(0)
+  return (
+    (code >= CODE_HEBREW_START && code <= CODE_HEBREW_END) ||
+    (code >= CODE_DIGIT_START && code <= CODE_DIGIT_END)
+  )
 }
 
 function isWhitespace(ch: string | undefined): boolean {
@@ -51,8 +64,9 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
  * are transformed.
  *
  * Transformations (on top of stripNikkudFromHtml):
- *   - Colons kept only when at end-of-line (followed by a tag or end of string);
- *     mid-sentence colons (vowel-pointing artifacts) are dropped
+ *   - Colons kept when at end-of-line (followed by a tag or end of string) or when
+ *     they separate two letters/digits with no surrounding space (chapter:verse
+ *     citations); other mid-sentence colons (vowel-pointing artifacts) are dropped
  *   - Stray double-quotes ("  ״) not between two words are dropped
  *   - Multiple consecutive spaces collapsed to one
  *   - A space inserted after a period when the immediately following character
@@ -125,7 +139,14 @@ export function cleanHebrewText(html: string): string {
       while (lookahead < length && source[lookahead] === ' ') lookahead++
       // Keep the colon when it is followed by a tag (end-of-sentence before markup)
       // or when it is at the very end of the string (last character of the line).
-      if (lookahead >= length || source[lookahead] === '<') {
+      const atEndOfLine = lookahead >= length || source[lookahead] === '<'
+      // Keep it when it separates two letters/digits with no space on either side —
+      // a citation (ט:יג, ח:טו). Uses the immediate neighbours, not the
+      // space-skipping lookahead, so "הוא : שני" is still treated as an artifact.
+      const isCitation =
+        isCitationChar(specialIndex > 0 ? source[specialIndex - 1] : undefined) &&
+        isCitationChar(specialIndex + 1 < length ? source[specialIndex + 1] : undefined)
+      if (atEndOfLine || isCitation) {
         output.push(':')
         lastOutputChar = ':'
       }
