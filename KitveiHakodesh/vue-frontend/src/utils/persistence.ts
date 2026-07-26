@@ -221,6 +221,8 @@ export const KEYS = {
   SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
   SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'defaultAutoSyncCommentary',
   SETTINGS_CENSOR_DIVINE: 'censorDivineNames',
+  SETTINGS_CENSOR_ELOKIM: 'censorElokimMode',
+  SETTINGS_CENSOR_OTHER_NAMES: 'censorOtherNamesMode',
   SETTINGS_DIACRITICS: 'diacriticsState',
   SETTINGS_HEADER_FONT: 'headerFont',
   SETTINGS_TEXT_FONT: 'textFont',

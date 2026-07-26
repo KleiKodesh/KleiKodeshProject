@@ -1,13 +1,20 @@
 import { defineStore } from 'pinia'
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
   DEFAULT_DIVINE_NAME_MODE,
+  DEFAULT_ELOKIM_MODE,
+  DEFAULT_OTHER_NAMES_MODE,
   normalizeDivineNameMode,
+  normalizeElokimMode,
+  normalizeOtherNamesMode,
+  type CensorOptions,
   type DivineNameMode,
+  type ElokimMode,
+  type OtherNamesMode,
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
@@ -18,7 +25,11 @@ type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
 const DEFAULTS = {
   // How the divine names are rendered. Was a boolean in builds before the
   // multi-mode setting; normalizeDivineNameMode migrates old stored values.
+  // divineNameMode covers the tetragrammaton and is the master off switch
+  // ('none' disables all censoring); the other two cover the other names.
   divineNameMode: DEFAULT_DIVINE_NAME_MODE,
+  elokimMode: DEFAULT_ELOKIM_MODE,
+  otherNamesMode: DEFAULT_OTHER_NAMES_MODE,
   diacriticsState: 0,
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
@@ -62,6 +73,8 @@ const DEFAULTS = {
 
 export const useSettingsStore = defineStore('settings', () => {
   const divineNameMode = ref<DivineNameMode>(DEFAULTS.divineNameMode)
+  const elokimMode = ref<ElokimMode>(DEFAULTS.elokimMode)
+  const otherNamesMode = ref<OtherNamesMode>(DEFAULTS.otherNamesMode)
   const diacriticsState = ref(DEFAULTS.diacriticsState)
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
@@ -156,6 +169,10 @@ export const useSettingsStore = defineStore('settings', () => {
     // Accepts both the current mode string and the legacy boolean (true → 'yudDaled').
     const storedDivineNameMode = normalizeDivineNameMode(lsGet(KEYS.SETTINGS_CENSOR_DIVINE))
     if (storedDivineNameMode != null) divineNameMode.value = storedDivineNameMode
+    const storedElokimMode = normalizeElokimMode(lsGet(KEYS.SETTINGS_CENSOR_ELOKIM))
+    if (storedElokimMode != null) elokimMode.value = storedElokimMode
+    const storedOtherNamesMode = normalizeOtherNamesMode(lsGet(KEYS.SETTINGS_CENSOR_OTHER_NAMES))
+    if (storedOtherNamesMode != null) otherNamesMode.value = storedOtherNamesMode
     loadSetting(KEYS.SETTINGS_DIACRITICS, diacriticsState)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
@@ -231,6 +248,8 @@ export const useSettingsStore = defineStore('settings', () => {
   // ── Persistence watchers ──────────────────────────────────────────────────
 
   persistSetting(divineNameMode, KEYS.SETTINGS_CENSOR_DIVINE, applyCSSVariables)
+  persistSetting(elokimMode, KEYS.SETTINGS_CENSOR_ELOKIM)
+  persistSetting(otherNamesMode, KEYS.SETTINGS_CENSOR_OTHER_NAMES)
   persistSetting(diacriticsState, KEYS.SETTINGS_DIACRITICS)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
@@ -272,6 +291,24 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
 
+  // ── Derived ───────────────────────────────────────────────────────────────
+
+  /**
+   * The three censoring settings bundled for censorDivineNames(). Every render
+   * path reads this so they cannot drift apart, and so a render cache can key on
+   * it — see the cache keys in useBookViewLineRenderer / useCommentaryRender.
+   */
+  const censorOptions = computed<CensorOptions>(() => ({
+    mode: divineNameMode.value,
+    elokim: elokimMode.value,
+    otherNames: otherNamesMode.value,
+  }))
+
+  /** Stable cache key for the censoring settings. */
+  const censorCacheKey = computed(
+    () => `${divineNameMode.value}:${elokimMode.value}:${otherNamesMode.value}`,
+  )
+
   // ── Actions ───────────────────────────────────────────────────────────────
 
   function cycleDiacritics() {
@@ -309,6 +346,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   function reset() {
     divineNameMode.value = DEFAULTS.divineNameMode
+    elokimMode.value = DEFAULTS.elokimMode
+    otherNamesMode.value = DEFAULTS.otherNamesMode
     diacriticsState.value = DEFAULTS.diacriticsState
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
@@ -349,7 +388,8 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    divineNameMode, diacriticsState, headerFont, textFont, fontSize, linePadding,
+    divineNameMode, elokimMode, otherNamesMode, censorOptions, censorCacheKey,
+    diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,

@@ -418,7 +418,7 @@ export function useBookViewLineRenderer(
 
   function getGlobalKey(): string {
     const p = getProps()
-    return `${diacriticsState.value}|${settings.divineNameMode}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
+    return `${diacriticsState.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
   }
 
   function getAnnotationKey(lineId: number): string {
@@ -449,7 +449,7 @@ export function useBookViewLineRenderer(
 
     const p = getProps()
     let content = diacriticsState.value === 0 ? raw : diacriticsState.value === 2 ? cleanHebrewText(raw) : applyDiacriticsFilter(raw, diacriticsState.value)
-    content = censorDivineNames(content, settings.divineNameMode)
+    content = censorDivineNames(content, settings.censorOptions)
 
     // Apply user highlights first (underneath search marks and note markers)
     const lineHighlights = p.getHighlightsForLine?.(lineId) ?? []

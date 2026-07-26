@@ -4,7 +4,11 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettings } from './useSettingsPage'
-import { DIVINE_NAME_MODE_OPTIONS } from '@/utils/censorDivineNames'
+import {
+  DIVINE_NAME_MODE_OPTIONS,
+  ELOKIM_MODE_OPTIONS,
+  OTHER_NAMES_MODE_OPTIONS,
+} from '@/utils/censorDivineNames'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
@@ -13,6 +17,8 @@ import FontDisplaySettings from './FontDisplaySettings.vue'
 const settings = useSettingsStore()
 const {
   divineNameMode,
+  elokimMode,
+  otherNamesMode,
   resumeLastRead,
   defaultAutoSyncCommentary,
   headerFont,
@@ -97,11 +103,33 @@ const commentaryMaxWidthSlider = computed({
     <SettingRow
       id="nav-censor-divine-names"
       data-nav-label="כיסוי שם ה'"
-      label="כיסוי שם ה'"
-      hint="בחר כיצד ייכתב שם ה' המפורש. שאר שמות הקודש (אדנ-י, א-להים, א-ל, ש-די) מכוסים בכל האפשרויות חוץ מ'כתיב מלא'"
+      label="כיסוי שם ה' המפורש"
+      hint="בחר כיצד ייכתב שם ה' המפורש. 'כתיב מלא' מבטל את הכיסוי בכל שמות הקודש"
       wrap
     >
       <ToggleGroup v-model="divineNameMode" :options="[...DIVINE_NAME_MODE_OPTIONS]" />
+    </SettingRow>
+
+    <SettingRow
+      v-if="divineNameMode !== 'none'"
+      id="nav-censor-elokim"
+      data-nav-label="כיסוי אלהים"
+      label="כיסוי שם אלהים"
+      hint="חל גם על אלוהים, אלהי ואלוה. הנקודות והטעמים נשמרים במקומם"
+      wrap
+    >
+      <ToggleGroup v-model="elokimMode" :options="[...ELOKIM_MODE_OPTIONS]" />
+    </SettingRow>
+
+    <SettingRow
+      v-if="divineNameMode !== 'none'"
+      id="nav-censor-other-names"
+      data-nav-label="כיסוי אדני, אל, שדי"
+      label="כיסוי שאר שמות הקודש"
+      hint="אדנ‑י, א‑ל, ש‑די — שמות שאין בהם אות ה׳ להחלפה, ולכן ניתן רק להפרידם או להשאירם בכתיב מלא"
+      wrap
+    >
+      <ToggleGroup v-model="otherNamesMode" :options="[...OTHER_NAMES_MODE_OPTIONS]" />
     </SettingRow>
   </div>
 

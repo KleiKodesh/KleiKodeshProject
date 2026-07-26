@@ -11,8 +11,9 @@
 /**
  * How the four-letter name (יהוה) is rendered.
  *
- * All modes except 'none' also apply the dash treatment to the other divine names
- * (אדני, אלהים, אלוה, אל, שדי, יה) — only the tetragrammaton itself varies.
+ * This setting covers the tetragrammaton only. The other divine names have their
+ * own settings — see ElokimMode (אלהים family) and OtherNamesMode (אדני, אל, שדי).
+ * 'none' here is the master off switch: it disables all censoring.
  *
  * - 'none'      — no censoring at all, text passes through untouched
  * - 'yudDaled'  — יהוה → ידוד  (ה→ד in place, all marks kept)
@@ -44,6 +45,50 @@ export const DIVINE_NAME_MODE_OPTIONS: readonly { value: DivineNameMode; label: 
 export const DEFAULT_DIVINE_NAME_MODE: DivineNameMode = 'yudDaled'
 
 /**
+ * How the אלהים family (אלהים, אלוהים, אלהי, אלוה) is censored.
+ *
+ * These names contain a ה, so they can either be broken with a separator or
+ * have the ה swapped for another letter.
+ *
+ * - 'hyphen' — א‑להים  (non-breaking separator after the א)
+ * - 'kuf'    — אלקים   (ה→ק in place, all marks kept)
+ * - 'daled'  — אלדים   (ה→ד in place, all marks kept)
+ */
+export type ElokimMode = 'hyphen' | 'kuf' | 'daled'
+
+export const ELOKIM_MODES: readonly ElokimMode[] = ['hyphen', 'kuf', 'daled']
+
+/** Hebrew labels for the settings UI, in display order. */
+export const ELOKIM_MODE_OPTIONS: readonly { value: ElokimMode; label: string }[] = [
+  { value: 'hyphen', label: 'א‑להים' },
+  { value: 'kuf', label: 'אלקים' },
+  { value: 'daled', label: 'אלדים' },
+]
+
+export const DEFAULT_ELOKIM_MODE: ElokimMode = 'hyphen'
+
+/**
+ * How the divine names with no ה (אדני, אל, שדי) are censored.
+ *
+ * Letter substitution does not apply to these — there is no ה to swap — so the
+ * only choice is whether to break them with a separator or leave them as-is.
+ *
+ * - 'hyphen' — אדנ‑י, א‑ל, ש‑די
+ * - 'none'   — printed in full, uncensored
+ */
+export type OtherNamesMode = 'hyphen' | 'none'
+
+export const OTHER_NAMES_MODES: readonly OtherNamesMode[] = ['hyphen', 'none']
+
+/** Hebrew labels for the settings UI, in display order. */
+export const OTHER_NAMES_MODE_OPTIONS: readonly { value: OtherNamesMode; label: string }[] = [
+  { value: 'hyphen', label: 'א‑ל' },
+  { value: 'none', label: 'כתיב מלא' },
+]
+
+export const DEFAULT_OTHER_NAMES_MODE: OtherNamesMode = 'hyphen'
+
+/**
  * Coerce a persisted value into a valid mode.
  * Migrates the legacy boolean setting: true → 'yudDaled' (the only censoring
  * the old build did), false → 'none'.
@@ -53,6 +98,22 @@ export function normalizeDivineNameMode(value: unknown): DivineNameMode | null {
   if (value === false) return 'none'
   if (typeof value === 'string' && (DIVINE_NAME_MODES as readonly string[]).includes(value)) {
     return value as DivineNameMode
+  }
+  return null
+}
+
+/** Coerce a persisted value into a valid ElokimMode, or null to keep the default. */
+export function normalizeElokimMode(value: unknown): ElokimMode | null {
+  if (typeof value === 'string' && (ELOKIM_MODES as readonly string[]).includes(value)) {
+    return value as ElokimMode
+  }
+  return null
+}
+
+/** Coerce a persisted value into a valid OtherNamesMode, or null to keep the default. */
+export function normalizeOtherNamesMode(value: unknown): OtherNamesMode | null {
+  if (typeof value === 'string' && (OTHER_NAMES_MODES as readonly string[]).includes(value)) {
+    return value as OtherNamesMode
   }
   return null
 }
@@ -147,51 +208,80 @@ function tetragrammatonRule(mode: Exclude<DivineNameMode, 'none'>): Rule {
 }
 
 /**
- * The other divine names. These are censored identically in every mode except
- * 'none' — the mode only selects how the tetragrammaton is written.
+ * יה — always hyphenated (י‑הּ), in every mode.
+ *
+ * It does contain a ה, but it is a two-letter name where the ה carries the whole
+ * word: swapping it (יק / יד) leaves nothing recognisable, so the אלהים
+ * substitution setting deliberately does not reach this rule.
  */
-function otherNameRules(): Rule[] {
+function yahRule(): Rule {
+  // Matches י with kamatz (ָ) followed by ה with any diacritics/teamim, as a standalone word.
+  // Must come after the יהוה rule so it never fires mid-match on the four-letter name.
+  return {
+    regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
+    replacement: (_m: string, y: string, h: string) => y + SEP + h,
+  }
+}
+
+/**
+ * The אלהים family (אלהים, אלוהים, אלהי, אלוה).
+ *
+ * Each rule captures the ה as its own group, so 'kuf'/'daled' can swap just that
+ * letter and leave its points and te'amim in place; 'hyphen' instead inserts the
+ * separator after the א and leaves every letter alone.
+ */
+function elokimRules(mode: ElokimMode): Rule[] {
+  // For the substitution modes the ה group keeps its marks and only the letter changes.
+  const swap = mode === 'kuf' ? 'ק' : 'ד'
+  const he = (h: string) => (mode === 'hyphen' ? h : h.replace('ה', swap))
+  // The separator goes in only when we are not substituting a letter.
+  const sep = mode === 'hyphen' ? SEP : ''
+
   return [
-    // יָהּ → י-הּ
-    // Matches י with kamatz (ָ) followed by ה with any diacritics/teamim, as a standalone word.
-    // Must come after the יהוה rule so it never fires mid-match on the four-letter name.
-    {
-      regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
-      replacement: (_m: string, y: string, h: string) => y + SEP + h,
-    },
-    // אדני → אדנ-י
-    // Only censor when the נ carries a kamatz (ָ), which identifies the divine name אֲדֹנָי.
-    // Any other vowel on the נ (chirik, patach, etc.) is a regular word — skip.
-    {
-      regex: new RegExp(`(א${D})(ד${D})(נ[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
-      replacement: `$1$2$3${SEP}$4`,
-    },
-    // אלהים → א-להים (not followed by אחרים)
+    // אלהים → א-להים / אלקים / אלדים  (not followed by אחרים)
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string, m: string) =>
-        a + SEP + l + h + y + m,
+        a + sep + l + he(h) + y + m,
     },
-    // אלוהים → א-לוהים (not followed by אחרים)
+    // אלוהים → א-לוהים / אלוקים / אלודים  (not followed by אחרים)
     {
       regex: new RegExp(
         `(א${D})(ל${D})(ו${D})(ה${D})(י${D})(ם${D})(?!\\s*א${D}ח${D}ר${D}י${D}ם)${HWB}`,
         'g',
       ),
       replacement: (_m: string, a: string, l: string, v: string, h: string, y: string, m: string) =>
-        a + SEP + l + v + h + y + m,
+        a + sep + l + v + he(h) + y + m,
     },
-    // אלהי → א-להי
+    // אלהי → א-להי / אלקי / אלדי
     {
       regex: new RegExp(`(א${D})(ל${D})(ה${D})(י${D})${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, h: string, y: string) =>
-        a + SEP + l + h + y,
+        a + sep + l + he(h) + y,
     },
-    // אלוה → א-לוה
+    // אלוה → א-לוה / אלוק / אלוד
     {
       regex: new RegExp(`(א${D})(ל${D})(ו${D})(ה${D})${HWB}`, 'g'),
       replacement: (_m: string, a: string, l: string, v: string, h: string) =>
-        a + SEP + l + v + h,
+        a + sep + l + v + he(h),
+    },
+  ]
+}
+
+/**
+ * The divine names containing no ה: אדני, אל, שדי.
+ *
+ * There is no letter to substitute here, so these are either separated or left
+ * alone — see OtherNamesMode.
+ */
+function noHeNameRules(): Rule[] {
+  return [
+    // אדני → אדנ-י
+    // Only censor when the נ carries a kamatz (ָ), which identifies the divine name אֲדֹנָי.
+    // Any other vowel on the נ (chirik, patach, etc.) is a regular word — skip.
+    {
+      regex: new RegExp(`(א${D})(ד${D})(נ[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
+      replacement: `$1$2$3${SEP}$4`,
     },
     // אל with tsere (צרה) → א-ל
     // Tsere is ֵ. Only censor when אל stands as its own word — meaning the character
@@ -223,17 +313,47 @@ function otherNameRules(): Rule[] {
   ]
 }
 
+/** The three independent censoring choices. */
+export interface CensorOptions {
+  /** How the tetragrammaton (יהוה) is written. 'none' disables ALL censoring. */
+  mode?: DivineNameMode
+  /** How the אלהים family is censored. */
+  elokim?: ElokimMode
+  /** How the names with no ה (אדני, אל, שדי) are censored. */
+  otherNames?: OtherNamesMode
+}
+
 /**
  * Apply divine-name censoring to `text`.
  *
- * `mode` defaults to 'yudDaled' so existing single-argument callers keep the old
- * behaviour. Pass 'none' to get the text back unchanged.
+ * Accepts either a bare DivineNameMode (the tetragrammaton setting, with the
+ * other two groups at their defaults) or a CensorOptions object. Everything
+ * defaults such that a bare call reproduces the original ידוד behaviour.
+ *
+ * `mode: 'none'` is the master off switch — it returns the text untouched
+ * regardless of the other two settings.
  */
-export function censorDivineNames(text: string, mode: DivineNameMode = DEFAULT_DIVINE_NAME_MODE): string {
+export function censorDivineNames(
+  text: string,
+  options: DivineNameMode | CensorOptions = DEFAULT_DIVINE_NAME_MODE,
+): string {
+  const {
+    mode = DEFAULT_DIVINE_NAME_MODE,
+    elokim = DEFAULT_ELOKIM_MODE,
+    otherNames = DEFAULT_OTHER_NAMES_MODE,
+  } = typeof options === 'string' ? { mode: options } : options
+
   if (mode === 'none') return text
 
+  const rules = [
+    tetragrammatonRule(mode),
+    yahRule(),
+    ...elokimRules(elokim),
+    ...(otherNames === 'hyphen' ? noHeNameRules() : []),
+  ]
+
   let result = text
-  for (const { regex, replacement } of [tetragrammatonRule(mode), ...otherNameRules()]) {
+  for (const { regex, replacement } of rules) {
     // Shared RegExp objects are stateful only with /y; /g is reset per .replace call,
     // but reset lastIndex defensively since TETRA_RE is module-level and reused.
     regex.lastIndex = 0

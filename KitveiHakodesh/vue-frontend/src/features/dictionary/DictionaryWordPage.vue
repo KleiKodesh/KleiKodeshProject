@@ -12,7 +12,7 @@ const settings = useSettingsStore()
 const paneNavigation = usePaneNavigation()
 
 function maybeFilter(text: string): string {
-  return censorDivineNames(text, settings.divineNameMode)
+  return censorDivineNames(text, settings.censorOptions)
 }
 
 function stripHtml(source: string): string {
