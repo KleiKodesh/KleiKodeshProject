@@ -6,11 +6,12 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
+import { DIVINE_NAME_MODE_OPTIONS } from '@/utils/censorDivineNames'
 import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 
 const settings = useSettingsStore()
-const { censorDivineNames, newTabPage, resumeLastRead, defaultAutoSyncCommentary } =
+const { divineNameMode, newTabPage, resumeLastRead, defaultAutoSyncCommentary } =
   storeToRefs(settings)
 
 const bookViewStore = useBookViewStore()
@@ -75,14 +76,8 @@ function pickCity(name: string) {
     </div>
     <div class="step-scroll">
       <div class="step-card">
-        <SettingRow label="כיסוי שם ה'">
-          <ToggleGroup
-            v-model="censorDivineNames"
-            :options="[
-              { label: 'כתיב מלא', value: false },
-              { label: 'כיסוי (ה←ד)', value: true },
-            ]"
-          />
+        <SettingRow label="כיסוי שם ה'" wrap>
+          <ToggleGroup v-model="divineNameMode" :options="[...DIVINE_NAME_MODE_OPTIONS]" />
         </SettingRow>
         <SettingRow
           label="זכור מיקום אחרון בספר"

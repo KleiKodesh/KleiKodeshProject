@@ -4,6 +4,11 @@ import type { Ref } from 'vue'
 import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
+import {
+  DEFAULT_DIVINE_NAME_MODE,
+  normalizeDivineNameMode,
+  type DivineNameMode,
+} from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
@@ -11,7 +16,9 @@ export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
 
 const DEFAULTS = {
-  censorDivineNames: true,
+  // How the divine names are rendered. Was a boolean in builds before the
+  // multi-mode setting; normalizeDivineNameMode migrates old stored values.
+  divineNameMode: DEFAULT_DIVINE_NAME_MODE,
   diacriticsState: 0,
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
@@ -54,7 +61,7 @@ const DEFAULTS = {
 }
 
 export const useSettingsStore = defineStore('settings', () => {
-  const censorDivineNames = ref(DEFAULTS.censorDivineNames)
+  const divineNameMode = ref<DivineNameMode>(DEFAULTS.divineNameMode)
   const diacriticsState = ref(DEFAULTS.diacriticsState)
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
@@ -146,7 +153,9 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // Synchronous — all settings are in localStorage
   function init() {
-    loadSetting(KEYS.SETTINGS_CENSOR_DIVINE, censorDivineNames)
+    // Accepts both the current mode string and the legacy boolean (true → 'yudDaled').
+    const storedDivineNameMode = normalizeDivineNameMode(lsGet(KEYS.SETTINGS_CENSOR_DIVINE))
+    if (storedDivineNameMode != null) divineNameMode.value = storedDivineNameMode
     loadSetting(KEYS.SETTINGS_DIACRITICS, diacriticsState)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
@@ -221,7 +230,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   // ── Persistence watchers ──────────────────────────────────────────────────
 
-  persistSetting(censorDivineNames, KEYS.SETTINGS_CENSOR_DIVINE, applyCSSVariables)
+  persistSetting(divineNameMode, KEYS.SETTINGS_CENSOR_DIVINE, applyCSSVariables)
   persistSetting(diacriticsState, KEYS.SETTINGS_DIACRITICS)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
@@ -299,7 +308,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   function reset() {
-    censorDivineNames.value = DEFAULTS.censorDivineNames
+    divineNameMode.value = DEFAULTS.divineNameMode
     diacriticsState.value = DEFAULTS.diacriticsState
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
@@ -340,7 +349,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    censorDivineNames, diacriticsState, headerFont, textFont, fontSize, linePadding,
+    divineNameMode, diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,

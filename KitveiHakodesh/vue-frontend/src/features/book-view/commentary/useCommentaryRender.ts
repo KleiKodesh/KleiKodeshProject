@@ -44,7 +44,7 @@ export function useCommentaryRender(
   let globalCacheKey = ''
 
   function getGlobalKey(searchQuery: string | undefined): string {
-    return `${diacriticsState.value}|${settingsStore.censorDivineNames}|${searchQuery ?? ''}`
+    return `${diacriticsState.value}|${settingsStore.divineNameMode}|${searchQuery ?? ''}`
   }
 
   function getAnnotationKey(lineId: number): string {
@@ -164,7 +164,7 @@ export function useCommentaryRender(
 
     let result =
       diacriticsState.value === 0 ? content : diacriticsState.value === 2 ? cleanHebrewText(content) : applyDiacriticsFilter(content, diacriticsState.value)
-    if (settingsStore.censorDivineNames) result = censorDivineNames(result)
+    result = censorDivineNames(result, settingsStore.divineNameMode)
 
     // Apply user highlights before search marks so search marks render on top
     if (lineId != null && getHighlightsForLine) {

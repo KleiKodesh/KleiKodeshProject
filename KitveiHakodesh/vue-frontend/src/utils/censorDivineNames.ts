@@ -5,34 +5,135 @@
  * NOTE: JS \b (word boundary) does not recognise Hebrew characters — it only works with
  * ASCII word chars [a-zA-Z0-9_]. After a Hebrew letter \b never matches, so every pattern
  * that formerly used \b was silently broken. We use a negative lookahead for Hebrew letters
- * and diacritics instead: (?![\u05D0-\u05EA\u0591-\u05C7])
+ * and diacritics instead: (?![א-ת֑-ׇ])
  */
-export function censorDivineNames(text: string): string {
-  const D = '[\\u0591-\\u05C7]*'
-  // Tsere (צרה) = \u05B5
-  // Patach (פתח) = \u05B7
-  // Kamatz (קמץ) = \u05B8
 
-  // Hebrew word boundary: not followed by another Hebrew letter or diacritic.
-  // Replaces \b which does not work after non-ASCII characters.
-  const HWB = '(?![\\u05D0-\\u05EA\\u0591-\\u05C7])'
+/**
+ * How the four-letter name (יהוה) is rendered.
+ *
+ * All modes except 'none' also apply the dash treatment to the other divine names
+ * (אדני, אלהים, אלוה, אל, שדי, יה) — only the tetragrammaton itself varies.
+ *
+ * - 'none'      — no censoring at all, text passes through untouched
+ * - 'yudDaled'  — יהוה → ידוד  (ה→ד in place, all marks kept)
+ * - 'yudKuf'    — יהוה → יקוק  (ה→ק in place, all marks kept)
+ * - 'doubleYud' — יהוה → יי    (both ה dropped; the second י inherits the ו's nikkud,
+ *                              and every cantillation mark in the name is preserved)
+ * - 'heApostrophe' — יהוה → ה'  (plain, all nikkud and cantillation discarded)
+ */
+export type DivineNameMode = 'none' | 'yudDaled' | 'yudKuf' | 'doubleYud' | 'heApostrophe'
 
-  const patterns: { regex: RegExp; replacement: string | ((...args: string[]) => string) }[] = [
-    // יהוה → ידוד
-    {
-      regex: new RegExp(`(י${D})(ה${D})(ו${D})(ה${D})${HWB}`, 'g'),
-      replacement: (_m: string, y: string, h1: string, v: string, h2: string) =>
-        y + h1.replace('ה', 'ד') + v + h2.replace('ה', 'ד'),
-    },
+export const DIVINE_NAME_MODES: readonly DivineNameMode[] = [
+  'yudDaled',
+  'yudKuf',
+  'doubleYud',
+  'heApostrophe',
+  'none',
+]
+
+/** Hebrew labels for the settings UI, in display order. */
+export const DIVINE_NAME_MODE_OPTIONS: readonly { value: DivineNameMode; label: string }[] = [
+  { value: 'yudDaled', label: 'ידוד' },
+  { value: 'yudKuf', label: 'יקוק' },
+  { value: 'doubleYud', label: 'יי' },
+  { value: 'heApostrophe', label: "ה'" },
+  { value: 'none', label: 'כתיב מלא' },
+]
+
+export const DEFAULT_DIVINE_NAME_MODE: DivineNameMode = 'yudDaled'
+
+/**
+ * Coerce a persisted value into a valid mode.
+ * Migrates the legacy boolean setting: true → 'yudDaled' (the only censoring
+ * the old build did), false → 'none'.
+ */
+export function normalizeDivineNameMode(value: unknown): DivineNameMode | null {
+  if (value === true) return 'yudDaled'
+  if (value === false) return 'none'
+  if (typeof value === 'string' && (DIVINE_NAME_MODES as readonly string[]).includes(value)) {
+    return value as DivineNameMode
+  }
+  return null
+}
+
+// Any Hebrew point or cantillation mark.
+const D = '[\\u0591-\\u05C7]*'
+// Cantillation marks (te'amim) only — no vowel points, no dagesh/shin dots.
+// U+0591–U+05AF is the te'amim block; meteg and rafe sit outside it and are
+// point-class marks, so they are deliberately excluded.
+const TEAMIM_RE = /[֑-֯]/g
+// Hebrew word boundary: not followed by another Hebrew letter or diacritic.
+// Replaces \b which does not work after non-ASCII characters.
+const HWB = '(?![\\u05D0-\\u05EA\\u0591-\\u05C7])'
+
+/** Four capture groups: י, ה, ו, ה — each with its trailing marks. */
+const TETRA_RE = new RegExp(`(י${D})(ה${D})(ו${D})(ה${D})${HWB}`, 'g')
+
+/** Keep only the cantillation marks from a group, dropping the letter and its vowels. */
+function teamimOf(group: string): string {
+  return group.match(TEAMIM_RE)?.join('') ?? ''
+}
+
+/**
+ * יהוה → יי
+ *
+ * The two ה letters are dropped. The second י takes the ו's nikkud, so
+ * יְהוָה becomes יְיָ. Cantillation marks are preserved wherever they sat:
+ * marks on the dropped ה letters migrate onto the neighbouring י (vowel points
+ * on a dropped letter cannot be kept — the letter they belonged to is gone).
+ */
+function toDoubleYud(_m: string, y: string, h1: string, v: string, h2: string): string {
+  // First י: its own marks, plus any te'amim orphaned by the first ה.
+  const first = y + teamimOf(h1)
+  // Second י: the ו's marks verbatim (nikkud + te'amim — v[0] is the ו itself),
+  // plus te'amim orphaned by the final ה.
+  const second = 'י' + v.slice(1) + teamimOf(h2)
+  return first + second
+}
+
+interface Rule {
+  regex: RegExp
+  replacement: string | ((...args: string[]) => string)
+}
+
+/** Rules for the tetragrammaton, keyed by mode. */
+function tetragrammatonRule(mode: Exclude<DivineNameMode, 'none'>): Rule {
+  switch (mode) {
+    case 'yudDaled':
+      return {
+        regex: TETRA_RE,
+        replacement: (_m: string, y: string, h1: string, v: string, h2: string) =>
+          y + h1.replace('ה', 'ד') + v + h2.replace('ה', 'ד'),
+      }
+    case 'yudKuf':
+      return {
+        regex: TETRA_RE,
+        replacement: (_m: string, y: string, h1: string, v: string, h2: string) =>
+          y + h1.replace('ה', 'ק') + v + h2.replace('ה', 'ק'),
+      }
+    case 'doubleYud':
+      return { regex: TETRA_RE, replacement: toDoubleYud }
+    case 'heApostrophe':
+      // Plain ה' — every point and te'am inside the name is discarded.
+      return { regex: TETRA_RE, replacement: "ה'" }
+  }
+}
+
+/**
+ * The other divine names. These are censored identically in every mode except
+ * 'none' — the mode only selects how the tetragrammaton is written.
+ */
+function otherNameRules(): Rule[] {
+  return [
     // יָהּ → י-הּ
-    // Matches י with kamatz (\u05B8) followed by ה with any diacritics/teamim, as a standalone word.
+    // Matches י with kamatz (ָ) followed by ה with any diacritics/teamim, as a standalone word.
     // Must come after the יהוה rule so it never fires mid-match on the four-letter name.
     {
       regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
       replacement: (_m: string, y: string, h: string) => y + '-' + h,
     },
     // אדני → אדנ-י
-    // Only censor when the נ carries a kamatz (\u05B8), which identifies the divine name אֲדֹנָי.
+    // Only censor when the נ carries a kamatz (ָ), which identifies the divine name אֲדֹנָי.
     // Any other vowel on the נ (chirik, patach, etc.) is a regular word — skip.
     {
       regex: new RegExp(`(א${D})(ד${D})(נ[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
@@ -66,12 +167,12 @@ export function censorDivineNames(text: string): string {
         a + '-' + l + v + h,
     },
     // אל with tsere (צרה) → א-ל
-    // Tsere is \u05B5. Only censor when אל stands as its own word — meaning the character
+    // Tsere is ֵ. Only censor when אל stands as its own word — meaning the character
     // before any prefix must be a non-Hebrew character (space, punctuation, start of string).
     // Supports zero, one, or two single-letter prefixes (ו ב כ ל מ ש ה) with their diacritics.
     // Prefix letters are listed as plain Unicode code points to avoid embedding nikkud inside
     // the character class. The prefix(es) are captured as group 1 and restored unchanged.
-    // \u05D1=ב \u05D5=ו \u05DB=כ \u05DC=ל \u05DE=מ \u05E9=ש \u05D4=ה
+    // ב=ב ו=ו כ=כ ל=ל מ=מ ש=ש ה=ה
     {
       regex: new RegExp(
         `(?:^|(?<=[^\\u05D0-\\u05EA\\u0591-\\u05C7]))` +
@@ -82,7 +183,7 @@ export function censorDivineNames(text: string): string {
         (prefix ?? '') + a + '-' + l,
     },
     // שדי with patach under shin and kamatz under dalet → ש-די
-    // Patach = \u05B7, Kamatz = \u05B8
+    // Patach = ַ, Kamatz = ָ
     {
       regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
       replacement: (_m: string, sh: string, d: string, y: string) => sh + '-' + d + y,
@@ -93,9 +194,22 @@ export function censorDivineNames(text: string): string {
       replacement: (_m: string, sh: string, d: string, y: string) => sh + '-' + d + y,
     },
   ]
+}
+
+/**
+ * Apply divine-name censoring to `text`.
+ *
+ * `mode` defaults to 'yudDaled' so existing single-argument callers keep the old
+ * behaviour. Pass 'none' to get the text back unchanged.
+ */
+export function censorDivineNames(text: string, mode: DivineNameMode = DEFAULT_DIVINE_NAME_MODE): string {
+  if (mode === 'none') return text
 
   let result = text
-  for (const { regex, replacement } of patterns) {
+  for (const { regex, replacement } of [tetragrammatonRule(mode), ...otherNameRules()]) {
+    // Shared RegExp objects are stateful only with /y; /g is reset per .replace call,
+    // but reset lastIndex defensively since TETRA_RE is module-level and reused.
+    regex.lastIndex = 0
     result =
       typeof replacement === 'function'
         ? result.replace(regex, replacement as (...args: string[]) => string)

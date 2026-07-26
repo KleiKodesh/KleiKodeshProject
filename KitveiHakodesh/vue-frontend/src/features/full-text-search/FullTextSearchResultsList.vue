@@ -91,7 +91,7 @@ watch(
 
 function renderSnippet(snippet: string): string {
   if (!snippet) return snippet
-  return settingsStore.censorDivineNames ? censorDivineNames(snippet) : snippet
+  return censorDivineNames(snippet, settingsStore.divineNameMode)
 }
 
 // "הצג עוד" — per-result windowed live preview (replaces the clamped snippet).
