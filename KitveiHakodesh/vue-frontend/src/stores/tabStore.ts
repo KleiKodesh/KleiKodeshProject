@@ -95,6 +95,11 @@ interface PersistedTabList {
   tabs: Omit<Tab, 'localFileVirtualUrl' | 'openToc'>[]
   activeTabId: string
   nextId: number
+  /**
+   * Tab-id → access stamp, most-recently-active = highest. Optional: a list saved
+   * by an older build restores with no recency and falls back to strip order.
+   */
+  accessOrder?: Record<string, number>
 }
 
 const DEFAULT_TAB: Tab = { id: '1', title: 'בית', route: '/' }
@@ -105,6 +110,11 @@ export const useTabStore = defineStore('tabs', () => {
   // Active tab for the secondary (right) pane in split view. Empty string means no pane 2 tab exists yet.
   const pane2ActiveTabId = ref('')
   let nextId = 1
+
+  // Access order (MRU) — see the mruTabsForPane section below. Declared up here
+  // because init() restores it alongside the tab list.
+  const accessOrder = ref(new Map<string, number>())
+  let accessTick = 0
 
   // ── Init (called once from main.ts before mount) ──────────────────────────
 
@@ -117,6 +127,18 @@ export const useTabStore = defineStore('tabs', () => {
       tabs.value = saved.tabs
       activeTabId.value = saved.activeTabId
       nextId = saved.nextId
+      if (saved.accessOrder) {
+        // Drop stamps for tabs that no longer exist (singletons were stripped on
+        // save), and rebase the tick above the highest restored stamp so new
+        // accesses still sort on top.
+        const live = new Map<string, number>()
+        for (const t of saved.tabs) {
+          const stamp = saved.accessOrder[t.id]
+          if (stamp !== undefined) live.set(t.id, stamp)
+        }
+        accessOrder.value = live
+        accessTick = live.size > 0 ? Math.max(...live.values()) : 0
+      }
     }
   }
 
@@ -170,6 +192,13 @@ export const useTabStore = defineStore('tabs', () => {
         // active tab makes both panes render the same tab on next startup.
         : (persistable.find((t) => t.pane !== 2)?.id ?? persistable[0]?.id ?? activeTabId.value),
       nextId,
+      // Only for tabs actually being saved — a stamp for a stripped singleton would
+      // be dead weight that init() discards anyway.
+      accessOrder: Object.fromEntries(
+        persistable
+          .map((t) => [t.id, accessOrder.value.get(t.id)] as const)
+          .filter((e): e is readonly [string, number] => e[1] !== undefined),
+      ),
     })
   }
 
@@ -191,11 +220,56 @@ export const useTabStore = defineStore('tabs', () => {
         tocPath: t.tocPath,
       })),
   )
-  watch([_persistedSnapshot, activeTabId], persistTabs)
+  // accessOrder is included so a pane-2 switch (which changes neither the snapshot
+  // nor activeTabId) still persists the new recency.
+  watch([_persistedSnapshot, activeTabId, accessOrder], persistTabs)
 
   const activeTab = computed(
     (): Tab => tabs.value.find((t) => t.id === activeTabId.value) ?? tabs.value[0]!,
   )
+
+  // ── Access order (MRU) ────────────────────────────────────────────────────
+  // The `tabs` array stays in stable strip order (see switchTab) — sequential
+  // navigation depends on it. Recency is tracked separately (accessOrder, declared
+  // at the top), as a monotonic stamp per tab id, so views that want a
+  // most-recently-used order (the address bar dropdown) can sort by it without
+  // touching the real tab order. Persisted with the tab list, so the order
+  // survives a restart; tabs never visited fall back to strip order.
+
+  function markAccessed(id: string) {
+    accessOrder.value.set(id, ++accessTick)
+    // Reassign so the ref's own dependents (mruTabsForPane) re-evaluate — Map
+    // mutation alone isn't tracked by Vue's reactivity for a plain ref.
+    accessOrder.value = new Map(accessOrder.value)
+  }
+
+  /**
+   * A pane's visible tabs ordered most-recently-active first. Unvisited tabs keep
+   * their relative strip order behind the visited ones.
+   */
+  function mruTabsForPane(pane: 1 | 2): Tab[] {
+    const paneTabs = pane === 1 ? pane1Tabs.value : pane2Tabs.value
+    const order = accessOrder.value
+    return paneTabs
+      .map((t, i) => ({ t, i }))
+      .sort((a, b) => {
+        const sa = order.get(a.t.id)
+        const sb = order.get(b.t.id)
+        if (sa !== undefined && sb !== undefined) return sb - sa
+        if (sa !== undefined) return -1
+        if (sb !== undefined) return 1
+        return a.i - b.i
+      })
+      .map(({ t }) => t)
+  }
+
+  // Stamp whichever tab each pane switches to. Deliberately NOT immediate: these
+  // watchers are created during store setup, before init() runs, so an immediate
+  // call would stamp the placeholder default tab and persist it before the saved
+  // list is even read. The restored active tab already carries the highest saved
+  // stamp, so it starts on top without a re-stamp.
+  watch(activeTabId, (id) => id && markAccessed(id))
+  watch(pane2ActiveTabId, (id) => id && markAccessed(id))
 
   // Orphan adoption: while split view is CLOSED, pane 1 displays and navigates the
   // pane-2 tabs too (they keep their pane: 2 identity so they return to pane 2 the
@@ -673,6 +747,7 @@ export const useTabStore = defineStore('tabs', () => {
     activeTab,
     pane1Tabs,
     pane2Tabs,
+    mruTabsForPane,
     pane2ActiveTabId,
     activeTabForPane,
     openPane2Tab,
