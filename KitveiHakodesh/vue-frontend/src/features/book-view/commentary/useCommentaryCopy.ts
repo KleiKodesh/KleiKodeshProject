@@ -175,8 +175,8 @@ export function useCommentaryCopy(
    */
   function buildFormattedHtml(): string | null {
     // ── Acquire raw HTML ──────────────────────────────────────────────────────
-    // copyAsBlob ON:  use extractSelection (collects .line innerHTML from the scroller)
-    // copyAsBlob OFF: use raw browser selection HTML directly
+    // copyJoinLines ON:  collect each intersected .line's innerHTML (joined below)
+    // copyJoinLines OFF: use raw browser selection HTML directly (per-line blocks kept)
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
     const range = sel.getRangeAt(0)
@@ -186,8 +186,9 @@ export function useCommentaryCopy(
     let joined = tmp.innerHTML
     if (!joined.trim()) return null
 
-    // copyAsBlob ON: also collect joined from .line elements for correct block wrapping
-    if (settingsStore.copyAsBlob && scrollerEl.value) {
+    // copyJoinLines ON: re-collect the full innerHTML of each intersected .line so the
+    // flatten step (Step 2) works on complete line content, not just the DOM range.
+    if (settingsStore.copyJoinLines && scrollerEl.value) {
       const intersectedLines = Array.from(scrollerEl.value.querySelectorAll('.line'))
         .filter((el) => range.intersectsNode(el))
       if (intersectedLines.length) {
@@ -206,15 +207,20 @@ export function useCommentaryCopy(
       html = stripNoteMarkers(joined)
     }
 
-    // ── Step 2: copyAsBlob div-wrapping ──────────────────────────────────────
-    // Only when blob mode is on — wrap each line in <div>...</div>
-    if (settingsStore.copyAsBlob) {
-      html = html
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => `<div>${line}</div>`)
-        .join('\n')
+    // ── Step 2: copyJoinLines — flatten to one continuous run ─────────────────
+    // Only when join-lines mode is on. `joined` above already concatenated the
+    // intersected lines' innerHTML with a space, so `html` is the combined inline
+    // content. Strip any block-level tags that would force a break between lines
+    // (<div>/<p>/<br>) and wrap the whole thing in a SINGLE <div>, so the lines
+    // paste as one uninterrupted block with no line break between them. The OFF
+    // path keeps the raw per-line blocks (one break per line).
+    if (settingsStore.copyJoinLines) {
+      const inline = html
+        .replace(/<\/?(?:div|p)[^>]*>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      html = `<div>${inline}</div>`
     }
 
     // ── Step 3: copyCleanText ────────────────────────────────────────────────
@@ -239,18 +245,18 @@ export function useCommentaryCopy(
 
     // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
     // Produces a single line: (מקור) "ציטוט"
-    // Always collects full line blocks (blob-style) and joins them into one inline
-    // paragraph regardless of the copyAsBlob setting.
+    // Always collects the full line content and joins it into one inline paragraph
+    // regardless of the copyJoinLines setting.
     // Mutually exclusive with copySourcePosition — checked via the onChange handler.
     if (settingsStore.copyAsSourceWithQuotation) {
       const activeGroup = getActiveGroup()
       const source = activeGroup
         ? buildCommentarySource(activeGroup.bookTitle, getTocPath(activeGroup.bookId))
         : ''
-      // Collect full line content. If copyAsBlob already ran, html has block-wrapped
-      // lines — strip note markers, div tags, then join. Otherwise re-collect from the DOM.
+      // Collect full line content. If copyJoinLines already ran, html is a single
+      // <div> — strip note markers, div tags, then join. Otherwise re-collect from the DOM.
       let inlineText: string
-      if (settingsStore.copyAsBlob) {
+      if (settingsStore.copyJoinLines) {
         inlineText = stripNoteMarkers(html).replace(/<\/?div>/gi, ' ').replace(/\s+/g, ' ').trim()
       } else {
         // Re-collect from blob lines for complete line content
@@ -275,7 +281,7 @@ export function useCommentaryCopy(
 
   function onCopy(): void {
     // Fire the native copy event — useScopedCopy intercepts it and applies all
-    // active flags (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText).
+    // active flags (copyJoinLines, copySourcePosition, copyWithNotes, copyCleanText).
     triggerCopy()
   }
 
@@ -320,9 +326,9 @@ export function useCommentaryCopy(
     // Independent checkboxes — all can be active simultaneously
     {
       type: 'checkbox',
-      label: 'העתק כבלוק',
-      get checked() { return settingsStore.copyAsBlob },
-      onChange: (value: boolean) => { settingsStore.copyAsBlob = value },
+      label: 'העתק כרצף (ללא מעבר שורה)',
+      get checked() { return settingsStore.copyJoinLines },
+      onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
     },
     // Radio pair — checking one unchecks the other (both off is valid)
     {

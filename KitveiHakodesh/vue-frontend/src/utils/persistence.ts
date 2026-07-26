@@ -249,7 +249,9 @@ export const KEYS = {
   SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
   SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
   SETTINGS_COPY_CLEAN_TEXT: 'copyCleanText',
-  SETTINGS_COPY_AS_BLOB: 'copyAsBlob',
+  // Storage key value kept as the historical 'copyAsBlob' string so existing users'
+  // saved preference migrates transparently; the setting is now named copyJoinLines.
+  SETTINGS_COPY_JOIN_LINES: 'copyAsBlob',
   SETTINGS_COPY_SOURCE_POSITION: 'copySourcePosition',
   SETTINGS_COPY_WITH_NOTES: 'copyWithNotes',
   SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION: 'copyAsSourceWithQuotation',
