@@ -131,12 +131,18 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
     const restored = await restoreLocalFile(item.fullPath)
     if (!restored?.url) return
 
+    // Route by what is actually served: dev Word docs may come back as HTML
+    // (Office-free fallback) — res.kind reports it. Fall back to the extension.
+    const servedRoute =
+      restored.kind === 'html' ? '/html-view' : restored.kind === 'pdf' ? '/pdf-view' : route
+
     tabStore.updateTab(targetTabId, {
-      route,
-      title: titleWithoutExtension,
+      route: servedRoute as '/html-view' | '/pdf-view',
+      title: item.addinName ? item.addinName.replace(/^תוסף אוצריא:\s*/u, '').trim() : titleWithoutExtension,
       localFileName: item.fileName,
       localFilePath: item.fullPath,
       localFileVirtualUrl: restored.url,
+      ...(item.addinName ? { isOtzariaAddin: true } : {}),
     })
   } finally {
     openingFile.value = false

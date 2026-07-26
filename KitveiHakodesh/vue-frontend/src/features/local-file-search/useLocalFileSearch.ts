@@ -21,6 +21,8 @@ export interface LocalFileSearchResult {
   path: string
   fullPath: string
   modifiedDate: number
+  /** Non-empty only for Otzaria addin entry-point files. Value is "תוסף אוצריא: {name}". */
+  addinName: string
 }
 
 export type LocalFileSearchSortOrder = 'relevance' | 'fileName' | 'fullPath' | 'date' | 'fileType'
@@ -83,11 +85,16 @@ export function useLocalFileSearch(
       return
     }
 
+    // Normalize תוספים (with or without trailing colon) to the baked index prefix
+    // "תוסף אוצריא:" so users get addin results whether they type the shorthand or the
+    // full prefix. The normalized query hits the same *word* wildcards as any other term.
+    const normalizedQuery = trimmed.replace(/תוספים:?\s*/g, 'תוסף אוצריא: ')
+
     searching.value = true
     startLoadingAnimationTimer()
 
     try {
-      const response = await fileSystemSearch(trimmed, MAX_RESULTS)
+      const response = await fileSystemSearch(normalizedQuery, MAX_RESULTS)
       if (thisGeneration !== generation) return
 
       if (response.error) {
@@ -103,6 +110,7 @@ export function useLocalFileSearch(
         path: item.path,
         fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
         modifiedDate: item.modifiedDate ?? 0,
+        addinName: (item as any).addinName ?? '',
       }))
     } catch (error) {
       if (thisGeneration !== generation) return

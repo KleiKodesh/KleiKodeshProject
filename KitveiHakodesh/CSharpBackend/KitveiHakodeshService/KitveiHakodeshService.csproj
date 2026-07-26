@@ -23,6 +23,11 @@
     <!-- Required by the LibraryImport source generator (advapi32 SCM P/Invokes). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UserSecretsId>dotnet-KitveiHakodeshService-65893fd5-946c-4ba8-8798-4e827a79ea21</UserSecretsId>
+    <!-- Embed the UAC manifest requesting Administrator elevation. Needed for USN journal
+         access (FSCTL_READ_USN_JOURNAL) used by the DocumentLocator PathIndex for live
+         file-system index updates. Without elevation PathIndex falls back to a directory
+         walk and live USN updates are skipped. -->
+    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
 
   <!-- Catalog databases shipped with the service, copied to output only when newer. -->
@@ -90,5 +95,9 @@
     <!-- Document conversion (Word→PDF via AOT-safe COM; OOXML→HTML fallback with
          wiki-style footnotes). Multi-targets net48;net10.0 — the net10.0 leg is used here. -->
     <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
+    <!-- DocumentLocator index library — multi-targets net48;net10.0-windows.
+         The net10.0-windows leg is used here so DocumentLocatorService can call
+         PathIndex directly in-process instead of going through the named pipe + JSON. -->
+    <ProjectReference Include="..\DocumentLocator\DocumentLocator\DocumentLocator.csproj" />
   </ItemGroup>
 </Project>
