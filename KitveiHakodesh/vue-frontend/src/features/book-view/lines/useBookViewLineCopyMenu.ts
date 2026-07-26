@@ -7,6 +7,7 @@ import type { useTabStore } from '@/stores/tabStore'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { escapeHtml, htmlToText } from '@/utils/htmlText'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { triggerCopy } from '@/composables/useLineCopy'
@@ -354,7 +355,10 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         inlineText = stripNoteMarkers(blobHtml).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       }
       if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
-      return `(${source}) "${inlineText}"`
+      // Decode any surviving HTML entities to real text, then escape once — the
+      // clipboard writer treats the return value as HTML, so bare </>/& must be
+      // escaped (and not double-encoded). source is plain text from buildSource.
+      return `<div dir="rtl">(${escapeHtml(source)}) "${escapeHtml(htmlToText(inlineText))}"</div>`
     }
 
     return html + endnotesHtml

@@ -3,6 +3,7 @@ import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { escapeHtml, htmlToText } from '@/utils/htmlText'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pasteIntoWord } from '@/webview-host/bridge'
@@ -277,7 +278,10 @@ export function useCommentaryCopy(
         }
       }
       if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
-      return `(${source}) "${inlineText}"`
+      // Decode any surviving HTML entities to real text, then escape once — the
+      // clipboard writer treats the return value as HTML, so bare </>/& must be
+      // escaped (and not double-encoded). source is plain text from buildCommentarySource.
+      return `<div dir="rtl">(${escapeHtml(source)}) "${escapeHtml(htmlToText(inlineText))}"</div>`
     }
 
     return html + endnotesHtml
