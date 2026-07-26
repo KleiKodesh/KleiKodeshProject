@@ -92,7 +92,9 @@ useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
 // The dropdown shows the pane's open tabs — with the recently-opened documents
 // (the home-page tile collection) below them — whenever the search has nothing
 // to show: empty/short query or a query with no matches. Results otherwise.
-const visibleTabs = computed(() => pane.tabs.value.filter((t) => t.route !== '/settings'))
+// Ordered most-recently-active first (pane.mruTabs) — a display order for this
+// list only; the pane's real tab order and the chrome tab strip are untouched.
+const visibleTabs = computed(() => pane.mruTabs.value.filter((t) => t.route !== '/settings'))
 const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
 
 const recentlyOpenedStore = useRecentlyOpenedStore()

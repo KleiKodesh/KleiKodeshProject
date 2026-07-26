@@ -24,6 +24,12 @@ export function useAppShellPane(paneId: 1 | 2) {
     paneId === 1 ? tabStore.activeTabId : tabStore.pane2ActiveTabId,
   )
 
+  /**
+   * The same tabs as `tabs`, ordered most-recently-active first. For list UIs
+   * (the address-bar dropdown) — the real tab order is unchanged.
+   */
+  const mruTabs = computed<Tab[]>(() => tabStore.mruTabsForPane(paneId))
+
   const activeTab = computed<Tab>(() => tabStore.activeTabForPane(paneId))
 
   function switchTab(id: string) {
@@ -120,6 +126,7 @@ export function useAppShellPane(paneId: 1 | 2) {
 
   return {
     tabs,
+    mruTabs,
     activeTabId,
     activeTab,
     switchTab,
