@@ -19,6 +19,13 @@ export function useCommentaryCopy(
   onClearHighlight: (lineId: number, startOffset: number, endOffset: number) => void,
   onAddNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => void,
   getNotesForLine?: (lineId: number) => Note[],
+  // Select-all/copy-all support. isSelectAll reflects the container-wide "בחר הכל"
+  // state; getAllContentHtml returns the ENTIRE (filtered) commentary document as
+  // <div class="line">-wrapped, rendered lines (note markers included — Step 1 strips
+  // them when copyWithNotes is off), built from the model so it is virtualization-
+  // independent (the DOM only holds the lines currently scrolled into view).
+  isSelectAll?: Ref<boolean>,
+  getAllContentHtml?: () => string,
 ) {
   const settingsStore = useSettingsStore()
   const paneNavigation = usePaneNavigation()
@@ -161,23 +168,39 @@ export function useCommentaryCopy(
     let counter = 0
     const replaced = html.replace(
       /<sup[^>]*class="user-note-marker"[^>]*data-note-id="(\d+)"[^>]*>.*?<\/sup>/gs,
-      (_match: string, noteIdStr: string) => {
+      (match: string, noteIdStr: string) => {
         const noteId = parseInt(noteIdStr, 10)
-        if (!getNotesForLine) return ''
-        const scroller = scrollerEl.value
-        if (!scroller) return ''
-        const markerEl = scroller.querySelector(`[data-note-id="${noteId}"]`) as HTMLElement | null
-        const lineEl = markerEl?.closest('[data-line-id]') as HTMLElement | null
-        const lineId = lineEl ? parseInt(lineEl.dataset['lineId'] ?? '', 10) : NaN
-        if (isNaN(lineId)) return ''
-        const foundNote = getNotesForLine(lineId).find((n) => n.id === noteId)
-        if (!foundNote) return ''
+        // The note text lives in the marker's own title attribute (set by the
+        // renderer). Read it straight from the matched HTML — this is
+        // virtualization-safe, so select-all copy resolves notes on off-screen
+        // lines too. Fall back to a DOM lookup only if the title is missing.
+        let noteText = decodeTitleAttr(match)
+        if (noteText == null) {
+          if (!getNotesForLine) return ''
+          const scroller = scrollerEl.value
+          if (!scroller) return ''
+          const markerEl = scroller.querySelector(`[data-note-id="${noteId}"]`) as HTMLElement | null
+          const lineEl = markerEl?.closest('[data-line-id]') as HTMLElement | null
+          const lineId = lineEl ? parseInt(lineEl.dataset['lineId'] ?? '', 10) : NaN
+          if (isNaN(lineId)) return ''
+          const foundNote = getNotesForLine(lineId).find((n) => n.id === noteId)
+          if (!foundNote) return ''
+          noteText = foundNote.note
+        }
         counter++
-        endnotes.push({ number: counter, noteText: foundNote.note })
+        endnotes.push({ number: counter, noteText })
         return `<sup><a href="#note-${counter}" id="ref-${counter}" style="color:var(--accent-color,#0078d4);text-decoration:none">${counter}</a></sup>`
       },
     )
     return { html: replaced, endnotes }
+  }
+
+  /** Extracts and decodes the title="…" of a note marker <sup>, or null if absent. */
+  function decodeTitleAttr(supHtml: string): string | null {
+    const m = supHtml.match(/\btitle="([^"]*)"/)
+    if (!m) return null
+    // The renderer HTML-escaped the note text into the attribute; decode it back.
+    return htmlToText(m[1]!)
   }
 
   function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
@@ -198,24 +221,37 @@ export function useCommentaryCopy(
    */
   function buildFormattedHtml(): string | null {
     // ── Acquire raw HTML ──────────────────────────────────────────────────────
-    // copyJoinLines ON:  collect each intersected .line's innerHTML (joined below)
-    // copyJoinLines OFF: use raw browser selection HTML directly (per-line blocks kept)
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
-    const range = sel.getRangeAt(0)
-    const fragment = range.cloneContents()
-    const tmp = document.createElement('div')
-    tmp.appendChild(fragment)
-    let joined = tmp.innerHTML
-    if (!joined.trim()) return null
+    // TWO INDEPENDENT decisions — do not conflate them (mirrors the lines menu):
+    //   WHICH content  → isSelectAll (select-all/copy-all): the whole (filtered)
+    //                    commentary document, built from the model so it is NOT
+    //                    truncated to the virtualized-in lines. Honoured regardless
+    //                    of copyJoinLines.
+    //   HOW to format  → copyJoinLines (Step 2 below): flatten to one run vs. keep
+    //                    per-line breaks. Purely formatting; does not pick content.
+    let joined: string
 
-    // copyJoinLines ON: re-collect the full innerHTML of each intersected .line so the
-    // flatten step (Step 2) works on complete line content, not just the DOM range.
-    if (settingsStore.copyJoinLines && scrollerEl.value) {
-      const intersectedLines = Array.from(scrollerEl.value.querySelectorAll('.line'))
-        .filter((el) => range.intersectsNode(el))
-      if (intersectedLines.length) {
-        joined = intersectedLines.map((el) => (el as HTMLElement).innerHTML).join(' ')
+    if (isSelectAll?.value && getAllContentHtml) {
+      // Copy-all: gather every visible line from the model (virtualization-independent).
+      joined = getAllContentHtml()
+      if (!joined.trim()) return null
+    } else {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
+      const range = sel.getRangeAt(0)
+      const fragment = range.cloneContents()
+      const tmp = document.createElement('div')
+      tmp.appendChild(fragment)
+      joined = tmp.innerHTML
+      if (!joined.trim()) return null
+
+      // copyJoinLines ON: re-collect the full innerHTML of each intersected .line so the
+      // flatten step (Step 2) works on complete line content, not just the DOM range.
+      if (settingsStore.copyJoinLines && scrollerEl.value) {
+        const intersectedLines = Array.from(scrollerEl.value.querySelectorAll('.line'))
+          .filter((el) => range.intersectsNode(el))
+        if (intersectedLines.length) {
+          joined = intersectedLines.map((el) => (el as HTMLElement).innerHTML).join(' ')
+        }
       }
     }
 
@@ -256,8 +292,11 @@ export function useCommentaryCopy(
     }
 
     // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
+    // Skipped when quotation is on: quotation OWNS the whole output (Step 5) and
+    // uses the same position to lay out its own parenthesised מקור, so decorating
+    // html here would be discarded (and would double-count in Step 5's re-collect).
     const position = settingsStore.copySourcePosition
-    if (position === 'start' || position === 'end') {
+    if (!settingsStore.copyAsSourceWithQuotation && (position === 'start' || position === 'end')) {
       const activeGroup = getActiveGroup()
       if (activeGroup) {
         const tocPath = getTocPath(activeGroup.bookId)
@@ -271,22 +310,26 @@ export function useCommentaryCopy(
     }
 
     // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
-    // Produces a single line: (מקור) "ציטוט"
-    // Always collects the full line content and joins it into one inline paragraph
-    // regardless of the copyJoinLines setting.
-    // Mutually exclusive with copySourcePosition — checked via the onChange handler.
+    // Produces a single inline line. The source position decides the layout:
+    //   start → (מקור) "ציטוט"      end → "ציטוט" (מקור)
+    // (quotation always has a position — enforced by copyFlagExclusivity). Always
+    // collects the full line content into one inline paragraph regardless of the
+    // copyJoinLines setting.
     if (settingsStore.copyAsSourceWithQuotation) {
       const activeGroup = getActiveGroup()
       const source = activeGroup
         ? buildCommentarySource(activeGroup.bookTitle, getTocPath(activeGroup.bookId))
         : ''
-      // Collect full line content. If copyJoinLines already ran, html is a single
-      // <div> — strip note markers, div tags, then join. Otherwise re-collect from the DOM.
+      // Collect full line content into one inline run. On the select-all path (or
+      // when copyJoinLines already ran), `html` already holds the complete content
+      // from the model — use it directly rather than re-collecting from the DOM,
+      // which would re-truncate a copy-all to the virtualized-in lines.
       let inlineText: string
-      if (settingsStore.copyJoinLines) {
-        inlineText = stripNoteMarkers(html).replace(/<\/?div>/gi, ' ').replace(/\s+/g, ' ').trim()
+      if (settingsStore.copyJoinLines || (isSelectAll?.value && getAllContentHtml)) {
+        inlineText = stripNoteMarkers(html).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim()
       } else {
-        // Re-collect from blob lines for complete line content
+        // Normal selection: re-collect from the intersected DOM lines for complete
+        // line content (the range may cut a line short, but the whole line is wanted).
         const scroller = scrollerEl.value
         const sel = window.getSelection()
         if (scroller && sel && sel.rangeCount > 0) {
@@ -303,7 +346,10 @@ export function useCommentaryCopy(
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
       // escaped (and not double-encoded). source is plain text from buildCommentarySource.
-      return `<div dir="rtl">(${escapeHtml(source)}) "${escapeHtml(htmlToText(inlineText))}"</div>`
+      const src = escapeHtml(source)
+      const quote = escapeHtml(htmlToText(inlineText))
+      const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
+      return `<div dir="rtl">${body}</div>`
     }
 
     return html + endnotesHtml

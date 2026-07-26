@@ -133,10 +133,15 @@ function extractSelection(
   renderLine?: (raw: string, lineIndex: number, lineId: number) => string,
 ): SelectionResult | null {
   if (isSelectAll) {
+    // Wrap each line as its own <div> block so the two copy concerns stay separable:
+    // with copyJoinLines OFF the per-line blocks keep one line break per line on
+    // paste (matching a normal selection), and with it ON the flatten step strips
+    // the <div>s to one continuous run. Callers that want flat text (search query,
+    // quotation re-collect) strip all tags anyway, so the wrappers don't affect them.
     const joined = lines
       .filter((l) => l.content != null)
-      .map((l) => (renderLine ? renderLine(l.content!, l.lineIndex, l.id) : l.content!))
-      .join(' ')
+      .map((l) => `<div class="line">${renderLine ? renderLine(l.content!, l.lineIndex, l.id) : l.content!}</div>`)
+      .join('')
     const firstLineIndex = lines.find((l) => l.content != null)?.lineIndex ?? null
     return { joined, firstLineIndex }
   }
@@ -278,28 +283,46 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
    */
   function buildFormattedHtml(): string | null {
     // ── Acquire raw HTML and firstLineIndex ───────────────────────────────────
-    // copyJoinLines ON:  use extractSelection (collects .line innerHTML, can use note renderer)
-    // copyJoinLines OFF: use raw browser selection HTML directly
+    // TWO INDEPENDENT decisions — do not conflate them:
+    //   WHICH content  → isSelectAll (select-all/copy-all): the whole document
+    //                    (every line, from the model) vs. just the browser range.
+    //                    This MUST be honoured regardless of copyJoinLines, or a
+    //                    select-all copy would only grab the virtualized-in lines.
+    //   HOW to format  → copyJoinLines (Step 2 below): flatten to one run vs. keep
+    //                    per-line breaks. Purely a formatting concern; it does NOT
+    //                    decide what gets copied.
     let joined: string
     let firstLineIndex: number | null = null
 
-    if (settingsStore.copyJoinLines) {
+    if (isSelectAll.value) {
+      // Copy-all: gather every line from the model (virtualization-independent).
       const renderLine = settingsStore.copyWithNotes ? options.getRenderedLineContent : undefined
-      const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value, renderLine)
+      const result = extractSelection(scrollerEl.value, lines(), true, renderLine)
       if (!result) return null
       joined = result.joined
       firstLineIndex = result.firstLineIndex
     } else {
+      // Normal selection: use the live browser range.
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
       const range = sel.getRangeAt(0)
-      const fragment = range.cloneContents()
-      const tmp = document.createElement('div')
-      tmp.appendChild(fragment)
-      joined = tmp.innerHTML
-      if (!joined.trim()) return null
-      // Resolve firstLineIndex from the selection anchor (virtualization-safe).
-      firstLineIndex = resolveFirstLineIndex(scrollerEl.value, range, lines())
+      if (settingsStore.copyJoinLines) {
+        // Collect the selected .line innerHTML (optionally via the note renderer).
+        const renderLine = settingsStore.copyWithNotes ? options.getRenderedLineContent : undefined
+        const result = extractSelection(scrollerEl.value, lines(), false, renderLine)
+        if (!result) return null
+        joined = result.joined
+        firstLineIndex = result.firstLineIndex
+      } else {
+        // Use the raw browser selection HTML directly (per-line blocks preserved).
+        const fragment = range.cloneContents()
+        const tmp = document.createElement('div')
+        tmp.appendChild(fragment)
+        joined = tmp.innerHTML
+        if (!joined.trim()) return null
+        // Resolve firstLineIndex from the selection anchor (virtualization-safe).
+        firstLineIndex = resolveFirstLineIndex(scrollerEl.value, range, lines())
+      }
     }
 
     // ── Step 1: note markers ─────────────────────────────────────────────────
@@ -351,20 +374,26 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     }
 
     // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
+    // Skipped when quotation is on: quotation OWNS the whole output (Step 5) and
+    // uses the same position to lay out its own parenthesised מקור, so decorating
+    // html here would be discarded (and would double-count in Step 5's re-collect).
     const position = settingsStore.copySourcePosition
-    if (position === 'start') {
-      const source = buildSource(firstLineIndex, false)
-      html = `<h2 dir="rtl">${source}</h2>${html}`
-    } else if (position === 'end') {
-      const source = buildSource(firstLineIndex, true)
-      html = `${html} (${source})`
+    if (!settingsStore.copyAsSourceWithQuotation) {
+      if (position === 'start') {
+        const source = buildSource(firstLineIndex, false)
+        html = `<h2 dir="rtl">${source}</h2>${html}`
+      } else if (position === 'end') {
+        const source = buildSource(firstLineIndex, true)
+        html = `${html} (${source})`
+      }
     }
 
     // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
-    // Produces a single line: (מקור) "ציטוט"
-    // Always collects the full line content and joins it into one inline paragraph
-    // regardless of the copyJoinLines setting.
-    // Mutually exclusive with copySourcePosition — checked via the onChange handler.
+    // Produces a single inline line. The source position decides the layout:
+    //   start → (מקור) "ציטוט"      end → "ציטוט" (מקור)
+    // (quotation always has a position — enforced by copyFlagExclusivity). Always
+    // collects the full line content into one inline paragraph regardless of the
+    // copyJoinLines setting.
     if (settingsStore.copyAsSourceWithQuotation) {
       const source = buildSource(firstLineIndex, true)
       // Collect full line content. If copyJoinLines already ran, html is a single
@@ -381,7 +410,10 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
       // escaped (and not double-encoded). source is plain text from buildSource.
-      return `<div dir="rtl">(${escapeHtml(source)}) "${escapeHtml(htmlToText(inlineText))}"</div>`
+      const src = escapeHtml(source)
+      const quote = escapeHtml(htmlToText(inlineText))
+      const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
+      return `<div dir="rtl">${body}</div>`
     }
 
     return html + endnotesHtml
