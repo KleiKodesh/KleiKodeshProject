@@ -85,6 +85,41 @@ describe("mode: heApostrophe", () => {
   })
 })
 
+describe('mode: hyphen (י‑ה‑ו‑ה)', () => {
+  it('separates all four letters, keeping each mark on its own letter', () => {
+    expect(censorDivineNames('יהוה', 'hyphen')).toBe(
+      ['י', 'ה', 'ו', 'ה'].join(NBHY),
+    )
+    // יְהוָה → יְ‑ה‑וָ‑ה : the sheva stays on the י, the kamatz on the ו.
+    expect(censorDivineNames(YHWH_SHEVA_KAMATZ, 'hyphen')).toBe(
+      ['יְ', 'ה', 'וָ', 'ה'].join(NBHY),
+    )
+    // The holam stays on the ה that carried it.
+    expect(censorDivineNames(YHWH_WITH_HOLAM, 'hyphen')).toBe(
+      ['יְ', 'הֹ', 'וָ', 'ה'].join(NBHY),
+    )
+  })
+
+  it('uses exactly three separators', () => {
+    const out = censorDivineNames('יהוה', 'hyphen')
+    expect([...out].filter((c) => c === NBHY)).toHaveLength(3)
+  })
+
+  it('preserves every letter and every mark', () => {
+    const out = censorDivineNames(YHWH_WITH_TEAM, 'hyphen')
+    const letters = (s: string) => [...s].filter((c) => c >= 'א' && c <= 'ת').join('')
+    const marks = (s: string) => [...s].filter((c) => c >= '֑' && c <= 'ׇ').join('')
+    expect(letters(out)).toBe('יהוה')
+    expect(marks(out)).toBe(marks(YHWH_WITH_TEAM))
+  })
+
+  it('leaves a prefix outside the separated name', () => {
+    expect(censorDivineNames('וְלַיהוָ֗ה', 'hyphen')).toBe(
+      'וְלַ' + ['י', 'ה', 'וָ֗', 'ה'].join(NBHY),
+    )
+  })
+})
+
 describe('mode: none', () => {
   it('returns the text completely untouched', () => {
     const sources = [YHWH_SHEVA_KAMATZ, YHWH_WITH_TEAM, 'אֲדֹנָי', 'אֱלֹהִים']
@@ -103,7 +138,7 @@ describe('the other divine names', () => {
     ['שַׁדַּי', 'שַׁ' + NBHY + 'דַּי'],
   ]
 
-  for (const mode of ['yudDaled', 'yudKuf', 'doubleYud', 'heApostrophe'] as const) {
+  for (const mode of ['yudDaled', 'yudKuf', 'doubleYud', 'heApostrophe', 'hyphen'] as const) {
     it(`applies the dash treatment in mode ${mode}`, () => {
       for (const [source, expected] of OTHERS) {
         expect(censorDivineNames(source, mode)).toBe(expected)
@@ -133,7 +168,7 @@ describe('the separator is non-breaking', () => {
     'שַׁדַּי',   // שדי
   ]
 
-  for (const mode of ['yudDaled', 'yudKuf', 'doubleYud', 'heApostrophe'] as const) {
+  for (const mode of ['yudDaled', 'yudKuf', 'doubleYud', 'heApostrophe', 'hyphen'] as const) {
     it(`never emits a plain hyphen in mode ${mode}`, () => {
       for (const sample of SAMPLES) {
         const out = censorDivineNames(sample, mode)
@@ -317,6 +352,7 @@ describe('normalizeDivineNameMode', () => {
     expect(normalizeDivineNameMode('yudKuf')).toBe('yudKuf')
     expect(normalizeDivineNameMode('doubleYud')).toBe('doubleYud')
     expect(normalizeDivineNameMode('heApostrophe')).toBe('heApostrophe')
+    expect(normalizeDivineNameMode('hyphen')).toBe('hyphen')
     expect(normalizeDivineNameMode('none')).toBe('none')
   })
 

@@ -22,14 +22,23 @@
  *                              and every cantillation mark in the name is preserved)
  * - 'heApostrophe' — יהוה → ה'  (nikkud discarded; cantillation marks are gathered
  *                              onto the ה so the name keeps its trope)
+ * - 'hyphen'    — יהוה → י‑ה‑ו‑ה  (all four letters kept, separated; every mark
+ *                              stays on the letter that carried it)
  */
-export type DivineNameMode = 'none' | 'yudDaled' | 'yudKuf' | 'doubleYud' | 'heApostrophe'
+export type DivineNameMode =
+  | 'none'
+  | 'yudDaled'
+  | 'yudKuf'
+  | 'doubleYud'
+  | 'heApostrophe'
+  | 'hyphen'
 
 export const DIVINE_NAME_MODES: readonly DivineNameMode[] = [
   'yudDaled',
   'yudKuf',
   'doubleYud',
   'heApostrophe',
+  'hyphen',
   'none',
 ]
 
@@ -39,6 +48,7 @@ export const DIVINE_NAME_MODE_OPTIONS: readonly { value: DivineNameMode; label: 
   { value: 'yudKuf', label: 'יקוק' },
   { value: 'doubleYud', label: 'יי' },
   { value: 'heApostrophe', label: "ה'" },
+  { value: 'hyphen', label: 'י‑ה‑ו‑ה' },
   { value: 'none', label: 'כתיב מלא' },
 ]
 
@@ -206,6 +216,15 @@ function tetragrammatonRule(mode: Exclude<DivineNameMode, 'none'>): Rule {
     case 'heApostrophe':
       // Plain ה' — nikkud discarded, cantillation carried onto the ה.
       return { regex: TETRA_RE, replacement: toHeApostrophe }
+    case 'hyphen':
+      // י‑ה‑ו‑ה — all four letters kept and separated. Each capture group is a
+      // letter plus its own marks, so joining the groups leaves every nikkud and
+      // te'am on the letter that carried it.
+      return {
+        regex: TETRA_RE,
+        replacement: (_m: string, y: string, h1: string, v: string, h2: string) =>
+          [y, h1, v, h2].join(SEP),
+      }
   }
 }
 
