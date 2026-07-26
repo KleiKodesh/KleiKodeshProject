@@ -115,7 +115,7 @@ const commentaryMaxWidthSlider = computed({
       id="nav-censor-elokim"
       data-nav-label="כיסוי אלהים"
       label="כיסוי שם אלהים"
-      hint="חל גם על אלוהים, אלהי ואלוה. הנקודות והטעמים נשמרים במקומם"
+      hint="חל גם על אלוהים, אלהי ואלוה. בהחלפת אות הנקודות והטעמים נשמרים במקומם"
       wrap
     >
       <ToggleGroup v-model="elokimMode" :options="[...ELOKIM_MODE_OPTIONS]" />

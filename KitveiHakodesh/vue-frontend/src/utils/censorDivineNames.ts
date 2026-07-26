@@ -48,21 +48,23 @@ export const DEFAULT_DIVINE_NAME_MODE: DivineNameMode = 'yudDaled'
  * How the אלהים family (אלהים, אלוהים, אלהי, אלוה) is censored.
  *
  * These names contain a ה, so they can either be broken with a separator or
- * have the ה swapped for another letter.
+ * have the ה swapped for another letter — or be left alone entirely.
  *
  * - 'hyphen' — א‑להים  (non-breaking separator after the א)
  * - 'kuf'    — אלקים   (ה→ק in place, all marks kept)
  * - 'daled'  — אלדים   (ה→ד in place, all marks kept)
+ * - 'none'   — אלהים   (printed in full, uncensored)
  */
-export type ElokimMode = 'hyphen' | 'kuf' | 'daled'
+export type ElokimMode = 'hyphen' | 'kuf' | 'daled' | 'none'
 
-export const ELOKIM_MODES: readonly ElokimMode[] = ['hyphen', 'kuf', 'daled']
+export const ELOKIM_MODES: readonly ElokimMode[] = ['hyphen', 'kuf', 'daled', 'none']
 
 /** Hebrew labels for the settings UI, in display order. */
 export const ELOKIM_MODE_OPTIONS: readonly { value: ElokimMode; label: string }[] = [
   { value: 'hyphen', label: 'א‑להים' },
   { value: 'kuf', label: 'אלקים' },
   { value: 'daled', label: 'אלדים' },
+  { value: 'none', label: 'כתיב מלא' },
 ]
 
 export const DEFAULT_ELOKIM_MODE: ElokimMode = 'hyphen'
@@ -228,12 +230,15 @@ function yahRule(): Rule {
  *
  * Each rule captures the ה as its own group, so 'kuf'/'daled' can swap just that
  * letter and leave its points and te'amim in place; 'hyphen' instead inserts the
- * separator after the א and leaves every letter alone.
+ * separator after the א and leaves every letter alone. 'none' contributes no
+ * rules, so these names pass through untouched.
  */
 function elokimRules(mode: ElokimMode): Rule[] {
+  // Uncensored — contribute no rules at all, leaving these names untouched.
+  if (mode === 'none') return []
+
   // For the substitution modes the ה group keeps its marks and only the letter changes.
-  const swap = mode === 'kuf' ? 'ק' : 'ד'
-  const he = (h: string) => (mode === 'hyphen' ? h : h.replace('ה', swap))
+  const he = (h: string) => (mode === 'hyphen' ? h : h.replace('ה', mode === 'kuf' ? 'ק' : 'ד'))
   // The separator goes in only when we are not substituting a letter.
   const sep = mode === 'hyphen' ? SEP : ''
 

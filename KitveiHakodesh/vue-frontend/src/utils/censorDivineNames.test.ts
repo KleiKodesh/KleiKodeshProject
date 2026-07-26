@@ -186,9 +186,32 @@ describe('elokim mode (the אלהים family)', () => {
 
   it('still exempts אלהים אחרים under substitution', () => {
     const text = 'אֱלֹהִים אחרים'
-    for (const mode of ['hyphen', 'kuf', 'daled'] as const) {
+    for (const mode of ['hyphen', 'kuf', 'daled', 'none'] as const) {
       expect(censorDivineNames(text, { elokim: mode })).toBe(text)
     }
+  })
+
+  it('leaves the family fully uncensored in none mode', () => {
+    for (const [source] of FAMILY) {
+      expect(censorDivineNames(source, { elokim: 'none' })).toBe(source)
+    }
+  })
+
+  it('none does not fall through to the daled substitution', () => {
+    // The swap letter is chosen with a ternary, so 'none' must be caught first.
+    expect(censorDivineNames('אֱלֹהִים', { elokim: 'none' })).not.toContain('ד')
+  })
+
+  it('none leaves the other groups censoring independently', () => {
+    const out = censorDivineNames('יְהוָה אֱלֹהִים אֲדֹנָי שַׁדַּי יָהּ', {
+      mode: 'yudDaled',
+      elokim: 'none',
+      otherNames: 'hyphen',
+    })
+    expect(out).toContain('אֱלֹהִים')            // untouched
+    expect(out).toContain('יְדוָד')              // tetragrammaton still censored
+    expect(out).toContain('אֲדֹנָ' + NBHY + 'י') // אדני still censored
+    expect(out).toContain('יָ' + NBHY + 'הּ')    // יה still censored
   })
 
   it('defaults to hyphen', () => {
@@ -197,7 +220,8 @@ describe('elokim mode (the אלהים family)', () => {
   })
 
   it('does not reach יה, which always hyphenates', () => {
-    for (const mode of ['hyphen', 'kuf', 'daled'] as const) {
+    // Including 'none' — turning off the אלהים family must not turn off יה.
+    for (const mode of ['hyphen', 'kuf', 'daled', 'none'] as const) {
       expect(censorDivineNames('יָהּ', { elokim: mode })).toBe('יָ' + NBHY + 'הּ')
     }
   })
@@ -275,9 +299,11 @@ describe('normalizeElokimMode / normalizeOtherNamesMode', () => {
       expect(normalizeElokimMode(bad)).toBeNull()
       expect(normalizeOtherNamesMode(bad)).toBeNull()
     }
-    // Cross-contamination guard: these enums do not share all their values.
-    expect(normalizeElokimMode('none')).toBeNull()
+    // Cross-contamination guard: the enums overlap on 'hyphen' and 'none' but
+    // the substitution values belong to ElokimMode alone.
+    expect(normalizeElokimMode('none')).toBe('none')
     expect(normalizeOtherNamesMode('kuf')).toBeNull()
+    expect(normalizeOtherNamesMode('daled')).toBeNull()
   })
 })
 
