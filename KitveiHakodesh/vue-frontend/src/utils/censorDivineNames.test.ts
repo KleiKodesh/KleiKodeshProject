@@ -58,11 +58,20 @@ describe('mode: doubleYud', () => {
 })
 
 describe("mode: heApostrophe", () => {
-  it("collapses the name to a bare ה' discarding all points and te'amim", () => {
+  it("collapses the name to ה' discarding all nikkud", () => {
     expect(censorDivineNames(YHWH_SHEVA_KAMATZ, 'heApostrophe')).toBe("ה'")
     expect(censorDivineNames(YHWH_WITH_HOLAM, 'heApostrophe')).toBe("ה'")
-    expect(censorDivineNames(YHWH_WITH_TEAM, 'heApostrophe')).toBe("ה'")
     expect(censorDivineNames('יהוה', 'heApostrophe')).toBe("ה'")
+  })
+
+  it("preserves cantillation, placing it on the ה before the apostrophe", () => {
+    // Tipcha (U+0596) survives; the sheva and kamatz do not.
+    expect(censorDivineNames(YHWH_WITH_TEAM, 'heApostrophe')).toBe('ה֖' + "'")
+  })
+
+  it('keeps a vocalized prefix untouched while the name itself goes bare', () => {
+    // וְלַיהוָ֗ה → וְלַה֗' — the prefix keeps its points, the name keeps only the revia.
+    expect(censorDivineNames('וְלַיהוָ֗ה', 'heApostrophe')).toBe('וְלַה֗' + "'")
   })
 })
 

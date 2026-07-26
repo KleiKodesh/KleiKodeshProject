@@ -19,7 +19,8 @@
  * - 'yudKuf'    — יהוה → יקוק  (ה→ק in place, all marks kept)
  * - 'doubleYud' — יהוה → יי    (both ה dropped; the second י inherits the ו's nikkud,
  *                              and every cantillation mark in the name is preserved)
- * - 'heApostrophe' — יהוה → ה'  (plain, all nikkud and cantillation discarded)
+ * - 'heApostrophe' — יהוה → ה'  (nikkud discarded; cantillation marks are gathered
+ *                              onto the ה so the name keeps its trope)
  */
 export type DivineNameMode = 'none' | 'yudDaled' | 'yudKuf' | 'doubleYud' | 'heApostrophe'
 
@@ -91,6 +92,20 @@ function toDoubleYud(_m: string, y: string, h1: string, v: string, h2: string): 
   return first + second
 }
 
+/**
+ * יהוה → ה'
+ *
+ * All nikkud is discarded — the four vocalized letters collapse to one bare ה,
+ * so no vowel has a letter left to sit on. Cantillation is preserved: every
+ * te'am found anywhere in the name is gathered onto the ה, before the
+ * apostrophe, so a marked name keeps its trope (יְהוָ֖ה → ה֖').
+ */
+function toHeApostrophe(...groups: string[]): string {
+  // groups[0] is the whole match; groups 1-4 are the י ה ו ה letter groups.
+  const teamim = groups.slice(1, 5).map(teamimOf).join('')
+  return 'ה' + teamim + "'"
+}
+
 interface Rule {
   regex: RegExp
   replacement: string | ((...args: string[]) => string)
@@ -114,8 +129,8 @@ function tetragrammatonRule(mode: Exclude<DivineNameMode, 'none'>): Rule {
     case 'doubleYud':
       return { regex: TETRA_RE, replacement: toDoubleYud }
     case 'heApostrophe':
-      // Plain ה' — every point and te'am inside the name is discarded.
-      return { regex: TETRA_RE, replacement: "ה'" }
+      // Plain ה' — nikkud discarded, cantillation carried onto the ה.
+      return { regex: TETRA_RE, replacement: toHeApostrophe }
   }
 }
 
