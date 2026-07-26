@@ -41,7 +41,11 @@ const KHS_FTSLIB_DIR = path.resolve(
 // The already-built Release exe. We spawn THIS directly (not `dotnet run`): a warm
 // `dotnet run` costs ~4s to pipe-ready (SDK host + MSBuild up-to-date check on every
 // launch) versus ~385ms for the prebuilt exe — a ~3.6s tax paid on every dev start.
-const KHS_EXE = path.join(KHS_DIR, 'bin', 'Release', 'net10.0', 'KitveiHakodeshService.exe')
+// TFM is net10.0-windows (the UAC manifest + USN journal work), so the output lands in
+// bin\Release\net10.0-windows\. Pointing at the old bin\Release\net10.0\ silently runs a
+// stale exe that has no DocumentLocator.dll beside it — searches still answer (via the
+// standalone DocumentLocator service's index) so the staleness is easy to miss.
+const KHS_EXE = path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
 const KHS_CONNECT_TIMEOUT_MS = 2_000
 const KHS_STARTUP_TIMEOUT_MS = 120_000 // a cold rebuild can take a while
 const KHS_STARTUP_POLL_MS = 250
