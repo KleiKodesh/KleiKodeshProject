@@ -275,6 +275,17 @@ async function spawnKhsExe(): Promise<void> {
   })
   khsProc.stdout?.on('data', (d: Buffer) => process.stdout.write(`[khs] ${d}`))
   khsProc.stderr?.on('data', (d: Buffer) => process.stderr.write(`[khs] ${d}`))
+  // Detect elevation failure: if the exe has requireAdministrator in its manifest and
+  // this terminal is not elevated, spawn succeeds but the process exits immediately with
+  // code null or a Windows error code. Surface a clear message instead of a cryptic hang.
+  khsProc.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'UNKNOWN' || (err as any).errno === -4094 /* ERROR_ELEVATION_REQUIRED */) {
+      console.error(
+        '[khs] ERROR: KitveiHakodeshService requires Administrator privileges (for NTFS USN journal access).\n' +
+        '      Restart your terminal as Administrator and run npm run dev again.',
+      )
+    }
+  })
   khsProc.on('exit', (code) => {
     console.log(`[khs] service exited (${code})`)
     khsProc = null

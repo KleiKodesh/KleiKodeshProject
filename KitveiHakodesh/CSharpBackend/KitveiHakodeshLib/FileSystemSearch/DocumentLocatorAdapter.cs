@@ -150,7 +150,8 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 list.Add(new FileSystemSearchResult(
                     System.IO.Path.GetFileName(entry.Path),
                     System.IO.Path.GetDirectoryName(entry.Path) ?? entry.Path,
-                    entry.DateMs));
+                    entry.DateMs,
+                    entry.AddinName));
             }
 
             return (list, result.Total);
@@ -198,11 +199,16 @@ namespace KitveiHakodeshLib.FileSystemSearch
 
     public sealed class FileSystemSearchResult
     {
-        public string FileName    { get; }
-        public string Path        { get; }
+        public string FileName     { get; }
+        public string Path         { get; }
         /// <summary>Last-write time as Unix milliseconds. 0 if not available.</summary>
         public long   ModifiedDate { get; }
-        public FileSystemSearchResult(string fileName, string path, long modifiedDate = 0)
-        { FileName = fileName; Path = path; ModifiedDate = modifiedDate; }
+        /// <summary>
+        /// Non-empty only for Otzaria addin entry-point files.
+        /// Value is "תוסף אוצריא: {name}" as stored in the index.
+        /// </summary>
+        public string AddinName    { get; }
+        public FileSystemSearchResult(string fileName, string path, long modifiedDate = 0, string addinName = "")
+        { FileName = fileName; Path = path; ModifiedDate = modifiedDate; AddinName = addinName ?? ""; }
     }
 }

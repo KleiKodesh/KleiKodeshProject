@@ -7,6 +7,7 @@ import {
   IconDocumentText20Filled,
   IconDocumentGlobe20Filled,
   IconWindowArrowUp20Regular,
+  IconPuzzlePiece20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
@@ -57,8 +58,9 @@ function openInDefaultApp(item: LocalFileSearchResult, event: MouseEvent) {
 
 type FileIconInfo = { component: unknown; color: string }
 
-function getFileIcon(fileName: string): FileIconInfo {
-  const extension = fileName.toLowerCase().split('.').pop()
+function getFileIcon(item: LocalFileSearchResult): FileIconInfo {
+  if (item.addinName) return { component: IconPuzzlePiece20Regular, color: '#7b5ea7' }
+  const extension = item.fileName.toLowerCase().split('.').pop()
   switch (extension) {
     case 'pdf':
       return { component: IconDocumentPdf20Filled, color: '#F40F02' }
@@ -115,12 +117,14 @@ defineExpose({
           @click="selectItem(virtualRow.index, $event)"
           @auxclick.middle="selectItem(virtualRow.index, $event)"
         >
-          <span class="icon" :style="{ color: getFileIcon(items[virtualRow.index]!.fileName).color }">
-            <component :is="getFileIcon(items[virtualRow.index]!.fileName).component" />
+          <span class="icon" :style="{ color: getFileIcon(items[virtualRow.index]!).color }">
+            <component :is="getFileIcon(items[virtualRow.index]!).component" />
           </span>
           <span class="item-text">
             <span class="item-title-row">
-              <span class="item-title">{{ items[virtualRow.index]!.fileName }}</span>
+              <span class="item-title">{{
+                items[virtualRow.index]!.addinName || items[virtualRow.index]!.fileName
+              }}</span>
               <span
                 v-if="items[virtualRow.index]!.modifiedDate"
                 class="item-date-pill"

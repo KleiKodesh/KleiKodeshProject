@@ -1,6 +1,3 @@
-using System.IO.Pipes;
-using System.Runtime.InteropServices;
-using System.Text;
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using KitveiHakodeshService.Ipc;
@@ -8,239 +5,195 @@ using KitveiHakodeshService.Ipc;
 namespace KitveiHakodeshService.LocalFiles;
 
 /// <summary>
-/// The service's file-system search capability. It does NOT reimplement the
-/// NTFS/Lucene crawler — it delegates to the existing standalone DocumentLocator
-/// Windows service over its named pipe (starting it on demand via the SCM, no
-/// elevation required), then shapes the reply into the object the Vue app already
-/// consumes: { results: [{ fileName, path, modifiedDate }], total }.
+/// File-system search backed by the DocumentLocator <see cref="DocumentLocator.PathIndex"/>
+/// running in-process. No named pipe, no JSON serialization — results are typed
+/// <see cref="FileHit"/> objects fed directly into the MessagePack response.
 ///
-/// This transform previously lived in the Vite dev middleware; moving it here is
-/// the point of the migration — the dev courier becomes a dumb proxy and all
-/// backend knowledge lives in the service.
+/// The index directory defaults to the same path the standalone DocumentLocator
+/// Windows service uses so both consumers share the same on-disk index. If the
+/// index doesn't exist yet it is built on first use (the build can take a minute
+/// on a cold machine; Vue's loading animation covers the wait).
+///
+/// Lifecycle: one <see cref="DocumentLocator.PathIndex"/> instance is created per
+/// service lifetime and disposed on shutdown. The index is thread-safe for reads;
+/// the background build task holds the single writer lock.
 /// </summary>
-public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logger)
+public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logger) : IDisposable
 {
-    private const string DlPipeName = "DocumentLocator";
-    private const string DlServiceName = "DocumentLocatorSvc";
-    private const int ConnectTimeoutMs = 1_500;
-    private const int StartupTimeoutMs = 30_000; // cold .NET service start can take a few seconds
-    private const int StartupPollMs = 500;
+    // ── Index path ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The on-disk Lucene index directory.  Matches the default used by the
+    /// standalone DocumentLocator.Service.exe so both hosts share the same index.
+    /// </summary>
+    private static string IndexPath =>
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "DocumentLocator",
+            "filesystemindex");
+
+    // ── Index instance ────────────────────────────────────────────────────────
+
+    private DocumentLocator.PathIndex? _index;
+    private readonly SemaphoreSlim _buildGate = new(1, 1);
+    private Task? _buildTask;
+
+    /// <summary>
+    /// Ensures the index is open and fully built, then returns it.
+    /// The build is run once; subsequent calls return the already-open instance.
+    /// Progress is swallowed — the caller's loading animation covers the wait.
+    /// </summary>
+    private async Task<DocumentLocator.PathIndex> EnsureIndexAsync(CancellationToken ct)
+    {
+        if (_index is not null) return _index;
+
+        await _buildGate.WaitAsync(ct);
+        try
+        {
+            if (_index is not null) return _index;
+
+            var index = new DocumentLocator.PathIndex(IndexPath);
+
+            // Run the (potentially slow) build on a thread-pool thread so we
+            // don't block the host's async machinery.
+            if (_buildTask is null || _buildTask.IsCompleted)
+            {
+                _buildTask = Task.Run(() =>
+                {
+                    try
+                    {
+                        index.Build(
+                            msg => logger.LogDebug("[DocumentLocator] {Message}", msg),
+                            ct);
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        logger.LogError(ex, "[DocumentLocator] Index build failed");
+                    }
+                }, ct);
+            }
+
+            await _buildTask.WaitAsync(ct);
+            _index = index;
+
+            // Start the live USN journal update loop now that the initial build is done.
+            // One background thread per NTFS drive, each blocked in kernel-wait — zero CPU.
+            // When the journal cursor goes stale (very rare — requires the NTFS journal to
+            // be recreated), the callback triggers a full rebuild automatically.
+            index.StartLiveUpdates(CancellationToken.None, (message, ex) =>
+            {
+                if (ex != null)
+                    logger.LogWarning(ex, "[DocumentLocator] {Message}", message);
+                else
+                    logger.LogInformation("[DocumentLocator] {Message} — triggering rebuild", message);
+
+                // Reset and rebuild: dispose the stale index, clear state, kick off a fresh build.
+                _ = Task.Run(async () =>
+                {
+                    try { await ReindexAsync(CancellationToken.None); }
+                    catch (Exception rebuildEx)
+                    {
+                        logger.LogError(rebuildEx, "[DocumentLocator] Rebuild after live-update failure failed");
+                    }
+                });
+            });
+
+            return _index;
+        }
+        finally
+        {
+            _buildGate.Release();
+        }
+    }
+
+    // ── Public API ────────────────────────────────────────────────────────────
 
     public async Task<LocateDocumentsResult> LocateAsync(string query, int max, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(query))
             return new LocateDocumentsResult();
 
-        string request = BuildSearchRequest(query, max);
+        var index = await EnsureIndexAsync(ct);
 
-        string? response = await TryCallAsync(request, ct);
-        if (response is null)
-        {
-            // Not running — start it via the SCM, wait for the pipe, retry once.
-            StartDocumentLocatorService();
-            await WaitForPipeAsync(ct);
-            response = await TryCallAsync(request, ct)
-                       ?? throw new InvalidOperationException(
-                           "DocumentLocator service did not respond after start.");
-        }
+        int total;
+        var entries = index.Search(query, drive: null, limit: max, total: out total);
 
-        // The index may still be building on a cold start; the service answers a
-        // search with {"status":"building"} until it is ready. Re-issue the search
-        // until it returns results (Vue's loading animation covers the wait).
-        int waited = 0;
-        while (IsBuilding(response) && waited < StartupTimeoutMs)
+        var result = new LocateDocumentsResult { Total = total };
+        foreach (var entry in entries)
         {
             ct.ThrowIfCancellationRequested();
-            await Task.Delay(StartupPollMs, ct);
-            waited += StartupPollMs;
-            response = await TryCallAsync(request, ct) ?? response;
-        }
 
-        return Transform(response);
-    }
-
-    /// <summary>Tell DocumentLocator to wipe its index and rebuild from scratch
-    /// (the dev "reset file-search index"). Starts the service on demand and returns
-    /// once the reindex has been acknowledged; the rebuild then runs in its service.</summary>
-    public async Task ReindexAsync(CancellationToken ct)
-    {
-        const string reindexRequest = "{\"type\":\"reindex\"}";
-        string? response = await TryCallAsync(reindexRequest, ct);
-        if (response is null)
-        {
-            StartDocumentLocatorService();
-            await WaitForPipeAsync(ct);
-            await TryCallAsync(reindexRequest, ct);
-        }
-    }
-
-    /// <summary>Fire-and-forget: make sure the DocumentLocator service is up so the
-    /// first real query is fast. Errors are swallowed — it's a hint, not a promise.</summary>
-    public void Warmup()
-    {
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                string? status = await TryCallAsync("{\"type\":\"status\"}", CancellationToken.None);
-                if (status is null) StartDocumentLocatorService();
-            }
-            catch (Exception ex)
-            {
-                logger.LogDebug(ex, "DocumentLocator warmup failed (non-fatal)");
-            }
-        });
-    }
-
-    // ── DocumentLocator pipe client ────────────────────────────────────────────
-
-    private static string BuildSearchRequest(string query, int max)
-    {
-        // DocumentLocator matches on the RAW query string and does NOT decode \uXXXX
-        // escapes, so the Hebrew must go over the wire as raw UTF-8 (as the old Vite
-        // middleware sent it). Default System.Text.Json escapes all non-ASCII to
-        // \uXXXX → 0 matches for Hebrew. Write with the relaxed encoder (escapes only
-        // the JSON-mandatory characters) so Hebrew stays literal. AOT-safe (no reflection).
-        using var ms = new MemoryStream();
-        using (var w = new Utf8JsonWriter(ms, new JsonWriterOptions { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping }))
-        {
-            w.WriteStartObject();
-            w.WriteString("q", query);
-            if (max > 0) w.WriteNumber("limit", max);
-            w.WriteEndObject();
-        }
-        return Encoding.UTF8.GetString(ms.ToArray());
-    }
-
-    private static bool IsBuilding(string response) =>
-        response.Contains("\"status\":\"building\"", StringComparison.Ordinal);
-
-    /// <summary>One attempt; returns null when the pipe isn't answering.</summary>
-    private static async Task<string?> TryCallAsync(string request, CancellationToken ct)
-    {
-        try
-        {
-            using var pipe = new NamedPipeClientStream(
-                ".", DlPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-            await pipe.ConnectAsync(ConnectTimeoutMs, ct);
-            // The upstream DocumentLocator pipe speaks UTF-8 JSON (not our msgpack channel),
-            // so encode/decode the string ourselves over the byte-oriented frame protocol.
-            await FrameProtocol.WriteFrameAsync(pipe, System.Text.Encoding.UTF8.GetBytes(request), ct);
-            byte[]? reply = await FrameProtocol.ReadFrameAsync(pipe, ct);
-            return reply is null ? null : System.Text.Encoding.UTF8.GetString(reply);
-        }
-        catch (TimeoutException) { return null; }
-        catch (IOException) { return null; }
-        catch (UnauthorizedAccessException) { return null; }
-    }
-
-    private static async Task WaitForPipeAsync(CancellationToken ct)
-    {
-        int elapsed = 0;
-        while (elapsed < StartupTimeoutMs)
-        {
-            ct.ThrowIfCancellationRequested();
-            try
-            {
-                using var pipe = new NamedPipeClientStream(
-                    ".", DlPipeName, PipeDirection.InOut, PipeOptions.Asynchronous);
-                await pipe.ConnectAsync(300, ct);
-                return;
-            }
-            catch { /* not ready yet */ }
-            await Task.Delay(StartupPollMs, ct);
-            elapsed += StartupPollMs;
-        }
-        throw new TimeoutException("DocumentLocator service did not start in time.");
-    }
-
-    private static LocateDocumentsResult Transform(string response)
-    {
-        var dl = JsonSerializer.Deserialize(response, RpcJsonContext.Default.DlResponse)
-                 ?? throw new InvalidOperationException("Empty DocumentLocator response.");
-
-        if (dl.Status == "error")
-            throw new InvalidOperationException(dl.Message ?? "DocumentLocator search error.");
-
-        var result = new LocateDocumentsResult { Total = dl.Total };
-
-        IEnumerable<(string path, long date)> entries =
-            dl.Entries is { Count: > 0 }
-                ? dl.Entries.Select(e => (e.Path ?? "", e.Date))
-                : (dl.Paths ?? new List<string>()).Select(p => (p, 0L));
-
-        foreach (var (path, date) in entries)
-        {
+            // PathIndex stores paths lower-cased; preserve that for display.
+            string path = entry.Path ?? "";
             if (string.IsNullOrEmpty(path)) continue;
 
             int lastSep = Math.Max(path.LastIndexOf('\\'), path.LastIndexOf('/'));
-            string fileName = lastSep >= 0 ? path[(lastSep + 1)..] : path;
-            string dir = lastSep >= 0 ? path[..lastSep] : "";
+            string fileName  = lastSep >= 0 ? path[(lastSep + 1)..] : path;
+            string directory = lastSep >= 0 ? path[..lastSep] : "";
 
-            long modified = date;
-            if (modified == 0)
+            long modified;
+            if (!long.TryParse(entry.DateMs, out modified) || modified == 0)
             {
                 try { modified = new DateTimeOffset(File.GetLastWriteTimeUtc(path)).ToUnixTimeMilliseconds(); }
                 catch { modified = 0; }
             }
 
-            result.Results.Add(new FileHit { FileName = fileName, Path = dir, ModifiedDate = modified });
+            result.Results.Add(new FileHit
+            {
+                FileName     = fileName,
+                Path         = directory,
+                ModifiedDate = modified,
+                AddinName    = entry.AddinName,
+            });
         }
 
         if (result.Total <= 0) result.Total = result.Results.Count;
         return result;
     }
 
-    // ── Start the DocumentLocator service via the SCM (no elevation needed) ─────
-    // Ported from DocumentLocator.Client/ServiceBridge.cs; LibraryImport keeps the
-    // P/Invoke marshalling AOT-friendly.
-
-    private void StartDocumentLocatorService()
+    /// <summary>
+    /// Wipe the index and trigger a full rebuild. Fire-and-forget — the rebuild
+    /// runs in the background; the next search call will block until it finishes.
+    /// </summary>
+    public async Task ReindexAsync(CancellationToken ct)
     {
-        const uint SC_MANAGER_CONNECT = 0x0001;
-        const uint SERVICE_START = 0x0010;
-        const int ERROR_SERVICE_ALREADY_RUNNING = 1056;
-
-        nint scm = NativeMethods.OpenSCManager(null, null, SC_MANAGER_CONNECT);
-        if (scm == 0)
-            throw new InvalidOperationException(
-                $"Cannot connect to the Service Control Manager (error {Marshal.GetLastWin32Error()}).");
+        // Dispose the current index so the writer lock is released, then rebuild.
+        await _buildGate.WaitAsync(ct);
         try
         {
-            nint svc = NativeMethods.OpenService(scm, DlServiceName, SERVICE_START);
-            if (svc == 0)
-                throw new InvalidOperationException(
-                    $"DocumentLocator service is not installed (error {Marshal.GetLastWin32Error()}).");
-            try
-            {
-                if (!NativeMethods.StartService(svc, 0, 0))
-                {
-                    int err = Marshal.GetLastWin32Error();
-                    if (err != ERROR_SERVICE_ALREADY_RUNNING)
-                        throw new InvalidOperationException($"StartService failed (error {err}).");
-                }
-            }
-            finally { NativeMethods.CloseServiceHandle(svc); }
+            _index?.Dispose();
+            _index = null;
+            _buildTask = null;
         }
-        finally { NativeMethods.CloseServiceHandle(scm); }
+        finally
+        {
+            _buildGate.Release();
+        }
+
+        // Kick off a fresh build in the background (fire-and-forget).
+        _ = EnsureIndexAsync(CancellationToken.None);
     }
-}
 
-internal static partial class NativeMethods
-{
-    [LibraryImport("advapi32.dll", EntryPoint = "OpenSCManagerW", SetLastError = true,
-        StringMarshalling = StringMarshalling.Utf16)]
-    internal static partial nint OpenSCManager(string? machineName, string? databaseName, uint desiredAccess);
+    /// <summary>
+    /// Fire-and-forget warm-up: open the index and start the build so the first
+    /// real query is fast. Errors are swallowed — it's a best-effort hint.
+    /// </summary>
+    public void Warmup()
+    {
+        _ = Task.Run(async () =>
+        {
+            try { await EnsureIndexAsync(CancellationToken.None); }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "[DocumentLocator] Warmup failed (non-fatal)");
+            }
+        });
+    }
 
-    [LibraryImport("advapi32.dll", EntryPoint = "OpenServiceW", SetLastError = true,
-        StringMarshalling = StringMarshalling.Utf16)]
-    internal static partial nint OpenService(nint scManager, string serviceName, uint desiredAccess);
-
-    [LibraryImport("advapi32.dll", EntryPoint = "StartServiceW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static partial bool StartService(nint service, uint numArgs, nint argVectors);
-
-    [LibraryImport("advapi32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    internal static partial bool CloseServiceHandle(nint handle);
+    public void Dispose()
+    {
+        _index?.Dispose();
+        _index = null;
+        _buildGate.Dispose();
+    }
 }

@@ -145,9 +145,11 @@ public sealed class DbPathResult
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class FileHit
 {
-    public string FileName { get; set; } = "";
-    public string Path { get; set; } = "";
-    public long ModifiedDate { get; set; }
+    public string FileName  { get; set; } = "";
+    public string Path      { get; set; } = "";
+    public long   ModifiedDate { get; set; }
+    /// <summary>Non-empty only for Otzaria addin entry-point files. "תוסף אוצריא: {name}".</summary>
+    public string AddinName { get; set; } = "";
 }
 
 /// <summary>Result payload for <c>locateDocuments</c>.</summary>
@@ -156,22 +158,6 @@ public sealed class LocateDocumentsResult
 {
     public List<FileHit> Results { get; set; } = new();
     public int Total { get; set; }
-}
-
-/// <summary>The subset of the DocumentLocator pipe response we consume.</summary>
-public sealed class DlResponse
-{
-    public string? Status { get; set; }
-    public string? Message { get; set; }
-    public int Total { get; set; }
-    public List<DlEntry>? Entries { get; set; }
-    public List<string>? Paths { get; set; }
-}
-
-public sealed class DlEntry
-{
-    public string? Path { get; set; }
-    public long Date { get; set; }
 }
 
 /// <summary>Args for the <c>hbSearch</c> op (HebrewBooks catalog search).</summary>
@@ -383,8 +369,6 @@ internal static class RpcResponse
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(LocateDocumentsResult))]
 [JsonSerializable(typeof(FileHit))]
-[JsonSerializable(typeof(DlResponse))]
-[JsonSerializable(typeof(DlEntry))]
 [JsonSerializable(typeof(HbSearchArgs))]
 [JsonSerializable(typeof(HebrewBook))]
 [JsonSerializable(typeof(HbSearchResult))]
