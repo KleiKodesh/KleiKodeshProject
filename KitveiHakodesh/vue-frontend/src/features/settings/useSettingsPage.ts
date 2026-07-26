@@ -11,7 +11,7 @@ export function useSettings() {
   const searchCache = useSearchCacheStore()
 
   const {
-    censorDivineNames,
+    divineNameMode,
     headerFont,
     textFont,
     fontSize,
@@ -58,7 +58,7 @@ export function useSettings() {
   }
 
   return {
-    censorDivineNames,
+    divineNameMode,
     headerFont,
     textFont,
     fontSize,

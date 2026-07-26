@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettings } from './useSettingsPage'
+import { DIVINE_NAME_MODE_OPTIONS } from '@/utils/censorDivineNames'
 import SettingRow from './SettingRow.vue'
 import SliderSetting from './SliderSetting.vue'
 import ToggleGroup from './ToggleGroup.vue'
@@ -11,7 +12,7 @@ import FontDisplaySettings from './FontDisplaySettings.vue'
 
 const settings = useSettingsStore()
 const {
-  censorDivineNames,
+  divineNameMode,
   resumeLastRead,
   defaultAutoSyncCommentary,
   headerFont,
@@ -93,14 +94,14 @@ const commentaryMaxWidthSlider = computed({
       />
     </SettingRow>
 
-    <SettingRow id="nav-censor-divine-names" data-nav-label="כיסוי שם ה'" label="כיסוי שם ה'" hint="מחליף את האות ה׳ בשמות הקודש באות ד׳">
-      <ToggleGroup
-        v-model="censorDivineNames"
-        :options="[
-          { label: 'כיסוי (ה←ד)', value: true },
-          { label: 'כתיב מלא', value: false },
-        ]"
-      />
+    <SettingRow
+      id="nav-censor-divine-names"
+      data-nav-label="כיסוי שם ה'"
+      label="כיסוי שם ה'"
+      hint="בחר כיצד ייכתב שם ה' המפורש. שאר שמות הקודש (אדנ-י, א-להים, א-ל, ש-די) מכוסים בכל האפשרויות חוץ מ'כתיב מלא'"
+      wrap
+    >
+      <ToggleGroup v-model="divineNameMode" :options="[...DIVINE_NAME_MODE_OPTIONS]" />
     </SettingRow>
   </div>
 
