@@ -353,15 +353,20 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     // innerHTML joined with a space, so `html` is already the concatenated inline
     // content. We strip any block-level tags that would force a break between lines
     // (<div>/<p>/<br>, incl. those coming from a note renderer) and wrap the whole
-    // thing in a SINGLE <div>, so the lines paste as one uninterrupted block with no
+    // thing in a SINGLE <span>, so the lines paste as one uninterrupted run with no
     // line break between them. OFF path keeps the raw per-line blocks (breaks kept).
+    //
+    // <span>, NOT <div>: a <div> IS a paragraph to Word's HTML importer, so it
+    // contributes its own trailing paragraph mark — which is exactly the break
+    // join-lines mode exists to avoid. A <span> is inline content and merges into
+    // the paragraph at the paste caret instead of opening a new one.
     if (settingsStore.copyJoinLines) {
       const inline = html
         .replace(/<\/?(?:div|p)[^>]*>/gi, ' ')
         .replace(/<br\s*\/?>/gi, ' ')
         .replace(/\s{2,}/g, ' ')
         .trim()
-      html = `<div>${inline}</div>`
+      html = `<span>${inline}</span>`
     }
 
     // ── Step 3: copyCleanText ────────────────────────────────────────────────
@@ -400,7 +405,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       // <div> — strip note markers, div tags, then join. Otherwise re-collect via extractSelection.
       let inlineText: string
       if (settingsStore.copyJoinLines) {
-        inlineText = stripNoteMarkers(html).replace(/<\/?div>/gi, ' ').replace(/\s+/g, ' ').trim()
+        inlineText = stripNoteMarkers(html).replace(/<\/?(?:div|span)>/gi, ' ').replace(/\s+/g, ' ').trim()
       } else {
         const blobResult = extractSelection(scrollerEl.value, lines(), isSelectAll.value, options.getRenderedLineContent)
         const blobHtml = blobResult ? blobResult.joined : html
@@ -413,7 +418,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       const src = escapeHtml(source)
       const quote = escapeHtml(htmlToText(inlineText))
       const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
-      return `<div dir="rtl">${body}</div>`
+      // <span>, not <div>: quotation mode is a single inline run by design, so it
+      // must not contribute a paragraph mark of its own on paste into Word.
+      return `<span dir="rtl">${body}</span>`
     }
 
     return html + endnotesHtml
