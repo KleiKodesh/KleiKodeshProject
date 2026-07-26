@@ -101,12 +101,16 @@ public sealed class HttpHostServer(
                     return;
                 }
 
-                // GET /file/<handle> is gated by an unguessable CAPABILITY handle (minted only
+        // GET /file/<handle> is gated by an unguessable CAPABILITY handle (minted only
                 // via the token-gated openLocalFile op), not by the bearer token — so pdf.js can
                 // range-fetch it with no header. The handle proves prior authentication; an
                 // unknown handle is a plain 404. The endpoint NEVER accepts a raw path; the
                 // handle rides in the PATH (hex, URL-safe) so it survives the pdf.js viewer's
                 // file= param round-trip without query-string re-encoding.
+                //
+                // Two URL forms:
+                //   GET /file/<fileHandle>                    — single-file grant (PDF etc.)
+                //   GET /file/<folderHandle>/<relative/path>  — folder grant (HTML + siblings)
                 if (req.Method == "GET" && req.Path.StartsWith("/file/", StringComparison.Ordinal))
                 {
                     await ServeFileAsync(stream, req, ct);
@@ -191,19 +195,41 @@ public sealed class HttpHostServer(
     }
 
     /// <summary>Serve a previously-authorized local file by its capability handle, honoring the
-    /// Range header. The file is opened read/shared and streamed in 64 KB slices — the whole
-    /// file is never buffered (constant service memory), and Range means pdf.js pulls only the
-    /// pages it renders. An unknown handle or a vanished file is a plain 404.</summary>
+    /// Range header. Two URL forms are handled:
+    ///   • /file/&lt;fileHandle&gt;                    — single-file grant (PDF, converted Word)
+    ///   • /file/&lt;folderHandle&gt;/relative/path    — folder grant (HTML entry point + any sibling)
+    /// The file is opened read/shared and streamed in 64 KB slices. An unknown handle or a
+    /// vanished file is a plain 404.</summary>
     private async Task ServeFileAsync(NetworkStream stream, HttpProtocol.Request req, CancellationToken ct)
     {
-        // Handle is the path segment after "/file/" (strip any trailing query).
+        // Strip the "/file/" prefix and any query string, then split into handle + optional relative path.
         string tail = req.Path["/file/".Length..];
         int q = tail.IndexOf('?');
-        string handle = q >= 0 ? tail[..q] : tail;
-        if (!localFileGrants.TryResolve(handle, out string path))
+        if (q >= 0) tail = tail[..q];
+
+        // The handle is always the first path segment (hex, no slashes).
+        int slash = tail.IndexOf('/');
+        string handle = slash >= 0 ? tail[..slash] : tail;
+        string relativePath = slash >= 0 ? tail[(slash + 1)..] : "";
+
+        string path;
+        if (!string.IsNullOrEmpty(relativePath))
         {
-            await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
-            return;
+            // Folder grant: resolve handle + relative path, rejecting any traversal attempt.
+            if (!localFileGrants.TryResolveFolder(handle, relativePath, out path))
+            {
+                await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
+                return;
+            }
+        }
+        else
+        {
+            // Single-file grant.
+            if (!localFileGrants.TryResolve(handle, out path))
+            {
+                await HttpProtocol.WriteStatusAsync(stream, 404, "Not Found", req.Origin, ct);
+                return;
+            }
         }
 
         FileStream fs;
@@ -290,9 +316,19 @@ public sealed class HttpHostServer(
     private static string ContentTypeFor(string path) =>
         Path.GetExtension(path).ToLowerInvariant() switch
         {
-            ".pdf" => "application/pdf",
+            ".pdf"  => "application/pdf",
             ".htm" or ".html" => "text/html; charset=utf-8",
-            ".txt" => "text/plain; charset=utf-8",
-            _ => "application/octet-stream",
+            ".txt"  => "text/plain; charset=utf-8",
+            ".css"  => "text/css; charset=utf-8",
+            ".js" or ".mjs" => "text/javascript; charset=utf-8",
+            ".json" => "application/json; charset=utf-8",
+            ".png"  => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif"  => "image/gif",
+            ".svg"  => "image/svg+xml",
+            ".ico"  => "image/x-icon",
+            ".woff" => "font/woff",
+            ".woff2" => "font/woff2",
+            _       => "application/octet-stream",
         };
 }

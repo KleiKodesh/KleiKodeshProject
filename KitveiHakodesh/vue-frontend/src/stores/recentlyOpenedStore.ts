@@ -33,6 +33,8 @@ export interface RecentlyOpenedEntry {
   lastAccessedAt: number
   /** Pinned entries sort ahead of the rest and are never evicted by the cap. */
   pinned?: boolean
+  /** True when the /html-view entry is an Otzaria addin (manifest.json detected next to the HTML file). */
+  isOtzariaAddin?: boolean
 }
 
 const RECENTLY_OPENED_DB = 'app-recently-opened'
@@ -200,6 +202,7 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
     localFileHbBookId?: string,
     localFileHbBookTitle?: string,
     localFileName?: string,
+    isOtzariaAddin?: boolean,
   ): void {
     const key = deriveKey(route, bookId, localFilePath, localFileHbBookId, localFileName)
     const displayTitle = route === '/book-view' ? title : stripFileExtension(title)
@@ -214,6 +217,7 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
       ...(localFileHbBookId ? { localFileHbBookId } : {}),
       ...(localFileHbBookTitle ? { localFileHbBookTitle } : {}),
       ...(localFileName ? { localFileName } : {}),
+      ...(isOtzariaAddin ? { isOtzariaAddin: true } : {}),
     }
 
     // Re-opening a pinned document keeps it pinned (the fresh entry carries no flag).

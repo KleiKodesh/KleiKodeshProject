@@ -37,13 +37,28 @@ public sealed class OpenLocalFileArgs
 }
 
 /// <summary>Result of <c>openLocalFile</c>: an opaque capability <see cref="Handle"/> for
-/// <c>GET /file?h=</c> (empty when rejected), the file's display name, and an error message
-/// when the path failed validation.</summary>
+/// <c>GET /file/&lt;handle&gt;</c> (empty when rejected), the file's display name, and an error message
+/// when the path failed validation.
+///
+/// For HTML files, <see cref="FolderHandle"/> is also set — a folder-scoped capability that
+/// allows serving any file inside the same directory (CSS, JS, images, fonts). The URL the
+/// browser loads is then <c>/khs-file/&lt;FolderHandle&gt;/filename.html</c> so sibling requests
+/// like <c>/khs-file/&lt;FolderHandle&gt;/css/style.css</c> resolve automatically. This mirrors the
+/// hosted mode's <c>SetVirtualHostNameToFolderMapping</c> which already serves the whole folder.
+///
+/// <see cref="IsOtzariaAddin"/> is true when a <c>manifest.json</c> exists next to the HTML file —
+/// the Vue HtmlViewPage uses this to activate the Otzaria addin bridge.
+/// </summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class OpenLocalFileResult
 {
     public string Handle { get; set; } = "";
     public string FileName { get; set; } = "";
+    /// <summary>Folder-scoped handle — set for HTML files. Serves the whole containing folder
+    /// so sibling CSS/JS/image assets load at /file/&lt;FolderHandle&gt;/relative/path.</summary>
+    public string FolderHandle { get; set; } = "";
+    /// <summary>True when manifest.json exists next to the HTML file (Otzaria addin).</summary>
+    public bool IsOtzariaAddin { get; set; }
     /// <summary>The conversion was aborted by the user (ביטול) — the caller closes the tab quietly,
     /// no error dialog.</summary>
     public bool Cancelled { get; set; }

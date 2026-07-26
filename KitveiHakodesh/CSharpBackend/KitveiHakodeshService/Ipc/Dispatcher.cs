@@ -69,6 +69,16 @@ public sealed class Dispatcher(
                 // an unguessable capability handle — the ONLY way a path becomes servable. This
                 // op is token-gated on the HTTP host, so a caller must already be authenticated
                 // to obtain a handle; GET /file then serves strictly by handle (no raw paths).
+                //
+                // For HTML files, a FOLDER grant is also minted so the browser can load sibling
+                // CSS/JS/image assets. The URL returned uses the folder handle:
+                //   /khs-file/<folderHandle>/filename.html
+                // This mirrors the hosted mode's SetVirtualHostNameToFolderMapping which already
+                // serves the whole containing folder. The file-scoped handle is still returned
+                // but is not needed when a folder handle is present.
+                //
+                // manifest.json next to an HTML file marks it as an Otzaria addin — the Vue
+                // HtmlViewPage activates the addin bridge when IsOtzariaAddin is true.
                 case "openLocalFile":
                 {
                     var a = MsgPack.De<OpenLocalFileArgs>(req.Args);
@@ -96,10 +106,27 @@ public sealed class Dispatcher(
                         fileName = System.IO.Path.GetFileNameWithoutExtension(full) + (isHtml ? ".html" : ".pdf");
                     }
 
+                    string fileHandle = localFileGrants.Grant(servePath);
+                    string servedExt = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
+                    bool isHtmlFile = servedExt == ".html" || servedExt == ".htm";
+
+                    // Folder grant for HTML so siblings (CSS/JS/images) load correctly.
+                    string folderHandle = "";
+                    bool isOtzariaAddin = false;
+                    if (isHtmlFile)
+                    {
+                        string folder = System.IO.Path.GetDirectoryName(full) ?? full;
+                        folderHandle = localFileGrants.GrantFolder(folder);
+                        // Otzaria addins have a manifest.json in the same directory.
+                        isOtzariaAddin = File.Exists(System.IO.Path.Combine(folder, "manifest.json"));
+                    }
+
                     return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult
                     {
-                        Handle = localFileGrants.Grant(servePath),
+                        Handle = fileHandle,
                         FileName = fileName,
+                        FolderHandle = folderHandle,
+                        IsOtzariaAddin = isOtzariaAddin,
                     }));
                 }
 
