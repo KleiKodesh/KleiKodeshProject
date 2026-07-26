@@ -513,7 +513,8 @@ defineExpose({ captureScrollPos, scrollToBook })
   line-height: var(--line-height, 1.5);
   color: var(--text-secondary);
   direction: rtl;
-  text-align: right;
+  text-align: justify;
+  text-align-last: right;
   user-select: text;
   display: -webkit-box;
   -webkit-line-clamp: 4;
