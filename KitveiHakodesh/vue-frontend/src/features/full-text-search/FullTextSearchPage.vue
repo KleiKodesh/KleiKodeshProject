@@ -10,6 +10,7 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { lsGet, lsSet, lsDelete } from '@/utils/persistence'
 import FullTextSearchBar from './FullTextSearchBar.vue'
 import FullTextSearchResultsList from './FullTextSearchResultsList.vue'
 import FullTextSearchFilterPanel from './FullTextSearchFilterPanel.vue'
@@ -23,6 +24,14 @@ const settings = useSettingsStore()
 
 // Capture tabId at mount time — stable for this component's lifetime (/search is keyed by tabId)
 const tabId = paneNavigation.activeTabId
+
+// Synchronous localStorage mirror of the scroll position. The canonical per-tab state lives
+// in IDB (setTabViewState), but that write is ASYNC — on a page reload (F5) the document is
+// torn down before the transaction commits, so the reload-time save never landed and every
+// boot restored the PREVIOUS save (tab-switch saves worked because the SPA keeps running
+// long enough for IDB to commit). localStorage writes are synchronous and survive teardown,
+// so the mirror always holds the latest position; boot prefers it over the IDB value.
+const scrollMirrorKey = `search.scroll:${tabId}`
 
 const zoom = ref<number>(ZOOM_CONFIG.DEFAULT)
 const isSearchActive = computed(() => paneNavigation.activeTab?.route === '/search')
@@ -95,8 +104,14 @@ const {
 const searchBarRef = ref<InstanceType<typeof FullTextSearchBar> | null>(null)
 const filterPanelRef = ref<HTMLElement | null>(null)
 const resultsListRef = ref<InstanceType<typeof FullTextSearchResultsList> | null>(null)
-const initialScrollIndex = ref<number | undefined>()
-const initialScrollOffset = ref<number | undefined>()
+// Seed the restore target from the localStorage mirror SYNCHRONOUSLY at setup — it's
+// available before the first render, unlike the async IDB read in onMounted. This is what
+// lets the results list scroll to the target before its first paint (no flash of the list
+// top followed by a jump). The IDB value in onMounted remains as fallback for saves that
+// predate the mirror.
+const _scrollMirror = lsGet<{ i: number; o: number }>(scrollMirrorKey)
+const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
+const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
 const isAdvancedOpen = ref(false)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 let lastScrollIndex: number | undefined
@@ -216,6 +231,11 @@ async function saveFilterState() {
     // reset-on-new-search default, so there's nothing to remember for it.
     searchSortOrder: sortOrder.value !== 'lineId' ? sortOrder.value : undefined,
   }
+  // Mirror the scroll scalars to localStorage FIRST — synchronous, so it lands even when
+  // this runs during reload teardown and the async IDB write below never commits.
+  if (state.searchScrollIndex != null) {
+    lsSet(scrollMirrorKey, { i: state.searchScrollIndex, o: state.searchScrollOffset ?? 0 })
+  }
   tabStore.setTabViewState(tabId, state)
 }
 
@@ -257,7 +277,12 @@ onMounted(async () => {
     zoom.value = saved.searchZoom
   }
 
-  if (saved?.searchScrollIndex != null) {
+  // The localStorage mirror was already read synchronously at setup (see initialScrollIndex
+  // declaration) — it's always at least as fresh as IDB, because every save writes the
+  // mirror synchronously while the IDB write is async and dies on reload teardown (this was
+  // the "reload restores the PREVIOUS position" bug). IDB is only the fallback for saves
+  // that predate the mirror.
+  if (_scrollMirror == null && saved?.searchScrollIndex != null) {
     initialScrollIndex.value = saved.searchScrollIndex
     initialScrollOffset.value = saved.searchScrollOffset ?? 0
     // Do NOT seed lastScrollIndex/lastScrollOffset from the saved state.
@@ -288,6 +313,10 @@ onMounted(async () => {
 useEventListener(document, 'visibilitychange', () => {
   if (document.visibilityState === 'hidden') saveFilterState()
 })
+// Reload safety net: the synchronous localStorage mirror inside saveFilterState is the part
+// that must land during teardown; running it from beforeunload guarantees it even if the
+// visibilitychange ordering varies. Idempotent with the handler above.
+useEventListener(window, 'beforeunload', () => { saveFilterState() })
 onBeforeUnmount(() => {
   // If the tab no longer exists in the store, it was closed — clear its cache entry
   // since the results are no longer needed for session restore or tab switching.
@@ -295,6 +324,7 @@ onBeforeUnmount(() => {
   const tabStillExists = tabStore.pane1Tabs.concat(tabStore.pane2Tabs).some((t) => t.id === tabId)
   if (!tabStillExists && executedQuery.value) {
     clearCachedResults(executedQuery.value)
+    lsDelete(scrollMirrorKey) // tab closed — drop its scroll mirror too
   }
   saveFilterState()
   if (overlayHideTimer) clearTimeout(overlayHideTimer)
