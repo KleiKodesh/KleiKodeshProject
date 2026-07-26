@@ -3,6 +3,7 @@ import { ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
+import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
@@ -177,6 +178,21 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
     loadSetting(KEYS.SETTINGS_COPY_WITH_NOTES, copyWithNotes)
     loadSetting(KEYS.SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION, copyAsSourceWithQuotation)
+    // Repair any contradictory copy-flag combination persisted by an OLDER build
+    // (before the copy menu's exclusivity guards existed). Loaded values are read
+    // back verbatim with no validation, so normalize once here — otherwise a saved
+    // e.g. {withNotes, sourcePosition:'end'} would drive the copy builder into a
+    // self-contradicting state. See copyFlagExclusivity.ts for the rules.
+    {
+      const repaired = normalizeCopyFlags({
+        copySourcePosition: copySourcePosition.value,
+        copyWithNotes: copyWithNotes.value,
+        copyAsSourceWithQuotation: copyAsSourceWithQuotation.value,
+      })
+      copySourcePosition.value = repaired.copySourcePosition
+      copyWithNotes.value = repaired.copyWithNotes
+      copyAsSourceWithQuotation.value = repaired.copyAsSourceWithQuotation
+    }
     loadSetting(KEYS.SETTINGS_HB_LOCAL_FOLDER, hebrewBooksLocalFolder)
     // If the WPF installer configured a local folder but localStorage has nothing yet,
     // seed it from the injected value so the settings page reflects it immediately.

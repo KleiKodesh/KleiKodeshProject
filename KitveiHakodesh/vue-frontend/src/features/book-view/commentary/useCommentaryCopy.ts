@@ -4,6 +4,7 @@ import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { escapeHtml, htmlToText } from '@/utils/htmlText'
+import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pasteIntoWord } from '@/webview-host/bridge'
@@ -21,6 +22,27 @@ export function useCommentaryCopy(
 ) {
   const settingsStore = useSettingsStore()
   const paneNavigation = usePaneNavigation()
+
+  /**
+   * Applies one copy-flag toggle through the shared exclusivity model and writes
+   * the enforced result back to the store. Kept identical to the lines menu so the
+   * two copy menus can't drift; the rule rationale lives in copyFlagExclusivity.ts
+   * (notably: notes ⊗ END-source is intentional, notes + start-source is allowed).
+   */
+  function toggleCopyFlag(toggle: CopyExclusivityToggle, value: boolean): void {
+    const next = applyCopyExclusivity(
+      {
+        copySourcePosition: settingsStore.copySourcePosition,
+        copyWithNotes: settingsStore.copyWithNotes,
+        copyAsSourceWithQuotation: settingsStore.copyAsSourceWithQuotation,
+      },
+      toggle,
+      value,
+    )
+    settingsStore.copySourcePosition = next.copySourcePosition
+    settingsStore.copyWithNotes = next.copyWithNotes
+    settingsStore.copyAsSourceWithQuotation = next.copyAsSourceWithQuotation
+  }
 
   // ── Source builder ──────────────────────────────────────────────────────────
 
@@ -338,46 +360,32 @@ export function useCommentaryCopy(
       get checked() { return settingsStore.copyJoinLines },
       onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
     },
-    // Radio pair — checking one unchecks the other (both off is valid)
+    // start/end are a mutually-exclusive pair rendered as two checkboxes (ticking
+    // one clears the other). All exclusivity is enforced by toggleCopyFlag →
+    // copyFlagExclusivity.ts; do not add ad-hoc clears here.
     {
       type: 'checkbox',
       label: 'העתק עם מקור בהתחלה',
       get checked() { return settingsStore.copySourcePosition === 'start' },
-      onChange: (value: boolean) => {
-        settingsStore.copySourcePosition = value ? 'start' : null
-        if (value) settingsStore.copyAsSourceWithQuotation = false
-      },
+      onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
     },
     {
       type: 'checkbox',
       label: 'העתק עם מקור בסוף',
       get checked() { return settingsStore.copySourcePosition === 'end' },
-      onChange: (value: boolean) => {
-        settingsStore.copySourcePosition = value ? 'end' : null
-        if (value) settingsStore.copyWithNotes = false
-        if (value) settingsStore.copyAsSourceWithQuotation = false
-      },
+      onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
     },
     {
       type: 'checkbox',
       label: 'העתק מקור עם ציטוט',
       get checked() { return settingsStore.copyAsSourceWithQuotation },
-      onChange: (value: boolean) => {
-        settingsStore.copyAsSourceWithQuotation = value
-        if (value) settingsStore.copySourcePosition = null
-        if (value) settingsStore.copyWithNotes = false
-      },
+      onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
     },
-    // Independent checkboxes
     {
       type: 'checkbox',
       label: 'העתק עם הערות',
       get checked() { return settingsStore.copyWithNotes },
-      onChange: (value: boolean) => {
-        settingsStore.copyWithNotes = value
-        if (value && settingsStore.copySourcePosition === 'end') settingsStore.copySourcePosition = null
-        if (value) settingsStore.copyAsSourceWithQuotation = false
-      },
+      onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
     },
     {
       type: 'checkbox',
