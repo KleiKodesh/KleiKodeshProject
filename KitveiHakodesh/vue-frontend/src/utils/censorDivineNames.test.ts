@@ -11,6 +11,12 @@ const YHWH_SHEVA_KAMATZ = 'יְה' + 'וָה'        // יְהוָה
 const YHWH_WITH_HOLAM = 'יְהֹ' + 'וָה'    // יְהֹוָה
 const YHWH_WITH_TEAM = 'יְה' + 'וָ֖ה'     // יְהוָ֖ה  (tipcha on the ו group)
 
+/**
+ * U+2011 NON-BREAKING HYPHEN — the separator inside censored names. A plain
+ * hyphen-minus would let the browser wrap a divine name across two lines.
+ */
+const NBHY = '‑'
+
 describe('mode: yudDaled', () => {
   it('replaces both ה with ד keeping every mark in place', () => {
     expect(censorDivineNames(YHWH_SHEVA_KAMATZ, 'yudDaled')).toBe('יְד' + 'וָד')
@@ -86,11 +92,11 @@ describe('mode: none', () => {
 
 describe('the other divine names', () => {
   // These are censored identically in every mode except 'none' — only the
-  // tetragrammaton rendering varies.
+  // tetragrammaton rendering varies. The separator is U+2011, not a plain hyphen.
   const OTHERS: [string, string][] = [
-    ['אֲדֹנָי', 'אֲדֹנָ-י'],   // אֲדֹנָי → אֲדֹנָ-י
-    ['אֱלֹהִים', 'אֱ-לֹהִים'], // אֱלֹהִים → אֱ-לֹהִים
-    ['שַׁדַּי', 'שַׁ-דַּי'], // שַׁדַּי → שַׁ-דַּי
+    ['אֲדֹנָי', 'אֲדֹנָ' + NBHY + 'י'],
+    ['אֱלֹהִים', 'אֱ' + NBHY + 'לֹהִים'],
+    ['שַׁדַּי', 'שַׁ' + NBHY + 'דַּי'],
   ]
 
   for (const mode of ['yudDaled', 'yudKuf', 'doubleYud', 'heApostrophe'] as const) {
@@ -104,6 +110,38 @@ describe('the other divine names', () => {
   it('leaves אלהים אחרים uncensored', () => {
     const text = 'אֱלֹהִים אחרים'
     expect(censorDivineNames(text, 'yudDaled')).toBe(text)
+  })
+})
+
+describe('the separator is non-breaking', () => {
+  // A plain hyphen-minus (U+002D) is a line-break opportunity, so a censored
+  // name could be split across two lines. Every rule must emit U+2011 instead.
+  // One sample per dash-emitting rule:
+  const SAMPLES = [
+    'יָהּ',      // יה
+    'אֲדֹנָי',   // אדני  (the string-replacement rule, easy to miss)
+    'אֱלֹהִים',  // אלהים
+    'אֱלוֹהִים', // אלוהים
+    'אֱלֹהֵי',   // אלהי
+    'אֱלוֹהַ',   // אלוה
+    'אֵל',       // אל
+    'וְאֵל',     // אל with a prefix
+    'שַׁדַּי',   // שדי
+  ]
+
+  for (const mode of ['yudDaled', 'yudKuf', 'doubleYud', 'heApostrophe'] as const) {
+    it(`never emits a plain hyphen in mode ${mode}`, () => {
+      for (const sample of SAMPLES) {
+        const out = censorDivineNames(sample, mode)
+        expect(out, `${sample} → ${out}`).not.toContain('-')
+        expect(out, `${sample} → ${out}`).toContain(NBHY)
+      }
+    })
+  }
+
+  it('renders the same glyph a reader would expect from a hyphen', () => {
+    // Sanity check on the codepoint itself, so a stray edit to SEP is caught.
+    expect(NBHY.codePointAt(0)).toBe(0x2011)
   })
 })
 

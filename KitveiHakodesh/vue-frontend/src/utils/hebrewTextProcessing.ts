@@ -47,7 +47,8 @@ export function applyDiacriticsFilter(html: string, state: number): string {
  *   - All dash types followed by a space (or end of string) removed:
  *       hyphen-minus U+002D (-), en dash U+2013 (–), em dash U+2014 (—),
  *       figure dash U+2012, horizontal bar U+2015 (―), minus sign U+2212 (−)
- *       A dash between two letters (e.g. divine-name censor separator א-ל) is preserved.
+ *       A dash between two letters is preserved. The divine-name censor separator
+ *       is U+2011 (non-breaking hyphen, e.g. א‑ל) and is never in this class at all.
  *   - ! → .   ? → .   ; → , (modern punctuation uncommon in older Hebrew texts)
  */
 export function stripNikkudFromHtml(html: string): string {
