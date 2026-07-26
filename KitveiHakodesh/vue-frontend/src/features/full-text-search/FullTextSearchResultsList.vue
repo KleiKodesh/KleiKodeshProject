@@ -124,19 +124,31 @@ function resultTitle(result: FullTextSearchResult): string {
 
 function captureScrollPos() {
   if (!scrollEl.value) return null
-  const first = virtualizer.value.getVirtualItems()[0]
-  if (!first) return null
+  const top = scrollEl.value.scrollTop
+  const items = virtualizer.value.getVirtualItems()
+  if (!items.length) return null
+  // First VISIBLE row — NOT items[0], which is an overscan row ~8 rows above the viewport.
+  // With items[0] the saved offset spanned all the overscan rows in pixels (observed: 924px
+  // ≈ 11 rows), and restoring `item.start + offset` then depended on the ESTIMATED heights
+  // of those rows — landing rows off and jumping when real measurements arrived. Anchoring
+  // to the row that actually contains scrollTop keeps the offset intra-row (< one row
+  // height), and `scrollTop = item.start + offset` is then row-exact regardless of how far
+  // the estimates are off, because the row's rendered position and item.start come from the
+  // same measurement table.
+  const first = items.find((it) => it.end > top) ?? items[0]!
   return {
     scrollIndex: first.index,
-    scrollOffset: Math.max(0, scrollEl.value.scrollTop - first.start),
+    scrollOffset: Math.max(0, top - first.start),
   }
 }
 
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
-  // Two-rAF pattern: scrollToIndex triggers TanStack's internal correction.
-  // Wait one rAF for it to settle, then set scrollTop directly — TanStack is idle by then.
-  // If the item isn't in measurementsCache yet (e.g. filtered set still building),
-  // retry up to 10 times at 100ms intervals before giving up.
+  // Pre-paint restore: the first applyOffset attempt runs synchronously (see call at the
+  // bottom) so the scroll lands before the browser paints — no flash of the list top.
+  // One rAF later the position is re-asserted to absorb TanStack's dynamic-measurement
+  // shift from the target rows' first real measurement. If the item isn't in
+  // measurementsCache yet (e.g. filtered set still building), retry up to 10 times at
+  // 100ms intervals before giving up.
   programmaticScrolling = true
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
   let attempts = 0
@@ -144,7 +156,15 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
     const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
     if (item && scrollEl.value) {
       scrollEl.value.scrollTop = item.start + scrollOffset
-      requestAnimationFrame(() => { programmaticScrolling = false })
+      requestAnimationFrame(() => {
+        // Re-assert once after TanStack's dynamic-measurement pass: the rows rendered at
+        // the target measure their real heights on this first frame, which can shift
+        // item.start under us. Same coordinates re-read → at most a sub-row settle,
+        // instead of the old visible jump.
+        const settled = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
+        if (settled && scrollEl.value) scrollEl.value.scrollTop = settled.start + scrollOffset
+        requestAnimationFrame(() => { programmaticScrolling = false })
+      })
     } else if (++attempts < 10) {
       virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
       setTimeout(() => requestAnimationFrame(applyOffset), 100)
@@ -152,7 +172,12 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
       programmaticScrolling = false
     }
   }
-  requestAnimationFrame(applyOffset)
+  // First attempt runs SYNCHRONOUSLY — we're called from nextTick right after the render
+  // window widened, so the DOM is up to date but nothing has painted yet. Landing the
+  // scroll here means the first painted frame is already at the target (no top-flash).
+  // The rAF path above and the 100ms retries remain as fallback when the target row
+  // isn't measurable yet.
+  applyOffset()
 }
 
 {
@@ -171,7 +196,14 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   const tryRestore = () => {
     if (restored) return true
     const target = props.initialScrollIndex
-    if (target == null) return true // nothing to restore
+    // No target YET is not "nothing to restore" — on reload the parent sets
+    // initialScrollIndex asynchronously in onMounted (after the IDB read), which can land
+    // AFTER results already started streaming. Returning true here would stop the watcher
+    // for good and the restore would silently never run (the sometimes-works reload bug:
+    // it only worked when the IDB read happened to win the race against the first batch).
+    // Keep waiting instead — if there is genuinely no saved position, the watcher just
+    // stays armed and inert, which is harmless: initialScrollIndex is set at most once.
+    if (target == null) return false
     const len = props.results.length
     if (!len) return false // no results yet — wait for more
     // If the target hasn't streamed in yet, keep waiting — UNLESS the stream is done, in
@@ -183,17 +215,22 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
     }
     const index = Math.min(target, len - 1)
     restored = true
-    nextTick(() => {
-      // Widen the render window to include the target before scrolling, or the virtualizer
-      // has no row there to land on.
-      renderCount.value = Math.max(renderCount.value, index + RENDER_PAGE)
-      restoreScrollPos(index, props.initialScrollOffset ?? 0)
-    })
+    // Widen the render window NOW (synchronously) so the re-render it triggers — which
+    // grows the scroller's inner height enough to contain the target — flushes in this
+    // same task. Widening inside the nextTick callback (the old order) meant scrollTop was
+    // set against the still-short scroller and clamped, deferring the real scroll by a
+    // frame or more: the user saw the list paint at the TOP first, then jump to the target.
+    renderCount.value = Math.max(renderCount.value, index + RENDER_PAGE)
+    // After that render flush (nextTick), apply the scroll SYNCHRONOUSLY — still before the
+    // browser paints this task's updates, so the first visible frame is already at the target.
+    nextTick(() => restoreScrollPos(index, props.initialScrollOffset ?? 0))
     return true
   }
   let stopWatch = () => {}
   stopWatch = watch(
-    [() => props.results.length, () => props.isSearching],
+    // initialScrollIndex is a watched source too: on reload it arrives asynchronously
+    // (parent onMounted IDB read), and the watcher must re-fire when it lands.
+    [() => props.results.length, () => props.isSearching, () => props.initialScrollIndex],
     () => {
       if (tryRestore()) stopWatch()
     },
