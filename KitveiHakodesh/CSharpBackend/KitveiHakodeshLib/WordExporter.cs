@@ -29,6 +29,10 @@ namespace KitveiHakodeshLib
         /// Pastes the current clipboard content at the cursor position in the active Word document.
         /// The caller is responsible for placing the HTML on the clipboard before calling this.
         /// If no document is open, creates a new blank document first.
+        ///
+        /// Pastes with "Merge Formatting" so the text adopts the destination document's font
+        /// rather than the one Word's HTML importer would otherwise substitute. See
+        /// PasteAtCursorCore.
         /// </summary>
         public static Task PasteAtCursorAsync()
         {
@@ -104,8 +108,30 @@ namespace KitveiHakodeshLib
                 }
 
                 // The clipboard already contains the formatted HTML set by the frontend.
-                // Selection.Paste() picks up the best available format automatically.
-                app.ActiveDocument.ActiveWindow.Selection.Paste();
+                //
+                // Paste with "Merge Formatting" rather than plain Selection.Paste(). Paste()
+                // does a Keep-Source-Formatting web import, and because the copied HTML carries
+                // no font of its own (the reading font lives in a stylesheet the clipboard does
+                // not travel with) Word substitutes its own web default — David / Times New
+                // Roman — as direct character formatting, which then overrides the document's
+                // styles. wdFormatSurroundingFormattingWithEmphasis (20) is Word's own
+                // "Merge Formatting" option: it matches the pasted text to the formatting of
+                // the surrounding text while keeping emphasis, so the text takes the
+                // destination's font instead of an imported one.
+                var selection = app.ActiveDocument.ActiveWindow.Selection;
+                try
+                {
+                    selection.PasteAndFormat(Word.WdRecoveryType.wdFormatSurroundingFormattingWithEmphasis);
+                }
+                catch (Exception pasteEx)
+                {
+                    // PasteAndFormat can reject a clipboard payload that plain Paste accepts
+                    // (the enum is documented against table cells and is format-sensitive), so
+                    // fall back rather than silently dropping the user's paste.
+                    System.Diagnostics.Debug.WriteLine("[WordExporter] PasteAndFormat failed, falling back to Paste: " + pasteEx.Message);
+                    selection.Paste();
+                }
+
                 app.Activate();
             }
             catch (Exception ex)
