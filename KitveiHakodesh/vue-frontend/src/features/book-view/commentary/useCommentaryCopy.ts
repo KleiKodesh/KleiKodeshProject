@@ -224,8 +224,12 @@ export function useCommentaryCopy(
     }
 
     // ── Step 3: copyCleanText ────────────────────────────────────────────────
+    // Clean BOTH the body and the endnotes so a single copy has one consistent
+    // cleaning state. The source decoration (Step 4) is added AFTER cleaning on
+    // purpose — a מקור reference is not book text and must not be stripped.
     if (settingsStore.copyCleanText) {
       html = cleanHebrewText(html)
+      if (endnotesHtml) endnotesHtml = cleanHebrewText(endnotesHtml)
     }
 
     // ── Step 4: copySourcePosition (radio) ───────────────────────────────────
