@@ -37,7 +37,9 @@ const DEFAULTS = {
   searchWildcardWrap: false,
   searchGrammarWrap: false,
   copyCleanText: false,
-  copyAsBlob: false,
+  // Join the selected lines into one continuous run of text with NO line break
+  // between them (default off = keep one line break per source line on paste).
+  copyJoinLines: false,
   copySourcePosition: null as 'end' | 'start' | null,
   copyWithNotes: false,
   copyAsSourceWithQuotation: false,
@@ -78,7 +80,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
-  const copyAsBlob = ref(DEFAULTS.copyAsBlob)
+  const copyJoinLines = ref(DEFAULTS.copyJoinLines)
   const copySourcePosition = ref<'end' | 'start' | null>(DEFAULTS.copySourcePosition)
   const copyWithNotes = ref(DEFAULTS.copyWithNotes)
   const copyAsSourceWithQuotation = ref(DEFAULTS.copyAsSourceWithQuotation)
@@ -171,7 +173,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
-    loadSetting(KEYS.SETTINGS_COPY_AS_BLOB, copyAsBlob)
+    loadSetting(KEYS.SETTINGS_COPY_JOIN_LINES, copyJoinLines)
     loadSetting(KEYS.SETTINGS_COPY_SOURCE_POSITION, copySourcePosition)
     loadSetting(KEYS.SETTINGS_COPY_WITH_NOTES, copyWithNotes)
     loadSetting(KEYS.SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION, copyAsSourceWithQuotation)
@@ -228,7 +230,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
-  persistSetting(copyAsBlob, KEYS.SETTINGS_COPY_AS_BLOB)
+  persistSetting(copyJoinLines, KEYS.SETTINGS_COPY_JOIN_LINES)
   persistSetting(copySourcePosition, KEYS.SETTINGS_COPY_SOURCE_POSITION)
   persistSetting(copyWithNotes, KEYS.SETTINGS_COPY_WITH_NOTES)
   persistSetting(copyAsSourceWithQuotation, KEYS.SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION)
@@ -306,7 +308,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
     copyCleanText.value = DEFAULTS.copyCleanText
-    copyAsBlob.value = DEFAULTS.copyAsBlob
+    copyJoinLines.value = DEFAULTS.copyJoinLines
     copySourcePosition.value = DEFAULTS.copySourcePosition
     copyWithNotes.value = DEFAULTS.copyWithNotes
     copyAsSourceWithQuotation.value = DEFAULTS.copyAsSourceWithQuotation
@@ -329,7 +331,7 @@ export const useSettingsStore = defineStore('settings', () => {
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
-    copyAsBlob,
+    copyJoinLines,
     copySourcePosition,
     copyWithNotes,
     copyAsSourceWithQuotation,

@@ -181,10 +181,14 @@ export function buildBookExportHtml(
 // execCopyHtmlToClipboard, then sends the pasteIntoWord bridge message so C# opens
 // Word and calls Selection.Paste().
 //
-// copyAsBlob (independent checkbox)
-//   ON:  use extractSelection to collect .line element innerHTML, wrap each line in
-//        <div>...</div>. Has nothing to do with note markers.
-//   OFF: use raw browser selection HTML directly.
+// copyJoinLines — "העתק כרצף (ללא מעבר שורה)" (independent checkbox)
+//   Controls whether the selected lines keep a line break between them on paste.
+//   ON:  JOIN the selected lines into ONE continuous run of text — the per-line
+//        block structure is removed so nothing breaks between lines. Collected via
+//        extractSelection (each .line's innerHTML) and joined into a single <div>.
+//   OFF: use the raw browser selection HTML directly, which preserves each source
+//        line as its own block (one line break per line on paste).
+//   Has nothing to do with note markers.
 //
 // copySourcePosition (radio pair — at most one active at a time)
 //   'start': prepend <h2 dir="rtl">book, toc path</h2> before the text
@@ -225,12 +229,12 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
    */
   function buildFormattedHtml(): string | null {
     // ── Acquire raw HTML and firstLineIndex ───────────────────────────────────
-    // copyAsBlob ON:  use extractSelection (collects .line innerHTML, can use note renderer)
-    // copyAsBlob OFF: use raw browser selection HTML directly
+    // copyJoinLines ON:  use extractSelection (collects .line innerHTML, can use note renderer)
+    // copyJoinLines OFF: use raw browser selection HTML directly
     let joined: string
     let firstLineIndex: number | null = null
 
-    if (settingsStore.copyAsBlob) {
+    if (settingsStore.copyJoinLines) {
       const renderLine = settingsStore.copyWithNotes ? options.getRenderedLineContent : undefined
       const result = extractSelection(scrollerEl.value, lines(), isSelectAll.value, renderLine)
       if (!result) return null
@@ -289,15 +293,20 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       html = stripNoteMarkers(joined)
     }
 
-    // ── Step 2: copyAsBlob div-wrapping ──────────────────────────────────────
-    // Only when blob mode is on — wrap each line in <div>...</div>
-    if (settingsStore.copyAsBlob) {
-      html = html
-        .split(/\n+/)
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => `<div>${line}</div>`)
-        .join('\n')
+    // ── Step 2: copyJoinLines — flatten to one continuous run ─────────────────
+    // Only when join-lines mode is on. extractSelection gave us the selected lines'
+    // innerHTML joined with a space, so `html` is already the concatenated inline
+    // content. We strip any block-level tags that would force a break between lines
+    // (<div>/<p>/<br>, incl. those coming from a note renderer) and wrap the whole
+    // thing in a SINGLE <div>, so the lines paste as one uninterrupted block with no
+    // line break between them. OFF path keeps the raw per-line blocks (breaks kept).
+    if (settingsStore.copyJoinLines) {
+      const inline = html
+        .replace(/<\/?(?:div|p)[^>]*>/gi, ' ')
+        .replace(/<br\s*\/?>/gi, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim()
+      html = `<div>${inline}</div>`
     }
 
     // ── Step 3: copyCleanText ────────────────────────────────────────────────
@@ -317,15 +326,15 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
     // ── Step 5: copyAsSourceWithQuotation ─────────────────────────────────────
     // Produces a single line: (מקור) "ציטוט"
-    // Always collects full line blocks (blob-style) and joins them into one inline
-    // paragraph regardless of the copyAsBlob setting.
+    // Always collects the full line content and joins it into one inline paragraph
+    // regardless of the copyJoinLines setting.
     // Mutually exclusive with copySourcePosition — checked via the onChange handler.
     if (settingsStore.copyAsSourceWithQuotation) {
       const source = buildSource(firstLineIndex, true)
-      // Collect full line content. If copyAsBlob already ran, html has block-wrapped
-      // lines — strip note markers, div tags, then join. Otherwise re-collect via extractSelection.
+      // Collect full line content. If copyJoinLines already ran, html is a single
+      // <div> — strip note markers, div tags, then join. Otherwise re-collect via extractSelection.
       let inlineText: string
-      if (settingsStore.copyAsBlob) {
+      if (settingsStore.copyJoinLines) {
         inlineText = stripNoteMarkers(html).replace(/<\/?div>/gi, ' ').replace(/\s+/g, ' ').trim()
       } else {
         const blobResult = extractSelection(scrollerEl.value, lines(), isSelectAll.value, options.getRenderedLineContent)
@@ -341,7 +350,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
   function onCopy(): void {
     // Fire the native copy event — useScopedCopy intercepts it and applies all
-    // active flags (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText).
+    // active flags (copyJoinLines, copySourcePosition, copyWithNotes, copyCleanText).
     triggerCopy()
   }
 
@@ -385,9 +394,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       // Independent checkboxes — all can be active simultaneously
       {
         type: 'checkbox',
-        label: 'העתק כבלוק',
-        get checked() { return settingsStore.copyAsBlob },
-        onChange: (value: boolean) => { settingsStore.copyAsBlob = value },
+        label: 'העתק כרצף (ללא מעבר שורה)',
+        get checked() { return settingsStore.copyJoinLines },
+        onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
       },
       // Radio pair — checking one unchecks the other (both off is valid)
       {

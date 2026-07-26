@@ -31,12 +31,12 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
   /**
    * Builds the final clipboard HTML for the current selection.
    *
-   * copyAsBlob ON:  merge all selected .txt-line divs into one continuous prose
+   * copyJoinLines ON:  merge all selected .txt-line divs into one continuous prose
    *   run (space-joined, no per-line breaks). h2 headers are preserved as <h2>
-   *   block elements and act as the only structural separators. This is the
-   *   "blob" — the file's line-per-line display structure is collapsed away so
-   *   the pasted text reads as flowing prose rather than a list of separate lines.
-   * copyAsBlob OFF: use the raw browser selection HTML directly, which preserves
+   *   block elements and act as the only structural separators. The file's
+   *   line-per-line display structure is collapsed away so the pasted text reads
+   *   as flowing prose rather than a list of separate lines.
+   * copyJoinLines OFF: use the raw browser selection HTML directly, which preserves
    *   whatever block structure the browser captured (one element per line).
    *
    * copyCleanText is applied after either path.
@@ -50,7 +50,7 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
     const range = sel.getRangeAt(0)
     let html: string
 
-    if (settingsStore.copyAsBlob && scrollerEl.value) {
+    if (settingsStore.copyJoinLines && scrollerEl.value) {
       // Blob mode: collapse the file's per-line display structure into flowing prose.
       // Consecutive .txt-line divs are merged into a single space-joined run with no
       // line breaks between them. h2 headers flush the current run and are kept as
@@ -125,12 +125,12 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
     { type: 'separator' },
     {
       type: 'checkbox',
-      label: 'העתק כבלוק',
+      label: 'העתק כרצף (ללא מעבר שורה)',
       get checked() {
-        return settingsStore.copyAsBlob
+        return settingsStore.copyJoinLines
       },
       onChange: (value: boolean) => {
-        settingsStore.copyAsBlob = value
+        settingsStore.copyJoinLines = value
       },
     },
     {

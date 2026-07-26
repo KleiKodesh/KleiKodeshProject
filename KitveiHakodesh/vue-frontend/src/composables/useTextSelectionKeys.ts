@@ -1,23 +1,14 @@
-import { ref, type Ref } from 'vue'
+import { type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
+import { useSelectAllInContainer } from './useSelectAllInContainer'
 
 export function useScopedKeys(
   containerRef: Ref<HTMLElement | null>,
   options?: { onCtrlF?: () => void; onCtrlV?: () => void; onCtrlShiftC?: () => void },
 ) {
-  const isSelectAll = ref(false)
-
-  function selectAllInContainer() {
-    const container = containerRef.value
-    if (!container) return
-    const selection = window.getSelection()
-    if (!selection) return
-    const range = document.createRange()
-    range.selectNodeContents(container)
-    selection.removeAllRanges()
-    selection.addRange(range)
-    isSelectAll.value = true
-  }
+  // Select-all detection lives in a standalone composable so features that only need
+  // the boolean (not the key handling) can reuse it. Ctrl+A here just drives it.
+  const { isSelectAll, selectAll: selectAllInContainer } = useSelectAllInContainer(containerRef)
 
   useEventListener('keydown', (event: KeyboardEvent) => {
     const container = containerRef.value
@@ -38,13 +29,6 @@ export function useScopedKeys(
       event.preventDefault()
       options.onCtrlShiftC()
     }
-  })
-
-  // Clear the flag whenever selection changes (user clicked or made a partial selection)
-  useEventListener('selectionchange', () => {
-    if (!isSelectAll.value) return
-    const selection = window.getSelection()
-    if (!selection || selection.isCollapsed) isSelectAll.value = false
   })
 
   return { selectAllInContainer, isSelectAll }

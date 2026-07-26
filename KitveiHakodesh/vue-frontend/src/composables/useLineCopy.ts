@@ -82,7 +82,7 @@ export function triggerCopy(afterCopy?: () => void): void {
  *   1. Copy action fires document.execCommand('copy') via triggerCopy()
  *   2. Browser dispatches copy event on the focused element
  *   3. This handler intercepts it, calls buildFormattedHtml to apply all active flags
- *      (copyAsBlob, copySourcePosition, copyWithNotes, copyCleanText)
+ *      (copyJoinLines, copySourcePosition, copyWithNotes, copyCleanText)
  *   4. Writes the result to event.clipboardData and calls event.preventDefault()
  *   5. If an afterCopy callback was registered via triggerCopy(), calls it now —
  *      the clipboard is guaranteed to be set at this point.
