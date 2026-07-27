@@ -124,6 +124,7 @@ Add it to the `Update-AllVersionTargets` function in `UpdateVersion.ps1`. Do NOT
 
 ## Version Format
 
+- **Component count outranks the numbers** (`UpdateChecker.CompareVersions`): a version with more parts is always newer — `v0.2.3.4` > `v1.2.3` and > `v12.345.456`. Only versions with the same number of parts compare numerically. This lets the scheme move to four-part numbers and restart low without any installed three-part version blocking the update. ⚠ One-way ratchet: once a four-part release is published, three-part tags will forever look older to installed clients.
 - App version: `vMAJOR.MINOR.PATCH` (semver with `v` prefix, e.g. `v3.4.0`)
 - csproj `<Version>`: `MAJOR.MINOR.PATCH` (no `v` prefix, e.g. `3.4.0`)
 - GitHub release tag: same as app version (`v3.4.0`)

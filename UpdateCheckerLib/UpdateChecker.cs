@@ -112,18 +112,33 @@ namespace UpdateCheckerLib
             return null;
         }
 
+        /// <summary>
+        /// Compares two version strings ("v" prefix optional).
+        ///
+        /// A version with MORE components always outranks one with fewer,
+        /// regardless of the numbers: 0.2.3.4 > 1.2.3 and 0.2.3.4 > 12.345.456.
+        /// This lets the versioning scheme move to four-part numbers and restart
+        /// low without any installed three-part version blocking the update.
+        /// Versions with the same component count compare numerically as usual.
+        /// </summary>
         public static int CompareVersions(string githubVersion, string registryVersion)
         {
             var normalizedGithub = githubVersion?.TrimStart('v') ?? "";
             var normalizedRegistry = registryVersion?.TrimStart('v') ?? "";
 
-            var result =  Version.TryParse(normalizedGithub, out var githubVer) &&
-                   Version.TryParse(normalizedRegistry, out var registryVer)
-                ? githubVer.CompareTo(registryVer)
-                : string.Compare(normalizedGithub, normalizedRegistry, StringComparison.OrdinalIgnoreCase);
-            
-            return result;
+            if (Version.TryParse(normalizedGithub, out var githubVer) &&
+                Version.TryParse(normalizedRegistry, out var registryVer))
+            {
+                int lengthDiff = FieldCount(githubVer).CompareTo(FieldCount(registryVer));
+                return lengthDiff != 0 ? lengthDiff : githubVer.CompareTo(registryVer);
+            }
+
+            return string.Compare(normalizedGithub, normalizedRegistry, StringComparison.OrdinalIgnoreCase);
         }
+
+        /// <summary>Number of components a parsed Version carries (2, 3, or 4).</summary>
+        private static int FieldCount(Version v) =>
+            v.Revision >= 0 ? 4 : v.Build >= 0 ? 3 : 2;
 
         /// <summary>
         /// Background-only task: hits the GitHub API and silently downloads a newer
