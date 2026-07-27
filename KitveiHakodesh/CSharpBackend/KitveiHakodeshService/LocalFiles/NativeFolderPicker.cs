@@ -21,10 +21,8 @@ namespace KitveiHakodeshService.LocalFiles;
 /// three IUnknown slots (QueryInterface, AddRef, Release), then IModalWindow::Show, then the
 /// IFileDialog methods in declaration order.
 ///
-/// The dialog runs on a dedicated STA thread (shell dialogs require STA) and is owned by a
-/// <see cref="DialogOwnerWindow"/> — a hidden window of ours carrying the KitveiHakodesh icon,
-/// centred on the foreground window. Owning the foreground window directly would make the dialog
-/// wear the host BROWSER's icon in dev.
+/// The dialog runs on a dedicated STA thread (shell dialogs require STA) and is owned by the
+/// current foreground window (the browser that issued the RPC), which keeps it on top.
 /// </summary>
 public static partial class NativeFolderPicker
 {
@@ -133,14 +131,8 @@ public static partial class NativeFolderPicker
                     setTitle(dialog, titleText); // cosmetic — ignore failure
                 }
 
-                // Own the dialog with our own hidden window so its title-bar/taskbar icon is
-                // KitveiHakodesh's, not the host browser's (which owning the foreground window
-                // would inherit). Centred on the foreground window, so it still opens where the
-                // user is looking.
-                using var owner = new DialogOwnerWindow();
-
                 var show = (delegate* unmanaged[Stdcall]<nint, nint, int>)Vtbl(dialog, SlotShow);
-                int showResult = show(dialog, owner.Handle);
+                int showResult = show(dialog, GetForegroundWindow());
                 if (showResult == ERROR_CANCELLED || showResult < 0) return null; // cancelled
 
                 var getResult = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Vtbl(dialog, SlotGetResult);
