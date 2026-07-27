@@ -143,6 +143,50 @@ public sealed class Dispatcher(
                         : new PickLocalFileResult { Path = picked, FileName = System.IO.Path.GetFileName(picked) }));
                 }
 
+                // Show the NATIVE browse-for-folder dialog on the service's desktop. The browser has
+                // no folder picker that yields an absolute path, so dev could not otherwise feed a
+                // real folder to the settings page. Returns only the chosen PATH — no grant is
+                // created and no bytes are served as a result of picking.
+                case "pickFolder":
+                {
+                    var a = MsgPack.De<StringArg>(req.Args);
+                    string title = string.IsNullOrWhiteSpace(a.Value) ? "בחר תיקייה" : a.Value!;
+                    string? picked = await LocalFiles.NativeFolderPicker.PickAsync(title);
+                    return RpcResponse.Ok(MsgPack.Ser(picked is null
+                        ? new PickFolderResult { Cancelled = true }
+                        : new PickFolderResult { Path = picked }));
+                }
+
+                // Excluded folders for file search — persisted in excluded_folders.json inside the
+                // index directory via the SAME shared ExcludedFoldersPersistence the hosted
+                // DocumentLocator service uses, so the file name and format are identical. Applied
+                // at search time, so an edit takes effect immediately with no reindex.
+                case "getExcludedFolders":
+                    return RpcResponse.Ok(MsgPack.Ser(new ExcludedFoldersResult
+                    {
+                        Folders = locator.GetExcludedFolders(),
+                    }));
+
+                case "setExcludedFolders":
+                {
+                    var a = MsgPack.De<ExcludedFoldersArgs>(req.Args);
+                    try
+                    {
+                        locator.SetExcludedFolders(a.Folders ?? []);
+                        return RpcResponse.Ok(MsgPack.Ser(new ExcludedFoldersResult
+                        {
+                            Folders = locator.GetExcludedFolders(),
+                        }));
+                    }
+                    catch (Exception ex)
+                    {
+                        return RpcResponse.Ok(MsgPack.Ser(new ExcludedFoldersResult
+                        {
+                            Folders = locator.GetExcludedFolders(), Error = ex.Message,
+                        }));
+                    }
+                }
+
                 // Hand a local file off to the OS's registered default program (shell-execute) —
                 // the dev-mode equivalent of the hosted app's "openInDefaultApp" bridge action.
                 // Token-gated like every /rpc op; the path is validated (absolute, canonical, no
@@ -208,6 +252,27 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
                         Path = p, IsCustom = true, Exists = true, Restarting = true,
+                    }));
+                }
+
+                // Native open-file dialog for the seforim DB, then persist + restart — the dev
+                // equivalent of the hosted app's __webviewPickDbPath (which doesn't exist in a
+                // browser). Filtered to SQLite files. Cancelling changes nothing; the reply
+                // carries Cancelled so the settings page leaves the field untouched.
+                case "pickSeforimDbPath":
+                {
+                    string? picked = await LocalFiles.NativeFilePicker.PickAsync(
+                        LocalFiles.NativeFilePicker.DatabaseFilter, "בחר קובץ מסד נתונים");
+                    if (picked is null)
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Cancelled = true }));
+                    if (!File.Exists(picked))
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = picked, Error = "file not found" }));
+
+                    SeforimDbLocator.SaveRegistryPath(picked);
+                    RestartSoon();
+                    return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
+                    {
+                        Path = picked, IsCustom = true, Exists = true, Restarting = true,
                     }));
                 }
 
@@ -353,6 +418,19 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<StringArg>(req.Args);
                     AppSettingsRegistry.SetHbLocalFolder(a.Value ?? "");
                     return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHbLocalFolder() }));
+                }
+
+                // Automatic update check, in the registry value SHARED with the hosted app and the
+                // KleiKodesh Word add-in (KleiKodesh\UpdateChecker\TurnOffUpdates) — one toggle
+                // governs all three. true = the automatic check is turned OFF.
+                case "getTurnOffUpdates":
+                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffUpdates() }));
+
+                case "setTurnOffUpdates":
+                {
+                    var a = MsgPack.De<BoolArg>(req.Args);
+                    AppSettingsRegistry.SetTurnOffUpdates(a.Value);
+                    return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffUpdates() }));
                 }
 
                 // ── Dictionary (KitveiHakodesh_dictionary.db) ──────────────────

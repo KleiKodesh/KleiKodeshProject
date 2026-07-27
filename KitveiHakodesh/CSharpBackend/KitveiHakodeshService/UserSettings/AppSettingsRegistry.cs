@@ -41,4 +41,25 @@ public static class AppSettingsRegistry
     /// HKCU\Software\VB and VBA Program Settings\KitveiHakodesh\HebrewBooks\LocalFolder.</summary>
     public static string GetHbLocalFolder() => Get("KitveiHakodesh", "HebrewBooks", "LocalFolder", "");
     public static void SetHbLocalFolder(string path) => Set("KitveiHakodesh", "HebrewBooks", "LocalFolder", path);
+
+    // ── Automatic update check ────────────────────────────────────────────────────
+    //
+    // Shared with the KleiKodesh Word VSTO add-in AND the hosted app: all three read/write
+    // the SAME value so one toggle governs the automatic update check everywhere. The app
+    // name is "KleiKodesh" (NOT "KitveiHakodesh") because the VSTO's SettingsManager writes
+    // it there — see KitveiHakodeshLib.Settings.AppSettings.LoadTurnOffUpdates:
+    //   HKCU\Software\VB and VBA Program Settings\KleiKodesh\UpdateChecker\TurnOffUpdates
+    // Stored as the "True"/"False" string bool.ToString() produces so the VSTO's
+    // bool.TryParse round-trips it. Do not change the app name / section / key / value
+    // format — that would fork the setting.
+    private const string UpdateCheckerAppName = "KleiKodesh";
+
+    /// <summary>True when the user has turned OFF the automatic update check.</summary>
+    public static bool GetTurnOffUpdates() => string.Equals(
+        Get(UpdateCheckerAppName, "UpdateChecker", "TurnOffUpdates", "False"),
+        "True",
+        StringComparison.OrdinalIgnoreCase);
+
+    public static void SetTurnOffUpdates(bool turnedOff) =>
+        Set(UpdateCheckerAppName, "UpdateChecker", "TurnOffUpdates", turnedOff ? "True" : "False");
 }

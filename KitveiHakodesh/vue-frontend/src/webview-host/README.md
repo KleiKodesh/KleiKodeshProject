@@ -28,7 +28,8 @@ Push event names in use: `dbPathPicked` (`seforimDb.ts`, setup wizard); the loca
 - Files: `pickFile`, `restoreLocalFile`, `readTxtFileContent`, `restoreHbPdf`, `disposeLocalFileHost`, `pickFolder`
 - HebrewBooks: `hbSearch`, `triggerHbDownload`, `checkHbLocalFiles`, `deleteHbLocalFile`, `revealHbLocalFile`, `triggerHbSaveAs`, `clearHbLocalFolder`
 - Word/clipboard: `exportToWord`, `pasteIntoWord`, `copyImageToClipboard`
-- Search/indexes: `fileSystemSearchWarmup`, `fileSystemSearch`, `openExcludedFoldersManager`, `DeleteFtsIndex`, `ResetFtsIndex`, `ResetDocumentLocatorIndex`
+- Search/indexes: `fileSystemSearchWarmup`, `fileSystemSearch`, `openExcludedFoldersManager` (hosted: native WinForms dialog) / `getExcludedFolders` + `setExcludedFolders` (dev: the Vue dialog persists through the service to the same `excluded_folders.json`), `DeleteFtsIndex`, `ResetFtsIndex`, `ResetDocumentLocatorIndex`
+- Shared registry settings: `getHbLocalFolderFromRegistry`, `setHbLocalFolderInRegistry`, `getTurnOffUpdates`, `setTurnOffUpdates`, `getDbPathInfo`, `setDbPathDev`, `clearDbPath`. Both modes read and write the SAME registry values (`KitveiHakodesh\Database\Path`, `KitveiHakodesh\HebrewBooks\LocalFolder`, `KleiKodesh\UpdateChecker\TurnOffUpdates`) — hosted via the C# host, dev via the service — so a setting never forks between them. `pickFolder` shows a real native folder dialog in both modes (the service hosts it in dev).
 - App/window: `TogglePopOut`, `toggleFullscreen`, `reload`, `resetSettings`, `getDiagnostics`, `clearDbPath`, and `setTheme` — fire-and-forget `{ isDark }` push that keeps the WinForms title bar in sync (applied host-side via DarkNet)
 
 Env flags: `showPopOutButton` = `window.__webviewShowPopOut === true`, and `isVstoEnvironment` (same flag) — true only in the Word task-pane host.
