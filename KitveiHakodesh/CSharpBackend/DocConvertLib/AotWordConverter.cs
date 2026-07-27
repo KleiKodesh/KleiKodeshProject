@@ -30,6 +30,10 @@ public static unsafe partial class AotWordConverter
     private static partial int CLSIDFromProgID(string lpszProgID, out Guid lpclsid);
     [LibraryImport("ole32.dll")]
     private static partial int CoCreateInstance(in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
+    // Bind to an ALREADY-RUNNING Word from the ROT. Marshal.GetActiveObject is not available
+    // under AOT (it lives in the removed built-in COM interop), so call the OLE APIs directly.
+    [LibraryImport("oleaut32.dll")]
+    private static partial int GetActiveObject(in Guid rclsid, nint pvReserved, out nint ppunk);
 
     private const uint COINIT_APARTMENTTHREADED = 0x2;
     private const uint CLSCTX_LOCAL_SERVER = 0x4;
@@ -67,6 +71,19 @@ public static unsafe partial class AotWordConverter
     {
         if (obj == 0) return;
         ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(obj, 2))(obj);
+    }
+
+    /// <summary>IUnknown::QueryInterface (vtable slot 0) — GetActiveObject hands back an IUnknown,
+    /// but every Invoke helper here needs an IDispatch.</summary>
+    private static nint QueryInterface(nint obj, in Guid iid)
+    {
+        var fn = (delegate* unmanaged[Stdcall]<nint, Guid*, nint*, int>)Vtbl(obj, 0);
+        nint result;
+        fixed (Guid* pIid = &iid)
+        {
+            if (fn(obj, pIid, &result) < 0) return 0;
+        }
+        return result;
     }
 
     private static int GetDispId(nint disp, string name)
@@ -191,6 +208,117 @@ public static unsafe partial class AotWordConverter
             if (app != 0) { try { InvokeMethodVoid(app, "Quit", []); } catch { } Release(app); }
             if (coInit) CoUninitialize();
         }
+    }
+
+    /// <summary>
+    /// Paste whatever is on the Windows clipboard into Word at the cursor. The AOT-viable
+    /// equivalent of KitveiHakodeshLib WordExporter.PasteAtCursorCore, so dev behaves like the
+    /// published app (where the same menu item goes through the WebView2 bridge instead).
+    ///
+    /// Unlike <see cref="Convert"/> this REUSES a running Word when there is one — pasting into a
+    /// hidden throwaway instance would be useless, the user wants it in the document they are
+    /// looking at. Only spawns Word when none is running, and never Quits: the window is left
+    /// open and activated for the user. Must run on an STA thread (see PasteAsync).
+    /// </summary>
+    public static void PasteAtCursor()
+    {
+        int hr = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
+        bool coInit = hr >= 0;
+        nint app = 0, docs = 0, doc = 0, window = 0, selection = 0;
+        try
+        {
+            if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
+                throw new COMException("Word is not installed (Word.Application ProgID not found).");
+
+            // Prefer the instance the user already has open.
+            if (GetActiveObject(in clsid, 0, out nint unk) >= 0 && unk != 0)
+            {
+                app = QueryInterface(unk, in IID_IDispatch);
+                Release(unk);
+            }
+            if (app == 0)
+            {
+                if (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0)
+                    throw new COMException("Failed to start Word (CoCreateInstance).");
+            }
+
+            // Visible always — the point is for the user to see the pasted text. A reused
+            // instance is already visible; a spawned one would otherwise stay hidden.
+            PropPut(app, "Visible", Bool(true));
+
+            docs = PropGetDispatch(app, "Documents");
+            if (GetInt(docs, "Count") == 0)
+                doc = InvokeMethodDispatch(docs, "Add", []);
+
+            // Selection hangs off the active window, matching the hosted path
+            // (app.ActiveDocument.ActiveWindow.Selection).
+            window = PropGetDispatch(app, "ActiveWindow");
+            selection = PropGetDispatch(window, "Selection");
+
+            // wdFormatSurroundingFormattingWithEmphasis (20) is Word's "Merge Formatting": the
+            // text takes the destination's font instead of the web default Word would otherwise
+            // import as direct character formatting. Falls back to a plain Paste, exactly like
+            // the hosted path — PasteAndFormat is format-sensitive and can reject a payload
+            // plain Paste accepts, and dropping the user's paste entirely is worse.
+            try { InvokeMethodVoid(selection, "PasteAndFormat", [I4(20)]); }
+            catch { InvokeMethodVoid(selection, "Paste", []); }
+
+            try { InvokeMethodVoid(app, "Activate", []); } catch { }
+        }
+        finally
+        {
+            if (selection != 0) Release(selection);
+            if (window != 0) Release(window);
+            if (doc != 0) Release(doc);
+            if (docs != 0) Release(docs);
+            // NEVER Quit here — the user is left looking at the document. Releasing our ref is
+            // enough; Word stays up because it has its own UI reference.
+            if (app != 0) Release(app);
+            if (coInit) CoUninitialize();
+        }
+    }
+
+    /// <summary>Read an integer property (e.g. Documents.Count).</summary>
+    private static int GetInt(nint disp, string name)
+    {
+        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYGET, []);
+        return r.vt == VT_I4 ? r.i4 : 0;
+    }
+
+}
+
+/// <summary>
+/// Async/STA wrapper for <see cref="AotWordConverter.PasteAtCursor"/>. Separate class because
+/// <c>AotWordConverter</c> is <c>unsafe</c> and C# forbids <c>await</c> in an unsafe context.
+/// </summary>
+public static class AotWordPaste
+{
+    // One paste at a time — automating Word re-entrantly is fragile.
+    private static readonly SemaphoreSlim Gate = new(1, 1);
+
+    /// <summary>Run the paste on a dedicated STA thread and return null on success, or an error
+    /// message. COM automation of Word from a thread-pool (MTA) thread only works through a
+    /// marshaling proxy and is flaky for UI operations, so give it a real STA thread — the same
+    /// reason NativeFolderPicker does this for shell dialogs. Never throws.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static async Task<string?> PasteAsync()
+    {
+        if (!await Gate.WaitAsync(0)) return "פעולת הדבקה אחרת מתבצעת כעת.";
+        try
+        {
+            var completion = new TaskCompletionSource<string?>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            var thread = new Thread(() =>
+            {
+                try { AotWordConverter.PasteAtCursor(); completion.TrySetResult(null); }
+                catch (Exception ex) { completion.TrySetResult(ex.Message); }
+            })
+            { IsBackground = true, Name = "khs-word-paste" };
+            thread.SetApartmentState(ApartmentState.STA);
+            thread.Start();
+            return await completion.Task;
+        }
+        finally { Gate.Release(); }
     }
 }
 #endif
