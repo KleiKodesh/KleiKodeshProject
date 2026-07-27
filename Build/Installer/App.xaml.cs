@@ -74,13 +74,16 @@ namespace KleiKodeshVstoInstallerWpf
 
             if (waitForPid > 0)
             {
-                // Wait on a background thread — don't block the UI thread
+                // Wait on a background thread — don't block the UI thread.
+                // The wait is bounded: PIDs are recycled, so if the id now belongs to
+                // some unrelated long-lived process the wizard must not stay hidden
+                // forever. 30s covers even a slow Word/app teardown.
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     try
                     {
                         var proc = System.Diagnostics.Process.GetProcessById(waitForPid);
-                        proc.WaitForExit();
+                        proc.WaitForExit(30_000);
                     }
                     catch { /* process already gone */ }
 

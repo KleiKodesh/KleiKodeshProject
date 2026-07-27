@@ -18,6 +18,21 @@ namespace UpdateCheckerLib
         private static readonly string InstallerTempPath =
             Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe");
 
+        // In-flight downloads write here and are renamed to InstallerTempPath only
+        // after the byte count is validated. KleiKodeshSetup.exe therefore never
+        // exists half-written: a download interrupted by process exit leaves only
+        // a .partial file, which is ignored by the version check and cleaned up
+        // by the next session's download / DeleteInstallerFile call.
+        //
+        // This matters because a truncated NSIS exe still reports its full
+        // ProductVersion (the version resource lives in the small stub at the
+        // start of the file), so a half-downloaded KleiKodeshSetup.exe used to
+        // look like a complete update, get announced on every launch, and fail
+        // its CRC check on every close — with the "already downloaded" check
+        // preventing a re-download forever.
+        private static readonly string InstallerPartialPath =
+            Path.Combine(Path.GetTempPath(), "KleiKodeshSetup.exe.partial");
+
         /// <summary>
         /// Reads the ProductVersion embedded in %TEMP%\KleiKodeshSetup.exe (if it exists).
         /// Returns e.g. "v8.6.0" or null if the file is missing or has no version info.
@@ -38,10 +53,40 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
-        /// Deletes %TEMP%\KleiKodeshSetup.exe silently. Used to clean up after a
-        /// successful install or when a stale/outdated installer is found on disk.
+        /// Deletes %TEMP%\KleiKodeshSetup.exe (and any leftover .partial download)
+        /// silently. Used to clean up after a successful install or when a
+        /// stale/outdated installer is found on disk.
         /// </summary>
-        public static void DeleteInstallerFile() => TryDeleteFile(InstallerTempPath);
+        public static void DeleteInstallerFile()
+        {
+            TryDeleteFile(InstallerTempPath);
+            TryDeleteFile(InstallerPartialPath);
+        }
+
+        /// <summary>
+        /// Byte size of %TEMP%\KleiKodeshSetup.exe, or null if it doesn't exist.
+        /// Compared against the GitHub release asset size to detect files that
+        /// pre-date the atomic .partial download scheme and were left truncated.
+        /// </summary>
+        public static long? GetInstallerFileLength()
+        {
+            try
+            {
+                var info = new FileInfo(InstallerTempPath);
+                return info.Exists ? info.Length : (long?)null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// File name of the release asset for <paramref name="version"/>, matching
+        /// this machine's installer variant — e.g. "KleiKodeshSetup-v8.7.2-x64.exe".
+        /// </summary>
+        internal static string GetInstallerAssetName(string version) =>
+            $"KleiKodeshSetup-{version}{GetInstallerSuffix()}.exe";
 
         /// <summary>
         /// Returns the installer variant stored in the registry ("x64", "x86", or "AnyCPU").
@@ -82,8 +127,7 @@ namespace UpdateCheckerLib
         /// </summary>
         public static async Task DownloadAndScheduleInstallerAsync(string version)
         {
-            string suffix       = GetInstallerSuffix();
-            string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/KleiKodeshSetup-{version}{suffix}.exe";
+            string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/{GetInstallerAssetName(version)}";
 
             // Cross-process mutex: prevents simultaneous downloads from VSTO + demo app.
             // If another process is already downloading, skip silently.
@@ -100,21 +144,27 @@ namespace UpdateCheckerLib
                         return;
                     }
 
-                    // Download silently in background without showing progress form
-                    await DownloadFileAsync(installerUrl, InstallerTempPath, CancellationToken.None);
+                    // Download silently in background without showing progress form.
+                    // Written to .partial and renamed only after the byte count is
+                    // validated, so KleiKodeshSetup.exe is never seen half-written —
+                    // even if this process is killed mid-download.
+                    await DownloadFileAsync(installerUrl, InstallerPartialPath, CancellationToken.None);
 
-                    if (!File.Exists(InstallerTempPath) || new FileInfo(InstallerTempPath).Length == 0)
+                    if (!File.Exists(InstallerPartialPath) || new FileInfo(InstallerPartialPath).Length == 0)
                         throw new UpdateException("הורדת הקובץ נכשלה — הקובץ ריק או חסר", installerUrl, attempts: 1);
+
+                    TryDeleteFile(InstallerTempPath);
+                    File.Move(InstallerPartialPath, InstallerTempPath);
 
                     // Download complete. PendingInstallerPath is NOT set here —
                     // it is set by UpdateChecker.GetReadyUpdateVersion() on the next
                     // session when the sync disk check sees the file is newer than registry.
                 }
-                catch (OperationCanceledException) { TryDeleteFile(InstallerTempPath); }
+                catch (OperationCanceledException) { TryDeleteFile(InstallerPartialPath); }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"Silent download failed: {ex.Message}");
-                    TryDeleteFile(InstallerTempPath);
+                    TryDeleteFile(InstallerPartialPath);
                     // Fail silently - don't show error message to user
                 }
                 finally
@@ -129,8 +179,18 @@ namespace UpdateCheckerLib
         /// Launches the installer at <see cref="PendingInstallerPath"/> (set by
         /// <see cref="UpdateChecker.GetReadyUpdateVersion"/>) and clears the path.
         /// Called on app/Word close. No-op if PendingInstallerPath is not set.
-        /// Uses Verb="runas" to hand off to the Windows AIS service so the process
-        /// survives Word/app shutdown. No UAC prompt — NSIS has RequestExecutionLevel=user.
+        ///
+        /// The installer is launched unelevated — the NSIS wrapper and the WPF
+        /// installer both have user-level manifests, so no UAC prompt appears here.
+        /// (The WPF installer self-elevates just the DocumentLocator service
+        /// registration step, from its own visible foreground window.)
+        /// Verb="runas" must NOT be reintroduced: the verb itself forces a UAC
+        /// consent prompt regardless of the target's manifest, and a declined or
+        /// policy-denied prompt used to silently kill the update on every close.
+        ///
+        /// --wait-for-pid keeps the installer window hidden until this process has
+        /// fully exited (NSIS forwards all arguments to the WPF installer), so the
+        /// wizard never races the closing app.
         /// </summary>
         public static void RunPendingInstaller()
         {
@@ -149,6 +209,15 @@ namespace UpdateCheckerLib
             {
                 LaunchInstaller(pathToLaunch);
             }
+            catch (Win32Exception w32) when (w32.NativeErrorCode == 193)
+            {
+                // ERROR_BAD_EXE_FORMAT: the file on disk is corrupt (e.g. a truncated
+                // download from a version that pre-dates the .partial scheme).
+                // Delete it so the next session's background check downloads a fresh
+                // copy instead of failing on every close forever.
+                Debug.WriteLine("[UpdateChecker] Installer exe is corrupt, deleting so it re-downloads.");
+                TryDeleteFile(pathToLaunch);
+            }
             catch (Exception ex)
             {
                 var details = ex is Win32Exception w32
@@ -164,17 +233,13 @@ namespace UpdateCheckerLib
             }
         }
 
-        // UseShellExecute=true with Verb="runas" hands off to the Windows AIS system service,
-        // which runs outside Word's process tree. Without runas, ShellExecuteEx runs in-process
-        // and gets killed when Word shuts down before Process.Start returns.
-        // The NSIS wrapper has RequestExecutionLevel=user so no UAC prompt appears.
         private static void LaunchInstaller(string installerPath)
         {
             var psi = new ProcessStartInfo
             {
                 FileName         = installerPath,
+                Arguments        = $"--wait-for-pid {Process.GetCurrentProcess().Id}",
                 UseShellExecute  = true,
-                Verb             = "runas",
                 WorkingDirectory = Path.GetDirectoryName(installerPath)
             };
 
@@ -190,24 +255,11 @@ namespace UpdateCheckerLib
             }
             catch (Win32Exception win32ex) when (win32ex.NativeErrorCode == 1223)
             {
-                // ERROR_CANCELLED (1223): user clicked "No" on the UAC prompt.
-                // Respect the user's choice — don't retry, don't show an error.
+                // ERROR_CANCELLED (1223): a UAC prompt was declined. Current installers
+                // are user-level and never prompt, but an already-downloaded setup exe
+                // from the era when the NSIS manifest said "admin" still elevates.
+                // Respect the user's choice — the file stays for the next close.
                 Debug.WriteLine("[UpdateChecker] User cancelled UAC prompt, skipping install.");
-            }
-            catch
-            {
-                // Any other failure: retry without "runas".
-                // runas is only used to escape Word's process tree via the AIS service —
-                // the NSIS wrapper has RequestExecutionLevel=user so no elevation is needed.
-                // If the retry also throws, let the exception propagate to RunPendingInstaller's
-                // catch block which will show the error with the path for manual launch.
-                var fallback = new ProcessStartInfo
-                {
-                    FileName         = installerPath,
-                    UseShellExecute  = true,
-                    WorkingDirectory = Path.GetDirectoryName(installerPath)
-                };
-                Process.Start(fallback);
             }
         }
 
@@ -258,12 +310,12 @@ namespace UpdateCheckerLib
 
                         response.EnsureSuccessStatusCode();
                         var totalBytes = response.Content.Headers.ContentLength ?? 0;
+                        long totalRead = 0;
 
                         using (var input  = await response.Content.ReadAsStreamAsync())
                         using (var output = new FileStream(filePath, FileMode.Create, FileAccess.Write, FileShare.None, 8192, true))
                         {
-                            var buffer     = new byte[8192];
-                            long totalRead = 0;
+                            var buffer = new byte[8192];
                             int read;
 
                             while ((read = await input.ReadAsync(buffer, 0, buffer.Length, token)) > 0)
@@ -276,6 +328,15 @@ namespace UpdateCheckerLib
                                 else
                                     Debug.WriteLine($"Download: {FormatBytes(totalRead)}");
                             }
+                        }
+
+                        // A dropped connection can end the read loop without an exception.
+                        // Anything shorter than Content-Length is a failed attempt, not a file.
+                        if (totalBytes > 0 && totalRead != totalBytes)
+                        {
+                            Debug.WriteLine($"Download attempt {attempt} incomplete ({totalRead}/{totalBytes} bytes), retrying...");
+                            lastException = new IOException($"ההורדה נקטעה ({totalRead}/{totalBytes} בתים)");
+                            continue;
                         }
 
                         return; // success

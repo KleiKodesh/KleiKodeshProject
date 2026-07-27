@@ -149,11 +149,32 @@ namespace UpdateCheckerLib
 
                 // Check if the file already on disk is already this version — no need to re-download
                 var existingFileVersion = DownloadManager.GetInstallerFileVersion();
-                if (existingFileVersion != null &&
-                    CompareVersions(existingFileVersion, release.TagName) >= 0)
+                if (existingFileVersion != null)
                 {
-                    Debug.WriteLine($"[UpdateChecker] {release.TagName} already downloaded, skipping.");
-                    return;
+                    int cmp = CompareVersions(existingFileVersion, release.TagName);
+                    if (cmp > 0)
+                        return; // newer than the latest release (e.g. local dev build) — leave it alone
+
+                    if (cmp == 0)
+                    {
+                        // Same version — but don't trust the version stamp alone: a download
+                        // interrupted by process exit (before the .partial scheme) leaves a
+                        // truncated exe whose version resource still reads, wedging the updater
+                        // in an announce-but-never-install loop. Verify the byte size against
+                        // the release asset; on mismatch fall through and re-download.
+                        long? expectedSize = FindAssetSize(release, DownloadManager.GetInstallerAssetName(release.TagName));
+                        long? actualSize   = DownloadManager.GetInstallerFileLength();
+
+                        if (expectedSize == null || actualSize == expectedSize)
+                        {
+                            Debug.WriteLine($"[UpdateChecker] {release.TagName} already downloaded, skipping.");
+                            return;
+                        }
+
+                        Debug.WriteLine(
+                            $"[UpdateChecker] On-disk installer is {actualSize} bytes but the release asset " +
+                            $"is {expectedSize} bytes — truncated download, fetching a fresh copy.");
+                    }
                 }
 
                 await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
@@ -166,6 +187,21 @@ namespace UpdateCheckerLib
             {
                 Debug.WriteLine($"[UpdateChecker] Update check failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Byte size of the named asset in the release, or null if the release JSON
+        /// carries no matching asset (older cached responses, renamed assets).
+        /// </summary>
+        private static long? FindAssetSize(GitHubRelease release, string assetName)
+        {
+            if (release?.Assets == null) return null;
+            foreach (var asset in release.Assets)
+            {
+                if (string.Equals(asset.Name, assetName, StringComparison.OrdinalIgnoreCase) && asset.Size > 0)
+                    return asset.Size;
+            }
+            return null;
         }
 
         /// <summary>
