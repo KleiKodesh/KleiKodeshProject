@@ -67,19 +67,35 @@ Build → AddinInstaller.cs (const Version)
 | _(none)_                 | Normal UI — landing page                                                                                                              |
 | `--silent` / `--install` | Skip straight to install progress page, exit 0 on success / 1 on failure. Used by auto-updater and NSIS `--silent` passthrough.       |
 | `--repair`               | Skip straight to repair page with auto-run (no confirm dialog). Used when relaunching as admin from the repair page elevation banner. |
+| `--wait-for-pid <PID>`   | Start hidden; show the window once the given process exits (max 30s — PIDs get recycled). Passed by `RunPendingInstaller()` so the wizard appears only after Word/the app has fully closed. |
 
 ### Full Update Install Flow
 
 ```
-Word taskpane opens
-  → UpdateChecker detects newer GitHub release
-  → User confirms → DownloadManager downloads KleiKodeshSetup-vX.Y.Z.exe to %TEMP%
-  → User closes Word → RunPendingInstaller() launches NSIS wrapper with "--silent"
-  → NSIS checks .NET/VSTO prereqs, passes "--silent" through to WPF installer
-  → WPF installer starts with --silent → straight to InstallPage (no landing UI)
+Word taskpane / KitveiHakodesh app opens
+  → UpdateChecker Step 1 (sync, disk-only): %TEMP%\KleiKodeshSetup.exe newer than
+    registry? → arm RunPendingInstaller() + show "עדכון זמין" notification
+  → UpdateChecker Step 2 (async): GitHub latest newer than registry? → silent
+    download to %TEMP%\KleiKodeshSetup.exe.partial → validated against
+    Content-Length → renamed to KleiKodeshSetup.exe (atomic; a killed process
+    never leaves a half-written KleiKodeshSetup.exe). If the on-disk file already
+    claims the latest version, its byte size is verified against the GitHub
+    release asset size — a mismatch (truncated pre-.partial download) forces a
+    fresh download.
+  → User closes Word/app → RunPendingInstaller() launches the NSIS wrapper
+    unelevated with "--wait-for-pid <pid>" (no --silent — the wizard is shown)
+  → NSIS checks .NET/VSTO prereqs, passes the args through to the WPF installer
+  → WPF installer starts hidden, waits (max 30s) for the pid to exit, then shows
+    the landing page
   → Extracts VSTO zip, registers addin, SaveVersion() → exits 0
   → NSIS writes/overwrites HKCU\...\Uninstall\KleiKodesh\DisplayVersion = "vX.Y.Z"
 ```
+
+A truncated NSIS exe still reports its full `ProductVersion` (the version resource
+lives in the stub at the start of the file) — this is why the `.partial` rename and
+the asset-size check exist. Do not remove either: without them one interrupted
+download wedges the updater into announcing an update on every launch and failing
+to install on every close, forever ("already downloaded" skip blocks the repair).
 
 **No duplicate in Windows Installed Apps** — the uninstall key name is always the fixed string `KleiKodesh`, so `WriteRegStr` overwrites in-place on every install/update.
 
@@ -90,8 +106,8 @@ Word taskpane opens
 - **Elevate button**: calls `AdminHelper.RelaunchAsAdmin("--repair")` — relaunches the same exe with `runas` (UAC prompt) and exits the current instance. The elevated instance receives `--repair`, navigates straight to `RepairPage` with `autoRun: true`, and skips the confirm dialog since the user already confirmed by clicking the button.
 - **`--repair` arg**: handled in `App.xaml.cs` → calls `MainWindow.NavigateToRepairOnLoad()` which opens `RepairPage(autoRun: true)` directly, bypassing the landing page entirely.
 - **WPF installer manifest**: `asInvoker` — correct, never forces UAC.
-- **NSIS wrapper**: `RequestExecutionLevel user` — correct, never forces UAC.
-- **`DownloadManager.LaunchInstaller`**: **MUST use `Verb = "runas"`** — this is not for elevation, but because `runas` hands off to the Windows Application Information Service (AIS) which runs as a separate system service outside Word's process. Without `runas`, `ShellExecuteEx` runs in-process and gets killed when Word shuts down before `Process.Start` returns. The NSIS wrapper has `RequestExecutionLevel user` so no UAC prompt appears, but the AIS handoff is what makes the launch survive Word's shutdown.
+- **NSIS wrapper**: `RequestExecutionLevel user` — **MUST stay `user`** (this is a per-user install: `%LOCALAPPDATA%` + HKCU). It was briefly `admin` (June–July 2026, for the uninstaller's `sc stop/delete DocumentLocatorSvc`) and that broke auto-update: a surprise UAC prompt at Word/app close, silently swallowed when declined or policy-denied, and — worse — a standard user approving with admin credentials installed into the *admin's* profile, so the real user never updated. The uninstaller now elevates just its two `sc` commands through one `ExecShellWait "runas" cmd.exe` call (skipped when the service isn't registered); the installer side self-elevates only `DocumentLocator.Service.exe --install` (see `DocumentLocatorHelper.EnsureServiceInstalledAsync`).
+- **`DownloadManager.LaunchInstaller`**: **MUST NOT use `Verb = "runas"`** — the `runas` verb forces a UAC consent prompt regardless of the target exe's manifest (an earlier note here claimed it was a promptless AIS handoff; that is wrong — AIS *is* the elevation path). A declined/denied prompt surfaced as Win32 error 1223, which is deliberately swallowed, so updates silently never ran. Child processes survive parent exit on Windows; no handoff trick is needed for the installer to outlive Word/the app, and `--wait-for-pid` makes the installer wait for the host to fully exit before showing UI.
 
 If a user wants to clean HKLM leftovers from very old versions, they can run the WPF installer manually as administrator — the repair page will then have full access.
 

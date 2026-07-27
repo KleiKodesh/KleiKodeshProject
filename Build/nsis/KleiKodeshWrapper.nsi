@@ -96,7 +96,14 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
-RequestExecutionLevel admin
+; Per-user install (%LOCALAPPDATA% + HKCU) — MUST stay "user".
+; "admin" here breaks the auto-updater: the update launch at Word/app close hits
+; a surprise UAC prompt (declines are silent), and a standard user approving with
+; admin credentials installs into the ADMIN's profile, so the real user never
+; updates. The two places that genuinely need elevation prompt for it themselves:
+;   - install: the WPF installer elevates DocumentLocator.Service.exe --install
+;   - uninstall: the "sc stop/delete" pair below runs through one elevated cmd.exe
+RequestExecutionLevel user
 SilentInstall silent
 AutoCloseWindow true
 
@@ -354,18 +361,21 @@ Section Uninstall
 
   ; ── DocumentLocator Windows Service ──────────────────────────────────────────
   ; Must happen before file removal — the service exe must be on disk for
-  ; sc.exe to stop and delete it. Running as admin (RequestExecutionLevel admin)
-  ; so SCM access is available.
+  ; sc.exe to stop and delete it. The uninstaller itself runs unelevated
+  ; (RequestExecutionLevel user — see the note above), and SCM stop/delete needs
+  ; admin, so just these two commands run through a single elevated cmd.exe
+  ; (one UAC prompt). Skipped entirely when the service was never registered.
+  ; If the user declines the prompt, the service is left behind (best effort)
+  ; and the rest of the uninstall continues.
+  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\DocumentLocatorSvc" "ImagePath"
+  StrCmp $0 "" DocLocatorSvcDone
   DetailPrint "עוצר ומסיר שירות DocumentLocator..."
-  nsExec::ExecToStack 'sc stop DocumentLocatorSvc'
-  Pop $0
-  Pop $1
-  ; Give the service up to 5 seconds to reach STOPPED state
-  Sleep 3000
-  nsExec::ExecToStack 'sc delete DocumentLocatorSvc'
-  Pop $0
-  Pop $1
-  ; $0 == 0 = deleted, 1060 = service did not exist — both are fine
+  ; ping -n 4 ≈ 3s pause between stop and delete so the service reaches STOPPED
+  ; and releases its exe lock before file removal below.
+  ExecShellWait "runas" "$SYSDIR\cmd.exe" "/C sc stop DocumentLocatorSvc & ping -n 4 127.0.0.1 >nul & sc delete DocumentLocatorSvc" SW_HIDE
+  ; Small grace period for the service process to fully exit.
+  Sleep 500
+  DocLocatorSvcDone:
 
   ; Show progress with hardcoded Hebrew messages
   DetailPrint "מתחיל הסרת כלי קודש..."

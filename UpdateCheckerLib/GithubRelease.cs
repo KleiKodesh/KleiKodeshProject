@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace UpdateCheckerLib
@@ -10,6 +11,9 @@ namespace UpdateCheckerLib
 
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("assets")]
+        public List<GitHubReleaseAsset> Assets { get; set; } = new List<GitHubReleaseAsset>();
 
         [JsonPropertyName("body")]
         public string Body { get; set; } = string.Empty;
@@ -25,5 +29,17 @@ namespace UpdateCheckerLib
 
         [JsonPropertyName("html_url")]
         public string HtmlUrl { get; set; } = string.Empty;
+    }
+
+    public class GitHubReleaseAsset
+    {
+        [JsonPropertyName("name")]
+        public string Name { get; set; } = string.Empty;
+
+        [JsonPropertyName("size")]
+        public long Size { get; set; }
+
+        [JsonPropertyName("browser_download_url")]
+        public string BrowserDownloadUrl { get; set; } = string.Empty;
     }
 }
