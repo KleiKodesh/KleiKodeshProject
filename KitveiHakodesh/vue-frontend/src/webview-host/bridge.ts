@@ -551,10 +551,28 @@ export function exportToWord(html: string, title: string = ''): Promise<{ ok?: b
 /**
  * Paste into Word at the current cursor position by reading from the Windows clipboard.
  * The caller must have already set the clipboard via execCopyHtml / copyToClipboard
- * before calling this — the C# side calls Selection.Paste() which picks up whatever
- * is on the clipboard, so no HTML needs to be sent over the bridge.
+ * before calling this — the C# side pastes whatever is on the clipboard, so no HTML
+ * needs to be sent over the bridge.
+ *
+ * Hosted: the WebView2 host drives Word through the Office PIA (WordExporter).
+ * Dev: the KitveiHakodesh service drives Word over raw COM/IDispatch instead (the PIA
+ * and `dynamic` are both unavailable under native AOT) — see AotWordConverter.PasteAtCursor.
+ * The service runs on the same machine as the dev browser and shares its clipboard, so
+ * the already-copied HTML is exactly what gets pasted.
+ *
+ * NOTE: guard on __webviewAction, NOT isHosted — isHosted is TRUE in dev while the
+ * bridge channel is absent, so an isHosted check would send dev down the hosted path
+ * and reject with 'bridge not available'.
  */
-export function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
+export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
+  if (typeof window.__webviewAction !== 'function') {
+    try {
+      const r = await serviceCall<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
+      return { ok: !!r?.ok, error: r?.error }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
   return action<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
 }
 

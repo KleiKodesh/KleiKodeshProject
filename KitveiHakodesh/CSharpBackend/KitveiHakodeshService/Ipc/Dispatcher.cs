@@ -212,6 +212,20 @@ public sealed class Dispatcher(
                     }
                 }
 
+                // Paste the Windows clipboard into Word at the cursor — the dev-mode equivalent
+                // of the hosted app's "pasteIntoWord" bridge action (WordExporter.PasteAtCursor).
+                // The frontend has ALREADY put the formatted HTML on the clipboard via the copy
+                // event, so nothing travels over the wire; this only drives Word. Reuses a running
+                // Word instance when there is one and never Quits it, so the user is left looking
+                // at their document. Runs on an STA thread inside PasteAsync.
+                case "pasteIntoWord":
+                {
+                    string? error = await DocConvertLib.AotWordPaste.PasteAsync();
+                    return RpcResponse.Ok(MsgPack.Ser(error is null
+                        ? new PasteIntoWordResult { Ok = true }
+                        : new PasteIntoWordResult { Error = error }));
+                }
+
                 // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
                 // cancels the build cleanly (aborts any merge, releases the index lock)
                 // before the process exits. The dev killer calls this before taskkill so

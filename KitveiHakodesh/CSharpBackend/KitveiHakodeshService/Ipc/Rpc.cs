@@ -121,6 +121,17 @@ public sealed class OpenInDefaultAppResult
     public string? Error { get; set; }
 }
 
+/// <summary>Result of <c>pasteIntoWord</c>: <see cref="Ok"/> true once the clipboard was pasted
+/// into Word at the cursor, or an <see cref="Error"/> message (Word not installed, COM failure).
+/// Mirrors the hosted bridge action's <c>{ ok, error }</c> shape so the frontend caller is
+/// identical in dev and hosted.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class PasteIntoWordResult
+{
+    public bool Ok { get; set; }
+    public string? Error { get; set; }
+}
+
 /// <summary>Parameterized SQL (positional '?') for the generic user-settings read/write ops.
 /// The bind values are inherently dynamic (string | number | null) and the rows come back in
 /// arbitrary shapes, so this path stays JSON — there is no point re-encoding already-JSON,
