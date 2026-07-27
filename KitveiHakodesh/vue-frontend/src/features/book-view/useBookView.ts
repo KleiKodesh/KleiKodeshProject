@@ -231,6 +231,7 @@ export function useBookView(
   const {
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+    scheduleWordLinkAnchorsLoad,
     commentaryFontPx, renderContent, setCurrentMark,
     commentaryTocPaths, buildExportHtml,
   } = useBookViewCommentaryAnnotations(
@@ -462,6 +463,7 @@ export function useBookView(
     // commentary annotation & render (hoisted — survive v-if toggle)
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+    scheduleWordLinkAnchorsLoad,
     commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
     // export
     buildExportHtml, bookTitle,

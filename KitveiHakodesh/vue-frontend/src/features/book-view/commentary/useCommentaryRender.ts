@@ -4,6 +4,8 @@ import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } 
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, isDiacriticChar } from '../lines/useBookViewLineRenderer'
+import { applyWordLinkAnchors, wordLinkAnchorsSig } from '../lines/wordLinkAnchors'
+import type { WordLinkAnchor } from '@/webview-host/seforimApi'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 
@@ -21,6 +23,7 @@ export function useCommentaryRender(
   getCommentaryZoom: () => number,
   getHighlightsForLine?: (lineId: number) => Highlight[],
   getNotesForLine?: (lineId: number) => Note[],
+  getWordLinkAnchorsForLine?: (lineId: number) => WordLinkAnchor[],
 ) {
   const settingsStore = useSettingsStore()
 
@@ -58,7 +61,8 @@ export function useCommentaryRender(
           .map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`)
           .join(',')
       : ''
-    return `${highlightsSig}|${notesSig}`
+    const anchorsSig = wordLinkAnchorsSig(getWordLinkAnchorsForLine?.(lineId) ?? [])
+    return `${highlightsSig}|${notesSig}|${anchorsSig}`
   }
 
   function highlightMatches(
@@ -162,8 +166,12 @@ export function useCommentaryRender(
     const cached = renderCache.get(flatIndex)
     if (cached !== undefined) return cached
 
-    let result =
-      diacriticsState.value === 0 ? content : diacriticsState.value === 2 ? cleanHebrewText(content) : applyDiacriticsFilter(content, diacriticsState.value)
+    // Word-link splicing runs FIRST, on the raw content (see useBookViewLineRenderer —
+    // anchor offsets are in upstream's visible-char convention, pre-filter/pre-censor).
+    const anchors = lineId != null ? (getWordLinkAnchorsForLine?.(lineId) ?? []) : []
+    let result = anchors.length ? applyWordLinkAnchors(content, anchors) : content
+    result =
+      diacriticsState.value === 0 ? result : diacriticsState.value === 2 ? cleanHebrewText(result) : applyDiacriticsFilter(result, diacriticsState.value)
     result = censorDivineNames(result, settingsStore.censorOptions)
 
     // Apply user highlights before search marks so search marks render on top

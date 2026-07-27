@@ -42,6 +42,17 @@ public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
         return false;
     }
 
+    /// <summary>True if the DB has a table named <paramref name="table"/>. Whole tables
+    /// (not just columns) differ across seforim-DB schema versions — e.g. link_anchor
+    /// only exists from SeforimLibrary schema v2 on.</summary>
+    private static bool TableExists(SqliteConnection conn, string table)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = @t LIMIT 1";
+        cmd.Parameters.AddWithValue("@t", table);
+        return cmd.ExecuteScalar() != null;
+    }
+
     /// <summary>
     /// Client-triggered warm-up — called by an app when IT loads (never at service boot;
     /// boot stays idle by design). Pays the one-time cold costs in the background so the

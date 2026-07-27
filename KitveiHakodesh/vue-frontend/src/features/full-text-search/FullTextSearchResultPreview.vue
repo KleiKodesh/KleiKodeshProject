@@ -6,6 +6,10 @@
  */
 import { ref, watch, nextTick } from 'vue'
 import { useInfiniteScroll } from '@vueuse/core'
+import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
+import { useWordLinkTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
 import type { PreviewState } from './useFullTextSearchPreview'
 
 const props = defineProps<{
@@ -88,10 +92,31 @@ function recenter() {
 }
 
 defineExpose({ recenter })
+
+// ── Word-level links (hover preview + click-through) ─────────────────────────
+
+const paneNavigation = usePaneNavigation()
+const booksDataStore = useBooksDataStore()
+const { wordLinkTooltip } = useWordLinkTooltip(boxEl, {
+  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+  onNavigate: (target) => {
+    paneNavigation.openTab({
+      title: booksDataStore.allBooksMap.get(target.bookId)?.title ?? '',
+      route: '/book-view',
+      bookId: target.bookId,
+      openTocLineIndex: target.lineIndex,
+    })
+  },
+})
 </script>
 
 <template>
   <div ref="boxEl" class="preview-box" @scroll.passive="onScroll">
+    <WordLinkTooltip
+      v-if="wordLinkTooltip"
+      :key="wordLinkTooltip.id"
+      :data="wordLinkTooltip"
+    />
     <div v-if="state.loading && !state.lines.length" class="preview-empty">טוען…</div>
     <!-- eslint-disable-next-line vue/no-v-html -->
     <div
@@ -132,6 +157,27 @@ defineExpose({ recenter })
   color: var(--accent-color);
   font-weight: 600;
   user-select: text;
+}
+.preview-line :deep(.word-link) {
+  color: var(--accent-color);
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 100ms;
+}
+.preview-line :deep(.word-link:hover) {
+  text-decoration-color: currentColor;
+}
+.preview-line :deep(.word-link-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  color: var(--accent-color);
+  cursor: pointer;
+}
+/* Label via CSS content — the marker must contribute zero text characters. */
+.preview-line :deep(.word-link-marker)::before {
+  content: attr(data-wl-label);
 }
 .preview-empty {
   color: var(--text-secondary);

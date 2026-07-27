@@ -22,6 +22,9 @@ import { useCommentaryCopy } from './useCommentaryCopy'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
+import WordLinkTooltip from '../lines/WordLinkTooltip.vue'
+import { useWordLinkTooltip } from '../lines/useWordLinkTooltip'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
 const props = defineProps<{
@@ -38,6 +41,8 @@ const props = defineProps<{
   clearHighlight: (lineId: number, startOffset: number, endOffset: number) => void
   getNotesForLine: (lineId: number) => Note[]
   scheduleNotesLoad: (lineIds: number[]) => void
+  // Viewport-driven lazy load of word-level link anchors (link_anchor, schema v2+ DBs).
+  scheduleWordLinkAnchorsLoad?: (lineIds: number[]) => void
   // Viewport-driven content priority for the two-phase commentary loader —
   // lines can render before their text arrives; visible ones are fetched first.
   requestContentPriority?: (lineIds: number[]) => void
@@ -200,6 +205,7 @@ watch(
       )
       .filter((item) => item.lineId > 0)
     props.scheduleNotesLoad(lineItems.map((item) => item.lineId))
+    props.scheduleWordLinkAnchorsLoad?.(lineItems.map((item) => item.lineId))
     // Two-phase loader: lines in the viewport whose text hasn't arrived yet get
     // priority over the display-order backfill (scroll restore, jump-to-group,
     // fast scroll ahead of the backfill).
@@ -376,6 +382,14 @@ watch(() => props.loading, (loading) => {
   showLoadingSpinner.value = false
   if (loading) spinnerDelay.start()
 }, { immediate: true })
+
+// ── Word-level links (hover preview + click-through) ─────────────────────────
+
+const booksDataStore = useBooksDataStore()
+const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
+  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+  onNavigate: (target) => emit('open-book', target.bookId, target.lineIndex),
+})
 </script>
 
 <template>
@@ -389,6 +403,11 @@ watch(() => props.loading, (loading) => {
       :delete-note="props.deleteNote"
       @close="closeNoteBubble"
       @deleted="closeNoteBubble"
+    />
+    <WordLinkTooltip
+      v-if="wordLinkTooltip"
+      :key="wordLinkTooltip.id"
+      :data="wordLinkTooltip"
     />
     <div class="body">
       <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
@@ -604,6 +623,35 @@ watch(() => props.loading, (loading) => {
   transition: color 100ms;
 }
 .line :deep(.user-note-marker:hover) {
+  color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
+}
+.line :deep(.word-link) {
+  color: var(--accent-color);
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 100ms;
+}
+.line :deep(.word-link:hover) {
+  text-decoration-color: currentColor;
+}
+.line :deep(.word-link-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  color: var(--accent-color);
+  cursor: pointer;
+  font-style: normal;
+  font-weight: normal;
+  letter-spacing: 0;
+  transition: color 100ms;
+}
+/* Label rendered via CSS so the marker contributes zero text characters —
+   annotation offsets and selection extraction must not drift. */
+.line :deep(.word-link-marker)::before {
+  content: attr(data-wl-label);
+}
+.line :deep(.word-link-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
 }
 </style>

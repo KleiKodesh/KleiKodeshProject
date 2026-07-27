@@ -164,6 +164,30 @@ public sealed class CommentaryLinkRow
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CommentaryLinksResult { public List<CommentaryLinkRow> Rows { get; set; } = new(); }
 
+/// <summary>Word-level link anchor (link_anchor ⋈ link) for a source line. CharStart/CharEnd
+/// are visible-char offsets into the line's raw content (upstream countVisibleChars convention:
+/// tags = 0, entity = 1, everything else — including diacritics — = 1). CharEnd null = point
+/// anchor (inline marker); Label = the printed marker letter when the source declares one.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class WordLinkAnchorRow
+{
+    public int LineId { get; set; }
+    public int CharStart { get; set; }
+    public int? CharEnd { get; set; }
+    public string? Label { get; set; }
+    public int TargetBookId { get; set; }
+    public int TargetLineId { get; set; }
+    public int TargetLineIndex { get; set; }
+}
+
+/// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class WordLinkAnchorsResult
+{
+    public bool Supported { get; set; }
+    public List<WordLinkAnchorRow> Rows { get; set; } = new();
+}
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineContentRow { public int Id { get; set; } public string Content { get; set; } = ""; }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

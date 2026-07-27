@@ -23,6 +23,10 @@ import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
 import BookViewNoteBubble from './BookViewNoteBubble.vue'
 import BookViewAbbrevTooltip from './BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
+import WordLinkTooltip from './WordLinkTooltip.vue'
+import { useWordLinkTooltip } from './useWordLinkTooltip'
+import { useWordLinkAnchors } from './useWordLinkAnchors'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
 const emit = defineEmits<{
@@ -141,6 +145,12 @@ const { setProgrammaticScroll, onScroll, captureScrollPos } = useBookViewLinesSc
   props.prioritise,
 )
 
+// Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
+// a no-op on DBs without the table.
+const { getWordLinkAnchorsForLine } = useWordLinkAnchors(
+  () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
+)
+
 const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
   searchQuery: props.searchQuery,
   searchHighlightLineIndex: props.searchHighlightLineIndex,
@@ -149,6 +159,7 @@ const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, 
   searchHighlightTerms: props.searchHighlightTerms,
   getHighlightsForLine,
   getNotesForLine,
+  getWordLinkAnchorsForLine,
 }))
 
 // Apply .current class via DOM toggle — no re-render needed when only occurrence changes.
@@ -200,6 +211,19 @@ useContextMenuLongPress(scrollerEl, (event) => {
 })
 
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
+
+const booksDataStore = useBooksDataStore()
+const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
+  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+  onNavigate: (target) => {
+    paneNavigation.openTab({
+      title: booksDataStore.allBooksMap.get(target.bookId)?.title ?? '',
+      route: '/book-view',
+      bookId: target.bookId,
+      openTocLineIndex: target.lineIndex,
+    })
+  },
+})
 
 const { scrollToLineId, scrollToLineIndex } = useBookViewLinesNavigation(
   scrollerEl,
@@ -282,6 +306,11 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
       v-if="abbrevTooltip"
       :key="abbrevTooltip.id"
       :data="abbrevTooltip"
+    />
+    <WordLinkTooltip
+      v-if="wordLinkTooltip"
+      :key="wordLinkTooltip.id"
+      :data="wordLinkTooltip"
     />
     <div
       ref="scrollerEl"
@@ -447,6 +476,35 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
   transition: color 100ms;
 }
 .line :deep(.user-note-marker:hover) {
+  color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
+}
+.line :deep(.word-link) {
+  color: var(--accent-color);
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  text-underline-offset: 3px;
+  transition: text-decoration-color 100ms;
+}
+.line :deep(.word-link:hover) {
+  text-decoration-color: currentColor;
+}
+.line :deep(.word-link-marker) {
+  font-size: 0.72em;
+  vertical-align: super;
+  line-height: 1;
+  color: var(--accent-color);
+  cursor: pointer;
+  font-style: normal;
+  font-weight: normal;
+  letter-spacing: 0;
+  transition: color 100ms;
+}
+/* Label rendered via CSS so the marker contributes zero text characters —
+   annotation offsets and selection extraction must not drift. */
+.line :deep(.word-link-marker)::before {
+  content: attr(data-wl-label);
+}
+.line :deep(.word-link-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
 }
 </style>

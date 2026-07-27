@@ -301,6 +301,49 @@ public sealed partial class SeforimDbService
         return list;
     }
 
+    // Whether the link_anchor table exists (SeforimLibrary schema v2+; neither current
+    // Zayit nor Otzaria v1 DB has it). Detected once — the seforim DB is static for the
+    // life of the process (see _linkHasTargetLineIndex).
+    private bool? _hasLinkAnchorTable;
+
+    /// <summary>Word-level link anchors for a batch of source lines. Returns Supported=false
+    /// (and no rows) on DBs whose schema predates link_anchor, so callers can stop asking.</summary>
+    public WordLinkAnchorsResult GetWordLinkAnchorsForLines(List<int> lineIds)
+    {
+        var result = new WordLinkAnchorsResult();
+        if (lineIds is null || lineIds.Count == 0)
+        {
+            result.Supported = _hasLinkAnchorTable ?? true; // unknown yet — don't tell callers to stop
+            return result;
+        }
+        Run(() =>
+        {
+            using var conn = Open();
+            _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
+            result.Supported = _hasLinkAnchorTable.Value;
+            if (!result.Supported) return;
+            _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimSql.GetWordLinkAnchorsForLines(lineIds.Count, _linkHasTargetLineIndex.Value);
+            BindList(cmd, "p", lineIds);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                result.Rows.Add(new WordLinkAnchorRow
+                {
+                    LineId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                    CharStart = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    CharEnd = r.IsDBNull(2) ? null : r.GetInt32(2),
+                    Label = r.IsDBNull(3) ? null : r.GetString(3),
+                    TargetBookId = r.IsDBNull(4) ? 0 : r.GetInt32(4),
+                    TargetLineId = r.IsDBNull(5) ? 0 : r.GetInt32(5),
+                    TargetLineIndex = r.IsDBNull(6) ? 0 : r.GetInt32(6),
+                });
+            }
+        }, "getWordLinkAnchorsForLines");
+        return result;
+    }
+
     public List<LineContentRow> GetLineContents(List<int> lineIds)
     {
         var list = new List<LineContentRow>();
