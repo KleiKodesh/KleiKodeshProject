@@ -11,8 +11,9 @@
  * in the loaded lines.
  */
 import { reactive } from 'vue'
-import { getLineContents, getLineIndexFromLineId, getLinesPaged } from '@/webview-host/seforimApi'
+import { getLineContents, getLineIndexFromLineId, getLinesPaged, getWordLinkAnchorsForLines, type WordLinkAnchor } from '@/webview-host/seforimApi'
 import { highlightFromSnippet } from '@/features/book-view/lines/useBookViewLineRenderer'
+import { applyWordLinkAnchors } from '@/features/book-view/lines/wordLinkAnchors'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 
 export interface PreviewLine {
@@ -55,11 +56,32 @@ export function useFullTextSearchPreview() {
 
   async function fetchLines(result: FullTextSearchResult, lo: number, count: number): Promise<PreviewLine[]> {
     const rows = await getLinesPaged(result.bookId, count, lo)
+    // Word-level link anchors for the fetched window — one batched call, [] on
+    // schema-v1 DBs (probe short-circuits inside seforimApi). Best-effort: the
+    // preview renders fine without them.
+    const anchorsByLine = await fetchAnchors(rows.map((row) => row.id))
     return rows.map((row) => ({
       id: row.id,
       lineIndex: row.lineIndex,
-      html: highlightFromSnippet(row.content ?? '', result.snippet),
+      html: highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), result.snippet),
     }))
+  }
+
+  async function fetchAnchors(lineIds: number[]): Promise<Map<number, WordLinkAnchor[]>> {
+    const byLine = new Map<number, WordLinkAnchor[]>()
+    if (!lineIds.length) return byLine
+    try {
+      for (const row of await getWordLinkAnchorsForLines(lineIds)) {
+        let list = byLine.get(row.lineId)
+        if (!list) byLine.set(row.lineId, (list = []))
+        list.push(row)
+      }
+    } catch { /* best-effort */ }
+    return byLine
+  }
+
+  function spliceAnchors(content: string, anchors: WordLinkAnchor[] | undefined): string {
+    return anchors?.length ? applyWordLinkAnchors(content, anchors) : content
   }
 
   async function togglePreview(result: FullTextSearchResult) {
@@ -99,10 +121,13 @@ export function useFullTextSearchPreview() {
         // back to a fixed single-line window over the full matched line.
         const contents = await getLineContents([result.lineId])
         const content = contents[0]?.content
+        const anchorsByLine = content != null ? await fetchAnchors([result.lineId]) : new Map<number, WordLinkAnchor[]>()
         st.lines = [{
           id: result.lineId,
           lineIndex: st.lineIndex,
-          html: content != null ? highlightFromSnippet(content, result.snippet) : result.snippet,
+          html: content != null
+            ? highlightFromSnippet(spliceAnchors(content, anchorsByLine.get(result.lineId)), result.snippet)
+            : result.snippet,
         }]
         st.atStart = true
         st.atEnd = true

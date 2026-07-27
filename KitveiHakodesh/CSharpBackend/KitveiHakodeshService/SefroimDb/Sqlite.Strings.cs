@@ -143,6 +143,30 @@ internal static class SeforimSql
     public static string GetLineContents(int count) =>
         $"SELECT id, content FROM line WHERE id IN ({InPlaceholders("p", count)})";
 
+    /// <summary>Word-level link anchors (link_anchor, SeforimLibrary schema v2+) for a batch of
+    /// source lines. side 0 = the anchor sits in the source line's text. Offsets are visible-char
+    /// (HTML tags = 0 chars, each entity = 1 char, everything else — including nikud/te'amim — = 1;
+    /// upstream's countVisibleChars convention, verified against real v17 data 2026-07-27).
+    /// Guard the call behind a TableExists("link_anchor") probe. Same targetLineIndex variant
+    /// split as GetCommentaryLinksForSourceLineRange — schema v2 always has the column, but the
+    /// probe, not the schema doc, decides.</summary>
+    public static string GetWordLinkAnchorsForLines(int count, bool hasTargetLineIndex) => hasTargetLineIndex
+        ? $@"
+        SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
+               l.targetBookId, l.targetLineId, l.targetLineIndex
+        FROM link l
+        JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+        WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+        ORDER BY l.sourceLineId, la.charStart"
+        : $@"
+        SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
+               l.targetBookId, l.targetLineId, ln.lineIndex AS targetLineIndex
+        FROM link l
+        JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+        JOIN line ln ON ln.id = l.targetLineId
+        WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+        ORDER BY l.sourceLineId, la.charStart";
+
     /// <summary>All connection type ids and names.</summary>
     public const string GetAllConnectionTypes = "SELECT id, name FROM connection_type";
 

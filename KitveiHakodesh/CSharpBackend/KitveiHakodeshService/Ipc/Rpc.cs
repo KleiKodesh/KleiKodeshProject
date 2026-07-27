@@ -420,6 +420,8 @@ internal static class RpcResponse
 [JsonSerializable(typeof(CommentaryLinksResult))]
 [JsonSerializable(typeof(LineContentRow))]
 [JsonSerializable(typeof(LineContentsResult))]
+[JsonSerializable(typeof(WordLinkAnchorRow))]
+[JsonSerializable(typeof(WordLinkAnchorsResult))]
 [JsonSerializable(typeof(ConnectionTypeRow))]
 [JsonSerializable(typeof(ConnectionTypesResult))]
 [JsonSerializable(typeof(DefaultCommentatorRow))]

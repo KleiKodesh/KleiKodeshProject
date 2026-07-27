@@ -100,6 +100,7 @@ const {
   altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
   getHighlightsForLine, applyHighlight, clearHighlight,
   getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+  scheduleWordLinkAnchorsLoad,
   commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
   currentScrollLineIndex,
   scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
@@ -290,6 +291,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :clear-highlight="clearHighlight"
                 :get-notes-for-line="getNotesForLine"
                 :schedule-notes-load="scheduleNotesLoad"
+                :schedule-word-link-anchors-load="scheduleWordLinkAnchorsLoad"
                 :request-content-priority="requestContentPriority"
                 :has-saved-scroll-pos="commentaryScrollIndex != null"
                 :create-note="createNote"
@@ -407,6 +409,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 :clear-highlight="clearHighlight"
                 :get-notes-for-line="getNotesForLine"
                 :schedule-notes-load="scheduleNotesLoad"
+                :schedule-word-link-anchors-load="scheduleWordLinkAnchorsLoad"
                 :request-content-priority="requestContentPriority"
                 :has-saved-scroll-pos="commentaryScrollIndex != null"
                 :create-note="createNote"

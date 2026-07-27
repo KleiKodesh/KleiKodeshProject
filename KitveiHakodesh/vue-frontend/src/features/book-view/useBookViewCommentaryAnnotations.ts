@@ -12,6 +12,7 @@ import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
 import { useCommentaryNotes } from './commentary/useCommentaryNotes'
 import { useCommentaryRender } from './commentary/useCommentaryRender'
 import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
+import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
 import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
 import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
 import type { useSettingsStore } from '@/stores/settingsStore'
@@ -42,11 +43,17 @@ export function useBookViewCommentaryAnnotations(
   const getCommentaryZoom = () =>
     bookId != null ? bookViewStore.getCommentaryZoom(tabId, bookId) : 100
 
+  // Word-level link anchors for commentary lines (they are source lines of their own
+  // links, e.g. a Mishnah Berurah line citing Chosen Mishpat). Schedule-driven from
+  // CommentaryView's virtualizer watcher, same as notes.
+  const { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad } = useWordLinkAnchors()
+
   const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
     groupsForDisplay,
     getCommentaryZoom,
     getHighlightsForLine,
     getNotesForLine,
+    getWordLinkAnchorsForLine,
   )
 
   const { commentaryTocPaths } = useCommentaryTocPaths(
@@ -70,6 +77,7 @@ export function useBookViewCommentaryAnnotations(
   return {
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+    scheduleWordLinkAnchorsLoad,
     commentaryFontPx, renderContent, setCurrentMark,
     commentaryTocPaths,
     buildExportHtml,

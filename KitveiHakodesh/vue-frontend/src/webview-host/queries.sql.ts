@@ -357,6 +357,30 @@ export const SQL = {
     SELECT COUNT(*) AS n FROM pragma_table_info('link') WHERE name = 'targetLineIndex'
   `,
 
+  /** Schema probe: n=1 when the link_anchor table exists (SeforimLibrary schema v2+), n=0 otherwise. */
+  HAS_LINK_ANCHOR_TABLE: `
+    SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'link_anchor'
+  `,
+
+  /**
+   * Word-level link anchors (link_anchor ⋈ link, schema v2+) for a batch of source lines.
+   * side 0 = the anchor sits in the source line's text. charStart/charEnd are visible-char
+   * offsets into the line's RAW content — upstream's countVisibleChars convention: HTML tags
+   * count 0, each entity counts 1, everything else (including nikud/te'amim) counts 1. This
+   * differs from this app's stripHtmlForSearch space, which drops diacritics — splice anchors
+   * with the dedicated walker in wordLinkAnchors.ts, never with the highlight walkers.
+   * Guard behind HAS_LINK_ANCHOR_TABLE (schema v2 always has link.targetLineIndex, so no
+   * JOIN variant is needed).
+   */
+  GET_WORD_LINK_ANCHORS_FOR_LINES: (count: number) => `
+    SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
+           l.targetBookId, l.targetLineId, l.targetLineIndex
+    FROM link l
+    JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+    WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
+    ORDER BY l.sourceLineId, la.charStart
+  `,
+
   /** Content backfill for a batch of line ids (commentary lazy-content second phase). */
   GET_LINE_CONTENTS: (count: number) => `
     SELECT id, content FROM line WHERE id IN (${Array(count).fill('?').join(',')})

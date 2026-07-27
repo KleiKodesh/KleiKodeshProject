@@ -3,6 +3,8 @@ import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } 
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
+import { applyWordLinkAnchors, wordLinkAnchorsSig } from './wordLinkAnchors'
+import type { WordLinkAnchor } from '@/webview-host/seforimApi'
 import type { useSettingsStore } from '@/stores/settingsStore'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
@@ -19,6 +21,7 @@ interface LineRenderProps {
   searchHighlightTerms?: string[]
   getHighlightsForLine?: (lineId: number) => Highlight[]
   getNotesForLine?: (lineId: number) => Note[]
+  getWordLinkAnchorsForLine?: (lineId: number) => WordLinkAnchor[]
 }
 
 // Precompiled diacritic range check — faster than /[\u0591-\u05C7]/.test(ch) in tight loops.
@@ -427,7 +430,8 @@ export function useBookViewLineRenderer(
     const highlightsSig = lineHighlights.map((h) => `${h.id}:${h.startOffset}:${h.endOffset}:${h.colorArgb}`).join(',')
     const lineNotes = p.getNotesForLine?.(lineId) ?? []
     const notesSig = lineNotes.map((n) => `${n.id}:${n.startOffset}:${n.endOffset}:${n.updatedAt}`).join(',')
-    return `${highlightsSig}|${notesSig}`
+    const anchorsSig = wordLinkAnchorsSig(p.getWordLinkAnchorsForLine?.(lineId) ?? [])
+    return `${highlightsSig}|${notesSig}|${anchorsSig}`
   }
 
   function lineContent(raw: string, lineIndex: number, lineId: number): string {
@@ -448,7 +452,13 @@ export function useBookViewLineRenderer(
     if (cached !== undefined) return cached
 
     const p = getProps()
-    let content = diacriticsState.value === 0 ? raw : diacriticsState.value === 2 ? cleanHebrewText(raw) : applyDiacriticsFilter(raw, diacriticsState.value)
+    // Word-link splicing runs FIRST, on the raw content — the anchors' offsets are in
+    // upstream's visible-char convention, which counts diacritics and pre-censor text.
+    // The injected markup is pure tags (zero visible chars), so every later walker
+    // (which all skip tags) is unaffected.
+    const anchors = p.getWordLinkAnchorsForLine?.(lineId) ?? []
+    let content = anchors.length ? applyWordLinkAnchors(raw, anchors) : raw
+    content = diacriticsState.value === 0 ? content : diacriticsState.value === 2 ? cleanHebrewText(content) : applyDiacriticsFilter(content, diacriticsState.value)
     content = censorDivineNames(content, settings.censorOptions)
 
     // Apply user highlights first (underneath search marks and note markers)

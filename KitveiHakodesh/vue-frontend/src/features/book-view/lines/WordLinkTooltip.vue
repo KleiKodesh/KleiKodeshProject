@@ -1,0 +1,108 @@
+<script setup lang="ts">
+/**
+ * Hover preview for a word-level link: the target line's content, headed by the
+ * target book's title. Positioning follows the BookViewAbbrevTooltip pattern:
+ * Teleported to body, rendered hidden first so real dimensions can be measured,
+ * then fixed above the anchor (flipped below when clipped by the viewport top).
+ *
+ * The parent keys this component by hover id so a new target remounts and
+ * re-measures. Content is trusted seforim-DB HTML (same trust level as the book
+ * lines themselves); the divine-name censor is applied at render, mirroring the
+ * FTS snippet renderer.
+ */
+import { ref, computed, onMounted, nextTick } from 'vue'
+import { useSettingsStore } from '@/stores/settingsStore'
+import { censorDivineNames } from '@/utils/censorDivineNames'
+import type { WordLinkTooltipData } from './useWordLinkTooltip'
+
+const props = defineProps<{ data: WordLinkTooltipData }>()
+
+const settingsStore = useSettingsStore()
+const html = computed(() => censorDivineNames(props.data.html, settingsStore.censorOptions))
+
+const tooltipRef = ref<HTMLElement | null>(null)
+const resolvedTop = ref<number | null>(null)
+const resolvedLeft = ref<number | null>(null)
+
+const MARGIN = 8
+const MAX_WIDTH = 460
+
+function computePosition() {
+  const rect = props.data.anchorRect
+  const width = tooltipRef.value?.offsetWidth ?? MAX_WIDTH
+  const height = tooltipRef.value?.offsetHeight ?? 60
+
+  // Center horizontally on the link, clamped to the viewport
+  let left = rect.left + rect.width / 2 - width / 2
+  left = Math.min(Math.max(MARGIN, left), window.innerWidth - width - MARGIN)
+
+  // Prefer above the link; flip below when clipped by the top edge
+  let top = rect.top - height - MARGIN
+  if (top < MARGIN) top = rect.bottom + MARGIN
+
+  resolvedTop.value = top
+  resolvedLeft.value = left
+}
+
+const style = computed(() => {
+  if (resolvedTop.value === null) {
+    // Not yet measured: render invisible so dimensions can be read on mount
+    return {
+      position: 'fixed' as const,
+      top: '-9999px',
+      left: '-9999px',
+      maxWidth: `${Math.min(MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
+      zIndex: '9998',
+      visibility: 'hidden' as const,
+    }
+  }
+  return {
+    position: 'fixed' as const,
+    top: `${resolvedTop.value}px`,
+    left: `${resolvedLeft.value}px`,
+    maxWidth: `${Math.min(MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
+    zIndex: '9998',
+  }
+})
+
+onMounted(() => {
+  nextTick(computePosition)
+})
+</script>
+
+<template>
+  <Teleport to="body">
+    <div ref="tooltipRef" class="word-link-tooltip" :style="style" dir="rtl">
+      <div v-if="data.bookTitle" class="word-link-tooltip-title">{{ data.bookTitle }}</div>
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <div class="word-link-tooltip-body" v-html="html" />
+    </div>
+  </Teleport>
+</template>
+
+<style scoped>
+.word-link-tooltip {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow:
+    0 2px 8px rgba(0, 0, 0, 0.15),
+    0 8px 24px rgba(0, 0, 0, 0.1);
+  padding: 6px 10px;
+  direction: rtl;
+  font-family: var(--text-font);
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  max-height: 40vh;
+  overflow-y: auto;
+  pointer-events: none;
+}
+
+.word-link-tooltip-title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent-color);
+  margin-bottom: 2px;
+}
+</style>

@@ -134,6 +134,54 @@ export async function getCommentaryLinksForSourceLineRange(lineIds: number[]): P
   return query<CommentaryLinkRow>(SQL.GET_COMMENTARY_LINKS_FOR_SOURCE_LINE_RANGE_JOIN(lineIds.length), lineIds)
 }
 
+// ── Word-level link anchors (link_anchor, SeforimLibrary schema v2+) ──────────
+
+/** One word-level link anchor inside a source line. charStart/charEnd are visible-char
+ * offsets into the line's RAW content in upstream's countVisibleChars convention (tags = 0,
+ * entity = 1, everything else — including diacritics — = 1). charEnd null = point anchor. */
+export interface WordLinkAnchor {
+  lineId: number
+  charStart: number
+  charEnd: number | null
+  label: string | null
+  targetBookId: number
+  targetLineId: number
+  targetLineIndex: number
+}
+
+// Whether the open DB has the link_anchor table (schema v2+; current Zayit/Otzaria v1
+// DBs don't). null = unknown. Once false, callers get [] without touching the DB again —
+// the DB is static per page load (same lifecycle as _linkHasTargetLineIndex above).
+let _hasLinkAnchors: boolean | null = null
+
+/** Word-level link anchors for a batch of source lines. [] on schema-v1 DBs — always safe to call. */
+export async function getWordLinkAnchorsForLines(lineIds: number[]): Promise<WordLinkAnchor[]> {
+  if (_hasLinkAnchors === false || lineIds.length === 0) return []
+  if (!isDbHosted()) {
+    const res = await serviceCall<{ supported: boolean; rows: WordLinkAnchor[] }>(
+      'getWordLinkAnchorsForLines', { lineIds },
+    )
+    if (!res.supported) _hasLinkAnchors = false
+    return res.rows
+  }
+  if (_hasLinkAnchors == null) {
+    try {
+      const rows = await query<{ n: number }>(SQL.HAS_LINK_ANCHOR_TABLE)
+      _hasLinkAnchors = (rows[0]?.n ?? 0) > 0
+    } catch {
+      return [] // DB not ready — leave unknown so the next call re-probes
+    }
+    if (!_hasLinkAnchors) return []
+  }
+  try {
+    return await query<WordLinkAnchor>(SQL.GET_WORD_LINK_ANCHORS_FOR_LINES(lineIds.length), lineIds)
+  } catch {
+    // DB swapped under us (user picked a different seforim DB without a reload) — re-probe next call.
+    _hasLinkAnchors = null
+    return []
+  }
+}
+
 /** Content backfill for a batch of line ids. */
 export async function getLineContents(lineIds: number[]): Promise<{ id: number; content: string }[]> {
   if (!isDbHosted())
