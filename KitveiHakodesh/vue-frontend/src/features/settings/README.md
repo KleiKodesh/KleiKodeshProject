@@ -10,15 +10,19 @@ The section components are independent — each imports the stores it needs dire
 
 ## Section components
 
-**SettingsPageDisplaySection.vue** — theme picker, dark mode toggle, PDF filter toggle, app zoom, toolbar position, new-tab destination, and title bar button visibility chips.
+**SettingsPageThemeAndApplicationSection.vue** — theme picker, dark mode toggle, PDF filter toggle, app zoom, toolbar position, new-tab destination, and title bar button visibility chips.
 
-**SettingsPageReadingSection.vue** — resume last read, commentary sync default, divine name censoring, book display fonts/sizes/padding, max content width, and commentary display overrides. Calls `useSettings()` to wire the commentary-mirror watcher.
+**SettingsPageReadingAndBookDisplaySection.vue** — resume last read, commentary sync default, divine name censoring, book display fonts/sizes/padding, max content width, and commentary display overrides. Calls `useSettings()` to wire the commentary-mirror watcher.
 
-**SettingsPageStorageSection.vue** — HebrewBooks local folder, database path picker, and file-system search excluded folders manager (opens the native WinForms dialog via the C# bridge).
+**SettingsPageCalendarSection.vue** — Hebrew calendar and zmanim location settings.
+
+**SettingsPageAdvancedSection.vue** — HebrewBooks local folder, database path, file-search excluded folders, and the automatic-update toggle. Every control here is backed by a Windows registry value or an on-disk file shared with the hosted app, never by localStorage — so the setting is the same one in dev and hosted. Hosted mode routes through the C# bridge; dev routes through the KitveiHakodesh service, which reads and writes the identical registry values. Branch on `isDev` (`typeof window.__webviewAction !== 'function'`), never on `isHosted` — `isHosted` is TRUE in dev and will silently disable working controls.
 
 **SettingsPageResetSection.vue** — the four reset actions (settings, search index, document locator index, full app reset) with their `ConfirmDialog`. Completely self-contained — no props.
 
-**SettingsPageShortcutsSection.vue** — keyboard shortcuts reference grid. No script, no reactivity.
+**SettingsPageKeyboardShortcutsSection.vue** — keyboard shortcuts reference grid. No script, no reactivity.
+
+**SettingsExcludedFoldersDialog.vue** — dev-mode excluded-folders manager, mirroring the hosted app's WinForms `ExcludedFoldersForm` (list, add via the native folder dialog, remove selected, confirm to persist) in the app's own theme. Nothing is written until אישור. Persists via `setExcludedFolders` in `bridge.ts` to `excluded_folders.json` inside the file-search index directory — the same file and format the hosted DocumentLocator service uses. Hosted mode opens the native dialog instead and never mounts this component.
 
 ## Shared primitives
 

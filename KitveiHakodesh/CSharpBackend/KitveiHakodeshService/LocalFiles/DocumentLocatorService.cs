@@ -32,6 +32,21 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             "DocumentLocator",
             "filesystemindex");
 
+    // ── Excluded folders ──────────────────────────────────────────────────────
+    // Storage AND filtering both live in the library's ExcludedFoldersPersistence, so
+    // this host, the net48 DocumentLocator.Service, and the Vue settings dialog all share
+    // one implementation and one excluded_folders.json format. These are thin pass-throughs
+    // — never re-implement the prefix test here. Read on every search (never cached) so an
+    // edit takes effect immediately with no reindex.
+
+    /// <summary>The user-defined excluded folder list, freshly read from disk.</summary>
+    public List<string> GetExcludedFolders()
+        => DocumentLocator.ExcludedFoldersPersistence.Load(IndexPath);
+
+    /// <summary>Persist the excluded folder list. Takes effect on the next search.</summary>
+    public void SetExcludedFolders(IEnumerable<string> folders)
+        => DocumentLocator.ExcludedFoldersPersistence.Save(IndexPath, folders);
+
     // ── Index instance ────────────────────────────────────────────────────────
 
     private DocumentLocator.PathIndex? _index;
@@ -117,6 +132,11 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
 
         int total;
         var entries = index.Search(query, drive: null, limit: max, total: out total);
+
+        // Apply user-defined folder exclusions AFTER the Lucene query, via the library so
+        // this matches the net48 host exactly. Adjusts `total` for the dropped entries.
+        entries = DocumentLocator.ExcludedFoldersPersistence.Filter(
+            entries, GetExcludedFolders(), ref total);
 
         var result = new LocateDocumentsResult { Total = total };
         foreach (var entry in entries)

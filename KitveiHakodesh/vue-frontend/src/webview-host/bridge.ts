@@ -412,6 +412,35 @@ export async function openExcludedFoldersManager(): Promise<{ saved: boolean } |
 }
 
 /**
+ * Read/write the excluded folders list in dev. The service persists it to
+ * excluded_folders.json inside the file-search index directory using the same shared
+ * ExcludedFoldersPersistence the hosted DocumentLocator service uses, and applies it at
+ * search time — so a change takes effect immediately with no reindex.
+ *
+ * Hosted mode does not use these: it opens the native WinForms manager instead
+ * (openExcludedFoldersManager), which owns both the UI and the persistence.
+ */
+export async function getExcludedFolders(): Promise<string[]> {
+  if (typeof window.__webviewAction === 'function') return []
+  try {
+    const result = await serviceCall<{ folders?: string[] }>('getExcludedFolders')
+    return result?.folders ?? []
+  } catch {
+    return []
+  }
+}
+
+/** Persist the full replacement list. Returns the list as it stands on disk afterwards. */
+export async function setExcludedFolders(folders: string[]): Promise<string[]> {
+  if (typeof window.__webviewAction === 'function') return []
+  const result = await serviceCall<{ folders?: string[]; error?: string }>('setExcludedFolders', {
+    folders,
+  })
+  if (result?.error) throw new Error(result.error)
+  return result?.folders ?? []
+}
+
+/**
  * Reset the FTS search index on the C# side.
  */
 export async function resetSearchIndex(): Promise<void> {
@@ -830,12 +859,20 @@ export function triggerHbSaveAs(
  * Returns the selected folder path, or null if the user cancels.
  * Only available in hosted mode; returns null in dev mode.
  */
-export async function pickFolder(): Promise<string | null> {
+export async function pickFolder(title?: string): Promise<string | null> {
   if (typeof window.__webviewAction !== 'function') {
-    // Dev: no native folder dialog. The browser's directory picker can't hand back an absolute
-    // filesystem path (only a directory handle + name), so it can't feed the service's
-    // folder-based lookup. Return null and let the settings UI's text input take the path.
-    return null
+    // Dev: the browser's own directory picker can't hand back an absolute filesystem path
+    // (only a handle + display name), so the service shows the real native shell dialog on
+    // its desktop and returns the chosen path.
+    try {
+      const result = await serviceCall<{ path?: string; cancelled?: boolean }>('pickFolder', {
+        value: title ?? '',
+      })
+      if (result.cancelled || !result.path) return null
+      return result.path
+    } catch {
+      return null
+    }
   }
   const result = await action<{ folderPath?: string; cancelled?: boolean; error?: string }>('pickFolder')
   if (result.cancelled || result.error || !result.folderPath) return null
@@ -865,6 +902,24 @@ export async function getDbPathInfo(): Promise<DbPathInfo | null> {
   }
   const p = window.__webviewDbPath
   return p ? { path: p, isCustom: true, exists: true } : null
+}
+
+/**
+ * Show a native open-file dialog for the seforim DB and persist the choice (dev only).
+ * The hosted app has `window.__webviewPickDbPath`; a browser has no equivalent, so the
+ * service shows the real dialog on its desktop, writes the same registry value, and
+ * restarts. Returns the chosen path, or null when the user cancelled or it failed.
+ */
+export async function pickDbPathDev(): Promise<string | null> {
+  try {
+    const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string }>(
+      'pickSeforimDbPath',
+    )
+    if (result?.cancelled || result?.error || !result?.path) return null
+    return result.path
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -915,7 +970,16 @@ export async function clearHbLocalFolder(): Promise<void> {
  * so one toggle governs both apps. Returns null in dev/browser (no host).
  */
 export async function getTurnOffUpdates(): Promise<boolean | null> {
-  if (typeof window.__webviewAction !== 'function') return null
+  if (typeof window.__webviewAction !== 'function') {
+    // Dev: the service reads the same shared registry value, so the toggle agrees with
+    // the hosted app and the Word add-in.
+    try {
+      const res = await serviceCall<{ value?: boolean }>('getTurnOffUpdates')
+      return res?.value ?? false
+    } catch {
+      return null
+    }
+  }
   try {
     const res = await action<{ value?: boolean; error?: string }>('getTurnOffUpdates')
     if (res.error) return null
@@ -929,6 +993,9 @@ export async function getTurnOffUpdates(): Promise<boolean | null> {
  * Persist the "turn off automatic updates" flag to the shared VSTO registry key.
  */
 export async function setTurnOffUpdates(value: boolean): Promise<void> {
-  if (typeof window.__webviewAction !== 'function') return
+  if (typeof window.__webviewAction !== 'function') {
+    await serviceCallVoid('setTurnOffUpdates', { value })
+    return
+  }
   await action('setTurnOffUpdates', { value }).catch(() => {})
 }

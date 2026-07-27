@@ -3,8 +3,9 @@ import { ref, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
+import SettingsExcludedFoldersDialog from './SettingsExcludedFoldersDialog.vue'
 import ToggleGroup from './ToggleGroup.vue'
-import { isHosted, onDbReady } from '@/webview-host/seforimDb'
+import { onDbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
   pickFolder,
@@ -15,6 +16,7 @@ import {
   setTurnOffUpdates,
   getDbPathInfo,
   setDbPathDev,
+  pickDbPathDev,
 } from '@/webview-host/bridge'
 
 // ── Database path ─────────────────────────────────────────────────────────────
@@ -33,7 +35,16 @@ onMounted(async () => {
   }
 })
 
-function pickDbPath() {
+async function pickDbPath() {
+  if (isDev) {
+    // The service shows the native dialog and persists the choice, then restarts on the
+    // new DB. Reload so every store refetches from it; /khs waits for the respawn.
+    const picked = await pickDbPathDev()
+    if (!picked) return
+    dbPath.value = picked
+    setTimeout(() => window.location.reload(), 800)
+    return
+  }
   window.__webviewPickDbPath?.()
 }
 
@@ -95,8 +106,17 @@ async function resetDbPath() {
 }
 
 // ── Excluded folders ──────────────────────────────────────────────────────────
+// Hosted: the C# host shows the native WinForms manager, which owns its own persistence.
+// Dev: the Vue dialog below mirrors it and persists through the service to the SAME
+// excluded_folders.json in the file-search index directory.
+
+const isExcludedFoldersDialogOpen = ref(false)
 
 async function openExcludedFolders() {
+  if (isDev) {
+    isExcludedFoldersDialogOpen.value = true
+    return
+  }
   await openExcludedFoldersManager()
 }
 
@@ -134,13 +154,11 @@ async function applyTurnOffUpdates(value: boolean) {
         placeholder="לא נבחרה תיקייה"
         :clearable="true"
         :editable="true"
-        :disabled="!isHosted"
         @pick="pickHebrewBooksFolder"
         @clear="resetHebrewBooksFolder"
         @commit="commitHebrewBooksFolder"
       />
     </SettingRow>
-    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
 
     <!-- מסד נתונים -->
     <div class="subsection-label">מסד נתונים</div>
@@ -166,15 +184,8 @@ async function applyTurnOffUpdates(value: boolean) {
       label="תיקיות מוחרגות"
       hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
     >
-      <button
-        class="manage-btn"
-        :disabled="!isHosted"
-        @click="openExcludedFolders"
-      >
-        ניהול תיקיות מוחרגות
-      </button>
+      <button class="manage-btn" @click="openExcludedFolders">ניהול תיקיות מוחרגות</button>
     </SettingRow>
-    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
 
     <!-- עדכונים -->
     <div class="subsection-label">עדכונים</div>
@@ -193,7 +204,11 @@ async function applyTurnOffUpdates(value: boolean) {
         @update:model-value="applyTurnOffUpdates"
       />
     </SettingRow>
-    <p v-if="!isHosted" class="hint-text">זמין רק בתוך האפליקציה המארחת</p>
+
+    <SettingsExcludedFoldersDialog
+      v-if="isExcludedFoldersDialogOpen"
+      @close="isExcludedFoldersDialogOpen = false"
+    />
   </div>
 </template>
 

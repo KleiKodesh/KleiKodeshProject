@@ -58,17 +58,26 @@ public static partial class NativeFilePicker
     }
 
     // Same document family the hosted picker offers (LocalFileHandler), Win32 \0-separated form.
-    private const string Filter =
+    public const string DocumentFilter =
         "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)\0" +
         "*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt\0" +
+        "כל הקבצים (*.*)\0*.*\0\0";
+
+    /// <summary>SQLite database filter — used by the settings page's seforim DB path picker.
+    /// Mirrors the hosted app's own DB picker so both offer the same choices.</summary>
+    public const string DatabaseFilter =
+        "מסד נתונים (*.db;*.sqlite;*.sqlite3)\0*.db;*.sqlite;*.sqlite3\0" +
         "כל הקבצים (*.*)\0*.*\0\0";
 
     // One dialog at a time — a second concurrent pick returns "cancelled" instead of stacking.
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     /// <summary>Show the dialog and return the picked absolute path, or null when the user
-    /// cancelled (or another pick is already showing). Never throws.</summary>
-    public static async Task<string?> PickAsync()
+    /// cancelled (or another pick is already showing). Never throws.
+    /// <paramref name="filter"/> must be the Win32 \0-separated form (see the constants above);
+    /// it is passed to the dialog verbatim and MUST end with a double \0.</summary>
+    public static async Task<string?> PickAsync(
+        string filter = DocumentFilter, string title = "פתח קובץ")
     {
         if (!await Gate.WaitAsync(0)) return null;
         try
@@ -76,7 +85,7 @@ public static partial class NativeFilePicker
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var t = new Thread(() =>
             {
-                try { tcs.TrySetResult(ShowDialog()); }
+                try { tcs.TrySetResult(ShowDialog(filter, title)); }
                 catch { tcs.TrySetResult(null); }
             })
             { IsBackground = true, Name = "khs-file-picker" };
@@ -87,14 +96,14 @@ public static partial class NativeFilePicker
         finally { Gate.Release(); }
     }
 
-    private static unsafe string? ShowDialog()
+    private static unsafe string? ShowDialog(string filter, string title)
     {
         const int MaxPath = 32768; // long-path capable buffer
         char[] fileBuf = new char[MaxPath];
 
         fixed (char* pFile = fileBuf)
-        fixed (char* pFilter = Filter)
-        fixed (char* pTitle = "פתח קובץ")
+        fixed (char* pFilter = filter)
+        fixed (char* pTitle = title)
         {
             var ofn = new OPENFILENAMEW
             {

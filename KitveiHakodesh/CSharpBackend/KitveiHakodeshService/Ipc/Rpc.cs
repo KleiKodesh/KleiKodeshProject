@@ -76,6 +76,33 @@ public sealed class PickLocalFileResult
     public bool Cancelled { get; set; }
 }
 
+/// <summary>Result of <c>pickFolder</c>: the absolute folder path the user chose in the native
+/// browse-for-folder dialog (empty + <see cref="Cancelled"/> when dismissed). Used by the settings
+/// page for the HebrewBooks local folder and for adding excluded folders.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class PickFolderResult
+{
+    public string Path { get; set; } = "";
+    public bool Cancelled { get; set; }
+}
+
+/// <summary>Args for <c>setExcludedFolders</c> — the full replacement list of folders to exclude
+/// from file-search results.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ExcludedFoldersArgs
+{
+    public List<string>? Folders { get; set; }
+}
+
+/// <summary>Result of <c>getExcludedFolders</c> / <c>setExcludedFolders</c>: the persisted list.
+/// <see cref="Error"/> is set when the save failed (the list then reflects what is still on disk).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ExcludedFoldersResult
+{
+    public List<string> Folders { get; set; } = [];
+    public string? Error { get; set; }
+}
+
 /// <summary>Args for <c>openFileInDefaultApp</c> — a local file path to hand off to the OS's
 /// registered default program (shell-execute). Unlike <c>openLocalFile</c>, this does not serve
 /// any bytes over HTTP; it only launches the associated program on the service's machine.</summary>
@@ -138,6 +165,9 @@ public sealed class DbPathResult
     public bool IsCustom { get; set; }
     public bool Exists { get; set; }
     public bool Restarting { get; set; }
+    /// <summary><c>pickSeforimDbPath</c> only: the user dismissed the native dialog, so
+    /// nothing was persisted and the caller must leave the current path as-is.</summary>
+    public bool Cancelled { get; set; }
     public string? Error { get; set; }
 }
 
@@ -281,6 +311,20 @@ public sealed class StringArg
 public sealed class StringResult
 {
     public string Value { get; set; } = "";
+}
+
+/// <summary>Generic single-bool arg (e.g. <c>setTurnOffUpdates</c>).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BoolArg
+{
+    public bool Value { get; set; }
+}
+
+/// <summary>Generic single-bool result (e.g. <c>getTurnOffUpdates</c>).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BoolResult
+{
+    public bool Value { get; set; }
 }
 
 // ── Dictionary (KitveiHakodesh_dictionary.db) ──────────────────────────────────
