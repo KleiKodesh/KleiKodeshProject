@@ -2,20 +2,67 @@ import { useEventListener } from '@vueuse/core'
 import type { Ref } from 'vue'
 
 /**
- * Wraps clipboard HTML in a minimal RTL document.
+ * True when the payload is a SINGLE inline run — one <span> wrapping everything,
+ * which is what the copyJoinLines and quotation branches emit. Those are the cases
+ * that must paste without a paragraph break; anything else (per-line <div> blocks,
+ * an <h2> source heading, appended endnotes) is genuinely block content.
  *
- * NO whitespace between <body> and the payload, or between the payload and </body>:
- * Word's HTML importer materializes a leading/trailing whitespace text node as an
- * extra empty paragraph, which is why every paste used to land with a paragraph
- * break at the end. The payload is trimmed for the same reason.
+ * Deliberately conservative: it requires the string to both open and close with the
+ * same single span, so a payload that merely *starts* with a span (e.g. a run plus
+ * an endnotes block) is correctly treated as block content.
  */
-function wrapRtlHtml(innerHtml: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">` +
-    `<style>body{direction:rtl}</style></head><body>${innerHtml.trim()}</body></html>`
+function isSingleInlineRun(html: string): boolean {
+  const trimmed = html.trim()
+  if (!trimmed.startsWith('<span') || !trimmed.endsWith('</span>')) return false
+  // Reject multiple top-level spans: strip the outer pair and ensure no span closes
+  // at the top level in between (a nested <b>/<a> is fine, a sibling </span> is not).
+  const inner = trimmed.slice(trimmed.indexOf('>') + 1, -'</span>'.length)
+  let depth = 0
+  for (const m of inner.matchAll(/<(\/?)span\b/gi)) {
+    depth += m[1] ? -1 : 1
+    if (depth < 0) return false
+  }
+  return depth === 0
+}
+
+/**
+ * Wraps clipboard HTML for Word.
+ *
+ * Word decides "inline run" vs "whole-document import" from the CF_HTML fragment
+ * markers, NOT from the payload's tags. Chromium generates the CF_HTML header and
+ * places <!--StartFragment-->/<!--EndFragment--> around whatever string we pass to
+ * setData('text/html', …) — so handing it a full <!DOCTYPE html> document gets the
+ * document fragment-marked as a document, and Word terminates the final paragraph.
+ * That trailing paragraph break is what "העתק כרצף" was still producing.
+ *
+ * Verified against real Word (COM, PasteAndFormat(20)), pasting between sentinels:
+ *   <span> in a document wrapper → 2 paragraphs (BEFORE|text¶|AFTER)
+ *   <div>  in a document wrapper → 2 paragraphs
+ *   <div>  fragment-marked       → 2 paragraphs
+ *   <span> fragment-marked       → 1 paragraph  (BEFORE|text|AFTER)
+ * Both conditions are required: an inline outer element AND no document wrapper.
+ *
+ * So a single inline run is emitted bare, carrying its RTL direction on the element's
+ * own dir attribute. The dropped <style>body{direction:rtl}</style> was not pulling
+ * weight: it is a `body` selector with no body to match once unwrapped, and the
+ * pasteIntoWord path uses Merge Formatting, which discards imported formatting
+ * anyway (see WordExporter.PasteAtCursorCore).
+ *
+ * Block payloads keep the document wrapper — they SHOULD paste as paragraphs (one
+ * per line with copyJoinLines off). No whitespace around the payload there either:
+ * a leading/trailing whitespace text node becomes its own empty paragraph.
+ */
+export function wrapRtlHtml(innerHtml: string): string {
+  const trimmed = innerHtml.trim()
+  if (isSingleInlineRun(trimmed)) {
+    return trimmed.startsWith('<span dir=') ? trimmed : trimmed.replace(/^<span/i, '<span dir="rtl"')
+  }
+  return `<!DOCTYPE html><html dir="rtl"><head><meta charset="utf-8">` +
+    `<style>body{direction:rtl}</style></head><body>${trimmed}</body></html>`
 }
 
 /** Trimmed so the text/plain flavor doesn't carry a trailing newline either. */
-function htmlToPlainText(html: string): string {
+export function htmlToPlainText(html: string): string {
   const tempDiv = document.createElement('div')
   tempDiv.innerHTML = html
   return (tempDiv.textContent ?? '').trim()
