@@ -120,7 +120,7 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
     { type: 'separator' },
     {
       type: 'checkbox',
-      label: 'העתק כרצף (ללא מעבר שורה)',
+      label: 'העתק כרצף (ללא מעברי שורה)',
       get checked() {
         return settingsStore.copyJoinLines
       },

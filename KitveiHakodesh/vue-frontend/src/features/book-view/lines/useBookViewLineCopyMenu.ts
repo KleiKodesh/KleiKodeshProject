@@ -213,7 +213,7 @@ export function buildBookExportHtml(
 // execCopyHtmlToClipboard, then sends the pasteIntoWord bridge message so C# opens
 // Word and calls Selection.Paste().
 //
-// copyJoinLines — "העתק כרצף (ללא מעבר שורה)" (independent checkbox)
+// copyJoinLines — "העתק כרצף (ללא מעברי שורה)" (independent checkbox)
 //   Controls whether the selected lines keep a line break between them on paste.
 //   ON:  JOIN the selected lines into ONE continuous run of text — the per-line
 //        block structure is removed so nothing breaks between lines. Collected via
@@ -472,7 +472,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       // Independent checkboxes — all can be active simultaneously
       {
         type: 'checkbox',
-        label: 'העתק כרצף (ללא מעבר שורה)',
+        label: 'העתק כרצף (ללא מעברי שורה)',
         get checked() { return settingsStore.copyJoinLines },
         onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
       },
