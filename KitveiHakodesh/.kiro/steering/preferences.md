@@ -4,6 +4,12 @@
 
 Unless the user explicitly says they are running or testing in C#/WebView2, always assume they are in **browser dev mode** (`npm run dev`). Never assume a bug or behaviour is caused by the C# build pipeline, stale output in `bin/`, or WebView2-specific behaviour unless the user mentions C#, the host app, or the built output specifically. Suggesting a C# rebuild as a fix when the user is in dev mode is always wrong.
 
+Important nuance: "browser dev mode" does **not** mean "no C# involved". Dev mode is fully dependent on `KitveiHakodeshService` (native .NET 10) for all data access — seforim queries, dictionary, catalog, file search, local files. So:
+
+- A *data* bug in dev can legitimately live in the service. Investigating it there is correct.
+- What remains wrong is blaming the **WinForms host app** or a stale `bin/` bundle for a dev-mode symptom — the dev browser never loads that bundle.
+- `isHosted` is **true** in dev mode. It does not distinguish dev from the WinForms host. To detect the real host, branch on `window.__webviewAction`.
+
 
 Never assert facts about the codebase, database, runtime state, or system configuration that you have not directly verified using a tool. If the information is not in a file you have read, a command you have run, or a query result you have seen, say "I don't know — I need to check" and then check. This applies to:
 
@@ -29,6 +35,10 @@ A statement presented as a fact but derived from absence of evidence ("I didn't 
 - A composable or utility file must never import from a component (`.vue`) file. Components are consumers — they sit at the top of the dependency graph. Types shared between a composable and its child components belong in a dedicated `*Types.ts` file in the same feature folder, not in either the composable or the component. Importing a type from a `.vue` file in a `.ts` file inverts the dependency direction and is forbidden. The same rule applies to interfaces defined inside `.vue` files that are needed by `.ts` files — move them to a `*Types.ts` or `*types.ts` file and import from there in both the component and the composable.
 - `.vue` files must never re-export types for the benefit of `.ts` files. If a type is needed by a `.ts` file, it does not belong in a `.vue` file at all — move it to a plain `.ts` types file. A `.vue` file that re-exports a type is a sign the type is in the wrong place.
 
+  **Known violation — `ContextMenuItem`.** This type is defined in `src/components/ContextMenu.vue` and imported from there by `useCommentaryCopy.ts`, `useBookViewLineCopyMenu.ts`, `useFullTextSearchCopyMenu.ts`, `usePdfContextMenu.ts`, and `useTxtViewCopyMenu.ts`. It must move to a `contextMenuTypes.ts` beside the component, with all six files importing from there. Do not add a sixth importer in the meantime.
+
+  Separately, `useCommentaryCopy.ts` and `useBookViewLineCopyMenu.ts` import the *component* `BookViewAnnotationMenuRow.vue` (not just a type), which inverts the dependency direction outright. Those menu rows should be supplied by the calling component rather than imported inside a composable.
+
 - `src/utils/` is for code that is genuinely reusable across multiple features — text normalization, persistence helpers, generic data structures. A utility that is only ever used by one feature does not belong in `src/utils/`; it belongs in that feature's folder alongside its composables and components. The test: if removing a feature from the app would leave a dead file in `src/utils/`, that file was in the wrong place. Conversely, never put shared infrastructure in a feature folder — anything imported by more than one feature must live in `src/utils/`, `src/composables/`, `src/stores/`, or `src/webview-host/` depending on its role.
 
 ## File Length & Refactoring Thresholds
@@ -42,6 +52,51 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 - When a file crosses its hard limit during an edit session, refactor it before completing the task — do not leave the file over the limit.
 - Refactoring means splitting into smaller files with clear single responsibilities, not just moving code around. Every extracted file must have a name that describes exactly what it does.
 - After any split, update the `README.md` of the affected folder and update `architecture.md` if the split introduces a new composable, component, or utility that belongs in the architecture map.
+
+### Files currently over the hard limit — pending refactor
+
+These predate enforcement and are scheduled to be split. Do not add code to any of them: if a task requires touching one, extract rather than extend.
+
+Done so far: `features/home/HomePage.vue` (was 827 → 286) split into `HomePageDateBar.vue`, `useHomeDateBarFit.ts`, `useHomeSearchBar.ts`, `useHomeSearchNavigation.ts`, and `useHomeTiles.ts`.
+
+Components (hard limit 350):
+
+| File | Lines |
+| --- | --- |
+| `features/book-view/commentary/CommentaryView.vue` | 657 |
+| `features/book-view/BookViewPage.vue` | 655 |
+| `features/halachic-units/HalachicUnitsPage.vue` | 620 |
+| `layout/AppTitleBar.vue` | 577 |
+| `features/txt-view/TxtViewPage.vue` | 565 |
+| `features/full-text-search/FullTextSearchResultsList.vue` | 535 |
+| `features/home/HomeSearchDropdown.vue` | 525 |
+| `features/book-view/lines/BookViewLinesContent.vue` | 510 |
+| `features/pdf-viewer/PdfViewPage.vue` | 499 |
+| `features/local-file-search/LocalFileSearchPage.vue` | 493 |
+
+Composables, stores and utilities (hard limit 300 / 250):
+
+| File | Lines |
+| --- | --- |
+| `stores/tabStore.ts` | 781 |
+| `features/full-text-search/useFullTextSearch.ts` | 613 |
+| `features/book-view/commentary/useCommentaryScroll.ts` | 556 |
+| `features/book-view/lines/useBookViewLineCopyMenu.ts` | 519 |
+| `features/book-view/lines/useBookViewLineRenderer.ts` | 517 |
+| `stores/localFileStore.ts` | 509 |
+| `features/book-view/useBookView.ts` | 498 |
+| `features/book-view/commentary/useCommentary.ts` | 473 |
+| `features/book-view/commentary/useCommentaryCopy.ts` | 459 |
+| `utils/persistence.ts` | 438 |
+| `features/book-view/lines/useBookViewLinesScroll.ts` | 434 |
+| `stores/settingsStore.ts` | 417 |
+| `features/home/useHomeSearch.ts` | 404 |
+| `utils/censorDivineNames.ts` | 390 |
+| `stores/bookViewStore.ts` | 378 |
+| `features/html-view/useOtzariaAddinBridge.ts` | 372 |
+| `utils/segmentSearchTree.ts` | 348 |
+
+`BookViewPage.vue` is called a "shell that calls `useBookView`" in `architecture.md` — at 655 lines it is not currently a shell. Treat that description as the target state, not the present one.
 
 ## Components
 
@@ -76,6 +131,8 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 ## Dropdowns & Panels — Close Behavior
 
 Every dropdown, popover, or overlay panel must use `useDropdownClose` from `src/composables/useDropdownClose.ts` — never `onClickOutside` directly. `useDropdownClose` also closes on window blur (iframe clicks, app switching), which `onClickOutside` alone does not handle.
+
+Known violation: `src/components/common/AutofillDropdown.vue` still calls `onClickOutside` directly and should be migrated.
 
 When the panel has a dedicated toggle button, pass it as the `toggleButton` option so the composable can suppress the close handler on that element and prevent the toggle-button race condition (pointerdown closes → click reopens).
 
@@ -152,6 +209,7 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 ## Documentation
 
 - Every folder in the app (`src/features/*`, `src/components/`, `src/layout/`, `src/composables/`, `src/utils/`, `src/stores/`, `src/webview-host/`, `src/theme/`) must have its own `README.md`
+- Currently missing and owed a README: `src/features/local-file-search/`, `src/components/common/`, `src/assets/styles/`
 - When the user says "add documentation" or "document this", they mean: create or update the local `README.md` in the relevant folder
 - READMEs must be purely functional and concise — describe what each file does, where to add new code, what to import from where, and what patterns or constraints to follow
 - READMEs are written to help an AI agent make correct decisions without reading every file — they should answer "where does this go?" and "what should I use for this?"
@@ -161,18 +219,36 @@ This project uses Prettier with `printWidth: 100`. The Vue template compiler rej
 
 ## Book Search Query Normalization
 
-Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. The normalization and matching logic is split across two files:
+Book catalog search applies Hebrew-specific text transformations so that variant spellings and abbreviations all match the same results. It lives entirely in `src/features/book-catalog/`, not in `src/utils/`.
 
-`src/utils/bookPathNormalizer.ts` — owns all normalization rules. Must be applied symmetrically to both sides: indexed titles (in `booksCategoryTree.ts` `ensureBookSearchMetadata`) and user queries (in `useBookCatalogSearch.ts` `toQueryWords`).
+**`src/features/book-catalog/SEARCH.md` is the authoritative design document** — read it before changing anything about catalog search. The stack is four layers:
 
-`src/utils/bookPathMatcher.ts` — owns the scoring logic (exact / prefix / contains tiers). Used by `filterBooksByWords` in `booksCategoryTree.ts`.
+- `bookCatalogSearchNormalizer.ts` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), Hebrew word decomposition into consonantal skeleton + vowel-letter set for חסר/מלא matching, and definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed tokens at build time and query words at search time.
+- `bookCatalogSearchMatcher.ts` — the score tiers (`SCORE_EXACT` 3, `SCORE_PREFIX` 2, `SCORE_NONE` 0) and per-token scoring. Knows nothing about the index or catalog.
+- `bookCatalogSearch.ts` — the inverted index and query execution: `buildSearchIndex` and `filterBooksByWords`.
+- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`, `bookCatalogTocSearchCache.ts`).
 
-Current normalization rules in `bookPathNormalizer.ts`:
-- שו"ע / שוע → שלחן ערוך (abbreviation expansion)
-- שולחן → שלחן (standalone word normalization)
-- חסר/מלא spelling variants: נידה matches נדה, ליקוטי matches לקוטי, but שבועות does NOT match שביעית (different vowel letter types at the same skeleton positions)
+`bookCatalogTree.ts` owns tree building and category metadata (`buildTree`, `assignSubtreeBookIds`, `assignFullPaths`, `findCategoryMeta`) — it is not part of the search stack.
 
-When adding a new normalization rule — a new abbreviation, a new spelling variant, a new title alias — add it only to `bookPathNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
+חסר/מלא behaviour: נידה matches נדה and ליקוטי matches לקוטי, but שבועות does NOT match שביעית (incompatible vowel-letter sets at the same skeleton positions).
+
+When adding a new normalization rule — a new abbreviation, spelling variant, or title alias — add it only to `bookCatalogSearchNormalizer.ts`. Never add book-search-specific normalization to `normalizeText.ts` or inline it in a composable.
+
+## Tests
+
+Unit tests run under Vitest: `npm test` (`vitest run --config vitest.config.ts`).
+
+- `vitest.config.ts` is standalone and deliberately does **not** extend `vite.config.ts` — the dev plugin there spawns the .NET KHS service, which unit tests do not need and which blocks the runner from exiting. Keep the `@` alias in sync so imports resolve like the app.
+- Environment is `node`, include pattern is `src/**/*.{test,spec}.ts`. There is no jsdom/DOM environment configured, so tests must cover pure logic — not component rendering.
+- Test files sit beside the module they cover, named `<module>.test.ts`. Fixtures use a `.fixtures.ts` suffix beside the test.
+- Existing tests cover the areas where regressions have actually hurt: clipboard/copy shaping, copy-flag exclusivity, word-link anchor offsets, scroll restore, divine-name censoring, Hebrew text cleaning. When changing any of those, run the suite.
+- Extracting pure logic out of a component specifically so it can be tested is a good reason to split a file.
+
+### Verifying frontend work
+
+Use `npm run build` (which runs `vue-tsc --build`) to type-check, **not** `vue-tsc --noEmit` — `--noEmit` misses real errors in this project. The `type-check` script uses `--noEmit`, so do not rely on it alone.
+
+Ask before running live/browser verification — the user often verifies manually.
 
 ## Scripts & Tooling
 
@@ -203,7 +279,7 @@ When completing a task that involved temporary or investigative work, always cle
 
 When the user asks to add an LRU cache for a feature, always ask for the cap limit before implementing — never hardcode a guess.
 
-The established pattern for an IDB-backed LRU cache depends on how many places consume it. If multiple stores or composables need to read and write the cache, use a Pinia store in `src/stores/` — see `searchCacheStore.ts` as the canonical reference. If only a single feature touches the cache, use a plain module (no Pinia) co-located in the feature folder — see `dictCache.ts` in `src/components/dictionary/` as the reference for that case.
+The established pattern for an IDB-backed LRU cache depends on how many places consume it. If multiple stores or composables need to read and write the cache, use a Pinia store in `src/stores/` — see `searchCacheStore.ts` as the canonical reference. If only a single feature touches the cache, use a plain module (no Pinia) co-located in the feature folder — see `dictionaryCache.ts` in `src/features/dictionary/` and `bookCatalogTocSearchCache.ts` in `src/features/book-catalog/` as the references for that case.
 
 Either way the internal structure is the same:
 
@@ -226,7 +302,7 @@ Practical rules for this codebase:
 
 - Feature folders are named after the domain concept they represent, not the technical role. `book-catalog/` not `file-system/` or `fs/`. `full-text-search/` not `bloom/`. `book-view/` not `reader/`.
 - Framework and infrastructure concerns (HTTP, IDB, WebView bridge) live at the edges — in `src/webview-host/` and `src/utils/persistence.ts` — never mixed into feature folders.
-- Business logic (what the app does) is always more prominent than technical plumbing (how it does it). A new developer should be able to name every feature of the app by reading only the folder names under `src/components/`.
+- Business logic (what the app does) is always more prominent than technical plumbing (how it does it). A new developer should be able to name every feature of the app by reading only the folder names under `src/features/`.
 - When a folder name could apply to any app (e.g. `utils`, `services`, `helpers`, `file-system`), it is wrong. Every folder name must be specific enough to belong only to this app.
 - Technical layer names (`controllers`, `repositories`, `models`) are forbidden as top-level organizers. Organize by feature first; layer distinctions live inside the feature folder if needed at all.
 - Abbreviations in folder and file names fail the screaming test twice — they obscure both the domain and the intent. `books-fs` says neither "book catalog" nor "browser". Write the full domain name every time.
@@ -250,7 +326,9 @@ This applies to `FullTextSearchResultsList.vue` and any future virtual scroller 
 
 ## No Browser Dialogs
 
-Never use `window.alert`, `window.confirm`, or `window.prompt` anywhere in the app. These are blocking browser dialogs that look out of place in a native WebView2 host and cannot be styled. For error messages, use a reactive ref in the relevant store and display the message inline in the page — either as a dismissible banner, an inline error state, or within the existing page error UI. For confirmation, use `ConfirmDialog.vue`.
+Never use `window.alert`, `window.confirm`, or `window.prompt` anywhere in the app. These are blocking browser dialogs that look out of place in a native WebView2 host and cannot be styled. For error messages, use a reactive ref in the relevant store and display the message inline in the page — either as a dismissible banner, an inline error state, or within the existing page error UI. For confirmation, use `ConfirmDialog.vue`; for a message, `AlertDialog.vue`; for a transient notice, `useToast.ts` (rendered by `ToastBanner.vue`).
+
+Known violation: `src/stores/localFileStore.ts` calls `window.alert` in its push-event handler and should switch to `useToast` or `AlertDialog`.
 
 ## Button Elements
 

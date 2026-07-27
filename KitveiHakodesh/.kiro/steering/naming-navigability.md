@@ -6,7 +6,7 @@ These rules exist so that any developer — or AI agent — can find the right f
 
 ## The Guess-the-Path Test
 
-A name passes if someone who knows the app's features but has never seen the file tree can correctly guess the full path from a plain description. "The composable that syncs the active TOC entry as the user scrolls in the book reader" → `src/components/book-view/useBookViewScrollSync.ts`. If the path is not guessable, the name or location is wrong.
+A name passes if someone who knows the app's features but has never seen the file tree can correctly guess the full path from a plain description. "The composable that syncs the active TOC entry as the user scrolls in the book reader" → `src/features/book-view/useBookViewScrollSync.ts`. If the path is not guessable, the name or location is wrong.
 
 ---
 
@@ -29,7 +29,7 @@ The folder name is the canonical name for the feature. Everything inside inherit
 
 ## Siblings Share a Prefix
 
-All files in a feature folder that belong to the same component family share the parent component's name as a prefix. Sub-components of `CommentaryView.vue` are named `CommentaryHeader.vue`, `CommentaryHeaderNav.vue`, `CommentaryFilterPanel.vue` — never `Header.vue` or `FilterPanel.vue`. This keeps related files alphabetically adjacent in the editor and makes the relationship visible without opening any file.
+All files in a feature folder that belong to the same component family share the parent component's name as a prefix. Sub-components of `CommentaryView.vue` are named `CommentaryHeader.vue`, `CommentaryHeaderNav.vue`, `CommentaryTreePanel.vue` — never `Header.vue` or `TreePanel.vue`. This keeps related files alphabetically adjacent in the editor and makes the relationship visible without opening any file.
 
 ---
 

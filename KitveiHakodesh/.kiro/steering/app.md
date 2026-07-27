@@ -11,13 +11,16 @@
 
 - `src/features/` — one folder per app feature (e.g. `book-catalog/`, `book-view/`, `full-text-search/`)
 - Most feature folders keep files flat with no nested subfolders
-- Exception: `book-view/` has three subfolders (`lines/`, `toc/`, `commentary/`) for organizational clarity due to complexity
+- Exceptions: `book-view/` has three subfolders (`lines/`, `toc/`, `commentary/`) due to complexity, and `halachic-units/` has `units/` for per-system unit definitions
 - Sub-components named after parent: `BookCard.vue` → `BookCardCover.vue`, `BookCardMeta.vue`
-- Shared reusable components (used across features): `src/components/`
-- App shell components (title bar, page router): `src/layout/`
+- Shared reusable components (used across features): `src/components/`, with `src/components/common/` for shared search chrome
+- App shell components (split container, pane shell, title bar, page router): `src/layout/` — plus `App.vue` at the root, which owns split view
 - Shared composables across features: `src/composables/`
 - Shared pure utils: `src/utils/`
 - Pinia stores: `src/stores/` — never under `src/data/` or elsewhere
+- Host/data access layer: `src/webview-host/`
+- Theme system: `src/theme/`; global stylesheet: `src/assets/styles/main.css`
+- `src/stubs/` — build-time module stubs (e.g. the temporal polyfill stub)
 
 ## RTL Layout
 
@@ -57,15 +60,19 @@ This app is strictly RTL. Every spatial decision must be understood in physical 
 ## Navigation
 
 - Page-navigation app — navigating replaces the current tab's content in-place
-- Always use `tabStore.updateActiveTab({ title, route, ...data })` for navigation — never `openTab`
+- **The app is split-view capable: there are up to two panes, each with its own tab list and active tab.** Every navigation must target a specific pane.
+- From inside a pane's component tree, inject `PANE_NAVIGATION_KEY` (from `@/composables/usePaneNavigation`) and call `updateActiveTab` / `openTab` / `openOrUpdateActiveTab` / `navigateToSingleton` / `switchTab` on it. Calling `useTabStore().updateActiveTab(...)` directly always targets pane 1 and will navigate the wrong pane when split view is on.
+- Components that need to know which pane they are in inject `'paneId'`.
+- `useAppShellPane(paneId)` is the composable behind the provided API — use it when you need pane-scoped operations outside the injection context.
+- Store-level pane-2 equivalents exist (`pane2ActiveTabId`, `openPane2Tab`, `updatePane2ActiveTab`) but are implementation details of `useAppShellPane`; prefer the injected API.
 - `openTab` is reserved for explicitly creating a second tab (e.g. a "new tab" button)
-- `/book-view` and `/search` are keyed by `activeTabId` in `AppPageView` — they fully remount on tab switch, so setup-time reads of `tabStore.activeTabId` / `activeTab` are stable for the component's lifetime; all other routes share one instance
+- Keying in `AppPageView`: `/book-view` is keyed by tab id + book id, `/search` and `/txt-view` by tab id — these fully remount on tab switch, so setup-time reads of the active tab are stable for the component's lifetime. All other routes share one instance.
 
 ### Singleton pages
 
-The routes `/settings`, `/books`, `/hebrewbooks`, and `/workspaces` are singleton tabs — only one tab of each may exist at a time. Always navigate to them via `tabStore.navigateToSingleton(route)`, never `updateActiveTab` or `openTab` directly. If a tab with that route already exists it switches to it (closing the current tab); otherwise the current tab is replaced in-place.
+Singleton tabs allow only one tab of each route at a time. The authoritative list is `SINGLETON_ROUTES` in `tabStore.ts`: `/settings`, `/books`, `/hebrewbooks`, `/workspaces`, `/hebrew-calendar`, `/dictionary`, `/midot`, `/file-search`. Always navigate to them via `navigateToSingleton(route)` — the pane-scoped one from the injected API — never `updateActiveTab` or `openTab` directly. If a tab with that route already exists it switches to it; otherwise the current tab is replaced in-place. Hebrew titles come from `SINGLETON_TITLES` in the same file, so a new singleton route needs an entry in both.
 
-These routes are also never persisted across sessions — `persistTabs` strips them before writing to IDB.
+These routes are also never persisted across sessions — `persistTabs` strips them before writing.
 
 ## Design Language
 
@@ -143,8 +150,12 @@ Both `CommentaryHeader` and `CommentaryHeaderNav` use `background: var(--bg-prim
 - Use `color-mix()` tinted backgrounds instead of solid fills for icon containers in list contexts
 - Rounded corners: `4px` small controls, `8px` cards, `999px` search/input pills, `12px` tile icon containers
 - Secondary toolbars use `var(--bg-toolbar)` — between `--bg-primary` and `--bg-secondary`
-- Split pane divider hover: `color-mix(in srgb, var(--text-secondary) 25%, transparent)` — never accent color
-- Split pane divider visual height is 1px but touch target is 20px via a `::before` pseudo-element (`position: absolute; height: 20px; top: 50%; transform: translateY(-50%)`) — always keep this pattern on any resize handle
+There are two independent resize dividers — do not confuse them:
+
+- **Book view bottom-panel divider** (`SplitPane.vue`, horizontal): hover `color-mix(in srgb, var(--text-secondary) 25%, transparent)` — never accent color. Visual height 1px, touch target 20px via a `::before` pseudo-element (`position: absolute; height: 20px; top: 50%; transform: translateY(-50%)`).
+- **Split-view pane divider** (`App.vue`, vertical, between the two `AppShell` panes): 4px wide, `background: var(--border-color)`, hover `color-mix(in srgb, var(--accent-color) 50%, transparent)`, with a 20px-wide `::before` touch target. This one *does* use the accent color on hover.
+
+Always keep the enlarged-pseudo-element touch-target pattern on any resize handle.
 
 ## Dropdowns
 
@@ -199,165 +210,27 @@ Call `virtualizer.scrollToIndex({ align: 'start' })` to bring the item into the 
 
 ## Database
 
-- All SQLite access goes through `src/webview-host/db.ts` — never call fetch against the DB from a component or composable
-- All raw SQL strings live in `src/webview-host/queries.sql.ts` — no inline SQL anywhere else
+- All seforim SQLite access goes through `src/webview-host/seforimDb.ts` — never call fetch against the DB from a component or composable. (There is no `db.ts`.)
+- All raw SQL strings for the seforim DB live in `src/webview-host/queries.sql.ts` — no inline SQL anywhere else
 - Feature composables call `query()` with a SQL constant from `queries.sql.ts` and a params array
-- **Exception — dictionary DB**: dictionary SQL lives in `src/webview-host/dictionaryDb.ts`, not in `queries.sql.ts`. Both the C# host path (`__webviewDictQuery`) and the dev path (`devQueryDict`) execute the same SQL string sent from the frontend — there is nothing to keep in sync between C# and dev for dictionary queries.
+- `seforimApi.ts` is the typed request layer above `seforimDb.ts`; `serviceClient.ts` speaks to the native KitveiHakodesh service. Prefer `seforimApi.ts` for new data access over hand-writing a `query()` call.
+- Each additional database owns its own SQL file next to its access module: `dictionaryDb.ts` + `dictionaryDb.sql.ts`, `userSettingsDb.ts` + `userSettingsDb.sql.ts`. `dictionarySeforimDb.ts` holds seforim-specific dictionary queries.
+- **Dictionary and user-settings DBs**: their SQL lives beside their own access module, not in `queries.sql.ts`. Both the C# host path and the dev path execute the same SQL string sent from the frontend — there is nothing to keep in sync between C# and dev for these.
 
 ### Transports (auto-selected at runtime)
 
-1. C# WebView host — when `window.__webviewQuery` is injected by the host before app boots
-2. HTTP dev server — fallback for browser dev
+1. C# WebView host — when `window.__webviewQuery` is injected by the host before the app boots
+2. The native KitveiHakodesh service — used by browser dev mode, reached over the private loopback endpoint via `serviceClient.ts`
 
-Dev server: `npm run dev:server` — `DB_PATH` sets the `.db` file (default `./data.db`), `PORT` sets port (default `4000`), override URL via `VITE_DB_URL` in `.env.development`
+Browser dev mode is **fully service-dependent**: there is no JavaScript SQLite shim and no `npm run dev:server` script any more. `VITE_DB_URL` in `.env.development` still exists as an override. Because the service backs dev mode, `isHosted` is `true` in dev — see the runtime-context rule in `preferences.md`.
 
 ### Schema Reference
 
-#### category
-
-| column     | type    | notes                 |
-| ---------- | ------- | --------------------- |
-| id         | INTEGER | PK                    |
-| parentId   | INTEGER | nullable, self-ref    |
-| title      | TEXT    | not null              |
-| level      | INTEGER | not null, default 0   |
-| orderIndex | INTEGER | not null, default 999 |
-
-#### category_closure
-
-Closure table for category hierarchy.
-
-| column       | type    | notes          |
-| ------------ | ------- | -------------- |
-| ancestorId   | INTEGER | PK (composite) |
-| descendantId | INTEGER | PK (composite) |
-
-#### author / topic / pub_place / pub_date / source
-
-Simple lookup tables: `id` PK, `name` TEXT not null.
-
-#### book
-
-| column                  | type    | notes         |
-| ----------------------- | ------- | ------------- |
-| id                      | INTEGER | PK            |
-| categoryId              | INTEGER | FK → category |
-| sourceId                | INTEGER | FK → source   |
-| title                   | TEXT    | not null      |
-| heShortDesc             | TEXT    | nullable      |
-| notesContent            | TEXT    | nullable      |
-| orderIndex              | INTEGER | default 999   |
-| totalLines              | INTEGER | default 0     |
-| isBaseBook              | INTEGER | 0/1 bool      |
-| hasTargumConnection     | INTEGER | 0/1 bool      |
-| hasReferenceConnection  | INTEGER | 0/1 bool      |
-| hasSourceConnection     | INTEGER | 0/1 bool      |
-| hasCommentaryConnection | INTEGER | 0/1 bool      |
-| hasOtherConnection      | INTEGER | 0/1 bool      |
-| hasAltStructures        | INTEGER | 0/1 bool      |
-| hasTeamim               | INTEGER | 0/1 bool      |
-| hasNekudot              | INTEGER | 0/1 bool      |
-| externalLibraryId       | INTEGER | nullable      |
-
-#### book_pub_place / book_pub_date / book_topic / book_author
-
-Junction tables: `bookId` + respective FK, composite PK.
-
-#### line
-
-| column    | type    | notes     |
-| --------- | ------- | --------- |
-| id        | INTEGER | PK        |
-| bookId    | INTEGER | FK → book |
-| lineIndex | INTEGER | not null  |
-| content   | TEXT    | not null  |
-
-#### tocText
-
-`id` PK, `text` TEXT not null.
-
-#### tocEntry
-
-| column      | type    | notes               |
-| ----------- | ------- | ------------------- |
-| id          | INTEGER | PK                  |
-| bookId      | INTEGER | FK → book           |
-| parentId    | INTEGER | nullable, self-ref  |
-| textId      | INTEGER | FK → tocText        |
-| level       | INTEGER | not null            |
-| lineId      | INTEGER | nullable, FK → line |
-| isLastChild | INTEGER | 0/1 bool            |
-| hasChildren | INTEGER | 0/1 bool            |
-
-#### connection_type
-
-`id` PK, `name` TEXT not null.
-
-#### link
-
-| column           | type    | notes                |
-| ---------------- | ------- | -------------------- |
-| id               | INTEGER | PK                   |
-| sourceBookId     | INTEGER | FK → book            |
-| targetBookId     | INTEGER | FK → book            |
-| sourceLineId     | INTEGER | FK → line            |
-| targetLineId     | INTEGER | FK → line            |
-| connectionTypeId | INTEGER | FK → connection_type |
-
-#### book_has_links
-
-| column         | type    | notes    |
-| -------------- | ------- | -------- |
-| bookId         | INTEGER | PK       |
-| hasSourceLinks | INTEGER | 0/1 bool |
-| hasTargetLinks | INTEGER | 0/1 bool |
-
-#### line_toc
-
-`lineId` PK, `tocEntryId` FK → tocEntry.
-
-#### alt_toc_structure
-
-| column  | type    | notes     |
-| ------- | ------- | --------- |
-| id      | INTEGER | PK        |
-| bookId  | INTEGER | FK → book |
-| key     | TEXT    | not null  |
-| title   | TEXT    | nullable  |
-| heTitle | TEXT    | nullable  |
-
-#### alt_toc_entry
-
-| column      | type    | notes                  |
-| ----------- | ------- | ---------------------- |
-| id          | INTEGER | PK                     |
-| structureId | INTEGER | FK → alt_toc_structure |
-| parentId    | INTEGER | nullable, self-ref     |
-| textId      | INTEGER | FK → tocText           |
-| level       | INTEGER | not null               |
-| lineId      | INTEGER | nullable, FK → line    |
-| isLastChild | INTEGER | 0/1 bool               |
-| hasChildren | INTEGER | 0/1 bool               |
-
-#### line_alt_toc
-
-`lineId` + `structureId` composite PK, `altTocEntryId` FK → alt_toc_entry.
-
-#### book_acronym
-
-`bookId` + `term` composite PK.
-
-#### default_commentator / default_targum
-
-`bookId` + `commentatorBookId`/`targumBookId` composite PK, `position` INTEGER not null.
-
-#### bloom_metadata
-
-`id` PK, `chunk_size` INTEGER not null.
+The seforim schema lives in **`database-schema.md`** — it is the single source of truth. It used to be duplicated here; that copy was removed so the two cannot drift apart. Do not re-add schema tables to this file.
 
 ## Persistence
 
-Persistence uses three separate IndexedDB databases plus one localStorage key — all access goes through `src/utils/persistence.ts`.
+Persistence uses six IndexedDB databases plus localStorage — all access goes through `src/utils/persistence.ts`. The authoritative list of databases is the `handles` map in that file; the docblock at the top of the file has drifted from it, so trust `handles`.
 
 ### Why localStorage exists here
 
@@ -394,17 +267,24 @@ Current caches and their caps:
 
 ### IDB databases
 
-| Database            | Contents                                                         |
-| ------------------- | ---------------------------------------------------------------- |
-| `app-tabs`          | Tabs list, tab states, book states (workspace-scoped keys)       |
-| `app-lastread`      | Per-book last-read positions (LRU-capped at 1000)                |
-| `app-search-cache`  | FTS search result cache (LRU-capped at 100 queries)              |
+| Database                | Contents                                                   |
+| ----------------------- | ---------------------------------------------------------- |
+| `app-tabs`              | Tabs list, tab states, book states (workspace-scoped keys) |
+| `app-lastread`          | Per-book last-read positions (LRU-capped at 1000)          |
+| `app-search-cache`      | FTS search result cache (LRU-capped at 100 queries)        |
+| `app-dict-cache`        | Dictionary lookup cache                                    |
+| `app-catalog-toc-cache` | Book catalog TOC search result cache (LRU-capped at 25)    |
+| `app-recently-opened`   | Recently opened documents (LRU-capped at 16)               |
 
-All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar prefs, etc.) live in localStorage via `lsGet`/`lsSet` — synchronous, zero async cost. IDB is only used for data that is too large or structured for localStorage (tab/book state, last-read positions, search cache).
+All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar prefs, etc.) live in localStorage via `lsGet`/`lsSet` — synchronous, zero async cost, auto-prefixed with `kitvei-hakodesh.`. IDB is only used for data that is too large or structured for localStorage.
 
-All persistence access must go through `src/utils/persistence.ts` exclusively — no component, composable, or store may call `localStorage` or any IDB API directly. This is a hard rule with no exceptions.
+Settings that must be shared with the native host live in the user-settings database instead, accessed via `src/webview-host/userSettingsDb.ts` — not through `persistence.ts`. Use this only when the C# side needs to read the value too; browser-only preferences stay in localStorage.
 
-Components and composables must never import from `src/utils/persistence.ts` directly — they go through a store (`tabStore`, `bookViewStore`, `settingsStore`). Only stores import from `persistence.ts`.
+All browser persistence access must go through `src/utils/persistence.ts` exclusively — no component, composable, or store may call `localStorage` or any IDB API directly. This is a hard rule with no exceptions.
+
+Components and composables should reach persistence through a store (`tabStore`, `bookViewStore`, `settingsStore`) rather than importing `persistence.ts` directly. The exception is a self-contained cache module that owns its own IDB database and is not shared state — `dictionaryCache.ts` and `bookCatalogTocSearchCache.ts` import the `idb*` helpers directly by design, matching the "single feature → plain module, no Pinia" rule in `preferences.md`. A component or composable importing `persistence.ts` to read or write *app state* is still wrong; that belongs in a store.
+
+Known violations of the spirit of this rule that should move behind a store when next touched: `FullTextSearchPage.vue`, `HebrewCalendarPage.vue`, `useZmanim.ts`, `useNextZman.ts`, and `useAutofill.ts` all import `persistence.ts` directly.
 
 ### Key scheme
 
@@ -455,10 +335,27 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 
 ## C# Backend
 
-- Target framework: .NET 4.8, C# 7.3 — no C# 8+ features
+The backend is **not** uniformly net48 — the language rules depend on which project you are editing. Check the `.csproj` before writing code.
+
+| Project | Target | Language rules |
+| --- | --- | --- |
+| `KitveiHakodeshLib`, `KitveiHakodeshDemoApp` | net48 | C# 7.3 — the restrictions below apply |
+| `DocumentLocator.Client`, `.Service`, `.Tests`, `.Demo` | net48 | C# 7.3 — the restrictions below apply |
+| `FtsLib.Net48`, `FtsLibTest` | net48 | C# 7.3 — the restrictions below apply |
+| `KitveiHakodeshService` | net10.0-windows | modern C#, AOT-published |
+| `KitveiHakodeshService.Tests`, `FtsLibTest.Net10` | net10.0 | modern C# |
+| `FtsLib` | net10.0 | modern C# |
+| `DocumentLocator` (library) | net48 + net10.0-windows | multi-targeted — code must compile under BOTH, so guard modern syntax with `#if` |
+| `DocConvertLib` | net48 + net10.0 | multi-targeted — same constraint |
+
+In net48 / C# 7.3 projects:
+
 - No `using` declarations (use `using` statements with braces)
 - No switch expressions (use `if/else` chains)
 - No nullable reference types, no records, no default interface members
+- No `System.Runtime.Intrinsics` (net48 lacks it)
+
+In the multi-targeted projects, anything not available on net48 must sit behind a `#if NET10_0_OR_GREATER` guard — a modern-only construct added unguarded breaks the net48 build.
 
 ### Build pipeline
 
@@ -477,7 +374,8 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 ## C# Host UI in Dev Mode
 
 - All UI that is conditional on running inside the C# WebView host (`isHosted`) must also be visible in browser dev mode
-- `isHosted` and `dbReady` are exported from `src/webview-host/db.ts` as module-level constants/refs — import them from there, never recompute locally in components
+- `isHosted` and `dbReady` are exported from `src/webview-host/seforimDb.ts` as module-level constants/refs — import them from there, never recompute locally in components
 - `isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV`
-- `dbReady` is a `ref<boolean>` — set to `true` when the user picks a valid DB file; the `__onDbPathPicked` callback in `db.ts` handles this automatically
+- **`isHosted` is therefore `true` in browser dev mode.** It means "a real data backend is available", not "running inside the WinForms host". To branch on the actual host, check `window.__webviewAction` instead. Using `isHosted` as a host-only guard is a recurring bug — it silently takes the hosted path in dev.
+- `dbReady` is a `ref<boolean>` — set to `true` when the user picks a valid DB file; the `__onDbPathPicked` callback in `seforimDb.ts` handles this automatically
 - Never use `typeof window.__webviewPickDbPath === 'function'` for host detection — the bridge registers those functions at Vue boot time, which is too late for module-level const evaluation

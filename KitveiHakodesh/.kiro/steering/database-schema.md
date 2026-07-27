@@ -1,12 +1,16 @@
 # Database Schema Reference
 
+**This file is the single source of truth for the seforim schema.** The same tables were duplicated in the Schema Reference section of `app.md`; that copy has been removed in favour of this one. Do not re-add a second copy anywhere — update this file only.
+
 ## Overview
 
-The seforim database is SQLite. All SQLite access goes through `src/webview-host/db.ts` — never call fetch against the DB from a component or composable. All raw SQL strings live in `src/webview-host/queries.sql.ts` — no inline SQL anywhere else.
+The seforim database is SQLite. All seforim access goes through `src/webview-host/seforimDb.ts` (there is no `db.ts`) — never call fetch against the DB from a component or composable. All raw SQL strings live in `src/webview-host/queries.sql.ts` — no inline SQL anywhere else.
 
-Feature composables call `query()` with a SQL constant from `queries.sql.ts` and a params array.
+Feature composables call `query()` with a SQL constant from `queries.sql.ts` and a params array. `seforimApi.ts` is the typed layer above it and is preferred for new data access.
 
-**Exception — dictionary DB**: dictionary SQL lives in `src/webview-host/dictionaryDb.ts`, not in `queries.sql.ts`. Both the C# host path (`__webviewDictQuery`) and the dev path (`devQueryDict`) execute the same SQL string sent from the frontend — there is nothing to keep in sync between C# and dev for dictionary queries.
+**Other databases**: each owns its SQL beside its own access module — `dictionaryDb.ts` + `dictionaryDb.sql.ts`, `userSettingsDb.ts` + `userSettingsDb.sql.ts`. Both the host path and the dev path execute the same SQL string sent from the frontend, so there is nothing to keep in sync between C# and dev for those.
+
+The word-link feature (`wordLinkAnchors.ts` and friends) requires a schema-v2 database with per-word link data. No such table exists in the schema below, which is why that feature is currently dormant.
 
 ---
 
