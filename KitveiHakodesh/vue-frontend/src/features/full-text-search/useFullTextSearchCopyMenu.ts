@@ -3,30 +3,14 @@ import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+// Shared with the book-view copy path — see useLineCopy for why a single inline run
+// must NOT be wrapped in a document (Word's CF_HTML fragment markers, not the tags,
+// decide whether a paste terminates the paragraph).
+import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
 
 // Mirrors the book/txt view copy menus: a plain "העתק" plus a persistent
 // "העתק טקסט נקי" toggle (shared settingsStore.copyCleanText) that strips
 // nikud/te'amim from copied search-result text.
-
-/** Trimmed so the text/plain flavor doesn't carry a trailing newline either. */
-function htmlToPlainText(html: string): string {
-  const tempDiv = document.createElement('div')
-  tempDiv.innerHTML = html
-  return (tempDiv.textContent ?? '').trim()
-}
-
-/**
- * Wraps clipboard HTML in a minimal RTL document.
- *
- * NO whitespace between <body> and the payload, or between the payload and </body>:
- * Word's HTML importer materializes a leading/trailing whitespace text node as an
- * extra empty paragraph, which is why every paste used to land with a paragraph
- * break at the end. The payload is trimmed for the same reason.
- */
-function wrapRtlHtml(innerHtml: string): string {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8">` +
-    `<style>body{direction:rtl}</style></head><body>${innerHtml.trim()}</body></html>`
-}
 
 export function useFullTextSearchCopyMenu(): { items: ContextMenuItem[] } {
   const settingsStore = useSettingsStore()
