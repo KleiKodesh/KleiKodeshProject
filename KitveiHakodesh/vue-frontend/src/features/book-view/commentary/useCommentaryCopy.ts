@@ -409,7 +409,7 @@ export function useCommentaryCopy(
     // Independent checkboxes — all can be active simultaneously
     {
       type: 'checkbox',
-      label: 'העתק כרצף (ללא מעבר שורה)',
+      label: 'העתק כרצף (ללא מעברי שורה)',
       get checked() { return settingsStore.copyJoinLines },
       onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
     },
