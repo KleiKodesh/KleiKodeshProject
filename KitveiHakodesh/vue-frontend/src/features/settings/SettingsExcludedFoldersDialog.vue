@@ -230,10 +230,20 @@ async function saveAndClose() {
   height: 30px;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  gap: 6px;
   padding: 0 14px;
   font-size: 12px;
   border-radius: 4px;
+}
+
+/* theme.css pins `svg { color: var(--text-secondary) }`, which outranks plain
+   inheritance and would render every footer icon muted grey regardless of its
+   button. Re-point the icons at the button's own colour. */
+.excluded-actions button svg {
+  width: 16px;
+  height: 16px;
+  flex: none;
   color: inherit;
 }
 
@@ -242,6 +252,8 @@ async function saveAndClose() {
   cursor: not-allowed;
 }
 
+/* The dialog's single accent-filled default. הוסף תיקייה is a neutral secondary so the
+   footer has exactly one primary — two filled buttons left it with no visual default. */
 .excluded-ok-button {
   border: 1px solid transparent;
   background: var(--accent-color);
@@ -251,23 +263,15 @@ async function saveAndClose() {
   background: color-mix(in srgb, var(--accent-color) 85%, #000);
 }
 
-.excluded-cancel-button {
+.excluded-cancel-button,
+.excluded-add-button {
   border: 1px solid var(--border-color);
   background: var(--control-bg);
   color: var(--text-primary);
 }
-.excluded-cancel-button:hover {
-  background: var(--control-bg-hover);
-}
-
-/* Primary like the WinForms form's הוסף תיקייה (MakePrimaryButton). */
-.excluded-add-button {
-  border: 1px solid transparent;
-  background: var(--accent-color);
-  color: #fff;
-}
+.excluded-cancel-button:hover,
 .excluded-add-button:hover {
-  background: color-mix(in srgb, var(--accent-color) 85%, #000);
+  background: var(--control-bg-hover);
 }
 
 .excluded-remove-button {
