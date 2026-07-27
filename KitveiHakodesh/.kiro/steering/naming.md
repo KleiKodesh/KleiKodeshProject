@@ -12,7 +12,7 @@ Every name in this codebase — file, folder, variable, function, component, sto
 
 **Names must indicate context and placement.** A name read in isolation must tell you what feature it belongs to, what layer it lives in, and what it does. `useSearch.ts` is too vague — `useFileSystemSearch.ts` or `useBloomSearch.ts` is correct. `types.ts` is too vague — `bookViewTypes.ts` or `calendarTypes.ts` is correct.
 
-**Siblings share a prefix.** All files in a feature folder that belong to the same component family share the parent component's name as a prefix. Sub-components of `CommentaryView.vue` are named `CommentaryHeader.vue`, `CommentaryHeaderNav.vue`, `CommentaryFilterPanel.vue` — never `Header.vue` or `FilterPanel.vue`. All composables for the book view are prefixed `useBookView*`.
+**Siblings share a prefix.** All files in a feature folder that belong to the same component family share the parent component's name as a prefix. Sub-components of `CommentaryView.vue` are named `CommentaryHeader.vue`, `CommentaryHeaderNav.vue`, `CommentaryTreePanel.vue` — never `Header.vue` or `TreePanel.vue`. All composables for the book view are prefixed `useBookView*`.
 
 ---
 
@@ -24,7 +24,7 @@ Every name in this codebase — file, folder, variable, function, component, sto
 - Pages are always suffixed `*Page.vue`: `SearchPage.vue`, `SettingsPage.vue`
 - Sub-components are prefixed with their parent: `BookViewToolbar.vue` is a sub-component of `BookViewPage.vue`
 - Word order: highest-level (most general) word first, modifying words last. `BookViewSearchBar` not `SearchBarBookView`. This keeps related files alphabetically adjacent in the editor.
-- A component name must describe what it renders, not what it does: `CommentaryFilterPanel.vue` not `useCommentaryFilter.vue`
+- A component name must describe what it renders, not what it does: `CommentaryTreePanel.vue` not `useCommentaryFilter.vue`
 
 ### Composables (`.ts` with `use` prefix)
 - `use` prefix is reserved exclusively for functions that use Vue reactivity (refs, computed, watch, lifecycle hooks) and are called inside `setup()`
@@ -33,18 +33,20 @@ Every name in this codebase — file, folder, variable, function, component, sto
 - Never use `use` prefix for modules with lazy-loaded shared state: `homeDateInfo.ts` not `useHomeDateInfo.ts`
 
 ### Utility Files (`.ts`, no `use` prefix)
-- camelCase for the filename: `normalizeText.ts`, `booksCategoryTree.ts`, `commentaryNav.ts`
-- The name describes what the file provides, not what it is: `booksCategoryTree.ts` (provides tree-building logic for the book catalog) not `treeUtils.ts`
+- camelCase for the filename: `normalizeText.ts`, `bookCatalogTree.ts`, `commentaryNavigation.ts`
+- The name describes what the file provides, not what it is: `bookCatalogTree.ts` (provides tree-building logic for the book catalog) not `treeUtils.ts`
 - Never use generic names: no `utils.ts`, `helpers.ts`, `common.ts`, `shared.ts`. Every utility file must have a name specific enough that you know exactly what it contains without opening it.
 
 ### Types Files (`*Types.ts`)
-- PascalCase with `Types` suffix: `bookViewTypes.ts`, `dictionaryTypes.ts`, `calendarTypes.ts`
+- camelCase with a `Types` suffix — like every other non-component `.ts` file: `bookViewTypes.ts`, `dictionaryTypes.ts`, `calendarTypes.ts`, `fullTextSearchTypes.ts`, `pdfViewerTypes.ts`, `treeTypes.ts`
 - A types file exists only when a type is shared between a composable and a component (or between multiple composables). A type used in only one file stays in that file.
 - Never define types in `.vue` files that are needed by `.ts` files — move them to a types file first.
 
 ### Stores (`*Store.ts`)
 - camelCase with `Store` suffix in the filename: `tabStore.ts`, `settingsStore.ts`, `booksDataStore.ts`
-- The Pinia store id matches the filename without the suffix: `defineStore('tabs', ...)`, `defineStore('settings', ...)`
+- The Pinia store id is the filename without the `Store` suffix: `settingsStore.ts` → `defineStore('settings', ...)`, `bookViewStore.ts` → `'bookView'`, `localFileStore.ts` → `'localFile'`
+- One exception in the codebase: `tabStore.ts` uses the id `'tabs'` (plural). Match the existing id when editing a store; use the singular-filename rule for new ones.
+- `themeStore.ts` lives in `src/theme/`, not `src/stores/` — it is part of the theme system
 
 ### SQL Files (`*.sql.ts`)
 - Named after the database they serve: `queries.sql.ts` for the main seforim DB, `dictionaryDb.sql.ts` for the dictionary DB
@@ -68,7 +70,7 @@ These rules come from the [Vue official style guide](https://vuejs.org/style-gui
 
 **Multi-word component names (Priority A — Essential).** Every component name must be at least two words. This prevents conflicts with HTML elements which are always single words. `Search.vue` is forbidden — `SearchPage.vue` or `SearchBar.vue` is correct.
 
-**Component names start with the highest-level word (Priority B — Strongly Recommended).** The most general/contextual word comes first, modifiers come last. This keeps related files alphabetically adjacent. `SearchButtonClear.vue` and `SearchButtonRun.vue` not `ClearSearchButton.vue` and `RunSearchButton.vue`. In this codebase: `BookViewToolbar.vue`, `BookViewSearchBar.vue`, `BookViewSplitPane.vue` — not `ToolbarBookView.vue`.
+**Component names start with the highest-level word (Priority B — Strongly Recommended).** The most general/contextual word comes first, modifiers come last. This keeps related files alphabetically adjacent. `SearchButtonClear.vue` and `SearchButtonRun.vue` not `ClearSearchButton.vue` and `RunSearchButton.vue`. In this codebase: `BookViewToolbar.vue`, `BookViewSearchBar.vue`, `BookViewSidePanel.vue` — not `ToolbarBookView.vue`.
 
 **Tightly coupled child components share the parent prefix (Priority B).** Already covered in our Core Rules above — this is the official Vue recommendation too.
 
@@ -119,7 +121,7 @@ These rules come from the [Vue official style guide](https://vuejs.org/style-gui
 These rules exist so that any developer — or AI agent — can find the right file without searching, and can predict a file's path from its description alone.
 
 ### The "Guess the Path" Test
-A name passes if someone who knows the app's features but has never seen the file tree can correctly guess the full path from a description. "The composable that syncs the active TOC entry as the user scrolls in the book reader" → `src/components/book-view/useBookViewScrollSync.ts`. If the path is not guessable, the name or location is wrong.
+A name passes if someone who knows the app's features but has never seen the file tree can correctly guess the full path from a description. "The composable that syncs the active TOC entry as the user scrolls in the book reader" → `src/features/book-view/useBookViewScrollSync.ts`. If the path is not guessable, the name or location is wrong.
 
 ### Names Encode Layer and Feature Together
 A filename read in isolation must answer two questions: *what feature does this belong to?* and *what is its technical role?* Both must be present. `useSearch.ts` answers only the second. `useBloomSearch.ts` answers both. `BookViewScrollSync` answers both. `ScrollSync` answers neither.

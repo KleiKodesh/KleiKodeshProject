@@ -6,24 +6,60 @@ Every folder described here has a `README.md` that goes deeper: which file to ed
 
 ## App Shell
 
-The root layout is `App.vue`, which stacks two elements vertically:
+The shell is two levels: a split-view container and one or two pane shells inside it.
 
-- `AppTitleBar.vue` — fixed 40px header
-- `AppPageView.vue` — fills remaining height, renders the active page
+`App.vue` is the split-view container. It owns nothing about page rendering — its job is to decide how many panes exist and how wide they are:
 
-`AppPageView` maps `tabStore.activeTab.route` to a page component. Routes `/book-view` and `/search` are keyed by `activeTabId` so they fully remount on tab switch. All other routes share a single instance.
+- Renders `AppShell.vue` for pane 1 always, and a second `AppShell.vue` for pane 2 only when `bookViewStore.splitViewEnabled` is true
+- Switches from flex column to CSS grid when split is active, with the divider width driven by `bookViewStore.splitViewFraction`
+- Owns the horizontal resize divider (pointer events, 0.15–0.85 fraction clamp). In RTL the fraction controls pane 2, which is the physical LEFT pane, so dragging right grows it
+- Split view requires `appWidth >= 768` (`SPLIT_VIEW_MIN_WIDTH`) and is unavailable in the VSTO environment; it auto-disables when the window shrinks below that
+- Also renders the app-wide overlays: `ClockWidget`, `SetupWizard` (async, only when `!setupDone`), `GlobalContextMenu`, `ToastBanner`, and the reset overlay
+
+`AppShell.vue` is one pane. It takes a `paneId` prop (1 or 2) and stacks:
+
+- `AppTitleBar.vue` — fixed 40px header, receives `paneId`
+- `AppPageView.vue` — fills remaining height, renders the active page, receives `paneId`
+
+Each pane is an Edge-style inset content panel: `--content-inset`, `--content-border-width`, and `--content-border-radius` are set by `settingsStore.applyCSSVariables`, so turning the "content border" setting off zeroes them and the content sits flush. The chrome surface (`--bg-secondary`) flows continuously from the title bar around the panel — there is no separator line between them.
+
+`.app-shell-content` declares `container: app-shell / inline-size`. Page content must size its padding against this container query, not the viewport, so a narrow pane lays out correctly in split view.
+
+### Pane context — how children know which pane they are in
+
+`AppShell` provides two things to its entire subtree. Components must use these rather than reaching for `tabStore` directly:
+
+- `provide('paneId', paneId)` — inject this to know which pane the component lives in
+- `provide(PANE_NAVIGATION_KEY, ...)` — pane-scoped tab operations (`updateActiveTab`, `openTab`, `openOrUpdateActiveTab`, `navigateToSingleton`, `switchTab`, plus `activeTabId` / `activeTab` / `tabs` getters), backed by `useAppShellPane(paneId)`
+
+Any navigation performed from inside a pane must go through the injected `PANE_NAVIGATION_KEY` API, never through `useTabStore()` directly — calling the store directly always targets pane 1 and will navigate the wrong pane in split view.
+
+Pane 2 invariants are enforced synchronously at setup time, before first render: `AppShell` calls `ensurePane2HasTab()` when `paneId === 2`, and `App.vue` calls `reclaimPane1ActiveForSplit()` + `ensurePane2HasTab()` both on setup and whenever split view is re-enabled. This prevents the same tab rendering in both panes.
+
+`bookViewStore.setFocusedPane` is called from a capturing `pointerdown` on the pane root, so the last-touched pane is the focused one.
+
+### AppPageView routing
+
+`AppPageView` maps the active tab's route to a page component via a `<component :is>` map, reading `tabStore.pane2ActiveTabId` when `paneId === 2` and `tabStore.activeTabId` otherwise.
+
+Keying (the `pageKey` computed) decides what remounts on tab switch:
+
+- `/book-view` — keyed by `` `${activeTabId}:${bookId}` `` so it remounts on both tab and book change
+- `/search` and `/txt-view` — keyed by `activeTabId`
+- All other routes share a single instance
 
 ## Setup Wizard
 
 `SetupWizard.vue` is a full-screen onboarding overlay rendered in `App.vue` when `settingsStore.setupDone` is `false`. It covers the entire app until the user completes or skips it.
 
-Steps (in order):
+The step list is computed, so it varies by environment. Each step past `welcome` is its own `SetupWizardStep*.vue` component, mapped via a `stepComponents` record:
 
 1. `welcome` — always shown; app logo, intro text
-2. `db` — only shown when `isHosted && !dbReady`; lets the user download Zayit/Otzaria or pick an existing `.db` file via `window.__webviewPickDbPath`
+2. `db` — shown only when a database still needs to be chosen (in dev, when the service reports none); lets the user download Zayit/Otzaria or pick an existing `.db` file
 3. `theme` — theme picker + app zoom slider
 4. `general` — divine name censoring, resume-last-read, new-tab destination
 5. `book-display` — header/text fonts, font size, line padding; optional separate commentary settings
+6. `shortcuts` — keyboard shortcuts introduction
 
 Navigation: forward/back buttons with a slide transition; a "skip" button calls `settings.completeSetup()` immediately. Progress is shown as a top-edge accent bar.
 
@@ -31,14 +67,42 @@ Completion: `settings.completeSetup()` sets `setupDone = true` and persists it t
 
 ## Title Bar
 
-`AppTitleBar.vue` is the app's only persistent chrome.
+`AppTitleBar.vue` is the persistent chrome of a single pane — it takes a `paneId` and there is one instance per pane in split view. It is not app-global.
 
 - Physical left side: hamburger nav menu (`AppTitleBarNavDropdown`), theme toggle, toolbar toggle (book view only), PDF filter toggle (PDF tabs only)
-- Center: active tab title + TOC path (truncated)
+- Center: `AddressBar.vue` when in search mode, otherwise the active tab title + `AppTitleBarTocBreadcrumb`
 - Physical right side: home button, new tab button, close tab button
-- Clicking the title bar opens `AppTitleBarTabDropdown` — the full tab list
+- The address bar's dropdown doubles as the tab list — an empty field shows all tabs. There is no separate tab-dropdown component.
+- Visibility is managed by `useUiChromeVisibility`; `Ctrl+H` hides/shows the bar
 
-Keyboard shortcuts handled here: `Ctrl+W` (close tab), `Ctrl+X` (close all), `Ctrl+J` (toggle bottom panel), `Ctrl+F` (guarded — only intercepted when not in a search input).
+### Keyboard shortcuts
+
+All shortcuts use `e.code`, never `e.key`. `useSettingsPage` renders the user-facing reference from `ShortcutsReferenceList.vue` — keep that list in sync when changing any binding here.
+
+Pane-scoped — these fire only when `isThisPaneFocused` (i.e. always when split view is off):
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+W` / `Ctrl+X` | close tab / close all tabs |
+| `Ctrl+Tab` / `Ctrl+Shift+Tab` | next / previous tab (guarded on `e.repeat` — one hop per physical press, because each hop cold-remounts a page) |
+| `Ctrl+B` | toggle book-view toolbar, or the PDF viewer title bar on `/pdf-view` |
+| `Ctrl+J` / `Ctrl+K` | toggle bottom (commentary) panel / TOC panel — book view only |
+| `Ctrl+F` | open search in book view or txt view; suppressed when focus is inside `[data-ctrlf-enabled]` |
+| `Ctrl+T` | toggle the address bar |
+| `Ctrl+N` / `Ctrl+G` | new tab / go home |
+| `Ctrl+H` | toggle title bar visibility |
+| `Ctrl+L` / `Ctrl+M` | toggle dark mode / open nav dropdown |
+| `F1` | settings in a new tab |
+| `Ctrl+1`…`Ctrl+9` | open a nav destination in a new tab (ספרים, חיפוש, היברו-בוקס, פתח קובץ, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, סביבות עבודה) |
+
+App-wide — handled by pane 1 only, so they do not fire twice in split view:
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl+\` | toggle split view (only when `isSplitViewAvailable`) |
+| `Ctrl+Shift+F` / `F11` | toggle fullscreen |
+
+When adding a shortcut, decide deliberately whether it is pane-scoped or app-wide. An app-wide shortcut placed in the pane-scoped block fires once per open pane.
 
 ## Tab System
 
@@ -50,27 +114,30 @@ Navigation rules:
 - `tabStore.openTab(...)` — explicitly open a new tab (e.g. "new tab" button)
 - `tabStore.navigateToSingleton(route)` — for singleton routes; switches to existing tab if one exists, otherwise replaces current tab
 
-Singleton routes (`/settings`, `/books`, `/hebrewbooks`, `/workspaces`) enforce one-tab-per-route and are never persisted across sessions.
+Singleton routes enforce one-tab-per-route and are never persisted across sessions. The authoritative list is `SINGLETON_ROUTES` in `tabStore.ts` (with Hebrew titles in `SINGLETON_TITLES` beside it): `/settings`, `/books`, `/hebrewbooks`, `/workspaces`, `/hebrew-calendar`, `/dictionary`, `/midot`, `/file-search`.
 
-Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple tabs open simultaneously.
+Multi-instance routes (`/book-view`, `/search`, `/pdf-view`, `/html-view`, `/txt-view`) can have multiple tabs open simultaneously.
 
 ## Pages & Routes
 
-| Route              | Component                  | Kind                            |
-| ------------------ | -------------------------- | ------------------------------- |
-| `/`                | `HomePage.vue`             | shared instance                 |
-| `/books`           | `BookCatalogPage.vue`      | singleton                       |
-| `/book-view`       | `BookViewPage.vue`         | multi-instance (keyed by tabId) |
-| `/search`          | `FullTextSearchPage.vue`   | multi-instance (keyed by tabId) |
-| `/settings`        | `SettingsPage.vue`         | singleton                       |
-| `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                       |
-| `/pdf-viewer`      | `PdfViewPage.vue`          | multi-instance                  |
-| `/html-view`       | `HtmlViewPage.vue`         | multi-instance                  |
-| `/txt-view`        | `TxtViewPage.vue`          | multi-instance                  |
-| `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                       |
-| `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                       |
-| `/dictionary`      | `DictionaryPage.vue`       | singleton                       |
-| `/midot`           | `HalachicUnitsPage.vue`    | singleton                       |
+| Route              | Component                  | Kind                                     |
+| ------------------ | -------------------------- | ---------------------------------------- |
+| `/`                | `HomePage.vue`             | shared instance                          |
+| `/books`           | `BookCatalogPage.vue`      | singleton                                |
+| `/book-view`       | `BookViewPage.vue`         | multi-instance (keyed by tabId + bookId) |
+| `/search`          | `FullTextSearchPage.vue`   | multi-instance (keyed by tabId)          |
+| `/file-search`     | `LocalFileSearchPage.vue`  | singleton                                |
+| `/settings`        | `SettingsPage.vue`         | singleton                                |
+| `/hebrewbooks`     | `HebrewBooksPage.vue`      | singleton                                |
+| `/pdf-view`        | `PdfViewPage.vue`          | multi-instance                           |
+| `/html-view`       | `HtmlViewPage.vue`         | multi-instance                           |
+| `/txt-view`        | `TxtViewPage.vue`          | multi-instance (keyed by tabId)          |
+| `/workspaces`      | `WorkspaceManagerPage.vue` | singleton                                |
+| `/hebrew-calendar` | `HebrewCalendarPage.vue`   | singleton                                |
+| `/dictionary`      | `DictionaryPage.vue`       | singleton                                |
+| `/midot`           | `HalachicUnitsPage.vue`    | singleton                                |
+
+The PDF route is `/pdf-view`, not `/pdf-viewer` — the feature *folder* is `pdf-viewer/` but the route string is `/pdf-view`. Do not conflate them.
 
 ## Feature Folders (`src/features/`)
 
@@ -78,8 +145,16 @@ Multi-instance routes (`/book-view`, `/search`, `/pdf-view`) can have multiple t
 
 Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in `AppTitleBarNavDropdown.vue` are the two entry points to the same set of destinations — they must always be kept in sync. When adding, removing, or renaming a navigation destination, update both files. The home page uses `navigate()` (navigates in the active tab); the nav dropdown uses `navigateInNewTab()` (always opens a new tab). Neither list is derived from the other — they are maintained in parallel.
 
-- `HomePage.vue`, `HomePageTile.vue`, `useHomeDateInfo.ts`, `useDafYomiNavigation.ts`
-- Recently opened entries are rendered inline in `HomePage.vue`'s tile grid (after the static tiles), loaded async on mount from `recentlyOpenedStore`. No separate component.
+- `HomePage.vue` — page shell: layout, search input markup, tile keyboard traversal, cold-start focus. No search/tile/date logic.
+- `HomePageTile.vue` — one tile; emits `tap` (with the Ctrl/⌘ flag), `togglePin`, `remove`
+- `useHomeTiles.ts` — static tile list, recently-opened list + icon map, how many recent tiles fit, pin/remove actions
+- `useHomeSearchBar.ts` — dropdown open state, fixed-position anchor (computed once on open, never reactive), animated placeholder, input keyboard handling
+- `useHomeSearchNavigation.ts` — all four `onSelect*` handlers plus `openRecentEntry` / `openFullTextSearch`; the only file here that touches `tabStore` / `localFileStore` / the bridge
+- `HomePageDateBar.vue` — the bottom bar (clock, zman button + popup, Hebrew date, daf yomi), self-contained
+- `useHomeDateBarFit.ts` — keeps the date bar to one line by dropping items by priority instead of wrapping
+- `homeDateInfo.ts`, `dafYomiNavigation.ts` — no `use` prefix: these are plain modules with lazy-loaded shared state, not reactive composables (see the composable naming rule in `naming.md`)
+- `useNextZman.ts` + `NextZmanPopup.vue` — next-zman countdown
+- Recently opened entries are rendered inline in `HomePage.vue`'s tile grid (after the static tiles), loaded async on mount by `useHomeTiles`. No separate component.
 - `useHomeSearch.ts` — unified quick-search composable; fans the query out across book catalog (instant, title-only), HebrewBooks catalog (debounced, hosted-only), and Document Locator file search (debounced, hosted-only). Each source writes to its own result ref.
 - `HomeSearchDropdown.vue` — results dropdown for the hero search bar; grouped by source (ספרים / היברו-בוקס / קבצים) with per-section loading spinners.
 
@@ -87,64 +162,72 @@ Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in
 
 Book catalog browser. Supports list, tiles, and full tree views with search.
 
-- `BookCatalogPage.vue` — main page; owns view switching (list/tiles/tree) via `<component :is>` map
-- `BookCatalogTreeView.vue` — collapsible category tree
+- `BookCatalogPage.vue` — main page; owns view switching via `<component :is>` map
+- `BookCatalogView.List.vue`, `BookCatalogView.Tiles.vue`, `BookCatalogView.Tree.vue` — the three view modes
 - `BookCatalogSearch.vue` — search results
-- `BookCatalogBreadcrumb.vue` — navigation breadcrumb
+- `BookCatalogBreadcrumb.vue`, `BookCatalogBreadcrumbChevronDropdown.vue` — navigation breadcrumb
+- `BookCatalogTitleBar.vue` — catalog-specific title bar row
 - `useBookCatalog.ts` — navigation and folder traversal
-- `useBookCatalogSearch.ts` — title + TOC entry search
-- `booksCategoryTree.ts` — tree building and category metadata
+- `useBookCatalogSearch.ts` — two-phase search orchestration
+- `bookCatalogTree.ts` — tree building and category metadata
+- Search stack: `bookCatalogSearch.ts`, `bookCatalogSearchNormalizer.ts`, `bookCatalogSearchMatcher.ts`, `bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`, `bookCatalogTocSearchCache.ts`
+- `SEARCH.md` — authoritative design doc for the search stack; read before changing search behaviour
 
 ### book-view/
 
 The main book reader. Orchestrates a split pane (text above, commentary below), a TOC side panel, a floating search bar, and a toolbar. Organized into three subfolders: `lines/`, `toc/`, and `commentary/`.
 
+`SCROLL_AND_COMMENTARY_POSITIONING.md` in this folder documents the scroll/positioning contract — read it before touching any scroll code here.
+
 **Main components:**
-- `BookViewPage.vue` — orchestrator
+- `BookViewPage.vue` — orchestrator (see the note in `preferences.md`: it is over the length limit and pending refactor into a true shell)
 - `BookViewToolbar.vue` — zoom, search, TOC, bottom panel toggles
-- `BookViewSplitPane.vue` — thin wrapper around `SplitPane` that wires the top/bottom slots
 - `BookViewSidePanel.vue` — side panel container for TOC
 - `BookViewSearchBar.vue` — floating search (query, mode, match navigation)
 - `BookViewRelatedBooksDropdown.vue` — dropdown for related books
 - `bookViewTypes.ts` — shared types: `SearchMode`, `SidePanelMode`
 
 **Main composables:**
-- `useBookView.ts` — central composable; owns all data loading, state, event handlers, and watchers. `BookViewPage.vue` is a shell that calls this.
-- `useBookViewSearch.ts` — content search (line-based)
+- `useBookView.ts` — central composable; owns data loading, state, event handlers, and watchers
+- `useBookViewSearch.ts` / `useBookViewSearchPanel.ts` — content search (line-based) and its panel state
 - `useBookViewScrollSync.ts` — syncs active TOC entry and auto-selects commentary on scroll
-- `useBookViewSessionRestore.ts` — restores per-book view state from IDB on mount
+- `useBookViewSessionRestore.ts` — restores per-book view state on mount
 - `useBookViewPinnedCommentary.ts` — tracks the pinned commentary book with default-commentator fallback
+- `useBookViewCommentaryPanel.ts` / `useBookViewCommentaryAnnotations.ts` — bottom panel state; commentary annotations
+- `useBookViewLineSelection.ts` — line selection state
+- `useBookViewSidePanel.ts` / `useBookViewTocNavigation.ts` — side panel state; TOC navigation
+- `useBookViewKeyboardShortcuts.ts` — book-view-scoped shortcuts
+- `copyFlagExclusivity.ts` — mutual exclusivity rules for copy options (has unit tests)
 
 **lines/ subfolder** — main text rendering with virtual scroller and line selection:
 - `BookViewLinesContent.vue` — main text (virtual scroller, line selection)
-- `useBookViewLinesTable.ts` — paginated line fetching from the `line` table in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
+- `useBookViewLinesTable.ts` — paginated line fetching in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
 - `useBookViewLineRenderer.ts` — line rendering logic
 - `useBookViewLineCopyMenu.ts` — context menu for line copying
+- `useBookViewLinesScroll.ts` / `useBookViewLinesNavigation.ts` — scroll and navigation within the lines view
+- `useBookViewHighlights.ts`, `useBookViewNotes.ts`, `useBookViewAnnotations.ts` — user annotations; `bookViewAnnotationColors.ts`, `BookViewAnnotationMenuRow.vue`, `BookViewNoteBubble.vue`
+- `useBookViewAbbrevTooltip.ts` + `BookViewAbbrevTooltip.vue` — abbreviation expansion tooltip
+- `wordLinkAnchors.ts`, `useWordLinkAnchors.ts`, `useWordLinkTooltip.ts`, `WordLinkTooltip.vue` — per-word link anchors (with tests and fixtures). Requires a schema-v2 database; dormant without one.
 
 **toc/ subfolder** — table of contents side panel:
 - `BookViewTocTree.vue` — TOC side panel (main + alt structures)
 - `BookViewTocTreeSection.vue` — TOC section header
-- `useBookViewToc.ts` — loads TOC entries and alt TOC structures for a book; builds a path map (entry id → full breadcrumb string); exposes `getActiveTocEntry` and `getTocPath`
+- `useBookViewToc.ts` — loads TOC entries and alt TOC structures; builds a path map (entry id → full breadcrumb string); exposes `getActiveTocEntry` and `getTocPath`
 - `useBookViewTocScrollTracking.ts` — tracks programmatic TOC scrolls to suppress active-entry updates during animation
 - `tocSearchUtils.ts` — TOC search utilities
 
 **commentary/ subfolder** — commentary display and navigation:
 - `CommentaryView.vue` — commentary display grouped by book
-- `CommentaryHeader.vue` — commentary book header (type selector, nav)
-- `CommentaryHeaderNav.vue` — prev/next section navigation
-- `CommentaryTreePanel.vue` — tree panel for commentary filtering
-- `CommentaryTreeSectionNode.vue` — node in the commentary tree
+- `CommentaryHeader.vue` / `CommentaryHeaderNav.vue` — book header (type selector) and prev/next section nav
+- `CommentaryTreePanel.vue` / `CommentaryTreeSectionNode.vue` — tree panel for commentary filtering
 - `commentaryTreeTypes.ts` — types for commentary tree
-- `useCommentary.ts` — reactive composable shell; owns all Vue state (`groups`, `staticFilterGroups`, `loading`) and watchers; delegates data fetching to `commentaryGroupBuilder.ts`
-- `commentaryConnectionTypes.ts` — all connection type constants, DB→canonical mapping, Hebrew label lookups, and the lazy-loaded connection type ID table
-- `commentaryGroupBuilder.ts` — all data fetching and group building (no Vue reactivity): `buildCommentaryGroupsFromEntries`, `buildCommentaryGroupsFromCombined`, `fetchSourceEntriesViaReverseQuery`, `fetchTargumEntriesViaReverseQuery`, `buildStaticCommentaryFilterGroups`
-- `useCommentarySearch.ts` — commentary search (flat index-based)
-- `useCommentaryNavigation.ts` — next/prev section navigation for the commentary panel
-- `useCommentaryRender.ts` — commentary rendering logic
-- `useCommentaryScroll.ts` — commentary scroll handling
-- `useCommentaryTocPaths.ts` — TOC path building for commentary
-- `useCommentaryTreeSearch.ts` — search within commentary tree
-- `useCommentaryCopy.ts` — copy functionality for commentary
+- `useCommentary.ts` — reactive shell; owns Vue state (`groups`, `staticFilterGroups`, `loading`) and watchers; delegates fetching to `commentaryGroupBuilder.ts`
+- `commentaryConnectionTypes.ts` — connection type constants, DB→canonical mapping, Hebrew labels, lazy-loaded type ID table
+- `commentaryGroupBuilder.ts` — all data fetching and group building, no Vue reactivity
+- `commentaryNavigation.ts` — pure navigation helpers (no `use` prefix: no reactivity)
+- `uncheckedCommentaryBooks.ts` — persisted set of hidden commentary books
+- `useCommentarySearch.ts`, `useCommentaryNavigation.ts`, `useCommentaryRender.ts`, `useCommentaryScroll.ts`, `useCommentaryTocPaths.ts`, `useCommentaryTreeSearch.ts`, `useCommentaryCopy.ts`, `useCommentaryHighlights.ts`, `useCommentaryNotes.ts`
+- `DEBUG_NOTES.md` — scroll/positioning debugging notes
 
 ### full-text-search/
 
@@ -152,14 +235,21 @@ Full-text search backed by FtsLib with a custom LSM-style segment index. Support
 
 - `FullTextSearchPage.vue` — main page
 - `FullTextSearchBar.vue` — search input + filter toggle
+- `FullTextSearchAdvancedPanel.vue` — advanced query options (wildcard/grammar wrap, distance, ordering, ketiv)
 - `FullTextSearchResultsList.vue` — results (virtual scroller)
-- `FullTextSearchFilterPanel.vue` — category/book filter tree
-- `FullTextSearchFilterNode.vue` — filter tree node
-- `FullTextSearchIndexingOverlay.vue` — indexing progress overlay; shown while the index is building; search is enabled as soon as the first segment is flushed (partial index)
-- `useFullTextSearch.ts` — search execution and IDB caching; streams results from C# in batches via `chrome.webview` message events; enriches each batch with TOC paths via a SQL query; resumes interrupted searches from the cache skip offset
-- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress` push events from C#; handles `ftsIndexInvalidated` (automatic rebuild when DB changes or index is corrupt)
-- `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, and result click handler
+- `FullTextSearchResultPreview.vue` + `useFullTextSearchPreview.ts` — inline result preview
+- `FullTextSearchFilterPanel.vue`, `FullTextSearchFilterNode.vue`, `FullTextSearchFilterBookList.vue` — category/book filter tree
+- `fullTextSearchFilterExpansion.ts` — filter tree expansion state
+- `FullTextSearchIndexingOverlay.vue` — indexing progress overlay; search is enabled as soon as the first segment is flushed (partial index)
+- `useFullTextSearch.ts` — search execution and IDB caching; streams results from the host in batches; enriches each batch with TOC paths; resumes interrupted searches from the cache skip offset
+- `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress`; handles `ftsIndexInvalidated` (automatic rebuild when the DB changes or the index is corrupt)
+- `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, result click handler
+- `useFullTextSearchCopyMenu.ts` — copy context menu for results
+- `ftsChronology.ts` — chronological ordering/period metadata for results
+- `scrollRestore.ts` — scroll position restore (has unit tests). Scroll saves fire only on `visibilitychange` / `beforeunload` / unmount — never on `scroll`; see the rule in `preferences.md`.
 - `fullTextSearchTypes.ts` — TypeScript types
+
+Results must never be capped or limited. The term-expansion cap inside FtsLib is a separate, sanctioned mechanism — do not confuse the two.
 
 #### Query syntax (FtsLib)
 
@@ -181,18 +271,22 @@ Full-text search backed by FtsLib with a custom LSM-style segment index. Support
 App settings across three tabs: general, reading, and advanced. Also contains the setup wizard.
 
 - `SettingsPage.vue` — page shell: layout (side nav + scroll body), sticky search bar, narrow-screen nav dropdown, and section scroll navigation; no business logic
-- `SettingsPageDisplaySection.vue` — theme, dark mode, PDF filter, app zoom, toolbar position, new-tab destination, title bar button chips
-- `SettingsPageReadingSection.vue` — reading preferences, book display fonts/sizes, commentary display overrides
-- `SettingsPageSystemSection.vue` — calendar city picker, clock toggle, HebrewBooks local folder, database path picker, and all reset actions
-- `SettingsPageShortcutsSection.vue` — keyboard shortcuts reference grid (no script)
-- `SettingRow.vue`, `HintIcon.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
+- `SettingsPageSideNav.vue` — section side navigation
+- `SettingsPageThemeAndApplicationSection.vue` — theme, dark mode, zoom, toolbar position, new-tab destination, chrome options
+- `SettingsPageReadingAndBookDisplaySection.vue` — reading preferences, book display fonts/sizes, commentary overrides
+- `SettingsPageCalendarSection.vue` — calendar city picker, clock toggle
+- `SettingsPageAdvancedSection.vue` — database/index paths, excluded folders, diagnostics
+- `SettingsPageResetSection.vue` — all reset actions
+- `SettingsPageKeyboardShortcutsSection.vue` + `ShortcutsReferenceList.vue` — shortcuts reference; keep in sync with the handlers in `AppTitleBar.vue`
+- `SettingsPagePathField.vue`, `SettingRow.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
-- `useSettingsPage.ts`
-- `SetupWizard.vue` — first-launch onboarding wizard
+- `useSettingsPage.ts`, `useSettingsSearch.ts` — page state and settings search
+- `appResetState.ts` — the `resetting` flag `App.vue` reads to show the reset overlay
+- `SetupWizard.vue` + `SetupWizardStep*.vue` — first-launch onboarding wizard
 
-### hebrew-books/
+### hebrewbooks/
 
-HebrewBooks catalog browser with download history.
+HebrewBooks catalog browser with download history. Note the folder is `hebrewbooks/` (one word, no hyphen) — an exception to the kebab-case folder convention, matching the site's own name.
 
 - `HebrewBooksPage.vue`, `HebrewBooksListItem.vue`
 - `useHebrewBooks.ts`, `hebrewBooksCatalog.ts`
@@ -209,10 +303,15 @@ Halachic unit converter. Singleton route `/midot`. Converts between biblical, Ta
 
 PDF viewer with OCR support. Embeds a PDF.js iframe and provides OCR text extraction.
 
+Route is `/pdf-view`; folder is `pdf-viewer/`.
+
 - `PdfViewPage.vue` — main PDF viewer page
 - `PdfOcrResultPopup.vue` — OCR result display popup
 - `usePdfOcrSelection.ts` — OCR selection and text extraction
 - `pdfOcrInjectedScript.ts` — script injected into PDF.js iframe
+- `usePdfContextMenu.ts` — right-click menu inside the viewer
+- `usePdfViewPageTracking.ts` — tracks the current page for the breadcrumb and session restore
+- `pdfViewerTypes.ts` — TypeScript types
 
 ## PDF.js Viewer
 
@@ -236,12 +335,25 @@ When modifying PDF.js behaviour — adding a feature, fixing a bug, adjusting pr
 HTML file viewer for local HTML documents.
 
 - `HtmlViewPage.vue` — main HTML viewer page
+- `useOtzariaAddinBridge.ts` — bridge to the Otzaria add-in
 
 ### txt-view/
 
 Native Vue viewer for local `.txt` files. Renders content directly in a `<div>` — no iframe, no virtual host.
 
 - `TxtViewPage.vue` — loads raw text via bridge (`readTxtFileContent` action in C#), parses custom line markup (`@#$` → h2, `!` → strip prefix), renders with RTL layout. Scroll position persisted to `TabState.htmlViewScrollTop`.
+- `useTxtViewSearch.ts` — in-document search
+- `useTxtViewCopyMenu.ts` — copy context menu
+
+### local-file-search/
+
+File system search over the DocumentLocator service. Singleton route `/file-search`.
+
+- `LocalFileSearchPage.vue` — main page
+- `LocalFileSearchResultsList.vue` — results list
+- `useLocalFileSearch.ts` — query execution against the service
+
+This folder has no `README.md` yet — add one when next working here.
 
 ### dictionary/
 
@@ -267,17 +379,17 @@ Hebrew calendar page. Monthly grid and weekly detail views with zmanim. Singleto
 - `WeeklyView.vue` — week view with events, candle lighting, zmanim, daily learning
 - `DayRow.vue`, `CalendarHeader.vue`, `calendarTypes.ts`
 - `useMonthlyView.ts` — month navigation, keeps Gregorian and Hebrew month in sync
-- `useWeeklyView.ts` — week data via `@hebcal/core`, daily learning via `hebrewLearning.ts`
+- `useWeeklyView.ts` — week data via `@hebcal/core`, daily learning via `hebrewCalendarLearning.ts`
 - `useZmanim.ts` — city selection, geolocation, zmanim calculation
 
 ## App Shell (`src/layout/`)
 
-- `AppTitleBar.vue`, `AppPageView.vue`, `AppTitleBarTabDropdown.vue`, `AppTitleBarNavDropdown.vue`
+- `AppShell.vue` — one pane: title bar + page view, provides `paneId` and `PANE_NAVIGATION_KEY`
+- `AppTitleBar.vue`, `AppPageView.vue`, `AppTitleBarNavDropdown.vue`
+- `AddressBar.vue` — Explorer-style address bar in the title bar; hosts the tab dropdown and reuses the home search. There is no `AppTitleBarTabDropdown.vue`.
 - `AppTitleBarTocBreadcrumb.vue` — interactive breadcrumb rendered in the title bar center for `/book-view` and `/pdf-view` tabs. Each segment has a chevron before it listing siblings; the active segment gets a trailing chevron if it has children. Emits `navigateToTocEntry` and `navigateToPdfEntry`.
 - `AppTitleBarBreadcrumbChevronDropdown.vue` — teleported chevron dropdown listing `BreadcrumbItem[]` entries. Used by `AppTitleBarTocBreadcrumb` for both TOC and PDF siblings. Scrolls to the active item on open.
 - `useAppTitleBarTocBreadcrumb.ts` — parses `tab.tocPath` into `BreadcrumbSegment[]` for both `/book-view` (splits on ` / `, reads `TocBridge`) and `/pdf-view` (splits on ` · `, reads `PdfBridge`). Each segment includes `siblings` and `children` for the chevron dropdowns.
-
-`AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
 
 `AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
 
@@ -287,16 +399,19 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 - `TreeView.vue`, `TreeNode.vue` — generic tree
 - `treeTypes.ts` — `TreeNodeItem` interface; import from here, never from `TreeNode.vue`
-- `SplitPane.vue` — resizable split pane
-- `BottomSearchBar.vue`, `ContextMenu.vue`, `ConfirmDialog.vue`, `LoadingAnimation.vue`
+- `SplitPane.vue` — resizable split pane (the *bottom-panel* splitter inside book view; the left/right pane splitter is in `App.vue`)
+- `BottomSearchBar.vue`, `ContextMenu.vue`, `GlobalContextMenu.vue`, `ConfirmDialog.vue`, `AlertDialog.vue`, `LoadingAnimation.vue`, `ToastBanner.vue`, `ClockWidget.vue`
 - `HintIcon.vue` — tooltip hint icon
-- `IconTreeRtl.vue` — `IconTextBulletListTree` pre-flipped for RTL layout
+- `common/FloatingSearchBar.vue`, `common/AutofillDropdown.vue` — shared search chrome
+- RTL/custom icon wrappers: `IconTreeRtl.vue`, `IconBookRtl20.vue`, `IconBookRtl24.vue`, `IconEverythingSearch.vue`
+
+Dialogs are `ConfirmDialog.vue` (confirmation) and `AlertDialog.vue` / `ToastBanner.vue` (messages) — see the "No Browser Dialogs" rule in `preferences.md`. `useToast.ts` is the programmatic entry point for transient messages.
 
 ## Pinia Stores (`src/stores/`)
 
-**tabStore** — tab lifecycle, navigation, and all per-tab/per-book state persistence. The central store — most features read from it.
+**tabStore** — tab lifecycle, navigation, and all per-tab/per-book state persistence. The central store — most features read from it. It is **pane-aware**: alongside `tabs` / `activeTabId` it owns the pane-2 equivalents (`pane2ActiveTabId`, `openPane2Tab`, `updatePane2ActiveTab`) and the split invariant helpers (`ensurePane2HasTab`, `reclaimPane1ActiveForSplit`). Prefer the pane-scoped API from `useAppShellPane` / `PANE_NAVIGATION_KEY` over calling these directly.
 
-**bookViewStore** — book viewer UI state: toolbar visibility, floating search bar position, per-tab+book zoom map. Exposes a reactive `zoom` computed for the active tab+book. Also holds the per-tab `TocBridge` registration map (`registerTocBridge` / `unregisterTocBridge` / `getTocBridge`) used by the title bar breadcrumb for book-view TOC navigation, and the per-tab `PdfBridge` registration map (`registerPdfBridge` / `unregisterPdfBridge` / `getPdfBridge`) for PDF outline navigation. Both bridges are in-memory only, never persisted.
+**bookViewStore** — book viewer UI state and split-view state. Toolbar visibility, floating search bar position, per-tab+book zoom map, and a reactive `zoom` computed for the active tab+book. Panel toggles take a `paneId` (`toggleToolbar`, `toggleBottomPanel`, `toggleTocPanel`, `openSearch`). Also owns split view: `splitViewEnabled`, `splitViewFraction`, `setSplitViewFraction`, `toggleSplitView`, `disableSplitView`, and the focused-pane tracking (`setFocusedPane`). Also holds the per-tab `TocBridge` registration map (`registerTocBridge` / `unregisterTocBridge` / `getTocBridge`) used by the title bar breadcrumb for book-view TOC navigation, and the per-tab `PdfBridge` registration map (`registerPdfBridge` / `unregisterPdfBridge` / `getPdfBridge`) for PDF outline navigation. Both bridges are in-memory only, never persisted.
 
 **settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own localStorage key and is watched individually.
 
@@ -308,9 +423,11 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **searchCacheStore** — LRU cache for FTS search results (capped at 100 entries), stored in `app-search-cache` IDB.
 
-**hebrewBooksHistoryStore** — HebrewBooks download history, stored in `app-hb-history` IDB, LRU-capped at 25 entries.
+**hebrewBooksHistoryStore** — HebrewBooks download history, LRU-capped at 25 entries. This store owns the `app-hb-history` IDB database **entirely** — type, schema, open, read, write — rather than going through `persistence.ts`, which is why that database does not appear in the `handles` map there. It is the documented exception to the "all IDB access goes through persistence.ts" rule.
 
-**recentlyOpenedStore** — recently opened documents, stored in `app-recently-opened` IDB, LRU-capped at 16 entries. Covers /book-view, /pdf-view, /html-view, and /txt-view. Loaded lazily on first access from `HomePageRecentlyOpened`. Recording is triggered automatically by `tabStore.updateActiveTab`, `openTab`, and `updateTab` for all trackable routes.
+**recentlyOpenedStore** — recently opened documents, stored in `app-recently-opened` IDB, LRU-capped at 16 entries. Covers /book-view, /pdf-view, /html-view, and /txt-view. Loaded lazily on first access. Recording is triggered automatically by `tabStore.updateActiveTab`, `openTab`, and `updateTab` for all trackable routes.
+
+**hostSearchStore** — receives "navigate from the VSTO host" pushes and routes them to a page. The Word ribbon's context menu calls into the C# AppViewer, which pushes `hostSearch` (`target: 'fts' | 'catalog'` plus cleaned selection text) or `hostOpenBook` (an `otzaria://` / `zayit://` deep link). Seeds `tab.searchQuery` or `tab.catalogQuery`, which the target page reads on mount.
 
 **pdfOcrStore** — PDF OCR state and results caching.
 
@@ -334,6 +451,30 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 
 **useDropdownClose.ts** — drop-in replacement for `onClickOutside` that also closes on window blur and handles the toggle-button race condition. Use on every dropdown instead of `onClickOutside` directly.
 
+**useAppShellPane.ts** — pane-scoped tab operations for a given `paneId`. Backs the `PANE_NAVIGATION_KEY` injection provided by `AppShell.vue`.
+
+**usePaneNavigation.ts** — defines `PANE_NAVIGATION_KEY` and the injection helper. Import the key from here.
+
+**useCrossPaneTabActions.ts** — moving/duplicating tabs between panes.
+
+**useOpenInNewTab.ts** — shared "open in new tab" behaviour (modifier-click, middle-click).
+
+**useTabSwipeNavigation.ts** — touch swipe between tabs. One swipe = one tab, with a 2× ratio re-strike rule.
+
+**useFloatingPanel.ts** — draggable/positioned floating panel behaviour.
+
+**useUiChromeVisibility.ts** — show/hide app chrome (title bar, toolbars).
+
+**useSelectAllInContainer.ts** — `Ctrl+A` scoped to a container.
+
+**useContextMenuLongPress.ts** — long-press to open a context menu on touch.
+
+**useAutofill.ts** — autofill/history suggestions for search inputs; pairs with `common/AutofillDropdown.vue`.
+
+**useToast.ts** — transient message queue rendered by `ToastBanner.vue`. Use this instead of any browser dialog.
+
+## Host Layer (`src/webview-host/`)
+
 ### seforimDb.ts
 
 The main seforim database access layer. Exports:
@@ -353,6 +494,22 @@ Dictionary database access layer. Separate from the main seforim DB.
 
 Seforim-specific dictionary queries.
 
+### seforimApi.ts
+
+Typed request layer above `seforimDb.ts` — prefer this over hand-writing `query()` calls for new data access.
+
+### serviceClient.ts
+
+Client for the native KitveiHakodesh service (MessagePack over a loopback HTTP endpoint). See the service documentation for the wire contract.
+
+### userSettingsDb.ts / userSettingsDb.sql.ts
+
+Settings that must be shared with the native host. Browser-only preferences stay in localStorage via `persistence.ts` — use this only when C# needs to read the value too.
+
+### tabMirror.ts
+
+Mirrors the Vue tab list to the host so native chrome (the Fluent tab strip) can render it. Order is not synced back.
+
 ### queries.sql.ts
 
 All raw SQL strings for the seforim database live here. No inline SQL anywhere else in the Vue/TypeScript codebase — every query a composable or store needs must be added to this file and imported from it.
@@ -363,25 +520,32 @@ All raw SQL strings for the dictionary database.
 
 ### bridge.ts
 
-C# host actions for file operations. All functions have dev fallbacks.
+Host actions. There is no `devFallbacks.ts` — dev behaviour is handled inline or by the native service.
 
-- `pickFile()` — native file picker (PDF + Word)
-- `restoreLocalFile(filePath)` — re-register virtual host for a local file
-- `restoreHbPdf(bookId, bookTitle, tabId)` — restore HebrewBooks PDF from cache
-- `disposeLocalFileHost(filePath)` — decrement virtual host ref count on tab close
-- `callBridgeAction(name, ...params)` — call any C# action with positional params (used by search/indexing)
-- `resetHostApp()` — full app reset: deletes FTS index, resets C# settings, reloads
-- `resetSearchIndex()` — resets the FTS index on the C# side (triggers a fresh rebuild)
+Environment flags: `isVstoEnvironment` / `showPopOutButton` (running inside the Word add-in — split view is disabled here), `hasNativeChromeTabs`.
 
-### devFallbacks.ts
-
-Development fallback implementations for C# bridge functions when running in browser dev mode.
+- `callBridgeAction(name, ...params)` — call any host action with positional params
+- `pickLocalFile(openInNewTab)` — native file picker (**not** `pickFile()`)
+- `restoreLocalFile(filePath)`, `disposeLocalFileHost(filePath)`, `openFileInDefaultApp(filePath)`, `readTxtFileContent(filePath)`
+- `restoreHbPdf(bookId, bookTitle, tabId)` — restore HebrewBooks PDF from cache; `hbSearch(...)`
+- `fileSystemSearch(...)`, `fileSystemSearchWarmup()` — DocumentLocator search
+- `getExcludedFolders()`, `setExcludedFolders(folders)`, `openExcludedFoldersManager()`, `resetDocumentLocatorIndex()`
+- `exportToWord(html, title)`, `pasteIntoWord()`, `copyImageToClipboard(dataUrl)` — Word integration
+- `resetHostApp()`, `resetSearchIndex()`, `getDiagnostics()`, `toggleFullscreen()`, `togglePopOut()`, `setTheme(...)`
 
 ## Utilities (`src/utils/`)
 
-**persistence.ts** — the only file that touches IndexedDB and localStorage directly. All stores import from here; components and composables never do. Manages 3 IDB databases, all key patterns, LRU cap for lastread, the app reset mechanism, and the `__pendingReset` localStorage flag.
+**persistence.ts** — the only file that touches localStorage and the shared IndexedDB databases. Manages the databases in its `handles` map, all key patterns, the LRU cap for lastread, the app reset mechanism, and the `__pendingReset` localStorage flag. See the Persistence section of `app.md` for who may import it.
 
 **hebrewTextProcessing.ts** — diacritics handling and text normalization for Hebrew.
+
+**hebrewTextCleaning.ts** — text cleanup for copy/export paths (has unit tests).
+
+**htmlText.ts** — HTML ↔ plain text conversion used by the copy and Word-export paths.
+
+**textEncoding.ts** — encoding helpers.
+
+**bookViewPerf.ts**, **commentaryScrollTrace.ts** — instrumentation for book-view performance and commentary scroll debugging.
 
 **censorDivineNames.ts** — divine name censoring (replaces ה with ק).
 
@@ -409,14 +573,17 @@ Default theme is `vscode-dark`.
 
 ## Initialization Order (`main.ts`)
 
-1. `idbCheckAndExecReset()` — clear all DBs if a reset was scheduled last session
+1. `await idbCheckAndExecReset()` — clear all DBs if a reset was scheduled last session
 2. Create Pinia
-3. `workspaceStore.init()` — must be first; `tabStore` depends on `activeId`
-4. In parallel: `tabStore.init()`, `bookViewStore.init()`, `settingsStore.init()`, `themeStore.init()`
-5. Restore persisted local file tabs via `localFileStore.restoreTab()`
-6. Mount app to `#app`
-7. `initPdfThemeObserver()` — sync PDF iframe theme with app theme
-8. `booksDataStore.ensureLoaded()` — lazy-load book catalog in background
+3. Store init, synchronous and in this order — `workspaceStore.init()` must be first because `tabStore` depends on `activeId`, and `tabStore.init()` must be last: `workspaceStore`, `settingsStore`, `bookViewStore`, `themeStore`, `tabStore`
+4. `initTabMirror()` — start mirroring the tab list to the host
+5. Mount app to `#app`
+6. `initPdfThemeObserver()` — sync PDF iframe theme with app theme
+7. After one `requestAnimationFrame`, `booksDataStore.ensureLoaded()` — the catalog load IS the connection warm-up. Do **not** add a separate `dbWarmup` call or a delayed second load: a previous version raced two cold passes over the same connection and made startup slower. Exactly one cold pass.
+8. Restore persisted local file tabs via `localFileStore.restoreTab()` — after mount, so the UI paints first
+9. Signal the host that Vue has mounted and all event listeners are registered
+
+Steps 3 and 5 are ordering-sensitive. Store `init()` methods are synchronous (localStorage-backed) by design — see the IDB performance rule in `app.md` before adding any `await` to this sequence.
 
 ## C# Backend
 
@@ -428,16 +595,26 @@ The C# project (`CSharpBackend/`) hosts the Vue app in a WebView2 control.
 - Push events from C# arrive via `window.__onWebviewEvent`
 - Target: .NET 4.8, C# 7.3
 
-Key C# handlers:
+Key C# handlers (all under `KitveiHakodeshLib/`, organized into subfolders — the paths below are current):
 
-- `JsBridge.cs` — handles `__webviewAction` calls (file picker, PDF restore, virtual host management)
-- `WebBridge.cs` — WebView2 setup, message routing
-- `DbAccess.cs` / `DbHandler.cs` — SQLite access via Dapper
-- `SearchHandler.cs` — FtsLib index lifecycle orchestrator; delegates to search engine components in `KitveiHakodeshLib/Search/`
-- `HebrewBooksHandler.cs` — HebrewBooks download via WebView2 browser engine
-- `LocalFileHandler.cs` — local file virtual host management
-- `ZimHandler.cs` — ZIM virtual host management (Kiwix reader)
-- `WordToPdfConverter.cs` — Word-to-PDF conversion
+- `Bridge/JsBridge.cs` — handles `__webviewAction` calls (file picker, PDF restore, virtual host management)
+- `Bridge/WebBridge.cs` — WebView2 setup, message routing
+- `Db/DbAccess.cs` / `Db/DbHandler.cs` — SQLite access via Dapper
+- `Search/SearchHandler.cs` — FtsLib index lifecycle orchestrator
+- `HebrewBooks/HebrewBooksHandler.cs` — HebrewBooks download via the WebView2 browser engine
+- `Pdf/LocalFileHandler.cs` — local file virtual host management
+- `Pdf/WordToPdfConverter.cs` — Word-to-PDF conversion
+- `AppViewer*.cs` — the WinForms host shell (focus, navigation, tabs, theme, splash), plus `ChromeTabsMirror.cs`, `HostLink.cs`, `WordExporter.cs`
+
+There is no `ZimHandler.cs` — ZIM/Kiwix support was removed.
+
+### KitveiHakodeshService
+
+`CSharpBackend/KitveiHakodeshService/` is the native .NET 10 data front-door, AOT-published. **Browser dev mode is fully service-dependent** — the Vite dev path talks to this service, not to a JS shim. Subfolders: `SefroimDb`, `Dictionary`, `Catalog`, `HebrewBooks`, `LocalFiles`, `Pdf`, `UserSettings`, `Http`, `Ipc`, `Common`, `KitvieHakodesh`.
+
+Wire format is MessagePack with PascalCase keys; the frontend transforms to camelCase. The HTTP surface is a raw loopback `TcpListener` whose port is private — handed over an ACL'd pipe and discovered via `/khs-endpoint`, never written to a file.
+
+Consequence for frontend code: `isHosted` is **true** in browser dev mode. It is therefore the wrong guard for "am I inside the C# WinForms host" — branch on `window.__webviewAction` for that instead.
 
 ### Full-Text Search Pipeline
 
