@@ -16,7 +16,7 @@ import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { eraRank, authorYear } from './ftsChronology'
+import { chronologicalKey } from './ftsChronology'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 
@@ -258,19 +258,35 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           a.lineId - b.lineId
       })
     } else if (sortOrder.value === 'chronological') {
-      // Era rank (from the book's period) → author death-year within the era (where the
-      // author is in the curated map) → book name → line ID. Books whose author year is
-      // unknown sort after dated books of the same era (so an era's dated works lead,
-      // undated ones trail), then alphabetically.
+      // Era rank (from the book's period) → author death-year within the era (Infinity
+      // when unknown or era-implausible, so an era's dated works lead and undated ones
+      // trail) → catalog tree order → book name → line ID. Tree order keeps same-key books
+      // in their curated catalog sequence — תנ"ך in canonical book order, the שס in seder
+      // order — instead of alphabetical. Keys are cached per bookId because the comparator
+      // runs O(n log n) times and the author-year lookup normalizes name strings.
       const bookMap = booksStore.allBooksMap
-      const rankOf = (r: FullTextSearchResult) => eraRank(bookMap.get(r.bookId)?.period)
-      const yearOf = (r: FullTextSearchResult) =>
-        authorYear(bookMap.get(r.bookId)?.authors) ?? Number.POSITIVE_INFINITY
-      sorted.sort((a, b) =>
-        rankOf(a) - rankOf(b) ||
-        yearOf(a) - yearOf(b) ||
-        (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
-        a.lineId - b.lineId)
+      const keyCache = new Map<number, { rank: number; year: number; treeOrder: number }>()
+      const keyOf = (r: FullTextSearchResult) => {
+        let key = keyCache.get(r.bookId)
+        if (!key) {
+          const book = bookMap.get(r.bookId)
+          const { rank, year } = chronologicalKey(book)
+          key = { rank, year, treeOrder: book?.treeOrder ?? Number.POSITIVE_INFINITY }
+          keyCache.set(r.bookId, key)
+        }
+        return key
+      }
+      sorted.sort((a, b) => {
+        const keyA = keyOf(a)
+        const keyB = keyOf(b)
+        return (
+          keyA.rank - keyB.rank ||
+          keyA.year - keyB.year ||
+          keyA.treeOrder - keyB.treeOrder ||
+          (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+          a.lineId - b.lineId
+        )
+      })
     } else {
       // 'lineId' — restore the original streamed order (ascending line ID). This is a
       // no-op right after streaming, but matters when the user switches back from
