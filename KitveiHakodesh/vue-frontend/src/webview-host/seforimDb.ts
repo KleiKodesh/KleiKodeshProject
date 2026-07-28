@@ -1,7 +1,29 @@
 import { ref } from 'vue'
 
-export const isHosted = window.__webviewDbReady !== undefined || import.meta.env.DEV
-export const dbReady = ref(isHosted ? (window.__webviewDbReady ?? import.meta.env.DEV) : true)
+/**
+ * True when the C# host's bridge channel is present — i.e. we are running inside WebView2 and
+ * KitveiHakodeshLib is available to serve data and drive native features.
+ *
+ * THIS is the real hosted/dev distinction, and the only one worth branching on. It replaced an
+ * `isHosted` that could never be false (`__webviewDbReady !== undefined || import.meta.env.DEV`
+ * — DEV in dev, and the host always injects __webviewDbReady, true OR false, in hosted), so
+ * every `if (!isHosted)` guard was dead code and every `isHosted ? hosted : dev` branch silently
+ * took the hosted path in dev. That produced real bugs three times over (paste into Word,
+ * export to Word, font detection).
+ *
+ * Remember the architecture it selects between: hosted does NOT use the KitveiHakodesh service —
+ * KitveiHakodeshLib owns the data and the native calls there. Only dev goes through the service.
+ */
+export const hasHostBridge = typeof window.__webviewAction === 'function'
+
+/**
+ * Whether the seforim DB is available.
+ *
+ * Hosted: the C# host injects __webviewDbReady (false when the user skipped DB setup).
+ * Dev: always true — the service resolves and owns the DB; SetupWizard asks it separately
+ * (getDbPathInfo) whether the file actually exists on disk.
+ */
+export const dbReady = ref(window.__webviewDbReady ?? true)
 
 /** True once detected; false means the column doesn't exist or detection hasn't run yet. */
 export let categoryHasOrderIndex = false
@@ -71,7 +93,9 @@ export function emitWebviewEvent(msg: Record<string, unknown>): void {
   for (const fn of _listeners) fn(msg)
 }
 
-if (isHosted) {
+// Only the C# host pushes events into this channel; in dev the bridge functions call
+// emitWebviewEvent directly after their service round-trip.
+if (hasHostBridge) {
   window.__onWebviewEvent = (msg) => {
     for (const fn of _listeners) fn(msg)
   }
@@ -87,7 +111,7 @@ export async function query<T = unknown>(sql: string, params: unknown[] = []): P
     return (await window.__webviewQuery(sql, params)).rows as T[]
   }
   // In the hosted environment without a DB (user skipped setup), return empty results.
-  if (isHosted && !dbReady.value) return []
+  if (hasHostBridge && !dbReady.value) return []
   // Dev seforim access goes through seforimApi (the KitveiHakodesh service), not here.
   throw new Error('seforimDb.query() is hosted-only; dev uses seforimApi')
 }

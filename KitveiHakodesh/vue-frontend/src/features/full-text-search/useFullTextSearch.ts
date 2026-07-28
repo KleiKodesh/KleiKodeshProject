@@ -9,7 +9,7 @@
  */
 import { ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
+import { hasHostBridge, onWebviewEvent } from '@/webview-host/seforimDb'
 import { getTocPathsForLines, getBookIdsForLines } from '@/webview-host/seforimApi'
 import { serviceStream } from '@/webview-host/serviceClient'
 import { callBridgeAction } from '@/webview-host/bridge'
@@ -454,7 +454,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     // continuously over one connection (ftsSearchStream) until the search finishes.
     // No polling: aborting the stream is the cancel signal, and the service itself
     // supersedes the previous search when a new one starts.
-    if (!isHosted || typeof window.__webviewAction !== 'function') {
+    if (!hasHostBridge) {
       const normalizedQuery = q.trim().toLowerCase()
       // Abort the previous stream (if any) and own a fresh controller for this one.
       _devStreamAbort?.abort()

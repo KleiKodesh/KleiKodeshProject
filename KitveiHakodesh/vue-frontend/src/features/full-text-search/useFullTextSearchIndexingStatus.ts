@@ -1,5 +1,5 @@
 import { ref, onMounted, onUnmounted } from 'vue'
-import { isHosted, onWebviewEvent } from '@/webview-host/seforimDb'
+import { hasHostBridge, onWebviewEvent } from '@/webview-host/seforimDb'
 import { callBridgeAction } from '@/webview-host/bridge'
 import { serviceStream } from '@/webview-host/serviceClient'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
@@ -35,7 +35,7 @@ export function useFullTextSearchIndexingStatus() {
   let devAbort: AbortController | null = null
 
   onMounted(async () => {
-    if (!isHosted || typeof window.__webviewAction !== 'function') {
+    if (!hasHostBridge) {
       // Dev: the service PUSHES a status frame on every build-progress change over one
       // open stream (ftsIndexProgressStream) — no polling. The stream ends on its own
       // when the build reaches a terminal state (ready, or no DB). If it drops early

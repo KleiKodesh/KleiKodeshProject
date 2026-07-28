@@ -18,7 +18,7 @@ import {
 import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
 import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
 import IconBookRtl24 from '@/components/IconBookRtl24.vue'
-import { isHosted, dbReady } from '@/webview-host/seforimDb'
+import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
   useRecentlyOpenedStore,
@@ -55,7 +55,7 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
 
   const tiles = computed(() => {
-    const dbMissing = isHosted && !dbReady.value
+    const dbMissing = !dbReady.value
     return [
       dbMissing
         ? { label: 'הורד מסד ספרים', icon: IconArrowDownload24Filled, color: '#B5451B' }

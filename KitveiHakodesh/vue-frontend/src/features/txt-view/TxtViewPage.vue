@@ -6,7 +6,6 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { readTxtFileContent } from '@/webview-host/bridge'
-import { isHosted } from '@/webview-host/seforimDb'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
 import { useTxtViewSearch } from './useTxtViewSearch'
 import { useTxtViewCopyMenu, useTxtViewScopedCopy } from './useTxtViewCopyMenu'
@@ -283,7 +282,10 @@ async function loadContent() {
   rawContent.value = null
 
   try {
-    if (isHosted && filePath.value) {
+    // A real path is read through the bridge in BOTH modes — readTxtFileContent routes hosted
+    // to C# and dev to the service (which also detects the encoding). The virtualUrl branch
+    // below is for entries that only ever had a served URL.
+    if (filePath.value) {
       const content = await readTxtFileContent(filePath.value)
       if (content === null) {
         error.value = 'הקובץ לא נמצא'
