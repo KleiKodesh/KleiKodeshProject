@@ -60,6 +60,7 @@ These predate enforcement and are scheduled to be split. Do not add code to any 
 Done so far:
 
 - `features/home/HomePage.vue` (827 → 286) split into `HomePageDateBar.vue`, `useHomeDateBarFit.ts`, `useHomeSearchBar.ts`, `useHomeSearchNavigation.ts`, and `useHomeTiles.ts`.
+- `layout/AppTitleBar.vue` (577 → 420, still over) — all keyboard handling extracted to `layout/useAppTitleBarShortcuts.ts`. Stopped there deliberately: the remaining 420 is an even split of script, template and scoped style, and the only further cut is breaking the button clusters into sub-components that would forward ~15 bindings each and own no logic — the thin-wrapper anti-pattern this file warns against. Decide whether it earns an exemption before splitting it further.
 - `stores/tabStore.ts` (781 → 669, still over) — `booksView` moved to `settingsStore`, the full app reset moved to `features/settings/appResetState.ts`, and the persistence layer extracted to `stores/tabStatePersistence.ts` + `stores/bookLastRead.ts`. Its public API is unchanged: the store re-exports what moved. Remaining planned extractions: tab-list persistence, MRU access order, pane assignment.
 
 Components (hard limit 350):
@@ -67,37 +68,63 @@ Components (hard limit 350):
 | File | Lines |
 | --- | --- |
 | `features/book-view/commentary/CommentaryView.vue` | 657 |
-| `features/book-view/BookViewPage.vue` | 655 |
+| `features/book-view/BookViewPage.vue` | 657 |
 | `features/halachic-units/HalachicUnitsPage.vue` | 620 |
-| `layout/AppTitleBar.vue` | 577 |
-| `features/txt-view/TxtViewPage.vue` | 565 |
+| `layout/AppTitleBar.vue` | 420 |
+| `features/txt-view/TxtViewPage.vue` | 567 |
 | `features/full-text-search/FullTextSearchResultsList.vue` | 535 |
 | `features/home/HomeSearchDropdown.vue` | 525 |
 | `features/book-view/lines/BookViewLinesContent.vue` | 510 |
 | `features/pdf-viewer/PdfViewPage.vue` | 499 |
 | `features/local-file-search/LocalFileSearchPage.vue` | 493 |
+| `features/full-text-search/FullTextSearchPage.vue` | 460 |
+| `features/full-text-search/FullTextSearchFilterPanel.vue` | 456 |
+| `layout/AddressBar.vue` | 407 |
+| `features/book-view/commentary/CommentaryTreePanel.vue` | 402 |
+| `features/book-catalog/BookCatalogPage.vue` | 397 |
+| `features/dictionary/DictionaryWordPage.vue` | 388 |
+| `features/book-view/BookViewToolbar.vue` | 386 |
+| `features/pdf-viewer/PdfOcrResultPopup.vue` | 383 |
+| `features/hebrew-calendar/DayRow.vue` | 365 |
+| `features/full-text-search/FullTextSearchBar.vue` | 354 |
+| `features/home/HomePageTile.vue` | 352 |
 
-Composables, stores and utilities (hard limit 300 / 250):
+Composables, stores and other feature modules (hard limit 300):
 
 | File | Lines |
 | --- | --- |
+| `webview-host/bridge.ts` | 1038 |
 | `stores/tabStore.ts` | 669 |
 | `features/full-text-search/useFullTextSearch.ts` | 613 |
 | `features/book-view/commentary/useCommentaryScroll.ts` | 556 |
 | `features/book-view/lines/useBookViewLineCopyMenu.ts` | 519 |
 | `features/book-view/lines/useBookViewLineRenderer.ts` | 517 |
-| `stores/localFileStore.ts` | 509 |
+| `stores/localFileStore.ts` | 512 |
 | `features/book-view/useBookView.ts` | 498 |
 | `features/book-view/commentary/useCommentary.ts` | 473 |
 | `features/book-view/commentary/useCommentaryCopy.ts` | 459 |
-| `utils/persistence.ts` | 452 |
 | `features/book-view/lines/useBookViewLinesScroll.ts` | 434 |
 | `stores/settingsStore.ts` | 425 |
 | `features/home/useHomeSearch.ts` | 404 |
-| `utils/censorDivineNames.ts` | 390 |
+| `features/book-view/commentary/commentaryGroupBuilder.ts` | 394 |
+| `features/book-catalog/bookCatalogSearchTocHeuristics.ts` | 386 |
 | `stores/bookViewStore.ts` | 378 |
 | `features/html-view/useOtzariaAddinBridge.ts` | 372 |
+| `webview-host/seforimApi.ts` | 369 |
+| `webview-host/dictionarySeforimDb.ts` | 339 |
+| `features/pdf-viewer/usePdfViewPageTracking.ts` | 322 |
+| `features/book-catalog/useBookCatalogSearch.ts` | 311 |
+| `features/book-catalog/bookCatalogSearch.ts` | 303 |
+
+Utilities (hard limit 250):
+
+| File | Lines |
+| --- | --- |
+| `utils/persistence.ts` | 452 |
+| `utils/censorDivineNames.ts` | 390 |
 | `utils/segmentSearchTree.ts` | 348 |
+
+Total: 46 files over the hard limit. Regenerate this list rather than editing rows by hand — an earlier version of it was truncated and undercounted by 18 files.
 
 `BookViewPage.vue` is called a "shell that calls `useBookView`" in `architecture.md` — at 655 lines it is not currently a shell. Treat that description as the target state, not the present one.
 

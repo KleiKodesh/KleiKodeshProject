@@ -77,7 +77,7 @@ Completion: `settings.completeSetup()` sets `setupDone = true` and persists it t
 
 ### Keyboard shortcuts
 
-All shortcuts use `e.code`, never `e.key`. `useSettingsPage` renders the user-facing reference from `ShortcutsReferenceList.vue` — keep that list in sync when changing any binding here.
+All shortcuts live in `layout/useAppTitleBarShortcuts.ts`, not in the component — that composable also forwards `Ctrl`+key events out of child iframes back into the top-level pipeline. All matching uses `e.code`, never `e.key`. `ShortcutsReferenceList.vue` is the user-facing reference — keep it in sync when changing any binding.
 
 Pane-scoped — these fire only when `isThisPaneFocused` (i.e. always when split view is off):
 
@@ -277,7 +277,7 @@ App settings across three tabs: general, reading, and advanced. Also contains th
 - `SettingsPageCalendarSection.vue` — calendar city picker, clock toggle
 - `SettingsPageAdvancedSection.vue` — database/index paths, excluded folders, diagnostics
 - `SettingsPageResetSection.vue` — all reset actions
-- `SettingsPageKeyboardShortcutsSection.vue` + `ShortcutsReferenceList.vue` — shortcuts reference; keep in sync with the handlers in `AppTitleBar.vue`
+- `SettingsPageKeyboardShortcutsSection.vue` + `ShortcutsReferenceList.vue` — shortcuts reference; keep in sync with `layout/useAppTitleBarShortcuts.ts`
 - `SettingsPagePathField.vue`, `SettingRow.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
 - `useSettingsPage.ts`, `useSettingsSearch.ts` — page state and settings search
@@ -389,6 +389,7 @@ Hebrew calendar page. Monthly grid and weekly detail views with zmanim. Singleto
 - `AddressBar.vue` — Explorer-style address bar in the title bar; hosts the tab dropdown and reuses the home search. There is no `AppTitleBarTabDropdown.vue`.
 - `AppTitleBarTocBreadcrumb.vue` — interactive breadcrumb rendered in the title bar center for `/book-view` and `/pdf-view` tabs. Each segment has a chevron before it listing siblings; the active segment gets a trailing chevron if it has children. Emits `navigateToTocEntry` and `navigateToPdfEntry`.
 - `AppTitleBarBreadcrumbChevronDropdown.vue` — teleported chevron dropdown listing `BreadcrumbItem[]` entries. Used by `AppTitleBarTocBreadcrumb` for both TOC and PDF siblings. Scrolls to the active item on open.
+- `useAppTitleBarShortcuts.ts` — every keyboard shortcut the title bar owns, for one pane; splits them into pane-scoped and pane-1-only app-wide, and forwards iframe `Ctrl`+key events into the top-level pipeline
 - `useAppTitleBarTocBreadcrumb.ts` — parses `tab.tocPath` into `BreadcrumbSegment[]` for both `/book-view` (splits on ` / `, reads `TocBridge`) and `/pdf-view` (splits on ` · `, reads `PdfBridge`). Each segment includes `siblings` and `children` for the chevron dropdowns.
 
 `AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
