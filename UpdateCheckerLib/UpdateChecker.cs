@@ -34,6 +34,39 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
+        /// Returns the installed version string the FIRST time any host runs after
+        /// that version was installed (i.e. registry Version changed since the last
+        /// run), null otherwise. Lets the host show a one-time "עודכן בהצלחה"
+        /// notice after a silent update.
+        ///
+        /// LastSeenVersion is shared between Word and the standalone app —
+        /// whichever opens first shows the notice, the other stays quiet.
+        /// A missing LastSeenVersion (fresh install / first run ever) is recorded
+        /// silently: "updated successfully" on a first-ever run would be wrong.
+        /// </summary>
+        public static string GetJustInstalledUpdateVersion()
+        {
+            try
+            {
+                var current = GetCurrentVersionFromRegistry();
+                if (string.IsNullOrEmpty(current)) return null;
+
+                using (var key = Registry.CurrentUser.CreateSubKey(REGISTRY_KEY))
+                {
+                    if (key == null) return null;
+
+                    var lastSeen = key.GetValue("LastSeenVersion")?.ToString();
+                    if (string.Equals(lastSeen, current, StringComparison.OrdinalIgnoreCase))
+                        return null;
+
+                    key.SetValue("LastSeenVersion", current);
+                    return string.IsNullOrEmpty(lastSeen) ? null : current;
+                }
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
         /// Synchronous disk-only check — no network, no async, no threading concerns.
         /// Reads %TEMP%\KleiKodeshSetup.exe's embedded ProductVersion and compares it
         /// against the installed version in the registry.

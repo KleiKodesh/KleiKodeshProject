@@ -137,9 +137,20 @@ namespace KleiKodesh.Helpers
         {
             try
             {
-                bool turnedOff = SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false);
-                if (_updateCheckDone || turnedOff) return;
+                if (_updateCheckDone) return;
                 _updateCheckDone = true;
+
+                // One-time "updated successfully" notice on the first run after a
+                // silent update (LastSeenVersion is shared with the standalone app —
+                // whichever host opens first shows it). Non-modal, and deliberately
+                // not gated by TurnOffUpdates: the version DID change.
+                var justUpdated = UpdateChecker.GetJustInstalledUpdateVersion();
+                if (justUpdated != null)
+                {
+                    UpdateNotificationForm.Show($"כלי קודש עודכן בהצלחה לגרסה {justUpdated}.");
+                }
+
+                if (SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false)) return;
 
                 // ── Step 1: sync disk check — no network, no threading ──────────────
                 // Reads %TEMP%\KleiKodeshSetup.exe version and compares to registry.

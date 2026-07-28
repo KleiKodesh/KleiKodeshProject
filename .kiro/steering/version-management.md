@@ -65,7 +65,7 @@ Build → AddinInstaller.cs (const Version)
 | Arg                      | Effect                                                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | _(none)_                 | Normal UI — landing page                                                                                                              |
-| `--silent` / `--install` | Skip straight to install progress page, exit 0 on success / 1 on failure. Used by auto-updater and NSIS `--silent` passthrough.       |
+| `--silent` / `--install` | Fully headless auto-install: NO window at all. Waits up to 5 minutes for BOTH WINWORD and כתבי הקודש to exit (both hosts share the install folder); if either is still running after the grace it exits 1 WITHOUT touching files (no partial extraction). Installs via `InstallRunner`, exits 0 on success / 1 on failure — no dialogs ever; the pending exe stays armed and the next close retries. Passed by `RunPendingInstaller()`. Releases ≤ v8.7.2 show a small progress window instead — safe, since the flag itself is supported by every generation. |
 | `--repair`               | Skip straight to repair page with auto-run (no confirm dialog). Used when relaunching as admin from the repair page elevation banner. |
 | `--wait-for-pid <PID>`   | Start hidden; show the window once the given process exits (max 30s — PIDs get recycled). ⚠ NOT passed by `RunPendingInstaller()` — the downloaded exe is always an OLDER release, and installers before the 30s bound wait unbounded and sit hidden forever when the pid is recycled (observed live: three invisible elevated installers accumulated). Keep the arg supported, never pass it to a downloaded installer. |
 
@@ -83,12 +83,20 @@ Word taskpane / KitveiHakodesh app opens
     release asset size — a mismatch (truncated pre-.partial download) forces a
     fresh download.
   → User closes Word/app → RunPendingInstaller() launches the NSIS wrapper
-    unelevated with NO arguments (no --silent — the wizard is shown; no
-    --wait-for-pid — see the CLI args table warning)
-  → NSIS checks .NET/VSTO prereqs, runs the WPF installer
-  → WPF landing page waits up to 3s each for Word / the app to close, then shows
-  → Extracts VSTO zip, registers addin, SaveVersion() → exits 0
+    unelevated with "--silent" (skipped if an installer process is already
+    running — Word + app closing together must not start two installers;
+    no OTHER arguments — see the --wait-for-pid warning in the CLI table)
+  → NSIS (SilentInstall silent, invisible) checks prereqs, extracts, runs the
+    WPF installer with the args passed through
+  → WPF --silent path: fully headless — waits up to 5 min for BOTH WINWORD
+    and כתבי הקודש to exit (defers with exit 1 if either is still running),
+    then InstallRunner (extract, register, SaveVersion, service) → exits 0.
+    No dialogs even on failure (exit 1, retried at the next close).
   → NSIS writes/overwrites HKCU\...\Uninstall\KleiKodesh\DisplayVersion = "vX.Y.Z"
+  → Next open of Word/the app: GetJustInstalledUpdateVersion() sees registry
+    Version ≠ LastSeenVersion → one-time non-modal "עודכן בהצלחה לגרסה X"
+    notice (shared value — whichever host opens first shows it; fresh installs
+    record silently with no notice)
 ```
 
 A truncated NSIS exe still reports its full `ProductVersion` (the version resource
