@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { isHosted, dbReady } from '@/webview-host/seforimDb'
+import { dbReady } from '@/webview-host/seforimDb'
 import { getDbPathInfo } from '@/webview-host/bridge'
 import SetupWizardStepDb from './SetupWizardStepDb.vue'
 import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
@@ -25,7 +25,7 @@ onMounted(async () => {
 
 const steps = computed<Step[]>(() => {
   const s: Step[] = ['welcome']
-  if ((isHosted && !dbReady.value) || devDbMissing.value) s.push('db')
+  if (!dbReady.value || devDbMissing.value) s.push('db')
   s.push('theme', 'general', 'book-display', 'shortcuts')
   return s
 })

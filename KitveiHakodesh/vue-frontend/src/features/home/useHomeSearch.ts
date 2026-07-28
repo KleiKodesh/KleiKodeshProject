@@ -8,8 +8,8 @@
  *      contains a structural TOC keyword ("משנה תורה הלכות שבת"), the TOC
  *      results are additionally shown below the book results. Results share
  *      the catalog page's IDB LRU cache.
- *   2. Document Locator (file system) — async, only when isHosted
- *   3. HebrewBooks  — async, only when isHosted
+ *   2. Document Locator (file system) — async; hosted via C#, dev via the service
+ *   3. HebrewBooks  — async; hosted via C#, dev via the service
  *
  * Each source resolves independently and writes to its own ref so the
  * dropdown can render partial results as they arrive.
@@ -42,7 +42,7 @@ import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewB
 import { fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { isHosted, dbReady } from '@/webview-host/seforimDb'
+import { dbReady } from '@/webview-host/seforimDb'
 import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 
@@ -308,7 +308,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
       const generation = ++asyncGeneration
       const { effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
 
-      if (effectiveQuery.length < MIN_QUERY_LENGTH || !isHosted) {
+      if (effectiveQuery.length < MIN_QUERY_LENGTH) {
         setHebrewBooks([])
         setFiles([])
         isLoadingHebrewBooks.value = false

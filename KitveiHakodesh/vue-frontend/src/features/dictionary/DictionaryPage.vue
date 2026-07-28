@@ -11,7 +11,6 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { dictionaryCacheGet, dictionaryCacheSet, dictionaryCacheClear } from './dictionaryCache'
 import { dictLinks, dictSynonyms, dictVariants, dictSpellCandidates, dictKetivVariants, combinedLookup } from '@/webview-host/dictionaryDb'
 import { expandKetivHaser } from '@/utils/hebrewKetivExpander'
-import { isHosted } from '@/webview-host/seforimDb'
 import type { SenseRow, DictLink, MetzudatRow, MenchemRow, AruchRow } from '@/webview-host/dictionaryDb'
 import type { WordPageData } from './dictionaryTypes'
 
@@ -29,8 +28,11 @@ function levenshtein(a: string, b: string): number {
   return dp[n]!
 }
 
+// Hosted-only: the thesaurus lives in the C# host's Word interop. Dev has no equivalent, so it
+// returns no synonyms rather than calling an action that would reject.
+// The typeof check (not just hasHostBridge) is what narrows __webviewAction for TypeScript.
 async function fetchThesaurus(word: string): Promise<string[]> {
-  if (!isHosted || typeof window.__webviewAction !== 'function') return []
+  if (typeof window.__webviewAction !== 'function') return []
   try {
     const res = await window.__webviewAction('getWordSynonyms', { word })
     if (res && Array.isArray((res as any).groups)) return (res as any).groups.flat() as string[]

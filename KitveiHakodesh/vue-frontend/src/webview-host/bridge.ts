@@ -6,7 +6,7 @@
  * Push events from C# arrive via window.__onWebviewEvent (registered in db.ts).
  */
 
-import { isHosted, emitWebviewEvent } from './seforimDb'
+import { hasHostBridge, emitWebviewEvent } from './seforimDb'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 
@@ -45,12 +45,10 @@ export const isVstoEnvironment = showPopOutButton
  * initTabMirror() wires up the strip, so UI that delegates to the native strip
  * (e.g. the Ctrl+T tab list) can gate on the same flag.
  *
- * The dev browser has no strip, so it must behave like VSTO (Vue-owned tab list),
- * not like the demo — hence !isHosted-in-dev alone is not enough; we require the
- * bridge action channel too.
+ * The dev browser has no strip, so it must behave like VSTO (Vue-owned tab list) — which
+ * hasHostBridge already excludes, since dev has no bridge channel.
  */
-export const hasNativeChromeTabs =
-  isHosted && !isVstoEnvironment && typeof window.__webviewAction === 'function'
+export const hasNativeChromeTabs = hasHostBridge && !isVstoEnvironment
 
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
@@ -349,7 +347,7 @@ export async function restoreHbPdf(
  * Only relevant for local files (not cache-based files).
  */
 export function disposeLocalFileHost(filePath: string): void {
-  if (!isHosted || !filePath) return
+  if (!hasHostBridge || !filePath) return
   action('disposeLocalFileHost', { filePath }).catch(() => {})
 }
 
@@ -358,7 +356,7 @@ export function disposeLocalFileHost(filePath: string): void {
  * or returns it to the VSTO task pane / host form.
  */
 export function togglePopOut(): void {
-  if (!isHosted) return
+  if (!hasHostBridge) return
   action('TogglePopOut').catch(() => {})
 }
 
@@ -476,7 +474,7 @@ export async function getDiagnostics(): Promise<Record<string, string> | null> {
  * restores normal state when exiting.
  */
 export async function toggleFullscreen(): Promise<void> {
-  if (!isHosted) return
+  if (!hasHostBridge) return
   await action('toggleFullscreen').catch(() => {})
 }
 
