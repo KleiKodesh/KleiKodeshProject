@@ -404,7 +404,6 @@ export async function idbClearAll(): Promise<void> {
   // Import lazily to avoid circular dependency — drop* are plain functions
   const { dropHbHistoryDb } = await import('@/stores/hebrewBooksHistoryStore')
   const { dropRecentlyOpenedDb } = await import('@/stores/recentlyOpenedStore')
-  lsClearAll()
   await Promise.all([
     dropDb('app-tabs'),
     dropDb('app-lastread'),
@@ -414,6 +413,11 @@ export async function idbClearAll(): Promise<void> {
     dropDb('app-dict-cache'),
     dropDb('app-catalog-toc-cache'),
   ])
+  // MUST come last. lsClearAll() also removes the __pendingReset flag, so clearing
+  // it before the drops finish would disarm the crash-safety net: die mid-wipe and
+  // the next boot sees no flag and never redoes it. Dropping first means the flag
+  // survives any failure above and idbCheckAndExecReset picks it up.
+  lsClearAll()
 }
 
 /** Schedule a full reset on next boot — synchronous localStorage write, zero IDB cost. */
@@ -432,7 +436,17 @@ export async function idbCheckAndExecReset(): Promise<void> {
   let flagSet = false
   try { flagSet = localStorage.getItem(RESET_LS_KEY) === '1' } catch {}
   if (!flagSet) return
-  try { localStorage.removeItem(RESET_LS_KEY) } catch {}
-  await idbClearAll()
+  // Deliberately do NOT clear the flag up front — idbClearAll's final lsClearAll()
+  // removes it only once the wipe has actually completed, so a crash during this
+  // recovery still leaves something to recover from on the next boot.
+  try {
+    await idbClearAll()
+  } catch {
+    // The recovery wipe itself failed. Drop the flag so a persistently failing wipe
+    // cannot break startup on every launch — booting with stale data beats not
+    // booting at all. Also prevents a reload loop.
+    try { localStorage.removeItem(RESET_LS_KEY) } catch {}
+    return
+  }
   window.location.reload()
 }

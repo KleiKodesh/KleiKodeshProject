@@ -319,7 +319,10 @@ The sequence is: set `resetting` → `idbScheduleReset()` → `idbClearAll()` �
 
 `idbScheduleReset()` writes the `__pendingReset` localStorage key. That is a **crash-safety net, not the reset mechanism** — the wipe itself is eager. On next boot `idbCheckAndExecReset()` (called from `main.ts`) checks the flag synchronously; if it is still set the previous reset died partway through, so it redoes the wipe and reloads. The normal path clears the flag as part of the wipe, so the boot check returns immediately.
 
-Known limitation: `idbClearAll` calls `lsClearAll()` *before* dropping the databases, so the flag is removed before the drops finish. The net therefore covers only the window up to `lsClearAll`, not the drops. Removing the flag last, inside `idbClearAll`, would close that gap.
+Two ordering rules keep that net armed. Both are load-bearing — do not "tidy" either one:
+
+- `idbClearAll()` calls `lsClearAll()` **last**, after every database is dropped. `lsClearAll` also removes the flag, so clearing it earlier would mean a mid-wipe crash leaves no flag and the next boot never retries.
+- `idbCheckAndExecReset()` does **not** clear the flag before its recovery wipe, for the same reason. It only drops the flag if the wipe itself throws — a persistently failing wipe must not break startup on every launch, so booting with stale data wins over not booting.
 
 ### Adding new persisted state
 
