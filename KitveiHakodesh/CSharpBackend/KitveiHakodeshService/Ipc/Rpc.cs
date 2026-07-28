@@ -131,6 +131,25 @@ public sealed class FontsResult
     public string[] Fonts { get; set; } = [];
 }
 
+/// <summary>Args for <c>exportToWord</c> — the assembled document HTML and the book title used
+/// for the temp file name.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ExportToWordArgs
+{
+    public string? Html { get; set; }
+    public string? Title { get; set; }
+}
+
+/// <summary>Result of <c>exportToWord</c>: <see cref="Ok"/> true once Word opened the exported
+/// HTML, or an <see cref="Error"/> message. Mirrors the hosted bridge action's { ok, error }
+/// shape so the frontend caller is identical in dev and hosted.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class ExportToWordResult
+{
+    public bool Ok { get; set; }
+    public string? Error { get; set; }
+}
+
 /// <summary>Result of <c>pasteIntoWord</c>: <see cref="Ok"/> true once the clipboard was pasted
 /// into Word at the cursor, or an <see cref="Error"/> message (Word not installed, COM failure).
 /// Mirrors the hosted bridge action's <c>{ ok, error }</c> shape so the frontend caller is
