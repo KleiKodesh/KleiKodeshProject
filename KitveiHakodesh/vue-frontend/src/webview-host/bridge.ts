@@ -541,11 +541,25 @@ export function fileSystemSearch(
 }
 
 /**
- * Export book content as HTML to a new Word document.
- * C# opens Word (or reuses a running instance), creates a blank document,
- * and inserts the provided HTML as the document content.
+ * Export book content as HTML to a new Word document. Word opens (or a running instance is
+ * reused) with the HTML as the document content.
+ *
+ * Hosted: the WebView2 host drives Word through the Office PIA (WordExporter.ExportCore).
+ * Dev: the KitveiHakodesh service drives Word over raw COM/IDispatch instead (the PIA and
+ * `dynamic` are unavailable under native AOT) — see AotWordConverter.ExportHtml.
+ *
+ * NOTE: guard on __webviewAction, NOT isHosted — isHosted is TRUE in dev while the bridge
+ * channel is absent, so an isHosted check would send dev down the hosted path and reject.
  */
-export function exportToWord(html: string, title: string = ''): Promise<{ ok?: boolean; error?: string }> {
+export async function exportToWord(html: string, title: string = ''): Promise<{ ok?: boolean; error?: string }> {
+  if (typeof window.__webviewAction !== 'function') {
+    try {
+      const r = await serviceCall<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
+      return { ok: !!r?.ok, error: r?.error }
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : String(e) }
+    }
+  }
   return action<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
 }
 

@@ -211,6 +211,74 @@ public static unsafe partial class AotWordConverter
     }
 
     /// <summary>
+    /// Open an HTML string as a new document in Word. The AOT-viable equivalent of
+    /// KitveiHakodeshLib WordExporter.ExportCore, so dev's "ייצא ל-Word" behaves like the
+    /// published app (where the same button goes through the WebView2 bridge instead).
+    ///
+    /// Word imports HTML by OPENING it as a file — there is no "insert this string" API — so the
+    /// html is written to a temp .html named after the book title, exactly as hosted does. The
+    /// file is deliberately NOT deleted on success: Word has it open, and deleting it out from
+    /// under the user breaks Save. Reuses a running Word when there is one, and never Quits —
+    /// the document is left open and visible. Must run on an STA thread (see ExportAsync).
+    /// </summary>
+    public static void ExportHtml(string html, string title)
+    {
+        int hr = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
+        bool coInit = hr >= 0;
+        nint app = 0, docs = 0, doc = 0;
+
+        string safeName = BuildSafeFileName(title);
+        string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), safeName + ".html");
+        System.IO.File.WriteAllText(tempFile, html, new System.Text.UTF8Encoding(true));
+
+        bool opened = false;
+        try
+        {
+            if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
+                throw new COMException("Word is not installed (Word.Application ProgID not found).");
+
+            if (GetActiveObject(in clsid, 0, out nint unk) >= 0 && unk != 0)
+            {
+                app = QueryInterface(unk, in IID_IDispatch);
+                Release(unk);
+            }
+            if (app == 0 && (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0))
+                throw new COMException("Failed to start Word (CoCreateInstance).");
+
+            PropPut(app, "Visible", Bool(true));
+
+            docs = PropGetDispatch(app, "Documents");
+            // Open(FileName, ConfirmConversions, ReadOnly, AddToRecentFiles) — reversed for rgvarg.
+            // ReadOnly false and AddToRecentFiles false, matching the hosted call.
+            doc = InvokeMethodDispatch(docs, "Open", [Bool(false), Bool(false), Bool(false), Bstr(tempFile)]);
+            if (doc == 0) throw new COMException("Documents.Open returned no document.");
+            opened = true;
+
+            try { InvokeMethodVoid(app, "Activate", []); } catch { }
+        }
+        finally
+        {
+            // Only clean up the temp file if Word never got it open; otherwise leave it in place.
+            if (!opened) { try { System.IO.File.Delete(tempFile); } catch { } }
+            if (doc != 0) Release(doc);
+            if (docs != 0) Release(docs);
+            // NEVER Quit — the user is left looking at the exported document.
+            if (app != 0) Release(app);
+            if (coInit) CoUninitialize();
+        }
+    }
+
+    /// <summary>Strips characters that are invalid in a file name, so a book title can be used as
+    /// one. Mirrors KitveiHakodeshLib WordExporter.BuildSafeFileName.</summary>
+    private static string BuildSafeFileName(string title)
+    {
+        string name = string.IsNullOrWhiteSpace(title) ? "KitveiHakodesh" : title.Trim();
+        foreach (char c in System.IO.Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
+        // Keep well clear of MAX_PATH once the temp dir and extension are added.
+        return name.Length > 100 ? name.Substring(0, 100) : name;
+    }
+
+    /// <summary>
     /// Paste whatever is on the Windows clipboard into Word at the cursor. The AOT-viable
     /// equivalent of KitveiHakodeshLib WordExporter.PasteAtCursorCore, so dev behaves like the
     /// published app (where the same menu item goes through the WebView2 bridge instead).
@@ -301,19 +369,32 @@ public static class AotWordPaste
     /// marshaling proxy and is flaky for UI operations, so give it a real STA thread — the same
     /// reason NativeFolderPicker does this for shell dialogs. Never throws.</summary>
     [System.Runtime.Versioning.SupportedOSPlatform("windows")]
-    public static async Task<string?> PasteAsync()
+    public static Task<string?> PasteAsync()
+        => RunOnStaAsync("khs-word-paste", AotWordConverter.PasteAtCursor,
+            "פעולת הדבקה אחרת מתבצעת כעת.");
+
+    /// <summary>Open an HTML export in Word on a dedicated STA thread. Returns null on success or
+    /// an error message; never throws. See PasteAsync for why STA.</summary>
+    [System.Runtime.Versioning.SupportedOSPlatform("windows")]
+    public static Task<string?> ExportAsync(string html, string title)
+        => RunOnStaAsync("khs-word-export", () => AotWordConverter.ExportHtml(html, title),
+            "פעולת ייצוא אחרת מתבצעת כעת.");
+
+    /// <summary>Serializes Word automation onto one STA thread at a time. Rejects rather than
+    /// queues when busy — driving Word re-entrantly is fragile, and the caller is a UI action.</summary>
+    private static async Task<string?> RunOnStaAsync(string threadName, Action work, string busyMessage)
     {
-        if (!await Gate.WaitAsync(0)) return "פעולת הדבקה אחרת מתבצעת כעת.";
+        if (!await Gate.WaitAsync(0)) return busyMessage;
         try
         {
             var completion = new TaskCompletionSource<string?>(
                 TaskCreationOptions.RunContinuationsAsynchronously);
             var thread = new Thread(() =>
             {
-                try { AotWordConverter.PasteAtCursor(); completion.TrySetResult(null); }
+                try { work(); completion.TrySetResult(null); }
                 catch (Exception ex) { completion.TrySetResult(ex.Message); }
             })
-            { IsBackground = true, Name = "khs-word-paste" };
+            { IsBackground = true, Name = threadName };
             thread.SetApartmentState(ApartmentState.STA);
             thread.Start();
             return await completion.Task;

@@ -224,6 +224,21 @@ public sealed class Dispatcher(
                         Fonts = LocalFiles.HebrewFontsProvider.GetHebrewFonts(),
                     }));
 
+                // Open assembled HTML as a new Word document — the dev-mode equivalent of the
+                // hosted app's "exportToWord" bridge action (WordExporter.ExportCore). Word
+                // imports HTML only by opening a file, so the service writes a temp .html named
+                // after the book and opens it; the file stays put because Word holds it open.
+                case "exportToWord":
+                {
+                    var a = MsgPack.De<ExportToWordArgs>(req.Args);
+                    if (string.IsNullOrEmpty(a.Html))
+                        return RpcResponse.Ok(MsgPack.Ser(new ExportToWordResult { Error = "No HTML to export." }));
+                    string? exportError = await DocConvertLib.AotWordPaste.ExportAsync(a.Html!, a.Title ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(exportError is null
+                        ? new ExportToWordResult { Ok = true }
+                        : new ExportToWordResult { Error = exportError }));
+                }
+
                 // Paste the Windows clipboard into Word at the cursor — the dev-mode equivalent
                 // of the hosted app's "pasteIntoWord" bridge action (WordExporter.PasteAtCursor).
                 // The frontend has ALREADY put the formatted HTML on the clipboard via the copy

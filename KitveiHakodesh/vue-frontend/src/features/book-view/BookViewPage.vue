@@ -3,7 +3,6 @@ import { ref, computed, watch, inject } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { isHosted } from '@/webview-host/seforimDb'
 import { exportToWord as bridgeExportToWord } from '@/webview-host/bridge'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
@@ -125,8 +124,11 @@ const {
   () => commentaryViewRef.value,
 )
 
+// Works in both modes — hosted drives Word through the Office PIA, dev through the service.
+// There is deliberately no isHosted guard: isHosted is TRUE in dev, so it never blocked
+// anything here, and the bridge call it let through could only reject (silently, via the
+// catch) until dev got a real export path.
 async function onExportToWord() {
-  if (!isHosted) return
   const html = buildExportHtml()
   await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
 }

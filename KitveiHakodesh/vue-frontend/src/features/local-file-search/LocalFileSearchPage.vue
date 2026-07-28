@@ -16,7 +16,6 @@ import type { LocalFileSearchSortOrder, LocalFileSearchResult } from './useLocal
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { restoreLocalFile } from '@/webview-host/bridge'
-import { isHosted } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 
@@ -125,9 +124,10 @@ function focusResults() {
   resultsListElement.value?.focusContainer()
 }
 
+// No isHosted guard: it is TRUE in dev so it never gated anything, and opening a local file
+// works in both modes (hosted serves it from its virtual host, dev from the service's
+// capability-gated /khs-file proxy — restoreLocalFile picks the path).
 async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
-  if (!isHosted) return
-
   openingFile.value = true
 
   try {
