@@ -57,7 +57,10 @@ These thresholds exist so that agentic AI can reliably read, edit, and reason ab
 
 These predate enforcement and are scheduled to be split. Do not add code to any of them: if a task requires touching one, extract rather than extend.
 
-Done so far: `features/home/HomePage.vue` (was 827 → 286) split into `HomePageDateBar.vue`, `useHomeDateBarFit.ts`, `useHomeSearchBar.ts`, `useHomeSearchNavigation.ts`, and `useHomeTiles.ts`.
+Done so far:
+
+- `features/home/HomePage.vue` (827 → 286) split into `HomePageDateBar.vue`, `useHomeDateBarFit.ts`, `useHomeSearchBar.ts`, `useHomeSearchNavigation.ts`, and `useHomeTiles.ts`.
+- `stores/tabStore.ts` (781 → 669, still over) — `booksView` moved to `settingsStore`, the full app reset moved to `features/settings/appResetState.ts`, and the persistence layer extracted to `stores/tabStatePersistence.ts` + `stores/bookLastRead.ts`. Its public API is unchanged: the store re-exports what moved. Remaining planned extractions: tab-list persistence, MRU access order, pane assignment.
 
 Components (hard limit 350):
 
@@ -78,7 +81,7 @@ Composables, stores and utilities (hard limit 300 / 250):
 
 | File | Lines |
 | --- | --- |
-| `stores/tabStore.ts` | 781 |
+| `stores/tabStore.ts` | 669 |
 | `features/full-text-search/useFullTextSearch.ts` | 613 |
 | `features/book-view/commentary/useCommentaryScroll.ts` | 556 |
 | `features/book-view/lines/useBookViewLineCopyMenu.ts` | 519 |
@@ -87,9 +90,9 @@ Composables, stores and utilities (hard limit 300 / 250):
 | `features/book-view/useBookView.ts` | 498 |
 | `features/book-view/commentary/useCommentary.ts` | 473 |
 | `features/book-view/commentary/useCommentaryCopy.ts` | 459 |
-| `utils/persistence.ts` | 438 |
+| `utils/persistence.ts` | 452 |
 | `features/book-view/lines/useBookViewLinesScroll.ts` | 434 |
-| `stores/settingsStore.ts` | 417 |
+| `stores/settingsStore.ts` | 425 |
 | `features/home/useHomeSearch.ts` | 404 |
 | `utils/censorDivineNames.ts` | 390 |
 | `stores/bookViewStore.ts` | 378 |

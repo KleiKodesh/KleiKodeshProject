@@ -1,0 +1,113 @@
+import {
+  idbTabsGet,
+  idbTabsSet,
+  idbTabsDelete,
+  idbTabsDeleteByPrefix,
+  KEYS,
+} from '@/utils/persistence'
+import type { TabState, BookState } from '@/utils/persistence'
+import { useWorkspaceStore } from './workspaceStore'
+
+/**
+ * The `app-tabs` slice of persistence — everything keyed by workspace + tab.
+ *
+ * Two kinds of state live here, both scoped the same way:
+ *   - `TabState`  per tab: search filters, scroll restore, per-tab zoom
+ *   - `BookState` per tab *and* book: reading position, commentary layout
+ *
+ * Per-book state that is not tab-scoped (the global last-read position) lives in
+ * `bookLastRead.ts` — separate database, separate lifetime, survives tab close.
+ *
+ * A plain module rather than a Pinia store: it holds no reactive state, and both
+ * `tabStore` (for teardown) and feature composables (for read/write) use it, so it
+ * cannot live in a feature folder. `tabStore` re-exports the read/write functions,
+ * so callers reach it through the store as before.
+ */
+
+/** Resolved per call, never cached — switching workspaces must change which keys we address. */
+function workspaceId(): string {
+  return useWorkspaceStore().activeId
+}
+
+// ── In-memory cache ───────────────────────────────────────────────────────────
+// One entry per open tab×book. Bounded by what the user has open, and evicted by
+// deleteAllStateForTab when a tab closes, so it needs no size cap.
+
+const bookStateCache = new Map<string, BookState | null>()
+
+/**
+ * Cache-key builders. Kept beside each other deliberately: the entry key and the
+ * eviction prefix must agree on their separator, and a mismatch would silently
+ * stop eviction from matching anything.
+ */
+function bookCacheKey(wsId: string, tabId: string, bookId: number): string {
+  return `${wsId}:${tabId}:${bookId}`
+}
+function bookCacheKeyPrefixForTab(wsId: string, tabId: string): string {
+  return `${wsId}:${tabId}:`
+}
+
+/**
+ * Pending save promise. A tab being opened awaits this before reading, so the
+ * outgoing tab's async IDB write is guaranteed to have committed first.
+ */
+let pendingBookStateSave: Promise<void> | null = null
+
+// ── TabState (per tab) ────────────────────────────────────────────────────────
+
+export function getTabViewState(tabId: string): Promise<TabState | null> {
+  return idbTabsGet<TabState>(KEYS.tab(workspaceId(), tabId))
+}
+
+export function setTabViewState(tabId: string, state: TabState): Promise<void> {
+  return idbTabsSet(KEYS.tab(workspaceId(), tabId), state)
+}
+
+// ── BookState (per tab + book) ────────────────────────────────────────────────
+
+export function getBookViewState(tabId: string, bookId: number): Promise<BookState | null> {
+  const wsId = workspaceId()
+  const cacheKey = bookCacheKey(wsId, tabId, bookId)
+  if (bookStateCache.has(cacheKey)) return Promise.resolve(bookStateCache.get(cacheKey)!)
+  const read = async () => {
+    const value = await idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
+    bookStateCache.set(cacheKey, value)
+    return value
+  }
+  return pendingBookStateSave ? pendingBookStateSave.then(read) : read()
+}
+
+export function setBookViewState(tabId: string, bookId: number, state: BookState): Promise<void> {
+  const wsId = workspaceId()
+  bookStateCache.set(bookCacheKey(wsId, tabId, bookId), state)
+  pendingBookStateSave = idbTabsSet(KEYS.book(wsId, tabId, bookId), state)
+  return pendingBookStateSave
+}
+
+export function clearBookViewState(tabId: string, bookId: number): Promise<void> {
+  const wsId = workspaceId()
+  bookStateCache.delete(bookCacheKey(wsId, tabId, bookId))
+  return idbTabsDelete(KEYS.book(wsId, tabId, bookId))
+}
+
+// ── Teardown ──────────────────────────────────────────────────────────────────
+
+/**
+ * Forget everything persisted for a closing tab: its `TabState`, every `BookState`
+ * beneath it, and the matching in-memory cache entries.
+ *
+ * One call rather than three lines, because all three must happen together —
+ * `closeTab`, `closePane2Tab`, and `closeAllTabs` previously each open-coded the
+ * same sequence, and `closeAllTabs`'s copy recovered the tab id by splitting the
+ * cache key on ':' (which assumes a workspace id containing no colon). Matching on
+ * the prefix builder above removes that assumption.
+ */
+export function deleteAllStateForTab(tabId: string): void {
+  const wsId = workspaceId()
+  idbTabsDelete(KEYS.tab(wsId, tabId))
+  idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tabId))
+  const prefix = bookCacheKeyPrefixForTab(wsId, tabId)
+  for (const key of bookStateCache.keys()) {
+    if (key.startsWith(prefix)) bookStateCache.delete(key)
+  }
+}
