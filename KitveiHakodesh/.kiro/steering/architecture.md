@@ -281,7 +281,7 @@ App settings across three tabs: general, reading, and advanced. Also contains th
 - `SettingsPagePathField.vue`, `SettingRow.vue`, `SliderSetting.vue`, `ToggleGroup.vue`
 - `ThemePicker.vue`, `FontDisplaySettings.vue`, `FontSelector.vue`
 - `useSettingsPage.ts`, `useSettingsSearch.ts` — page state and settings search
-- `appResetState.ts` — the `resetting` flag `App.vue` reads to show the reset overlay
+- `appResetState.ts` — the app-reset module: the `resetting` flag `App.vue` reads to show the reset overlay, plus `resetEverything()`, the full-reset sequence. Lives here rather than in a store because it spans every domain (all seven databases + localStorage). See the App reset section of `app.md`.
 - `SetupWizard.vue` + `SetupWizardStep*.vue` — first-launch onboarding wizard
 
 ### hebrewbooks/

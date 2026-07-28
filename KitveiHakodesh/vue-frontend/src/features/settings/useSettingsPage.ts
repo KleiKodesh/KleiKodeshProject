@@ -1,13 +1,11 @@
 import { watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { useTabStore } from '@/stores/tabStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
-import { resetHostApp, resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, setTheme } from '@/webview-host/bridge'
+import { resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, setTheme } from '@/webview-host/bridge'
 
 export function useSettings() {
   const settings = useSettingsStore()
-  const tabStore = useTabStore()
   const searchCache = useSearchCacheStore()
 
   const {
@@ -34,11 +32,6 @@ export function useSettings() {
       commentaryLinePadding.value = linePadding.value
     }
   })
-
-  async function resetAll() {
-    await tabStore.resetAll()
-    await resetHostApp()
-  }
 
   async function resetSearchIndexAction() {
     await searchCache.clear()
@@ -74,6 +67,5 @@ export function useSettings() {
     resetSettings,
     resetSearchIndex: resetSearchIndexAction,
     resetDocumentLocatorIndex: resetDocumentLocatorIndexAction,
-    resetAll,
   }
 }

@@ -301,7 +301,7 @@ localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/
 
 ### Stores
 
-- `tabStore` — tab lifecycle, navigation, tab/book state, lastread, and `resetAll()`
+- `tabStore` — tab lifecycle, navigation, tab/book state, and lastread
 - `bookViewStore` — toolbar/searchBarPos; reads from localStorage at init (synchronous)
 - `settingsStore` — all app settings in localStorage; `init()` is synchronous
 - `themeStore` — theme preset + reading background in localStorage
@@ -313,7 +313,13 @@ Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enf
 
 ### App reset
 
-`tabStore.resetAll()` calls `idbScheduleReset()` which writes the `__pendingReset` localStorage flag, then `window.location.reload()`. On next boot, `idbCheckAndExecReset()` sees the flag synchronously, calls `lsClearAll()` to wipe all localStorage keys, deletes all IDB databases, then reloads into a clean state.
+`resetEverything()` in `src/features/settings/appResetState.ts` owns the full reset. It lives there — not in a store — because it spans every domain: it wipes all seven IDB databases plus all of localStorage, so no single store owns it. That module also owns the `resetting` flag `App.vue` reads to show the blocking overlay, and `resetEverything` sets the flag itself, so callers don't have to.
+
+The sequence is: set `resetting` → `idbScheduleReset()` → `idbClearAll()` → `resetHostApp()` (which resets the FTS index and C# settings, then reloads).
+
+`idbScheduleReset()` writes the `__pendingReset` localStorage key. That is a **crash-safety net, not the reset mechanism** — the wipe itself is eager. On next boot `idbCheckAndExecReset()` (called from `main.ts`) checks the flag synchronously; if it is still set the previous reset died partway through, so it redoes the wipe and reloads. The normal path clears the flag as part of the wipe, so the boot check returns immediately.
+
+Known limitation: `idbClearAll` calls `lsClearAll()` *before* dropping the databases, so the flag is removed before the drops finish. The net therefore covers only the window up to `lsClearAll`, not the drops. Removing the flag last, inside `idbClearAll`, would close that gap.
 
 ### Adding new persisted state
 
