@@ -17,6 +17,11 @@ namespace KitveiHakodeshLib.Db
     {
         private readonly WebBridge _bridge;
         private DbAccess _db;
+        // Full detail of a startup DB-open failure. The constructor runs before the page
+        // loads (no bridge listener yet), so the error is held here and attached to the
+        // first "No database loaded" reply — that puts the real cause in the F12 console
+        // instead of leaving it in Debug output nobody sees.
+        private string _startupOpenError;
 
         public Action<string> OnDbPathPicked { get; set; }
 
@@ -28,7 +33,8 @@ namespace KitveiHakodeshLib.Db
                 try { _db = new DbAccess(savedPath); }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine("[DbHandler] Failed to open DB: " + ex.Message);
+                    _startupOpenError = "DbAccess failed at startup for \"" + savedPath + "\":\n" + ex;
+                    System.Diagnostics.Debug.WriteLine("[DbHandler] " + _startupOpenError);
                 }
             }
         }
@@ -37,7 +43,11 @@ namespace KitveiHakodeshLib.Db
 
         public async Task HandleSql(JsonElement root, string id)
         {
-            if (_db == null) { _bridge.Reply(id, new { error = "No database loaded" }); return; }
+            if (_db == null)
+            {
+                _bridge.Reply(id, new { error = "No database loaded" + (_startupOpenError != null ? "\n" + _startupOpenError : "") });
+                return;
+            }
             string sql = root.GetProperty("sql").GetString();
             try
             {
@@ -80,7 +90,12 @@ namespace KitveiHakodeshLib.Db
             if (File.Exists(defaultPath))
             {
                 try { _db = new DbAccess(defaultPath); }
-                catch { _db = null; }
+                catch (Exception ex)
+                {
+                    _db = null;
+                    // Full detail to the F12 console — this catch used to swallow silently.
+                    _bridge.PushEvent(new { @event = "dbOpenError", error = "DbAccess failed for default \"" + defaultPath + "\":\n" + ex });
+                }
             }
             else
             {
@@ -120,8 +135,16 @@ namespace KitveiHakodeshLib.Db
 
         public void HandleSetDbPath(JsonElement root, string id)
         {
+            // Diagnostics for the "path won't change in the VSTO" reports: every failure
+            // in this flow must reach the frontend with the FULL exception (type, message,
+            // stack, inner exceptions — ex.ToString()), so an affected user's F12 console
+            // shows exactly which step failed. ex.Message alone hid the failing frame.
             string path = root.GetProperty("path").GetString();
-            if (!File.Exists(path)) { _bridge.Reply(id, new { error = "קובץ לא נמצא" }); return; }
+            if (!File.Exists(path))
+            {
+                _bridge.Reply(id, new { error = "קובץ לא נמצא: File.Exists returned false for \"" + path + "\"" });
+                return;
+            }
             AppSettings.SaveDbPath(path);
             if (_db != null) _db.Dispose();
             try
@@ -131,7 +154,7 @@ namespace KitveiHakodeshLib.Db
             catch (Exception ex)
             {
                 _db = null;
-                _bridge.Reply(id, new { error = ex.Message });
+                _bridge.Reply(id, new { error = "DbAccess failed for \"" + path + "\":\n" + ex });
                 return;
             }
             _bridge.Reply(id, new { path });
@@ -142,27 +165,37 @@ namespace KitveiHakodeshLib.Db
         {
             owner.BeginInvoke(new Action(() =>
             {
-                using (var dlg = new OpenFileDialog())
+                // Nothing awaits pickDbPath (fire-and-forget), so without this catch an
+                // exception anywhere here — ShowDialog, SaveDbPath — is an unhandled
+                // crash on the host UI thread and the user just sees a dead button.
+                // Push the full exception so it lands in the F12 console instead.
+                try
                 {
-                    dlg.Title    = "בחר קובץ מסד נתונים";
-                    dlg.Filter   = "SQLite Database (*.db)|*.db|All files (*.*)|*.*";
-                    dlg.FileName = AppSettings.LoadDbPath();
-                    if (dlg.ShowDialog() != DialogResult.OK) return;
-                    AppSettings.SaveDbPath(dlg.FileName);
-                    if (_db != null) _db.Dispose();
-                    try
+                    using (var dlg = new OpenFileDialog())
                     {
-                        _db = new DbAccess(dlg.FileName);
+                        dlg.Title    = "בחר קובץ מסד נתונים";
+                        dlg.Filter   = "SQLite Database (*.db)|*.db|All files (*.*)|*.*";
+                        dlg.FileName = AppSettings.LoadDbPath();
+                        if (dlg.ShowDialog() != DialogResult.OK) return;
+                        AppSettings.SaveDbPath(dlg.FileName);
+                        if (_db != null) _db.Dispose();
+                        try
+                        {
+                            _db = new DbAccess(dlg.FileName);
+                        }
+                        catch (Exception ex)
+                        {
+                            _db = null;
+                            _bridge.PushEvent(new { @event = "dbOpenError", error = "DbAccess failed for \"" + dlg.FileName + "\":\n" + ex });
+                            return;
+                        }
+                        _bridge.PushEvent(new { @event = "dbPathPicked", path = dlg.FileName });
+                        OnDbPathPicked?.Invoke(dlg.FileName);
                     }
-                    catch (Exception ex)
-                    {
-                        _db = null;
-                        _bridge.PushEvent(new { @event = "dbOpenError", error = ex.Message });
-                        return;
-                    }
-                    string escaped = dlg.FileName.Replace("\\", "\\\\");
-                    _bridge.PushEvent(new { @event = "dbPathPicked", path = dlg.FileName });
-                    OnDbPathPicked?.Invoke(dlg.FileName);
+                }
+                catch (Exception ex)
+                {
+                    _bridge.PushEvent(new { @event = "dbOpenError", error = "pickDbPath failed:\n" + ex });
                 }
             }));
         }

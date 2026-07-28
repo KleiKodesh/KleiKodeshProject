@@ -103,6 +103,12 @@ if (hasHostBridge) {
     if (msg.event === 'dbPathPicked') {
       onDbReady(msg.path as string)
     }
+    // C# pushes the FULL exception (type + stack) of any failure in the DB path
+    // flow here. Nothing used to listen, so a failed pick was invisible — log it
+    // so an affected user's F12 console names the exact failing step.
+    if (msg.event === 'dbOpenError') {
+      console.error('[seforimDb] DB path change failed (dbOpenError):\n' + String(msg.error ?? ''))
+    }
   })
 }
 

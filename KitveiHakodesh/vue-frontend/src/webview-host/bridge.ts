@@ -985,6 +985,9 @@ export async function clearDbPath(): Promise<string | null> {
     }
   }
   const result = await action<{ path?: string; error?: string }>('clearDbPath')
+  // Log the host's full error before collapsing to null — callers only show a
+  // generic failure, and the detail is what field debugging needs.
+  if (result.error) console.error('[bridge] clearDbPath failed:\n' + result.error)
   if (result.error || !result.path) return null
   return result.path
 }
