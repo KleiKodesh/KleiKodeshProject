@@ -92,20 +92,51 @@ namespace KleiKodeshVstoInstallerWpf
                 });
             }
 
-            MainWindow mainWindow;
             if (silentMode)
             {
-                // Go straight to install progress page — no landing, no UI chrome.
-                // Exits with code 0 on success, 1 on failure.
-                // Used by: NSIS --silent passthrough.
-                mainWindow = new MainWindow(startInstallImmediately: true);
+                // Fully headless auto-update: NO window at all. Both hosts share the
+                // install folder, so wait for BOTH Word and כתבי הקודש to exit —
+                // whichever one launched us is closing right now, but the other may
+                // be open with our files loaded (e.g. Word with another document).
+                // Up to 5 minutes of grace; if either is STILL running after that,
+                // bail out rather than risk a partial extraction over locked files.
+                // Errors exit 1 with no dialogs — the setup exe stays in %TEMP%,
+                // so the next session announces the update again and the next
+                // close retries.
+                ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    try
+                    {
+                        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(5);
+                        while (DateTime.UtcNow < deadline &&
+                               (Helpers.WordHelper.IsWordRunning() ||
+                                Helpers.KitveiHakodeshHelper.IsKitveiHakodeshRunning()))
+                            System.Threading.Thread.Sleep(500);
+
+                        if (Helpers.WordHelper.IsWordRunning() ||
+                            Helpers.KitveiHakodeshHelper.IsKitveiHakodeshRunning())
+                        {
+                            System.Diagnostics.Debug.WriteLine("[Installer] Host still running after 5min, deferring update.");
+                            Environment.Exit(1);
+                        }
+
+                        await Helpers.InstallRunner.RunAsync(
+                            new Progress<double>(_ => { }), status: null);
+                        Environment.Exit(0);
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Installer] Silent install failed: {ex.Message}");
+                        Environment.Exit(1);
+                    }
+                });
+                return;
             }
-            else
-            {
-                mainWindow = new MainWindow();
-                if (repairMode)
-                    mainWindow.NavigateToRepairOnLoad();
-            }
+
+            MainWindow mainWindow = new MainWindow();
+            if (repairMode)
+                mainWindow.NavigateToRepairOnLoad();
 
             // If waiting for a pid, start hidden — the background task above will show it
             if (waitForPid > 0)

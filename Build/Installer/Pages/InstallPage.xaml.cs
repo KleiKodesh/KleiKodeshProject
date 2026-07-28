@@ -45,43 +45,15 @@ namespace KleiKodeshVstoInstallerWpf
         {
             try
             {
-                if (!System.IO.Directory.Exists(AddinInstaller.InstallPath))
-                    System.IO.Directory.CreateDirectory(AddinInstaller.InstallPath);
-
-                // Send pipe shutdown to DocumentLocator service immediately so the
-                // 1 500 ms exit window runs in the background while we extract other
-                // files. AddinInstaller will wait for the remainder of that window
-                // (if any) before it tries to overwrite DocumentLocator.Service.exe.
-                _ = DocumentLocatorHelper.SendShutdownAsync();
-
-                _status.Report("מחלץ קבצים...");
-                await AddinInstaller.ExtractAsync(_progress);
-
-                _status.Report("רושם תוסף...");
-                await AddinInstaller.RegisterAddInAsync(_progress);
+                // The install sequence itself lives in InstallRunner — shared with
+                // the fully headless --silent auto-update path in App.xaml.cs.
+                await InstallRunner.RunAsync(_progress, _status);
 
                 while (ProgressBar.Value < ProgressBar.Maximum)
                 {
                     ProgressBar.Value++;
                     await Task.Delay(10);
                 }
-
-                _status.Report("שומר גרסה...");
-                AddinInstaller.SaveVersion();
-
-                _status.Report("יוצר קיצור דרך...");
-                AddinInstaller.CreateKitveiHakodeshShortcut();
-
-                // Register (or re-register) the DocumentLocator Windows Service while
-                // we are still a foreground process that can surface a UAC prompt.
-                // The VSTO runs inside Word and cannot reliably elevate.
-                _status.Report("מתקין שירות אינדקס...");
-                await DocumentLocatorHelper.EnsureServiceInstalledAsync();
-
-                // Trigger a background reindex of the file-system search service
-                // so it reflects any new files from this install. Fire-and-forget —
-                // the service acks immediately and rebuilds without blocking us.
-                _ = DocumentLocatorHelper.EnsureServiceRunningAndReindexAsync();
 
                 _status.Report("ההתקנה הושלמה!");
                 await Task.Delay(300);

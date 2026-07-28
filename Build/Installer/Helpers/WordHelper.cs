@@ -9,6 +9,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// </summary>
     public static class WordHelper
     {
+        /// <summary>True while any WINWORD process is running.</summary>
+        public static bool IsWordRunning() =>
+            Process.GetProcessesByName("WINWORD").Length > 0;
+
         /// <summary>
         /// Blocks up to <paramref name="timeoutMs"/> ms waiting for Word to close.
         /// Returns immediately if Word is not running.

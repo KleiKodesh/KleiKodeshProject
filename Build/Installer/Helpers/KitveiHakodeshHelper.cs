@@ -11,6 +11,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         private const string ProcessName = "כתבי הקודש";
 
+        /// <summary>True while any כתבי הקודש process is running.</summary>
+        public static bool IsKitveiHakodeshRunning() =>
+            Process.GetProcessesByName(ProcessName).Length > 0;
+
         /// <summary>
         /// Blocks up to <paramref name="timeoutMs"/> ms waiting for כתבי הקודש to close.
         /// Returns immediately if it is not running.

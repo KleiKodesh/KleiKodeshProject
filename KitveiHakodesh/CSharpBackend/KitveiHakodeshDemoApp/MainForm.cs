@@ -82,6 +82,16 @@ namespace KitveiHakodeshDemoApp
             if (_updateCheckDone) return;
             _updateCheckDone = true;
 
+            // One-time "updated successfully" notice on the first run after a silent
+            // update (LastSeenVersion is shared with the Word add-in — whichever host
+            // opens first shows it). Non-modal, and deliberately not gated by the
+            // TurnOffUpdates toggle: the version DID change, however it happened.
+            var justUpdated = UpdateChecker.GetJustInstalledUpdateVersion();
+            if (justUpdated != null)
+            {
+                UpdateNotificationForm.Show($"כלי קודש עודכן בהצלחה לגרסה {justUpdated}.");
+            }
+
             // Respect the shared "turn off automatic updates" toggle (same registry key
             // as the KleiKodesh Word add-in — set from the Vue settings "מתקדם" card).
             // When on, skip the network/GitHub check entirely. RunPendingInstaller() on
