@@ -57,7 +57,8 @@ async function commitDbPath(newPath: string) {
       // The service restarts on the new DB (and rebuilds a stale FTS index).
       // Reload so every store refetches from it; /khs waits for the respawn.
       setTimeout(() => window.location.reload(), 800)
-    } catch {
+    } catch (err) {
+      console.error('[settings] setDbPathDev failed:', err)
       dbPath.value = prev
     }
     return
@@ -67,7 +68,11 @@ async function commitDbPath(newPath: string) {
     await window.__webviewSetDbPath(newPath)
     dbPath.value = newPath
     onDbReady(newPath)
-  } catch {
+  } catch (err) {
+    // The rejection carries the host's FULL exception (type + stack). This catch
+    // used to swallow it, so the field silently snapping back to the injected
+    // path was all a user ever saw of the failure — log it for debugging.
+    console.error('[settings] setDbPath failed:', err)
     dbPath.value = window.__webviewDbPath ?? ''
   }
 }

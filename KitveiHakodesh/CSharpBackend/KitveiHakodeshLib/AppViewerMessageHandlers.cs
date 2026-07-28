@@ -97,7 +97,11 @@ namespace KitveiHakodeshLib
             }
             catch (Exception ex)
             {
-                if (id != null) _bridge.Reply(id, new { error = ex.Message });
+                // Full exception (type + message + stack + inner exceptions), not just
+                // ex.Message — this is the only place a handler that throws before its
+                // own try/catch (e.g. SaveDbPath inside setDbPath) gets reported, and
+                // the truncated form made those failures undiagnosable from the field.
+                if (id != null) _bridge.Reply(id, new { error = ex.ToString() });
             }
         }
 
