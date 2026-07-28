@@ -578,11 +578,17 @@ export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }>
 }
 
 /**
- * Place a PNG image on the Windows clipboard via the C# host.
- * The browser's navigator.clipboard.write() for images is unreliable inside
- * WebView2, so C# does it with System.Windows.Forms.Clipboard instead.
+ * Place a PNG image on the Windows clipboard via the C# host (hosted only).
+ *
+ * Needed because the host serves the app from http://KitveiHakodesh-vue-app/ — plain http on a
+ * non-localhost hostname, which Chromium treats as an INSECURE context, so navigator.clipboard
+ * is not exposed there and C# must do it with System.Windows.Forms.Clipboard instead.
+ *
+ * There is deliberately no dev equivalent: dev is served from http://localhost, a secure context
+ * where navigator.clipboard.write() works, so callers use the browser API directly rather than
+ * calling this and having it reject.
+ *
  * `dataUrl` must be a PNG data: URL (canvas.toDataURL('image/png')).
- * Rejects when the bridge is unavailable (dev/browser) — callers fall back.
  */
 export function copyImageToClipboard(dataUrl: string): Promise<{ ok?: boolean; error?: string }> {
   return action<{ ok?: boolean; error?: string }>('copyImageToClipboard', { dataUrl })

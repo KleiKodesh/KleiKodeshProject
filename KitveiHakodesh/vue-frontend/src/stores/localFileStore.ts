@@ -485,7 +485,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
       return
     }
 
-    // Dev mode: no real path, navigate directly (blob URL is gone — file must be re-opened)
+    // No stored path — an older recents entry saved before local files carried one. Nothing can
+    // be re-served, so open the tab empty and let the user re-open the file. Not a dev/hosted
+    // distinction: both modes serve real paths now (hosted via its virtual host, dev via the
+    // service's capability-gated /khs-file proxy).
     placeTab({ route, title, localFileName: entry.localFileName ?? title })
   }
 
