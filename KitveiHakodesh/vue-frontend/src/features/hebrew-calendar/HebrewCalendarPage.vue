@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { ref, watch, onMounted } from 'vue'
 import { HDate } from '@hebcal/core'
-import { lsGet, lsSet, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet } from '@/utils/persistence'
+import { ZMANIM_CITY_KEY } from './useZmanim'
+
+const KEYS = {
+  SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY,
+  SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
+} as const
 import { useZmanim } from './useZmanim'
 import { useWeeklyView } from './useWeeklyView'
 import { useMonthlyView } from './useMonthlyView'

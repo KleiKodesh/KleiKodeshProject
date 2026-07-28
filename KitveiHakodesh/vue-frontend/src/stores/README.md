@@ -1,8 +1,23 @@
 # src/stores
 
-Pinia stores, plus a couple of plain state-infrastructure modules. The only layer (besides `persistence.ts`) allowed to read from or write to IndexedDB or localStorage. Components and composables never import from `persistence.ts` directly — they go through this folder.
+Pinia stores, plus a couple of plain state-infrastructure modules. Owns all *structured* persistence — everything in IndexedDB, and the localStorage slices below. Features may read and write their own scalar settings through `lsGet`/`lsSet` directly; they must not touch an IDB API.
 
 Not everything here is a Pinia store. `tabStatePersistence.ts` and `bookLastRead.ts` are plain modules: they hold no reactive state, but both `tabStore` and feature composables use them, so they belong in neither a feature folder nor `utils`. Anything named `*Store.ts` is a Pinia store; anything else here is not.
+
+**Storage keys and schemas live with their owner, never centrally.** `persistence.ts` is a driver and holds neither. Each module defines the disk names for the values it owns and the shape of what it writes:
+
+| Owner | Defines |
+| --- | --- |
+| `settingsStore` | the ~42 app settings keys, and `clearPersistedSettings` (settings-vs-structural reset) |
+| `bookViewStore` | the book-view UI-state keys (`bookView.*`, `splitView.*`) |
+| `workspaceStore` | `Workspace`/`WorkspaceList`, `workspaces.list`, the exported `tabsListKey(wsId)`, and `deleteWorkspaceData` |
+| `tabStatePersistence` | `TabState`/`BookState`, and the `app-tabs` key layout (`tab:`, `book:`) |
+| `bookLastRead` | `LastReadState`, and the 1000-entry on-disk cap |
+| `themeStore`, feature modules | their own single keys |
+
+Every localStorage key is namespaced `area.name` so two owners can never claim the same slot — localStorage has one flat namespace, and a collision silently overwrites with no error. Never add a bare key. Structural keys use the `tabs:` and `workspaces.` prefixes, which is how `clearPersistedSettings` preserves them without a hardcoded name list.
+
+A database may be opened outside `persistence.ts` only when its schema needs something the driver cannot express — in-line keys, secondary indexes, or multiple object stores. `hebrewBooksHistoryStore` qualifies (`keyPath: 'id'` plus a `lastAccessed` index); such an owner must also export a `drop*` function for `appResetState` to call.
 
 Initialization order matters: `workspaceStore` must init before `tabStore`. See `main.ts`.
 
@@ -10,7 +25,7 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 
 **tabStatePersistence.ts** — the `app-tabs` slice: everything keyed by workspace + tab. `TabState` get/set (search filters, scroll restore, per-tab zoom), `BookState` get/set/clear (reading position and commentary layout, per tab *and* book), the in-memory book-state cache, and `deleteAllStateForTab(tabId)`. Use that last one for teardown — it drops the `TabState`, every `BookState` beneath the tab, and the cache entries together, and all three close paths call it.
 
-**bookLastRead.ts** — the `app-lastread` slice: the global per-book last-read position. Not tab-scoped, and it deliberately outlives tab close — that is what separates it from `BookState`, which has nearly the same shape but describes one tab's view of a book. Always write through `setLastReadPos()` so the 1000-entry on-disk cap in `idbSetLastRead` is enforced. Use `updateActiveTab` for in-place navigation, `openTab` only for explicitly creating a new tab, and `navigateToSingleton(route, pane, openInNewTab)` for singleton routes (singletons are enforced per-pane).
+**bookLastRead.ts** — the `app-lastread` slice: the global per-book last-read position. Not tab-scoped, and it deliberately outlives tab close — that is what separates it from `BookState`, which has nearly the same shape but describes one tab's view of a book. Owns `LastReadState` and both caps: the 200-entry in-memory cache and the 1000-entry on-disk cap. Always write through `setLastReadPos()` so both are applied. Use `updateActiveTab` for in-place navigation, `openTab` only for explicitly creating a new tab, and `navigateToSingleton(route, pane, openInNewTab)` for singleton routes (singletons are enforced per-pane).
 
 Split-view panes: one flat `tabs` array holds both panes' tabs, and `Tab.pane` is the sole discriminator — absent or `1` means pane 1, `2` means pane 2. There is no second store, shell id, or per-pane array. Pane 1 and pane 2 have parallel function pairs: `openTab`/`openPane2Tab`, `switchTab`/`switchPaneTab`, `closeTab`/`closePane2Tab`, `updateActiveTab`/`updatePane2ActiveTab`, with active ids `activeTabId`/`pane2ActiveTabId` and computeds `pane1Tabs`/`pane2Tabs`/`activeTabForPane(pane)`. Pane-1 select and update also do the MRU move-to-front — the only tab reordering in the app (no drag UI). `closeAllTabs()` resets pane 1 only, leaving pane 2 intact; `ensurePane2HasTab()` guarantees pane 2 is never empty. Components inside a shell should not call the `*Pane2*` functions directly — go through `useAppShellPane`/`usePaneNavigation` (see `src/composables`).
 

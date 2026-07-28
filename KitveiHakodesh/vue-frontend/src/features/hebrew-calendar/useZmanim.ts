@@ -1,7 +1,14 @@
 import { ref, computed, watch } from 'vue'
 import { GeoLocation } from '@hebcal/noaa'
 import { Zmanim } from '@hebcal/core/dist/esm/zmanim'
-import { lsGet, lsSet, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet } from '@/utils/persistence'
+
+/**
+ * Disk name for the selected zmanim city. Exported because the home page's next-zman
+ * bar reads the same preference — this feature owns it, `home` consumes it.
+ */
+export const ZMANIM_CITY_KEY = 'zmanim.city'
+const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
 import type { City } from './calendarTypes'
 import { CITIES } from './calendarTypes'
 

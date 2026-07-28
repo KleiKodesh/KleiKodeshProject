@@ -1,7 +1,72 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch } from 'vue'
 import type { Ref } from 'vue'
-import { lsGet, lsSet, lsClearSettingsOnly, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet, lsDelete, lsKeys } from '@/utils/persistence'
+
+/**
+ * Disk names for the settings this store owns. Nothing else reads them.
+ *
+ * Every name is namespaced by area, so two features can never claim the same slot
+ * in localStorage's one flat namespace. Keep that rule for anything added here:
+ * `area.name`, never a bare word.
+ */
+const KEYS = {
+  // Book text display
+  SETTINGS_HEADER_FONT: 'text.headerFont',
+  SETTINGS_TEXT_FONT: 'text.textFont',
+  SETTINGS_FONT_SIZE: 'text.fontSize',
+  SETTINGS_LINE_PADDING: 'text.linePadding',
+  SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
+  SETTINGS_DIACRITICS: 'text.diacritics',
+
+  // Commentary display
+  SETTINGS_COMMENTARY_HEADER_FONT: 'commentary.headerFont',
+  SETTINGS_COMMENTARY_TEXT_FONT: 'commentary.textFont',
+  SETTINGS_COMMENTARY_FONT_SIZE: 'commentary.fontSize',
+  SETTINGS_COMMENTARY_LINE_PADDING: 'commentary.linePadding',
+  SETTINGS_COMMENTARY_MAX_WIDTH: 'commentary.maxWidth',
+  SETTINGS_SEPARATE_COMMENTARY: 'commentary.useSeparateSettings',
+  SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'commentary.defaultAutoSync',
+
+  // Divine-name censoring
+  SETTINGS_CENSOR_DIVINE: 'censor.divineNames',
+  SETTINGS_CENSOR_ELOKIM: 'censor.elokimMode',
+  SETTINGS_CENSOR_OTHER_NAMES: 'censor.otherNamesMode',
+
+  // Copy flags
+  SETTINGS_COPY_CLEAN_TEXT: 'copy.cleanText',
+  SETTINGS_COPY_JOIN_LINES: 'copy.joinLines',
+  SETTINGS_COPY_SOURCE_POSITION: 'copy.sourcePosition',
+  SETTINGS_COPY_WITH_NOTES: 'copy.withNotes',
+  SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION: 'copy.asSourceWithQuotation',
+
+  // Full-text search
+  SETTINGS_SEARCH_CONTEXT_MARGIN: 'search.contextMargin',
+  SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
+  SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
+  SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
+  SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
+  SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
+
+  // App shell / chrome
+  SETTINGS_APP_ZOOM: 'app.zoom',
+  SETTINGS_NEW_TAB_PAGE: 'app.newTabPage',
+  SETTINGS_SHOW_CLOCK: 'app.showClock',
+  SETTINGS_SETUP_DONE: 'app.setupDone',
+  SETTINGS_COMPACT_MODE: 'app.compactMode',
+  SETTINGS_CONTENT_BORDER: 'app.contentBorder',
+  SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
+  SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
+  SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
+
+  // Per-feature preferences
+  SETTINGS_BOOKS_VIEW: 'books.view',
+  SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
+  SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
+  SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
+  SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
+  SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
+} as const
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
@@ -72,6 +137,30 @@ const DEFAULTS = {
   compactMode: true,
   contentBorder: false,
   showRecentlyOpened: true,
+}
+
+/**
+ * Remove only display/reading settings from localStorage, preserving app structure:
+ * the tab lists, the workspace list, and the one-time onboarding flag (so the setup
+ * wizard never re-appears).
+ *
+ * The settings-versus-structural split is a product decision, which is why it lives
+ * here and not in the storage driver: the driver has no way to know that `tabs:*` is
+ * structure while `text.fontSize` is a preference.
+ *
+ * Now that every key is namespaced, structure is identified by prefix rather than by
+ * a list of bare names — so a new structural key is preserved automatically as long
+ * as it lands under one of these namespaces.
+ */
+const PRESERVE_PREFIXES = ['tabs:', 'workspaces.']
+const PRESERVE_KEYS = new Set<string>([KEYS.SETTINGS_SETUP_DONE])
+
+function clearPersistedSettings(): void {
+  for (const key of lsKeys()) {
+    if (PRESERVE_PREFIXES.some((p) => key.startsWith(p))) continue
+    if (PRESERVE_KEYS.has(key)) continue
+    lsDelete(key)
+  }
 }
 
 export const useSettingsStore = defineStore('settings', () => {
@@ -390,7 +479,7 @@ export const useSettingsStore = defineStore('settings', () => {
     compactMode.value = DEFAULTS.compactMode
     contentBorder.value = DEFAULTS.contentBorder
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
-    lsClearSettingsOnly()
+    clearPersistedSettings()
     applyCSSVariables()
   }
 

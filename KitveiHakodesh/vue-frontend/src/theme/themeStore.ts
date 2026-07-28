@@ -1,6 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
-import { lsGet, lsSet, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet } from '@/utils/persistence'
+
+/** Disk name for the theme preference. Nothing else reads it. */
+const KEYS = { SETTINGS_THEME: 'app.theme' } as const
 import { applyTheme, getTheme, toggleThemeMode, type ThemePreset } from './themes'
 import { darken, lighten } from './themeColorUtils'
 import { setTheme } from '@/webview-host/bridge'

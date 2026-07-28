@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import { lsGet, lsSet, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet } from '@/utils/persistence'
+import { tabsListKey } from './workspaceStore'
 import { useWorkspaceStore } from './workspaceStore'
 import {
   getTabViewState,
@@ -119,7 +120,7 @@ export const useTabStore = defineStore('tabs', () => {
   function init() {
     const wsStore = useWorkspaceStore()
     const wsId = wsStore.activeId
-    const saved = lsGet<PersistedTabList>(KEYS.tabsList(wsId))
+    const saved = lsGet<PersistedTabList>(tabsListKey(wsId))
     if (saved && saved.tabs.length > 0) {
       tabs.value = saved.tabs
       activeTabId.value = saved.activeTabId
@@ -167,7 +168,7 @@ export const useTabStore = defineStore('tabs', () => {
   function persistTabs() {
     const wsId = useWorkspaceStore().activeId
     const persistable = tabs.value.filter((t) => !SINGLETON_ROUTES.includes(t.route))
-    lsSet<PersistedTabList>(KEYS.tabsList(wsId), {
+    lsSet<PersistedTabList>(tabsListKey(wsId), {
       tabs: persistable.map(
         ({
           localFileVirtualUrl,

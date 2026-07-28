@@ -1,22 +1,40 @@
 /**
- * Persistence layer — localStorage for scalar settings, IndexedDB for large/structured data.
+ * Storage driver. Moves bytes in and out of localStorage and IndexedDB.
  *
- * localStorage (synchronous, zero async cost):
- *   All scalar app settings, theme, workspaces, UI state flags
+ * THE CONTRACT: this file knows nothing about the application. It has no schemas,
+ * no retention policies, no key names, no reset workflow. If you can only explain a
+ * change here by naming a feature, it does not belong in this file. It has no
+ * imports, and that is the invariant worth keeping — the moment it needs one, it has
+ * started knowing something it shouldn't.
  *
- * IndexedDB databases:
- *   app-tabs               — tabs list, tab states, book states (workspace-scoped)
- *   app-lastread           — per-book last-read positions (LRU-capped at 1000)
- *   app-hb-history         — HebrewBooks download history
- *   app-search-cache       — full-text search result cache (LRU-capped at 100 queries)
- *   app-catalog-toc-cache  — Book catalog TOC search result cache (LRU-capped at 25 queries)
- *   app-recently-opened    — recently opened documents (LRU-capped at 16 entries)
+ * Things that used to live here and where they went, so they don't come back:
+ *   schemas (TabState/BookState) → stores/tabStatePersistence.ts
+ *   LastReadState + the 1000-book cap → stores/bookLastRead.ts
+ *   Workspace types + workspace teardown → stores/workspaceStore.ts
+ *   settings-vs-structural key policy → stores/settingsStore.ts
+ *   the reset workflow → features/settings/appResetState.ts
+ *   every key name → the module that owns the value (there is no central registry)
  *
- * Reset: clear all localStorage keys + delete all IDB databases.
+ * Two halves, one reason to change each (the browser storage APIs):
+ *
+ *   localStorage — namespaced under `kitvei-hakodesh.` so app keys can never
+ *   collide with the WebView2 host's or an addin's, JSON-coded, and total-error
+ *   containing (localStorage throws on quota and in some privacy modes; every
+ *   function here swallows that and degrades to null rather than propagating).
+ *
+ *   IndexedDB — a promise wrapper over IDB's callback API, plus one cached
+ *   `IDBDatabase` handle per database per session. Each database is a flat
+ *   key→blob bucket: one object store (`data`), out-of-line keys, no indexes.
+ *   A caller needing in-line keys, secondary indexes or multiple object stores
+ *   cannot use this driver and must hold its own handle — see
+ *   `hebrewBooksHistoryStore`, which legitimately does.
+ *
+ * Callers name their own database and their own keys. Every localStorage key in the
+ * app is namespaced `area.name` by its owning module, so the one flat namespace this
+ * driver writes into cannot be claimed twice.
  */
 
 const STORE = 'data'
-const LASTREAD_MAX = 1000
 
 // ── localStorage helpers (synchronous) ───────────────────────────────────────
 
@@ -38,106 +56,50 @@ export function lsDelete(key: string): void {
   try { localStorage.removeItem(LS_PREFIX + key) } catch {}
 }
 
-/** Remove all kitvei-hakodesh.* keys from localStorage (used during full app reset). */
+/** Every key in this app's namespace, unprefixed. Callers filter; the driver does not. */
+export function lsKeys(): string[] {
+  try {
+    const out: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i)
+      if (k?.startsWith(LS_PREFIX)) out.push(k.slice(LS_PREFIX.length))
+    }
+    return out
+  } catch { return [] }
+}
+
+/** Remove every key in this app's namespace. */
 export function lsClearAll(): void {
-  try {
-    const toRemove: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)
-      if (k?.startsWith(LS_PREFIX) || k === RESET_LS_KEY) toRemove.push(k)
-    }
-    toRemove.forEach((k) => localStorage.removeItem(k))
-  } catch {}
+  lsKeys().forEach(lsDelete)
 }
 
-/**
- * Remove only display/reading settings from localStorage.
- * Preserves structural and non-settings keys: tabs lists (tabs:*), workspaces,
- * and the one-time onboarding flag (setupDone) so the wizard never re-appears.
- * Used by settings reset so open tabs and app structure survive.
- */
-export function lsClearSettingsOnly(): void {
-  const PRESERVE = new Set(['workspaces', 'setupDone'])
-  try {
-    const toRemove: string[] = []
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i)
-      if (!k?.startsWith(LS_PREFIX)) continue
-      const unprefixed = k.slice(LS_PREFIX.length)
-      if (unprefixed.startsWith('tabs:') || PRESERVE.has(unprefixed)) continue
-      toRemove.push(k)
-    }
-    toRemove.forEach((k) => localStorage.removeItem(k))
-  } catch {}
+// Unprefixed raw access, for the few values that must live outside the app
+// namespace (e.g. a flag that has to be readable before the app boots). Same
+// error containment; no JSON coding, since these are plain strings.
+
+export function lsGetRaw(key: string): string | null {
+  try { return localStorage.getItem(key) } catch { return null }
 }
 
-// ── Shared types ──────────────────────────────────────────────────────────────
-
-export interface TabState {
-  searchCheckedBookIds?: number[] // absent/null means "all checked" (default)
-  searchAtFilters?: string[]      // @ tokens from the search input, e.g. ["בראשית", "בבלי"]
-  searchZoom?: number             // per-tab zoom level for the search results page (50–200)
-  searchScrollIndex?: number      // virtual scroller item index for scroll restore
-  searchScrollOffset?: number     // virtual scroller item offset for scroll restore
-  searchSortOrder?: import('@/features/full-text-search/fullTextSearchTypes').FullTextSearchSortOrder // per-tab FTS result sort ('lineId' | 'relevance')
-  htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
-  txtViewZoom?: number            // per-tab zoom level for /txt-view tabs (50–400)
+export function lsSetRaw(key: string, value: string): void {
+  try { localStorage.setItem(key, value) } catch {}
 }
 
-export interface BookState {
-  scrollIndex: number
-  scrollOffset: number
-  selectedLineId?: number | null
-  commentaryScrollIndex?: number | null
-  commentaryScrollOffset?: number | null
-  commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
-  zoom?: number
-  commentaryZoom?: number
-  commentaryVisible?: boolean
-  commentaryMode?: 'off' | 'bottom' | 'side'
-  commentaryFraction?: number    // side-by-side divider position (0.1–0.9)
-  stackedCommentaryFraction?: number  // stacked (bottom) divider position (0.1–0.9)
-  autoSelectTopLine?: boolean
-  /** @deprecated use pinnedCommentaryGroup — kept for reading old saves */
-  pinnedCommentaryBookId?: number | null
-  pinnedCommentaryGroup?: import('@/features/book-view/bookViewTypes').PinnedCommentaryGroup | null
-}
-
-export interface LastReadState {
-  scrollIndex: number
-  scrollOffset: number
-  selectedLineId?: number | null
-  commentaryScrollIndex?: number | null
-  commentaryScrollOffset?: number | null
-  commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
-  commentaryMode?: 'off' | 'bottom' | 'side'
-  commentaryFraction?: number
-  stackedCommentaryFraction?: number
-  /** @deprecated use pinnedCommentaryGroup — kept for reading old saves */
-  pinnedCommentaryBookId?: number | null
-  pinnedCommentaryGroup?: import('@/features/book-view/bookViewTypes').PinnedCommentaryGroup | null
-}
-
-export interface Workspace {
-  id: string
-  name: string
-  createdAt: number
-}
-
-export interface WorkspaceList {
-  workspaces: Workspace[]
-  activeId: string
+export function lsDeleteRaw(key: string): void {
+  try { localStorage.removeItem(key) } catch {}
 }
 
 // ── DB handles ────────────────────────────────────────────────────────────────
 
+// Cache only — a name absent here is opened on demand and cached on first use.
+// Listed names are the databases this driver owns; databases held by a store
+// (app-hb-history, app-recently-opened) are deliberately not among them.
 const handles: Record<string, IDBDatabase | null> = {
   'app-tabs': null,
   'app-lastread': null,
   'app-search-cache': null,
   'app-dict-cache': null,
   'app-catalog-toc-cache': null,
-  'app-recently-opened': null,
 }
 
 function openDb(name: string): Promise<IDBDatabase> {
@@ -157,7 +119,7 @@ function openDb(name: string): Promise<IDBDatabase> {
 
 // ── Core get / set / delete ───────────────────────────────────────────────────
 
-async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
+export async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
   const store = (await openDb(dbName)).transaction(STORE).objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.get(key)
@@ -166,7 +128,7 @@ async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
   })
 }
 
-async function dbSet<T>(dbName: string, key: string, value: T): Promise<void> {
+export async function dbSet<T>(dbName: string, key: string, value: T): Promise<void> {
   const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.put(value, key)
@@ -175,7 +137,7 @@ async function dbSet<T>(dbName: string, key: string, value: T): Promise<void> {
   })
 }
 
-async function dbDelete(dbName: string, key: string): Promise<void> {
+export async function dbDelete(dbName: string, key: string): Promise<void> {
   const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.delete(key)
@@ -184,7 +146,7 @@ async function dbDelete(dbName: string, key: string): Promise<void> {
   })
 }
 
-async function dbDeleteByPrefix(dbName: string, prefix: string): Promise<void> {
+export async function dbDeleteByPrefix(dbName: string, prefix: string): Promise<void> {
   const idb = await openDb(dbName)
   return new Promise((resolve, reject) => {
     const req = idb.transaction(STORE, 'readwrite').objectStore(STORE).openCursor()
@@ -201,7 +163,53 @@ async function dbDeleteByPrefix(dbName: string, prefix: string): Promise<void> {
   })
 }
 
-function dropDb(name: string): Promise<void> {
+/** Does this key exist? Cheaper than a get — reads the key, not the value. */
+export async function dbHasKey(dbName: string, key: string): Promise<boolean> {
+  const store = (await openDb(dbName)).transaction(STORE).objectStore(STORE)
+  return new Promise((resolve, reject) => {
+    const req = store.getKey(key)
+    req.onsuccess = () => resolve(req.result !== undefined)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** Number of entries. For callers enforcing their own retention cap. */
+export async function dbCount(dbName: string): Promise<number> {
+  const store = (await openDb(dbName)).transaction(STORE).objectStore(STORE)
+  return new Promise((resolve, reject) => {
+    const req = store.count()
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** Keys in cursor order, optionally stopping after `limit` — values are not read. */
+export async function dbListKeys(dbName: string, limit?: number): Promise<string[]> {
+  const idb = await openDb(dbName)
+  return new Promise((resolve, reject) => {
+    const acc: string[] = []
+    const req = idb.transaction(STORE).objectStore(STORE).openKeyCursor()
+    req.onsuccess = () => {
+      const cursor = req.result
+      if (!cursor || (limit !== undefined && acc.length >= limit)) {
+        resolve(acc)
+        return
+      }
+      acc.push(cursor.key as string)
+      cursor.continue()
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/**
+ * Close this driver's handle and delete the database.
+ *
+ * Only safe for databases this driver opened. `deleteDatabase` stalls on
+ * `onblocked` while any handle is open, so a database whose handle is held
+ * elsewhere must be dropped by its own owner.
+ */
+export function dropDatabase(name: string): Promise<void> {
   handles[name]?.close()
   handles[name] = null
   return new Promise((resolve, reject) => {
@@ -211,70 +219,6 @@ function dropDb(name: string): Promise<void> {
     req.onblocked = () => resolve() // blocked means another tab holds it open; reload will finish the delete
   })
 }
-
-export const KEYS = {
-  // localStorage keys (used with lsGet/lsSet)
-  SETTINGS_WORKSPACES: 'workspaces',
-  SETTINGS_BOOKS_VIEW: 'books.view',
-  SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
-  SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
-  SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
-  SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'defaultAutoSyncCommentary',
-  SETTINGS_CENSOR_DIVINE: 'censorDivineNames',
-  SETTINGS_CENSOR_ELOKIM: 'censorElokimMode',
-  SETTINGS_CENSOR_OTHER_NAMES: 'censorOtherNamesMode',
-  SETTINGS_DIACRITICS: 'diacriticsState',
-  SETTINGS_HEADER_FONT: 'headerFont',
-  SETTINGS_TEXT_FONT: 'textFont',
-  SETTINGS_FONT_SIZE: 'fontSize',
-  SETTINGS_LINE_PADDING: 'linePadding',
-  SETTINGS_COMMENTARY_HEADER_FONT: 'commentaryHeaderFont',
-  SETTINGS_COMMENTARY_TEXT_FONT: 'commentaryTextFont',
-  SETTINGS_COMMENTARY_FONT_SIZE: 'commentaryFontSize',
-  SETTINGS_COMMENTARY_LINE_PADDING: 'commentaryLinePadding',
-  SETTINGS_SEPARATE_COMMENTARY: 'useSeparateCommentarySettings',
-  SETTINGS_APP_ZOOM: 'appZoom',
-  SETTINGS_NEW_TAB_PAGE: 'newTabPage',
-  SETTINGS_PDF_FILTERS: 'pdfPageFilters',
-  SETTINGS_RESUME_LAST_READ: 'resumeLastRead',
-  SETTINGS_SHOW_CLOCK: 'showClock',
-  SETTINGS_THEME: 'theme',
-  SETTINGS_SETUP_DONE: 'setupDone',
-  SETTINGS_ZMANIM_CITY: 'zmanim.city',
-  SETTINGS_CALENDAR_VIEW: 'calendar.viewMode',
-  SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
-  SETTINGS_DICTIONARY_ZOOM: 'dictionaryZoom',
-  SETTINGS_SEARCH_CONTEXT_MARGIN: 'search.contextMargin',
-  SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
-  SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
-  SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
-  SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
-  SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
-  SETTINGS_COPY_CLEAN_TEXT: 'copyCleanText',
-  // Storage key value kept as the historical 'copyAsBlob' string so existing users'
-  // saved preference migrates transparently; the setting is now named copyJoinLines.
-  SETTINGS_COPY_JOIN_LINES: 'copyAsBlob',
-  SETTINGS_COPY_SOURCE_POSITION: 'copySourcePosition',
-  SETTINGS_COPY_WITH_NOTES: 'copyWithNotes',
-  SETTINGS_COPY_AS_SOURCE_WITH_QUOTATION: 'copyAsSourceWithQuotation',
-  SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
-  SETTINGS_LINES_CONTENT_MAX_WIDTH: 'linesContentMaxWidth',
-  SETTINGS_COMMENTARY_MAX_WIDTH: 'commentaryMaxWidth',
-  SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
-  SETTINGS_SPLIT_VIEW: 'splitView.enabled',
-  SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
-  SETTINGS_COMPACT_MODE: 'compactMode',
-  SETTINGS_CONTENT_BORDER: 'contentBorder',
-  SETTINGS_SHOW_RECENTLY_OPENED: 'showRecentlyOpened',
-  SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
-  // tab list is also localStorage (small JSON, needed synchronously at boot)
-  tabsList: (wsId: string) => `tabs:${wsId}`,
-
-  // app-tabs IDB keys (per-tab and per-book state — can accumulate, stays in IDB)
-  tab: (wsId: string, tabId: string) => `tab:${wsId}:${tabId}`,
-  book: (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
-  tabPrefix: (wsId: string, tabId: string) => `book:${wsId}:${tabId}:`,
-} as const
 
 // ── Search cache DB ───────────────────────────────────────────────────────────
 
@@ -328,125 +272,4 @@ export function idbTabsDelete(key: string): Promise<void> {
 }
 export function idbTabsDeleteByPrefix(prefix: string): Promise<void> {
   return dbDeleteByPrefix('app-tabs', prefix)
-}
-
-export function idbDeleteWorkspaceData(wsId: string): Promise<void> {
-  // Tab list is in localStorage — remove it synchronously
-  lsDelete(KEYS.tabsList(wsId))
-  // Tab/book states are in IDB
-  return Promise.all([
-    dbDeleteByPrefix('app-tabs', `tab:${wsId}:`),
-    dbDeleteByPrefix('app-tabs', `book:${wsId}:`),
-  ]).then(() => {})
-}
-
-// ── LastRead DB ───────────────────────────────────────────────────────────────
-
-// In-memory count of lastread entries — avoids a full DB key scan on every scroll save.
-// Initialised to -1 (unknown); first write counts the real value via a cursor.
-let _lastReadCount = -1
-
-export async function idbSetLastRead(bookId: number, value: LastReadState): Promise<void> {
-  const key = `lastread:${bookId}`
-  const idb = await openDb('app-lastread')
-
-  // Check if this key already exists — if so, count stays the same
-  const existing = await new Promise<boolean>((resolve, reject) => {
-    const req = idb.transaction(STORE).objectStore(STORE).getKey(key)
-    req.onsuccess = () => resolve(req.result !== undefined)
-    req.onerror = () => reject(req.error)
-  })
-
-  await dbSet('app-lastread', key, value)
-
-  if (!existing) {
-    if (_lastReadCount === -1) {
-      // First write after boot — count the real number of entries once
-      _lastReadCount = await new Promise<number>((resolve, reject) => {
-        const req = idb.transaction(STORE).objectStore(STORE).count()
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-      })
-    } else {
-      _lastReadCount++
-    }
-  }
-
-  if (_lastReadCount <= LASTREAD_MAX) return
-
-  // Over the cap — evict the oldest entries via a cursor (only runs when cap is exceeded)
-  const toEvict = _lastReadCount - LASTREAD_MAX
-  const keysToDelete = await new Promise<string[]>((resolve, reject) => {
-    const acc: string[] = []
-    const req = idb.transaction(STORE).objectStore(STORE).openKeyCursor()
-    req.onsuccess = () => {
-      const cursor = req.result
-      if (!cursor || acc.length >= toEvict) {
-        resolve(acc)
-        return
-      }
-      acc.push(cursor.key as string)
-      cursor.continue()
-    }
-    req.onerror = () => reject(req.error)
-  })
-  await Promise.all(keysToDelete.map((k) => dbDelete('app-lastread', k)))
-  _lastReadCount -= keysToDelete.length
-}
-
-export function idbGetLastRead(bookId: number): Promise<LastReadState | null> {
-  return dbGet<LastReadState>('app-lastread', `lastread:${bookId}`)
-}
-
-const RESET_LS_KEY = '__pendingReset'
-
-export async function idbClearAll(): Promise<void> {
-  // Import lazily to avoid circular dependency — drop* are plain functions
-  const { dropHbHistoryDb } = await import('@/stores/hebrewBooksHistoryStore')
-  const { dropRecentlyOpenedDb } = await import('@/stores/recentlyOpenedStore')
-  await Promise.all([
-    dropDb('app-tabs'),
-    dropDb('app-lastread'),
-    dropHbHistoryDb(),
-    dropRecentlyOpenedDb(),
-    dropDb('app-search-cache'),
-    dropDb('app-dict-cache'),
-    dropDb('app-catalog-toc-cache'),
-  ])
-  // MUST come last. lsClearAll() also removes the __pendingReset flag, so clearing
-  // it before the drops finish would disarm the crash-safety net: die mid-wipe and
-  // the next boot sees no flag and never redoes it. Dropping first means the flag
-  // survives any failure above and idbCheckAndExecReset picks it up.
-  lsClearAll()
-}
-
-/** Schedule a full reset on next boot — synchronous localStorage write, zero IDB cost. */
-export function idbScheduleReset(): void {
-  try { localStorage.setItem(RESET_LS_KEY, '1') } catch {}
-}
-
-/**
- * Call once at boot. Synchronous localStorage check — zero cost on normal boots.
- * Safety net: if a reset was scheduled but the page reloaded before IDB could be
- * cleared (e.g. a crash mid-reset), clears IDB and reloads now.
- * Under normal operation, idbClearAll() is called directly before the reload so
- * this function returns immediately without touching IDB.
- */
-export async function idbCheckAndExecReset(): Promise<void> {
-  let flagSet = false
-  try { flagSet = localStorage.getItem(RESET_LS_KEY) === '1' } catch {}
-  if (!flagSet) return
-  // Deliberately do NOT clear the flag up front — idbClearAll's final lsClearAll()
-  // removes it only once the wipe has actually completed, so a crash during this
-  // recovery still leaves something to recover from on the next boot.
-  try {
-    await idbClearAll()
-  } catch {
-    // The recovery wipe itself failed. Drop the flag so a persistently failing wipe
-    // cannot break startup on every launch — booting with stale data beats not
-    // booting at all. Also prevents a reload loop.
-    try { localStorage.removeItem(RESET_LS_KEY) } catch {}
-    return
-  }
-  window.location.reload()
 }

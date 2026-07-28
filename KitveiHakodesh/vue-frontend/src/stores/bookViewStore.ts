@@ -2,7 +2,16 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
-import { lsGet, lsSet, KEYS } from '@/utils/persistence'
+import { lsGet, lsSet } from '@/utils/persistence'
+
+/** Disk names for the book-view UI state this store owns. Nothing else reads them. */
+const KEYS = {
+  SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
+  SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
+  SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
+  SETTINGS_SPLIT_VIEW: 'splitView.enabled',
+  SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
+} as const
 import {
   ZOOM_CONFIG,
   zoomIn as zoomInUtil,
