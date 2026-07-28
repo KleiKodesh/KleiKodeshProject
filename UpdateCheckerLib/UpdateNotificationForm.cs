@@ -61,8 +61,10 @@ namespace UpdateCheckerLib
                 ForeColor = Color.White,
                 Cursor    = Cursors.Hand,
                 Anchor    = AnchorStyles.None,   // centres in the column
-                DialogResult = DialogResult.OK,
             };
+            // Shown non-modally (Show, not ShowDialog), so DialogResult would not
+            // close the form — close explicitly.
+            ok.Click += (s, e) => Close();
             ok.FlatAppearance.BorderSize         = 0;
             ok.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 102, 180);
             ok.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 84, 153);
@@ -74,13 +76,16 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
-        /// Shows the topmost update notification and blocks until the user dismisses it.
-        /// Call on any UI thread — no special threading setup required.
+        /// Shows the topmost update notification WITHOUT blocking — the host app
+        /// keeps loading behind it and the user can ignore the dialog entirely.
+        /// Call on a UI thread (the host's message pump drives the window).
+        /// Non-modal forms dispose themselves on close, so no using block here.
         /// </summary>
         public static void Show(string message)
         {
-            using (var form = new UpdateNotificationForm(message))
-                form.ShowDialog();
+            var form = new UpdateNotificationForm(message);
+            form.FormClosed += (s, e) => form.Dispose();
+            form.Show();
         }
     }
 }

@@ -188,9 +188,12 @@ namespace UpdateCheckerLib
         /// consent prompt regardless of the target's manifest, and a declined or
         /// policy-denied prompt used to silently kill the update on every close.
         ///
-        /// --wait-for-pid keeps the installer window hidden until this process has
-        /// fully exited (NSIS forwards all arguments to the WPF installer), so the
-        /// wizard never races the closing app.
+        /// The installer is launched with NO arguments. In particular, do NOT pass
+        /// --wait-for-pid: the exe on disk is always an OLDER release than this
+        /// code, and installers before the 30s wait bound sit hidden FOREVER when
+        /// the pid gets recycled by a long-lived process (verified live: three
+        /// invisible elevated installers accumulated across three app closes).
+        /// The WPF installer's landing page already waits for Word/the app itself.
         /// </summary>
         public static void RunPendingInstaller()
         {
@@ -238,7 +241,6 @@ namespace UpdateCheckerLib
             var psi = new ProcessStartInfo
             {
                 FileName         = installerPath,
-                Arguments        = $"--wait-for-pid {Process.GetCurrentProcess().Id}",
                 UseShellExecute  = true,
                 WorkingDirectory = Path.GetDirectoryName(installerPath)
             };

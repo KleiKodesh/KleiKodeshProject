@@ -67,7 +67,7 @@ Build → AddinInstaller.cs (const Version)
 | _(none)_                 | Normal UI — landing page                                                                                                              |
 | `--silent` / `--install` | Skip straight to install progress page, exit 0 on success / 1 on failure. Used by auto-updater and NSIS `--silent` passthrough.       |
 | `--repair`               | Skip straight to repair page with auto-run (no confirm dialog). Used when relaunching as admin from the repair page elevation banner. |
-| `--wait-for-pid <PID>`   | Start hidden; show the window once the given process exits (max 30s — PIDs get recycled). Passed by `RunPendingInstaller()` so the wizard appears only after Word/the app has fully closed. |
+| `--wait-for-pid <PID>`   | Start hidden; show the window once the given process exits (max 30s — PIDs get recycled). ⚠ NOT passed by `RunPendingInstaller()` — the downloaded exe is always an OLDER release, and installers before the 30s bound wait unbounded and sit hidden forever when the pid is recycled (observed live: three invisible elevated installers accumulated). Keep the arg supported, never pass it to a downloaded installer. |
 
 ### Full Update Install Flow
 
@@ -83,10 +83,10 @@ Word taskpane / KitveiHakodesh app opens
     release asset size — a mismatch (truncated pre-.partial download) forces a
     fresh download.
   → User closes Word/app → RunPendingInstaller() launches the NSIS wrapper
-    unelevated with "--wait-for-pid <pid>" (no --silent — the wizard is shown)
-  → NSIS checks .NET/VSTO prereqs, passes the args through to the WPF installer
-  → WPF installer starts hidden, waits (max 30s) for the pid to exit, then shows
-    the landing page
+    unelevated with NO arguments (no --silent — the wizard is shown; no
+    --wait-for-pid — see the CLI args table warning)
+  → NSIS checks .NET/VSTO prereqs, runs the WPF installer
+  → WPF landing page waits up to 3s each for Word / the app to close, then shows
   → Extracts VSTO zip, registers addin, SaveVersion() → exits 0
   → NSIS writes/overwrites HKCU\...\Uninstall\KleiKodesh\DisplayVersion = "vX.Y.Z"
 ```
@@ -107,7 +107,7 @@ to install on every close, forever ("already downloaded" skip blocks the repair)
 - **`--repair` arg**: handled in `App.xaml.cs` → calls `MainWindow.NavigateToRepairOnLoad()` which opens `RepairPage(autoRun: true)` directly, bypassing the landing page entirely.
 - **WPF installer manifest**: `asInvoker` — correct, never forces UAC.
 - **NSIS wrapper**: `RequestExecutionLevel user` — **MUST stay `user`** (this is a per-user install: `%LOCALAPPDATA%` + HKCU). It was briefly `admin` (June–July 2026, for the uninstaller's `sc stop/delete DocumentLocatorSvc`) and that broke auto-update: a surprise UAC prompt at Word/app close, silently swallowed when declined or policy-denied, and — worse — a standard user approving with admin credentials installed into the *admin's* profile, so the real user never updated. The uninstaller now elevates just its two `sc` commands through one `ExecShellWait "runas" cmd.exe` call (skipped when the service isn't registered); the installer side self-elevates only `DocumentLocator.Service.exe --install` (see `DocumentLocatorHelper.EnsureServiceInstalledAsync`).
-- **`DownloadManager.LaunchInstaller`**: **MUST NOT use `Verb = "runas"`** — the `runas` verb forces a UAC consent prompt regardless of the target exe's manifest (an earlier note here claimed it was a promptless AIS handoff; that is wrong — AIS *is* the elevation path). A declined/denied prompt surfaced as Win32 error 1223, which is deliberately swallowed, so updates silently never ran. Child processes survive parent exit on Windows; no handoff trick is needed for the installer to outlive Word/the app, and `--wait-for-pid` makes the installer wait for the host to fully exit before showing UI.
+- **`DownloadManager.LaunchInstaller`**: **MUST NOT use `Verb = "runas"`** — the `runas` verb forces a UAC consent prompt regardless of the target exe's manifest (an earlier note here claimed it was a promptless AIS handoff; that is wrong — AIS *is* the elevation path). A declined/denied prompt surfaced as Win32 error 1223, which is deliberately swallowed, so updates silently never ran. Child processes survive parent exit on Windows; no handoff trick is needed for the installer to outlive Word/the app. Launch with NO arguments — see the `--wait-for-pid` warning in the CLI args table.
 
 If a user wants to clean HKLM leftovers from very old versions, they can run the WPF installer manually as administrator — the repair page will then have full access.
 
