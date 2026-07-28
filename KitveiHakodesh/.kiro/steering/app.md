@@ -255,7 +255,6 @@ Current caches and their caps:
 
 - `_bookStateCache` in `tabStore` — one entry per open tab×book; evicted on `closeTab` / `closeAllTabs`
 - `_lastReadCache` in `tabStore` — capped at 200 entries, FIFO eviction
-- `_booksView` in `tabStore` — single scalar, no cap needed
 - `_mem` in `searchCacheStore` — **not cached in memory** — search results can be hundreds of items with snippet strings; only the LRU key list (`_lru`) is kept in memory
 
 ### localStorage rules
@@ -302,7 +301,7 @@ localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/
 
 ### Stores
 
-- `tabStore` — tab lifecycle, navigation, tab/book state, lastread, booksView setting, and `resetAll()`
+- `tabStore` — tab lifecycle, navigation, tab/book state, lastread, and `resetAll()`
 - `bookViewStore` — toolbar/searchBarPos; reads from localStorage at init (synchronous)
 - `settingsStore` — all app settings in localStorage; `init()` is synchronous
 - `themeStore` — theme preset + reading background in localStorage

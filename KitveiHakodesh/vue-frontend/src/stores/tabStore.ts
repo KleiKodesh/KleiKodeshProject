@@ -499,20 +499,6 @@ export const useTabStore = defineStore('tabs', () => {
     return pendingLastReadSave
   }
 
-  // ── Books view setting ────────────────────────────────────────────────────
-
-  let _booksView: 'list' | 'tiles' | 'tree' | null = null
-
-  async function getBooksView(): Promise<'list' | 'tiles' | 'tree'> {
-    if (_booksView !== null) return _booksView
-    _booksView = lsGet<'list' | 'tiles' | 'tree'>(KEYS.SETTINGS_BOOKS_VIEW) ?? 'list'
-    return _booksView
-  }
-  function setBooksView(v: 'list' | 'tiles' | 'tree') {
-    _booksView = v
-    lsSet(KEYS.SETTINGS_BOOKS_VIEW, v)
-  }
-
   // ── App reset ─────────────────────────────────────────────────────────────
 
   async function resetAll(): Promise<void> {
@@ -766,8 +752,6 @@ export const useTabStore = defineStore('tabs', () => {
     updateTab,
     openNewHomeTab,
     navigateToSingleton,
-    getBooksView,
-    setBooksView,
     getLastReadPos,
     setLastReadPos,
     getTabViewState,

@@ -413,7 +413,9 @@ Dialogs are `ConfirmDialog.vue` (confirmation) and `AlertDialog.vue` / `ToastBan
 
 **bookViewStore** — book viewer UI state and split-view state. Toolbar visibility, floating search bar position, per-tab+book zoom map, and a reactive `zoom` computed for the active tab+book. Panel toggles take a `paneId` (`toggleToolbar`, `toggleBottomPanel`, `toggleTocPanel`, `openSearch`). Also owns split view: `splitViewEnabled`, `splitViewFraction`, `setSplitViewFraction`, `toggleSplitView`, `disableSplitView`, and the focused-pane tracking (`setFocusedPane`). Also holds the per-tab `TocBridge` registration map (`registerTocBridge` / `unregisterTocBridge` / `getTocBridge`) used by the title bar breadcrumb for book-view TOC navigation, and the per-tab `PdfBridge` registration map (`registerPdfBridge` / `unregisterPdfBridge` / `getPdfBridge`) for PDF outline navigation. Both bridges are in-memory only, never persisted.
 
-**settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own localStorage key and is watched individually.
+**settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own localStorage key and is watched individually: add a `DEFAULTS` entry and a ref, then a `loadSetting` call in `init()` and a `persistSetting` call, and export the ref. Assigning the ref is all a consumer needs to do — the watcher persists it.
+
+Per-feature *display* preferences belong here too, not in the feature or in `tabStore` — `booksView` (book catalog layout) and `fileSearchSortOrder` are the precedents. A preference belongs in a feature folder only when it is genuinely per-tab.
 
 **booksDataStore** — lazy-loaded book catalog. Fetches all categories and books on first access, builds the category tree, assigns period metadata.
 

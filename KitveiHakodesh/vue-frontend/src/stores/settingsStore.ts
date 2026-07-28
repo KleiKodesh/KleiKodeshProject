@@ -18,6 +18,8 @@ import {
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
+/** Layout modes for the book catalog page. */
+export type BooksView = 'list' | 'tiles' | 'tree'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
@@ -43,6 +45,7 @@ const DEFAULTS = {
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
+  booksView: 'list' as BooksView,
   pdfPageFilters: false,
   resumeLastRead: true,
   showClock: false,
@@ -113,6 +116,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const contentBorder = ref(DEFAULTS.contentBorder)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const fileSearchSortOrder = ref<import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder>('relevance')
+  /** Which layout the book catalog page renders in. */
+  const booksView = ref<BooksView>(DEFAULTS.booksView)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -242,6 +247,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_CONTENT_BORDER, contentBorder)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
+    loadSetting(KEYS.SETTINGS_BOOKS_VIEW, booksView)
     applyCSSVariables()
   }
 
@@ -290,6 +296,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
+  persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -408,6 +415,7 @@ export const useSettingsStore = defineStore('settings', () => {
     contentBorder,
     showRecentlyOpened,
     fileSearchSortOrder,
+    booksView,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })

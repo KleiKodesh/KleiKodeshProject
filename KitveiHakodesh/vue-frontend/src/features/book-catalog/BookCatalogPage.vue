@@ -12,6 +12,8 @@ import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
+import { useSettingsStore, type BooksView } from '@/stores/settingsStore'
+import { storeToRefs } from 'pinia'
 import type { BookRow, CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
 import { getDiagnostics } from '@/webview-host/bridge'
@@ -34,10 +36,9 @@ const {
   navigateToSibling,
 } = useBookCatalog()
 
-const view = ref<'list' | 'tiles' | 'tree'>('list')
-onMounted(async () => {
-  view.value = await tabStore.getBooksView()
-})
+// Persisted in settingsStore alongside every other display preference — it is
+// app-wide, not per-tab, so it needs no load-on-mount step.
+const { booksView: view } = storeToRefs(useSettingsStore())
 
 // This tab's id, captured at mount. The catalog is NOT a singleton (multiple
 // '/books' tabs can coexist), so we persist against the specific tab, never the
@@ -156,9 +157,9 @@ const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
 
 watch(searchQuery, (val) => (val ? pauseTyping() : resumeTyping()))
 
-function setView(v: 'list' | 'tiles' | 'tree') {
+function setView(v: BooksView) {
+  // Assigning the store ref persists it — settingsStore watches and writes.
   view.value = v
-  tabStore.setBooksView(v)
 }
 
 onMounted(() => {
