@@ -36,4 +36,12 @@ Env flags: `showPopOutButton` = `window.__webviewShowPopOut === true`, and `isVs
 
 **queries.sql.ts** — all raw SQL strings in the app. Every new SQL query must be added here as a named constant. No inline SQL anywhere else in the codebase.
 
-**devFallbacks.ts** — dev-mode fallbacks for all host operations. Contains the fetch-based DB transports (`devQuery`, `devQueryDict`, `devQueryWikiDict`) and browser file-input pickers (`devPickPdf`, `devPickZim`). Only called when running outside the C# WebView2 host. Never import this file from production logic paths directly — it is only consumed by the other files in this folder.
+**seforimApi.ts** — typed wrappers over the seforim queries (categories, books, TOC entries, connections). Each one routes through the C# host when hosted and the service in dev, so callers never branch on the mode themselves.
+
+**serviceClient.ts** — the dev-mode transport to `KitveiHakodeshService` (MessagePack over the loopback HTTP host). `serviceCall<T>(op, args?)` is the entry point.
+
+**tabMirror.ts** — mirrors the Vue tab store into the native chrome tab strip. Note that this file imports stores and a composable, so unlike everything else here it sits *above* the store layer; it is a known layering exception awaiting a move (see `.kiro/steering/architecture.md`).
+
+**fontsApi.ts** — `detectAvailableFonts()`: the machine's real Hebrew-capable font families, for the settings font picker. Asks the C# host (`getFonts` → WPF) when hosted, the service (`getFonts` → DirectWrite) in dev, and falls back to `fontsCanvasProbe.ts` only when neither answers. `isHosted` is TRUE in dev and cannot pick the path — branch on `__webviewAction`.
+
+**fontsCanvasProbe.ts** — last-resort font detection by canvas text-width measurement against a fixed candidate list. Under-reports by design (it can only confirm names the list already contains) and is never used when a real enumerator is reachable.

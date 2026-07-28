@@ -1,5 +1,5 @@
-import { serviceCall } from '@/webview-host/serviceClient'
-import { detectFontsByCanvas } from './detectFontsByCanvas'
+import { serviceCall } from './serviceClient'
+import { detectFontsByCanvas } from './fontsCanvasProbe'
 
 /**
  * Real system font families that can render Hebrew, sorted alphabetically.
@@ -10,9 +10,12 @@ import { detectFontsByCanvas } from './detectFontsByCanvas'
  *        HebrewFontsProvider) — WPF is unavailable under native AOT, so it uses the API WPF
  *        itself wraps, testing each face's own cmap for א.
  *
- * detectFontsByCanvas is the last resort when neither is reachable. It can only confirm fonts its
+ * fontsCanvasProbe is the last resort when neither is reachable. It can only confirm fonts its
  * own CANDIDATES list names, so it under-reports — but a plausible subset beats an empty picker,
  * and the two real enumerators are what normally answer.
+ *
+ * Lives here rather than in utils/ because it is entirely host I/O: it talks to the C# bridge or
+ * the service and knows which of the two to ask. A util may not invoke a host action.
  *
  * NOTE: `isHosted` is TRUE in dev, so it cannot pick the path — branch on __webviewAction
  * (present only in the real WebView2 host) and let dev go to the service.
