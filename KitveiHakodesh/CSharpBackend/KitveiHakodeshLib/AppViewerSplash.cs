@@ -24,10 +24,25 @@ namespace KitveiHakodeshLib
                     logo = Image.FromStream(stream);
             }
 
-            _splash = new SplashOverlay(logo) { Dock = DockStyle.Fill };
+            _splash = new SplashOverlay(logo, GetInstalledVersionText()) { Dock = DockStyle.Fill };
             Controls.Add(_splash);
             _SyncSplashBackColor();
             _splash.BringToFront();
+        }
+
+        /// <summary>
+        /// Installed version from the registry (written by the installer's
+        /// SaveVersion) for the splash's bottom version line. Null on dev/portable
+        /// runs — the splash then simply shows no version.
+        /// </summary>
+        private static string GetInstalledVersionText()
+        {
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
+                    return key?.GetValue("Version")?.ToString();
+            }
+            catch { return null; }
         }
 
         /// <summary>
