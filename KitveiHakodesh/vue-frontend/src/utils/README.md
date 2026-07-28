@@ -24,4 +24,4 @@ Key names are **not** centralised. Every localStorage key is defined by its owni
 
 **scrollToIndexWithRetry.ts** — scroll-to-index for `@tanstack/vue-virtual` that retries until the target item has rendered. Use this instead of calling `scrollToIndex` directly when the list may not have rendered the target yet.
 
-**detectFonts.ts** — `detectAvailableFonts()` uses canvas measurement to detect which Hebrew and general fonts are installed on the user's system. Returns an array of font family name strings. Used by `FontSelector.vue` to populate the font picker with only fonts that are actually available.
+Font detection is **not** here — it asks the C# host or the service which fonts the OS has, which is host I/O, so it lives in `src/webview-host/fontsApi.ts`.

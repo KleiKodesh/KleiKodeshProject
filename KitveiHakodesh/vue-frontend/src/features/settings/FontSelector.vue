@@ -2,7 +2,7 @@
 import { ref, computed, nextTick } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
-import { detectAvailableFonts } from '@/utils/detectFonts'
+import { detectAvailableFonts } from '@/webview-host/fontsApi'
 import HintIcon from '@/components/HintIcon.vue'
 
 const props = defineProps<{
