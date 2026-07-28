@@ -134,18 +134,22 @@ export function usePdfContextMenu(
       return
     }
 
-    // Preferred path: let the C# host set the clipboard. The browser's
-    // navigator.clipboard.write() for images is blocked inside WebView2, which is
-    // why the old path fell through to a download. copyImageToClipboard rejects
-    // when there's no bridge (dev/browser), so we fall back to the browser API.
-    try {
-      const res = await copyImageToClipboard(canvas.toDataURL('image/png'))
-      if (res?.ok) {
-        options.notify?.(`דף ${pageNumber} הועתק כתמונה.`)
-        return
+    // Hosted MUST go through C#: the host serves the app from
+    // http://KitveiHakodesh-vue-app/ — plain http on a non-localhost hostname, which Chromium
+    // treats as an INSECURE context, so navigator.clipboard isn't exposed there at all.
+    // Dev is served from http://localhost, which IS a secure context, so the browser API below
+    // works and there is nothing for C# to do — skip the call rather than issue one that can
+    // only reject (the service has no clipboard-image op).
+    if (typeof window.__webviewAction === 'function') {
+      try {
+        const res = await copyImageToClipboard(canvas.toDataURL('image/png'))
+        if (res?.ok) {
+          options.notify?.(`דף ${pageNumber} הועתק כתמונה.`)
+          return
+        }
+      } catch {
+        /* host bridge failed — try the browser clipboard below */
       }
-    } catch {
-      /* no host bridge — try the browser clipboard below */
     }
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))

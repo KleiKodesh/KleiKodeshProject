@@ -27,7 +27,8 @@ export interface RecentlyOpenedEntry {
   localFileHbBookId?: string
   /** Needed for HebrewBooks restore — the title used as cache filename. */
   localFileHbBookTitle?: string
-  /** Present when localFilePath is empty (dev mode blob URL files — identified by filename). */
+  /** Display name; also the only identifier when localFilePath is empty (older entries saved
+   *  before local files carried a real path — those can't be re-served, only re-opened). */
   localFileName?: string
   /** Unix timestamp of last access (ms). */
   lastAccessedAt: number
