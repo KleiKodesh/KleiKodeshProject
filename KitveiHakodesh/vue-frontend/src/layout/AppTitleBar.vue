@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, defineAsyncComponent } from 'vue'
-import { useEventListener, useWindowSize } from '@vueuse/core'
+import { useWindowSize } from '@vueuse/core'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
-import { useAppNavigation } from '@/composables/useAppNavigation'
 import {
   IconLineHorizontal320Regular,
   IconAdd20Regular,
@@ -26,11 +25,11 @@ const AddressBar = defineAsyncComponent(() => import('./AddressBar.vue'))
 import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
+import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
-import { useThemeStore } from '@/theme/themeStore'
-import { toggleFullscreen, isVstoEnvironment as isVsto } from '@/webview-host/bridge'
+import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -38,8 +37,6 @@ const pane = useAppShellPane(props.paneId)
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const pdfOcrStore = usePdfOcrStore()
-const themeStore = useThemeStore()
-const { navigateInNewTab } = useAppNavigation()
 const { titleBarVisible } = useUiChromeVisibility(props.paneId)
 
 const { width: windowWidth } = useWindowSize()
@@ -135,175 +132,21 @@ function toggleNavDropdown() {
   navDropdownOpen.value = !navDropdownOpen.value
 }
 
-// Keyboard shortcuts — each pane installs its own handler.
-// Pane-scoped shortcuts (tab ops, book view actions, navigation within a pane)
-// only fire when this pane is the focused pane.
-// App-wide shortcuts (theme, fullscreen, split view, quick-nav, settings) are
-// handled exclusively by pane 1 — they must not fire twice.
-
-// Forward Ctrl+key shortcuts from child iframes (HTML viewer) back into the
-// top-level keydown pipeline. Only pane 1 needs to do this — iframes only
-// appear in pane 1 (txt-view / html-view).
-if (props.paneId === 1) {
-  useEventListener('message', (e: MessageEvent) => {
-    if (!e.data || e.data.type !== 'iframeKeydown') return
-    window.dispatchEvent(new KeyboardEvent('keydown', {
-      code: e.data.code,
-      ctrlKey: e.data.ctrlKey,
-      shiftKey: e.data.shiftKey,
-      metaKey: e.data.metaKey,
-      altKey: e.data.altKey,
-      bubbles: true,
-      cancelable: true,
-    }))
-  })
+/** Ctrl+T: the address bar's dropdown doubles as the tab list (empty field = tab list). */
+function toggleAddressBar() {
+  if (searchMode.value) searchMode.value = false
+  else enterSearchMode()
 }
 
-const isThisPaneFocused = computed(
-  () => !bookViewStore.splitViewEnabled || bookViewStore.focusedPaneId === props.paneId,
-)
+useAppTitleBarShortcuts({
+  paneId: props.paneId,
+  pane,
+  titleBarVisible,
+  isSplitViewAvailable,
+  toggleAddressBar,
+  toggleNavDropdown,
+})
 
-useEventListener('keydown', (e: KeyboardEvent) => {
-  // ── Pane-scoped shortcuts ──────────────────────────────────────────────────
-  // Only fire when this pane is focused (or split view is not active).
-  if (isThisPaneFocused.value) {
-    if (e.ctrlKey && e.code === 'KeyW') {
-      e.preventDefault()
-      pane.closeTab(pane.activeTabId.value)
-      return
-    } else if (e.ctrlKey && e.code === 'KeyX') {
-      e.preventDefault()
-      pane.closeAllTabs()
-      return
-    } else if (e.ctrlKey && !e.shiftKey && e.code === 'Tab') {
-      e.preventDefault()
-      // One switch per physical press — holding the combo must not machine-gun
-      // through tabs via key auto-repeat (each hop cold-remounts a page).
-      if (e.repeat) return
-      const paneTabs = pane.tabs.value
-      const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
-      const nextIndex = (currentIndex + 1) % paneTabs.length
-      pane.switchTab(paneTabs[nextIndex]!.id)
-      return
-    } else if (e.ctrlKey && e.shiftKey && e.code === 'Tab') {
-      e.preventDefault()
-      if (e.repeat) return
-      const paneTabs = pane.tabs.value
-      const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
-      const previousIndex = (currentIndex - 1 + paneTabs.length) % paneTabs.length
-      pane.switchTab(paneTabs[previousIndex]!.id)
-      return
-    } else if (e.ctrlKey && e.code === 'KeyB') {
-      e.preventDefault()
-      if (isBookViewActive.value) {
-        bookViewStore.toggleToolbar(props.paneId)
-      } else if (activeTab.value?.route === '/pdf-view') {
-        pane.togglePdfViewerTitleBar()
-      }
-      return
-    } else if (e.ctrlKey && e.code === 'KeyJ') {
-      e.preventDefault()
-      if (isBookViewActive.value) bookViewStore.toggleBottomPanel(props.paneId)
-      return
-    } else if (e.ctrlKey && e.code === 'KeyK') {
-      e.preventDefault()
-      if (isBookViewActive.value) bookViewStore.toggleTocPanel(props.paneId)
-      return
-    } else if (e.ctrlKey && e.code === 'KeyF') {
-      if (document.activeElement?.closest('[data-ctrlf-enabled]')) return
-      e.preventDefault()
-      if (isBookViewActive.value) {
-        bookViewStore.openSearch(props.paneId)
-      } else if (isTxtViewActive.value) {
-        bookViewStore.txtViewToggleSearch(props.paneId)
-      }
-      return
-    } else if (e.ctrlKey && e.code === 'KeyT') {
-      e.preventDefault()
-      // Toggle the address bar in every environment — its dropdown doubles as
-      // the tab list (empty field = tab list).
-      if (searchMode.value) searchMode.value = false
-      else enterSearchMode()
-      return
-    } else if (e.ctrlKey && e.code === 'KeyN') {
-      e.preventDefault()
-      pane.openNewTab()
-      return
-    } else if (e.ctrlKey && e.code === 'KeyG') {
-      e.preventDefault()
-      pane.goHome()
-      return
-    } else if (e.ctrlKey && e.code === 'KeyH') {
-      e.preventDefault()
-      titleBarVisible.value = !titleBarVisible.value
-      return
-    } else if (e.ctrlKey && e.code === 'KeyL') {
-      e.preventDefault()
-      themeStore.toggleDarkMode()
-      return
-    } else if (e.ctrlKey && e.code === 'KeyM') {
-      e.preventDefault()
-      toggleNavDropdown()
-      return
-    } else if (e.code === 'F1') {
-      e.preventDefault()
-      navigateInNewTab('הגדרות')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit1') {
-      e.preventDefault()
-      navigateInNewTab('ספרים')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit2') {
-      e.preventDefault()
-      navigateInNewTab('חיפוש')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit3') {
-      e.preventDefault()
-      navigateInNewTab('היברו-בוקס')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit4') {
-      e.preventDefault()
-      navigateInNewTab('פתח קובץ')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit5') {
-      e.preventDefault()
-      navigateInNewTab('חיפוש קבצים')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit6') {
-      e.preventDefault()
-      navigateInNewTab('מילון')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit7') {
-      e.preventDefault()
-      navigateInNewTab('לוח שנה')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit8') {
-      e.preventDefault()
-      navigateInNewTab('מידות ושיעורים')
-      return
-    } else if (e.ctrlKey && e.code === 'Digit9') {
-      e.preventDefault()
-      navigateInNewTab('סביבות עבודה')
-      return
-    }
-  }
-
-  // ── App-wide shortcuts — pane 1 only ──────────────────────────────────────
-  if (props.paneId === 1) {
-    if (e.ctrlKey && e.code === 'Backslash') {
-      e.preventDefault()
-      if (isSplitViewAvailable.value) bookViewStore.toggleSplitView()
-    } else if (e.ctrlKey && e.shiftKey && e.code === 'KeyF') {
-      e.preventDefault()
-      toggleFullscreen()
-    } else if (e.code === 'F11') {
-      e.preventDefault()
-      toggleFullscreen()
-    } else if (e.ctrlKey && e.code === 'KeyP') {
-      e.preventDefault()
-    }
-  }
-}, { capture: true })
 </script>
 
 <template>
