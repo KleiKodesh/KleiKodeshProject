@@ -9,6 +9,7 @@
  * - useBookViewSidePanel          — TOC / commentary-tree panel open/close
  * - useBookViewSearchPanel        — search panel state and match navigation
  * - useBookViewCommentaryPanel    — commentary panel visibility and scroll restore
+ * - useBookViewLinesBackfillGate  — full-book lines backfill yields to commentary loads
  */
 import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -33,6 +34,7 @@ import { useBookViewLineSelection } from './useBookViewLineSelection'
 import { useBookViewSidePanel } from './useBookViewSidePanel'
 import { useBookViewSearchPanel } from './useBookViewSearchPanel'
 import { useBookViewCommentaryPanel } from './useBookViewCommentaryPanel'
+import { useBookViewLinesBackfillGate } from './lines/useBookViewLinesBackfillGate'
 import { useBookViewTocNavigation } from './useBookViewTocNavigation'
 import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotations'
 import type { CommentaryTreeState } from './bookViewTypes'
@@ -110,7 +112,7 @@ export function useBookView(
     loadAltTocSections,
   } = useToc(() => bookId, () => bookTitle)
 
-  const { lines, prioritise, prefetch, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
+  const { lines, prioritise, prefetch, holdBackfill, releaseBackfill, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
 
   // Warm up the connection type ID table immediately — single tiny query that must
   // resolve before any line-tap commentary load fires its reverse queries.
@@ -295,6 +297,13 @@ export function useBookView(
     ensureStaticFilterGroupsLoaded,
   )
 
+  // Make the full-book lines backfill yield to commentary loading — commentary
+  // queries must never queue behind ~100 large chunk fetches.
+  const backfillGate = useBookViewLinesBackfillGate(
+    holdBackfill, releaseBackfill,
+    commentaryPanel.commentaryVisible, commentaryLoading,
+  )
+
   const sidePanel = useBookViewSidePanel(
     toolbarRef,
     commentaryViewRef,
@@ -390,6 +399,10 @@ export function useBookView(
     if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
     if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction
     if (result?.pinnedCommentaryGroup != null) restorePin(result.pinnedCommentaryGroup)
+
+    // commentaryVisible is final for this restore — release the lines backfill
+    // right away when no commentary panel is reopening.
+    backfillGate.onSessionRestoreSettled()
 
     // After session restore, the virtualizer has scrolled to the saved line index
     // but onLinesScrolled has not fired yet, so tocPath is empty and the breadcrumb

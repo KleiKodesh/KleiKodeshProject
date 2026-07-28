@@ -298,15 +298,14 @@ export async function fetchTargumEntriesViaReverseQuery(
 /**
  * Builds the full static filter group list for a given source book.
  * Used to populate the commentary filter tree before any line is selected.
- * Results are cached in the per-instance cache to avoid redundant DB queries.
+ * Expensive (three link-table scans) — useCommentary caches the returned
+ * promise per book at module level; do not call from anywhere else without
+ * going through that cache.
  */
 export async function buildStaticCommentaryFilterGroups(
   sourceBookId: number,
   allBooksMap: Map<number, BookRow>,
-  instanceCache: Map<number, CommentaryGroup[]>,
 ): Promise<CommentaryGroup[]> {
-  const cached = instanceCache.get(sourceBookId)
-  if (cached) return cached
   await ensureConnectionTypeNamesLoaded()
 
   // Forward lookup: COMMENTARY and EIN_MISHPAT (SOURCE and TARGUM are unreliable in the
@@ -384,11 +383,9 @@ export async function buildStaticCommentaryFilterGroups(
     },
   )
 
-  const result = buildCommentaryGroupsFromEntries([
+  return buildCommentaryGroupsFromEntries([
     ...sourceEntries,
     ...targumEntries,
     ...commentaryEntries,
   ])
-  instanceCache.set(sourceBookId, result)
-  return result
 }

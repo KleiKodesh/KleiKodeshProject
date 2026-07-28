@@ -1,4 +1,4 @@
-import { computed, nextTick, ref, watch } from 'vue'
+import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { getCommentaryLinksForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import {
@@ -97,6 +97,17 @@ export function buildCommentaryTree(groups: CommentaryGroup[]): CommentaryTreeNo
 
 const NO_TEXT_PLACEHOLDER_CONTENT = 'אין טקסט לשורה זו'
 
+// Static filter groups are a per-book constant — which books EVER comment on /
+// translate / source this book — derived from three link-table scans that cost
+// seconds on heavily-linked books (a gemara volume has ~75k inbound links).
+// Cached at MODULE level so a tab switch back to the same book never re-runs
+// the scans. The PROMISE is cached (not just the result) so a remount that
+// races a still-in-flight build reuses it instead of re-issuing the queries;
+// rejected entries are dropped so a transient service error retries next time.
+// The seforim DB is fixed for the page's lifetime (a DB swap reloads the page),
+// so there is no invalidation.
+const staticFilterGroupsByBook = new Map<number, Promise<CommentaryGroup[]>>()
+
 export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,
@@ -113,8 +124,6 @@ export function useCommentary(
   const loadError = ref(false)
   const booksDataStore = useBooksDataStore()
   let staticFilterLoadToken = 0
-  // Per-instance cache — scoped to this tab's book, cleared when the composable is destroyed
-  const staticFilterCache = new Map<number, CommentaryGroup[]>()
 
   const filterGroups = computed(() => {
     if (!staticFilterGroupsLoaded.value) return groups.value
@@ -345,11 +354,13 @@ export function useCommentary(
     await booksDataStore.ensureLoaded()
     await booksDataStore.ensureCommentaryMetadataLoaded()
 
-    const nextGroups = await buildStaticCommentaryFilterGroups(
-      bookId,
-      booksDataStore.allBooksMap,
-      staticFilterCache,
-    )
+    let pending = staticFilterGroupsByBook.get(bookId)
+    if (!pending) {
+      pending = buildStaticCommentaryFilterGroups(bookId, booksDataStore.allBooksMap)
+      staticFilterGroupsByBook.set(bookId, pending)
+      pending.catch(() => staticFilterGroupsByBook.delete(bookId))
+    }
+    const nextGroups = await pending
     if (token !== staticFilterLoadToken) return
 
     staticFilterGroups.value = nextGroups
@@ -388,8 +399,17 @@ export function useCommentary(
     void load(lineId)
   })
 
+  // Stop the display-order content backfill when this instance's component
+  // unmounts (tab switch away): backfillLineContents checks loadedForLineId
+  // before every batch. Without this it kept fetching large batches for a dead
+  // panel, and the NEXT mount's restore queries queued behind that zombie
+  // traffic (dev: the browser's 6-connection limit; hosted: the shared bridge).
+  onScopeDispose(() => {
+    loadedForLineId = null
+  })
+
   // Lazy — called by useBookView when the related-books dropdown or commentary filter
-  // panel first opens. Safe to call multiple times; the staticFilterCache prevents
+  // panel first opens. Safe to call multiple times; staticFilterGroupsByBook prevents
   // redundant DB queries for the same book.
   async function ensureStaticFilterGroupsLoaded() {
     const id = sourceBookId()

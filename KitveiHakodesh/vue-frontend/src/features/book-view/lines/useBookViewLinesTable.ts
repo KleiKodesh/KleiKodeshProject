@@ -1,4 +1,4 @@
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import { getBookById, getLinesPaged } from '@/webview-host/seforimApi'
 
 export interface LineItem {
@@ -38,6 +38,11 @@ export function useLines(bookId: () => number | undefined) {
   let fetchQueue: Array<{ offset: number; limit: number }> = []
   let activeWorkers = 0
   let currentBookId: number | undefined
+  // While true, spawnWorkers() is a no-op — queued backfill ranges wait until
+  // releaseBackfill(). Held during session restore (useBookViewLinesBackfillGate)
+  // so the restored commentary panel's queries never queue behind full-book
+  // chunk fetches. prefetch()/prioritise() bypass the queue and still run.
+  let backfillHeld = false
   // Per-CHUNK_SIZE-slot state — SLOT_PENDING means fetched or in flight.
   // Prevents duplicate fetches between prioritise()/prefetch() and backfill.
   let slotState: Uint8Array = new Uint8Array(0)
@@ -102,7 +107,7 @@ export function useLines(bookId: () => number | undefined) {
     activeWorkers++
     try {
       while (fetchQueue.length > 0) {
-        if (currentBookId !== bookIdAtStart) break
+        if (currentBookId !== bookIdAtStart || backfillHeld) break
         const range = fetchQueue.shift()!
         // Skip ranges whose every slot was already fetched out-of-band.
         if (rangeFullyPending(range.offset, range.limit)) continue
@@ -117,11 +122,34 @@ export function useLines(bookId: () => number | undefined) {
   // Spawn workers up to the CONCURRENT_CHUNKS cap.
   function spawnWorkers() {
     const id = currentBookId
-    if (id == null) return
+    if (id == null || backfillHeld) return
     while (activeWorkers < CONCURRENT_CHUNKS && fetchQueue.length > 0) {
       void runWorker(id)
     }
   }
+
+  /** Pauses the backfill queue: no new ranges are dequeued (in-flight chunk
+   *  fetches — at most CONCURRENT_CHUNKS — still complete). */
+  function holdBackfill() {
+    backfillHeld = true
+  }
+
+  /** Resumes the backfill queue. Safe to call multiple times. */
+  function releaseBackfill() {
+    if (!backfillHeld) return
+    backfillHeld = false
+    spawnWorkers()
+  }
+
+  // The backfill exists for THIS mounted view (in-book search, instant scroll).
+  // Without this, workers of an unmounted book view kept draining their queue —
+  // tens of MB for a large book — and every query of the NEXT mount (tab switch
+  // back: session restore, commentary load) competed with that zombie flood.
+  // Clearing currentBookId also stops in-flight chunks from writing their rows.
+  onScopeDispose(() => {
+    currentBookId = undefined
+    fetchQueue = []
+  })
 
   // Moves the chunk containing lineIndex to the front of the queue so it loads next.
   // Fires an out-of-band fetch for the CHUNK_SIZE window containing lineIndex if that
@@ -220,5 +248,5 @@ export function useLines(bookId: () => number | undefined) {
     { immediate: true },
   )
 
-  return { lines, prioritise, prefetch, hasCommentaries, hasRelatedBooks, hasTeamim }
+  return { lines, prioritise, prefetch, holdBackfill, releaseBackfill, hasCommentaries, hasRelatedBooks, hasTeamim }
 }
