@@ -1,18 +1,16 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
-import {
-  lsGet,
-  lsSet,
-  idbTabsGet,
-  idbTabsSet,
-  idbTabsDelete,
-  idbTabsDeleteByPrefix,
-  idbSetLastRead,
-  idbGetLastRead,
-  KEYS,
-} from '@/utils/persistence'
-import type { TabState, BookState, LastReadState } from '@/utils/persistence'
+import { lsGet, lsSet, KEYS } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
+import {
+  getTabViewState,
+  setTabViewState,
+  getBookViewState,
+  setBookViewState,
+  clearBookViewState,
+  deleteAllStateForTab,
+} from './tabStatePersistence'
+import { getLastReadPos, setLastReadPos } from './bookLastRead'
 import { useBookViewStore } from './bookViewStore'
 import { disposeLocalFileHost } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
@@ -332,12 +330,7 @@ export const useTabStore = defineStore('tabs', () => {
     if (idx === -1) return
     const tab = tabs.value[idx]!
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-    const wsId = useWorkspaceStore().activeId
-    idbTabsDelete(KEYS.tab(wsId, id))
-    idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
-    for (const key of _bookStateCache.keys()) {
-      if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
-    }
+    deleteAllStateForTab(id)
     dropUncheckedCommentaryForTab(id)
     tabs.value.splice(idx, 1)
     // Update pane2ActiveTabId if the closed tab was active
@@ -430,74 +423,6 @@ export const useTabStore = defineStore('tabs', () => {
     return tab.id
   }
 
-  // ── Per-tab state ─────────────────────────────────────────────────────────
-
-  function getTabViewState(tabId: string): Promise<TabState | null> {
-    const wsId = useWorkspaceStore().activeId
-    return idbTabsGet<TabState>(KEYS.tab(wsId, tabId))
-  }
-  function setTabViewState(tabId: string, state: TabState): Promise<void> {
-    const wsId = useWorkspaceStore().activeId
-    return idbTabsSet(KEYS.tab(wsId, tabId), state)
-  }
-
-  // ── Per-tab+book state ────────────────────────────────────────────────────
-
-  // In-memory cache: key = `${wsId}:${tabId}:${bookId}`
-  const _bookStateCache = new Map<string, BookState | null>()
-  // In-memory cache: key = bookId
-  const _lastReadCache = new Map<number, LastReadState | null>()
-
-  // Pending save promise — onMounted on the incoming tab awaits this before reading,
-  // so the outgoing tab's async IDB write is guaranteed to have committed first.
-  let pendingBookStateSave: Promise<void> | null = null
-
-  function getBookViewState(tabId: string, bookId: number): Promise<BookState | null> {
-    const wsId = useWorkspaceStore().activeId
-    const cacheKey = `${wsId}:${tabId}:${bookId}`
-    if (_bookStateCache.has(cacheKey)) return Promise.resolve(_bookStateCache.get(cacheKey)!)
-    const read = async () => {
-      const val = await idbTabsGet<BookState>(KEYS.book(wsId, tabId, bookId))
-      _bookStateCache.set(cacheKey, val)
-      return val
-    }
-    return pendingBookStateSave ? pendingBookStateSave.then(read) : read()
-  }
-  function setBookViewState(tabId: string, bookId: number, state: BookState): Promise<void> {
-    const wsId = useWorkspaceStore().activeId
-    const cacheKey = `${wsId}:${tabId}:${bookId}`
-    _bookStateCache.set(cacheKey, state)
-    pendingBookStateSave = idbTabsSet(KEYS.book(wsId, tabId, bookId), state)
-    return pendingBookStateSave
-  }
-  function clearBookViewState(tabId: string, bookId: number): Promise<void> {
-    const wsId = useWorkspaceStore().activeId
-    const cacheKey = `${wsId}:${tabId}:${bookId}`
-    _bookStateCache.delete(cacheKey)
-    return idbTabsDelete(KEYS.book(wsId, tabId, bookId))
-  }
-
-  // ── Global last-read per book (LRU-capped at 1000) ────────────────────────
-
-  let pendingLastReadSave: Promise<void> | null = null
-
-  function getLastReadPos(bookId: number): Promise<LastReadState | null> {
-    if (_lastReadCache.has(bookId)) return Promise.resolve(_lastReadCache.get(bookId)!)
-    const read = async () => {
-      const val = await idbGetLastRead(bookId)
-      _lastReadCache.set(bookId, val)
-      return val
-    }
-    return pendingLastReadSave ? pendingLastReadSave.then(read) : read()
-  }
-  function setLastReadPos(bookId: number, pos: LastReadState): Promise<void> {
-    _lastReadCache.set(bookId, pos)
-    // Keep in-memory cache from growing unbounded — evict oldest entry when over 200
-    if (_lastReadCache.size > 200) _lastReadCache.delete(_lastReadCache.keys().next().value!)
-    pendingLastReadSave = idbSetLastRead(bookId, pos)
-    return pendingLastReadSave
-  }
-
   // ── Recently opened tracking ──────────────────────────────────────────────
 
   /**
@@ -563,20 +488,13 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   function closeAllTabs() {
-    const wsId = useWorkspaceStore().activeId
     // While split view is off, pane 1 also owns the pane-2 orphans it adopted —
     // "close all" closes everything the user sees, orphans included.
     const splitOn = useBookViewStore().splitViewEnabled
     const closing = splitOn ? tabs.value.filter((t) => !t.pane || t.pane === 1) : [...tabs.value]
     for (const tab of closing) {
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-      idbTabsDelete(KEYS.tab(wsId, tab.id))
-      idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, tab.id))
-    }
-    // Evict the closed tabs' book state cache entries only
-    for (const key of _bookStateCache.keys()) {
-      const tabId = key.split(':')[1]
-      if (closing.some((t) => t.id === tabId)) _bookStateCache.delete(key)
+      deleteAllStateForTab(tab.id)
     }
     const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
     // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
@@ -596,13 +514,7 @@ export const useTabStore = defineStore('tabs', () => {
       return
     }
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-    const wsId = useWorkspaceStore().activeId
-    idbTabsDelete(KEYS.tab(wsId, id))
-    idbTabsDeleteByPrefix(KEYS.tabPrefix(wsId, id))
-    // Evict all book state cache entries for this tab
-    for (const key of _bookStateCache.keys()) {
-      if (key.startsWith(`${wsId}:${id}:`)) _bookStateCache.delete(key)
-    }
+    deleteAllStateForTab(id)
     dropUncheckedCommentaryForTab(id)
     // The next active tab must be the closed tab's neighbor among the tabs pane 1
     // can display — picking by index from the mixed array could land on a pane-2

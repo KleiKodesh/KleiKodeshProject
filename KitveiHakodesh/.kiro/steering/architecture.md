@@ -409,7 +409,7 @@ Dialogs are `ConfirmDialog.vue` (confirmation) and `AlertDialog.vue` / `ToastBan
 
 ## Pinia Stores (`src/stores/`)
 
-**tabStore** — tab lifecycle, navigation, and all per-tab/per-book state persistence. The central store — most features read from it. It is **pane-aware**: alongside `tabs` / `activeTabId` it owns the pane-2 equivalents (`pane2ActiveTabId`, `openPane2Tab`, `updatePane2ActiveTab`) and the split invariant helpers (`ensurePane2HasTab`, `reclaimPane1ActiveForSplit`). Prefer the pane-scoped API from `useAppShellPane` / `PANE_NAVIGATION_KEY` over calling these directly.
+**tabStore** — tab lifecycle and navigation. The central store — most features read from it. It re-exports the per-tab/per-book persistence API (see below), so callers keep reaching it through the store. It is **pane-aware**: alongside `tabs` / `activeTabId` it owns the pane-2 equivalents (`pane2ActiveTabId`, `openPane2Tab`, `updatePane2ActiveTab`) and the split invariant helpers (`ensurePane2HasTab`, `reclaimPane1ActiveForSplit`). Prefer the pane-scoped API from `useAppShellPane` / `PANE_NAVIGATION_KEY` over calling these directly.
 
 **bookViewStore** — book viewer UI state and split-view state. Toolbar visibility, floating search bar position, per-tab+book zoom map, and a reactive `zoom` computed for the active tab+book. Panel toggles take a `paneId` (`toggleToolbar`, `toggleBottomPanel`, `toggleTocPanel`, `openSearch`). Also owns split view: `splitViewEnabled`, `splitViewFraction`, `setSplitViewFraction`, `toggleSplitView`, `disableSplitView`, and the focused-pane tracking (`setFocusedPane`). Also holds the per-tab `TocBridge` registration map (`registerTocBridge` / `unregisterTocBridge` / `getTocBridge`) used by the title bar breadcrumb for book-view TOC navigation, and the per-tab `PdfBridge` registration map (`registerPdfBridge` / `unregisterPdfBridge` / `getPdfBridge`) for PDF outline navigation. Both bridges are in-memory only, never persisted.
 
@@ -428,6 +428,11 @@ Per-feature *display* preferences belong here too, not in the feature or in `tab
 **hebrewBooksHistoryStore** — HebrewBooks download history, LRU-capped at 25 entries. This store owns the `app-hb-history` IDB database **entirely** — type, schema, open, read, write — rather than going through `persistence.ts`, which is why that database does not appear in the `handles` map there. It is the documented exception to the "all IDB access goes through persistence.ts" rule.
 
 **recentlyOpenedStore** — recently opened documents, stored in `app-recently-opened` IDB, LRU-capped at 16 entries. Covers /book-view, /pdf-view, /html-view, and /txt-view. Loaded lazily on first access. Recording is triggered automatically by `tabStore.updateActiveTab`, `openTab`, and `updateTab` for all trackable routes.
+
+Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no reactive state, and both `tabStore` (for teardown) and feature composables (for read/write) use them, so they can live in neither a feature folder nor `utils`. Split on the database boundary, which is also the scoping boundary:
+
+- **tabStatePersistence.ts** — the `app-tabs` slice: everything keyed by workspace + tab. `TabState` (search filters, scroll restore, per-tab zoom), `BookState` (reading position, commentary layout, per tab *and* book), the book-state cache, and `deleteAllStateForTab` — the single teardown call every close path uses.
+- **bookLastRead.ts** — the `app-lastread` slice: the global per-book last-read position. Deliberately not tab-scoped and it outlives tab close, which is what separates it from `BookState` (same shape, one tab's view). Always write via `setLastReadPos` so the 1000-entry on-disk cap is enforced.
 
 **hostSearchStore** — receives "navigate from the VSTO host" pushes and routes them to a page. The Word ribbon's context menu calls into the C# AppViewer, which pushes `hostSearch` (`target: 'fts' | 'catalog'` plus cleaned selection text) or `hostOpenBook` (an `otzaria://` / `zayit://` deep link). Seeds `tab.searchQuery` or `tab.catalogQuery`, which the target page reads on mount.
 

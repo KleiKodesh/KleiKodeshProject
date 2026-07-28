@@ -247,14 +247,14 @@ For runtime hot paths (opening a book, switching tabs, every search), prefer an 
 When adding an in-memory cache in front of IDB, always answer these questions before shipping:
 
 - What is the maximum number of entries this cache can hold? If unbounded, add an explicit cap.
-- When are entries evicted? Every cache tied to a lifecycle (tab, session, workspace) must evict when that lifecycle ends — e.g. `_bookStateCache` entries are evicted when their tab is closed. Caches not tied to a lifecycle must have a size cap with FIFO or LRU eviction.
+- When are entries evicted? Every cache tied to a lifecycle (tab, session, workspace) must evict when that lifecycle ends — e.g. the book-state cache is evicted when its tab closes. Caches not tied to a lifecycle must have a size cap with FIFO or LRU eviction.
 - Does the cache stay consistent with IDB writes? Every write path must update the cache before or alongside the IDB write — never write to IDB without also updating the cache.
 - Is the cached value large? Never cache result sets, arrays of objects, or anything that scales with user data — only cache scalars, small structs, and key lists. Large data belongs in IDB only.
 
 Current caches and their caps:
 
-- `_bookStateCache` in `tabStore` — one entry per open tab×book; evicted on `closeTab` / `closeAllTabs`
-- `_lastReadCache` in `tabStore` — capped at 200 entries, FIFO eviction
+- `bookStateCache` in `stores/tabStatePersistence.ts` — one entry per open tab×book; evicted by `deleteAllStateForTab`, which every close path calls
+- `lastReadCache` in `stores/bookLastRead.ts` — capped at 200 entries, FIFO eviction (the *on-disk* cap of 1000 is separate and lives in `idbSetLastRead`)
 - `_mem` in `searchCacheStore` — **not cached in memory** — search results can be hundreds of items with snippet strings; only the LRU key list (`_lru`) is kept in memory
 
 ### localStorage rules
