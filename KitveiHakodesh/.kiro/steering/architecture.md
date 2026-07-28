@@ -4,6 +4,48 @@ This is a functional architecture map of the app — a Hebrew book reader, mobil
 
 Every folder described here has a `README.md` that goes deeper: which file to edit for a given task, what to import from where, and what constraints apply. When working in any folder, read its README first.
 
+## Feature-First Organization
+
+**This is a feature-based app, and the code must be built that way.** A feature owns everything that exists only for it — its components, composables, plain modules, types, utils, caches, and tests all live in that feature's folder under `src/features/`. The default home for new code is the feature folder, not a shared folder.
+
+`src/utils/` is only for utilities that are **not feature-specific** — genuinely shared code with more than one consuming feature. A utility used by exactly one feature belongs in that feature's folder, even if it is pure, generic-looking, and has no Vue in it. The test: if deleting a feature would leave a dead file in `src/utils/`, that file was in the wrong place.
+
+The reverse is equally wrong: never park shared infrastructure inside a feature folder. Anything imported by more than one feature must move out to `src/utils/`, `src/composables/`, `src/stores/`, or `src/webview-host/` depending on its role. Reaching into `../another-feature/` for a helper is the signal that it is time to move the helper, not the signal to add the import.
+
+## Layering & Dependency Direction
+
+**A module must never know its consumers.** Dependencies point one way, lowest layer first:
+
+```
+utils/  ->  webview-host/  ->  stores/  ->  composables/  ->  components/, layout/  ->  features/
+```
+
+Never do any of these:
+
+- `utils/` importing a store, a composable, or anything from `features/`
+- a shared component in `components/` importing from `features/`
+- a data-layer module in `webview-host/` importing a type from `features/`
+- a child folder importing its parent's implementation (a subfolder importing shared *types* from its feature root — `../bookViewTypes` — is fine; that is siblings sharing a contract)
+- two stores importing each other
+
+**A shared type belongs to the lower layer.** If a type describes a database row or a wire payload, the data layer defines it and features consume it, never the reverse. `features/dictionary/dictionaryTypes.ts` is the correct pattern: it imports its row types *from* `webview-host/dictionaryDb`. The known anti-pattern to fix when next touched is `features/book-catalog/bookCatalogTree.ts` defining `BookRow`/`CategoryRow`, which `webview-host/seforimApi.ts` then imports upward to type its own SQL results — the C# `SeforimModels.cs` even documents itself as *"matches bookCatalogTree.ts CategoryRow"*, making a UI feature the authority for the wire contract.
+
+**Prefer an invariant a command can check over a rule that needs an argument.** "Don't put app knowledge in `utils/`" has to be re-argued at every review, and lost repeatedly. "`persistence.ts` has zero imports" cannot be quietly eroded:
+
+| Invariant | Check | Status |
+| --- | --- | --- |
+| the storage driver knows nothing about the app | `grep -c '^import' src/utils/persistence.ts` -> `0` | holds |
+| no upward imports out of utils | `grep -rn "@/stores\|@/features\|@/composables" src/utils/` -> empty | holds |
+| no feature imports in shared components | `grep -rn "@/features" src/components/` -> empty | holds |
+
+All three hold as of 2026-07-28. The last one was fixed by pointing `components/TreeView.vue` at `utils/segmentSearchTree` directly instead of at `features/book-view/toc/tocSearchUtils`, which merely re-exports that same class under the alias `SearchableTree`. Note the shape of that bug: nothing needed to move, because the generic code was already in the right place — the component was reaching it through a feature-folder alias. Check for that before relocating anything.
+
+**Still open (weaker, same family):** `features/book-catalog/bookCatalogSearchTocHeuristics.ts` imports `stripTocTitleRoots` from `../book-view/toc/tocSearchUtils` — a feature reaching into another feature's subfolder. Per the Feature-First rule above, a helper used by two features must move out. It can be shrunk first: that file also imports `SearchableTree`, which it should take from `utils/segmentSearchTree` like `TreeView` now does, leaving exactly one shared function to place.
+
+**Name a file after its contract, not its category.** A category name invites everything adjacent to accumulate: `persistence.ts` reached six jobs and 452 lines before anyone noticed, and the reset workflow inside it forced `utils/` to import two Pinia stores. "Storage driver" is a contract; "persistence" is a topic. The same applies to identifiers — do not name a function `idb*` if it also writes localStorage, and do not prefix a constant `SETTINGS_` if it is not a setting.
+
+**When refactoring a file that has drifted:** name its single job before deciding where anything goes ("where should this live?" is unanswerable while a file has several jobs), park everything undecided in one staging file with a manifest of candidate homes, land the direction fix separately from the ownership decisions, then delete the staging file. Treat an existing workaround comment as evidence of where the design is broken — but verify the claim, since the one reading "imported lazily to avoid a circular dependency" turned out to be guarding a type-only cycle that could not occur at runtime.
+
 ## App Shell
 
 The shell is two levels: a split-view container and one or two pane shells inside it.
@@ -63,7 +105,7 @@ The step list is computed, so it varies by environment. Each step past `welcome`
 
 Navigation: forward/back buttons with a slide transition; a "skip" button calls `settings.completeSetup()` immediately. Progress is shown as a top-edge accent bar.
 
-Completion: `settings.completeSetup()` sets `setupDone = true` and persists it to IDB at key `setupDone` (via `KEYS.SETTINGS_SETUP_DONE` in `persistence.ts`). Once set, the wizard never shows again.
+Completion: `settings.completeSetup()` sets `setupDone = true` and persists it to localStorage at key `app.setupDone` (via `KEYS.SETTINGS_SETUP_DONE` in `settingsStore.ts`). Once set, the wizard never shows again. `clearPersistedSettings` preserves this key explicitly, so a settings reset never re-shows the wizard.
 
 ## Title Bar
 
@@ -414,7 +456,9 @@ Dialogs are `ConfirmDialog.vue` (confirmation) and `AlertDialog.vue` / `ToastBan
 
 **bookViewStore** — book viewer UI state and split-view state. Toolbar visibility, floating search bar position, per-tab+book zoom map, and a reactive `zoom` computed for the active tab+book. Panel toggles take a `paneId` (`toggleToolbar`, `toggleBottomPanel`, `toggleTocPanel`, `openSearch`). Also owns split view: `splitViewEnabled`, `splitViewFraction`, `setSplitViewFraction`, `toggleSplitView`, `disableSplitView`, and the focused-pane tracking (`setFocusedPane`). Also holds the per-tab `TocBridge` registration map (`registerTocBridge` / `unregisterTocBridge` / `getTocBridge`) used by the title bar breadcrumb for book-view TOC navigation, and the per-tab `PdfBridge` registration map (`registerPdfBridge` / `unregisterPdfBridge` / `getPdfBridge`) for PDF outline navigation. Both bridges are in-memory only, never persisted.
 
-**settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own localStorage key and is watched individually: add a `DEFAULTS` entry and a ref, then a `loadSetting` call in `init()` and a `persistSetting` call, and export the ref. Assigning the ref is all a consumer needs to do — the watcher persists it.
+**settingsStore** — all app-wide settings (fonts, sizes, padding, zoom, diacritics, censoring, etc.). Each setting has its own localStorage key and is watched individually: add a namespaced key to the local `KEYS` object, a `DEFAULTS` entry and a ref, then a `loadSetting` call in `init()` and a `persistSetting` call, and export the ref. Assigning the ref is all a consumer needs to do — the watcher persists it.
+
+This store also **owns** the disk names for those settings (there is no central key registry) and `clearPersistedSettings`, which implements the settings-vs-structural split: it wipes the `kitvei-hakodesh.` namespace except the `tabs:` and `workspaces.` prefixes and `app.setupDone`. That distinction is a product decision, which is why it lives here and not in the driver — the driver has no way to know that `tabs:*` is structure while `text.fontSize` is a preference.
 
 Per-feature *display* preferences belong here too, not in the feature or in `tabStore` — `booksView` (book catalog layout) and `fileSearchSortOrder` are the precedents. A preference belongs in a feature folder only when it is genuinely per-tab.
 
@@ -543,7 +587,11 @@ Environment flags: `isVstoEnvironment` / `showPopOutButton` (running inside the 
 
 ## Utilities (`src/utils/`)
 
-**persistence.ts** — the only file that touches localStorage and the shared IndexedDB databases. Manages the databases in its `handles` map, all key patterns, the LRU cap for lastread, the app reset mechanism, and the `__pendingReset` localStorage flag. See the Persistence section of `app.md` for who may import it.
+**persistence.ts** — the **storage driver**, and the only file that touches localStorage or a raw IndexedDB API. Two halves: a promise wrapper over IDB with one cached handle per database, and a namespaced (`kitvei-hakodesh.`), JSON-coded, non-throwing localStorage wrapper.
+
+It has **zero imports**, and that is the invariant to protect — the moment it needs one it has started knowing something about the app. Check it with `grep -c '^import' src/utils/persistence.ts` → `0`.
+
+It deliberately holds **no** schemas, retention policies, key names or reset workflow. Those belong to whoever owns the value: `TabState`/`BookState` and the `app-tabs` key layout → `stores/tabStatePersistence.ts`; `LastReadState` and the 1000-entry disk cap → `stores/bookLastRead.ts`; `Workspace` types, `tabsListKey` and workspace teardown → `stores/workspaceStore.ts`; the settings-vs-structural reset filter and the settings keys → `stores/settingsStore.ts`; the reset workflow → `features/settings/appResetState.ts`. If a change here can only be explained by naming a feature, it belongs in one of those instead. See the Persistence section of `app.md` for who may import it.
 
 **hebrewTextProcessing.ts** — diacritics handling and text normalization for Hebrew.
 
@@ -581,7 +629,7 @@ Default theme is `vscode-dark`.
 
 ## Initialization Order (`main.ts`)
 
-1. `await idbCheckAndExecReset()` — clear all DBs if a reset was scheduled last session
+1. `await checkAndExecPendingReset()` (from `features/settings/appResetState.ts`) — clear all DBs if a reset was scheduled last session
 2. Create Pinia
 3. Store init, synchronous and in this order — `workspaceStore.init()` must be first because `tabStore` depends on `activeId`, and `tabStore.init()` must be last: `workspaceStore`, `settingsStore`, `bookViewStore`, `themeStore`, `tabStore`
 4. `initTabMirror()` — start mirroring the tab list to the host

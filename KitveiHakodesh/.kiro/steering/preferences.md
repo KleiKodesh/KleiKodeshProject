@@ -39,7 +39,9 @@ A statement presented as a fact but derived from absence of evidence ("I didn't 
 
   Separately, `useCommentaryCopy.ts` and `useBookViewLineCopyMenu.ts` import the *component* `BookViewAnnotationMenuRow.vue` (not just a type), which inverts the dependency direction outright. Those menu rows should be supplied by the calling component rather than imported inside a composable.
 
-- `src/utils/` is for code that is genuinely reusable across multiple features — text normalization, persistence helpers, generic data structures. A utility that is only ever used by one feature does not belong in `src/utils/`; it belongs in that feature's folder alongside its composables and components. The test: if removing a feature from the app would leave a dead file in `src/utils/`, that file was in the wrong place. Conversely, never put shared infrastructure in a feature folder — anything imported by more than one feature must live in `src/utils/`, `src/composables/`, `src/stores/`, or `src/webview-host/` depending on its role.
+- **This is a feature-based app — build the code that way.** The default home for new code is the feature folder under `src/features/`. A feature owns everything that exists only for it: components, composables, plain modules, types, feature-specific utils, caches, and tests.
+- `src/utils/` is only for utilities that are **not feature-specific** — text normalization, persistence helpers, generic data structures with more than one consuming feature. A utility used by exactly one feature belongs in that feature's folder, even when it is pure and generic-looking. The test: if removing a feature would leave a dead file in `src/utils/`, that file was in the wrong place.
+- Conversely, never put shared infrastructure in a feature folder — anything imported by more than one feature must live in `src/utils/`, `src/composables/`, `src/stores/`, or `src/webview-host/` depending on its role. An import reaching into `../another-feature/` means the helper should move out, not that the import is fine. See the Feature-First Organization section of `architecture.md`.
 
 ## File Length & Refactoring Thresholds
 
@@ -280,6 +282,12 @@ Use `npm run build` (which runs `vue-tsc --build`) to type-check, **not** `vue-t
 
 Ask before running live/browser verification — the user often verifies manually.
 
+**A green build proves nothing about behaviour you changed on purpose.** After a refactor, list what the compiler cannot see and test exactly that — a retention cap that only fires past its threshold, a crash-recovery flag, an ordering constraint between two subsystems. Those are precisely the places where types stay valid while semantics change.
+
+For non-UI modules (storage, pure logic), do not boot the app to test them. Drop a throwaway `test-harness.html` in the `vue-frontend/` root, point Playwright at `/test-harness.html`, then `await import('/src/...')` inside `page.evaluate`. That gives real IndexedDB and localStorage on the correct origin with no app boot and no database dependency. Delete the harness afterwards, and stop every dev server and browser you started.
+
+**Count before concluding.** When reasoning about structure — how many modules read a symbol, whether an import cycle is real, who owns a value — run the grep and count. Structural conclusions reached by reasoning alone were wrong more than once: an import cycle that turned out to be type-only and therefore impossible at runtime, and a "these keys are shared" claim that consumer counts disproved (53 of 55 had exactly one reader).
+
 ## Scripts & Tooling
 
 - For any script that runs outside the app — database building, data processing, file generation, migrations, or any other standalone tooling — use Python, not Node.js
@@ -314,13 +322,13 @@ The established pattern for an IDB-backed LRU cache depends on how many places c
 Either way the internal structure is the same:
 
 - A dedicated IDB database registered in the `handles` map in `persistence.ts`, with matching `idb{Name}Get/Set/Delete` exports added there.
-- The database is added to `idbClearAll` in `persistence.ts` so it is wiped on full app reset.
+- The database is added to the wipe list in `features/settings/appResetState.ts` so it is dropped on full app reset. If the cache owns its own handle instead of using the driver, it must also export a `drop*` function for that wipe to call — `deleteDatabase` stalls silently on `onblocked` while any handle is open.
 - A `PREFIX` constant for all entry keys and a separate `LRU_KEY` entry that holds the ordered list of cached keys as a JSON array.
 - `get` reads the entry, returns null on miss, and calls `touchLru` on hit to move the key to the most-recently-used end.
 - `set` calls `evictIfNeeded` before writing — eviction removes the least-recently-used entry (the first element of the LRU array) when the array length without the current key is already at the cap.
 - `clear` deletes all entries listed in the LRU array plus the LRU key itself.
 - Results are never cached in memory — only the LRU key list may be kept in memory if needed. Large result sets belong in IDB only.
-- The full app reset (`idbClearAll`) drops the database entirely — no explicit `clear()` call or settings button is needed for the full reset path.
+- The full app reset drops the database entirely — no explicit `clear()` call or settings button is needed for the full reset path.
 
 ## Screaming Architecture
 
