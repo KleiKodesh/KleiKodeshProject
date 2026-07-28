@@ -40,11 +40,11 @@ The section components are independent — each imports the stores it needs dire
 
 ## Composables
 
-**useSettingsPage.ts** — wires the commentary-mirror watcher (syncs commentary font settings to book settings when `useSeparateCommentarySettings` is false) and exposes reset actions (`resetSettings`, `resetSearchIndex`, `resetDocumentLocatorIndex`, `resetAll`). Called by `SettingsPageReadingSection` and `SettingsPageSystemSection`.
+**useSettingsPage.ts** — wires the commentary-mirror watcher (syncs commentary font settings to book settings when `useSeparateCommentarySettings` is false) and exposes the scoped reset actions (`resetSettings`, `resetSearchIndex`, `resetDocumentLocatorIndex`). The *full* app reset is not here — it is `resetEverything()` in `appResetState.ts`, which `SettingsPageResetSection` calls directly.
 
 **useSettingsSearch.ts** — DOM-walker search. Accepts a ref to the scroll container, watches `searchQuery`, walks every `[data-section]` element and toggles `data-section-hidden` on non-matching sections. Also exposes `getSectionNavEntries()` and `getSectionNavTree()` for the sidebar and drawer nav.
 
-**appResetState.ts** — single exported `resetting` ref used to block UI during a reset/reload.
+**appResetState.ts** — the app-reset module. Exports the `resetting` ref that blocks the UI during a reset/reload (read by `App.vue`), and `resetEverything()`, which wipes every local database and localStorage key, then resets the host and reloads. `resetEverything` sets `resetting` itself, so callers just invoke it. This is the one place that owns a full reset — it deliberately does not live in a store, because it spans all of them.
 
 ## Setup wizard
 

@@ -364,12 +364,13 @@ export function togglePopOut(): void {
 
 /**
  * Full app reset — deletes the FTS index, resets C# settings, then reloads.
- * Call tabStore.resetAll() before this to schedule the IDB wipe.
+ * Called by resetEverything() in features/settings/appResetState.ts, which wipes
+ * the local databases first — do not call this directly.
  */
 export async function resetHostApp(): Promise<void> {
   if (typeof window.__webviewAction !== 'function') {
     // Dev: the C# host doesn't exist, so reset both indexes through the service and
-    // clear local settings (IDB is already wiped by tabStore.resetAll()), then reload.
+    // clear local settings (IDB is already wiped by resetEverything()), then reload.
     await serviceCall('ftsResetIndex').catch(() => {})
     await serviceCall('resetDocumentLocatorIndex').catch(() => {})
     try { localStorage.clear() } catch { /* ignore */ }

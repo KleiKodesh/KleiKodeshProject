@@ -9,7 +9,6 @@ import {
   idbTabsDeleteByPrefix,
   idbSetLastRead,
   idbGetLastRead,
-  idbClearAll,
   KEYS,
 } from '@/utils/persistence'
 import type { TabState, BookState, LastReadState } from '@/utils/persistence'
@@ -499,12 +498,6 @@ export const useTabStore = defineStore('tabs', () => {
     return pendingLastReadSave
   }
 
-  // ── App reset ─────────────────────────────────────────────────────────────
-
-  async function resetAll(): Promise<void> {
-    await idbClearAll()
-  }
-
   // ── Recently opened tracking ──────────────────────────────────────────────
 
   /**
@@ -759,7 +752,6 @@ export const useTabStore = defineStore('tabs', () => {
     getBookViewState,
     setBookViewState,
     clearBookViewState,
-    resetAll,
     togglePdfViewerTitleBar,
   }
 })

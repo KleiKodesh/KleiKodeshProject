@@ -2,10 +2,10 @@
 import { ref } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useSettings } from './useSettingsPage'
-import { resetting } from './appResetState'
+import { resetting, resetEverything } from './appResetState'
 import { showToast } from '@/composables/useToast'
 
-const { resetSettings, resetSearchIndex, resetAll, resetDocumentLocatorIndex } = useSettings()
+const { resetSettings, resetSearchIndex, resetDocumentLocatorIndex } = useSettings()
 
 type ConfirmAction = {
   label: string
@@ -67,10 +67,8 @@ function confirmResetAll() {
   confirmAction({
     label: 'איפוס האפליקציה',
     desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואינדקס החיפוש ותטען אותה מחדש. לא ניתן לבטל פעולה זו.',
-    action: async () => {
-      resetting.value = true
-      await resetAll()
-    },
+    // resetEverything sets the `resetting` flag itself before it starts.
+    action: resetEverything,
   })
 }
 </script>
