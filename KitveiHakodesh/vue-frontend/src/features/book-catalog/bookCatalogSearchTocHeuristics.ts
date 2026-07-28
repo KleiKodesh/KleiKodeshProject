@@ -16,7 +16,7 @@
  *             stripping redundant root entries.
  *
  *   Stage 3 — searchTocRows
- *             Runs the SearchableTree scorer against the TOC words portion.
+ *             Runs the SegmentSearchTree scorer against the TOC words portion.
  *
  *   Stage 4 — buildTocResultItems
  *             Converts matched TOC nodes into SearchFsItem objects for the UI.
@@ -26,7 +26,11 @@ import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { isDbHosted } from '@/webview-host/seforimApi'
 import { serviceCall } from '@/webview-host/serviceClient'
-import { SearchableTree, stripTocTitleRoots } from '../book-view/toc/tocSearchUtils'
+import { SegmentSearchTree } from '@/utils/segmentSearchTree'
+// The only remaining cross-feature import here. `stripTocTitleRoots` carries a
+// hardcoded FORCE_STRIP_BOOK_IDS list, so it is not generic enough for utils/ —
+// left in book-view deliberately rather than dragging that list into utils/.
+import { stripTocTitleRoots } from '../book-view/toc/tocSearchUtils'
 import type { BookRow } from './bookCatalogTree'
 import type { TocFsItem } from './useBookCatalogSearch'
 
@@ -211,7 +215,7 @@ export async function fetchTocRowsForBooks(
 /**
  * Stage 3 — searchTocRows
  *
- * Builds a SearchableTree from the flat TOC rows and runs the scorer against
+ * Builds a SegmentSearchTree from the flat TOC rows and runs the scorer against
  * the TOC words. Returns matched nodes sorted by score (tightest match first).
  *
  * The tree is built fresh per search — it is not cached because the candidate
@@ -220,8 +224,8 @@ export async function fetchTocRowsForBooks(
 export function searchTocRows(
   allRows: TocRow[],
   tocWords: string[],
-): { matchedNodes: ReturnType<SearchableTree['search']>; tree: SearchableTree } {
-  const tree = new SearchableTree(allRows)
+): { matchedNodes: ReturnType<SegmentSearchTree['search']>; tree: SegmentSearchTree } {
+  const tree = new SegmentSearchTree(allRows)
   const tocQuery = tocWords.join(' ')
   const matchedNodes = tree.search(allRows, tocQuery)
   return { matchedNodes, tree }
@@ -237,9 +241,9 @@ export function searchTocRows(
  * are silently dropped (should not happen in practice).
  */
 export function buildTocResultItems(
-  matchedNodes: ReturnType<SearchableTree['search']>,
+  matchedNodes: ReturnType<SegmentSearchTree['search']>,
   bookMap: Map<number, BookRow>,
-  tree: SearchableTree,
+  tree: SegmentSearchTree,
 ): TocFsItem[] {
   const items: TocFsItem[] = []
 

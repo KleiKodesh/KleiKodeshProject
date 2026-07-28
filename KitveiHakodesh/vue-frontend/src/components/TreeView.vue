@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import TreeNode from './TreeNode.vue'
 import type { TreeNodeItem } from './treeTypes'
 import { useListKeys } from '@/composables/useListKeyNav'
-import { SearchableTree } from '@/features/book-view/toc/tocSearchUtils'
+import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 
 const props = defineProps<{
   nodes: TreeNodeItem[]
@@ -13,7 +13,7 @@ const props = defineProps<{
   rowHeight?: number
   fontSize?: string
   stickyHeaders?: boolean
-  searchTree?: SearchableTree
+  searchTree?: SegmentSearchTree
 }>()
 
 // The optional event lets consumers honour Ctrl/⌘-click (mouse) or Ctrl/⌘+Enter
@@ -94,12 +94,12 @@ function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
   emit('select', node, event)
 }
 
-// Use the passed-in SearchableTree or build one lazily only when a filter is active
-// and no external tree was provided — avoids constructing segment maps on every load.
+// Use the passed-in tree or build one lazily only when a filter is active and no
+// external tree was provided — avoids constructing segment maps on every load.
 const internalTree = computed(() =>
-  !props.searchTree && props.filter ? new SearchableTree(props.nodes) : null,
+  !props.searchTree && props.filter ? new SegmentSearchTree(props.nodes) : null,
 )
-const activeTree = computed(() => props.searchTree ?? internalTree.value ?? new SearchableTree([]))
+const activeTree = computed(() => props.searchTree ?? internalTree.value ?? new SegmentSearchTree([]))
 
 const visibleNodes = computed(() => {
   if (props.filter) {

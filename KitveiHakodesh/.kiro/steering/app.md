@@ -254,15 +254,16 @@ When adding an in-memory cache in front of IDB, always answer these questions be
 Current caches and their caps:
 
 - `bookStateCache` in `stores/tabStatePersistence.ts` — one entry per open tab×book; evicted by `deleteAllStateForTab`, which every close path calls
-- `lastReadCache` in `stores/bookLastRead.ts` — capped at 200 entries, FIFO eviction (the *on-disk* cap of 1000 is separate and lives in `idbSetLastRead`)
+- `lastReadCache` in `stores/bookLastRead.ts` — capped at 200 entries, FIFO eviction (the *on-disk* cap of 1000 is separate; both live in that same module)
 - `_mem` in `searchCacheStore` — **not cached in memory** — search results can be hundreds of items with snippet strings; only the LRU key list (`_lru`) is kept in memory
 
 ### localStorage rules
 
-- All localStorage access must go through `src/utils/persistence.ts` — never call `localStorage` directly anywhere else in the codebase
-- The only current localStorage key is `__pendingReset` (the app-reset flag)
-- When adding a new localStorage key, add it as a named constant in `persistence.ts` alongside the IDB keys
-- App reset (`idbClearAll`) must also call `localStorage.clear()` or explicitly remove every known localStorage key — reset must leave no state behind
+- All localStorage access must go through `src/utils/persistence.ts` — never call `localStorage` directly anywhere else in the codebase. The one deliberate exception is the unprefixed `__pendingReset` flag, which `appResetState.ts` reads and writes through the driver's `lsGetRaw`/`lsSetRaw`/`lsDeleteRaw` primitives.
+- **Every localStorage key is namespaced `area.name`** — `text.fontSize`, `search.expandKetiv`, `bookView.toolbarVisible`. Never add a bare key. localStorage is one flat namespace, and two owners claiming the same bare name overwrite each other silently, with no error: the setting simply resets on every launch.
+- **Define a new key in the module that owns the value, not in a central registry.** There is no `KEYS` file — `settingsStore` defines its own settings keys, `bookViewStore` its UI-state keys, `themeStore` its one key, and a feature that owns a preference defines it locally (exporting it only if a second module genuinely reads the same value, as `hebrew-calendar/useZmanim.ts` does with `ZMANIM_CITY_KEY`).
+- Structural (non-setting) keys use the `tabs:` and `workspaces.` prefixes. That is how `clearPersistedSettings` in `settingsStore` tells structure from preferences — it preserves by prefix rather than by a hardcoded list of names, so a new structural key is covered automatically as long as it lands under one of those namespaces.
+- Full app reset must leave no state behind: it drops every database, then calls `lsClearAll()` (which clears the whole `kitvei-hakodesh.` namespace), then removes `__pendingReset` explicitly, last.
 
 ### IDB databases
 
@@ -279,7 +280,9 @@ All scalar settings (fonts, zoom, theme, toolbar state, workspaces, calendar pre
 
 Settings that must be shared with the native host live in the user-settings database instead, accessed via `src/webview-host/userSettingsDb.ts` — not through `persistence.ts`. Use this only when the C# side needs to read the value too; browser-only preferences stay in localStorage.
 
-All browser persistence access must go through `src/utils/persistence.ts` exclusively — no component, composable, or store may call `localStorage` or any IDB API directly. This is a hard rule with no exceptions.
+All browser persistence access must go through `src/utils/persistence.ts` — no component, composable, or store may call `localStorage` or a raw IDB API directly.
+
+One structural exception, which is a property of the driver rather than a loophole: each database the driver manages is a flat key→blob bucket (a single `data` object store, out-of-line keys, no indexes). A caller whose schema needs in-line keys (`keyPath`), a secondary index, or multiple object stores therefore *cannot* use the driver and must hold its own handle. `hebrewBooksHistoryStore` is the one qualifying case (`keyPath: 'id'` plus a `lastAccessed` index). Any such owner must export a `drop*` function for `appResetState` to call, because `deleteDatabase` stalls silently on `onblocked` while a handle is still open. Needing a *different key name* is never a reason to open your own database.
 
 Components and composables should reach persistence through a store (`tabStore`, `bookViewStore`, `settingsStore`) rather than importing `persistence.ts` directly. The exception is a self-contained cache module that owns its own IDB database and is not shared state — `dictionaryCache.ts` and `bookCatalogTocSearchCache.ts` import the `idb*` helpers directly by design, matching the "single feature → plain module, no Pinia" rule in `preferences.md`. A component or composable importing `persistence.ts` to read or write *app state* is still wrong; that belongs in a store.
 
@@ -287,7 +290,7 @@ Known violations of the spirit of this rule that should move behind a store when
 
 ### Key scheme
 
-localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/`lsSet`. The `KEYS` constants in `persistence.ts` are the unprefixed names.
+localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/`lsSet`, so every name a caller passes is the unprefixed `area.name` form. Each owning module declares its own; `persistence.ts` holds no key names at all.
 
 `app-tabs` keys are workspace-scoped:
 
@@ -309,28 +312,33 @@ localStorage keys are prefixed with `kitvei-hakodesh.` automatically by `lsGet`/
 
 ### lastread LRU cap
 
-Always use `tabStore.setLastReadPos()` — it calls `idbSetLastRead()` which enforces the 1000-entry cap.
+Always use `tabStore.setLastReadPos()` — it goes through `bookLastRead.ts`, which enforces both the 200-entry memory cap and the 1000-entry on-disk cap.
 
 ### App reset
 
 `resetEverything()` in `src/features/settings/appResetState.ts` owns the full reset. It lives there — not in a store — because it spans every domain: it wipes all seven IDB databases plus all of localStorage, so no single store owns it. That module also owns the `resetting` flag `App.vue` reads to show the blocking overlay, and `resetEverything` sets the flag itself, so callers don't have to.
 
-The sequence is: set `resetting` → `idbScheduleReset()` → `idbClearAll()` → `resetHostApp()` (which resets the FTS index and C# settings, then reloads).
+The sequence is: set `resetting` → `scheduleReset()` → the wipe → `resetHostApp()` (which resets the FTS index and C# settings, then reloads). All of it lives in `appResetState.ts`; none of it is in the storage driver.
 
-`idbScheduleReset()` writes the `__pendingReset` localStorage key. That is a **crash-safety net, not the reset mechanism** — the wipe itself is eager. On next boot `idbCheckAndExecReset()` (called from `main.ts`) checks the flag synchronously; if it is still set the previous reset died partway through, so it redoes the wipe and reloads. The normal path clears the flag as part of the wipe, so the boot check returns immediately.
+`scheduleReset()` writes the `__pendingReset` localStorage key. That is a **crash-safety net, not the reset mechanism** — the wipe itself is eager. On next boot `checkAndExecPendingReset()` (called from `main.ts`) checks the flag synchronously; if it is still set the previous reset died partway through, so it redoes the wipe and reloads. The normal path clears the flag at the end of the wipe, so the boot check returns immediately.
+
+The reset is a **sequencer, not an operation** — it spans four subsystems (IndexedDB, localStorage, the C# host, the page lifecycle) and the driver owns only one of them. That is why it must not live in `persistence.ts`: a sequencer has to reach every participant, so putting it at the bottom of the stack forces the bottom to import from the top. It previously did exactly that, via `await import('@/stores/...')`.
 
 Two ordering rules keep that net armed. Both are load-bearing — do not "tidy" either one:
 
-- `idbClearAll()` calls `lsClearAll()` **last**, after every database is dropped. `lsClearAll` also removes the flag, so clearing it earlier would mean a mid-wipe crash leaves no flag and the next boot never retries.
-- `idbCheckAndExecReset()` does **not** clear the flag before its recovery wipe, for the same reason. It only drops the flag if the wipe itself throws — a persistently failing wipe must not break startup on every launch, so booting with stale data wins over not booting.
+- The wipe clears localStorage **last**, after every database is dropped: `lsClearAll()` then `lsDeleteRaw(RESET_LS_KEY)`. Removing the flag earlier would mean a mid-wipe crash leaves no flag and the next boot never retries. (`lsClearAll` only clears the `kitvei-hakodesh.` namespace — the flag is unprefixed, which is why it takes its own explicit delete. Dying between those two calls is safe: the flag survives and the next boot redoes an already-finished wipe, which is a no-op.)
+- `checkAndExecPendingReset()` does **not** clear the flag before its recovery wipe, for the same reason. It only drops the flag if the wipe itself throws — a persistently failing wipe must not break startup on every launch, so booting with stale data wins over not booting.
 
 ### Adding new persisted state
 
-- Global scalar setting → add key to `KEYS` in `persistence.ts`, expose via the owning store
-- Per-tab UI state → add field to `TabState` in `persistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
-- Per-tab+book state → add field to `BookState` in `persistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
-- Per-book global state → add field to `LastReadState` in `persistence.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
-- Boot-time flag that must be synchronous → use localStorage via `persistence.ts`, add a named constant, and ensure `idbClearAll` removes it
+Add the key or field to the module that **owns** the value. Never to `persistence.ts` — it is a driver and holds no schemas or key names.
+
+- Global scalar setting → add a namespaced key to the `KEYS` object in `settingsStore.ts` (plus a `DEFAULTS` entry, a ref, `loadSetting`, `persistSetting`), and export the ref
+- Per-tab UI state → add a field to `TabState` in `stores/tabStatePersistence.ts`, expose via `tabStore.getTabViewState/setTabViewState`
+- Per-tab+book state → add a field to `BookState` in `stores/tabStatePersistence.ts`, expose via `tabStore.getBookViewState/setBookViewState`
+- Per-book global state → add a field to `LastReadState` in `stores/bookLastRead.ts`, expose via `tabStore.getLastReadPos/setLastReadPos`
+- Book-view UI state → add a namespaced key to the `KEYS` object in `bookViewStore.ts`
+- Boot-time flag that must be synchronous → use localStorage via `persistence.ts`, declare the constant in the module that owns the flag, and ensure the wipe in `appResetState.ts` removes it
 
 ## HebrewBooks Downloads
 
