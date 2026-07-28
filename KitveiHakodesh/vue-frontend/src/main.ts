@@ -13,11 +13,11 @@ import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
 import { useHostSearchStore } from './stores/hostSearchStore'
-import { idbCheckAndExecReset } from './utils/persistence'
+import { checkAndExecPendingReset } from './features/settings/appResetState'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
-await idbCheckAndExecReset()
+await checkAndExecPendingReset()
 
 const pinia = createPinia()
 const app = createApp(App).use(pinia)

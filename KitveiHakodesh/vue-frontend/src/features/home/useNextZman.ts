@@ -2,7 +2,10 @@ import { ref, computed, onMounted } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { CITIES } from '@/features/hebrew-calendar/calendarTypes'
 import type { CalendarZmanim, City } from '@/features/hebrew-calendar/calendarTypes'
-import { lsGet, KEYS } from '@/utils/persistence'
+import { lsGet } from '@/utils/persistence'
+import { ZMANIM_CITY_KEY } from '@/features/hebrew-calendar/useZmanim'
+
+const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
 
 /**
  * Chronological order + Hebrew labels for the zmanim we surface on the home bar.

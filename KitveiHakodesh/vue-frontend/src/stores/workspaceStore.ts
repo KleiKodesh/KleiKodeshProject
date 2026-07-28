@@ -1,9 +1,42 @@
 import { defineStore } from 'pinia'
 import { ref, computed, toRaw } from 'vue'
-import { lsGet, lsSet, idbDeleteWorkspaceData, KEYS } from '@/utils/persistence'
-import type { Workspace, WorkspaceList } from '@/utils/persistence'
+import { lsGet, lsSet, lsDelete, idbTabsDeleteByPrefix } from '@/utils/persistence'
 
-export type { Workspace } from '@/utils/persistence'
+/**
+ * Disk names owned here. `tabsList` is exported because `tabStore` writes the list
+ * this store's teardown deletes — it lives here rather than in `tabStore` because
+ * the key is workspace-scoped, and because `tabStore` already imports this module
+ * (the reverse would close a cycle).
+ */
+const KEYS = { SETTINGS_WORKSPACES: 'workspaces.list' } as const
+export const tabsListKey = (wsId: string) => `tabs:${wsId}`
+
+export interface Workspace {
+  id: string
+  name: string
+  createdAt: number
+}
+
+export interface WorkspaceList {
+  workspaces: Workspace[]
+  activeId: string
+}
+
+/**
+ * Forget everything persisted for a deleted workspace: its tab list (localStorage,
+ * removed synchronously) and every per-tab and per-book state beneath it (app-tabs).
+ *
+ * Lives here rather than in the storage driver because the `tab:` / `book:` key
+ * shapes and the fact that a workspace spans two storage systems are app knowledge,
+ * not storage mechanics.
+ */
+function deleteWorkspaceData(wsId: string): Promise<void> {
+  lsDelete(tabsListKey(wsId))
+  return Promise.all([
+    idbTabsDeleteByPrefix(`tab:${wsId}:`),
+    idbTabsDeleteByPrefix(`book:${wsId}:`),
+  ]).then(() => {})
+}
 
 const DEFAULT_WS_ID = 'default'
 const DEFAULT_WS_NAME = 'ברירת מחדל'
@@ -67,7 +100,7 @@ export const useWorkspaceStore = defineStore('workspace', () => {
       activeId.value = workspaces.value[0]!.id
     }
     persist()
-    await idbDeleteWorkspaceData(id)
+    await deleteWorkspaceData(id)
   }
 
   async function switchWorkspace(id: string) {

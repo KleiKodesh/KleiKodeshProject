@@ -6,7 +6,13 @@ Pure utility functions. No Vue, no Pinia, no reactivity. If a utility needs a re
 
 **segmentSearchTree.ts** — generic segment-aware search tree used by any hierarchical node list. `SegmentSearchTree` indexes nodes by their full ancestor chain (each ancestor's text is one segment) and matches query words as an ordered subsequence across segments. Three-pass algorithm: score all nodes (prefix on last word, exact-last-word preferred), bond detection (consecutive words that landed in the same segment in the best result must stay together), ancestry deduplication (matched parent suppresses its descendants). `displayPaths` map gives the "root / parent / node" string for rendering. Used by `TreeView.vue`, `CommentaryTreePanel.vue`, `bookCatalogSearchTocHeuristics.ts`, and `dafYomiNavigation.ts`.
 
-**persistence.ts** — the only file in the app that touches IndexedDB and localStorage. All IDB reads and writes go through here. Do not call any IDB API or `localStorage` directly from anywhere else. Stores import from here; components and composables do not.
+**persistence.ts** — the storage driver: a promise wrapper over IndexedDB plus a namespaced, JSON-coded, non-throwing wrapper over localStorage. It has **zero imports**, and that is the invariant worth protecting — the moment it needs one, it has started knowing something about the app.
+
+It holds no schemas, no retention policies, no key names and no reset workflow. If a change here can only be explained by naming a feature, it belongs in the module that owns the value, not in this file. Its docblock lists where each such concern went.
+
+Do not call an IDB API or `localStorage` directly from anywhere else — go through this file. One exception, by design: each IDB database here is a flat key→blob bucket (single `data` store, out-of-line keys, no indexes), so a caller needing in-line keys, secondary indexes or multiple object stores must hold its own handle. `hebrewBooksHistoryStore` legitimately does; see `src/stores/README.md`.
+
+Key names are **not** centralised. Every localStorage key is defined by its owning module and namespaced `area.name` (`text.fontSize`, `search.expandKetiv`), so the one flat namespace this driver writes into cannot be claimed twice. Never add a bare, un-namespaced key.
 
 **hebrewTextProcessing.ts** — diacritics handling and text normalization for Hebrew display.
 

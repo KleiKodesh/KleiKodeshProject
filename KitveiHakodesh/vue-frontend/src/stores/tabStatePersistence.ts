@@ -3,10 +3,49 @@ import {
   idbTabsSet,
   idbTabsDelete,
   idbTabsDeleteByPrefix,
-  KEYS,
 } from '@/utils/persistence'
-import type { TabState, BookState } from '@/utils/persistence'
 import { useWorkspaceStore } from './workspaceStore'
+
+/**
+ * Key layout for the `app-tabs` IndexedDB database — the record shape of this slice,
+ * not a settings name. One record per workspace×tab, one per workspace×tab×book, and
+ * a prefix that matches every book record beneath a tab so teardown can scan for it.
+ */
+const KEYS = {
+  tab: (wsId: string, tabId: string) => `tab:${wsId}:${tabId}`,
+  book: (wsId: string, tabId: string, bookId: number) => `book:${wsId}:${tabId}:${bookId}`,
+  tabPrefix: (wsId: string, tabId: string) => `book:${wsId}:${tabId}:`,
+} as const
+
+export interface TabState {
+  searchCheckedBookIds?: number[] // absent/null means "all checked" (default)
+  searchAtFilters?: string[]      // @ tokens from the search input, e.g. ["בראשית", "בבלי"]
+  searchZoom?: number             // per-tab zoom level for the search results page (50–200)
+  searchScrollIndex?: number      // virtual scroller item index for scroll restore
+  searchScrollOffset?: number     // virtual scroller item offset for scroll restore
+  searchSortOrder?: import('@/features/full-text-search/fullTextSearchTypes').FullTextSearchSortOrder // per-tab FTS result sort ('lineId' | 'relevance')
+  htmlViewScrollTop?: number      // scroll position (px) for /html-view tabs (HTML and TXT files)
+  txtViewZoom?: number            // per-tab zoom level for /txt-view tabs (50–400)
+}
+
+export interface BookState {
+  scrollIndex: number
+  scrollOffset: number
+  selectedLineId?: number | null
+  commentaryScrollIndex?: number | null
+  commentaryScrollOffset?: number | null
+  commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
+  zoom?: number
+  commentaryZoom?: number
+  commentaryVisible?: boolean
+  commentaryMode?: 'off' | 'bottom' | 'side'
+  commentaryFraction?: number    // side-by-side divider position (0.1–0.9)
+  stackedCommentaryFraction?: number  // stacked (bottom) divider position (0.1–0.9)
+  autoSelectTopLine?: boolean
+  /** @deprecated use pinnedCommentaryGroup — kept for reading old saves */
+  pinnedCommentaryBookId?: number | null
+  pinnedCommentaryGroup?: import('@/features/book-view/bookViewTypes').PinnedCommentaryGroup | null
+}
 
 /**
  * The `app-tabs` slice of persistence — everything keyed by workspace + tab.
