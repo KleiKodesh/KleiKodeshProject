@@ -12,7 +12,9 @@ Persistence: the tab list is saved to localStorage per workspace under `KEYS.tab
 
 **bookViewStore** — book viewer UI state: toolbar visibility, search bar position, and per-tab+book zoom map. Read `zoom` as a computed for the active tab and book. Also owns split-view state (not tabStore): `splitViewEnabled`, `splitViewFraction` (0.5 default), `focusedPaneId` (1|2), mutated via `toggleSplitView`/`disableSplitView`/`setSplitViewFraction`/`setFocusedPane`; persisted under `KEYS.SETTINGS_SPLIT_VIEW` / `KEYS.SETTINGS_SPLIT_VIEW_FRACTION`.
 
-**settingsStore** — all app-wide settings. Each setting has its own IDB key and is watched individually so only the changed key is written. Add new settings here, not as local component state.
+**settingsStore** — all app-wide settings. Each setting has its own localStorage key and is watched individually so only the changed key is written. Add new settings here, not as local component state.
+
+To add one: put a default in `DEFAULTS`, declare a `ref`, call `loadSetting(KEYS.X, theRef)` inside `init()`, call `persistSetting(theRef, KEYS.X)`, and export the ref. Consumers then just assign it — the watcher persists. Per-feature *display* preferences belong here too (`booksView`, `fileSearchSortOrder`); only genuinely per-tab state belongs on the tab.
 
 **booksDataStore** — lazy-loaded book catalog. Call `ensureLoaded()` to trigger the load. Do not fetch categories or books from the DB anywhere else.
 

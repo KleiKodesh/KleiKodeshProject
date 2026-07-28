@@ -2,7 +2,7 @@
 
 Book catalog browser. List, tiles, and full collapsible tree views with two-tier search.
 
-**BookCatalogPage.vue** - main page, orchestrates the title bar, search bar, and view switching between list, tiles, and tree via a `<component :is>` map.
+**BookCatalogPage.vue** - main page, orchestrates the title bar, search bar, and view switching between list, tiles, and tree via a `<component :is>` map. The active view mode is `settingsStore.booksView` — an app-wide preference shared by every `/books` tab, not per-tab state. Assigning it persists it; there is nothing to load on mount.
 
 **BookCatalogView.Tree.vue** - collapsible category tree showing the full catalog hierarchy. Uses `TreeView.vue` with `TreeNodeItem` data from `bookCatalogTree.ts`.
 
