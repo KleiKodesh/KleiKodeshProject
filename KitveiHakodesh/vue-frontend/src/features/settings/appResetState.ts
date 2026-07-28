@@ -16,12 +16,8 @@ export const resetting = ref(false)
  * `idbScheduleReset()` first is the crash-safety net: it writes the
  * `__pendingReset` localStorage flag, and `idbCheckAndExecReset()` at boot redoes
  * the wipe if the flag is still set — i.e. if we died partway through. The wipe
- * clears the flag itself (`idbClearAll` → `lsClearAll` removes it).
- *
- * Caveat worth knowing: `idbClearAll` clears localStorage *before* dropping the
- * databases, so the flag is gone before the drops finish. The net therefore covers
- * the window up to `lsClearAll`, not the drops themselves. Covering everything
- * would mean removing the flag last, inside `idbClearAll`.
+ * clears the flag itself, and only after every database is actually gone
+ * (`idbClearAll` calls `lsClearAll` last, by design — do not reorder it).
  */
 export async function resetEverything(): Promise<void> {
   resetting.value = true
