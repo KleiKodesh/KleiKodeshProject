@@ -28,10 +28,14 @@ namespace KitveiHakodeshLib
         private bool  _fading = false;
         private float _phase  = 0f;   // advances each tick
         private readonly Timer _timer;
+        private readonly string _versionText;
+        private readonly Font _versionFont;
 
-        public SplashOverlay(Image logo)
+        public SplashOverlay(Image logo, string versionText = null)
         {
             _logo = logo;
+            _versionText = versionText;
+            _versionFont = new Font("Segoe UI", 12f);
 
             SetStyle(
                 ControlStyles.AllPaintingInWmPaint |
@@ -138,6 +142,22 @@ namespace KitveiHakodeshLib
                 using (var brush = new SolidBrush(Color.FromArgb(dotA, AR, AG, AB)))
                     g.FillEllipse(brush, dx - r, dotsY - r, r * 2, r * 2);
             }
+
+            // ── Version stamp ─────────────────────────────────────────────────────
+            // Unobtrusive current-version line at the bottom edge — updates install
+            // silently, so this is where the user can passively see what they're on.
+            // Muted 55%-alpha text, white on dark backgrounds / black on light.
+            if (!string.IsNullOrEmpty(_versionText))
+            {
+                bool darkBg = BackColor.GetBrightness() < 0.5f;
+                var baseCol = darkBg ? Color.White : Color.Black;
+                var textCol = Color.FromArgb((int)(_alpha * 255 * 0.55f), baseCol);
+
+                var size = g.MeasureString(_versionText, _versionFont);
+                using (var brush = new SolidBrush(textCol))
+                    g.DrawString(_versionText, _versionFont, brush,
+                        cx - size.Width / 2f, h - size.Height - 14f);
+            }
         }
 
         protected override void OnBackColorChanged(EventArgs e)
@@ -153,6 +173,7 @@ namespace KitveiHakodeshLib
                 _timer.Dispose();
                 _logo?.Dispose();
                 _logo = null;
+                _versionFont?.Dispose();
             }
             base.Dispose(disposing);
         }
