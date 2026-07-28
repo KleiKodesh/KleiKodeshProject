@@ -121,6 +121,16 @@ public sealed class OpenInDefaultAppResult
     public string? Error { get; set; }
 }
 
+/// <summary>Result of <c>getFonts</c>: system font families that can render Hebrew, sorted
+/// alphabetically. Same contract as the hosted <c>getFonts</c> bridge action, so the settings
+/// font picker is identical in dev and hosted. Empty when DirectWrite is unavailable — the
+/// frontend then falls back to its canvas probe.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class FontsResult
+{
+    public string[] Fonts { get; set; } = [];
+}
+
 /// <summary>Result of <c>pasteIntoWord</c>: <see cref="Ok"/> true once the clipboard was pasted
 /// into Word at the cursor, or an <see cref="Error"/> message (Word not installed, COM failure).
 /// Mirrors the hosted bridge action's <c>{ ok, error }</c> shape so the frontend caller is

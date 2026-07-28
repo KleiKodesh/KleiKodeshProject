@@ -212,6 +212,18 @@ public sealed class Dispatcher(
                     }
                 }
 
+                // System font families that can render Hebrew — the dev-mode equivalent of the
+                // hosted app's "getFonts" bridge action. Hosted asks WPF; this service is
+                // native-AOT with no WPF, so HebrewFontsProvider goes to DirectWrite (the API WPF
+                // wraps) and applies the SAME test: does the family have a glyph for א? Returns
+                // an empty list rather than failing if DirectWrite is unavailable, and the
+                // frontend falls back to its canvas probe.
+                case "getFonts":
+                    return RpcResponse.Ok(MsgPack.Ser(new FontsResult
+                    {
+                        Fonts = LocalFiles.HebrewFontsProvider.GetHebrewFonts(),
+                    }));
+
                 // Paste the Windows clipboard into Word at the cursor — the dev-mode equivalent
                 // of the hosted app's "pasteIntoWord" bridge action (WordExporter.PasteAtCursor).
                 // The frontend has ALREADY put the formatted HTML on the clipboard via the copy

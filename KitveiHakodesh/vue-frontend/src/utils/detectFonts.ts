@@ -1,4 +1,4 @@
-import { isHosted } from '@/webview-host/seforimDb'
+import { serviceCall } from '@/webview-host/serviceClient'
 
 const CANDIDATES = [
   // Culmus
@@ -108,14 +108,37 @@ const CANDIDATES = [
   'Gentium Plus',
 ]
 
+/**
+ * Real system font families that can render Hebrew.
+ *
+ * Both modes ask the OS, so the font picker offers the machine's ACTUAL Hebrew fonts rather than
+ * whatever happens to be in the CANDIDATES guess-list:
+ *   Hosted: the C# host enumerates via WPF (`getFonts` → Helpers/FontsProvider).
+ *   Dev: the KitveiHakodesh service enumerates via DirectWrite (`getFonts` →
+ *        HebrewFontsProvider) — WPF is unavailable under native AOT, so it uses the API WPF
+ *        itself wraps, with the same "has a glyph for א" test.
+ *
+ * The canvas probe stays as the fallback for both: it only ever confirms fonts from CANDIDATES,
+ * so it misses anything installed that the list doesn't name.
+ *
+ * NOTE: `isHosted` is TRUE in dev, so it cannot pick the path — branch on __webviewAction
+ * (present only in the real WebView2 host) and let dev fall through to the service.
+ */
 export async function detectAvailableFonts(): Promise<string[]> {
-  if (isHosted) {
+  if (typeof window.__webviewAction === 'function') {
     try {
-      const result = await window.__webviewAction!('getFonts')
+      const result = await window.__webviewAction('getFonts')
       const fonts = (result as { fonts: string[] }).fonts
       if (Array.isArray(fonts) && fonts.length > 0) return fonts
     } catch {
       // C# action unavailable — fall through to canvas detection
+    }
+  } else {
+    try {
+      const result = await serviceCall<{ fonts?: string[] }>('getFonts')
+      if (Array.isArray(result?.fonts) && result.fonts.length > 0) return result.fonts
+    } catch {
+      // Service unreachable — fall through to canvas detection
     }
   }
   return _detectByCanvas()
