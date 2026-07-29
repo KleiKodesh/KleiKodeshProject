@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
 import { onLongPress, useTimeoutFn } from '@vueuse/core'
-import { useScopedKeys } from '@/composables/useTextSelectionKeys'
+import { useScopedKeys } from '../useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { useTabStore } from '@/stores/tabStore'

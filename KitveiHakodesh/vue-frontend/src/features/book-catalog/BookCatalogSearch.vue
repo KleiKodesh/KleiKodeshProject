@@ -5,7 +5,7 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import { useTilesKeys } from '@/composables/useTileGridKeys'
+import { useTilesKeys } from './useTileGridKeys'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
