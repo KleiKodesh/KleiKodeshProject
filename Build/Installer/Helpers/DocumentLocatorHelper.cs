@@ -128,12 +128,25 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         public static async Task<bool> EnsureServiceInstalledAsync()
         {
             string serviceExe = Path.Combine(AddinInstaller.InstallPath, ServiceExeName);
-            if (!File.Exists(serviceExe)) return false; // exe not deployed yet — skip
+
+            // The exe-exists check is also what retires this service cleanly. Once a
+            // release stops shipping DocumentLocator.Service.exe, extraction leaves
+            // nothing here, so this returns false and never re-registers the service
+            // that LegacyServiceRetirement just removed earlier in the same run.
+            if (!File.Exists(serviceExe)) return false; // not deployed (or retired) — skip
 
             if (IsServiceInstalledAndCurrent(serviceExe)) return true;
 
             // Launch --install elevated.  The service exe handles the case where it is
             // already registered at a different path by uninstalling first.
+            //
+            // The installer itself stays asInvoker (per-user install — see app.manifest),
+            // so this step must request elevation on its own. Known rough edge: on the
+            // headless auto-update path this prompt has no visible parent and appears
+            // minutes after Word exited. Registration is normally already current on an
+            // update, so it rarely fires; fixing it properly means teaching the installer
+            // to take the target user's paths as explicit input so the whole process can
+            // elevate safely.
             var psi = new ProcessStartInfo
             {
                 FileName        = serviceExe,
