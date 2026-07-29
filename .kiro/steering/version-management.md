@@ -70,7 +70,7 @@ Build → AddinInstaller.cs (const Version)
 | Arg                      | Effect                                                                                                                                |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
 | _(none)_                 | Normal UI — landing page                                                                                                              |
-| `--silent` / `--install` | Fully headless auto-install: NO window at all. Waits up to 5 minutes for BOTH WINWORD and כתבי הקודש to exit (both hosts share the install folder); if either is still running after the grace it exits 1 WITHOUT touching files (no partial extraction). Installs via `InstallRunner`, exits 0 on success / 1 on failure — no dialogs ever; the pending exe stays armed and the next close retries. Passed by `RunPendingInstaller()`. Releases ≤ v8.7.2 show a small progress window instead — safe, since the flag itself is supported by every generation. |
+| `--silent` / `--install` | **Accepted and IGNORED** (since 2026-07-29, ed76eaf9). Takes the same path as no arguments: the normal wizard, user clicks התקן. Still parsed so it stays a valid argument, and still passed by `RunPendingInstaller()` — the downloaded exe is always an OLDER release and `--silent` is the one flag every generation understands, so the meaning had to change in the installer rather than via a new flag. It used to mean a fully headless install; see "Why the install is not silent" below for why that was reversed. Do not reintroduce the headless branch. |
 | `--repair`               | Skip straight to repair page with auto-run (no confirm dialog). Used when relaunching as admin from the repair page elevation banner. |
 | `--wait-for-pid <PID>`   | Start hidden; show the window once the given process exits (max 30s — PIDs get recycled). ⚠ NOT passed by `RunPendingInstaller()` — the downloaded exe is always an OLDER release, and installers before the 30s bound wait unbounded and sit hidden forever when the pid is recycled (observed live: three invisible elevated installers accumulated). Keep the arg supported, never pass it to a downloaded installer. |
 
@@ -93,16 +93,32 @@ Word taskpane / KitveiHakodesh app opens
     no OTHER arguments — see the --wait-for-pid warning in the CLI table)
   → NSIS (SilentInstall silent, invisible) checks prereqs, extracts, runs the
     WPF installer with the args passed through
-  → WPF --silent path: fully headless — waits up to 5 min for BOTH WINWORD
-    and כתבי הקודש to exit (defers with exit 1 if either is still running),
-    then InstallRunner (extract, register, SaveVersion, service) → exits 0.
-    No dialogs even on failure (exit 1, retried at the next close).
+  → WPF installer IGNORES --silent and shows the normal wizard: LandingPage →
+    user clicks התקן → InstallPage → InstallRunner → SettingsPage.
+    (The flag is still accepted, and still passed, because the exe on disk is
+    always an older release that only understands --silent. See below.)
   → NSIS writes/overwrites HKCU\...\Uninstall\KleiKodesh\DisplayVersion = "vX.Y.Z"
-  → Next open of Word/the app: GetJustInstalledUpdateVersion() sees registry
-    Version ≠ LastSeenVersion → one-time non-modal "עודכן בהצלחה לגרסה X"
-    notice (shared value — whichever host opens first shows it; fresh installs
-    record silently with no notice)
+  → Next open of Word/the app: RecordCurrentVersionAsSeen() stamps
+    LastSeenVersion. No "עודכן בהצלחה" notice — the user just watched the
+    install, so announcing it on the next launch is redundant.
 ```
+
+**Why the install is not silent** (reversed 2026-07-29, commit ed76eaf9 — it was
+fully headless from 2026-07-28's 1e78c999). Two compounding reasons:
+
+1. The install overwrites files Word (VSTO) and כתבי הקודש hold open, so both must
+   be closed first. The only place to require that usefully is the התקן click:
+   `LandingPage` waits for both hosts and `EnsureWordClosed()` /
+   `EnsureKitveiHakodeshClosed()` can tell the user *which* to close and let them
+   retry. Headless could only wait blindly (the old ≤5 min timeout) and give up,
+   and when it guessed wrong the result was a partial extraction over locked files.
+2. Registering the index service needs admin, so it raises a UAC prompt. From a
+   hidden process that prompt had no visible parent and appeared minutes after the
+   user closed Word, so it read as a dialog from nowhere and got dismissed.
+
+Do not reintroduce a headless branch in `App.xaml.cs`, and do not move the
+host-wait into `InstallRunner` — that was tried and reverted the same day, since it
+duplicates LandingPage's gate from too far down to act on it.
 
 A truncated NSIS exe still reports its full `ProductVersion` (the version resource
 lives in the stub at the start of the file) — this is why the `.partial` rename and
