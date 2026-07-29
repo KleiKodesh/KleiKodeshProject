@@ -1,4 +1,4 @@
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Kicks off background FTS indexing as soon as the service starts, so the index is

@@ -5,7 +5,7 @@ using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Http;
 using KitveiHakodeshService.Ipc;
 using KitveiHakodeshService.LocalFiles;
-using KitveiHakodeshService.SefroimDb;
+using KitveiHakodeshService.SeforimDb;
 using KitveiHakodeshService.UserSettings;
 
 // KitveiHakodesh service — the clean, native (.NET 10 / AOT) data front-door.

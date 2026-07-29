@@ -1,6 +1,6 @@
 namespace KitveiHakodeshService.Catalog;
 
-using KitveiHakodeshService.SefroimDb;
+using KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Service wrapper around <see cref="CatalogTocIndex"/> — the disk-based Lucene index

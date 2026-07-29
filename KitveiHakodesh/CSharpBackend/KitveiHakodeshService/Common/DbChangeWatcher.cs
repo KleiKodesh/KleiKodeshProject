@@ -1,6 +1,6 @@
 namespace KitveiHakodeshService.Common;
 
-using KitveiHakodeshService.SefroimDb;
+using KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Watches the seforim DB file for changes WHILE the service runs, and asks each derived

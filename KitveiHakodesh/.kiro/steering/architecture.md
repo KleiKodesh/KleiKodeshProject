@@ -670,7 +670,7 @@ There is no `ZimHandler.cs` — ZIM/Kiwix support was removed.
 
 ### KitveiHakodeshService
 
-`CSharpBackend/KitveiHakodeshService/` is the native .NET 10 data front-door, AOT-published. **Browser dev mode is fully service-dependent** — the Vite dev path talks to this service, not to a JS shim. Subfolders: `SefroimDb`, `Dictionary`, `Catalog`, `HebrewBooks`, `LocalFiles`, `Pdf`, `UserSettings`, `Http`, `Ipc`, `Common`, `KitvieHakodesh`.
+`CSharpBackend/KitveiHakodeshService/` is the native .NET 10 data front-door, AOT-published. **Browser dev mode is fully service-dependent** — the Vite dev path talks to this service, not to a JS shim. Subfolders: `SeforimDb`, `Dictionary`, `Catalog`, `HebrewBooks`, `LocalFiles`, `Pdf`, `UserSettings`, `Http`, `Ipc`, `Common`, `KitveiHakodesh`.
 
 Wire format is MessagePack with PascalCase keys; the frontend transforms to camelCase. The HTTP surface is a raw loopback `TcpListener` whose port is private — handed over an ACL'd pipe and discovered via `/khs-endpoint`, never written to a file.
 

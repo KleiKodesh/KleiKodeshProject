@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Read-only access to the user's seforim.db (the large Torah-library content DB).
