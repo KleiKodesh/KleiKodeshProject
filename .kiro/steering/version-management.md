@@ -57,8 +57,13 @@ Build → AddinInstaller.cs (const Version)
 - Reads current version from `HKCU\SOFTWARE\KleiKodesh\Version`
 - Fetches latest from `https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest`
 - Triggered from `TaskPaneManager` on first taskpane open (unless user disabled it)
-- Downloads `KleiKodeshSetup-vX.Y.Z.exe` (NSIS wrapper) to `%TEMP%\KleiKodeshSetup.exe`
-- Schedules it to run on Word shutdown via `RunPendingInstaller()`
+- **Variant selection** (`UpdateChecker.ResolveInstallerAsset`): picks the release asset matching the
+  machine's installed variant per `HKCU\SOFTWARE\KleiKodesh\InstallerVariant` ("x64" → `-x64`,
+  "x86" → `-x86`, "AnyCPU"/missing → unsuffixed). If the release didn't publish that variant, it
+  **falls back to the unsuffixed AnyCPU asset**. Each variant installer re-stamps `InstallerVariant`
+  on install (baked in at build time via `-p:InstallerVariant`), so the chain sustains across updates.
+- Downloads the resolved asset to `%TEMP%\KleiKodeshSetup.exe` (via `.partial` + exact asset-size check)
+- Schedules it to run on Word/app shutdown via `RunPendingInstaller()`
 
 ### WPF Installer CLI Args
 

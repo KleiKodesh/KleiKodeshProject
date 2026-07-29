@@ -195,6 +195,11 @@ namespace UpdateCheckerLib
                 if (release?.TagName == null || CompareVersions(release.TagName, currentVersion) <= 0)
                     return;
 
+                // Releases publish up to three installer builds (x64 / x86 / unsuffixed
+                // AnyCPU). Pick the asset matching this machine's installed variant,
+                // falling back to the AnyCPU one when the release only shipped that.
+                var asset = ResolveInstallerAsset(release);
+
                 // Check if the file already on disk is already this version — no need to re-download
                 var existingFileVersion = DownloadManager.GetInstallerFileVersion();
                 if (existingFileVersion != null)
@@ -210,10 +215,9 @@ namespace UpdateCheckerLib
                         // truncated exe whose version resource still reads, wedging the updater
                         // in an announce-but-never-install loop. Verify the byte size against
                         // the release asset; on mismatch fall through and re-download.
-                        long? expectedSize = FindAssetSize(release, DownloadManager.GetInstallerAssetName(release.TagName));
-                        long? actualSize   = DownloadManager.GetInstallerFileLength();
+                        long? actualSize = DownloadManager.GetInstallerFileLength();
 
-                        if (expectedSize == null || actualSize == expectedSize)
+                        if (asset == null || actualSize == asset.Size)
                         {
                             Debug.WriteLine($"[UpdateChecker] {release.TagName} already downloaded, skipping.");
                             return;
@@ -221,11 +225,16 @@ namespace UpdateCheckerLib
 
                         Debug.WriteLine(
                             $"[UpdateChecker] On-disk installer is {actualSize} bytes but the release asset " +
-                            $"is {expectedSize} bytes — truncated download, fetching a fresh copy.");
+                            $"is {asset.Size} bytes — truncated download, fetching a fresh copy.");
                     }
                 }
 
-                await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
+                if (asset != null)
+                    await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName, asset.BrowserDownloadUrl, asset.Size);
+                else
+                    // Release JSON carried no usable assets list — fall back to the
+                    // constructed variant URL (pre-assets behavior).
+                    await DownloadManager.DownloadAndScheduleInstallerAsync(release.TagName);
             }
             catch (UpdateCheckException ex)
             {
@@ -238,16 +247,30 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
-        /// Byte size of the named asset in the release, or null if the release JSON
-        /// carries no matching asset (older cached responses, renamed assets).
+        /// Picks the installer asset to download from the release's asset list:
+        /// the variant matching this machine's install ("-x64" / "-x86" / unsuffixed
+        /// AnyCPU, per the InstallerVariant registry value) when the release ships it,
+        /// otherwise the unsuffixed AnyCPU asset as fallback — a release may publish
+        /// only that one. Returns null when the release JSON has no usable asset
+        /// (renamed assets, empty list), in which case the caller falls back to the
+        /// constructed variant URL.
         /// </summary>
-        private static long? FindAssetSize(GitHubRelease release, string assetName)
+        internal static GitHubReleaseAsset ResolveInstallerAsset(GitHubRelease release)
         {
-            if (release?.Assets == null) return null;
+            if (release?.Assets == null || release.TagName == null) return null;
+
+            return FindAsset(release, DownloadManager.GetInstallerAssetName(release.TagName))
+                ?? FindAsset(release, $"KleiKodeshSetup-{release.TagName}.exe");
+        }
+
+        private static GitHubReleaseAsset FindAsset(GitHubRelease release, string assetName)
+        {
             foreach (var asset in release.Assets)
             {
-                if (string.Equals(asset.Name, assetName, StringComparison.OrdinalIgnoreCase) && asset.Size > 0)
-                    return asset.Size;
+                if (string.Equals(asset.Name, assetName, StringComparison.OrdinalIgnoreCase) &&
+                    asset.Size > 0 &&
+                    !string.IsNullOrEmpty(asset.BrowserDownloadUrl))
+                    return asset;
             }
             return null;
         }
