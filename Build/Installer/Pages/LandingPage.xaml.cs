@@ -13,8 +13,9 @@ namespace KleiKodeshVstoInstallerWpf
     ///   "תיקון" → RepairPage
     ///   "ביטול" → exit
     ///
-    /// Silent mode (--silent / --install CLI arg) bypasses this page entirely and
-    /// goes straight to InstallPage with no UI. See App.xaml.cs.
+    /// Auto-updates land here too — --silent no longer bypasses this page. That is
+    /// deliberate: this is the one place that can require Word and כתבי הקודש to be closed
+    /// and tell the user which one to close, which the install depends on. See App.xaml.cs.
     /// </summary>
     public partial class LandingPage : Page
     {

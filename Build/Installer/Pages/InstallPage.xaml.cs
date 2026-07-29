@@ -10,10 +10,13 @@ namespace KleiKodeshVstoInstallerWpf
     /// Step 2 of the installer flow — runs the actual installation (extract, register, save version).
     ///
     /// Reached two ways:
-    ///   - Normal:  LandingPage "התקן" → NavigateToInstall(showSettingsAfter: true)
-    ///              After install completes, navigates to SettingsPage (post-install config).
-    ///   - Silent:  App.xaml.cs --silent arg → NavigateToInstall(showSettingsAfter: false)
-    ///              After install completes, exits with code 0.
+    ///   - LandingPage "התקן" → NavigateToInstall(showSettingsAfter: true)
+    ///   - RepairPage (after cleanup) → NavigateToInstall(showSettingsAfter: true)
+    /// Both then navigate to SettingsPage for post-install config. showSettingsAfter:false
+    /// exits with code 0 instead; no caller currently uses it.
+    ///
+    /// Auto-updates come through LandingPage like any other install: --silent is ignored
+    /// and the user clicks התקן. See App.xaml.cs for why there is no headless path.
     ///
     /// The close button is hidden for the duration of the install to prevent mid-install abort.
     /// </summary>
@@ -45,8 +48,9 @@ namespace KleiKodeshVstoInstallerWpf
         {
             try
             {
-                // The install sequence itself lives in InstallRunner — shared with
-                // the fully headless --silent auto-update path in App.xaml.cs.
+                // The install sequence itself lives in InstallRunner. Both entry points
+                // reach it here: a user who clicked התקן, and the --silent auto-update,
+                // which shows this page and auto-runs it without the click.
                 await InstallRunner.RunAsync(_progress, _status);
 
                 while (ProgressBar.Value < ProgressBar.Maximum)

@@ -63,8 +63,9 @@ namespace KleiKodeshVstoInstallerWpf
         // Normal install flow (interactive):
         //   LandingPage → InstallPage → SettingsPage → ComponentSettingsPage → exit
         //
-        // Silent install flow (--silent / --install arg):
-        //   InstallPage → exit  (no UI pages shown)
+        // Auto-update (--silent / --install arg) takes the SAME path as a manual install:
+        //   LandingPage → InstallPage → SettingsPage → ...
+        // The flag is ignored — see App.xaml.cs for why there is no headless flow.
         //
         // Repair flow:
         //   LandingPage "תיקון" → RepairPage
