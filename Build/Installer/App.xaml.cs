@@ -36,7 +36,6 @@ namespace KleiKodeshVstoInstallerWpf
         {
             base.OnStartup(e);
 
-            bool silentMode  = false;
             // When built with -p:ForceCleanInstall=true, the installer always launches
             // in repair mode — wipes existing files/registry then installs fresh.
             // The "התקן" button on LandingPage therefore behaves exactly like "תיקון".
@@ -49,11 +48,11 @@ namespace KleiKodeshVstoInstallerWpf
 
             foreach (string arg in e.Args)
             {
-                if (arg.Equals("--silent",  StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("/silent",   StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("--install", StringComparison.OrdinalIgnoreCase) ||
-                    arg.Equals("/install",  StringComparison.OrdinalIgnoreCase))
-                    silentMode = true;
+                // --silent / --install are accepted and intentionally IGNORED. The
+                // auto-updater still passes --silent (it must — the exe on disk predates
+                // this code and older builds only understand that flag), but an update now
+                // shows the normal wizard. See the note above the window construction below
+                // for why a headless install is not viable here.
 
                 if (arg.Equals("--repair", StringComparison.OrdinalIgnoreCase) ||
                     arg.Equals("/repair",  StringComparison.OrdinalIgnoreCase))
@@ -92,50 +91,28 @@ namespace KleiKodeshVstoInstallerWpf
                 });
             }
 
-            if (silentMode)
-            {
-                // Fully headless auto-update: NO window at all. Both hosts share the
-                // install folder, so wait for BOTH Word and כתבי הקודש to exit —
-                // whichever one launched us is closing right now, but the other may
-                // be open with our files loaded (e.g. Word with another document).
-                // Up to 5 minutes of grace; if either is STILL running after that,
-                // bail out rather than risk a partial extraction over locked files.
-                // Errors exit 1 with no dialogs — the setup exe stays in %TEMP%,
-                // so the next session announces the update again and the next
-                // close retries.
-                ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown;
-                _ = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    try
-                    {
-                        var deadline = DateTime.UtcNow + TimeSpan.FromMinutes(5);
-                        while (DateTime.UtcNow < deadline &&
-                               (Helpers.WordHelper.IsWordRunning() ||
-                                Helpers.KitveiHakodeshHelper.IsKitveiHakodeshRunning()))
-                            System.Threading.Thread.Sleep(500);
-
-                        if (Helpers.WordHelper.IsWordRunning() ||
-                            Helpers.KitveiHakodeshHelper.IsKitveiHakodeshRunning())
-                        {
-                            System.Diagnostics.Debug.WriteLine("[Installer] Host still running after 5min, deferring update.");
-                            Environment.Exit(1);
-                        }
-
-                        // Already elevated — the manifest requires admin, so consent was
-                        // obtained at launch (while the user was still present) and every
-                        // privileged step below runs without further prompting.
-                        await Helpers.InstallRunner.RunAsync(
-                            new Progress<double>(_ => { }), status: null);
-                        Environment.Exit(0);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[Installer] Silent install failed: {ex.Message}");
-                        Environment.Exit(1);
-                    }
-                });
-                return;
-            }
+            // "--silent" no longer suppresses anything: an auto-update shows the normal
+            // wizard and the user drives it, exactly as if they had run the installer.
+            //
+            // Two reasons it cannot be silent, and they compound:
+            //
+            //   1. The install overwrites files that Word (VSTO) and כתבי הקודש hold open,
+            //      so BOTH must be closed first. The only place to enforce that usefully is
+            //      the התקן click: LandingPage waits for them, and
+            //      EnsureWordClosed()/EnsureKitveiHakodeshClosed() can tell the user what to
+            //      close and let them retry. A headless installer can only wait blindly and
+            //      give up, which is how a partial extraction over locked files happens.
+            //   2. Registering the elevated index service raises a UAC prompt. Raised from a
+            //      hidden process it had no visible parent and appeared minutes after the
+            //      user closed Word, so it read as a dialog from nowhere and got dismissed.
+            //
+            // The flag is still accepted, and the updater still passes it, because the exe
+            // on disk is always an OLDER release than the code launching it — DownloadManager
+            // must not pass arguments older builds don't understand. So the meaning changed
+            // here, in the installer, rather than by adding a flag old builds would ignore.
+            //
+            // Net effect: --silent takes the same path as a manual launch. Do not
+            // reintroduce a headless branch here.
 
             MainWindow mainWindow = new MainWindow();
             if (repairMode)

@@ -5,15 +5,21 @@ using System.Threading.Tasks;
 namespace KleiKodeshVstoInstallerWpf.Helpers
 {
     /// <summary>
-    /// The install sequence itself, independent of any UI — shared by
-    /// InstallPage (visible flow, real progress bar) and the fully headless
-    /// --silent auto-update path in App.xaml.cs (no window at all).
+    /// The install sequence itself, independent of any UI. Driven by InstallPage, which is
+    /// the only caller — auto-updates included, since --silent no longer has a headless
+    /// path. Assumes Word and כתבי הקודש are already closed; LandingPage enforces that.
     /// Throws on failure; callers decide how to surface or swallow errors.
     /// </summary>
     public static class InstallRunner
     {
         public static async Task RunAsync(IProgress<double> progress, IProgress<string> status)
         {
+            // NOTE: this assumes Word and כתבי הקודש are already closed. Enforcing that is
+            // LandingPage's job — its constructor waits for them and the התקן click calls
+            // EnsureWordClosed()/EnsureKitveiHakodeshClosed(), which can actually tell the
+            // user what to close. Do not re-add a wait here; there is no useful way to
+            // stall from this far down, and duplicating the check just hides where the real
+            // gate is.
             if (!Directory.Exists(AddinInstaller.InstallPath))
                 Directory.CreateDirectory(AddinInstaller.InstallPath);
 

@@ -210,9 +210,11 @@ namespace UpdateCheckerLib
         /// consent prompt regardless of the target's manifest, and a declined or
         /// policy-denied prompt used to silently kill the update on every close.
         ///
-        /// The installer is launched with "--silent": it auto-installs with no
-        /// clicks and exits (fully headless in current installers; releases up to
-        /// v8.7.2 show a small progress window). --silent is safe to pass because
+        /// The installer is launched with "--silent": it auto-installs with no clicks and
+        /// exits. From v9 the installer SHOWS its window while doing so — the install has
+        /// to register an elevated service, and a UAC prompt raised from a hidden process
+        /// minutes after Word closed had no visible parent and got dismissed. --silent now
+        /// means "skip the התקן click", not "run invisibly". --silent is safe to pass because
         /// every installer generation supports it — it was the original
         /// auto-update flag. Do NOT pass newer arguments: the exe on disk is
         /// always an OLDER release than this code. --wait-for-pid specifically
