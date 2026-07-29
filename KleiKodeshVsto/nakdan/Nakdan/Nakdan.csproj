@@ -118,7 +118,7 @@
     <Compile Include="Core\TokenChunker.cs" />
     <Compile Include="Core\TokenTextConverter.cs" />
     <Compile Include="Core\DictaApiClient.cs" />
-    <Compile Include="Core\NakdanCofiguration.cs" />
+    <Compile Include="Core\NakdanConfiguration.cs" />
     <Compile Include="Core\NakdanEngine.cs" />
     <Compile Include="Core\NakdanWrapper.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />

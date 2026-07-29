@@ -18,7 +18,7 @@ The **main application** is the **WPF installer** (`Build/Installer`). It instal
 - `WpfLib` — Shared WPF utilities and helpers
 - `KitveiHakodesh` (Vue/TypeScript) — frontend for the KitveiHakodesh seforim viewer
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib` — C# backend for the KitveiHakodesh WebView2 app
-- `KitveiHakodesh/CSharpBackend/Ftslib-Csharp` — Ftslib-based search engine
+- `KitveiHakodesh/CSharpBackend/FtsLib-Csharp` — Ftslib-based search engine
 - `KitveiHakodesh/CSharpBackend/DocumentLocator` — NTFS MFT-based document indexing service for fast local file search
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp` — Standalone WinForms demo app for testing KitveiHakodeshLib
 - `KleiKodeshVsto/Kiwix` — WinForms + WebView2 ZIM file reader (offline wiki browser)
@@ -52,7 +52,7 @@ On startup (`SearchHandler.OnDbReady`), if the installed app version (from regis
 
 - **MSBuild** (for VSTO and WPF projects requiring VS tools): `C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe`
 - **Full solution build**: `& "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KleiKodeshProject.slnx /m /nologo /verbosity:minimal`
-- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `Ftslib-Csharp`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
+- **dotnet build** works for SDK-style projects only (`Build/Installer`, `KitveiHakodeshLib`, `FtsLib-Csharp`). Old-style WPF/VSTO projects (`KleiKodeshVsto`, `WpfLib`) require MSBuild from VS.
 
 ## NuGet Quirk — Native Interop DLLs Don't Propagate Transitively
 
@@ -95,7 +95,7 @@ Each project folder contains a `README.md` describing its purpose, folder struct
 | [`KitveiHakodesh/README.md`](../../KitveiHakodesh/README.md)                                                                       | Vue 3 frontend: components, stores, host bridge, build             |
 | [`KitveiHakodesh/CSharpBackend/README.md`](../../KitveiHakodesh/CSharpBackend/README.md)                                           | C# backend projects overview                                       |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md`](../../KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | WebView2 host, message bridge, all handlers                        |
-| [`KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md`](../../KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md) | Ftslib search engine: indexing, searching, version detection |
+| [`KitveiHakodesh/CSharpBackend/FtsLib-Csharp/README.md`](../../KitveiHakodesh/CSharpBackend/FtsLib-Csharp/README.md) | Ftslib search engine: indexing, searching, version detection |
 | [`KitveiHakodesh/CSharpBackend/DocumentLocator/README.md`](../../KitveiHakodesh/CSharpBackend/DocumentLocator/README.md) | NTFS MFT indexing: Windows service, named-pipe client for file search |
 | [`hebrew-typing-tutor/README.md`](../../hebrew-typing-tutor/README.md)                                               | Browser-based Hebrew touch-typing tutor: exercises, progress       |
 | [`kleikodesh-website/README.md`](../../kleikodesh-website/README.md)                                                 | Public website (GitHub Pages): homepage, downloads, features       |

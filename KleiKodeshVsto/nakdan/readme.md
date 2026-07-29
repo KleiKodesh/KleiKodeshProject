@@ -25,7 +25,7 @@ The main library providing vowelization functionality:
 
 | Subfolder | Key Files | Purpose |
 |-----------|-----------|---------|
-| `Core/` | `NakdanEngine.cs`, `NakdanWrapper.cs`, `DictaApiClient.cs`, `Token.cs`, `TokenChunker.cs`, `OoxmlHelper.cs`, `RunInfo.cs`, `RunWriter.cs`, `TokenTextConverter.cs`, `HebrewTextExtensions.cs`, `NakdanCofiguration.cs` | API communication, OOXML parsing, token stream processing, text chunking, parallel API calls |
+| `Core/` | `NakdanEngine.cs`, `NakdanWrapper.cs`, `DictaApiClient.cs`, `Token.cs`, `TokenChunker.cs`, `OoxmlHelper.cs`, `RunInfo.cs`, `RunWriter.cs`, `TokenTextConverter.cs`, `HebrewTextExtensions.cs`, `NakdanConfiguration.cs` | API communication, OOXML parsing, token stream processing, text chunking, parallel API calls |
 | `Helpers/` | `SettingsManager.cs`, `VstoHelper.cs` | Persistent settings, Word interop helpers |
 | `UI/` | `NakdanView.xaml/.cs`, `NakdanViewModel.cs`, `NakdanDictionary.xaml`, `Converters.cs` | WPF controls for vowelization UI and dictionary display |
 | `WdStyles/` | `DocumentStyle.cs`, `DocumentStyleProvider.cs`, `StyleExtractor.cs`, `StyleItem.cs`, `StyleNameResolver.cs` | Word style enumeration, ignored-style filtering |

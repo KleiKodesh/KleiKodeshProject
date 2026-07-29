@@ -20,7 +20,7 @@ The library is organized into four functional areas:
 | `RunInfo.cs` | Model for a Word `<w:r>` run with formatting context |
 | `RunWriter.cs` | Writes vowelized text back into OOXML, preserving `<w:rPr>` formatting |
 | `HebrewTextExtensions.cs` | Hebrew character classification and nikkud manipulation extensions |
-| `NakdanCofiguration.cs` | Configuration model (genre, ignored styles, API URL) |
+| `NakdanConfiguration.cs` | Configuration model (genre, ignored styles, API URL) |
 
 ### Helpers/ — Utilities
 

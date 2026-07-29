@@ -17,7 +17,7 @@ The `packages/` folders are gitignored and must be restored on every fresh clone
 Restore commands (run from the workspace root):
 
 ```
-.\nuget.exe restore "CSharpBackend\Ftslib-Csharp\FtsLib.slnx" -PackagesDirectory "CSharpBackend\Ftslib-Csharp\packages"
+.\nuget.exe restore "CSharpBackend\FtsLib-Csharp\FtsLib.slnx" -PackagesDirectory "CSharpBackend\FtsLib-Csharp\packages"
 .\nuget.exe restore "CSharpBackend\KitveiHakodesh.slnx"
 ```
 

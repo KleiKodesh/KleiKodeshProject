@@ -2,9 +2,9 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace KitveiHakodeshService.Hebrewbooks
+namespace KitveiHakodeshService.HebrewBooks
 {
-    internal class HebrewbooksUpdater
+    internal class HebrewBooksUpdater
     {
     }
 }

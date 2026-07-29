@@ -199,7 +199,7 @@
   <ItemGroup>
     <!-- Reverted net48 FtsLib (System.Data.SQLite) — the stable engine for the hosted app.
          The net10-optimized FtsLib is a separate project used only by KitveiHakodeshService. -->
-    <ProjectReference Include="..\Ftslib-Csharp\FtsLib.Net48\FtsLib.Net48.csproj">
+    <ProjectReference Include="..\FtsLib-Csharp\FtsLib.Net48\FtsLib.Net48.csproj">
       <Project>{76f9daa9-374f-40f9-8511-3239fb6e846e}</Project>
       <Name>FtsLib.Net48</Name>
     </ProjectReference>

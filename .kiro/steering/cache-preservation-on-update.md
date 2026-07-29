@@ -80,4 +80,4 @@ This ensures the search index stays in sync with the app version without forcing
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/AppViewer.cs` — WebView2 user data folder
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/Pdf/LocalFileHandler.cs` — Word cache
 - `KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/HebrewBooks/HebrewBooksHandler.cs` — HebrewBooks cache
-- `KitveiHakodesh/CSharpBackend/Ftslib-Csharp/Search/SearchHandler.cs` — index version detection
+- `KitveiHakodesh/CSharpBackend/FtsLib-Csharp/Search/SearchHandler.cs` — index version detection

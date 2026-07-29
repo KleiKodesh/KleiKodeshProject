@@ -680,7 +680,7 @@ Consequence for frontend code: `isHosted` is **true** in browser dev mode. It is
 
 The full-text search pipeline spans three layers: FtsLib (the custom index engine), KitveiHakodeshLib (the C# orchestration layer), and the Vue frontend.
 
-**FtsLib** (`CSharpBackend/Ftslib-Csharp/`) is a custom LSM-style segment index built specifically for Hebrew/Aramaic seforim. It uses delta+varint compressed posting lists and skip-list accelerated intersection. The search engine handles index building, querying, and result retrieval with support for prefix/suffix/infix wildcards, fuzzy matching (Levenshtein distance), and Hebrew-specific features like spelling variant expansion. Public API entry point is `SeforimIndex` in `FtsLib/SeforimDb/`.
+**FtsLib** (`CSharpBackend/FtsLib-Csharp/`) is a custom LSM-style segment index built specifically for Hebrew/Aramaic seforim. It uses delta+varint compressed posting lists and skip-list accelerated intersection. The search engine handles index building, querying, and result retrieval with support for prefix/suffix/infix wildcards, fuzzy matching (Levenshtein distance), and Hebrew-specific features like spelling variant expansion. Public API entry point is `SeforimIndex` in `FtsLib/SeforimDb/`.
 
 **KitveiHakodeshLib/Search/** contains the orchestration classes:
 

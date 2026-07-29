@@ -31,7 +31,7 @@
 | [`UpdateCheckerLib`](UpdateCheckerLib/README.md)                                                      | .NET Library          | בדיקת עדכונים מ-GitHub והורדתם                        |
 | [`KitveiHakodesh`](KitveiHakodesh/README.md)                                                                       | Vue 3 + TypeScript    | ספרייה לצפייה במאגר הספרים של זית / אוצריא            |
 | [`KitveiHakodesh/CSharpBackend/KitveiHakodeshLib`](KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/README.md)                     | .NET Library          | WebView2 host לממשק KitveiHakodesh                           |
-| [`KitveiHakodesh/CSharpBackend/Ftslib-Csharp`](KitveiHakodesh/CSharpBackend/Ftslib-Csharp/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
+| [`KitveiHakodesh/CSharpBackend/FtsLib-Csharp`](KitveiHakodesh/CSharpBackend/FtsLib-Csharp/README.md) | .NET Library          | מנוע חיפוש Bloom filter                               |
 | [`KitveiHakodesh/CSharpBackend/DocumentLocator`](KitveiHakodesh/CSharpBackend/DocumentLocator/README.md) | Windows Service + .NET | שירות אינדוקס קבצים NTFS עבור חיפוש מהיר                     |
 | [`kleikodesh-website`](kleikodesh-website/README.md)                                             | Static HTML/CSS/JS    | אתר הפרויקט הציבורי ודף ההורדה                        |
 | [`hebrew-typing-tutor`](hebrew-typing-tutor/README.md)                                         | Web app (HTML/CSS/JS) | מאמן הקלדה עברית                                       |
@@ -189,7 +189,7 @@ This section helps AI agents find the right file for a given change without sear
 | Change C#/JS bridge | `webview-host/bridge.ts` + `CSharpBackend/KitveiHakodeshLib/Bridge/JsBridge.cs` |
 | Change theme system | `theme/themeStore.ts`, `theme/themes.json`, `theme/theme.css` |
 | Change PDF viewer | `features/pdf-viewer/` |
-| Change search | `features/full-text-search/` (frontend), `CSharpBackend/Ftslib-Csharp/FtsLib/` (backend) |
+| Change search | `features/full-text-search/` (frontend), `CSharpBackend/FtsLib-Csharp/FtsLib/` (backend) |
 
 ### Common Changes — Build System
 

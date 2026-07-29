@@ -10,7 +10,7 @@ This folder exists in two git repos simultaneously:
 When you change files in this folder, push to both repos separately:
 
 1. From the workspace root — commits to KleiKodeshProject
-2. From inside this folder (`CSharpBackend/Ftslib-Csharp`) — commits to the FtsLib repo
+2. From inside this folder (`CSharpBackend/FtsLib-Csharp`) — commits to the FtsLib repo
 
 Both repos share the same local files. There is no automatic sync between them.
 
