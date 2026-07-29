@@ -2,8 +2,12 @@ namespace KitveiHakodeshService.SefroimDb;
 
 // Result-row DTOs for the seforim DB, matching the Vue row shapes exactly
 // (camelCase on the wire). Registered in RpcJsonContext for AOT-safe serialization.
+//
+// The frontend counterpart is vue-frontend/src/webview-host/queries.types.ts — the row
+// types live beside the SQL that produces them, so both sides of the wire point at the
+// same place. Keep the two files in step when a SELECT list changes.
 
-/// <summary>A category tree row — matches bookCatalogTree.ts CategoryRow.</summary>
+/// <summary>A category tree row — matches CategoryRow in webview-host/queries.types.ts.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CategoryRow
 {
@@ -13,7 +17,7 @@ public sealed class CategoryRow
     public int Level { get; set; }
 }
 
-/// <summary>A catalog book row — matches bookCatalogTree.ts BookRow (query subset).</summary>
+/// <summary>A catalog book row — matches BookRow in webview-host/queries.types.ts (query subset).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookRow
 {
@@ -41,7 +45,7 @@ public sealed class BooksResult
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookByIdArgs { public int Id { get; set; } }
 
-/// <summary>Single-book metadata — matches the BookRow in useBookViewLinesTable.ts load().</summary>
+/// <summary>Single-book metadata — matches BookInfo in webview-host/queries.types.ts.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookInfo
 {

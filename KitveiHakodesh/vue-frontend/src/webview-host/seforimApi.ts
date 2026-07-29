@@ -10,8 +10,17 @@
 import { query, categoryHasOrderIndex } from './seforimDb'
 import { serviceCall } from './serviceClient'
 import { SQL } from './queries.sql'
-import type { CategoryRow, BookRow } from '@/features/book-catalog/bookCatalogTree'
-import type { TocEntry, AltTocStructure } from '@/features/book-view/toc/useBookViewToc'
+import type {
+  BookRow, CategoryRow, BookInfo, TocEntry, AltTocStructure,
+  LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor,
+} from './queries.types'
+
+// Re-exported so callers can keep importing row types from the API they call.
+// The definitions live in queries.types.ts, beside the SQL that produces them.
+export type {
+  BookRow, CategoryRow, BookInfo, TocEntry, AltTocStructure,
+  LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, TocRow,
+} from './queries.types'
 
 /** True when the C# seforim bridge is present (hosted). Dev falls to the service. */
 export const isDbHosted = (): boolean => typeof window.__webviewQuery === 'function'
@@ -29,23 +38,6 @@ export async function getAllBooks(): Promise<BookRow[]> {
 }
 
 // ── Book + lines ──────────────────────────────────────────────────────────────
-
-/** Single-book metadata: totalLines for virtual-scroll init + has* connection flags. */
-export interface BookInfo {
-  totalLines: number
-  hasTeamim: number
-  hasTargumConnection: number
-  hasReferenceConnection: number
-  hasSourceConnection: number
-  hasCommentaryConnection: number
-  hasOtherConnection: number
-}
-
-export interface LineRow {
-  id: number
-  lineIndex: number
-  content: string
-}
 
 export async function getBookById(id: number): Promise<BookInfo | undefined> {
   if (!isDbHosted())
@@ -93,14 +85,6 @@ export async function getTocEntryByTextPrefix(
 
 // ── Commentary / links ────────────────────────────────────────────────────────
 
-export interface CommentaryLinkRow {
-  targetBookId: number
-  targetLineId: number
-  connectionTypeId: number
-  lineIndex: number
-  content?: string
-}
-
 // Whether link.targetLineIndex exists in the hosted DB (Zayit: yes, Otzaria: no —
 // verified 2026-07-19 against both real DBs; both schemas evolve independently, so
 // RE-VERIFY when either DB project ships a new schema version).
@@ -135,19 +119,6 @@ export async function getCommentaryLinksForSourceLineRange(lineIds: number[]): P
 }
 
 // ── Word-level link anchors (link_anchor, SeforimLibrary schema v2+) ──────────
-
-/** One word-level link anchor inside a source line. charStart/charEnd are visible-char
- * offsets into the line's RAW content in upstream's countVisibleChars convention (tags = 0,
- * entity = 1, everything else — including diacritics — = 1). charEnd null = point anchor. */
-export interface WordLinkAnchor {
-  lineId: number
-  charStart: number
-  charEnd: number | null
-  label: string | null
-  targetBookId: number
-  targetLineId: number
-  targetLineIndex: number
-}
 
 // Whether the open DB has the link_anchor table (schema v2+; current Zayit/Otzaria v1
 // DBs don't). null = unknown. Once false, callers get [] without touching the DB again —
@@ -202,13 +173,6 @@ export async function getDefaultCommentators(bookId: number): Promise<{ commenta
 }
 
 // ── Reverse lookups (source & targum) + static filter books ────────────────────
-
-export interface ReverseLineRow {
-  sourceBookId: number
-  sourceLineId: number
-  lineIndex: number
-  content: string
-}
 
 /** Reverse source/targum lookup — pass commentary type ids for source, targum type ids for targum. */
 export async function getReverseLineData(lineIds: number[], typeIds: number[]): Promise<ReverseLineRow[]> {

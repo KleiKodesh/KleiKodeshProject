@@ -1,20 +1,8 @@
-export interface BookRow {
-  id: number
-  categoryId: number
-  title: string
-  hasTeamim?: number | null // 1 if the book has cantillation marks, 0/null if not
-  authors?: string | null
-  treeOrder?: number
-  parentPath?: string // category path without the book title — used for display in search results
-  period?: string // Chronological period: תנ"ך, ספרות חז"ל, גאונים, ראשונים, אחרונים, etc.
-  rootCategory?: string // First-tier category title
-}
-export interface CategoryRow {
-  id: number
-  parentId: number | null
-  title: string
-  level: number
-}
+import type { BookRow, CategoryRow } from '@/webview-host/queries.types'
+
+// Row shapes come FROM the data layer — this file only adds the tree view model below.
+export type { BookRow, CategoryRow }
+
 export interface CategoryNode extends CategoryRow {
   children: CategoryNode[]
   books: BookRow[]

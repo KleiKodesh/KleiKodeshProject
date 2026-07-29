@@ -31,7 +31,8 @@ import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 // hardcoded FORCE_STRIP_BOOK_IDS list, so it is not generic enough for utils/ —
 // left in book-view deliberately rather than dragging that list into utils/.
 import { stripTocTitleRoots } from '../book-view/toc/tocSearchUtils'
-import type { BookRow } from './bookCatalogTree'
+import type { BookRow, TocRow } from '@/webview-host/queries.types'
+export type { TocRow }
 import type { TocFsItem } from './useBookCatalogSearch'
 
 // ─── Cap ──────────────────────────────────────────────────────────────────────
@@ -51,14 +52,6 @@ const MAX_TOC_CANDIDATE_BOOKS = 50
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type TocRow = {
-  id: number
-  parentId: number | null
-  bookId: number
-  text: string
-  lineIndex: number | null
-  hasChildren: number | boolean
-}
 
 export type TocHeuristicsResult = {
   /** TOC items ready for the UI, sorted by book tree order */
