@@ -16,6 +16,27 @@
             Remove this element if your application requires this virtualization for backwards
             compatibility.
         -->
+        <!--
+          MUST stay "asInvoker". This is a per-user install and cannot be anything else:
+            - VSTO registers the add-in under HKCU\Software\Microsoft\Office\Word\Addins.
+            - The WebView2 user-data (webcache) directory needs write access at runtime
+              as the interactive user.
+
+          Elevating this exe makes Environment.GetFolderPath(LocalApplicationData) and
+          every HKCU write resolve against whichever admin approved the UAC prompt, so a
+          standard user's install lands in the ADMIN's profile and the real user never
+          gets it or its updates. See the matching note in Build/nsis/KleiKodeshWrapper.nsi.
+
+          Rejected repeatedly, do not re-propose: requireAdministrator here;
+          ExecShellWait "runas" on this exe from the NSIS wrapper; Verb="runas" in
+          DownloadManager.LaunchInstaller. Elevating "just the child process" fails the
+          same way — elevating this exe at all is what breaks path resolution.
+
+          Steps that genuinely need admin (SCM register/retire of the index service)
+          elevate individually and are skipped when the rights aren't available. The real
+          fix is removing the service, not elevating the installer — which is the plan
+          (KitveiHakodeshService indexes in-process).
+        -->
         <requestedExecutionLevel level="asInvoker" uiAccess="false" />
       </requestedPrivileges>
     </security>
