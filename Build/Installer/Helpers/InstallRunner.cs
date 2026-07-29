@@ -17,10 +17,18 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (!Directory.Exists(AddinInstaller.InstallPath))
                 Directory.CreateDirectory(AddinInstaller.InstallPath);
 
+            // Retire services this product no longer ships, before extraction — a
+            // registered service holds a lock on its exe that would fail the extract.
+            // No-op (one registry probe) once a machine has been cleaned up, so this is
+            // safe on every install. Runs elevated like the rest of the installer, so it
+            // needs no prompting of its own — see LegacyServiceRetirement.
+            await LegacyServiceRetirement.RetireAllAsync(status);
+
             // Send pipe shutdown to DocumentLocator service immediately so the
             // 1 500 ms exit window runs in the background while we extract other
             // files. AddinInstaller will wait for the remainder of that window
             // (if any) before it tries to overwrite DocumentLocator.Service.exe.
+            // Harmless once DocumentLocator is retired: the pipe simply isn't there.
             _ = DocumentLocatorHelper.SendShutdownAsync();
 
             status?.Report("מחלץ קבצים...");
