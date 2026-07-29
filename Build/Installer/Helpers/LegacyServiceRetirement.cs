@@ -11,6 +11,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// <summary>
     /// Removes Windows services that this product used to ship but no longer does.
     ///
+    /// TRANSITIONAL — this whole class exists for the DocumentLocatorSvc →
+    /// KitveiHakodeshService migration and is meant to be deleted, not maintained. Once no
+    /// supported upgrade path can still have a retired service registered (keep the entry
+    /// for several releases so machines that skip versions are still cleaned up), remove
+    /// the file and its call in InstallRunner. Nothing else depends on it.
+    ///
     /// Why this exists separately from <see cref="DocumentLocatorHelper"/>:
     /// that helper delegates registration to the service exe itself
     /// (<c>DocumentLocator.Service.exe --install</c>). That approach cannot retire a
