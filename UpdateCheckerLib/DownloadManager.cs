@@ -124,10 +124,19 @@ namespace UpdateCheckerLib
         /// Pure fire-and-forget: no UI, no side effects on program state.
         /// <see cref="UpdateChecker.GetReadyUpdateVersion"/> will pick up the file
         /// on the next session's sync disk check and arm <see cref="RunPendingInstaller"/>.
+        ///
+        /// <paramref name="downloadUrl"/> is the release asset URL resolved by
+        /// <see cref="UpdateChecker.ResolveInstallerAsset"/> (installed variant with
+        /// AnyCPU fallback); when null, the variant URL is constructed blindly
+        /// (pre-assets behavior). When <paramref name="expectedSize"/> is positive,
+        /// a download whose byte count differs is rejected — the .partial file is
+        /// deleted and KleiKodeshSetup.exe is never produced.
         /// </summary>
-        public static async Task DownloadAndScheduleInstallerAsync(string version)
+        public static async Task DownloadAndScheduleInstallerAsync(
+            string version, string downloadUrl = null, long expectedSize = 0)
         {
-            string installerUrl = $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/{GetInstallerAssetName(version)}";
+            string installerUrl = downloadUrl ??
+                $"https://github.com/KleiKodesh/KleiKodeshProject/releases/download/{version}/{GetInstallerAssetName(version)}";
 
             // Cross-process mutex: prevents simultaneous downloads from VSTO + demo app.
             // If another process is already downloading, skip silently.
@@ -150,8 +159,18 @@ namespace UpdateCheckerLib
                     // even if this process is killed mid-download.
                     await DownloadFileAsync(installerUrl, InstallerPartialPath, CancellationToken.None);
 
-                    if (!File.Exists(InstallerPartialPath) || new FileInfo(InstallerPartialPath).Length == 0)
+                    long downloadedLength = File.Exists(InstallerPartialPath)
+                        ? new FileInfo(InstallerPartialPath).Length : 0;
+
+                    if (downloadedLength == 0)
                         throw new UpdateException("הורדת הקובץ נכשלה — הקובץ ריק או חסר", installerUrl, attempts: 1);
+
+                    // When the release JSON told us the asset's exact size, enforce it —
+                    // a wrong-sized file must never be renamed into KleiKodeshSetup.exe.
+                    if (expectedSize > 0 && downloadedLength != expectedSize)
+                        throw new UpdateException(
+                            $"הורדת הקובץ נכשלה — גודל שגוי ({downloadedLength}/{expectedSize} בתים)",
+                            installerUrl, attempts: 1);
 
                     TryDeleteFile(InstallerTempPath);
                     File.Move(InstallerPartialPath, InstallerTempPath);
