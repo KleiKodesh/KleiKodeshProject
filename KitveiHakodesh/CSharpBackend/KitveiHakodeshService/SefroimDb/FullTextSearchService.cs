@@ -12,7 +12,9 @@ namespace KitveiHakodeshService.SefroimDb;
 ///
 /// Index location: FTS_INDEX_PATH if set (used as-is), else "FtsIndex" next to the
 /// service binary (AppContext.BaseDirectory) — so deleting the service folder deletes
-/// the index too. A completed build writes fts.ver so later runs skip rebuilding.
+/// the index too. A completed build writes fts.ver so later runs skip rebuilding;
+/// every build session writes fts.src at start so even an INTERRUPTED build records
+/// which DB it came from (resume is refused when that no longer matches).
 /// Search returns one capped batch (the hosted C# path streams; dev doesn't need to).
 /// </summary>
 public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger, SeforimDbService seforim)
@@ -92,23 +94,28 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // the progress file on the next service start.
             if (_buildStarted) return;
 
-            // fts.ver records the change-STAMP of the seforim DB the index was built
-            // from (Common.DbChangeStamp — path + content-free file metadata). If the
-            // user switched databases OR the DB file's content changed (same path,
-            // edited/replaced/updated), the stored stamp no longer matches the current
-            // one and the old index answers for the wrong content — wipe and rebuild.
+            // Provenance check. fts.ver records the change-STAMP of the seforim DB the
+            // index was built from (Common.DbChangeStamp — path + content-free file
+            // metadata), written on build COMPLETION. fts.src records the same stamp at
+            // build START, so an interrupted build still carries provenance. If any index
+            // state exists (segments or a build.progress watermark) and its recorded stamp
+            // doesn't match the current DB — or there is no stamp at all (legacy
+            // interrupted build) — the state belongs to a different/unknown database and
+            // resuming it would permanently skip every line below the old watermark
+            // (2026-07-28 incident: a DB swap under an incomplete build left the whole
+            // chumash-parshanut corpus unsearchable). Wipe and rebuild.
             string verFile = Path.Combine(_indexPath, "fts.ver");
             string currentStamp = Common.DbChangeStamp.Compute(_dbPath!, FtsVersion);
-            if (File.Exists(verFile))
+            string? recordedStamp = ReadStamp(verFile) ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
+            bool hasIndexState = SegmentsExist() || File.Exists(Path.Combine(_indexPath, "build.progress"));
+            if (hasIndexState && !string.Equals(recordedStamp, currentStamp, StringComparison.OrdinalIgnoreCase))
             {
-                string builtFrom = "";
-                try { builtFrom = File.ReadAllText(verFile).Trim(); } catch { }
-                if (!string.Equals(builtFrom, currentStamp, StringComparison.OrdinalIgnoreCase))
-                {
-                    logger.LogInformation("FTS index is stale (seforim DB changed) — wiping for rebuild");
-                    try { Directory.Delete(_indexPath, recursive: true); }
-                    catch (Exception ex) { logger.LogError(ex, "FTS stale-index wipe failed"); }
-                }
+                logger.LogInformation(
+                    "FTS index is stale (seforim DB changed or provenance unknown; recorded={Recorded}) — wiping for rebuild",
+                    recordedStamp ?? "(none)");
+                try { Directory.Delete(_indexPath, recursive: true); }
+                catch (Exception ex) { logger.LogError(ex, "FTS stale-index wipe failed"); }
+                _index = null; // never let an already-open store answer over the wiped directory
             }
 
             // A completed service-owned build against the CURRENT DB → ready, no rebuild.
@@ -127,11 +134,28 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         }
     }
 
+    /// <summary>Reads a stamp file; null when absent or unreadable.</summary>
+    private static string? ReadStamp(string path)
+    {
+        try { return File.Exists(path) ? File.ReadAllText(path).Trim() : null; }
+        catch { return null; }
+    }
+
     private void RunBuild(CancellationToken ct)
     {
         try
         {
             Directory.CreateDirectory(_indexPath);
+            // Record the source-DB stamp BEFORE any segment or progress state exists, so
+            // an interrupted build is attributable to its DB on the next start (see the
+            // provenance check in EnsureIndexing). A resume session rewrites the same
+            // stamp — EnsureIndexing already validated it matches the current DB.
+            try
+            {
+                File.WriteAllText(Path.Combine(_indexPath, "fts.src"),
+                    Common.DbChangeStamp.Compute(_dbPath!, FtsVersion));
+            }
+            catch (Exception ex) { logger.LogError(ex, "FTS fts.src write failed"); }
             var index = GetIndex();
 
             // Resume from the progress file if a prior build was interrupted (no DB scan on resume).
@@ -238,11 +262,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     {
         if (_external || !HasDb) return false;
 
-        string verFile = Path.Combine(_indexPath, "fts.ver");
-        if (!File.Exists(verFile)) return false; // no completed build to invalidate yet
+        // fts.ver = completed build; fts.src = in-progress build (written at build
+        // start). Either one is a valid provenance record to invalidate — a DB swapped
+        // MID-BUILD must cancel and restart, not keep appending the new DB's lines onto
+        // the old DB's segments. Neither present → nothing built yet to invalidate.
+        string? builtFrom = ReadStamp(Path.Combine(_indexPath, "fts.ver"))
+                         ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
+        if (builtFrom == null) return false;
 
-        string builtFrom = "";
-        try { builtFrom = File.ReadAllText(verFile).Trim(); } catch { return false; }
         string current;
         try { current = Common.DbChangeStamp.Compute(_dbPath!, FtsVersion); } catch { return false; }
         if (string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase))

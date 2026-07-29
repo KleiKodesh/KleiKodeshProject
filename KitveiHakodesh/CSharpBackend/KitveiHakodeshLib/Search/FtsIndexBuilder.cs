@@ -57,6 +57,12 @@ namespace KitveiHakodeshLib.Search
 
         private void RunBuildCore(CancellationTokenSource cts, SeforimIndex index)
         {
+            // Record which DB this build session indexes FROM — written at build START so
+            // even an interrupted build carries provenance. ExecuteOnDbReady refuses to
+            // resume when this stamp no longer matches the current DB (resuming a foreign
+            // build would permanently skip every line below the old watermark).
+            FtsIndexState.WriteSourceStamp(FtsIndexState.ComputeDbStamp(_state.GetDbPath()));
+
             // Read all resume state from the progress file — zero DB queries on resume.
             index.GetResumeState(out int resumeLineId, out long cachedTotalLines, out long cachedResumeOffset);
 
