@@ -36,6 +36,8 @@ Env flags: `showPopOutButton` = `window.__webviewShowPopOut === true`, and `isVs
 
 **queries.sql.ts** — all raw SQL strings in the app. Every new SQL query must be added here as a named constant. No inline SQL anywhere else in the codebase.
 
+**queries.types.ts** — the row shapes those queries return: `BookRow`, `CategoryRow`, `BookInfo`, `TocEntry`, `AltTocStructure`, `TocRow`, `LineRow`, `ReverseLineRow`, `CommentaryLinkRow`, `WordLinkAnchor`. Same rule as the SQL strings: anything used as a `query<T>` parameter or a `{ rows: T[] }` service reply is defined here, and a changed SELECT list is changed here in the same edit. The file has **no imports** by design — a row shape must not reference a component prop type, a Vue type, or anything in `features/`. Types that build *on* a row (`CategoryNode` adding `children`/`books`) are view models and belong to the feature that builds them. `seforimApi.ts` re-exports these so callers may keep importing them from the API they call. The C# counterpart is `SeforimModels.cs`; keep the two in step.
+
 **seforimApi.ts** — typed wrappers over the seforim queries (categories, books, TOC entries, connections). Each one routes through the C# host when hosted and the service in dev, so callers never branch on the mode themselves.
 
 **serviceClient.ts** — the dev-mode transport to `KitveiHakodeshService` (MessagePack over the loopback HTTP host). `serviceCall<T>(op, args?)` is the entry point.

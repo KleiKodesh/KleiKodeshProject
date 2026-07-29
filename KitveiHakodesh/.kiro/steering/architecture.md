@@ -28,7 +28,11 @@ Never do any of these:
 - a child folder importing its parent's implementation (a subfolder importing shared *types* from its feature root — `../bookViewTypes` — is fine; that is siblings sharing a contract)
 - two stores importing each other
 
-**A shared type belongs to the lower layer.** If a type describes a database row or a wire payload, the data layer defines it and features consume it, never the reverse. `features/dictionary/dictionaryTypes.ts` is the correct pattern: it imports its row types *from* `webview-host/dictionaryDb`. The known anti-pattern to fix when next touched is `features/book-catalog/bookCatalogTree.ts` defining `BookRow`/`CategoryRow`, which `webview-host/seforimApi.ts` then imports upward to type its own SQL results — the C# `SeforimModels.cs` even documents itself as *"matches bookCatalogTree.ts CategoryRow"*, making a UI feature the authority for the wire contract.
+**A shared type belongs to the lower layer.** If a type describes a database row or a wire payload, the data layer defines it and features consume it, never the reverse.
+
+Every seforim row type lives in `webview-host/queries.types.ts`, beside the SQL that produces it — the same rule `queries.sql.ts` applies to the SQL strings. That file has **no imports** by design: a row shape must not reference a component prop type, a Vue type, or anything in `features/`. Types that build *on* a row are view models and stay with their feature (`CategoryNode` adds `children`/`books`/`subtreeBookIds`, so it belongs to book-catalog). `features/dictionary/dictionaryTypes.ts` shows the same shape for the dictionary DB.
+
+One trap worth knowing: `TocEntry`'s first five fields are identical to `TreeNodeItem`, `TreeView`'s prop contract in `components/`. There is deliberately **no `extends`** between them — TypeScript is structural, so the row satisfies the prop with no import in either direction, whereas declaring the relationship would make the data layer depend on a component. Reach for structural compatibility instead of inheritance whenever a type would otherwise have to point upward.
 
 **Prefer an invariant a command can check over a rule that needs an argument.** "Don't put app knowledge in `utils/`" has to be re-argued at every review, and lost repeatedly. "`persistence.ts` has zero imports" cannot be quietly eroded:
 

@@ -1,18 +1,12 @@
 import { ref, shallowRef, computed, watch } from 'vue'
 import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/webview-host/seforimApi'
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
-import type { TreeNodeItem } from '@/components/treeTypes'
+import type { TocEntry, AltTocStructure } from '@/webview-host/queries.types'
 
-export interface TocEntry extends TreeNodeItem {
-  lineId: number | null
-  lineIndex: number | null
-}
-export interface AltTocStructure {
-  id: number
-  key: string
-  title: string | null
-  heTitle: string | null
-}
+// TOC row shapes are owned by the data layer; re-exported here because most of the
+// book-view tree already imports them from this composable.
+export type { TocEntry, AltTocStructure }
+
 export interface AltTocSection {
   structure: AltTocStructure
   entries: TocEntry[]
