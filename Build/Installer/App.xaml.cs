@@ -121,6 +121,9 @@ namespace KleiKodeshVstoInstallerWpf
                             Environment.Exit(1);
                         }
 
+                        // Already elevated — the manifest requires admin, so consent was
+                        // obtained at launch (while the user was still present) and every
+                        // privileged step below runs without further prompting.
                         await Helpers.InstallRunner.RunAsync(
                             new Progress<double>(_ => { }), status: null);
                         Environment.Exit(0);
