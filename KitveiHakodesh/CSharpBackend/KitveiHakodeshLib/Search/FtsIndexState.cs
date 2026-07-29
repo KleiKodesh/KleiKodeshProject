@@ -442,6 +442,9 @@ namespace KitveiHakodeshLib.Search
         internal static string FtsVersionStampPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.ver");
 
+        internal static string FtsSourceStampPath =>
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.src");
+
         internal static string BloomFolderPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
 
@@ -474,6 +477,54 @@ namespace KitveiHakodeshLib.Search
             {
                 Directory.CreateDirectory(FtsIndexPath);
                 File.WriteAllText(FtsVersionStampPath, version ?? "");
+            }
+            catch { }
+        }
+
+        // ── Source-DB stamp (build provenance) ───────────────────────────────────
+        // fts.ver (the app-version stamp above) is written only when a build COMPLETES,
+        // so an interrupted build used to carry no record of which DB it was indexing —
+        // resuming it after a DB switch permanently skipped every line below the old
+        // watermark. fts.src records a cheap content-free fingerprint of the source DB
+        // at build START; ExecuteOnDbReady refuses to resume (and invalidates a
+        // completed index) when it no longer matches the current DB.
+
+        /// <summary>Content-free fingerprint of the seforim DB: path + size + mtime,
+        /// plus the SQLite WAL sidecar when non-empty (a committed write lands there
+        /// before any checkpoint touches the main file). Returns null on error.</summary>
+        internal static string ComputeDbStamp(string dbPath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(dbPath)) return null;
+                if (!File.Exists(dbPath)) return dbPath.ToLowerInvariant() + "|missing";
+                var info = new FileInfo(dbPath);
+                string stamp = dbPath.ToLowerInvariant() + "|" + info.Length + "|" + info.LastWriteTimeUtc.Ticks;
+                var wal = new FileInfo(dbPath + "-wal");
+                if (wal.Exists && wal.Length > 0)
+                    stamp += "|wal=" + wal.Length + ":" + wal.LastWriteTimeUtc.Ticks;
+                return stamp;
+            }
+            catch { return null; }
+        }
+
+        internal static string ReadSourceStamp()
+        {
+            try
+            {
+                return File.Exists(FtsSourceStampPath)
+                    ? File.ReadAllText(FtsSourceStampPath).Trim()
+                    : null;
+            }
+            catch { return null; }
+        }
+
+        internal static void WriteSourceStamp(string stamp)
+        {
+            try
+            {
+                Directory.CreateDirectory(FtsIndexPath);
+                File.WriteAllText(FtsSourceStampPath, stamp ?? "");
             }
             catch { }
         }

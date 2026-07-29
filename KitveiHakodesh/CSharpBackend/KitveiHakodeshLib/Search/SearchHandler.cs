@@ -164,6 +164,26 @@ namespace KitveiHakodeshLib.Search
                     return;
                 }
 
+                // The app-version stamp misses a DB switched BETWEEN app runs (the
+                // in-memory dbPathChanged check above only covers switches within this
+                // process's lifetime). fts.src records the source DB's fingerprint at
+                // build time — a mismatch means this completed index answers for a
+                // different database. A missing fts.src (index built by an older app
+                // version) keeps today's behavior and self-heals on the next rebuild.
+                string builtFromDb = FtsIndexState.ReadSourceStamp();
+                string currentDbStamp = FtsIndexState.ComputeDbStamp(dbPath);
+                if (builtFromDb != null && currentDbStamp != null &&
+                    !string.Equals(builtFromDb, currentDbStamp, StringComparison.OrdinalIgnoreCase))
+                {
+                    Console.WriteLine("[SearchHandler] Index was built from a different DB ("
+                        + builtFromDb + " → " + currentDbStamp + ") — rebuilding automatically");
+                    FtsIndexState.DeleteFtsIndex();
+                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db changed" });
+                    _indexState.SetDatabase(dbPath, new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
+                    StartBuildOrWatch(dbPath);
+                    return;
+                }
+
                 Console.WriteLine("[SearchHandler] FTS index complete and up-to-date, marking ready");
                 _indexState.MarkReadyDirect();
                 _builder.PushCurrentProgress();
@@ -195,10 +215,31 @@ namespace KitveiHakodeshLib.Search
                 }
                 catch { }
 
-                if (segmentsExist)
+                // Resume is only safe when the interrupted build came from the CURRENT
+                // DB. fts.src records the source DB's fingerprint at build start; if it
+                // is missing (build from an app version before fts.src existed) or no
+                // longer matches, the watermark belongs to another database — resuming
+                // would permanently skip every line below it (the segments would answer
+                // for the wrong content). Wipe and rebuild from scratch instead.
+                string resumeSourceStamp = FtsIndexState.ReadSourceStamp();
+                string resumeDbStamp = FtsIndexState.ComputeDbStamp(dbPath);
+                bool provenanceOk = resumeSourceStamp != null && resumeDbStamp != null &&
+                                    string.Equals(resumeSourceStamp, resumeDbStamp,
+                                                  StringComparison.OrdinalIgnoreCase);
+
+                if (segmentsExist && provenanceOk)
                 {
                     Console.WriteLine("[SearchHandler] Interrupted build detected — resuming from line id "
                         + resumeLineId);
+                }
+                else if (segmentsExist)
+                {
+                    Console.WriteLine("[SearchHandler] Interrupted build's source DB is unknown or changed ("
+                        + (resumeSourceStamp ?? "(no fts.src)") + " vs " + resumeDbStamp
+                        + ") — wiping instead of resuming");
+                    FtsIndexState.DeleteFtsIndex();
+                    _indexState.SetDatabase(dbPath,
+                        new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
                 }
                 else
                 {
