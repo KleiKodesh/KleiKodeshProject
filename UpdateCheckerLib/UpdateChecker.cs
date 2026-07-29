@@ -34,36 +34,32 @@ namespace UpdateCheckerLib
         }
 
         /// <summary>
-        /// Returns the installed version string the FIRST time any host runs after
-        /// that version was installed (i.e. registry Version changed since the last
-        /// run), null otherwise. Lets the host show a one-time "עודכן בהצלחה"
-        /// notice after a silent update.
+        /// Records the installed version as seen, so LastSeenVersion tracks the version
+        /// each host has already run.
         ///
-        /// LastSeenVersion is shared between Word and the standalone app —
-        /// whichever opens first shows the notice, the other stays quiet.
-        /// A missing LastSeenVersion (fresh install / first run ever) is recorded
-        /// silently: "updated successfully" on a first-ever run would be wrong.
+        /// This used to return the version on the first run after an update so the host
+        /// could show a one-time "עודכן בהצלחה" notice. That notice existed because
+        /// updates were installed silently and the user had no other way to know it had
+        /// happened. Updates now run the installer visibly and the user drives it, so
+        /// announcing it on the next launch tells them something they just watched.
+        ///
+        /// The tracking is kept (it is one registry write and callers rely on the stamp
+        /// staying current) but nothing is returned. If a first-run-after-update hook is
+        /// ever needed again, restore the comparison here rather than reading
+        /// LastSeenVersion from a host — it is shared between Word and the standalone app,
+        /// so only the first host to run may consume it.
         /// </summary>
-        public static string GetJustInstalledUpdateVersion()
+        public static void RecordCurrentVersionAsSeen()
         {
             try
             {
                 var current = GetCurrentVersionFromRegistry();
-                if (string.IsNullOrEmpty(current)) return null;
+                if (string.IsNullOrEmpty(current)) return;
 
                 using (var key = Registry.CurrentUser.CreateSubKey(REGISTRY_KEY))
-                {
-                    if (key == null) return null;
-
-                    var lastSeen = key.GetValue("LastSeenVersion")?.ToString();
-                    if (string.Equals(lastSeen, current, StringComparison.OrdinalIgnoreCase))
-                        return null;
-
-                    key.SetValue("LastSeenVersion", current);
-                    return string.IsNullOrEmpty(lastSeen) ? null : current;
-                }
+                    key?.SetValue("LastSeenVersion", current);
             }
-            catch { return null; }
+            catch { /* tracking only — never break startup over it */ }
         }
 
         /// <summary>

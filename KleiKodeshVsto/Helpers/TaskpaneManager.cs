@@ -140,15 +140,10 @@ namespace KleiKodesh.Helpers
                 if (_updateCheckDone) return;
                 _updateCheckDone = true;
 
-                // One-time "updated successfully" notice on the first run after a
-                // silent update (LastSeenVersion is shared with the standalone app —
-                // whichever host opens first shows it). Non-modal, and deliberately
-                // not gated by TurnOffUpdates: the version DID change.
-                var justUpdated = UpdateChecker.GetJustInstalledUpdateVersion();
-                if (justUpdated != null)
-                {
-                    UpdateNotificationForm.Show($"כלי קודש עודכן בהצלחה לגרסה {justUpdated}.");
-                }
+                // Keep LastSeenVersion current. There is no longer an "עודכן בהצלחה"
+                // notice here: updates run the installer visibly now, so the user has
+                // already watched it finish and does not need to be told on next launch.
+                UpdateChecker.RecordCurrentVersionAsSeen();
 
                 if (SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false)) return;
 
@@ -159,8 +154,11 @@ namespace KleiKodesh.Helpers
                 var readyVersion = UpdateChecker.GetReadyUpdateVersion();
                 if (readyVersion != null)
                 {
+                    // Sets the expectation for what actually happens now: closing Word
+                    // launches the installer, and the user runs it. Saying "יותקן
+                    // אוטומטית" would be wrong — the install is no longer silent.
                     UpdateNotificationForm.Show(
-                        $"עדכון זמין לגרסה {readyVersion}.\nהעדכון יותקן אוטומטית עם סגירת וורד."
+                        $"עדכון זמין לגרסה {readyVersion}.\nעם סגירת וורד ייפתח חלון ההתקנה."
                     );
                 }
 
