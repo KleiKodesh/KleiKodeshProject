@@ -1,6 +1,6 @@
 using Microsoft.Win32;
 
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Single source of truth for WHERE the seforim database lives.

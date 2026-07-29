@@ -4,7 +4,7 @@ using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Http;
 using KitveiHakodeshService.LocalFiles;
-using KitveiHakodeshService.SefroimDb;
+using KitveiHakodeshService.SeforimDb;
 using KitveiHakodeshService.UserSettings;
 
 namespace KitveiHakodeshService.Ipc;

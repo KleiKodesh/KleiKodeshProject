@@ -1,4 +1,4 @@
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// SQL strings for the seforim (Torah library) database — kept in this file ONLY,

@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
 
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Full-text search over the custom FtsLib index. The service OWNS the index and

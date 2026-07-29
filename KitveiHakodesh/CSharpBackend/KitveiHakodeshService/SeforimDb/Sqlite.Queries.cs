@@ -1,6 +1,6 @@
 using Microsoft.Data.Sqlite;
 
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
 /// Query logic for the seforim DB. SQL strings live in Sqlite.Strings.cs

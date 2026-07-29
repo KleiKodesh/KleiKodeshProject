@@ -1,4 +1,4 @@
-namespace KitveiHakodeshService.SefroimDb;
+namespace KitveiHakodeshService.SeforimDb;
 
 // Result-row DTOs for the seforim DB, matching the Vue row shapes exactly
 // (camelCase on the wire). Registered in RpcJsonContext for AOT-safe serialization.

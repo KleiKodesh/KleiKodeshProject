@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 using Microsoft.Data.Sqlite;
-using KitveiHakodeshService.SefroimDb;
+using KitveiHakodeshService.SeforimDb;
 
 namespace KitveiHakodeshService.Ipc;
 
