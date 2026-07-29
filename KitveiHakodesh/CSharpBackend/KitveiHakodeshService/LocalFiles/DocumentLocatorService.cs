@@ -32,6 +32,17 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             "DocumentLocator",
             "filesystemindex");
 
+    /// <summary>
+    /// How often to rescan when there is no live USN watcher (i.e. not elevated).
+    /// Bounds how stale search results can get; only used in that fallback case.
+    ///
+    /// Daily, matching Everything's no-NTFS "Folder Indexing" mode. A rescan is a full
+    /// crawl of every indexed drive, so it is far too expensive to run frequently — and
+    /// the pass is delta-based (existing entries are re-stamped, not re-analyzed), so a
+    /// no-change rescan is much cheaper than the first build.
+    /// </summary>
+    private static readonly TimeSpan RescanInterval = TimeSpan.FromHours(24);
+
     // ── Excluded folders ──────────────────────────────────────────────────────
     // Storage AND filtering both live in the library's ExcludedFoldersPersistence, so
     // this host, the net48 DocumentLocator.Service, and the Vue settings dialog all share
@@ -112,6 +123,19 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
                     }
                 });
             });
+
+            // When we're not elevated the USN watcher can't start, and without it the
+            // index is frozen at build time — it never sees files the user adds, deletes,
+            // or renames. Reading the USN journal needs a raw volume handle, which is
+            // admin-only by design, so there is no unprivileged substitute; the only
+            // mitigation is to rescan periodically and bound how stale the index can get.
+            // (Same approach Everything uses for its no-NTFS "Folder Indexing" mode.)
+            // No-ops entirely when every drive has a live watcher.
+            index.StartPeriodicRescan(
+                RescanInterval,
+                CancellationToken.None,
+                message => logger.LogInformation("[DocumentLocator] {Message}", message),
+                (message, ex) => logger.LogError(ex, "[DocumentLocator] {Message}", message));
 
             return _index;
         }
