@@ -367,11 +367,13 @@ export function togglePopOut(): void {
  */
 export async function resetHostApp(): Promise<void> {
   if (typeof window.__webviewAction !== 'function') {
-    // Dev: the C# host doesn't exist, so reset both indexes through the service and
-    // clear local settings (IDB is already wiped by resetEverything()), then reload.
+    // Dev: the C# host doesn't exist, so reset both indexes through the service, then
+    // reload. Browser storage is NOT touched here — resetEverything() has already wiped
+    // every database and the whole kitvei-hakodesh.* localStorage namespace before
+    // calling this. A raw localStorage.clear() used to sit here, which both duplicated
+    // that work and reached outside the app's namespace.
     await serviceCall('ftsResetIndex').catch(() => {})
     await serviceCall('resetDocumentLocatorIndex').catch(() => {})
-    try { localStorage.clear() } catch { /* ignore */ }
     window.location.reload()
     return
   }

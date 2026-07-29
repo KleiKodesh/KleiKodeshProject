@@ -146,3 +146,11 @@ interface Note {
 **Mutations:** Create/update/delete are fire-and-forget DB writes with immediate in-memory map updates. Map is keyed by lineId, storing `Note[]` sorted by `startOffset`.
 
 Storage: `user_settings.db` table `user_notes`. All access via `userSettingsDb.ts` (web-host layer).
+
+## Text selection keyboard handling
+
+**useTextSelectionKeys.ts** — `Ctrl+A` (select all), `Ctrl+F` (open search), `Ctrl+V` and `Ctrl+Shift+C`, scoped to one element. Used by `lines/BookViewLinesContent.vue` and `commentary/CommentaryView.vue`, which is why it sits at the feature root rather than in either subfolder. `Ctrl+A` drives `useSelectAllInContainer`, whose `isSelectAll` / `selectAllInContainer` it re-exports.
+
+**useSelectAllInContainer.ts** — tracks whether the current selection is a whole-container "select all" as a reactive `isSelectAll` boolean, plus a `selectAll()` trigger. The flag matters for copy/export: with virtualized content, "select all" must grab the ENTIRE line set rather than only the DOM range that happens to be mounted (see `useLineCopy`). Auto-clears on the next `selectionchange` that collapses or replaces the selection.
+
+Both lived in `src/composables/` until 2026-07-29 and moved here because book-view is their only consumer. If a second feature needs them, move them back to `src/composables/`.

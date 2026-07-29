@@ -49,17 +49,43 @@ export function scheduleReset(): void {
 }
 
 /**
+ * Sweep any `app-` database the explicit list above did not name.
+ *
+ * Exists for the per-addin `app-addin-storage-<addinId>` databases, whose names are
+ * only known at runtime, so a reset previously left third-party addin data behind —
+ * the one kind of data a user resetting the app most likely wants gone.
+ *
+ * `indexedDB.databases()` is Chromium-only, which is fine (the app only ever runs in
+ * WebView2 or a Chromium dev browser) but it is still feature-detected: an absent API
+ * means the named drops above were the whole wipe, which is the previous behaviour
+ * rather than a failure. The `app-` prefix keeps the sweep to this app's own
+ * databases — the origin is shared with anything else the host loads.
+ */
+async function dropRemainingAppDatabases(): Promise<void> {
+  if (typeof indexedDB.databases !== 'function') return
+  try {
+    const names = (await indexedDB.databases())
+      .map((entry) => entry.name)
+      .filter((name): name is string => !!name && name.startsWith('app-'))
+    await Promise.all(names.map((name) => dropDatabase(name)))
+  } catch {
+    // Enumeration is a best-effort sweep on top of the explicit drops; if it fails the
+    // named databases are already gone and the reset should still complete.
+  }
+}
+
+/**
  * Drop every local database, then every localStorage key.
  *
- * The seven database names are listed explicitly and the two store-owned ones are
- * reached by dynamic import, rather than read from a registry. That is deliberate:
+ * The named databases are listed explicitly and the two store-owned ones are reached
+ * by dynamic import, rather than read from a registry. That is deliberate:
  * `recentlyOpenedStore` is lazy-loaded, so a registry populated at module load would
  * silently MISS its database whenever the user never opened the recent list.
  *
- * KNOWN GAP: `app-addin-storage-*` (one database per Otzaria addin, created in
- * `useOtzariaAddinBridge`) is not wiped, because the names are dynamic. Enumerating
- * with `indexedDB.databases()` and dropping everything matching `app-` would fix
- * that and let this list go away entirely.
+ * The explicit list cannot cover everything, though — `useOtzariaAddinBridge` creates
+ * one `app-addin-storage-<addinId>` database per addin, with names only known at
+ * runtime. Those are swept afterwards by enumeration, which also catches any future
+ * `app-` database whose author forgets to add it here.
  */
 async function clearAllLocalStorage(): Promise<void> {
   // These two stores own their own IDB handles, and a handle must be closed before
@@ -76,6 +102,7 @@ async function clearAllLocalStorage(): Promise<void> {
     dropDatabase('app-dict-cache'),
     dropDatabase('app-catalog-toc-cache'),
   ])
+  await dropRemainingAppDatabases()
   // MUST come last. These two clear the __pendingReset flag, so clearing it before
   // the drops finish would disarm the crash-safety net: die mid-wipe and the next
   // boot sees no flag and never redoes it. Dropping first means the flag survives

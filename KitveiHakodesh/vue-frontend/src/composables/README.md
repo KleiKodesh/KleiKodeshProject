@@ -4,6 +4,8 @@ Shared composables used across multiple features. Feature-specific composables l
 
 Only create a file here if the composable is used by two or more features. Single-feature logic stays in the feature folder.
 
+That rule is enforced, not aspirational. `useTileGridKeys` (book-catalog only), `useTextSelectionKeys` and `useSelectAllInContainer` (book-view only) were moved out into their feature folders on 2026-07-29 for breaking it. If a second feature needs one of them, move it back here — that is the intended lifecycle, not a reason to leave it here pre-emptively.
+
 **useAppNavigation.ts** — central navigation handler. Routes singletons via `navigateToSingleton`, handles the file picker, external links, and search navigation. Any code that needs to navigate between pages should use this, not call `tabStore` directly.
 
 **useAppShellPane.ts** — `useAppShellPane(paneId)` wraps `tabStore` so every mutation routes to the correct split-view pane: `switchTab`, `closeTab`, `closeAllTabs`, `openTab`, `openNewTab`, `updateActiveTab`, `navigateToSingleton`, `goHome`, `togglePdfViewerTitleBar`. Shell chrome uses this — never call the `*Pane2*` tabStore functions directly.
@@ -15,12 +17,6 @@ Only create a file here if the composable is used by two or more features. Singl
 **useZoom.ts** — zoom via keyboard (`Ctrl+±/0`), wheel (`Ctrl+scroll`), and pinch. Range 50–200, step 10, default 100. `useZoomHandler` accepts a `zoom` ref, an optional `target` element, and an optional `enabled` flag — pass `enabled` to guard the handler so it only fires when the relevant page is active. Used in `BookViewPage`, `DictionaryPage`, and `SearchPage`.
 
 **useListKeyNav.ts** — arrow-key, Home, and End navigation for plain DOM lists. Use this instead of hand-rolling keyboard handlers on any list.
-
-**useSelectAllInContainer.ts** — tracks whether the current selection is a whole-container "select all" as a reactive `isSelectAll` boolean, plus a `selectAll()` trigger. Standalone so any feature can reuse the flag (e.g. copy/export deciding to grab the ENTIRE content rather than only the DOM range, which matters with virtualized content). The flag auto-clears on the next `selectionchange` that collapses/replaces the selection.
-
-**useTextSelectionKeys.ts** — `Ctrl+A` (select all), `Ctrl+F` (open search), `Ctrl+V`, `Ctrl+Shift+C` scoped to a specific element. Ctrl+A drives `useSelectAllInContainer`; re-exports its `isSelectAll` / `selectAllInContainer`.
-
-**useTileGridKeys.ts** — 2D arrow-key navigation for tile grids. Computes column count from container width to handle Up/Down correctly.
 
 **useVirtualListKeyNav.ts** — arrow-key and `Ctrl+Home`/`Ctrl+End` for `@tanstack/vue-virtual` lists. Use this instead of `useVirtualScrollerKeys` when the list also needs arrow-key item navigation.
 
