@@ -11,8 +11,7 @@
  */
 import { computed, watch } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
-import type { TocEntry } from './toc/useBookViewToc'
-
+import type { TocEntry } from '@/webview-host/queries.types'
 type LinesContentInstance = {
   scrollToLineId: (lineId: number, lineIndex?: number) => void
   scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void

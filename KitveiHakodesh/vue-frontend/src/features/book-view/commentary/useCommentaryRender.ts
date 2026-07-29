@@ -5,7 +5,7 @@ import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, isDiacriticChar } from '../lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors, wordLinkAnchorsSig } from '../lines/wordLinkAnchors'
-import type { WordLinkAnchor } from '@/webview-host/seforimApi'
+import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 

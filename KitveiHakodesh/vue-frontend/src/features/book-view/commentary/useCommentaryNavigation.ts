@@ -22,8 +22,7 @@ import {
 } from './commentaryNavigation'
 import type { Ref } from 'vue'
 import type { LineItem } from '../lines/useBookViewLinesTable'
-import type { TocEntry } from '../toc/useBookViewToc'
-
+import type { TocEntry } from '@/webview-host/queries.types'
 interface LinesContentRef { scrollToLineId: (lineId: number, lineIndex?: number) => void }
 
 export function useCommentaryNavigation(

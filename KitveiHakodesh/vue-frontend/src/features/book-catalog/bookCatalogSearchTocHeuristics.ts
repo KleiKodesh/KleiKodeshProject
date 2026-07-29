@@ -32,7 +32,6 @@ import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 // left in book-view deliberately rather than dragging that list into utils/.
 import { stripTocTitleRoots } from '../book-view/toc/tocSearchUtils'
 import type { BookRow, TocRow } from '@/webview-host/queries.types'
-export type { TocRow }
 import type { TocFsItem } from './useBookCatalogSearch'
 
 // ─── Cap ──────────────────────────────────────────────────────────────────────

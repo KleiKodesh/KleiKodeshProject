@@ -15,7 +15,8 @@ import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import FullTextSearchFilterNode from './FullTextSearchFilterNode.vue'
 import FullTextSearchFilterBookList from './FullTextSearchFilterBookList.vue'
 import { FILTER_EXPANSION_KEY } from './fullTextSearchFilterExpansion'
-import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { BookRow } from '@/webview-host/queries.types'
 const props = defineProps<{
   checkedBookIds: Set<number>
   resultCounts: Map<number, number>

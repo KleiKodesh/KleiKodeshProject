@@ -4,7 +4,7 @@
  * No Vue reactivity — purely async functions and pure transformations.
  */
 import { getReverseLineData, getReverseBooks, getStaticFilterBooks } from '@/webview-host/seforimApi'
-import type { BookRow } from '../../book-catalog/bookCatalogTree'
+import type { BookRow } from '@/webview-host/queries.types'
 import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
   ensureConnectionTypeNamesLoaded,

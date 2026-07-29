@@ -3,6 +3,13 @@ import { ref, reactive, computed, watch } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
 import { lsGet, lsSet } from '@/utils/persistence'
+import {
+  ZOOM_CONFIG,
+  zoomIn as zoomInUtil,
+  zoomOut as zoomOutUtil,
+  resetZoom as resetZoomUtil,
+} from '@/composables/useZoom'
+import type { TocEntry } from '@/webview-host/queries.types'
 
 /** Disk names for the book-view UI state this store owns. Nothing else reads them. */
 const KEYS = {
@@ -12,13 +19,6 @@ const KEYS = {
   SETTINGS_SPLIT_VIEW: 'splitView.enabled',
   SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
 } as const
-import {
-  ZOOM_CONFIG,
-  zoomIn as zoomInUtil,
-  zoomOut as zoomOutUtil,
-  resetZoom as resetZoomUtil,
-} from '@/composables/useZoom'
-import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
 
 export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 

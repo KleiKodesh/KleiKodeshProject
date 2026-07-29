@@ -3,8 +3,7 @@ import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
-
+import type { BookRow } from '@/webview-host/queries.types'
 const props = defineProps<{
   books: BookRow[]
   checkedBookIds: Set<number>

@@ -46,8 +46,7 @@ import {
 import { isTocKeyword } from './bookCatalogTocKeywords'
 import { filterBooksByWords } from './bookCatalogSearch'
 import { getCatalogTocCache, setCatalogTocCache } from './bookCatalogTocSearchCache'
-import type { BookRow } from './bookCatalogTree'
-
+import type { BookRow } from '@/webview-host/queries.types'
 // ─── Public types ─────────────────────────────────────────────────────────────
 
 export type BookFsItem = { uid: string; kind: 'book'; book: BookRow }

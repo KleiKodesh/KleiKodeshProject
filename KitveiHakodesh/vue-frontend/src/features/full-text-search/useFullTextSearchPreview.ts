@@ -11,7 +11,8 @@
  * in the loaded lines.
  */
 import { reactive } from 'vue'
-import { getLineContents, getLineIndexFromLineId, getLinesPaged, getWordLinkAnchorsForLines, type WordLinkAnchor } from '@/webview-host/seforimApi'
+import { getLineContents, getLineIndexFromLineId, getLinesPaged, getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
+import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import { highlightFromSnippet } from '@/features/book-view/lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors } from '@/features/book-view/lines/wordLinkAnchors'
 import type { FullTextSearchResult } from './fullTextSearchTypes'

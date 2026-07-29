@@ -23,8 +23,7 @@
  * `data-wl` carries "targetBookId:targetLineIndex:targetLineId" for the click/hover
  * handlers (see useWordLinkTooltip.ts).
  */
-import type { WordLinkAnchor } from '@/webview-host/seforimApi'
-
+import type { WordLinkAnchor } from '@/webview-host/queries.types'
 export interface WordLinkTarget {
   bookId: number
   lineIndex: number
