@@ -36,7 +36,7 @@ const KHS_PROJECT = path.join(KHS_DIR, 'KitveiHakodeshService.csproj')
 // toward the "needs rebuild?" staleness check below.
 const KHS_FTSLIB_DIR = path.resolve(
   path.dirname(toPath(import.meta.url)),
-  '../CSharpBackend/Ftslib-Csharp/FtsLib',
+  '../CSharpBackend/FtsLib-Csharp/FtsLib',
 )
 // The already-built Release exe. We spawn THIS directly (not `dotnet run`): a warm
 // `dotnet run` costs ~4s to pipe-ready (SDK host + MSBuild up-to-date check on every
