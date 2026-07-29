@@ -201,6 +201,9 @@ namespace UpdateCheckerLib
         ///
         /// The installer is launched unelevated — the NSIS wrapper and the WPF
         /// installer both have user-level manifests, so no UAC prompt appears here.
+        /// This is required, not incidental: the install is per-user
+        /// (%LOCALAPPDATA% + HKCU), so an elevated install would resolve those paths
+        /// against the approving ADMIN's profile and the real user would never update.
         /// (The WPF installer self-elevates just the DocumentLocator service
         /// registration step, from its own visible foreground window.)
         /// Verb="runas" must NOT be reintroduced: the verb itself forces a UAC

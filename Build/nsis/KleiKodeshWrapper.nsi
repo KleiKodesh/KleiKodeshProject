@@ -97,12 +97,22 @@ Name "מתקין ${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
 ; Per-user install (%LOCALAPPDATA% + HKCU) — MUST stay "user".
+; Per-user is forced by the product, not chosen: VSTO registers the add-in under
+; HKCU, and the WebView2 webcache dir needs runtime write access as the real user.
+;
 ; "admin" here breaks the auto-updater: the update launch at Word/app close hits
 ; a surprise UAC prompt (declines are silent), and a standard user approving with
 ; admin credentials installs into the ADMIN's profile, so the real user never
-; updates. The two places that genuinely need elevation prompt for it themselves:
+; updates. Elevating the WPF child instead (ExecShellWait "runas" on the ExecWait
+; below) fails identically — that exe resolves %LOCALAPPDATA% and HKCU from its own
+; identity, so elevating it is exactly what sends the install to the wrong profile.
+; Both were considered and rejected; do not re-propose either.
+;
+; The two places that genuinely need elevation prompt for it themselves:
 ;   - install: the WPF installer elevates DocumentLocator.Service.exe --install
 ;   - uninstall: the "sc stop/delete" pair below runs through one elevated cmd.exe
+; Both exist only because a per-user app registers a machine-wide service. The fix
+; is removing the service (KitveiHakodeshService indexes in-process), not elevating.
 RequestExecutionLevel user
 SilentInstall silent
 AutoCloseWindow true
