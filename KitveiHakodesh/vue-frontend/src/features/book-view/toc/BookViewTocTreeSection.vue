@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import TreeView from '@/components/TreeView.vue'
-import type { TocEntry } from './useBookViewToc'
+import type { TocEntry } from '@/webview-host/queries.types'
 import type { SearchableTree } from './tocSearchUtils'
 
 defineProps<{

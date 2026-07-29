@@ -10,8 +10,7 @@
  * the active TOC section. Manual multi-select takes priority over the TOC range.
  */
 import { ref, computed } from 'vue'
-import type { TocEntry } from './toc/useBookViewToc'
-
+import type { TocEntry } from '@/webview-host/queries.types'
 type Line = { id: number; lineIndex: number; content: string | null }
 
 export function useBookViewLineSelection(

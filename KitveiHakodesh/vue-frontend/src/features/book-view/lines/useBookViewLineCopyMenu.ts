@@ -1,7 +1,7 @@
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import type { LineItem } from './useBookViewLinesTable'
-import type { TocEntry } from '../toc/useBookViewToc'
+import type { TocEntry } from '@/webview-host/queries.types'
 import type { Note } from './useBookViewNotes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'

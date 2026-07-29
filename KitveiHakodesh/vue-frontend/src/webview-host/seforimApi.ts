@@ -15,13 +15,6 @@ import type {
   LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor,
 } from './queries.types'
 
-// Re-exported so callers can keep importing row types from the API they call.
-// The definitions live in queries.types.ts, beside the SQL that produces them.
-export type {
-  BookRow, CategoryRow, BookInfo, TocEntry, AltTocStructure,
-  LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, TocRow,
-} from './queries.types'
-
 /** True when the C# seforim bridge is present (hosted). Dev falls to the service. */
 export const isDbHosted = (): boolean => typeof window.__webviewQuery === 'function'
 

@@ -5,7 +5,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { storeToRefs } from 'pinia'
 import TreeView from '@/components/TreeView.vue'
 import type { TreeNodeItem } from '@/components/treeTypes'
-import type { CategoryNode, BookRow } from '@/features/book-catalog/bookCatalogTree'
+import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { BookRow } from '@/webview-host/queries.types'
 import { wantsNewTab } from '@/composables/useOpenInNewTab'
 
 const emit = defineEmits<{ selectBook: [BookRow, boolean?] }>()

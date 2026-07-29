@@ -9,8 +9,8 @@ import {
   findCategoryMeta,
 } from '../features/book-catalog/bookCatalogTree'
 import { buildSearchIndex } from '../features/book-catalog/bookCatalogSearch'
-import type { CategoryNode, CategoryRow, BookRow } from '../features/book-catalog/bookCatalogTree'
-
+import type { CategoryNode } from '../features/book-catalog/bookCatalogTree'
+import type { CategoryRow, BookRow } from '@/webview-host/queries.types'
 export const useBooksDataStore = defineStore('booksData', () => {
   const loaded = ref(false)
   const loading = ref(false)

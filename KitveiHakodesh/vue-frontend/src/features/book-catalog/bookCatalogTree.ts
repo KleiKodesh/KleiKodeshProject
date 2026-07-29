@@ -1,7 +1,8 @@
 import type { BookRow, CategoryRow } from '@/webview-host/queries.types'
 
-// Row shapes come FROM the data layer — this file only adds the tree view model below.
-export type { BookRow, CategoryRow }
+// Row shapes come FROM the data layer; this file only adds the tree view model below.
+// Consumers import the rows from queries.types directly — no re-export here, so there
+// is exactly one path to each type.
 
 export interface CategoryNode extends CategoryRow {
   children: CategoryNode[]

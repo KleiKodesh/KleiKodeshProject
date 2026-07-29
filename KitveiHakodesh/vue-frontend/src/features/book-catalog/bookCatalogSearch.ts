@@ -14,8 +14,7 @@ import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath, decomposeHebrewWord, stripHePrefix } from './bookCatalogSearchNormalizer'
 import type { DecomposedToken } from './bookCatalogSearchNormalizer'
 import { SCORE_EXACT, SCORE_PREFIX, SCORE_NONE } from './bookCatalogSearchMatcher'
-import type { BookRow } from './bookCatalogTree'
-
+import type { BookRow } from '@/webview-host/queries.types'
 // ─── Tokenization ─────────────────────────────────────────────────────────────
 
 /** Compute the normalized token list for a book's full indexed string (path + title + authors). */

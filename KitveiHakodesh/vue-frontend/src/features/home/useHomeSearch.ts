@@ -43,7 +43,7 @@ import { fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { dbReady } from '@/webview-host/seforimDb'
-import type { BookRow } from '@/features/book-catalog/bookCatalogTree'
+import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 
 // ─── Types ────────────────────────────────────────────────────────────────────

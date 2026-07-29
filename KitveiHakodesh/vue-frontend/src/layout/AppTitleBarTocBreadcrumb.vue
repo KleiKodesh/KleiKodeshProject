@@ -2,7 +2,7 @@
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import type { BreadcrumbSegment, TocBreadcrumbSegment, PdfBreadcrumbSegment } from './useAppTitleBarTocBreadcrumb'
 import { isTocBreadcrumbSegment } from './useAppTitleBarTocBreadcrumb'
-import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
+import type { TocEntry } from '@/webview-host/queries.types'
 import type { PdfOutlineEntry } from '@/stores/bookViewStore'
 
 const props = defineProps<{

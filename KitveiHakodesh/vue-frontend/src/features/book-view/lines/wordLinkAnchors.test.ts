@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { applyWordLinkAnchors, parseWordLinkData } from './wordLinkAnchors'
 import { stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { realAnchorFixtures } from './wordLinkAnchors.fixtures'
-import type { WordLinkAnchor } from '@/webview-host/seforimApi'
-
+import type { WordLinkAnchor } from '@/webview-host/queries.types'
 const anchor = (over: Partial<WordLinkAnchor>): WordLinkAnchor => ({
   lineId: 1,
   charStart: 0,

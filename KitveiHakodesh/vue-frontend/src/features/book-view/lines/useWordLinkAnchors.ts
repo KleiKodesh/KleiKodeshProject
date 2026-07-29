@@ -12,7 +12,8 @@
  * array and the renderers skip the splice entirely).
  */
 import { ref, watch } from 'vue'
-import { getWordLinkAnchorsForLines, type WordLinkAnchor } from '@/webview-host/seforimApi'
+import { getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
+import type { WordLinkAnchor } from '@/webview-host/queries.types'
 
 const EMPTY: WordLinkAnchor[] = []
 

@@ -3,10 +3,6 @@ import { getAllTocEntries, getAltTocStructures, getAllAltTocEntries } from '@/we
 import { SearchableTree, stripTocTitleRoots } from './tocSearchUtils'
 import type { TocEntry, AltTocStructure } from '@/webview-host/queries.types'
 
-// TOC row shapes are owned by the data layer; re-exported here because most of the
-// book-view tree already imports them from this composable.
-export type { TocEntry, AltTocStructure }
-
 export interface AltTocSection {
   structure: AltTocStructure
   entries: TocEntry[]

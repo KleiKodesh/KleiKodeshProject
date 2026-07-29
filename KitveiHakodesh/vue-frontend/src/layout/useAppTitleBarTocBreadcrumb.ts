@@ -10,7 +10,7 @@
  */
 import { computed } from 'vue'
 import type { ComputedRef } from 'vue'
-import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
+import type { TocEntry } from '@/webview-host/queries.types'
 import type { TocBridge, PdfBridge, PdfOutlineEntry } from '@/stores/bookViewStore'
 
 export interface TocBreadcrumbSegment {

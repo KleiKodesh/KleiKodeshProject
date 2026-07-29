@@ -59,7 +59,7 @@ const {
   (tabId) => bookViewStore.getPdfBridge(tabId),
 )
 
-function onNavigateToBreadcrumbEntry(entry: import('@/features/book-view/toc/useBookViewToc').TocEntry) {
+function onNavigateToBreadcrumbEntry(entry: import('@/webview-host/queries.types').TocEntry) {
   bookViewStore.getTocBridge(pane.activeTabId.value)?.navigateToEntry(entry)
 }
 

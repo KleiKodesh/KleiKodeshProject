@@ -4,8 +4,7 @@ import {
   getNextTocSectionWithCommentary,
   getPrevTocSectionWithCommentary,
 } from '@/webview-host/seforimApi'
-import type { TocEntry } from '@/features/book-view/toc/useBookViewToc'
-
+import type { TocEntry } from '@/webview-host/queries.types'
 export interface SectionNavResult {
   id: number
   lineIndex: number
