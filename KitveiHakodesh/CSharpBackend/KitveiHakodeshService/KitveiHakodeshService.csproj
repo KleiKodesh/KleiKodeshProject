@@ -23,11 +23,22 @@
     <!-- Required by the LibraryImport source generator (advapi32 SCM P/Invokes). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <UserSecretsId>dotnet-KitveiHakodeshService-65893fd5-946c-4ba8-8798-4e827a79ea21</UserSecretsId>
-    <!-- Embed the UAC manifest. It requests asInvoker, NOT elevation: admin rights only buy
-         the USN journal fast path (FSCTL_READ_USN_JOURNAL) for DocumentLocator's PathIndex,
-         and PathIndex degrades cleanly without them (FallbackCrawler build, no live updates).
+    <!-- Win32 version-resource fields. AssemblyTitle becomes FileDescription, which is the
+         program name Windows shows in the UAC consent dialog; Company fills the publisher
+         line for an unsigned exe. Keep these Hebrew — with nothing set the SDK defaults
+         them to the assembly name and the prompt reads "KitveiHakodeshService". Matters
+         whenever this exe elevates (SCM register/unregister of the indexing service). -->
+    <AssemblyTitle>כלי קודש</AssemblyTitle>
+    <Product>כלי קודש</Product>
+    <Company>כלי קודש</Company>
+    <Description>שירות אינדוקס קבצים — כלי קודש</Description>
+    <!-- Embed the UAC manifest. It requests asInvoker, NOT elevation — correct for both the
+         dev spawn (inherits the terminal token, stays rebuildable) and the production
+         Windows service (gets LocalSystem from the SCM, no manifest elevation needed).
          requireAdministrator here would make CreateProcess fail with ERROR_ELEVATION_REQUIRED
-         for any non-elevated parent, which breaks `npm run dev` from a normal terminal. -->
+         for any non-elevated parent, which breaks `npm run dev` from a normal terminal.
+         Note: elevation is NOT optional for the product — without USN access PathIndex has
+         no watcher at all and the index freezes at build time. See Properties\app.manifest. -->
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
 

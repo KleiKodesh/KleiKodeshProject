@@ -4,10 +4,25 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>8.7.2</Version>
+    <Version>1.0.16</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
+    <!--
+      Win32 version-resource fields the UAC consent dialog reads. Windows shows
+      AssemblyTitle (→ FileDescription) as the bold program name and Company as the
+      publisher line; with nothing set the SDK defaults both to the assembly name,
+      which is why the prompt used to read "KleiKodeshVstoInstallerWpf" in English.
+      Keep these Hebrew so the elevation prompt is recognisable to the user.
+
+      NOTE: the publisher line only reads "כלי קודש" for an unsigned exe, where Windows
+      renders it as an unverified publisher. Once the exe is Authenticode-signed, that
+      line comes from the certificate subject instead and this value is ignored.
+    -->
+    <AssemblyTitle>כלי קודש</AssemblyTitle>
+    <Product>כלי קודש</Product>
+    <Company>כלי קודש</Company>
+    <Description>התקנת כלי קודש</Description>
     <!-- Prevent dependency DLLs from being copied to output — they are embedded as resources -->
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
   </PropertyGroup>
