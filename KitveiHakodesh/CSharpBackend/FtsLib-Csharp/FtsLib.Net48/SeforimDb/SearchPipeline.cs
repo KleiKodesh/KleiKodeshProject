@@ -1,4 +1,4 @@
-using FtsLib.Indexing;
+﻿using FtsLib.Indexing;
 using FtsLib.Search;
 using System.Collections.Generic;
 using System.Threading;
@@ -100,7 +100,8 @@ namespace FtsLib.SeforimDb
 
                 // Snapshot the docId→corpus map while the segment files are still
                 // leased — after the reader disposes, a merge may delete them.
-                docMap = reader.GetDocSourceMap();
+                // Zero results need no map (nothing will be fetched).
+                docMap = ids.Count > 0 ? reader.GetDocSourceMap() : DocSourceMap.Identity;
             }
 
             if (ids.Count == 0) yield break;
