@@ -369,6 +369,11 @@ namespace FtsLibTest
             var allRows = CollectAllRows(reopened);
             allRows.Sort((a, b) => a.DocLo.CompareTo(b.DocLo));
 
+            // The canary below is vacuous with fewer than two rows — make that
+            // visible instead of silently passing.
+            Check("I2a resume produced ≥2 segments", allRows.Count >= 2,
+                $"rows={allRows.Count} (overlap canary needs ≥2)");
+
             // No overlap between any two segment rows (resume-overlap canary):
             // overlapping doc ranges are the exact corruption mode the resume
             // floor exists to prevent.

@@ -383,8 +383,12 @@ namespace FtsLib.Indexing
                 _merger.MergeLevel(op.Level, targetSegId: op.Target);
                 FtsLog.Write("SegmentStore.Recover", "recovery merge complete");
             }
-            catch (Exception ex) when (ex is InvalidDataException || ex is FileNotFoundException || ex is IOException)
+            catch (Exception ex) when (ex is InvalidDataException || ex is FileNotFoundException || ex is IOException
+                                       || ex is System.Data.Common.DbException)
             {
+                // DbException: a source segment's SQLite meta (term_index /
+                // doc_source) is unreadable — same corruption class as a torn
+                // .dat, same remedy. Both providers' exceptions derive from it.
                 Console.WriteLine("[Recovery] Corrupt or missing segment during merge — wiping index for rebuild: " + ex.Message);
                 FtsLog.Write("SegmentStore.Recover",
                     "corrupt/missing segment during recovery merge — wiping: " + ex.GetType().Name + ": " + ex.Message);
@@ -505,6 +509,15 @@ namespace FtsLib.Indexing
                 using (var reader = new SegmentReader(datPath))
                     while (reader.MoveNext()) termCount++;
                 if (termCount == 0) return false;
+
+                // doc_source must be readable too (or absent — that's the legacy
+                // identity fallback). Searches and merges gate on this table with
+                // read-failures PROPAGATING, so committing a target whose
+                // doc_source is torn (while term_index survived) would brick the
+                // index with no self-heal — unlike every other corruption mode,
+                // which recovery wipes and rebuilds. A throw here lands in the
+                // catch below → validation fails → normal recovery handling.
+                ReadDocSourceRows(dbPath);
 
                 // Pooling=false: a pooled read handle would survive this using-block and
                 // keep the segment .db open, blocking a later merge's File.Delete of it.

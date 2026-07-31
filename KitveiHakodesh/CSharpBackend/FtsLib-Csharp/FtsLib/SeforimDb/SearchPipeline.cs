@@ -100,7 +100,8 @@ namespace FtsLib.SeforimDb
 
                 // Snapshot the docId→corpus map while the segment files are still
                 // leased — after the reader disposes, a merge may delete them.
-                docMap = reader.GetDocSourceMap();
+                // Zero results need no map (nothing will be fetched).
+                docMap = ids.Count > 0 ? reader.GetDocSourceMap() : DocSourceMap.Identity;
             }
 
             if (ids.Count == 0) yield break;
@@ -222,8 +223,8 @@ namespace FtsLib.SeforimDb
                 }
 
                 // Snapshot the docId→corpus map while segment files are leased
-                // (see Search).
-                docMap = reader.GetDocSourceMap();
+                // (see Search). Zero results need no map.
+                docMap = ids.Count > 0 ? reader.GetDocSourceMap() : DocSourceMap.Identity;
             }
 
             if (ids.Count == 0) return System.Array.Empty<SearchResult>();
@@ -277,8 +278,9 @@ namespace FtsLib.SeforimDb
                         }
                     }
                 }
-                if (write < arr.Length)
-                    System.Array.Resize(ref arr, write);
+                // FetchSearchResultsParallel returns exactly one slot per queried
+                // id (nulls included), so `write` always equals arr.Length here;
+                // the null-compaction below is the single place rows drop out.
             }
 
             // Every matched id comes from the line table, so each slot is filled; guard
