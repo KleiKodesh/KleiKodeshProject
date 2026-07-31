@@ -50,12 +50,34 @@ export const useLocalFileStore = defineStore('localFile', () => {
     return tabStore.activeTabId
   }
   /**
+   * True when the target pane holds nothing but a home tab — the one the store
+   * auto-creates for a session with no saved tabs (see DEFAULT_TAB in tabStore).
+   * An "Open With" launch lands exactly here: its push event asks for a new tab,
+   * and honouring that would leave the untouched home tab behind as a redundant
+   * first tab, so the file takes that tab over instead. Mirrors the same "unless
+   * the current tab is home" rule navigateToSingleton uses.
+   */
+  function targetPaneHasOnlyHomeTab(): boolean {
+    const pane = targetPaneId()
+    const paneTabs = pane === 2 ? tabStore.pane2Tabs : tabStore.pane1Tabs
+    if (paneTabs.length !== 1 || paneTabs[0]!.route !== '/') return false
+    // In-place navigation patches the pane's ACTIVE tab — only claim the home tab
+    // when that is what it will hit, otherwise the file would land on nothing.
+    const activeId = pane === 2 ? tabStore.pane2ActiveTabId : tabStore.activeTabId
+    return paneTabs[0]!.id === activeId
+  }
+
+  /**
    * Resolve the new-tab intent for a push event: the in-flight user pick's intent
    * (frontend-owned, since the C# events don't carry it), falling back to the
-   * event's own flag for "Open With" launches.
+   * event's own flag for "Open With" launches. A user pick's intent is absolute —
+   * a Ctrl-click gets its own tab even from the home page — but the "Open With"
+   * flag yields to a lone home tab, which the file replaces rather than doubling.
    */
   function resolveOpenInNewTab(eventFlag: unknown): boolean {
-    return pendingPickOpenInNewTab() ?? !!eventFlag
+    const pickIntent = pendingPickOpenInNewTab()
+    if (pickIntent !== null) return pickIntent
+    return !!eventFlag && !targetPaneHasOnlyHomeTab()
   }
 
   const virtualUrl = computed(() => tabStore.activeTab.localFileVirtualUrl ?? null)
