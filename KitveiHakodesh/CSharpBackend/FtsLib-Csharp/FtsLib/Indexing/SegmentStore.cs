@@ -383,12 +383,12 @@ namespace FtsLib.Indexing
                 _merger.MergeLevel(op.Level, targetSegId: op.Target);
                 FtsLog.Write("SegmentStore.Recover", "recovery merge complete");
             }
-            catch (Exception ex) when (ex is InvalidDataException || ex is FileNotFoundException || ex is IOException
-                                       || ex is System.Data.Common.DbException)
+            catch (Exception ex) when (ex is InvalidDataException || ex is FileNotFoundException || ex is IOException)
             {
-                // DbException: a source segment's SQLite meta (term_index /
-                // doc_source) is unreadable — same corruption class as a torn
-                // .dat, same remedy. Both providers' exceptions derive from it.
+                // Torn doc_source in a source segment arrives here as
+                // InvalidDataException (wrapped at the read site in SegmentMerger),
+                // so it heals like any other corruption. Environmental SQLite
+                // failures writing the NEW target are deliberately NOT caught.
                 Console.WriteLine("[Recovery] Corrupt or missing segment during merge — wiping index for rebuild: " + ex.Message);
                 FtsLog.Write("SegmentStore.Recover",
                     "corrupt/missing segment during recovery merge — wiping: " + ex.GetType().Name + ": " + ex.Message);

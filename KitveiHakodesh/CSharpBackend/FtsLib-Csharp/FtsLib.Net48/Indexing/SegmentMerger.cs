@@ -137,8 +137,22 @@ namespace FtsLib.Indexing
             List<DocSourceRange> mergedDocSources = null;
             {
                 var collected = new List<DocSourceRange>();
-                foreach (int sid in segIds)
-                    collected.AddRange(SegmentStore.ReadDocSourceRows(_store.Live.SegDbPath(level, sid)));
+                try
+                {
+                    foreach (int sid in segIds)
+                        collected.AddRange(SegmentStore.ReadDocSourceRows(_store.Live.SegDbPath(level, sid)));
+                }
+                catch (System.Data.Common.DbException ex)
+                {
+                    // A source's meta .db is present but unreadable — the same
+                    // corruption class as a torn .dat. Surface it as the type every
+                    // recovery path already treats as wipe-and-rebuild, so torn
+                    // doc_source heals like any other corruption, while an
+                    // environmental SQLite failure writing the NEW target below
+                    // keeps its preserve-WAL/retry semantics (it is not wrapped).
+                    throw new InvalidDataException(
+                        "Unreadable doc_source in a merge source segment: " + ex.Message, ex);
+                }
                 if (collected.Count > 0)
                     mergedDocSources = new List<DocSourceRange>(DocSourceMap.FromRows(collected).Rows);
                 FtsLog.Write("SegmentMerger",
