@@ -36,3 +36,5 @@ All file-open paths go through `LocalFileHandler` in C# and produce push events 
 ## "Open With" entry point
 
 `AppViewer.OpenFileFromPath(filePath)` is the entry point for files opened via the Windows context menu or command-line argument. It queues the path if the WebView2 bridge is not yet ready, then calls `LocalFileHandler.OpenFileFromPathAsync` which produces the same event sequence as `HandlePickFile`. The single-instance pipe in `Program.cs` forwards the path to the already-running instance if one exists.
+
+These events carry `openInNewTab = true` so a forwarded path never clobbers what the running instance is showing. On a cold "Open With" launch there is nothing to protect: with no saved session the tab store starts on its auto-created home tab, and a new tab would leave that home tab behind as redundant. So `resolveOpenInNewTab` in `localFileStore.ts` drops the flag when the target pane holds only a home tab — the file takes that tab over. A user pick's own intent (Ctrl-click → new tab) is never overridden this way.
