@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text;
 
 namespace FtsLibTest
@@ -49,12 +49,13 @@ namespace FtsLibTest
                 case "probe":             ProbeSearch.Run(args); return;
                 case "dumpids":           DumpIds.Run(args); return;
                 case "monitor":           MonitorTest.Run(args); return;
+                case "docsource":         DocSourceTest.Run(args); return;
                 case "interrupttest":     InterruptTest.Run(args); return;
                 case "mergetest":         MergeTest.Run(args); return;
                 case "crashmergetest":    CrashMergeTest.Run(args); return;
                 case "searchduringmerge": SearchDuringMergeTest.Run(args); return;
                 default:
-                    Console.WriteLine("net10 test port. Commands: bench fetchbench build buildfresh search speed perf query parsertest orderedtest worddist snippettest snippetdiag ketivtest ketivquery verify filtertest probe dumpids monitor interrupttest mergetest crashmergetest searchduringmerge");
+                    Console.WriteLine("net10 test port. Commands: bench fetchbench build buildfresh search speed perf query parsertest orderedtest worddist snippettest snippetdiag ketivtest ketivquery verify filtertest probe dumpids monitor docsource interrupttest mergetest crashmergetest searchduringmerge");
                     return;
             }
         }

@@ -126,6 +126,26 @@ namespace FtsLib.Indexing
             List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> entries = null;
             long mergedLastDoc = long.MinValue;
 
+            // Carry the docId→corpus mapping through the merge: union of every
+            // source's doc_source rows, coalesced (adjacent same-corpus slices
+            // join). Read NOW, while all sources are guaranteed on disk — after
+            // the commit below they are deleted. Sources predating the table
+            // contribute nothing; their doc ranges stay on the identity fallback,
+            // which is exactly what they were built as. A read failure propagates
+            // and aborts the merge (recoverable — sources untouched) instead of
+            // silently writing a target whose docs lost their corpus mapping.
+            List<DocSourceRange> mergedDocSources = null;
+            {
+                var collected = new List<DocSourceRange>();
+                foreach (int sid in segIds)
+                    collected.AddRange(SegmentStore.ReadDocSourceRows(_store.Live.SegDbPath(level, sid)));
+                if (collected.Count > 0)
+                    mergedDocSources = new List<DocSourceRange>(DocSourceMap.FromRows(collected).Rows);
+                FtsLog.Write("SegmentMerger",
+                    $"doc_source carry-through: {collected.Count} source row(s) → " +
+                    $"{(mergedDocSources == null ? 0 : mergedDocSources.Count)} merged row(s)");
+            }
+
             try
             {
                 readers = OpenReaders(level, segIds);
@@ -172,7 +192,7 @@ namespace FtsLib.Indexing
             {
                 FtsLog.Write("SegmentMerger",
                     $"writing meta DB → {System.IO.Path.GetFileName(tmpDb)}");
-                SegmentWriter.WriteMetaDb(tmpDb, entries, mergedLastDoc);
+                SegmentWriter.WriteMetaDb(tmpDb, entries, mergedLastDoc, mergedDocSources);
                 long dbSzTmp = File.Exists(tmpDb) ? new System.IO.FileInfo(tmpDb).Length : -1;
                 FtsLog.Write("SegmentMerger",
                     $"WriteMetaDb complete: tmpDb size={dbSzTmp:N0}B");

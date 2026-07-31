@@ -157,6 +157,10 @@ namespace FtsLibTest
                     ProbeSearch.Run(args);
                     return;
 
+                case "docsource":
+                    DocSourceTest.Run(args);
+                    return;
+
                 case "interrupttest":
                     InterruptTest.Run(args);
                     return;

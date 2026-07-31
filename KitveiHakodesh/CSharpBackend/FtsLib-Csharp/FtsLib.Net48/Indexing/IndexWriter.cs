@@ -40,6 +40,24 @@ namespace FtsLib.Indexing
         private bool          _disposed;
         private int           _lastLineId = int.MinValue;
         private bool          _flushPending;
+        private DocSourceMap  _docSources = DocSourceMap.Identity;
+
+        /// <summary>
+        /// The corpus layout: which source corpus (and source-local id) each docId
+        /// belongs to. Every flushed segment persists this map clipped to its own
+        /// doc range (the doc_source table in the segment .db), making docIds
+        /// internal to the index instead of implicitly seforim line.ids.
+        ///
+        /// Defaults to <see cref="DocSourceMap.Identity"/> — docId == library
+        /// line.id — which matches every existing caller. A multi-corpus build
+        /// (library + user books) sets a map with one range per corpus base
+        /// BEFORE adding that corpus's docs.
+        /// </summary>
+        public DocSourceMap DocSources
+        {
+            get { return _docSources; }
+            set { _docSources = value ?? DocSourceMap.Identity; }
+        }
 
         /// <summary>
         /// The highest line ID that has been fully written to a segment file on disk.
@@ -311,7 +329,12 @@ namespace FtsLib.Indexing
             RamIndex batch = _ramIndex;
             _ramIndex = new RamIndex(useSkipList: _useSkipList);
 
-            _store.Flush(batch, _lastLineId);
+            // The segment's doc_source rows: the corpus layout clipped to exactly
+            // the doc range this batch covers. Computed here (indexing thread) so
+            // the background write task never touches the mutable DocSources.
+            var docSourceRows = _docSources.Clip(batch.MinDocId, batch.MaxDocId);
+
+            _store.Flush(batch, _lastLineId, docSourceRows);
 
             Console.WriteLine("[IndexWriter] Flush scheduled.");
         }

@@ -46,7 +46,8 @@ namespace FtsLib.Indexing
             RamIndex     ramIndex,
             List<string> sortedTerms,
             string       datPath,
-            string       dbPath)
+            string       dbPath,
+            List<DocSourceRange> docSourceRows = null)
         {
             string tmpDat = datPath + ".tmp";
             string tmpDb  = dbPath  + ".tmp";
@@ -123,7 +124,7 @@ namespace FtsLib.Indexing
                 }
 
                 long lastDoc = anyPosting ? (long)maxLastEncoded + int.MinValue : long.MinValue;
-                WriteMetaDb(tmpDb, meta, lastDoc);
+                WriteMetaDb(tmpDb, meta, lastDoc, docSourceRows);
 
                 // Both files are fully written — rename to their final paths, replacing
                 // any stale leftover already there (e.g. an unregistered segment file
@@ -173,11 +174,18 @@ namespace FtsLib.Indexing
         /// into a second segment, and overlapping doc ranges silently corrupt
         /// AND-search results. Older segments without the table simply fall back
         /// to the progress file (no worse than before).
+        ///
+        /// <paramref name="docSourceRows"/> (when non-empty) is persisted as the
+        /// <c>doc_source</c> table: which corpus each docId range belongs to and
+        /// the affine docId→sourceId rule (see <see cref="DocSourceRange"/>).
+        /// Readers of segments without the table fall back to library-identity,
+        /// mirroring the segment_meta backward-compat precedent above.
         /// </summary>
         internal static void WriteMetaDb(
             string path,
             List<(string term, long skipOffset, int skipCount, long offset, int length, int count)> rows,
-            long lastDocId = long.MinValue)
+            long lastDocId = long.MinValue,
+            List<DocSourceRange> docSourceRows = null)
         {
             // Pooling=False: these segment .db files are written once then File.Move'd to their
             // final name. With pooling on, Microsoft.Data.Sqlite keeps the file handle open after
@@ -230,6 +238,33 @@ namespace FtsLib.Indexing
                         ins.CommandText = "INSERT INTO segment_meta(key,value) VALUES('last_doc',@v)";
                         ins.Parameters.Add("@v", SqliteType.Integer).Value = lastDocId;
                         ins.ExecuteNonQuery();
+                    }
+                }
+
+                if (docSourceRows != null && docSourceRows.Count > 0)
+                {
+                    Exec(conn,
+                        "CREATE TABLE doc_source(" +
+                        "doc_lo INTEGER NOT NULL,doc_hi INTEGER NOT NULL," +
+                        "source INTEGER NOT NULL,src_lo INTEGER NOT NULL);");
+                    using (var tx  = conn.BeginTransaction())
+                    using (var ins = conn.CreateCommand())
+                    {
+                        ins.CommandText =
+                            "INSERT INTO doc_source(doc_lo,doc_hi,source,src_lo) VALUES(@dl,@dh,@s,@sl)";
+                        var pDL = ins.Parameters.Add("@dl", SqliteType.Integer);
+                        var pDH = ins.Parameters.Add("@dh", SqliteType.Integer);
+                        var pS  = ins.Parameters.Add("@s",  SqliteType.Integer);
+                        var pSL = ins.Parameters.Add("@sl", SqliteType.Integer);
+                        foreach (var r in docSourceRows)
+                        {
+                            pDL.Value = r.DocLo;
+                            pDH.Value = r.DocHi;
+                            pS.Value  = r.Source;
+                            pSL.Value = r.SrcLo;
+                            ins.ExecuteNonQuery();
+                        }
+                        tx.Commit();
                     }
                 }
 

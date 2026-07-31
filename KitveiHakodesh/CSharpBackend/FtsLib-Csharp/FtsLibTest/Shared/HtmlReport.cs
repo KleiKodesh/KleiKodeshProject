@@ -157,6 +157,10 @@ namespace FtsLibTest
 
         public static void OpenHtml(string path)
         {
+            // FTS_NO_OPEN=1 suppresses the browser launch — for scripted /
+            // unattended runs where a tab popping up is unwanted. The report
+            // file is still written; its path is printed by the caller.
+            if (Environment.GetEnvironmentVariable("FTS_NO_OPEN") == "1") return;
             try { Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
             catch { /* best-effort */ }
         }

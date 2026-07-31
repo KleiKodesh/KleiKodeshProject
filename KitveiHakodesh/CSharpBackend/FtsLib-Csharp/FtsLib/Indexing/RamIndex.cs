@@ -15,6 +15,14 @@ namespace FtsLib.Indexing
 
         public RamIndex(bool useSkipList = true) { _useSkipList = useSkipList; }
 
+        /// <summary>Lowest doc (line) ID added to this batch; int.MaxValue when empty.
+        /// With MaxDocId, gives the doc range this batch's segment will cover —
+        /// used to clip the corpus layout into the segment's doc_source rows.</summary>
+        public int MinDocId { get; private set; } = int.MaxValue;
+
+        /// <summary>Highest doc (line) ID added to this batch; int.MinValue when empty.</summary>
+        public int MaxDocId { get; private set; } = int.MinValue;
+
         public void Add(string term, int lineId)
         {
             if (!TryGetValue(term, out var e))
@@ -23,6 +31,8 @@ namespace FtsLib.Indexing
                 this[term] = e;
             }
             e.Add(lineId);
+            if (lineId < MinDocId) MinDocId = lineId;
+            if (lineId > MaxDocId) MaxDocId = lineId;
         }
 
         public int GetCount(string term) =>
