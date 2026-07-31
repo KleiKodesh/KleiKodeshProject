@@ -263,7 +263,12 @@ namespace FtsLib.SeforimDb
 
             // Resume floor: the progress file lags the background flush and can be
             // stale after a hard kill (the flush completed, the progress write did
-            // not). The flushed segments record their own last doc ID atomically
+            // not). NOTE (doc_source refactor): maxOnDisk is a docId used directly
+            // as a line.id cursor below (ReadLinesFrom) — valid while this pipeline
+            // builds only the library corpus (docId == line.id, the identity
+            // mapping). A multi-corpus build must resolve the docId through the
+            // segments' doc_source map to a per-corpus resume position instead.
+            // The flushed segments record their own last doc ID atomically
             // with the segment (segment_meta) — trust whichever is HIGHER, because
             // resuming below a flushed segment's last line re-indexes those lines
             // into a second segment, and overlapping doc ranges silently corrupt

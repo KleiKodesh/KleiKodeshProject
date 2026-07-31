@@ -28,6 +28,12 @@ namespace FtsLib.Search
         // Lives exactly as long as this reader's immutable segment snapshot.
         private readonly TermChunkCache _chunkCache = new TermChunkCache();
 
+        // Aggregated docId→corpus map over this reader's segment snapshot.
+        // Built lazily on first use (SearchIds never needs it), from each
+        // segment's doc_source rows. Must be materialized while the reader is
+        // open — the segment files can be merged away after the lease releases.
+        private DocSourceMap _docSourceMap;
+
         /// <summary>
         /// Opens an IndexReader using an explicit snapshot of live segment paths,
         /// holding a <see cref="SearchLease"/> for the reader's entire lifetime.
@@ -230,6 +236,32 @@ namespace FtsLib.Search
         // ── Term count ───────────────────────────────────────────────
 
         public int GetTermCount(string term) => TotalCount(LookupTerm(term));
+
+        // ── Doc→source resolution ────────────────────────────────────
+
+        /// <summary>
+        /// The docId→corpus map for this reader's segment snapshot: the union of
+        /// every live segment's persisted doc_source rows, coalesced. Segments
+        /// predating the table contribute nothing — their docs resolve through
+        /// the map's library-identity fallback, the meaning they were built as.
+        ///
+        /// Built lazily (one small SELECT per segment on first call) and cached
+        /// for the reader's lifetime. Callers that fetch content by source-local
+        /// id MUST obtain this while the reader is still open: after the search
+        /// lease releases, a merge may delete the segment files it derives from.
+        /// </summary>
+        public DocSourceMap GetDocSourceMap()
+        {
+            if (_docSourceMap != null) return _docSourceMap;
+
+            var rows = new List<DocSourceRange>();
+            foreach (var seg in _segments)
+                rows.AddRange(seg.ReadDocSources());
+
+            _docSourceMap = rows.Count == 0 ? DocSourceMap.Identity
+                                            : DocSourceMap.FromRows(rows);
+            return _docSourceMap;
+        }
 
         // ── Helpers ──────────────────────────────────────────────────
 

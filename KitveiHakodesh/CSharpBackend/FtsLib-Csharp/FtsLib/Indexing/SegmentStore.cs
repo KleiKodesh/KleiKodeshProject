@@ -653,6 +653,69 @@ namespace FtsLib.Indexing
             return max;
         }
 
+        /// <summary>
+        /// Reads a segment .db's doc_source rows (the persisted docId→corpus map).
+        /// Returns an empty list for segments that predate the table — callers
+        /// treat that as library-identity, the meaning such segments were built
+        /// under. A MISSING table is detected via sqlite_master (never an error);
+        /// an actual read failure on a present table propagates — the merger must
+        /// abort (recoverable: sources untouched) rather than silently write a
+        /// merged segment whose docs lost their corpus mapping.
+        /// Pooling=false so the handle never outlives the call and blocks a later
+        /// merge's File.Delete (same rationale as <see cref="MaxSegmentLastDoc"/>).
+        /// </summary>
+        internal static List<DocSourceRange> ReadDocSourceRows(string dbPath)
+        {
+            var rows = new List<DocSourceRange>();
+            using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+                   {
+                       DataSource = dbPath,
+                       Mode       = SqliteOpenMode.ReadOnly,
+                       Pooling    = false,
+                   }.ConnectionString))
+            {
+                conn.Open();
+                using (var probe = conn.CreateCommand())
+                {
+                    probe.CommandText =
+                        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='doc_source'";
+                    if (Convert.ToInt64(probe.ExecuteScalar()) == 0)
+                        return rows; // pre-doc_source segment — identity fallback
+                }
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText =
+                        "SELECT doc_lo, doc_hi, source, src_lo FROM doc_source ORDER BY doc_lo";
+                    using (var r = cmd.ExecuteReader())
+                    {
+                        while (r.Read())
+                            rows.Add(new DocSourceRange(
+                                r.GetInt32(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3)));
+                    }
+                }
+            }
+            return rows;
+        }
+
+        /// <summary>
+        /// TEST HOOK — drops a segment's doc_source table to simulate a segment
+        /// written before the table existed (legacy-fallback and mixed-merge
+        /// tests). Never called by production code.
+        /// </summary>
+        internal static void DropDocSourceTableForTest(string dbPath)
+        {
+            using (var conn = new SqliteConnection(new SqliteConnectionStringBuilder
+                   { DataSource = dbPath, Pooling = false }.ConnectionString))
+            {
+                conn.Open();
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.CommandText = "DROP TABLE IF EXISTS doc_source";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+        }
+
         // ── Flush ─────────────────────────────────────────────────────
 
         /// <summary>
@@ -667,8 +730,12 @@ namespace FtsLib.Indexing
         ///
         /// <paramref name="lineId"/> is the highest line ID in the batch; it is
         /// written to <see cref="LastFlushedLineId"/> once the segment is on disk.
+        ///
+        /// <paramref name="docSourceRows"/> — the corpus layout clipped to this
+        /// batch's doc range (computed by the caller on the indexing thread);
+        /// persisted as the segment's doc_source table.
         /// </summary>
-        public void Flush(RamIndex ramIndex, int lineId)
+        public void Flush(RamIndex ramIndex, int lineId, List<DocSourceRange> docSourceRows = null)
         {
             // Back-pressure: block until the previous flush+merge cycle is free.
             _flushSlot.Wait();
@@ -711,7 +778,7 @@ namespace FtsLib.Indexing
                     {
                         FtsLog.Write("SegmentStore.Flush.BgTask",
                             $"writing seg_0_{segId} to disk...");
-                        SegmentWriter.WriteSegment(ramIndex, terms, datPath, dbPath);
+                        SegmentWriter.WriteSegment(ramIndex, terms, datPath, dbPath, docSourceRows);
                         Live.AddToLive(0, segId);
                         LastFlushedLineId = lineId;
                         FtsLog.Write("SegmentStore.Flush.BgTask",

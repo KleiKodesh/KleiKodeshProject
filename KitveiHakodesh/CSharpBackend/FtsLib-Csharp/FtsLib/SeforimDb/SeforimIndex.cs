@@ -401,6 +401,40 @@ namespace FtsLib.SeforimDb
             return SearchPipeline.SearchParallel(query, _indexPath, _dbPath, livePaths, lease, maxDop, expandKetiv, filterIds, ct);
         }
 
+        // ── Doc→source resolution ─────────────────────────────────────
+
+        /// <summary>
+        /// Resolves an index docId (as returned by <see cref="SearchIds"/> /
+        /// <see cref="Search"/> results) to its source corpus and source-local id,
+        /// using the doc_source mapping persisted in the live segments.
+        ///
+        /// Source 0 is the library (seforim.db): sourceLineId is the line.id.
+        /// docIds not covered by any persisted row — including every doc of an
+        /// index built before the mapping existed — resolve as library-identity.
+        /// Returns false only when the index has no live segments at all.
+        /// </summary>
+        public bool TryResolveDocId(int docId, out int source, out int sourceLineId)
+        {
+            source       = Indexing.DocSourceMap.LibrarySource;
+            sourceLineId = docId;
+
+            var lease = AcquireSearchLease(out var livePaths);
+            if (lease == null && livePaths.Count == 0) return false;
+            using (lease)
+            {
+                if (livePaths.Count == 0) return false;
+
+                var rows = new List<Indexing.DocSourceRange>();
+                foreach (var (dat, db) in livePaths)
+                    rows.AddRange(Indexing.SegmentStore.ReadDocSourceRows(db));
+
+                var map = rows.Count == 0 ? Indexing.DocSourceMap.Identity
+                                          : Indexing.DocSourceMap.FromRows(rows);
+                map.Resolve(docId, out source, out sourceLineId);
+                return true;
+            }
+        }
+
         // ── Snippets ──────────────────────────────────────────────────
 
         public SnippetResult GenerateSnippet(int lineId, string query)

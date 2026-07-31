@@ -69,6 +69,7 @@ namespace FtsLib.SeforimDb
             var ids = new List<int>();
             IReadOnlyList<IReadOnlyCollection<string>> matchedGroups;
             int originalGroupCount = parsed.Groups.Count;
+            DocSourceMap docMap;
 
             using (var reader = new IndexReader(indexPath, livePaths, lease))
             {
@@ -96,6 +97,10 @@ namespace FtsLib.SeforimDb
                     ids.Add(id);
                     if (cap > 0 && ids.Count >= cap) break;
                 }
+
+                // Snapshot the docId→corpus map while the segment files are still
+                // leased — after the reader disposes, a merge may delete them.
+                docMap = reader.GetDocSourceMap();
             }
 
             if (ids.Count == 0) yield break;
@@ -105,15 +110,56 @@ namespace FtsLib.SeforimDb
             // it per line was O(#expanded terms) per snippet.
             var prepared = FtsLib.Snippets.PreparedQueryGroups.FromGroups(matchedGroups);
 
-            // Phase 2 — lease released: stream content rows from the DB.
-            using (var db = new ZayitDb(dbPath))
+            // Phase 2 — lease released: stream content rows from the DB, routed by
+            // corpus. Result ids are docIds; SplitBySource returns null when every
+            // id is library-identity (docId == line.id) — the fast path, which is
+            // byte-identical to the single-corpus fetch. Otherwise each contiguous
+            // run is fetched from its corpus DB by source-local id and yielded
+            // under its app-visible docId, preserving the ascending-id contract.
+            var runs = docMap.SplitBySource(ids);
+            if (runs == null)
             {
-                foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(ids))
+                using (var db = new ZayitDb(dbPath))
                 {
-                    ct.ThrowIfCancellationRequested();
-                    yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount, prepared);
+                    foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(ids))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount, prepared);
+                    }
+                }
+                yield break;
+            }
+
+            foreach (var run in runs)
+            {
+                // Only the library corpus has a content DB wired up so far. A
+                // non-library run means the index was built with a multi-corpus
+                // DocSourceMap this pipeline doesn't know how to fetch for yet —
+                // fail loudly rather than mislabel content.
+                if (run.Source != DocSourceMap.LibrarySource)
+                    throw new System.NotSupportedException(
+                        $"FTS: no content database registered for corpus {run.Source} " +
+                        $"({run.Count} result(s)); only the library (source 0) is wired up.");
+
+                long offset = run.Offset;
+                using (var db = new ZayitDb(dbPath))
+                {
+                    foreach (var (srcId, content, bookTitle) in
+                             db.FetchSearchResultsStreaming(TranslateRun(ids, run)))
+                    {
+                        ct.ThrowIfCancellationRequested();
+                        int docId = (int)(srcId - offset); // back to the app-visible id
+                        yield return new SearchResult(docId, bookTitle, content, matchedGroups, originalGroupCount, prepared);
+                    }
                 }
             }
+        }
+
+        /// <summary>Lazily translates one source run's docIds to source-local ids.</summary>
+        private static IEnumerable<int> TranslateRun(List<int> ids, DocSourceMap.SourceRun run)
+        {
+            for (int i = 0; i < run.Count; i++)
+                yield return (int)(ids[run.Start + i] + run.Offset);
         }
 
         /// <summary>

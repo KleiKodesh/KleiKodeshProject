@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 
 namespace FtsLib.Indexing
@@ -142,6 +142,39 @@ namespace FtsLib.Indexing
                 _datStream.Dispose();
                 throw;
             }
+        }
+
+        /// <summary>
+        /// Reads this segment's persisted docId→corpus rows (doc_source table)
+        /// on the already-open connection. Empty for segments that predate the
+        /// table — the caller's identity fallback covers them. Same
+        /// probe-then-read discipline as <see cref="SegmentStore.ReadDocSourceRows"/>:
+        /// a missing table is normal, a failing read on a present table is not.
+        /// Not thread-safe (shares Conn with term lookups) — call from the
+        /// search thread that owns the reader, as LookupTerm does.
+        /// </summary>
+        public System.Collections.Generic.List<DocSourceRange> ReadDocSources()
+        {
+            var rows = new System.Collections.Generic.List<DocSourceRange>();
+            using (var probe = Conn.CreateCommand())
+            {
+                probe.CommandText =
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='doc_source'";
+                if (Convert.ToInt64(probe.ExecuteScalar()) == 0)
+                    return rows;
+            }
+            using (var cmd = Conn.CreateCommand())
+            {
+                cmd.CommandText =
+                    "SELECT doc_lo, doc_hi, source, src_lo FROM doc_source ORDER BY doc_lo";
+                using (var r = cmd.ExecuteReader())
+                {
+                    while (r.Read())
+                        rows.Add(new DocSourceRange(
+                            r.GetInt32(0), r.GetInt32(1), r.GetInt32(2), r.GetInt32(3)));
+                }
+            }
+            return rows;
         }
 
         /// <summary>

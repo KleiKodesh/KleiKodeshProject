@@ -130,8 +130,12 @@ namespace FtsLib.Search
             var terms = new List<string>(1 << 16);
             var ids = new List<int>(1 << 16);
             long maxRowId = 0;
+            // Pooling=false: a pooled handle outlives this using-block and blocks a
+            // later merge's File.Delete of the segment in the same process (e.g.
+            // sidecars rebuilt at startup for an interrupted build's L0 segments,
+            // then deleted by the resumed build's LSM merge).
             var csb = new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
-            { DataSource = dbPath, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly };
+            { DataSource = dbPath, Mode = Microsoft.Data.Sqlite.SqliteOpenMode.ReadOnly, Pooling = false };
             using (var conn = new Microsoft.Data.Sqlite.SqliteConnection(csb.ConnectionString))
             {
                 conn.Open();
