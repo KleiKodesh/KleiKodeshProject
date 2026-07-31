@@ -130,11 +130,12 @@ namespace FtsLib.Indexing
                 _store.Wal.Clear();
                 FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL cleared");
             }
-            catch (Exception ex) when (ex is InvalidDataException || ex is System.Data.Common.DbException)
+            catch (InvalidDataException ex)
             {
-                // DbException: a segment's SQLite meta (term_index / doc_source)
-                // is unreadable — same corruption class as a torn .dat, same
-                // remedy. Both SQLite providers' exceptions derive from it.
+                // Torn doc_source in a source segment arrives here as
+                // InvalidDataException (wrapped at the read site in SegmentMerger).
+                // Environmental failures writing the new target keep the
+                // preserve-WAL/retry path below.
                 FtsLog.Write("ForceMerger.ResumeForceMerge",
                     "corrupt segment during resume — wiping index: " + ex.Message);
                 _store.Wal.Close();
