@@ -350,3 +350,155 @@
 #loadingBar {
   display: none !important;
 }
+
+/* --- Outline panel: search input + flat results list ---
+   Mirrors the BookView TOC side-panel search (see outline-search.js). The input
+   sits BELOW the scrollable content, like BookView's `.toc-search`, and is shown
+   only while the outline view is active and the document actually has a TOC.
+   While a query is active, #outlinesView is hidden and a flat ranked
+   #outlineSearchResults list takes its place; it reuses the `.treeView` class
+   (without `withNesting`) so rows are styled identically, just unindented. */
+#outlinesView.outlineSearchActive {
+  display: none;
+}
+
+/* #viewsManager has `padding-bottom:16px`. That was invisible while the scrollable
+   #viewsManagerContent was the last child, but the search bar is now last, so the
+   padding showed up as a stray gap between the input and the panel's bottom edge.
+   Drop it while the bar is visible so the bar sits flush; other sidebar views
+   (which hide the bar) keep PDF.js's original 16px. */
+#viewsManager:has(#outlineSearchBar:not(.hidden)) {
+  padding-bottom: 0;
+}
+
+/* #viewsManager is `display:flex; flex-direction:column; align-items:flex-start`,
+   so a child inserted after #viewsManagerContent would shrink to its content
+   width — align-self:stretch is required to span the sidebar. */
+#outlineSearchBar {
+  flex: 0 0 auto;
+  align-self: stretch;
+  box-sizing: border-box;
+  padding: 4px 4px 5px;
+  border-top: 1px solid var(--separator-color);
+  background: var(--toolbar-bg-color);
+}
+
+#outlineSearchBar.hidden {
+  display: none;
+}
+
+#outlineSearchInner {
+  display: flex;
+  align-items: center;
+  padding: 3px 6px;
+}
+
+#outlineSearchInput {
+  flex: 1;
+  width: 0;
+  min-width: 0;
+  padding: 0;
+  /* The UA gives search inputs their own height/line-height; pin both so the row
+     height is only the 12px text plus the paddings above, with no hidden extra. */
+  height: 18px;
+  line-height: 18px;
+  /* Same bidi reason as `.treeItem > a` above: the viewer root is dir="ltr", so a
+     typed Hebrew query ending in ":" or "." (e.g. "ד:") renders with the weak
+     punctuation jumping to the wrong end. The input needs its own RTL base
+     direction, and text-align:right keeps the caret at the Hebrew side. */
+  direction: rtl;
+  text-align: right;
+  background: none;
+  border: none;
+  outline: none;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--main-color);
+}
+
+#outlineSearchInput::placeholder {
+  color: var(--main-color);
+  opacity: 0.6;
+}
+
+#outlineSearchInput::-webkit-search-cancel-button {
+  filter: grayscale(1) opacity(0.4);
+}
+
+/* Keyboard-nav focus ring on the flat results, mirroring the Vue app's
+   `[data-nav-item].is-focused`. Focus is painted on the row rather than moved
+   there as real DOM focus, so the caret stays in the query box and the user can
+   keep typing while arrowing. `!important` beats `.treeItem > a:hover`.
+
+   Color deliberately does NOT use --treeitem-selected-bg-color (0.25 alpha) —
+   that is PDF.js's *selected* weight and reads far too dark for a transient
+   focus ring. This matches the Vue app's `[data-nav-item].is-focused`, a 10%
+   mix of the text color, which also keeps it lighter than the 0.15 hover token
+   so hovering a focused row still reads as a change. */
+#outlineSearchResults .treeItem > a.is-focused,
+#outlinesView .treeItem > a.is-focused {
+  background-color: color-mix(in srgb, var(--main-color) 10%, transparent) !important;
+  background-clip: padding-box;
+  border-radius: 2px;
+}
+
+/* Current-entry tracking uses PDF.js's own `.selected` styling — no separate
+   highlight class. The row covering the page being viewed IS the selected item,
+   so page tracking and a manual click share one highlight and one piece of state
+   (`_currentTreeItem`). See outline-search.js — revealCurrentEntry().
+
+   PDF.js's own weight for this is too heavy here. Its `--treeitem-selected-bg-color`
+   is 0.25 alpha, chosen for a selection the user makes deliberately and rarely;
+   ours now moves on every page turn, so it reads as a constantly-shifting dark
+   block. Retune the TOKEN rather than the rule, so every `.selected` consumer
+   stays consistent.
+
+   The three tree highlights must stay separable, so keep this ordering:
+     focus ring   10% (color-mix, see below)
+     hover      0.15  (--treeitem-bg-color, PDF.js)
+     selected   0.18  (here — above hover so it still reads as selection)
+
+   Both blocks below mirror PDF.js's own structure for this token, including the
+   exact `@supports` condition, so whichever branch the browser takes ours is the
+   one that wins on load order (viewer-custom.css loads after viewer.css). */
+.treeView {
+  --treeitem-selected-bg-color: rgb(0 0 0 / 0.18);
+}
+
+@media (prefers-color-scheme: dark) {
+  .treeView {
+    --treeitem-selected-bg-color: rgb(255 255 255 / 0.18);
+  }
+}
+
+@supports (color: light-dark(red, red)) and (color: rgb(0 0 0 / 0)) {
+  .treeView {
+    --treeitem-selected-bg-color: light-dark(rgb(0 0 0 / 0.18), rgb(255 255 255 / 0.18));
+  }
+}
+
+/* Opening a result calls the original anchor's handler, so PDF.js's
+   `_updateCurrentTreeItem` marks that row `.selected` — in the *tree*, which is
+   hidden at the time. Its `.selected:is(.treeView .treeItem) > a` rule then
+   painted the matching tree row with the heavy selected color, still showing
+   after the query was cleared. #outlineSearchResults also carries `.treeView`,
+   so that rule reaches these rows too. Suppress it here and let `.is-focused`
+   be the only highlight in the results list; the real tree keeps its own
+   selected styling untouched. */
+#outlineSearchResults .treeItem.selected > a {
+  background-color: transparent;
+  color: var(--treeitem-color);
+}
+
+/* Ancestor path subtitle under each result, mirroring the Vue panel's rows.
+   `isolate` keeps its own bidi run: the path is built by joining ancestor titles
+   with " · ", and without isolation a title ending in ":" or "." would let that
+   weak punctuation reorder against the separator. */
+.outlineSearchPath {
+  display: block;
+  direction: rtl;
+  unicode-bidi: isolate;
+  font-size: 11px;
+  line-height: 13px;
+  opacity: 0.6;
+}

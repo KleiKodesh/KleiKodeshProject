@@ -1158,6 +1158,358 @@ loads normally, and there are no console errors.
 
 ---
 
+## Outline panel — search input (תוכן עניינים), flat ranked results
+
+Adds a search input to the outline side panel that behaves **identically to the BookView
+TOC side-panel search**: typing filters the table of contents down to a flat, ranked list
+of matches (best first); clearing the query restores the normal nested tree.
+
+Entirely additive — one new file plus a `<script>` tag and a CSS block. **No `viewer.mjs`
+patches**, so nothing here conflicts with a PDF.js upgrade; the only upgrade risk is the
+outline DOM shape changing (see "If the outline DOM changes" below).
+
+### Added file: `web/outline-search.js`
+
+Self-contained. Two parts:
+
+1. **A hand-written port of the Vue app's `SegmentSearchTree`**
+   (`vue-frontend/src/utils/segmentSearchTree.ts`) — `tokenizeSegmentText` plus the
+   3-pass scoring algorithm (score with segment-crossing penalty → bond detection →
+   ancestry dedup), including the exact-last-word retry and the Talmud-page suffix rule.
+2. **The panel wiring** — DOM indexer, flat result renderer, and event hookup.
+
+**Why a port and not an import.** `public/` is copied to the output verbatim and is not
+part of the Vue module graph; importing from `src/` would couple `public/pdfjs/` to the
+Vue build output, which nothing else there does. The duplication is deliberate.
+
+**Keeping the two copies in sync** is guarded by a test:
+`vue-frontend/src/utils/outlineSearchPortEquivalence.test.ts` loads `outline-search.js`,
+extracts the ported class, and asserts it produces byte-identical rankings to
+`segmentSearchTree.ts` across 27 queries plus tokenizer, display-path, result-limit, and
+leaf-only-candidate checks. **If you change either implementation, run
+`npm run test` — a divergence fails there.** The test locates the port's internals by
+searching for the literal `  if (document.readyState === ` line, so keep that line as the
+IIFE's last statement.
+
+### How the filtering works
+
+- On `outlineloaded`, the index is invalidated (lazily rebuilt on first keystroke, so a
+  document with a TOC the user never searches costs nothing).
+- `indexOutline()` reads `#outlinesView`'s nested `div.treeItem > a` DOM into a flat
+  `{id, parentId, text, anchor}` list. Nesting is
+  `div.treeItem > div.treeItems > div.treeItem`, so an item's parent is its nearest
+  ancestor `.treeItem` — this reconstructs the same ancestor chain that `parentId` gives
+  the Vue tree, which is what makes segment-aware scoring possible.
+- While a query is active, `#outlinesView` gets `.outlineSearchActive` (`display:none`)
+  and a sibling `#outlineSearchResults` holds the flat rows. It reuses the `.treeView`
+  class **without** `withNesting`, so rows are styled exactly like real outline rows but
+  unindented.
+- Each result row's anchor is a **clone** (href + bold/italic styles copied). Clicking it
+  is delegated to the original anchor via `.click()`, so PDF.js's own `_bindLink` handler
+  stays the single source of truth for navigation and selected-item tracking. Nothing in
+  `viewer.mjs` needed changing.
+- Results are capped at **100**, matching the Vue `TreeView`'s filtered-list limit.
+- Each row shows its ancestor path as a `.outlineSearchPath` subtitle, mirroring the Vue
+  panel's result rows.
+
+The input is shown only when the outline view is active **and** `outlineCount > 0`.
+`Escape` clears the query (and stops propagating so it does not close the sidebar instead).
+
+**Keyboard navigation** works in **both modes** — the flat results while a query is
+active, and the nested outline tree otherwise — and is driven entirely from the search
+input's `keydown`, so there is one code path and the caret never has to leave the box.
+It is a port of the Vue app's `useListKeys` (`src/composables/useListKeyNav.ts`), the same
+composable that drives the BookView TOC list: **Up/Down** move, **Home/End** jump to the
+ends, **Enter** activates.
+
+In the **tree**, two extra bindings handle hierarchy. Because the outline is RTL,
+**ArrowLeft expands** (goes deeper) and **ArrowRight collapses** (goes back toward the
+root), mirroring the chevron direction in BookView's RTL tree; collapsing an
+already-collapsed row climbs to its parent. Both rely on PDF.js internals verified in
+`viewer.mjs` / `viewer.css`:
+
+- `.treeItemToggler` is `prepend`ed as the **first child** of `.treeItem`
+  (`_addToggleButton`), hence the `:scope > .treeItemToggler` lookup.
+- `.treeItemsHidden ~ .treeItems { display: none }` is the collapsed state, so collapsed
+  rows are genuinely `display:none` and `navItems()` filters them with
+  `offsetParent === null`. Without that filter, arrowing would step through invisible rows.
+
+Focus is **not** carried across a mode switch: the tree and the results have unrelated
+orderings, so an index would land the ring on an arbitrary row. `paintFocus()` clears
+rings in *both* containers before painting, so switching modes or collapsing the focused
+row can never strand a stale highlight.
+
+**Space** toggles expand/collapse on the focused tree row, and opens it when it is a leaf
+— mirroring BookView's `TreeNode.vue`, where Space toggles a parent and selects a leaf.
+It is bound **only while the query box is empty**: queries are multi-word
+(`"פסחים דף ד"`), so Space has to stay typable the moment there is any text. This is the
+one place the port cannot follow BookView unconditionally — there the list is not a text
+field, here it is.
+
+One deliberate difference from `useListKeys`, because the key target here is a text input
+rather than a list: focus is **painted** on the row (`.is-focused`) rather than moved there
+as real DOM focus, so the caret stays in the query box and the user can keep typing to
+refine while arrowing. `scrollIntoView({ block: 'nearest' })` matches `useListKeys`.
+
+**Arrowing starts from the current entry, not from the top.** The first Up/Down press in
+the tree seeds the ring onto the row for the page being viewed (`seedFocusFromCurrent()`)
+and consumes that keypress, so the next press moves off it. Arrowing is a continuation of
+"where am I" rather than a fresh traversal — in a 500-page book, starting at row 0 would
+mean hundreds of presses to get back to the reading position. The seed calls
+`revealCurrentEntry()` first, since the current row may sit inside a collapsed branch and
+must be expanded before `navItems()` will consider it navigable. If there is no current
+entry yet, it falls through to row 0 as before. Results mode is excluded — there the top
+hit is already the right starting point.
+
+Re-rendering on each keystroke resets the index to the **top hit**, so Enter alone opens
+the best match. Activation calls `.click()` on the row, which flows through the same
+delegated handler as a real mouse click (a synthetic click bubbles and `closest()` matches
+it), so there is exactly one navigation path.
+
+**Focus must be reclaimed after every activation**, or keyboard navigation dies after a
+single Enter. **Two** separate things steal it, at two different times:
+
+1. **The row itself** — these are real `<a href>` elements, so activating one (by Enter or
+   by mouse, in either mode) focuses it synchronously.
+2. **`PDFLinkService.goToDestination()`** — it registers a one-shot `textlayerrendered`
+   listener and calls `evt.source.textLayer.div.focus()` when the destination page
+   renders (`viewer.mjs`, in `goToDestination`). That is **asynchronous and unbounded**:
+   on a cold page it can land hundreds of ms later, long after any `requestAnimationFrame`
+   we might wait on. The text layer is focusable because `TextLayerBuilder` sets
+   `this.div.tabIndex = 0`.
+
+A single deferred re-focus therefore is not enough — that was a real bug. `refocusInput()`
+instead focuses the input immediately and opens a **1 s reclaim window**; a capturing
+document-level `focusin` listener (it bubbles, unlike `focus`) pulls focus back for the
+duration. Reclaiming is restricted to the elements activation is *known* to focus — an
+outline anchor or a `.textLayer` — so it never yanks focus from somewhere the user
+deliberately clicked, and the window is short enough that it cannot fight a later genuine
+focus change.
+
+Mouse clicks additionally sync the ring to the clicked row, so a following Enter/Arrow
+continues from there.
+
+The tree's click listener is bound on `#outlinesView`, the **same element** PDF.js binds
+its toggler listener to — `stopEvent()`'s `stopPropagation()` does not prevent other
+listeners on that same element from running, so both coexist. Toggler clicks are skipped
+explicitly so expanding/collapsing does not move the ring.
+
+**Autofocus** is driven from `updateVisibility()` on the hidden→visible transition, *not*
+from any single event. Visibility depends on two inputs — the active view and
+`outlineCount` — and either can be the last to arrive: the "default to the outline"
+customization above switches the view **before** the outline loads, so
+`sidebarviewchanged` fires while `outlineCount` is still 0 (bar correctly hidden, no focus)
+and it is `outlineloaded` that reveals the bar. Driving focus off the transition covers
+both orderings. Two details make it robust:
+
+- A `wasVisible` flag limits focus to the transition itself. PDF.js's `open()` calls
+  `switchView(this.active)` and then `#dispatchEvent()` unconditionally, so opening the
+  sidebar dispatches `sidebarviewchanged` twice with the same view; the flag also stops a
+  later unrelated dispatch from yanking focus out of the outline list while the user is
+  arrowing through it.
+- The focus call is deferred one `requestAnimationFrame`, because the bar is revealed by
+  removing `.hidden` in the same tick and `focus()` does nothing on a `display:none`
+  element.
+
+Re-focusing on every open (not just the first) falls out of `#dispatchEvent()` sending
+`view: this.visibleView`, whose getter returns `SidebarView.NONE` while the sidebar is
+closed — so closing resets `wasVisible` and reopening is a genuine transition again.
+
+### `web/viewer.html` — script tag
+
+Add immediately after `<script src="viewer.mjs" type="module"></script>`:
+
+```html
+<!-- CUSTOM: outline (תוכן עניינים) search input — flat ranked results,
+     mirroring the BookView TOC side-panel search. Self-contained; it polls for
+     PDFViewerApplication, so load order relative to viewer.mjs does not matter. -->
+<script src="outline-search.js" defer></script>
+```
+
+### `web/viewer-custom.css`
+
+The search bar is inserted **after** `#viewsManagerContent` (below the scroll area, like
+BookView's `.toc-search`, which renders after its tree). Two things about the parent
+`#viewsManager` matter, and both cost a rule:
+
+- It is `display:flex; flex-direction:column; **align-items:flex-start**` — so
+  `align-self: stretch` is **required**, otherwise the bar shrinks to its content width.
+- It has `**padding-bottom: 16px**`. That was invisible while the scrollable
+  `#viewsManagerContent` was the last child, but the search bar is now last, so the
+  padding renders as a stray gap between the input and the panel's bottom edge. The
+  `:has()` rule below zeroes it only while the bar is visible, so the pages/attachments/
+  layers views keep PDF.js's original 16px. (`:has()` takes the specificity of its most
+  specific argument, so `#viewsManager:has(#outlineSearchBar…)` is 2 IDs and beats
+  PDF.js's 1-ID `#viewsManager` rule regardless of load order.)
+
+```css
+#outlinesView.outlineSearchActive { display: none; }
+
+#viewsManager:has(#outlineSearchBar:not(.hidden)) { padding-bottom: 0; }
+
+#outlineSearchBar {
+  flex: 0 0 auto;
+  align-self: stretch;   /* required — parent is align-items:flex-start */
+  /* no margin/padding-bottom here — the parent's 16px is zeroed above instead */
+  box-sizing: border-box;
+  padding: 5px 6px 6px;
+  border-top: 1px solid var(--separator-color);
+  background: var(--toolbar-bg-color);
+}
+#outlineSearchBar.hidden { display: none; }
+#outlineSearchInner { display: flex; align-items: center; padding: 1px 6px; }
+#outlineSearchInput {
+  flex: 1; width: 0; min-width: 0;
+  padding: 0;
+  height: 18px; line-height: 18px;   /* see note below */
+  direction: rtl; text-align: right;  /* see the bidi note below */
+  background: none; border: none; outline: none;
+  font-size: 12px; font-family: inherit; color: var(--main-color);
+}
+.outlineSearchPath {
+  display: block;
+  direction: rtl; unicode-bidi: isolate;
+  font-size: 11px; line-height: 13px; opacity: 0.6;
+}
+
+/* keyboard focus ring — both containers */
+#outlineSearchResults .treeItem > a.is-focused,
+#outlinesView .treeItem > a.is-focused {
+  background-color: color-mix(in srgb, var(--main-color) 10%, transparent) !important;
+  background-clip: padding-box;
+  border-radius: 2px;
+}
+/* suppress PDF.js's .selected styling inside the results — see note below */
+#outlineSearchResults .treeItem.selected > a {
+  background-color: transparent;
+  color: var(--treeitem-color);
+}
+#outlineSearchInput::placeholder { color: var(--main-color); opacity: 0.6; }
+#outlineSearchInput::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
+.outlineSearchPath { display: block; font-size: 11px; line-height: 13px; opacity: 0.6; }
+```
+
+Colors use PDF.js's own themed variables (which `viewer-custom.css` already maps onto the
+app's `--*-custom` values).
+
+**Bidi — every new text surface needs `direction: rtl`.** The viewer root is `dir="ltr"`,
+so any Hebrew string ending in weak punctuation (`:` or `.` — extremely common in these
+TOCs, e.g. `דף ד:`) renders with that punctuation jumping to the *wrong end*. The
+pre-existing "Hebrew RTL outline (TOC) sidebar" rule above fixes this for
+`.treeItem > a`, which the flat result rows inherit for free because they are built with
+the same `div.treeItem > a` shape — that is a reason to keep that shape. But the rule does
+**not** reach the two surfaces this feature adds, so both set it themselves:
+
+- `#outlineSearchInput` — without it a typed query like `ד:` shows the colon on the left.
+  `text-align: right` keeps the caret on the Hebrew side.
+- `.outlineSearchPath` — uses `unicode-bidi: isolate` (not `embed`) because the path joins
+  ancestor titles with `" · "`, and an ancestor ending in `:` would otherwise reorder
+  against that separator.
+
+If you add another text element here, set `direction: rtl` on it too.
+
+**Two highlight gotchas**, both worth knowing before retuning these colors:
+
+- The focus ring must **not** use `--treeitem-selected-bg-color` (0.25 alpha). That is
+  PDF.js's *selected* weight and reads far too dark for a transient ring. The
+  `color-mix(… 10%)` above matches the Vue app's `[data-nav-item].is-focused` and stays
+  lighter than the 0.15 hover token, so hovering a focused row still reads as a change.
+- Opening a search result routes through the original anchor's handler, so PDF.js's
+  `_updateCurrentTreeItem` marks that row `.selected` — and since `#outlineSearchResults`
+  also carries the `.treeView` class, PDF.js's `.selected:is(.treeView .treeItem) > a`
+  rule painted the matching **results** row with that same heavy color, which lingered
+  after the query was cleared. The suppression rule above scopes that styling back to the
+  real tree, where it belongs (it is the current-entry indicator — see the
+  current-entry-tracking section).
+
+**Mangled titles are a separate, non-CSS problem.** ABBYY FineReader and some other
+producers store Hebrew outline titles with trailing punctuation encoded in visual/LTR
+order, so the string literally begins with the punctuation: `".מח"` instead of `"מח."`.
+No amount of `direction: rtl` fixes that — the characters really are in that order.
+`normalizeOutlineTitle()` in `outline-search.js` detects leading punctuation followed by a
+Hebrew letter and moves it to the end. It runs in two places:
+
+- `normalizeOutlineDom()`, on `outlineloaded`, rewrites PDF.js's own rendered tree in
+  place (`_finishRendering()` appends the DOM *before* dispatching the event, so it is
+  available). Correcting the DOM rather than patching `PDFOutlineViewer.render` keeps this
+  additive and upgrade-safe.
+- `indexOutline()`, so search matches what the user sees — a query for `מח.` finds a title
+  stored as `.מח`.
+
+This is a **port of the Vue app's `normalizeOutlineTitle`**
+(`src/features/pdf-viewer/usePdfViewPageTracking.ts`), which applies the same correction to
+the titlebar breadcrumb; that copy predates the sidebar search and only ever covered the
+breadcrumb. Keep the two in sync — including the regex's `.` (not `[\s\S]`), which leaves
+titles containing a newline untouched instead of reordering across the line break.
+
+**On the compact sizing.** The paddings are deliberately tighter than
+`BookViewTocTree.vue`'s `.toc-search` (which uses `5px 6px 6px` + `4px 8px`): the PDF
+sidebar is narrower and shorter than the BookView panel, so the same values read as a
+too-tall row there. Three paddings stack in this bar — the bar's, `#outlineSearchInner`'s,
+and the input's own — plus the UA's default `height`/`line-height` on `input[type=search]`,
+which is **not** derived from `font-size` and silently adds a few px. `padding: 0` and an
+explicit `height`/`line-height` on the input pin the row to exactly the 12px text plus the
+two paddings above it (~24px total, down from ~37px). If you retune this, change the
+paddings and leave the height pins alone, or the UA default creeps back in.
+
+### No locale change needed
+
+The placeholder (`חיפוש...`) and tooltip are hardcoded Hebrew with no `data-l10n-id`,
+matching the select-all checkbox convention above — the iframe is always loaded with
+`?locale=he`.
+
+### Current-entry tracking (follows the page as you scroll)
+
+The outline row covering the page being viewed becomes PDF.js's **selected** item, updated
+on every `pagechanging` and on document load — the same relationship BookView's line view
+has with its TOC. Every ancestor is expanded recursively so the row is visible, and it is
+scrolled into view with `block: 'nearest'`.
+
+`revealCurrentEntry()` calls **`pdfOutlineViewer._updateCurrentTreeItem()`** rather than
+maintaining a parallel highlight class. That is PDF.js's own selected-item bookkeeping: it
+holds `_currentTreeItem` and clears the previous row when a new one is set, so page
+tracking and a manual click share one highlight and one piece of state and can never leave
+two rows marked. There is a defensive fallback that toggles `.selected` directly if that
+private method is ever renamed upstream.
+
+The ancestor walk mirrors PDF.js's `_scrollToCurrentTreeItem`, with one deliberate
+difference: it scrolls `block: 'nearest'` where PDF.js uses `'center'`, which would yank
+the list on every page turn.
+
+**PDF.js has this feature and it cannot be reused here.** `_currentOutlineItem()` does
+exactly this, but it is gated on `_isPagesLoaded`, and `_dispatchEvent()` resolves its
+`currentOutlineItemPromise` to `false` whenever `disableAutoFetch` is set — which this
+viewer sets deliberately (see the memory-reduction AppOptions section). So its toolbar
+button is permanently disabled here. The underlying reason is `_getPageNumberToDestHash()`
+resolving pages via `cachedPageNumber()`, which only answers once every page is loaded.
+
+`buildPageIndex()` instead resolves each destination with **`getPageIndex()`**, which works
+without loading all pages — the same approach the Vue app's `usePdfViewPageTracking` uses
+for the titlebar breadcrumb. Rows are matched to entries by **destination hash**
+(`linkService.getDestinationHash(dest)`), which is exactly what PDF.js assigns to each
+anchor's `href` in `_bindLink`, so the two align by construction; this avoids assuming the
+BFS render order matches `querySelectorAll` document order (they differ for nested trees).
+The active entry for page N is the **last** entry with `page <= N`, matching BookView's
+`getActiveTocEntry`.
+
+A `pageIndexToken` counter guards the async build: switching documents bumps it so an
+in-flight build from the previous document discards its result. Revealing is suppressed
+while the panel is hidden or search results are showing, and re-triggered when the panel
+opens or the query is cleared.
+
+No custom CSS is involved — the current row is styled by PDF.js's existing
+`.selected:is(.treeView .treeItem) > a` rule. The keyboard focus ring (`.is-focused`) is
+separate and can sit on a different row, which is correct: one means "where the page is",
+the other "where the keyboard is".
+
+### If the outline DOM changes on upgrade
+
+Only two assumptions matter, both in `indexOutline()`:
+`.treeItem` is the per-item wrapper class, and an item's own anchor is `:scope > a`.
+Verify those in `PDFOutlineViewer.render()` (search for `div.className = "treeItem"`).
+
+---
+
 ## Vue App Integration (no changes needed on upgrade)
 
 These live in the Vue app and do not need to be re-applied to PDF.js:
