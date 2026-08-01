@@ -616,7 +616,7 @@ public sealed partial class SeforimDbService
                     {
                         TargetBookId = r.IsDBNull(0) ? 0 : CorpusIds.ToAppId(r.GetInt32(0), corpus),
                         TargetLineId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
-                        ConnectionTypeId = ToAppConnTypeId(r.IsDBNull(2) ? 0 : r.GetInt32(2), corpus, typeMaps),
+                        ConnectionTypeId = r.IsDBNull(2) ? 0 : ToAppConnTypeId(r.GetInt32(2), corpus, typeMaps),
                         LineIndex = r.IsDBNull(3) ? 0 : r.GetInt32(3),
                     });
                 }
@@ -825,7 +825,7 @@ public sealed partial class SeforimDbService
                 list.Add(new StaticFilterRow
                 {
                     TargetBookId = r.IsDBNull(0) ? 0 : CorpusIds.ToAppId(r.GetInt32(0), corpus),
-                    ConnectionTypeId = ToAppConnTypeId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus, typeMaps),
+                    ConnectionTypeId = r.IsDBNull(1) ? 0 : ToAppConnTypeId(r.GetInt32(1), corpus, typeMaps),
                 });
             }
         }, "getStaticFilterBooks");
