@@ -57,26 +57,47 @@ public sealed partial class SeforimDbService
 
     private readonly ConnTypeMaps?[] _connTypes = new ConnTypeMaps?[2];
     private long _connTypeUserStamp = -1;
+    private readonly object _connTypeLock = new();
 
     /// <summary>The (id↔name) maps of one corpus, or null when that DB is unavailable.
     /// The user map is invalidated when user_books.db changes on disk (Otzaria appends
-    /// connection types lazily as links are created); the library map loads once.</summary>
+    /// connection types lazily as links are created); the library map loads once.
+    ///
+    /// The user maps and their stamp are read and stored as an ATOMIC PAIR under
+    /// <see cref="_connTypeLock"/>: a load that lost a race stores its (older) maps
+    /// together with the stamp it loaded FOR, so the very next stamp compare sees the
+    /// mismatch and reloads. Advancing the stamp separately from the maps would pin a
+    /// stale generation under the new stamp — translations silently wrong until the DB
+    /// changed again.</summary>
     private ConnTypeMaps? GetConnTypes(Corpus corpus)
     {
-        if (corpus == Corpus.UserBooks)
+        if (corpus == Corpus.Library)
         {
-            long stamp = UserBooksChangeStamp;
-            if (stamp != _connTypeUserStamp)
-            {
-                _connTypes[(int)Corpus.UserBooks] = null;
-                _connTypeUserStamp = stamp;
-            }
-            if (stamp == 0) return null;
+            if (!HasDb) return null;
+            if (_connTypes[(int)Corpus.Library] is { } cachedLib) return cachedLib;
+            var lib = LoadConnTypeMaps(Corpus.Library);
+            if (lib is not null) _connTypes[(int)Corpus.Library] = lib; // idempotent content — benign race
+            return lib;
         }
-        else if (!HasDb) return null;
 
-        if (_connTypes[(int)corpus] is { } cached) return cached;
+        long stamp = UserBooksChangeStamp;
+        if (stamp == 0) return null;
+        lock (_connTypeLock)
+            if (_connTypes[(int)Corpus.UserBooks] is { } cached && _connTypeUserStamp == stamp)
+                return cached;
 
+        var maps = LoadConnTypeMaps(Corpus.UserBooks);
+        if (maps is null) return null;
+        lock (_connTypeLock)
+        {
+            _connTypes[(int)Corpus.UserBooks] = maps;
+            _connTypeUserStamp = stamp;
+        }
+        return maps;
+    }
+
+    private ConnTypeMaps? LoadConnTypeMaps(Corpus corpus)
+    {
         var maps = new ConnTypeMaps();
         try
         {
@@ -97,9 +118,17 @@ public sealed partial class SeforimDbService
             logger.LogError(ex, "connection-type load failed ({Corpus})", corpus);
             return null;
         }
-        _connTypes[(int)corpus] = maps;
         return maps;
     }
+
+    /// <summary>
+    /// Row-translation snapshot for one query: resolve the maps ONCE before iterating a
+    /// reader, not per row — per-row resolution would re-stat user_books.db for every
+    /// row and could even mix two map generations inside one result set if Otzaria
+    /// writes mid-iteration. Library rows translate as identity without touching maps.
+    /// </summary>
+    private (ConnTypeMaps? User, ConnTypeMaps? Lib) SnapshotConnTypes(Corpus corpus) =>
+        corpus == Corpus.Library ? (null, null) : (GetConnTypes(Corpus.UserBooks), GetConnTypes(Corpus.Library));
 
     /// <summary>
     /// A connection-type id read from <paramref name="corpus"/>, translated to the
@@ -107,12 +136,12 @@ public sealed partial class SeforimDbService
     /// the library id of the SAME NAME. A user-only name (no library counterpart)
     /// falls back to its shifted id — kept distinct rather than mislabelled.
     /// </summary>
-    private int ToAppConnTypeId(int localTypeId, Corpus corpus)
+    private static int ToAppConnTypeId(int localTypeId, Corpus corpus, (ConnTypeMaps? User, ConnTypeMaps? Lib) maps)
     {
         if (corpus == Corpus.Library) return localTypeId;
-        if (GetConnTypes(Corpus.UserBooks) is { } user
+        if (maps.User is { } user
             && user.IdToName.TryGetValue(localTypeId, out var name)
-            && GetConnTypes(Corpus.Library) is { } lib
+            && maps.Lib is { } lib
             && lib.NameToId.TryGetValue(name, out int libId))
             return libId;
         return CorpusIds.ToAppId(localTypeId, corpus);
@@ -188,12 +217,16 @@ public sealed partial class SeforimDbService
 
         var lib = LibraryCategories();
         List<CategoryRow> merged;
+        bool userOk = true; // failed user read ⇒ serve library-only but DON'T cache it,
+                            // so the next call retries instead of pinning until the
+                            // file's stamp happens to change.
         if (stamp == 0)
         {
             merged = lib;
         }
         else
         {
+            userOk = false;
             var user = new List<CategoryRow>();
             Run(Corpus.UserBooks, () =>
             {
@@ -212,6 +245,7 @@ public sealed partial class SeforimDbService
                         Level = r.IsDBNull(3) ? 0 : r.GetInt32(3),
                     });
                 }
+                userOk = true;
             }, "getAllCategories");
 
             merged = new List<CategoryRow>(lib.Count + user.Count);
@@ -219,7 +253,7 @@ public sealed partial class SeforimDbService
             merged.AddRange(user);
         }
 
-        if (merged.Count > 0)
+        if (merged.Count > 0 && userOk)
         {
             lock (_catalogCacheLock)
             {
@@ -270,12 +304,14 @@ public sealed partial class SeforimDbService
 
         var lib = LibraryBooks();
         List<BookRow> merged;
+        bool userOk = true; // see GetAllCategories — a failed user read must not be cached
         if (stamp == 0)
         {
             merged = lib;
         }
         else
         {
+            userOk = false;
             var user = new List<BookRow>();
             Run(Corpus.UserBooks, () =>
             {
@@ -294,6 +330,7 @@ public sealed partial class SeforimDbService
                         Authors = r.IsDBNull(4) ? null : r.GetString(4),
                     });
                 }
+                userOk = true;
             }, "getAllBooks");
 
             merged = new List<BookRow>(lib.Count + user.Count);
@@ -301,7 +338,7 @@ public sealed partial class SeforimDbService
             merged.AddRange(user);
         }
 
-        if (merged.Count > 0)
+        if (merged.Count > 0 && userOk)
         {
             lock (_catalogCacheLock)
             {
@@ -521,7 +558,7 @@ public sealed partial class SeforimDbService
                     {
                         Id = CorpusIds.ToAppId(r.GetInt32(0), corpus),
                         ParentId = CorpusIds.ToAppId(r.IsDBNull(1) ? null : r.GetInt32(1), corpus),
-                        BookId = CorpusIds.ToAppId(r.IsDBNull(2) ? 0 : r.GetInt32(2), corpus),
+                        BookId = r.IsDBNull(2) ? 0 : CorpusIds.ToAppId(r.GetInt32(2), corpus),
                         Text = r.IsDBNull(3) ? "" : r.GetString(3),
                         LineIndex = r.IsDBNull(4) ? null : r.GetInt32(4),
                     });
@@ -567,6 +604,7 @@ public sealed partial class SeforimDbService
             Run(corpus, () =>
             {
                 using var conn = Open(corpus);
+                var typeMaps = SnapshotConnTypes(corpus);
                 using var cmd = conn.CreateCommand();
                 cmd.CommandText = SeforimSql.GetCommentaryLinksForSourceLineRange(
                     localIds.Count, LinkHasTargetLineIndex(conn, corpus));
@@ -576,9 +614,9 @@ public sealed partial class SeforimDbService
                 {
                     list.Add(new CommentaryLinkRow
                     {
-                        TargetBookId = CorpusIds.ToAppId(r.IsDBNull(0) ? 0 : r.GetInt32(0), corpus),
-                        TargetLineId = CorpusIds.ToAppId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
-                        ConnectionTypeId = ToAppConnTypeId(r.IsDBNull(2) ? 0 : r.GetInt32(2), corpus),
+                        TargetBookId = r.IsDBNull(0) ? 0 : CorpusIds.ToAppId(r.GetInt32(0), corpus),
+                        TargetLineId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
+                        ConnectionTypeId = ToAppConnTypeId(r.IsDBNull(2) ? 0 : r.GetInt32(2), corpus, typeMaps),
                         LineIndex = r.IsDBNull(3) ? 0 : r.GetInt32(3),
                     });
                 }
@@ -615,12 +653,12 @@ public sealed partial class SeforimDbService
                 {
                     result.Rows.Add(new WordLinkAnchorRow
                     {
-                        LineId = CorpusIds.ToAppId(r.IsDBNull(0) ? 0 : r.GetInt32(0), corpus),
+                        LineId = r.IsDBNull(0) ? 0 : CorpusIds.ToAppId(r.GetInt32(0), corpus),
                         CharStart = r.IsDBNull(1) ? 0 : r.GetInt32(1),
                         CharEnd = r.IsDBNull(2) ? null : r.GetInt32(2),
                         Label = r.IsDBNull(3) ? null : r.GetString(3),
-                        TargetBookId = CorpusIds.ToAppId(r.IsDBNull(4) ? 0 : r.GetInt32(4), corpus),
-                        TargetLineId = CorpusIds.ToAppId(r.IsDBNull(5) ? 0 : r.GetInt32(5), corpus),
+                        TargetBookId = r.IsDBNull(4) ? 0 : CorpusIds.ToAppId(r.GetInt32(4), corpus),
+                        TargetLineId = r.IsDBNull(5) ? 0 : CorpusIds.ToAppId(r.GetInt32(5), corpus),
                         TargetLineIndex = r.IsDBNull(6) ? 0 : r.GetInt32(6),
                     });
                 }
@@ -730,8 +768,8 @@ public sealed partial class SeforimDbService
                 {
                     list.Add(new ReverseLineRow
                     {
-                        SourceBookId = CorpusIds.ToAppId(r.IsDBNull(0) ? 0 : r.GetInt32(0), corpus),
-                        SourceLineId = CorpusIds.ToAppId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
+                        SourceBookId = r.IsDBNull(0) ? 0 : CorpusIds.ToAppId(r.GetInt32(0), corpus),
+                        SourceLineId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
                         LineIndex = r.IsDBNull(2) ? 0 : r.GetInt32(2),
                         Content = r.IsDBNull(3) ? "" : r.GetString(3),
                     });
@@ -776,6 +814,7 @@ public sealed partial class SeforimDbService
         Run(corpus, () =>
         {
             using var conn = Open(corpus);
+            var typeMaps = SnapshotConnTypes(corpus);
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimSql.GetStaticFilterBooks(localTypes.Count);
             cmd.Parameters.AddWithValue("@bookId", CorpusIds.ToLocalId(sourceBookId));
@@ -785,8 +824,8 @@ public sealed partial class SeforimDbService
             {
                 list.Add(new StaticFilterRow
                 {
-                    TargetBookId = CorpusIds.ToAppId(r.IsDBNull(0) ? 0 : r.GetInt32(0), corpus),
-                    ConnectionTypeId = ToAppConnTypeId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
+                    TargetBookId = r.IsDBNull(0) ? 0 : CorpusIds.ToAppId(r.GetInt32(0), corpus),
+                    ConnectionTypeId = ToAppConnTypeId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus, typeMaps),
                 });
             }
         }, "getStaticFilterBooks");
@@ -899,7 +938,7 @@ public sealed partial class SeforimDbService
                     list.Add(new TocPathRow
                     {
                         LineId = CorpusIds.ToAppId(r.GetInt32(0), corpus),
-                        BookId = CorpusIds.ToAppId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
+                        BookId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
                         TocPath = r.IsDBNull(2) ? "" : r.GetString(2),
                     });
                 }
@@ -960,7 +999,7 @@ public sealed partial class SeforimDbService
                 list.Add(new EnclosingTocPathRow
                 {
                     GroupKey = r.GetInt32(0),
-                    BookId = CorpusIds.ToAppId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
+                    BookId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
                     TocPath = r.IsDBNull(2) ? "" : r.GetString(2),
                 });
             }
@@ -986,7 +1025,7 @@ public sealed partial class SeforimDbService
                     list.Add(new LineBookRow
                     {
                         LineId = CorpusIds.ToAppId(r.GetInt32(0), corpus),
-                        BookId = CorpusIds.ToAppId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
+                        BookId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
                     });
                 }
             }, "getBookIdsForLines");
@@ -1010,7 +1049,7 @@ public sealed partial class SeforimDbService
                 list.Add(new LineIndexRow
                 {
                     LineIndex = r.IsDBNull(0) ? 0 : r.GetInt32(0),
-                    BookId = CorpusIds.ToAppId(r.IsDBNull(1) ? 0 : r.GetInt32(1), corpus),
+                    BookId = r.IsDBNull(1) ? 0 : CorpusIds.ToAppId(r.GetInt32(1), corpus),
                 });
             }
         }, "getLineIndexFromLineId");
@@ -1081,8 +1120,8 @@ public sealed partial class SeforimDbService
                     {
                         Content = r.IsDBNull(0) ? "" : r.GetString(0),
                         Title = r.IsDBNull(1) ? "" : r.GetString(1),
-                        BookId = CorpusIds.ToAppId(r.IsDBNull(2) ? 0 : r.GetInt32(2), corpus),
-                        LineId = CorpusIds.ToAppId(r.IsDBNull(3) ? 0 : r.GetInt32(3), corpus),
+                        BookId = r.IsDBNull(2) ? 0 : CorpusIds.ToAppId(r.GetInt32(2), corpus),
+                        LineId = r.IsDBNull(3) ? 0 : CorpusIds.ToAppId(r.GetInt32(3), corpus),
                         LineIndex = r.IsDBNull(4) ? 0 : r.GetInt32(4),
                     });
                 }
