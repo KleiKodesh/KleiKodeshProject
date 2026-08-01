@@ -21,6 +21,10 @@
  *   HebrewBooks first: היברו, היברובוקס, היברו בוקס, \ (single backslash)
  *   Files first:       מחשב, קובץ, \\ (double backslash)
  *   Default (no prefix): catalog first
+ *
+ * "תוספים" also puts files first, but it is a term rather than a prefix — see
+ * features/local-file-search/otzariaAddins.ts, which owns the addin rules the
+ * file-search page and this composable share.
  */
 
 import { ref, watch } from 'vue'
@@ -39,6 +43,7 @@ import {
   setCatalogTocCache,
 } from '@/features/book-catalog/bookCatalogTocSearchCache'
 import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
+import { normalizeAddinQuery, queryTargetsAddins } from '@/features/local-file-search/otzariaAddins'
 import { fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -62,6 +67,8 @@ export interface FileSearchResult {
   source: 'files'
   fileName: string
   fullPath: string
+  /** Non-empty only for Otzaria addin entry points. Value is "תוסף אוצריא: {name}". */
+  addinName: string
 }
 
 export type HomeSearchResult = CatalogSearchResult | HebrewBooksSearchResult | FileSearchResult
@@ -118,6 +125,11 @@ function parseQueryPrefix(rawQuery: string): ParsedQuery {
     if (trimmed.startsWith(prefix)) {
       return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, prefix) }
     }
+  }
+  // "תוספים" also puts files first, but it is a search TERM rather than a prefix —
+  // the file search rewrites it to the index's addin prefix, so it must survive here.
+  if (queryTargetsAddins(trimmed)) {
+    return { priority: 'files', effectiveQuery: trimmed }
   }
   return { priority: 'catalog', effectiveQuery: trimmed }
 }
@@ -334,7 +346,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
           if (generation === asyncGeneration) isLoadingHebrewBooks.value = false
         })
 
-      const filePromise = fileSystemSearch(effectiveQuery, 50)
+      const filePromise = fileSystemSearch(normalizeAddinQuery(effectiveQuery), 50)
         .then((response) => {
           if (generation !== asyncGeneration) return
           if (response.error || !response.results) {
@@ -345,6 +357,7 @@ export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
             source: 'files' as const,
             fileName: item.fileName,
             fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
+            addinName: item.addinName ?? '',
           })))
         })
         .catch(() => {

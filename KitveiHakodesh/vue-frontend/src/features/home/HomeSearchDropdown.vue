@@ -72,7 +72,7 @@ const emit = defineEmits<{
   selectCatalogBook: [bookId: number, bookTitle: string, openInNewTab: boolean]
   selectCatalogToc: [item: TocFsItem, openInNewTab: boolean]
   selectHebrewBook: [book: HebrewBook, openInNewTab: boolean]
-  selectFile: [fullPath: string, fileName: string, openInNewTab: boolean]
+  selectFile: [item: FileSearchResult, openInNewTab: boolean]
   selectTab: [id: string]
   closeTab: [id: string]
   selectRecent: [entry: RecentlyOpenedEntry, openInNewTab: boolean]
@@ -107,7 +107,7 @@ const allItems = computed(() => {
     | { kind: 'catalog'; bookId: number; title: string }
     | { kind: 'catalogToc'; item: TocFsItem }
     | { kind: 'hebrewBooks'; book: HebrewBook }
-    | { kind: 'file'; fullPath: string; fileName: string }
+    | { kind: 'file'; item: FileSearchResult }
   > = []
   for (const tab of props.tabs ?? []) {
     items.push({ kind: 'tab', id: tab.id })
@@ -129,7 +129,7 @@ const allItems = computed(() => {
       }
     } else {
       for (const item of props.fileResults) {
-        items.push({ kind: 'file', fullPath: item.fullPath, fileName: item.fileName })
+        items.push({ kind: 'file', item })
       }
     }
   }
@@ -144,7 +144,7 @@ function activateItem(index: number, openInNewTab = false) {
   else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title, openInNewTab)
   else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item, openInNewTab)
   else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book, openInNewTab)
-  else emit('selectFile', item.fullPath, item.fileName, openInNewTab)
+  else emit('selectFile', item.item, openInNewTab)
 }
 
 const { focusedIndex, containerFocused } = useListKeys(
@@ -171,8 +171,9 @@ function onDropdownBlur(e: FocusEvent) {
 
 type FileIconInfo = { component: unknown; color: string }
 
-function getFileIcon(fileName: string): FileIconInfo {
-  const extension = fileName.toLowerCase().split('.').pop()
+function getFileIcon(item: FileSearchResult): FileIconInfo {
+  if (item.addinName) return { component: IconPuzzlePiece20Regular, color: '#7b5ea7' }
+  const extension = item.fileName.toLowerCase().split('.').pop()
   switch (extension) {
     case 'pdf':
       return { component: IconDocumentPdf20Filled, color: '#F40F02' }
@@ -374,18 +375,18 @@ function getTabIcon(route: string): FileIconInfo {
             :key="item.fullPath"
             role="option"
             class="home-search-dropdown__item"
-            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'file' && i.fullPath === item.fullPath) }"
+            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'file' && i.item.fullPath === item.fullPath) }"
             data-nav-item
-            :title="withNewTabHint(`${item.fileName}\n${item.fullPath}`)"
-            @click="emit('selectFile', item.fullPath, item.fileName, wantsNewTab($event))"
-            @auxclick.middle="emit('selectFile', item.fullPath, item.fileName, wantsNewTab($event))"
+            :title="withNewTabHint(`${item.addinName || item.fileName}\n${item.fullPath}`)"
+            @click="emit('selectFile', item, wantsNewTab($event))"
+            @auxclick.middle="emit('selectFile', item, wantsNewTab($event))"
           >
             <component
-              :is="getFileIcon(item.fileName).component"
+              :is="getFileIcon(item).component"
               class="home-search-dropdown__item-icon"
-              :style="{ color: getFileIcon(item.fileName).color }"
+              :style="{ color: getFileIcon(item).color }"
             />
-            <span class="home-search-dropdown__item-title">{{ item.fileName }}</span>
+            <span class="home-search-dropdown__item-title">{{ item.addinName || item.fileName }}</span>
             <span class="home-search-dropdown__item-path">{{ item.fullPath }}</span>
           </div>
         </template>

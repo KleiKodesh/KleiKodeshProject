@@ -13,6 +13,7 @@ const SEARCH_PLACEHOLDERS = [
   'קובץ: ברכות',
   'או מחשב: ברכות',
   'או: \\\\ ברכות',
+  'הקלד תוספים: עבור תוספי אוצריא',
 ]
 
 const MINIMUM_QUERY_LENGTH = 2

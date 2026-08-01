@@ -20,7 +20,8 @@ import { ref, computed, nextTick, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSearchDropdown from '@/features/home/HomeSearchDropdown.vue'
-import { useHomeSearch } from '@/features/home/useHomeSearch'
+import { useHomeSearch, type FileSearchResult } from '@/features/home/useHomeSearch'
+import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
@@ -55,6 +56,7 @@ const PLACEHOLDERS = [
   'הקלד חופשי לחיפוש ספר או קובץ',
   'היברו בוקס: שבת',
   'קובץ: ברכות',
+  'תוספים: עבור תוספי אוצריא',
 ]
 const placeholder = ref(PLACEHOLDERS[0]!)
 let phraseIdx = 0, charIdx = 0, pauseTicks = 0
@@ -233,8 +235,9 @@ function onSelectHebrewBook(book: HebrewBook, openInNewTab = false) {
   close()
 }
 
-async function onSelectFile(fullPath: string, fileName: string, openInNewTab = false) {
+async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
   // Dev opens local files too now (restoreLocalFile → service capability + /khs-file proxy).
+  const { fullPath, fileName } = item
   const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
   const dotIndex = fileName.lastIndexOf('.')
   const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
@@ -267,12 +270,15 @@ async function onSelectFile(fullPath: string, fileName: string, openInNewTab = f
   const servedRoute =
     restored.kind === 'html' ? '/html-view' : restored.kind === 'pdf' ? '/pdf-view' : route
 
+  // An Otzaria addin is presented by its addin name, and the tab is flagged so
+  // HtmlViewPage activates the addin bridge — same as the file-search page.
   tabStore.updateTab(targetTabId, {
     route: servedRoute as '/html-view' | '/pdf-view',
-    title: titleWithoutExtension,
+    title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
     localFileName: fileName,
     localFilePath: fullPath,
     localFileVirtualUrl: restored.url,
+    ...(item.addinName ? { isOtzariaAddin: true } : {}),
   })
   close()
 }

@@ -514,6 +514,14 @@ export function fileSystemSearchWarmup(): void {
   action('fileSystemSearchWarmup').catch(() => {})
 }
 
+export interface FileSystemSearchHit {
+  fileName: string
+  path: string
+  modifiedDate?: number
+  /** Non-empty only for Otzaria addin entry points. Value is "תוסף אוצריא: {name}". */
+  addinName?: string
+}
+
 /**
  * Search the file system using the DocumentLocator service.
  * Starts the service on demand if it has stopped and waits until the index is ready before returning results.
@@ -523,7 +531,7 @@ export function fileSystemSearch(
   query: string,
   max = 200,
 ): Promise<{
-  results?: Array<{ fileName: string; path: string; modifiedDate?: number }>
+  results?: FileSystemSearchHit[]
   total?: number
   error?: string
 }> {
@@ -531,7 +539,7 @@ export function fileSystemSearch(
     // Dev mode: query the KitveiHakodesh service for documents. The service owns
     // the DocumentLocator delegation and the result shaping; we just ask for it.
     return serviceCall<{
-      results: Array<{ fileName: string; path: string; modifiedDate?: number }>
+      results: FileSystemSearchHit[]
       total: number
     }>('locateDocuments', { query, max }).catch((err) => ({
       error: err instanceof Error ? err.message : 'Search error',

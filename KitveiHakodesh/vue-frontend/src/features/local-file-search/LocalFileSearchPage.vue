@@ -12,6 +12,7 @@ import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
 import { useLocalFileSearch } from './useLocalFileSearch'
+import { addinDisplayTitle } from './otzariaAddins'
 import type { LocalFileSearchSortOrder, LocalFileSearchResult } from './useLocalFileSearch'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -167,7 +168,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
 
     tabStore.updateTab(targetTabId, {
       route: servedRoute as '/html-view' | '/pdf-view',
-      title: item.addinName ? item.addinName.replace(/^תוסף אוצריא:\s*/u, '').trim() : titleWithoutExtension,
+      title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
       localFileName: item.fileName,
       localFilePath: item.fullPath,
       localFileVirtualUrl: restored.url,

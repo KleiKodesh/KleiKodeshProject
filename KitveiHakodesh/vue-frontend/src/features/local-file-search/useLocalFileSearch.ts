@@ -15,6 +15,7 @@ import { ref, watch, computed, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
 import { fileSystemSearch, fileSystemSearchWarmup } from '@/webview-host/bridge'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
+import { normalizeAddinQuery } from './otzariaAddins'
 
 export interface LocalFileSearchResult {
   fileName: string
@@ -85,10 +86,7 @@ export function useLocalFileSearch(
       return
     }
 
-    // Normalize תוספים (with or without trailing colon) to the baked index prefix
-    // "תוסף אוצריא:" so users get addin results whether they type the shorthand or the
-    // full prefix. The normalized query hits the same *word* wildcards as any other term.
-    const normalizedQuery = trimmed.replace(/תוספים:?\s*/g, 'תוסף אוצריא: ')
+    const normalizedQuery = normalizeAddinQuery(trimmed)
 
     searching.value = true
     startLoadingAnimationTimer()
@@ -110,7 +108,7 @@ export function useLocalFileSearch(
         path: item.path,
         fullPath: item.path ? `${item.path}\\${item.fileName}` : item.fileName,
         modifiedDate: item.modifiedDate ?? 0,
-        addinName: (item as any).addinName ?? '',
+        addinName: item.addinName ?? '',
       }))
     } catch (error) {
       if (thisGeneration !== generation) return
