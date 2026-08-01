@@ -100,8 +100,22 @@
 
     <Copy SourceFiles="@(VstoFiles)" DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
 
-    <Message Text="Creating VSTO zip package..." Importance="high" />
-    <Exec Command="powershell -Command &quot;Compress-Archive -Path '$(TempPackageDir)\*' -DestinationPath '$(ZipOutputPath)' -Force&quot;" />
+    <!--
+      NoCompression is deliberate — the zip is a plain container, not a compressed one.
+      This zip is embedded in the exe, which NSIS then packs with /SOLID lzma. Deflating
+      here would hand NSIS incompressible bytes and defeat that outer pass; worse, a
+      per-file zip cannot dedupe across files, so the payload's cross-file redundancy
+      (three tesseract .traineddata, pdf.mjs + its .map, x64/x86 SQLite.Interop.dll,
+      Kiwix bundle.js + bundle.min.js) is only recoverable by the solid outer LZMA.
+      Measured on the v1.0.16 payload: Deflate here → 33.15 MB final exe; NoCompression
+      → 23.75 MB. Keep this in sync with SetCompressor in Build/nsis/KleiKodeshWrapper.nsi.
+
+      Do NOT switch to -CompressionLevel Optimal or an LZMA-method zip: .NET Framework
+      4.8's ZipArchive only reads Stored and Deflate, so an LZMA zip throws
+      "unsupported compression method" in AddinInstaller.ExtractAsync at runtime.
+    -->
+    <Message Text="Creating VSTO zip package (stored — NSIS applies solid LZMA)..." Importance="high" />
+    <Exec Command="powershell -Command &quot;Compress-Archive -Path '$(TempPackageDir)\*' -DestinationPath '$(ZipOutputPath)' -CompressionLevel NoCompression -Force&quot;" />
 
     <RemoveDir Directories="$(TempPackageDir)" />
     <Message Text="VSTO package ready: $(ZipOutputPath)" Importance="high" />

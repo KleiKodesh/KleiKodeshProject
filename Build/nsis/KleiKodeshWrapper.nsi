@@ -93,6 +93,18 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
   !define WPF_EXE_PATH "..\Installer\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
 !endif
 
+; ── Compression ───────────────────────────────────────────────────────────────
+; Without this line NSIS silently defaults to zlib, which is not enough to fit the
+; payload under the 30 MB target. Solid LZMA over the whole datablock is what makes
+; the size work: it dedupes across files, which a per-file zip cannot do.
+;
+; This ONLY pays off because KleiKodesh.zip is built with -CompressionLevel
+; NoCompression (see the prebuild target in Build/Installer/KleiKodeshVstoInstallerWpf.csproj).
+; If that zip ever goes back to Deflate, NSIS gets incompressible bytes and this
+; directive buys nothing — measured 66.27 MB with a Deflated zip vs 23.75 MB without.
+; The two settings are a pair; change them together or not at all.
+SetCompressor /SOLID lzma
+
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
 InstallDir "$LOCALAPPDATA\KleiKodesh"
@@ -263,9 +275,14 @@ Section "Main"
   SetOutPath "$TEMP\KleiKodeshInstaller"
   
   ; Copy WPF installer files (built for .NET Framework 4.8)
+  ;
+  ; KleiKodesh.zip is NOT copied here on purpose. It is embedded in the exe as a
+  ; managed resource (EmbeddedResource in the csproj) and AddinInstaller.ExtractAsync
+  ; reads it with GetManifestResourceStream — it never looks for a file on disk.
+  ; Shipping it alongside the exe put the whole payload in the installer twice and
+  ; cost ~33 MB for nothing (65.93 MB → 33.02 MB just by dropping it).
   File "${WPF_EXE_PATH}"
   File /nonfatal "${WPF_EXE_PATH}\..\*.config"
-  File "..\Installer\KleiKodesh.zip"
   
   ; Pass all command-line arguments through to the WPF installer unchanged
   ${GetParameters} $R0
