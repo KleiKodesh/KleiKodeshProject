@@ -57,7 +57,7 @@ namespace FtsLibTest
             Console.WriteLine($"║  Limit  : {limit:N0} lines");
             Console.WriteLine("╠════════════════════════════════════════════════════════════════════");
 
-            _passed = 0; _failed = 0;
+            _passed = 0; _failed = 0; _droppedAllSegments = false;
 
             UnitTests();
 
@@ -291,7 +291,9 @@ namespace FtsLibTest
             var rows = SegmentStore.ReadDocSourceRows(live[0].db);
             if (_droppedAllSegments)
             {
-                Check("M2 all-legacy merge carries no rows (full fallback)",
+                // (At exactly 1 segment with an empty delete set the force merge
+                // is a no-op — either way the surviving segment must stay rowless.)
+                Check("M2 all-legacy stays rowless (full fallback)",
                     rows.Count == 0, FormatRows(rows));
             }
             else
