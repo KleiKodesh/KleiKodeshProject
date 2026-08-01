@@ -378,6 +378,16 @@ FodyWeavers.xsd
 *.db-shm
 *.db-wal
 *.zim
-KitveiHakodesh/scripts/
+# Build tooling under scripts/ IS tracked (the .py/.md), but the word lists and
+# generated data it chews on are not — the committed artifact is Dictionary.db.
+KitveiHakodesh/scripts/**
+!KitveiHakodesh/scripts/**/
+!KitveiHakodesh/scripts/**/*.py
+!KitveiHakodesh/scripts/**/*.md
+KitveiHakodesh/scripts/**/terms/
+KitveiHakodesh/scripts/**/redirects/
+KitveiHakodesh/scripts/**/baseline_source6/
+KitveiHakodesh/scripts/**/__pycache__/
+KitveiHakodesh/scripts/**/*.json
 
 hebrew-typing-tutor
