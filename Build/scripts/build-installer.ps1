@@ -275,9 +275,51 @@ foreach ($asset in @($installerX64, $installerX86, $installerAny, $installerStab
 
 Remove-Item $notesFile -ErrorAction SilentlyContinue
 
-if ($LASTEXITCODE -eq 0) {
-    Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green
-} else {
+if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: GitHub release creation failed." -ForegroundColor Red
     exit 1
 }
+
+# ── 6. Verify the website's download link actually resolves ──────────────────
+#
+# The website links to a fixed, version-independent URL. GitHub resolves "latest"
+# server-side, but the *filename* is literal — it cannot interpolate a version. So
+# this URL is only valid while the release keeps carrying an asset named exactly
+# KleiKodeshSetup.exe (the stable copy made above).
+#
+# This check exists because that agreement is invisible: the filename is decided
+# here, in the website's HTML, and in its JS regex — and a mismatch downloads
+# nothing while looking perfectly fine to anyone whose browser can reach the
+# GitHub API. Fail the release instead of shipping a dead button.
+Write-Host ""
+Write-Host "Verifying website download link..." -ForegroundColor Yellow
+
+$downloadUrl = "https://github.com/KleiKodesh/KleiKodeshProject/releases/latest/download/KleiKodeshSetup.exe"
+$linkOk = $false
+try {
+    # -MaximumRedirection 0 would reject the 302 to the CDN; follow it but read
+    # only headers so the installer body is never downloaded.
+    $resp = Invoke-WebRequest -Uri $downloadUrl -Method Head -UseBasicParsing -TimeoutSec 30
+    $linkOk = ($resp.StatusCode -eq 200)
+} catch {
+    $linkOk = $false
+    Write-Host "  $($_.Exception.Message)" -ForegroundColor DarkGray
+}
+
+if ($linkOk) {
+    Write-Host "OK: $downloadUrl -> 200" -ForegroundColor Green
+} else {
+    Write-Host ""
+    Write-Host "ERROR: The website's download link does not resolve." -ForegroundColor Red
+    Write-Host "  $downloadUrl" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  The release published, but the website button is dead. Assets in $version" -ForegroundColor Yellow
+    Write-Host "  must include a file named exactly 'KleiKodeshSetup.exe'." -ForegroundColor Yellow
+    Write-Host "  Assets currently in the release:" -ForegroundColor Yellow
+    gh release view $version --repo KleiKodesh/KleiKodeshProject --json assets --jq '.assets[].name' |
+        ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
+    exit 1
+}
+
+Write-Host ""
+Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green
