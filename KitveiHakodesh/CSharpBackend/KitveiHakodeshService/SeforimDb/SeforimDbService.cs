@@ -42,13 +42,19 @@ public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
     {
         get
         {
-            if (_userBooksResolved && _userBooksDbPath is not null) return _userBooksDbPath;
-
-            // Not found (yet): re-probe at most every 5s, so the DB Otzaria creates
-            // mid-run is picked up without paying candidate File.Exists on every query.
+            // Both directions re-check at most every 5s: a DB Otzaria creates mid-run
+            // is picked up, and a deleted/moved one is DROPPED (else every personal-book
+            // query would fail its Open and log an error for the rest of the process).
             long now = Environment.TickCount64;
-            if (_userBooksResolved && now < _userBooksNextProbeTicks) return null;
+            if (_userBooksResolved && now < _userBooksNextProbeTicks) return _userBooksDbPath;
             _userBooksNextProbeTicks = now + 5_000;
+
+            if (_userBooksDbPath is not null)
+            {
+                if (File.Exists(_userBooksDbPath)) return _userBooksDbPath;
+                logger.LogInformation("personal-books DB gone from {Path} — re-probing", _userBooksDbPath);
+                _userBooksDbPath = null;
+            }
 
             _userBooksDbPath = UserBooksDbLocator.Resolve(_dbPath);
             _userBooksResolved = true;

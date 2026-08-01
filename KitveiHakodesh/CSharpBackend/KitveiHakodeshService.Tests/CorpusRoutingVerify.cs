@@ -48,6 +48,15 @@ internal static class CorpusRoutingVerify
             BuildSyntheticUserDb(synthPath);
 
             // ── A + B: service with the SYNTHETIC user DB ─────────────────────────
+            // The registry candidate OUTRANKS the env override; if it's set, sections
+            // A/B would silently run against the wrong DB and fail bafflingly.
+            if (!string.IsNullOrWhiteSpace(UserBooksDbLocator.LoadRegistryPath()))
+            {
+                Console.Error.WriteLine(
+                    $"setup: HKCU {UserBooksDbLocator.RegistryKeyPath}\\UserBooksPath is set and outranks " +
+                    "USER_BOOKS_DB_PATH — clear it before running --corpus");
+                return 2;
+            }
             Environment.SetEnvironmentVariable("USER_BOOKS_DB_PATH", synthPath);
             var svc = new SeforimDbService(Logger);
             if (!svc.HasUserBooksDb) { Fail("setup: synthetic user DB not resolved"); return 1; }
