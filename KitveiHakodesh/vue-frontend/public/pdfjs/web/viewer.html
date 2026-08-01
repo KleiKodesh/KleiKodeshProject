@@ -50,6 +50,10 @@ See https://github.com/adobe-type-tools/cmap-resources
     console.log('[KitveiHakodesh] PDF viewer runtime — userAgent:', navigator.userAgent);
   </script>
   <script src="viewer.mjs" type="module"></script>
+  <!-- CUSTOM: outline (תוכן עניינים) search input — flat ranked results,
+       mirroring the BookView TOC side-panel search. Self-contained; it polls for
+       PDFViewerApplication, so load order relative to viewer.mjs does not matter. -->
+  <script src="outline-search.js" defer></script>
   </head>
 
   <body tabindex="0">

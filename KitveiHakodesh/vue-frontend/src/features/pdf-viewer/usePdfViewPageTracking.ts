@@ -144,20 +144,13 @@ async function buildOutlineIndex(
   return entries
 }
 
-const SIDEBAR_OUTLINE_VIEW = 2 // SidebarView.OUTLINE in PDF.js
-
-// Fix sidebar outline tree items that were stored by ABBYY with leading
-// punctuation in visual/LTR order. Called once when the user opens the outline
-// panel — no need to touch the DOM before the user actually looks at it.
-function fixSidebarOutlineTitles(contentWindow: Window): void {
-  const document = contentWindow.document
-  const anchors = document.querySelectorAll<HTMLElement>('.treeItem > a')
-  for (const anchor of anchors) {
-    const text = anchor.textContent ?? ''
-    const match = text.match(/^([.,:;!?()\[\]{}"']+)(\p{Script=Hebrew}.*)$/u)
-    if (match && match[1] !== undefined && match[2] !== undefined) anchor.textContent = match[2] + match[1]
-  }
-}
+// NOTE: the sidebar outline tree's mangled titles used to be corrected here too,
+// on first open of the outline panel. That now happens inside the viewer itself
+// (public/pdfjs/web/outline-search.js — normalizeOutlineDom), which runs earlier
+// (on `outlineloaded`, rather than waiting for the user to open the panel) and
+// keeps the rendered rows and the panel's search index consistent. The
+// `normalizeOutlineTitle` above is still needed here for the breadcrumb, which
+// is built from the outline data rather than from the sidebar DOM.
 
 function findActiveOutlineEntry(
   entries: OutlineEntry[],
@@ -184,7 +177,6 @@ export function usePdfViewPageTracking() {
   let pendingPage: { pageNumber: number } | null = null
   let pagechangingHandler: ((data: unknown) => void) | null = null
   let documentloadedHandler: ((data: unknown) => void) | null = null
-  let sidebarViewChangedHandler: ((data: unknown) => void) | null = null
   let applicationRef: PdfViewerApplication | null = null
 
   function buildPdfOutlineEntries(entries: OutlineEntry[]): PdfOutlineEntry[] {
@@ -267,19 +259,6 @@ export function usePdfViewPageTracking() {
     }
     application.eventBus._on('documentloaded', documentloadedHandler)
 
-    // Fix sidebar outline titles when the user first opens the outline panel.
-    // Running it on outlineloaded was too early and blocked the UI — the panel
-    // may never be opened, so we defer until it's actually needed.
-    let sidebarOutlineFixed = false
-    sidebarViewChangedHandler = (data: unknown) => {
-      const event = data as { view: number }
-      if (event.view === SIDEBAR_OUTLINE_VIEW && !sidebarOutlineFixed) {
-        sidebarOutlineFixed = true
-        fixSidebarOutlineTitles(contentWindow)
-      }
-    }
-    application.eventBus._on('sidebarviewchanged', sidebarViewChangedHandler)
-
     // Already loaded — init immediately.
     if (application.pdfDocument) {
       initOutlineAndSync(application)
@@ -299,7 +278,6 @@ export function usePdfViewPageTracking() {
       if (application) {
         if (pagechangingHandler) application.eventBus._off('pagechanging', pagechangingHandler)
         if (documentloadedHandler) application.eventBus._off('documentloaded', documentloadedHandler)
-        if (sidebarViewChangedHandler) application.eventBus._off('sidebarviewchanged', sidebarViewChangedHandler)
       }
     }
 
@@ -308,7 +286,6 @@ export function usePdfViewPageTracking() {
     tabId = null
     pagechangingHandler = null
     documentloadedHandler = null
-    sidebarViewChangedHandler = null
     pendingPage = null
     outlineEntries = []
     pdfOutlineEntries = []
