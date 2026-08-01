@@ -72,6 +72,19 @@ already knows is not worth an entry. When in doubt, **leave it out.**
 Local tooling lives in **`scripts/hebrew_lexicon/`** (this is gitignored — it's a
 build tool; the committed artifact is `Dictionary.db` itself).
 
+0. **Pre-flight a fresh draft** (recommended — saves a lot of wasted work):
+   ```
+   cd scripts/hebrew_lexicon
+   python check_candidates.py mydraft.json --out terms/batch_150_loan.json
+   ```
+   Roughly a fifth of any freshly-drafted list is already in the dictionary.
+   Importing anyway is NOT harmless: the importer dedupes on (word_id, text),
+   so a *reworded* gloss for a word that already exists lands as a second,
+   redundant sense. `check_candidates.py` drops those, flags Latin characters
+   typed into a headword by accident, headwords drafted twice, and glosses
+   already carried by a different word. Read the `.report.txt` it writes —
+   the console is cp1252 and prints Hebrew as `?`.
+
 1. **Edit the word list:** `scripts/hebrew_lexicon/terms/batch_lexicon.json`
    Each entry:
    ```json
@@ -131,6 +144,14 @@ db.close()
 
 ## 5. Checklist before committing
 
+- [ ] **The numbers balance.** The importer prints two accounting lines — read
+      them. `N drafted = kept + blocked + excluded + dup-in-batches + empty`,
+      and per DB, `inserted + already-present` must equal what was offered. A
+      `!!` line means an entry vanished: find it before committing. This is the
+      only signal for a silently-dropped entry, and it catches two real cases —
+      a gloss rejected by the blocklist (correct: drop the word, don't reword
+      around the filter), and a gloss identical to one already on **another**
+      word (reword the gloss so the entry isn't lost as a duplicate).
 - [ ] Applied to **both** DB copies (service + frontend).
 - [ ] `PRAGMA integrity_check` returns `ok`.
 - [ ] `PRAGMA wal_checkpoint(TRUNCATE)` run — otherwise new senses sit in a
