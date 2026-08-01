@@ -166,13 +166,16 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
     const servedRoute =
       restored.kind === 'html' ? '/html-view' : restored.kind === 'pdf' ? '/pdf-view' : route
 
+    // isOtzariaAddin is written unconditionally (updateTab merges, so omitting the
+    // key would leave a previous addin's `true` on this tab) and gated on the
+    // served route, since only /html-view ever reads it.
     tabStore.updateTab(targetTabId, {
       route: servedRoute as '/html-view' | '/pdf-view',
       title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
       localFileName: item.fileName,
       localFilePath: item.fullPath,
       localFileVirtualUrl: restored.url,
-      ...(item.addinName ? { isOtzariaAddin: true } : {}),
+      isOtzariaAddin: !!item.addinName && servedRoute === '/html-view',
     })
   } finally {
     openingFile.value = false

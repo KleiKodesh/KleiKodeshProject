@@ -272,13 +272,16 @@ async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
 
   // An Otzaria addin is presented by its addin name, and the tab is flagged so
   // HtmlViewPage activates the addin bridge — same as the file-search page.
+  // isOtzariaAddin is written unconditionally (updateTab merges, so omitting the
+  // key would leave a previous addin's `true` on this tab) and gated on the
+  // served route, since only /html-view ever reads it.
   tabStore.updateTab(targetTabId, {
     route: servedRoute as '/html-view' | '/pdf-view',
     title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
     localFileName: fileName,
     localFilePath: fullPath,
     localFileVirtualUrl: restored.url,
-    ...(item.addinName ? { isOtzariaAddin: true } : {}),
+    isOtzariaAddin: !!item.addinName && servedRoute === '/html-view',
   })
   close()
 }

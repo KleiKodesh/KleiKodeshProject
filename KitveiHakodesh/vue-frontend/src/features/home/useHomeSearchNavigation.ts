@@ -104,13 +104,19 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
 
     // An Otzaria addin is presented by its addin name, and the tab is flagged so
     // HtmlViewPage activates the addin bridge — same as the file-search page.
+    //
+    // isOtzariaAddin is written unconditionally, never spread in only when true:
+    // updateTab merges, so an omitted key leaves a previous addin's `true` on the
+    // tab, and the next plain HTML file opened here would get the bridge injected
+    // into it. Gated on the served route for the same reason bridge.ts and
+    // localFileStore.ts gate theirs — only /html-view ever reads the flag.
     tabStore.updateTab(targetTabId, {
       route: servedRoute,
       title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
       localFileName: fileName,
       localFilePath: fullPath,
       localFileVirtualUrl: restored.url,
-      ...(item.addinName ? { isOtzariaAddin: true } : {}),
+      isOtzariaAddin: !!item.addinName && servedRoute === '/html-view',
     })
   }
 

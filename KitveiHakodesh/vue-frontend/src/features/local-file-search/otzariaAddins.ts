@@ -16,12 +16,23 @@
  *    addin bridge (and the recents entry inherits the puzzle-piece icon).
  */
 
-/** The shorthand users type, with or without a trailing colon. */
-const SHORTHAND = /תוספים:?\s*/
+/**
+ * The shorthand users type, with or without a trailing colon.
+ *
+ * Word-initial only: an unanchored match would fire inside ordinary words, and
+ * these inputs are where people type book titles. "בעלי התוספים" must stay a
+ * book query — matching it would both mis-rank the sections and rewrite the
+ * term into the nonsense "בעלי התוסף אוצריא: ".
+ */
+const SHORTHAND = /(^|\s)תוספים:?\s*/
 
-/** Rewrites the "תוספים" shorthand to the prefix the index actually stores. */
+/**
+ * Rewrites the "תוספים" shorthand to the prefix the index actually stores.
+ * Built from SHORTHAND so the rewrite rule can never drift from the ranking
+ * rule below; $1 preserves the boundary the pattern consumed.
+ */
 export function normalizeAddinQuery(query: string): string {
-  return query.replace(/תוספים:?\s*/g, 'תוסף אוצריא: ')
+  return query.replace(new RegExp(SHORTHAND.source, 'g'), '$1תוסף אוצריא: ')
 }
 
 /**
