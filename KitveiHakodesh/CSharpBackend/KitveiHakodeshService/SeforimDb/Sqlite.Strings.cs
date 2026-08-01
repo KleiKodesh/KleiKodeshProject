@@ -47,8 +47,24 @@ internal static class SeforimSql
 
     // ── TOC ───────────────────────────────────────────────────────────────────
 
+    // A TOC entry's lineIndex lives in a different place per schema generation: the
+    // library (Zayit-built) has no tocEntry.lineIndex column and derives it by joining
+    // `line` on te.lineId; Otzaria-built DBs (user_books.db) store it on tocEntry
+    // directly — and there te.lineId is NULL and `line` is empty, so the JOIN variant
+    // would return NULL for every entry and the TOC couldn't navigate. Callers pass a
+    // ColumnExists(tocEntry, lineIndex) probe of the OPEN db; the column, when present,
+    // is authoritative.
+
     /// <summary>All TOC entries for a book, flat — the frontend builds the tree in memory.</summary>
-    public const string GetAllTocEntries = @"
+    public static string GetAllTocEntries(bool tocHasLineIndex) => tocHasLineIndex
+        ? @"
+        SELECT te.id, te.parentId, te.level, te.lineId, te.hasChildren,
+               tt.text, te.lineIndex
+        FROM tocEntry te
+        JOIN tocText tt ON tt.id = te.textId
+        WHERE te.bookId = @bookId
+        ORDER BY te.id"
+        : @"
         SELECT te.id, te.parentId, te.level, te.lineId, te.hasChildren,
                tt.text, l.lineIndex
         FROM tocEntry te
@@ -64,7 +80,8 @@ internal static class SeforimSql
         WHERE bookId = @bookId
         ORDER BY id";
 
-    /// <summary>All alt_toc entries for a structure, flat.</summary>
+    /// <summary>All alt_toc entries for a structure, flat. NB: alt_toc_entry has no
+    /// lineIndex column in ANY known schema (unlike tocEntry) — always the JOIN variant.</summary>
     public const string GetAllAltTocEntries = @"
         SELECT ae.id, ae.parentId, ae.level, ae.lineId, ae.hasChildren,
                tt.text, l.lineIndex
@@ -75,7 +92,16 @@ internal static class SeforimSql
         ORDER BY ae.id";
 
     /// <summary>First TOC entry for a book whose text matches a LIKE pattern (daf-yomi nav).</summary>
-    public const string GetTocEntryByTextPrefix = @"
+    public static string GetTocEntryByTextPrefix(bool tocHasLineIndex) => tocHasLineIndex
+        ? @"
+        SELECT te.id, te.lineIndex
+        FROM tocEntry te
+        JOIN tocText tt ON tt.id = te.textId
+        WHERE te.bookId = @bookId
+          AND tt.text LIKE @pattern
+        ORDER BY te.id ASC
+        LIMIT 1"
+        : @"
         SELECT te.id, l.lineIndex
         FROM tocEntry te
         JOIN tocText tt ON tt.id = te.textId
@@ -86,17 +112,17 @@ internal static class SeforimSql
         LIMIT 1";
 
     /// <summary>TOC titles for a set of books (TOC-search fallback). Dynamic IN over book ids.</summary>
-    public static string GetTocTitlesForBooks(int count) => $@"
-        SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
+    public static string GetTocTitlesForBooks(int count, bool tocHasLineIndex) => $@"
+        SELECT te.id, te.parentId, te.bookId, tt.text, {(tocHasLineIndex ? "te.lineIndex" : "l.lineIndex")}
         FROM tocEntry te
         JOIN tocText tt ON tt.id = te.textId
-        LEFT JOIN line l ON l.id = te.lineId
+        {(tocHasLineIndex ? "" : "LEFT JOIN line l ON l.id = te.lineId")}
         WHERE te.bookId IN ({InPlaceholders("b", count)})
         ORDER BY te.id";
 
     /// <summary>Prefiltered TOC titles: entries whose text contains @word plus all their
     /// ancestors (so segment chains stay complete). Dynamic IN over book ids + @word.</summary>
-    public static string GetTocTitlesMatchingForBooks(int count) => $@"
+    public static string GetTocTitlesMatchingForBooks(int count, bool tocHasLineIndex) => $@"
         WITH RECURSIVE matched(id, parentId) AS (
           SELECT te.id, te.parentId
           FROM tocEntry te
@@ -109,10 +135,10 @@ internal static class SeforimSql
           UNION
           SELECT te.parentId FROM tocEntry te JOIN anc ON te.id = anc.id WHERE te.parentId IS NOT NULL
         )
-        SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
+        SELECT te.id, te.parentId, te.bookId, tt.text, {(tocHasLineIndex ? "te.lineIndex" : "l.lineIndex")}
         FROM tocEntry te
         JOIN tocText tt ON tt.id = te.textId
-        LEFT JOIN line l ON l.id = te.lineId
+        {(tocHasLineIndex ? "" : "LEFT JOIN line l ON l.id = te.lineId")}
         WHERE te.id IN (SELECT id FROM matched UNION SELECT id FROM anc)
         ORDER BY te.id";
 
