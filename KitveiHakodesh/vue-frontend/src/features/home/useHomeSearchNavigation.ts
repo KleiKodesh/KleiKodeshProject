@@ -5,6 +5,8 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
+import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
+import type { FileSearchResult } from './useHomeSearch'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 
@@ -63,11 +65,12 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
     ).catch(() => {})
   }
 
-  async function onSelectFile(fullPath: string, fileName: string, openInNewTab = false) {
+  async function onSelectFile(item: FileSearchResult, openInNewTab = false) {
     resetSearch()
     // Dev opens local files too now: restoreLocalFile authorizes the path with the service and
     // serves it through the same-origin /khs-file proxy (hosted keeps its C# path).
 
+    const { fullPath, fileName } = item
     const extension = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
     const dotIndex = fileName.lastIndexOf('.')
     const titleWithoutExtension = dotIndex > 0 ? fileName.substring(0, dotIndex) : fileName
@@ -99,12 +102,15 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
     const servedRoute =
       restored.kind === 'html' ? '/html-view' : restored.kind === 'pdf' ? '/pdf-view' : route
 
+    // An Otzaria addin is presented by its addin name, and the tab is flagged so
+    // HtmlViewPage activates the addin bridge — same as the file-search page.
     tabStore.updateTab(targetTabId, {
       route: servedRoute,
-      title: titleWithoutExtension,
+      title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
       localFileName: fileName,
       localFilePath: fullPath,
       localFileVirtualUrl: restored.url,
+      ...(item.addinName ? { isOtzariaAddin: true } : {}),
     })
   }
 
