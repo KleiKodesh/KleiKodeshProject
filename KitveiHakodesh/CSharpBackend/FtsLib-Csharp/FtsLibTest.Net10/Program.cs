@@ -50,6 +50,18 @@ namespace FtsLibTest
                 case "dumpids":           DumpIds.Run(args); return;
                 case "monitor":           MonitorTest.Run(args); return;
                 case "docsource":         DocSourceTest.Run(args); return;
+                case "forcemerge":
+                {
+                    // Force-merge an existing tier index to a single segment — puts a
+                    // fresh build into the same topology as a production
+                    // (post-forceMergeOnComplete) index before perf comparisons.
+                    string tier = args.Length > 1 ? args[1] : "full";
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(
+                        TestHelpers.IndexDir(tier), BuildTest.ResolveDbPath());
+                    idx.ForceMerge();
+                    Console.WriteLine("Force merge complete.");
+                    return;
+                }
                 case "interrupttest":     InterruptTest.Run(args); return;
                 case "mergetest":         MergeTest.Run(args); return;
                 case "crashmergetest":    CrashMergeTest.Run(args); return;
