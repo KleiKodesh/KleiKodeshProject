@@ -396,6 +396,8 @@ internal static class CorpusRoutingVerify
 
         // Give synthetic book 3 a real file and the Otzaria shape: filePath set,
         // totalLines = 0, and NO rows in `line` for it (delete the seeded ones).
+        // NB: this MUTATES book 3 for the rest of the run — checks added after B2
+        // must not assume its original DB-lined shape.
         string bookFile = Path.Combine(Path.GetTempPath(), $"kh-corpus-book-{Environment.ProcessId}.txt");
         // BOM + CRLF on one line + trailing \n — the exact shapes the reader must handle.
         File.WriteAllText(bookFile,
@@ -420,13 +422,19 @@ internal static class CorpusRoutingVerify
             var info = svc.GetBookById(Base + 3)!;
             Eq("file-backed GetBookById.totalLines", info.TotalLines, 6);
 
+            // Line 0 read explicitly: a reader that fails to strip the UTF-8 BOM
+            // would prepend U+FEFF here and fail this exact-match.
+            var line0 = svc.GetLineByBookAndLineIndex(Base + 3, 0);
+            Eq("file-backed BOM stripped (line 0)", line0.Count == 1 ? line0[0].Content : "<none>", "<h1>ספר קובץ</h1>");
+
             var page = svc.GetLinesPaged(Base + 3, 3, 1);
             Eq("file-backed GetLinesPaged.count", page.Count, 3);
             if (page.Count == 3)
             {
                 Eq("file-backed page[0].lineIndex", page[0].LineIndex, 1);
-                Eq("file-backed page[0].content", page[0].Content, "שורה אחת");
-                Eq("file-backed CRLF trimmed", page[1].Content, "שורה שתיים");
+                // page[0] is file line 1 ("שורה אחת\r") — the trim is what this proves.
+                Eq("file-backed CRLF trimmed (page[0])", page[0].Content, "שורה אחת");
+                Eq("file-backed page[1].content", page[1].Content, "שורה שתיים");
                 Eq("file-backed page ids are 0 (no line ids exist)", page[0].Id, 0);
             }
 
@@ -512,8 +520,7 @@ internal static class CorpusRoutingVerify
             var page = svc.GetLinesPaged(Base + realTxtBook, 3, 0);
             Eq("real file-backed first page.count", page.Count, Math.Min(3, expected.Length));
             if (page.Count > 0)
-                Eq("real file-backed first line", page[0].Content, expected[0].TrimEnd('\r'))
-                ;
+                Eq("real file-backed first line", page[0].Content, expected[0].TrimEnd('\r'));
         }
 
         // Title lookup for a real user book title (may also exist in the library —

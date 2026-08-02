@@ -104,8 +104,9 @@ export async function getBookById(id: number): Promise<BookInfo | undefined> {
   if (isUserBooksId(id)) {
     const book = (await queryUserBooks<BookInfo>(SQL.GET_BOOK_BY_ID, [toLocalId(id)]))[0]
     // File-backed books store totalLines = 0 — without the real count the virtual
-    // scroller renders an empty book and never requests a page.
-    if (book && book.totalLines === 0)
+    // scroller renders an empty book and never requests a page. (!totalLines also
+    // covers a SQL NULL, which the service maps to 0 — keep the two paths agreeing.)
+    if (book && !book.totalLines)
       return { ...book, totalLines: (await userBooksFileLines(toLocalId(id), 0, 0)).totalLines }
     return book
   }
