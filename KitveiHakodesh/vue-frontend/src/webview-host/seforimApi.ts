@@ -200,7 +200,11 @@ export async function getCommentaryLinksForSourceLineRange(lineIds: number[]): P
       const maps = await connTypeMaps(libTypesQuery)
       return shiftRowIds(rows, ['targetBookId', 'targetLineId']).map((r) => ({
         ...r,
-        connectionTypeId: r.connectionTypeId === 0 ? 0 : userTypeIdToApp(r.connectionTypeId, maps),
+        // typeof guard: a NULL connectionTypeId must pass through as-is, not
+        // arithmetic into the shifted range (null + base is a number in JS).
+        connectionTypeId: typeof r.connectionTypeId === 'number' && r.connectionTypeId !== 0
+          ? userTypeIdToApp(r.connectionTypeId, maps)
+          : r.connectionTypeId,
       }))
     }))
   }
@@ -381,7 +385,9 @@ export async function getStaticFilterBooks(
         SQL.GET_STATIC_COMMENTARY_FILTER_BOOKS_FOR_SOURCE_BOOK(uTypes.length), [toLocalId(sourceBookId), ...uTypes])
       return shiftRowIds(rows, ['targetBookId']).map((r) => ({
         ...r,
-        connectionTypeId: r.connectionTypeId === 0 ? 0 : userTypeIdToApp(r.connectionTypeId, maps),
+        connectionTypeId: typeof r.connectionTypeId === 'number' && r.connectionTypeId !== 0
+          ? userTypeIdToApp(r.connectionTypeId, maps)
+          : r.connectionTypeId,
       }))
     })
   }

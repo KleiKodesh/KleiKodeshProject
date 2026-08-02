@@ -105,21 +105,44 @@ export async function userBooksPresent(): Promise<boolean> {
 }
 
 /**
- * Raw SQL against user_books.db. `unavailable` (DB absent/deleted) reads as empty —
- * for rows that no longer exist, "no rows" IS the correct answer, not an error.
+ * Raw variant that PRESERVES the unavailability signal. Everything that CACHES an
+ * answer derived from a reply (schema probes, type maps) must use this and refuse
+ * to cache on `unavailable` — an unavailable reply is indistinguishable from real
+ * data through the rows alone ([] is a legitimate result), and caching one poisons
+ * the session: a transient absence at first-probe time would pin the wrong SQL
+ * variant / empty type maps long after the DB is back.
  */
-export async function queryUserBooks<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
-  if (!hasUserBooksChannel()) return []
+async function queryUserBooksRaw<T = unknown>(
+  sql: string,
+  params: unknown[] = [],
+): Promise<{ rows: T[]; unavailable: boolean }> {
+  if (!hasUserBooksChannel()) return { rows: [], unavailable: true }
   const res = await window.__webviewUserBooksQuery!(sql, params)
   if (res.unavailable) {
     _present = false
     invalidateUserBooksCaches()
-    return []
+    return { rows: [], unavailable: true }
   }
-  return res.rows as T[]
+  return { rows: res.rows as T[], unavailable: false }
+}
+
+/**
+ * Raw SQL against user_books.db. `unavailable` (DB absent/deleted) reads as empty —
+ * for rows that no longer exist, "no rows" IS the correct answer, not an error.
+ */
+export async function queryUserBooks<T = unknown>(sql: string, params: unknown[] = []): Promise<T[]> {
+  return (await queryUserBooksRaw<T>(sql, params)).rows
 }
 
 // ── Schema probes (per-DB — the library and Otzaria schemas answer differently) ──
+//
+// Each probe caches ONLY an answer computed from an AVAILABLE reply, and only when
+// no invalidation interleaved with its await (generation guard) — otherwise it
+// answers false for THIS call and re-probes next time. A cached wrong variant is a
+// session-long silent failure (TOC that can't navigate); a one-call conservative
+// answer is not.
+
+let _generation = 0
 
 // tocEntry.lineIndex: Otzaria-built DBs store the TOC position ON the entry (their
 // line table is empty — user_books.db is a catalog+TOC index over files); the
@@ -127,41 +150,37 @@ export async function queryUserBooks<T = unknown>(sql: string, params: unknown[]
 let _tocHasLineIndex: boolean | null = null
 export async function userTocHasLineIndex(): Promise<boolean> {
   if (_tocHasLineIndex !== null) return _tocHasLineIndex
-  try {
-    const rows = await queryUserBooks<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM pragma_table_info('tocEntry') WHERE name = 'lineIndex'`,
-    )
-    _tocHasLineIndex = (rows[0]?.n ?? 0) > 0
-  } catch {
-    return false // unknown — don't cache, re-probe next call
-  }
-  return _tocHasLineIndex
+  return probe(
+    `SELECT COUNT(*) AS n FROM pragma_table_info('tocEntry') WHERE name = 'lineIndex'`,
+    (v) => { _tocHasLineIndex = v },
+  )
 }
 
 // link.targetLineIndex: absent in Otzaria-built DBs → the JOIN variant.
 let _linkHasTargetLineIndex: boolean | null = null
 export async function userLinkHasTargetLineIndex(): Promise<boolean> {
   if (_linkHasTargetLineIndex !== null) return _linkHasTargetLineIndex
-  try {
-    const rows = await queryUserBooks<{ n: number }>(SQL.HAS_LINK_TARGET_LINE_INDEX)
-    _linkHasTargetLineIndex = (rows[0]?.n ?? 0) > 0
-  } catch {
-    return false
-  }
-  return _linkHasTargetLineIndex
+  return probe(SQL.HAS_LINK_TARGET_LINE_INDEX, (v) => { _linkHasTargetLineIndex = v })
 }
 
 // link_anchor table: no Otzaria-built DB has it today.
 let _hasLinkAnchor: boolean | null = null
 export async function userHasLinkAnchor(): Promise<boolean> {
   if (_hasLinkAnchor !== null) return _hasLinkAnchor
+  return probe(SQL.HAS_LINK_ANCHOR_TABLE, (v) => { _hasLinkAnchor = v })
+}
+
+async function probe(sql: string, cache: (v: boolean) => void): Promise<boolean> {
+  const gen = _generation
   try {
-    const rows = await queryUserBooks<{ n: number }>(SQL.HAS_LINK_ANCHOR_TABLE)
-    _hasLinkAnchor = (rows[0]?.n ?? 0) > 0
+    const res = await queryUserBooksRaw<{ n: number }>(sql)
+    if (res.unavailable) return false // don't cache — re-probe when the DB is back
+    const value = (res.rows[0]?.n ?? 0) > 0
+    if (gen === _generation) cache(value)
+    return value
   } catch {
-    return false
+    return false // unknown — don't cache, re-probe next call
   }
-  return _hasLinkAnchor
 }
 
 // ── Connection-type translation (by NAME, never by shift) ─────────────────────
@@ -169,10 +188,10 @@ export async function userHasLinkAnchor(): Promise<boolean> {
 type ConnTypeMaps = { idToName: Map<number, string>; nameToId: Map<string, number> }
 
 let _userTypes: ConnTypeMaps | null = null
+let _userTypesExpiry = 0
 let _libTypes: ConnTypeMaps | null = null
 
-async function loadMaps(run: (sql: string) => Promise<{ id: number; name: string }[]>): Promise<ConnTypeMaps> {
-  const rows = await run(SQL.GET_ALL_CONNECTION_TYPES)
+function buildMaps(rows: { id: number; name: string }[]): ConnTypeMaps {
   const maps: ConnTypeMaps = { idToName: new Map(), nameToId: new Map() }
   for (const r of rows) {
     maps.idToName.set(r.id, r.name)
@@ -181,14 +200,33 @@ async function loadMaps(run: (sql: string) => Promise<{ id: number; name: string
   return maps
 }
 
-/** The library's types ARE the app-visible type-id space. `libraryQuery` is injected
- * (rather than importing seforimDb) to keep this module free of import cycles. */
+/**
+ * The library's types ARE the app-visible type-id space. `libraryQuery` is injected
+ * (rather than importing seforimDb) to keep this module free of import cycles.
+ *
+ * Throws when user_books.db is unavailable — rows can't be translated without maps,
+ * and every caller sits behind a degrade-to-library-only guard. An unavailable-window
+ * load is NEVER cached (see queryUserBooksRaw), and a load that raced an invalidation
+ * is used for this call but not stored (generation guard). The user maps also expire
+ * on a 60s TTL: Otzaria appends connection types lazily as links are created, and
+ * unlike the service we have no file change-stamp to key on.
+ */
 export async function connTypeMaps(
   libraryQuery: (sql: string) => Promise<{ id: number; name: string }[]>,
 ): Promise<{ user: ConnTypeMaps; lib: ConnTypeMaps }> {
-  _userTypes ??= await loadMaps((sql) => queryUserBooks(sql))
-  _libTypes ??= await loadMaps(libraryQuery)
-  return { user: _userTypes, lib: _libTypes }
+  let user = _userTypes
+  if (user === null || Date.now() >= _userTypesExpiry) {
+    const gen = _generation
+    const res = await queryUserBooksRaw<{ id: number; name: string }>(SQL.GET_ALL_CONNECTION_TYPES)
+    if (res.unavailable) throw new Error('personal-books DB unavailable')
+    user = buildMaps(res.rows)
+    if (gen === _generation) {
+      _userTypes = user
+      _userTypesExpiry = Date.now() + 60_000
+    }
+  }
+  if (_libTypes === null) _libTypes = buildMaps(await libraryQuery(SQL.GET_ALL_CONNECTION_TYPES))
+  return { user, lib: _libTypes }
 }
 
 /** USER-DB type id → app space: the library id of the SAME NAME, else shifted (user-only name). */
@@ -229,8 +267,12 @@ export function appTypeIdsToLibraryLocal(appTypeIds: number[]): number[] {
 function invalidateUserBooksCaches(): void {
   // Schema generation is stable per file, but the FILE can be recreated by Otzaria
   // (types are appended lazily as links are created) — drop everything derived from
-  // it whenever it disappears; the next presence probe rebuilds lazily.
+  // it whenever it disappears; the next presence probe rebuilds lazily. The bumped
+  // generation stops any in-flight probe/load from re-caching its pre-invalidation
+  // answer after its await resumes.
+  _generation++
   _userTypes = null
+  _userTypesExpiry = 0
   _tocHasLineIndex = null
   _linkHasTargetLineIndex = null
   _hasLinkAnchor = null
