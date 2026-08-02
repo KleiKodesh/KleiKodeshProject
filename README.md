@@ -71,6 +71,40 @@ Build/Installer  ──installs──▶  KleiKodeshVsto (Word add-in)
 - **PowerShell 5+**
 - **Node.js 18+** (for KitveiHakodesh Vue frontend)
 
+### שכפול המאגר (clone)
+
+שלוש תיקיות בתוך המאגר הן **מאגרי git נפרדים** (submodules), עם היסטוריה ו-remote משל עצמן:
+
+| תיקייה | מאגר |
+| --- | --- |
+| `KitveiHakodesh/CSharpBackend/DocumentLocator` | [DocumentLocator](https://github.com/KleiKodesh/DocumentLocator) |
+| `hebrew-typing-tutor` | [hebrew-typing-tutor](https://github.com/KleiKodesh/hebrew-typing-tutor) |
+| `kleikodesh-website` | [kleikodesh.github.io](https://github.com/KleiKodesh/kleikodesh.github.io) |
+
+`git clone` רגיל משאיר את שלושתן **ריקות**, והבנייה נכשלת — שירות אינדוקס הקבצים נמצא באחת מהן. יש לשכפל כך:
+
+```powershell
+git clone --recurse-submodules <url>
+```
+
+או, במאגר שכבר שוכפל:
+
+```powershell
+git submodule update --init --recursive
+```
+
+### הגדרות git מומלצות (פעם אחת בכל clone)
+
+ההגדרות האלה מקומיות ולכן אינן עוברות בשכפול — יש להריץ אותן מחדש בכל מאגר חדש:
+
+```powershell
+git config push.recurseSubmodules check   # חוסם push של המאגר הראשי כשה-commit של תת-מאגר טרם נדחף
+git config status.submoduleSummary true   # git status יציג איזה commit השתנה, ולא רק "M"
+git config diff.submodule log             # git diff יציג את רשימת ה-commits במקום SHA גולמי
+```
+
+**סדר הדחיפה חשוב**: כשמשנים קובץ שנמצא בתת-מאגר, יש לדחוף (push) קודם את תת-המאגר ורק אחר כך את המאגר הראשי. אחרת המצביע השמור במאגר הראשי מפנה ל-commit שאינו קיים באף remote, ו-`git submodule update --init` ייכשל אצל מי שישכפל. ההגדרה `push.recurseSubmodules check` חוסמת בדיוק את הטעות הזו.
+
 ### בנייה לגרסת הפצה (מתקין)
 
 השתמש בתפריט הבנייה האינטראקטיבי:
