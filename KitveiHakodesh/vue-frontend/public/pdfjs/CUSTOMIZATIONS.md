@@ -1546,7 +1546,7 @@ navigate on click; editing happens on the rows themselves:
   pointing at the CURRENT page — after the ring row, else after the current-entry row,
   else at the end — and drops straight into rename with the name pre-selected. Pressed
   while search results are showing, it clears the query first so the insertion is
-  visible. Carries the unsaved-edits dot.
+  visible.
 - **Right-click context menu** (`#outlineContextMenu`) on any row — the action hub:
   שינוי שם (F2) / עדכון יעד לעמוד הנוכחי / הוספת פריט אחרי / הוספת תת־פריט / מחיקה
   (Del). Also reachable via the hover `⋯` button (`#outlineRowMenuButton` — a single
@@ -1569,6 +1569,10 @@ navigate on click; editing happens on the rows themselves:
 - **עדכון יעד לעמוד הנוכחי** (retarget) re-points a row at the current page: it
   becomes editor-owned — `data-toc-page` set, `src` stamp and href/onclick dropped —
   and navigates like an added row.
+
+There are deliberately NO visual unsaved-changes cues in the panel (no dirty dot, no
+markers on added/retargeted rows) — the dirty STATE still drives the save flow, the
+beforeunload alert and the host-side close guards; it just is not painted.
 
 Edits are written into the **PDF itself** on save via the standard save pipeline — NOT
 stored app-side. Verified live end-to-end: edit → save → reload the saved bytes →

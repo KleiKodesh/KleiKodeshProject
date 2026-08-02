@@ -1125,7 +1125,6 @@
 
     function markDirty() {
       outlineDirty = true;
-      addButton.classList.add('dirty');
     }
 
     /**
@@ -1327,7 +1326,6 @@
         outlineMenuButton.disabled = false;
       }
       outlineDirty = true;
-      addButton.classList.add('dirty');
       invalidateIndex();
       rebuildPageIndexFromDom();
       pushOutlineToTransport();
@@ -2342,7 +2340,6 @@
       // dialog dispatches nothing, so the edits correctly stay dirty.
       document.addEventListener('kh-save-complete', function () {
         outlineDirty = false;
-        addButton.classList.remove('dirty');
         notifyHost();
       });
 
@@ -2420,7 +2417,6 @@
         activeItem = null;
         // Edits belong to the previous document — reset the editor entirely.
         outlineDirty = false;
-        addButton.classList.remove('dirty');
         closeContextMenu();
         clearDrag();
         // A rename active when the document switches never gets its blur (the
