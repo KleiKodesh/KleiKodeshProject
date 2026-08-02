@@ -546,6 +546,7 @@ export const useTabStore = defineStore('tabs', () => {
           for (const t of dirty) approvedPdfClose.delete(t.id)
         }
       },
+      dirty.length === 1 ? dirty[0]!.id : null,
     )
     return true
   }

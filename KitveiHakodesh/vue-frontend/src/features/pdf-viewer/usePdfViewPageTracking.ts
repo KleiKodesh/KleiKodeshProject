@@ -48,6 +48,8 @@ interface PdfViewerApplication {
   }
   /** Dirty check — wrapped by outline-search.js to include outline edits. */
   _hasChanges?: () => boolean
+  /** Save routing: save() when dirty (incl. outline edits), download() otherwise. */
+  downloadOrSave?: () => Promise<void>
 }
 
 /** The outline editor's host API, exposed by outline-search.js on the iframe window. */
@@ -257,6 +259,35 @@ export function usePdfViewPageTracking() {
             return false
           }
         },
+        // Save-as for the close-guard dialog. Resolves true only when the
+        // viewer signals the file was actually written (kh-save-complete —
+        // dispatched by the patched _triggerDownload only for bytes that came
+        // out of a successful saveDocument()); a cancelled picker emits
+        // nothing and falls to the timeout.
+        saveAs: () =>
+          new Promise<boolean>((resolve) => {
+            const win = contentWindowRef
+            const app = applicationRef
+            if (!win || !app?.downloadOrSave) {
+              resolve(false)
+              return
+            }
+            const doc = win.document
+            let settled = false
+            const finish = (ok: boolean) => {
+              if (settled) return
+              settled = true
+              clearTimeout(timer)
+              doc.removeEventListener('kh-save-complete', onComplete)
+              resolve(ok)
+            }
+            const onComplete = () => finish(true)
+            // Generous: the File System Access picker has no cancel signal, so
+            // a cancel simply times out as "not saved".
+            const timer = setTimeout(() => finish(false), 120_000)
+            doc.addEventListener('kh-save-complete', onComplete)
+            void app.downloadOrSave().catch(() => finish(false))
+          }),
       }
       bookViewStore.registerPdfBridge(tabId, registeredBridge)
     }

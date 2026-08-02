@@ -58,6 +58,13 @@ export interface PdfBridge {
    * background tabs use the parked snapshot in pdfEditStateByTabId instead.
    */
   hasUnsavedChanges?: () => boolean
+  /**
+   * Run the viewer's save flow (downloadOrSave → File System Access dialog).
+   * Resolves true once the file was ACTUALLY written (the viewer's
+   * kh-save-complete signal); false if nothing was saved within the timeout —
+   * a cancelled picker emits nothing, so cancellation looks like a timeout.
+   */
+  saveAs?: () => Promise<boolean>
 }
 
 /**
@@ -424,17 +431,27 @@ export const useBookViewStore = defineStore('bookView', () => {
    * chrome-tabs strip, which the web dialog does not block) must not evaporate
    * the first.
    */
-  const pdfClosePendingQueue = ref<{ tabTitles: string[]; proceed: () => void }[]>([])
+  const pdfClosePendingQueue = ref<
+    { tabTitles: string[]; proceed: () => void; tabId: string | null }[]
+  >([])
 
   const pdfClosePending = computed(() => pdfClosePendingQueue.value[0] ?? null)
 
-  function requestPdfCloseConfirm(tabTitles: string[], proceed: () => void) {
-    pdfClosePendingQueue.value.push({ tabTitles, proceed })
+  /** `tabId` — set when the request is about exactly ONE dirty tab, enabling
+   *  the dialog's "שמירה בשם..." action (save that tab, then proceed). */
+  function requestPdfCloseConfirm(tabTitles: string[], proceed: () => void, tabId?: string | null) {
+    pdfClosePendingQueue.value.push({ tabTitles, proceed, tabId: tabId ?? null })
   }
 
   function resolvePdfCloseConfirm(confirmed: boolean) {
     const pending = pdfClosePendingQueue.value.shift()
     if (confirmed && pending) pending.proceed()
+  }
+
+  /** Dequeue the head WITHOUT resolving — the save-as flow needs to hold the
+   *  `proceed` callback across an async save and only then invoke it. */
+  function takePdfClosePending() {
+    return pdfClosePendingQueue.value.shift() ?? null
   }
 
   return {
@@ -447,6 +464,7 @@ export const useBookViewStore = defineStore('bookView', () => {
     pdfClosePending,
     requestPdfCloseConfirm,
     resolvePdfCloseConfirm,
+    takePdfClosePending,
     toolbarVisible,
     toolbarPosition,
     getToolbarVisible,
