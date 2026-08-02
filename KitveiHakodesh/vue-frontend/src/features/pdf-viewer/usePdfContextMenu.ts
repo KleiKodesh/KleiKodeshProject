@@ -196,6 +196,15 @@ export function usePdfContextMenu(
     const win = iframe?.contentWindow
     if (!iframe || !win) return
 
+    // Only inside the page-viewing area. This listener is on the iframe
+    // DOCUMENT (capture phase, so it beats PDF.js's own handlers), which means
+    // it also sees right-clicks on the side panel, the toolbars and the find
+    // bar — where "העתק דף כתמונה" is meaningless and, worse, it suppressed
+    // the outline panel's own row menu. #viewerContainer is the scroll area
+    // holding the rendered pages.
+    const target = event.target as Element | null
+    if (!target?.closest?.('#viewerContainer')) return
+
     event.preventDefault()
     capturedText = captureSelectionText(win)
     items.value = buildItems(capturedText.trim().length > 0)
