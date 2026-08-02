@@ -631,7 +631,6 @@
    See outline-search.js — "Editing". */
 #outlineAddButton {
   flex: 0 0 auto;
-  position: relative; /* anchors the .dirty::after dot */
   width: 20px;
   height: 18px;
   padding: 0;
@@ -652,18 +651,6 @@
   opacity: 1;
   background: var(--button-hover-color);
 }
-/* Unsaved-edits marker: a small dot on the + button. */
-#outlineAddButton.dirty::after {
-  content: '';
-  position: absolute;
-  top: -1px;
-  inset-inline-end: -2px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--progressBar-color, #0a84ff);
-}
-
 /* Context menu — floats at the cursor, styled on PDF.js's doorhanger tokens. */
 #outlineContextMenu {
   position: fixed;
@@ -750,13 +737,6 @@
      contentEditable — outside the box, so the full-bleed row gets it clipped
      at the panel edges too. The inset shadow above is the focus indicator. */
   outline: none;
-}
-
-/* Rows with unsaved editor-owned targets (added or retargeted): a dashed
-   start-edge marks them until the file is saved. */
-#outlinesView .treeItem[data-toc-new] > a {
-  border-inline-start: 2px dashed var(--progressBar-color, #0a84ff);
-  padding-inline-start: 2px;
 }
 
 /* Ancestor path subtitle under each result, mirroring the Vue panel's rows.
