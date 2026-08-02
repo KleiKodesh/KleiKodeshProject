@@ -33,6 +33,28 @@ import type {
 /** True when the C# seforim bridge is present (hosted). Dev falls to the service. */
 export const isDbHosted = (): boolean => typeof window.__webviewQuery === 'function'
 
+/**
+ * FILE-BACKED personal-book content (hosted). Otzaria keeps a personal book's text
+ * in the file at book.filePath — totalLines is 0 and the line table is empty — so
+ * when the DB answers empty, content comes from the file via the host. Rows carry
+ * id = 0 (file lines have no line ids; per-line features are guarded off for
+ * id-less rows). Dev needs none of this: the service does the same fallback
+ * server-side. limit 0 fetches just totalLines (virtual-scroll init).
+ */
+async function userBooksFileLines(
+  localBookId: number, offset: number, limit: number,
+): Promise<{ rows: LineRow[]; totalLines: number }> {
+  try {
+    const res = (await window.__webviewAction!('userBooksFileLines', {
+      bookId: localBookId, offset, limit,
+    })) as { rows?: LineRow[]; totalLines?: number }
+    return { rows: res.rows ?? [], totalLines: res.totalLines ?? 0 }
+  } catch (e) {
+    console.warn('[seforimApi] personal-book file content failed:', e)
+    return { rows: [], totalLines: 0 }
+  }
+}
+
 const libTypesQuery = (sql: string) => query<{ id: number; name: string }>(sql)
 
 /** Guarded user-side fetch for UNION/SPLIT-MERGE paths: degrade to nothing, loudly. */
@@ -79,17 +101,27 @@ export async function getAllBooks(): Promise<BookRow[]> {
 export async function getBookById(id: number): Promise<BookInfo | undefined> {
   if (!isDbHosted())
     return (await serviceCall<{ book: BookInfo | null }>('getBookById', { id })).book ?? undefined
-  if (isUserBooksId(id))
-    return (await queryUserBooks<BookInfo>(SQL.GET_BOOK_BY_ID, [toLocalId(id)]))[0]
+  if (isUserBooksId(id)) {
+    const book = (await queryUserBooks<BookInfo>(SQL.GET_BOOK_BY_ID, [toLocalId(id)]))[0]
+    // File-backed books store totalLines = 0 — without the real count the virtual
+    // scroller renders an empty book and never requests a page.
+    if (book && book.totalLines === 0)
+      return { ...book, totalLines: (await userBooksFileLines(toLocalId(id), 0, 0)).totalLines }
+    return book
+  }
   return (await query<BookInfo>(SQL.GET_BOOK_BY_ID, [id]))[0]
 }
 
 export async function getLinesPaged(bookId: number, limit: number, offset: number): Promise<LineRow[]> {
   if (!isDbHosted())
     return (await serviceCall<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset })).rows
-  if (isUserBooksId(bookId))
-    return shiftRowIds(
+  if (isUserBooksId(bookId)) {
+    const rows = shiftRowIds(
       await queryUserBooks<LineRow>(SQL.GET_LINES_PAGED, [toLocalId(bookId), limit, offset]), ['id'])
+    if (rows.length > 0) return rows
+    // Empty line table ⇒ the text lives in the file — serve it from there.
+    return (await userBooksFileLines(toLocalId(bookId), offset, limit)).rows
+  }
   return query<LineRow>(SQL.GET_LINES_PAGED, [bookId, limit, offset])
 }
 
@@ -613,9 +645,12 @@ export async function getLineByBookAndLineIndex(
   if (!isDbHosted())
     return (await serviceCall<{ rows: { id: number; lineIndex: number; content: string }[] }>(
       'getLineByBookAndLineIndex', { bookId, lineIndex })).rows
-  if (isUserBooksId(bookId))
-    return shiftRowIds(
+  if (isUserBooksId(bookId)) {
+    const rows = shiftRowIds(
       await queryUserBooks<{ id: number; lineIndex: number; content: string }>(
         SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX, [toLocalId(bookId), lineIndex]), ['id'])
+    if (rows.length > 0 || lineIndex < 0) return rows
+    return (await userBooksFileLines(toLocalId(bookId), lineIndex, 1)).rows
+  }
   return query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX, [bookId, lineIndex])
 }

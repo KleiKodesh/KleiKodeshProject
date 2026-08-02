@@ -72,6 +72,7 @@ internal static class CorpusRoutingVerify
 
             CheckLibraryParity(svc, lib);
             CheckSyntheticRouting(svc, lib, synth);
+            CheckFileBackedContent(svc, synthPath);
 
             // ── C: a fresh service with the REAL user_books.db, if present ────────
             // Clear the synthetic override FIRST, then let the locator's own candidate
@@ -387,6 +388,71 @@ internal static class CorpusRoutingVerify
         Console.WriteLine("  synthetic routing: done");
     }
 
+    // ── B2. File-backed content (Otzaria model: text in FILES, empty line table) ──
+
+    private static void CheckFileBackedContent(SeforimDbService svc, string synthPath)
+    {
+        Console.WriteLine("\n=== B2. file-backed content ===");
+
+        // Give synthetic book 3 a real file and the Otzaria shape: filePath set,
+        // totalLines = 0, and NO rows in `line` for it (delete the seeded ones).
+        string bookFile = Path.Combine(Path.GetTempPath(), $"kh-corpus-book-{Environment.ProcessId}.txt");
+        // BOM + CRLF on one line + trailing \n — the exact shapes the reader must handle.
+        File.WriteAllText(bookFile,
+            "<h1>ספר קובץ</h1>\nשורה אחת\r\nשורה שתיים\n<h2>פרק ב</h2>\nשורה אחרונה\n",
+            new System.Text.UTF8Encoding(true));
+        try
+        {
+            using (var rw = new SqliteConnection($"Data Source={synthPath}"))
+            {
+                rw.Open();
+                using var cmd = rw.CreateCommand();
+                cmd.CommandText =
+                    "UPDATE book SET filePath = @p, fileType = 'txt', totalLines = 0 WHERE id = 3; " +
+                    "DELETE FROM line WHERE bookId = 3;";
+                cmd.Parameters.AddWithValue("@p", bookFile);
+                cmd.ExecuteNonQuery();
+            }
+            SqliteConnection.ClearAllPools();
+
+            // '\n'-split of the file: 6 elements (trailing empty line KEPT — the split
+            // indexes must match Otzaria's 0-based tocEntry.lineIndex exactly).
+            var info = svc.GetBookById(Base + 3)!;
+            Eq("file-backed GetBookById.totalLines", info.TotalLines, 6);
+
+            var page = svc.GetLinesPaged(Base + 3, 3, 1);
+            Eq("file-backed GetLinesPaged.count", page.Count, 3);
+            if (page.Count == 3)
+            {
+                Eq("file-backed page[0].lineIndex", page[0].LineIndex, 1);
+                Eq("file-backed page[0].content", page[0].Content, "שורה אחת");
+                Eq("file-backed CRLF trimmed", page[1].Content, "שורה שתיים");
+                Eq("file-backed page ids are 0 (no line ids exist)", page[0].Id, 0);
+            }
+
+            var one = svc.GetLineByBookAndLineIndex(Base + 3, 3);
+            Eq("file-backed single line.count", one.Count, 1);
+            if (one.Count == 1) Eq("file-backed single line.content", one[0].Content, "<h2>פרק ב</h2>");
+
+            Eq("file-backed beyond-end page", svc.GetLinesPaged(Base + 3, 10, 99).Count, 0);
+            Eq("file-backed missing lineIndex", svc.GetLineByBookAndLineIndex(Base + 3, 99).Count, 0);
+
+            // A book that still has DB lines must keep serving them (no file fallback).
+            var dbBook = svc.GetLinesPaged(Base + 1, 3, 0);
+            if (dbBook.Count != 3 || dbBook[0].Id < Base)
+                Fail("file-backed: DB-lined book stopped serving DB rows");
+
+            // Books 1/2 have no filePath — totalLines stays the DB value.
+            Eq("non-file-backed totalLines untouched", svc.GetBookById(Base + 1)!.TotalLines, 9);
+
+            Console.WriteLine("  file-backed content: done");
+        }
+        finally
+        {
+            try { File.Delete(bookFile); } catch { }
+        }
+    }
+
     // ── C. The real Otzaria user_books.db ────────────────────────────────────────
 
     private static void CheckRealUserDb(SeforimDbService svc, SqliteConnection lib, SqliteConnection real)
@@ -420,8 +486,35 @@ internal static class CorpusRoutingVerify
         if (tocDirect > 0 && withIndex == 0)
             Fail("real TOC: every lineIndex is null — the tocEntry.lineIndex variant was not used");
 
-        // Content lives in FILES, not the DB: line queries return empty, not garbage.
-        Eq("real GetLinesPaged(empty line table)", svc.GetLinesPaged(Base + tocBook, 10, 0).Count, 0);
+        // Content lives in FILES, not the DB — served from the file, ground truth
+        // computed here by reading the same file independently.
+        string? realFile = null;
+        int realTxtBook = 0;
+        using (var cmd = real.CreateCommand())
+        {
+            cmd.CommandText = @"SELECT id, filePath FROM book
+                WHERE fileType = 'txt' AND filePath IS NOT NULL ORDER BY id LIMIT 5";
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                if (File.Exists(r.GetString(1))) { realTxtBook = r.GetInt32(0); realFile = r.GetString(1); break; }
+            }
+        }
+        if (realFile is null)
+        {
+            Console.WriteLine("  (no on-disk txt book found — file-content spot check skipped)");
+        }
+        else
+        {
+            string[] expected = File.ReadAllText(realFile, System.Text.Encoding.UTF8).Split('\n');
+            var bi = svc.GetBookById(Base + realTxtBook)!;
+            Eq($"real file-backed totalLines (book {realTxtBook})", bi.TotalLines, expected.Length);
+            var page = svc.GetLinesPaged(Base + realTxtBook, 3, 0);
+            Eq("real file-backed first page.count", page.Count, Math.Min(3, expected.Length));
+            if (page.Count > 0)
+                Eq("real file-backed first line", page[0].Content, expected[0].TrimEnd('\r'))
+                ;
+        }
 
         // Title lookup for a real user book title (may also exist in the library —
         // the shifted id must be present either way).

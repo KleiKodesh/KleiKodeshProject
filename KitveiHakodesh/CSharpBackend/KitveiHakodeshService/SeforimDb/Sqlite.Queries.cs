@@ -406,6 +406,12 @@ public sealed partial class SeforimDbService
                 };
             }
         }, "getBookById");
+
+        // File-backed personal books store totalLines = 0 (their text lives in the
+        // file, not the DB) — without the real count the frontend's virtual scroller
+        // renders an empty book and never requests a single page.
+        if (book is { TotalLines: 0 } && corpus == Corpus.UserBooks)
+            book.TotalLines = GetUserFileTotalLines(CorpusIds.ToLocalId(id));
         return book;
     }
 
@@ -432,6 +438,12 @@ public sealed partial class SeforimDbService
                 });
             }
         }, "getLinesPaged");
+
+        // Personal books keep their text in FILES (empty line table) — fall back to
+        // the file when the DB has nothing. Rows carry Id = 0: no line ids exist for
+        // file lines, and per-line features are guarded off for id-less rows.
+        if (list.Count == 0 && corpus == Corpus.UserBooks)
+            return GetUserFileLinesPaged(CorpusIds.ToLocalId(bookId), limit, offset);
         return list;
     }
 
@@ -1178,6 +1190,14 @@ public sealed partial class SeforimDbService
                 });
             }
         }, "getLineByBookAndLineIndex");
+
+        // File-backed personal books: serve the single file line (see GetLinesPaged).
+        if (list.Count == 0 && corpus == Corpus.UserBooks && lineIndex >= 0)
+        {
+            var lines = GetUserBookFileLines(CorpusIds.ToLocalId(bookId));
+            if (lines is not null && lineIndex < lines.Length)
+                list.Add(new RawLineRow { Id = 0, LineIndex = lineIndex, Content = lines[lineIndex] });
+        }
         return list;
     }
 
