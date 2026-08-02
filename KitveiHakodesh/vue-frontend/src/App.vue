@@ -12,6 +12,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { storeToRefs } from 'pinia'
 import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
+import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 useTabSwipeNavigation()
@@ -99,6 +100,46 @@ const pdfCloseDesc = computed(() => {
   return `השינויים שבוצעו בתוכן העניינים${names} לא נשמרו ויאבדו אם הכרטיסייה תיסגר.`
 })
 
+// "שמירה בשם..." from the close dialog: save the tab's PDF through the
+// viewer, then complete the close. The tab may be a BACKGROUND one whose
+// iframe is long gone — activate it first and wait for the viewer (and the
+// parked-edit rehydration) to come back before asking it to save.
+const pdfSaveAsBusy = ref(false)
+
+async function pdfCloseSaveAs() {
+  if (pdfSaveAsBusy.value) return
+  const pending = bookViewStore.takePdfClosePending()
+  if (!pending) return
+  if (!pending.tabId) {
+    // Multi-tab request (close-all) — no single document to save; requeue
+    // semantics: treat as cancel.
+    return
+  }
+  pdfSaveAsBusy.value = true
+  try {
+    activateTabAnyPane(pending.tabId)
+    // Wait for the viewer bridge AND for it to report dirty — the bridge
+    // registers on documentloaded, but the parked-edit rehydration lands
+    // later; saving in that window would write the file WITHOUT the edits
+    // (and the clean-document download path never signals completion).
+    const bridge = await (async () => {
+      const deadline = Date.now() + 20_000
+      for (;;) {
+        const b = bookViewStore.getPdfBridge(pending.tabId!)
+        if (b?.saveAs && b.hasUnsavedChanges?.()) return b
+        if (Date.now() > deadline) return null
+        await new Promise((r) => setTimeout(r, 150))
+      }
+    })()
+    if (!bridge) return // viewer/rehydration never came back — leave the tab open
+    const saved = await bridge.saveAs!()
+    if (saved) pending.proceed() // completes the close, pre-approved
+    // Not saved (picker cancelled / timeout): leave the tab open, no dialog.
+  } finally {
+    pdfSaveAsBusy.value = false
+  }
+}
+
 // App close / reload / workspace switch (workspace switching ends in
 // window.location.reload()): the browser prompt is the only interception
 // point at window level. Any live-dirty viewer or parked dirty snapshot
@@ -145,8 +186,11 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
       v-if="pdfClosePending"
       title="שינויים שלא נשמרו"
       :desc="pdfCloseDesc"
+      confirm-label="סגירה ללא שמירה"
+      :extra-label="pdfClosePending.tabId ? 'שמירה בשם...' : undefined"
       @confirm="bookViewStore.resolvePdfCloseConfirm(true)"
       @cancel="bookViewStore.resolvePdfCloseConfirm(false)"
+      @extra="pdfCloseSaveAs"
     />
     <div v-if="resetting" class="reset-overlay" />
   </div>
