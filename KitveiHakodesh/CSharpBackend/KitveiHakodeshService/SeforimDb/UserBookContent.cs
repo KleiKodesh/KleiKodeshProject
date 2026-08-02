@@ -53,20 +53,25 @@ public sealed partial class SeforimDbService
     private string[]? GetUserBookFileLines(int localBookId)
     {
         string? path = null, fileType = null;
+        int totalLines = 0;
         Run(Corpus.UserBooks, () =>
         {
             using var conn = Open(Corpus.UserBooks);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT filePath, fileType FROM book WHERE id = @id";
+            cmd.CommandText = "SELECT filePath, fileType, totalLines FROM book WHERE id = @id";
             cmd.Parameters.AddWithValue("@id", localBookId);
             using var r = cmd.ExecuteReader();
             if (r.Read())
             {
                 path = r.IsDBNull(0) ? null : r.GetString(0);
                 fileType = r.IsDBNull(1) ? null : r.GetString(1);
+                totalLines = r.IsDBNull(2) ? 0 : r.GetInt32(2);
             }
         }, "getUserBookFilePath");
 
+        // totalLines > 0 means the book OWNS DB lines (Otzaria's import flow) — never
+        // splice file content into a DB-lined book (e.g. for a past-the-end page).
+        if (totalLines > 0) return null;
         if (string.IsNullOrWhiteSpace(path)) return null;
         if (!string.Equals(fileType, "txt", StringComparison.OrdinalIgnoreCase)) return null;
 
@@ -147,7 +152,8 @@ public sealed partial class SeforimDbService
         var list = new List<LineRow>();
         var lines = GetUserBookFileLines(localBookId);
         if (lines is null) return list;
-        for (int i = offset; i < lines.Length && list.Count < limit; i++)
+        // i >= 0 guards a negative offset (mirrors the hosted reader's loop).
+        for (int i = offset; i >= 0 && i < lines.Length && list.Count < limit; i++)
             list.Add(new LineRow { Id = 0, LineIndex = i, Content = lines[i] });
         return list;
     }

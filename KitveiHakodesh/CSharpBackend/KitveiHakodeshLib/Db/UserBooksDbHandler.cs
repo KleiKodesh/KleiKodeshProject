@@ -150,15 +150,21 @@ namespace KitveiHakodeshLib.Db
         private string[] GetFileLines(DbAccess db, int bookId)
         {
             string path = null, fileType = null;
-            foreach (var row in db.Query("SELECT filePath, fileType FROM book WHERE id = ?", new object[] { bookId }))
+            long totalLines = 0;
+            foreach (var row in db.Query("SELECT filePath, fileType, totalLines FROM book WHERE id = ?", new object[] { bookId }))
             {
-                object p, t;
+                object p, t, n;
                 row.TryGetValue("filePath", out p);
                 row.TryGetValue("fileType", out t);
+                row.TryGetValue("totalLines", out n);
                 path = p as string;
                 fileType = t as string;
+                if (n is long lv) totalLines = lv;
                 break;
             }
+            // totalLines > 0 means the book OWNS DB lines (Otzaria's import flow) —
+            // never splice file content into a DB-lined book.
+            if (totalLines > 0) return null;
             if (string.IsNullOrWhiteSpace(path)) return null;
             if (!string.Equals(fileType, "txt", StringComparison.OrdinalIgnoreCase)) return null;
 
