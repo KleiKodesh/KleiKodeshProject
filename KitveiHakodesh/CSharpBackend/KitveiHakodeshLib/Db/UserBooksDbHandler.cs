@@ -93,6 +93,113 @@ namespace KitveiHakodeshLib.Db
             }
         }
 
+        /// <summary>
+        /// FILE-BACKED content: Otzaria keeps a personal book's text in the file at
+        /// book.filePath (totalLines = 0, `line` table empty). Serves a page of
+        /// '\n'-split file lines with Id = 0 — file lines have NO line ids, and
+        /// per-line features are guarded off for id-less rows. tocEntry.lineIndex is
+        /// 0-based into this split (verified against real Otzaria data), so the split
+        /// keeps every element; only the display-only '\r' is trimmed.
+        /// Message: { bookId (LOCAL id), offset, limit } — limit 0 returns just
+        /// totalLines (the frontend's virtual-scroll init needs the real count).
+        /// v1 serves fileType 'txt' only (PDF/docx go through their own flows).
+        /// </summary>
+        public async Task HandleFileLines(JsonElement root, string id)
+        {
+            var db = Current();
+            if (db == null)
+            {
+                _bridge.Reply(id, new { rows = Array.Empty<object>(), totalLines = 0, unavailable = true });
+                return;
+            }
+            int bookId = root.GetProperty("bookId").GetInt32();
+            int offset = root.TryGetProperty("offset", out var o) ? o.GetInt32() : 0;
+            int limit = root.TryGetProperty("limit", out var l) ? l.GetInt32() : 0;
+            try
+            {
+                var reply = await Task.Run(() =>
+                {
+                    string[] lines = GetFileLines(db, bookId);
+                    if (lines == null) return new { rows = Array.Empty<object>(), totalLines = 0 };
+                    var rows = new System.Collections.Generic.List<object>();
+                    for (int i = offset; i >= 0 && i < lines.Length && rows.Count < limit; i++)
+                        rows.Add(new { id = 0, lineIndex = i, content = lines[i] });
+                    return new { rows = rows.ToArray(), totalLines = lines.Length };
+                }).ConfigureAwait(false);
+                _bridge.Reply(id, reply);
+            }
+            catch (Exception ex)
+            {
+                _bridge.Reply(id, new { error = ex.Message });
+            }
+        }
+
+        // Tiny LRU (2 entries): realistically only the open book is hot, and a large
+        // sefer's split lines can run tens of MB.
+        private readonly System.Collections.Generic.List<FileBookLines> _fileCache
+            = new System.Collections.Generic.List<FileBookLines>(2);
+
+        private sealed class FileBookLines
+        {
+            public int BookId;
+            public string Path;
+            public long Stamp;
+            public string[] Lines;
+        }
+
+        private string[] GetFileLines(DbAccess db, int bookId)
+        {
+            string path = null, fileType = null;
+            foreach (var row in db.Query("SELECT filePath, fileType FROM book WHERE id = ?", new object[] { bookId }))
+            {
+                object p, t;
+                row.TryGetValue("filePath", out p);
+                row.TryGetValue("fileType", out t);
+                path = p as string;
+                fileType = t as string;
+                break;
+            }
+            if (string.IsNullOrWhiteSpace(path)) return null;
+            if (!string.Equals(fileType, "txt", StringComparison.OrdinalIgnoreCase)) return null;
+
+            var info = new FileInfo(path);
+            if (!info.Exists) return null;
+            long stamp = info.LastWriteTimeUtc.Ticks ^ info.Length;
+
+            lock (_lock)
+            {
+                for (int i = 0; i < _fileCache.Count; i++)
+                {
+                    var c = _fileCache[i];
+                    if (c.BookId == bookId && c.Path == path && c.Stamp == stamp)
+                    {
+                        _fileCache.RemoveAt(i);
+                        _fileCache.Insert(0, c);
+                        return c.Lines;
+                    }
+                }
+            }
+
+            // BOM-aware UTF-8; invalid bytes decode to replacement chars rather than
+            // failing the book. Keep IDENTICAL semantics to the service's reader.
+            string text = File.ReadAllText(path, new System.Text.UTF8Encoding(false));
+            string[] lines = text.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                if (line.Length > 0 && line[line.Length - 1] == '\r')
+                    lines[i] = line.Substring(0, line.Length - 1);
+            }
+
+            lock (_lock)
+            {
+                _fileCache.RemoveAll(c => c.BookId == bookId);
+                _fileCache.Insert(0, new FileBookLines { BookId = bookId, Path = path, Stamp = stamp, Lines = lines });
+                if (_fileCache.Count > 2) _fileCache.RemoveAt(_fileCache.Count - 1);
+            }
+            return lines;
+        }
+
         public void HandleInfo(string id)
         {
             _ = Current(); // refresh resolution, then read both facts under ONE lock
