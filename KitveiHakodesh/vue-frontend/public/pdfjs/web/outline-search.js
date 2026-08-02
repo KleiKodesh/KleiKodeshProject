@@ -1930,6 +1930,15 @@
       // dangling. 'documentinit' fires right after setInitialView, per
       // document, regardless of download progress.
       app.eventBus._on('documentinit', function () {
+        // The host sets __khSuppressUnloadPrompt on the OUTGOING document's
+        // window before navigating — but an iframe's WindowProxy keeps its JS
+        // identity across navigations, so on a REUSED iframe (pdf→pdf tab
+        // switch) the flag written during teardown is still set when the NEXT
+        // document initializes here. Left set, it silences _hasChanges for the
+        // life of that document — annotation edits would close/unload without
+        // a prompt. Clear it: a new document starting means any suppression
+        // window is over.
+        window.__khSuppressUnloadPrompt = false;
         outlineCount = 0;
         input.value = '';
         invalidateIndex();

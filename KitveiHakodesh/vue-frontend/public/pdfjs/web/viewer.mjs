@@ -5631,6 +5631,11 @@ class BaseDownloadManager {
 
 class DownloadManager extends BaseDownloadManager {
   _triggerDownload(blobUrl, originalUrl, filename, isAttachment = false) {
+    // PATCH: consume the save-success arm (set by save() only after
+    // saveDocument() resolved). Consumed here so a cancelled FSA picker can't
+    // leave it armed for a later unrelated download.
+    const khSavePending = window.__khSaveDataPending === true;
+    window.__khSaveDataPending = false;
     // Custom: use File System Access API save dialog when available
     if (blobUrl && !isAttachment && window.showSaveFilePicker) {
       (async () => {
@@ -5645,22 +5650,25 @@ class DownloadManager extends BaseDownloadManager {
           await writable.write(blob);
           await writable.close();
           if (blobUrl.startsWith("blob:")) URL.revokeObjectURL(blobUrl);
-          // PATCH: signal a COMPLETED save (file actually written). A cancelled
-          // picker never reaches here, so unsaved-state consumers (the outline
-          // editor's dirty flag) correctly stay dirty on cancel.
-          document.dispatchEvent(new CustomEvent("kh-save-complete"));
+          // PATCH: signal a COMPLETED save — file actually written AND the
+          // bytes came from a successful saveDocument() (khSavePending). A
+          // cancelled picker never reaches here; a failed save falls back to
+          // download() with khSavePending unset — both correctly stay dirty.
+          if (khSavePending) {
+            document.dispatchEvent(new CustomEvent("kh-save-complete"));
+          }
           return;
         } catch {
-          // User cancelled or API error — fall through to default anchor download
+          // User cancelled or a mid-write FSA error — no anchor fallback runs
+          // here (the outer function already returned); nothing was saved.
         }
       })();
       return;
     }
     this._defaultTriggerDownload(blobUrl, originalUrl, filename, isAttachment);
-    if (!isAttachment) {
+    if (!isAttachment && khSavePending) {
       // PATCH: the anchor-download fallback has no cancel affordance — the
-      // download starts immediately, so the save is complete for dirty-state
-      // purposes.
+      // download starts immediately, so a successful save's bytes are on disk.
       document.dispatchEvent(new CustomEvent("kh-save-complete"));
     }
   }
@@ -18840,6 +18848,12 @@ const PDFViewerApplication = {
     await this.pdfScriptingManager.dispatchWillSave();
     try {
       const data = await this.pdfDocument.saveDocument();
+      // PATCH: arm the save-complete signal ONLY for bytes that came out of a
+      // successful saveDocument(). The catch below falls back to download(),
+      // which writes the ORIGINAL bytes — dispatching kh-save-complete for
+      // that would clear the unsaved-edits state while the edits were in fact
+      // discarded. Same for plain downloads and the page-organizer path.
+      window.__khSaveDataPending = true;
       this.downloadManager.download(data, this._downloadUrl, this._docFilename);
     } catch (reason) {
       console.error(`Error when saving the document:`, reason);

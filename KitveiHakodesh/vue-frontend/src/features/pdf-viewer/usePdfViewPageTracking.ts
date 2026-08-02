@@ -16,7 +16,7 @@
 import { onBeforeUnmount } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import type { PdfOutlineEntry, PdfOutlineEditEntry } from '@/stores/bookViewStore'
+import type { PdfOutlineEntry, PdfOutlineEditEntry, PdfBridge } from '@/stores/bookViewStore'
 
 // PDF.js types — just enough for what we access at runtime.
 interface PdfDestinationRef {
@@ -190,6 +190,12 @@ export function usePdfViewPageTracking() {
   let pdfOutlineEntries: PdfOutlineEntry[] = []
   let tabId: string | null = null
   let pendingPage: { pageNumber: number } | null = null
+  // Bumped per attach — stale async work (the rehydrate poll) checks it.
+  let attachGeneration = 0
+  // The bridge object this instance registered — detach only unregisters its
+  // OWN bridge, so a late detach (cross-pane moves, load-event ordering) can't
+  // delete a bridge another pane just registered for the same tab.
+  let registeredBridge: PdfBridge | null = null
   let pagechangingHandler: ((data: unknown) => void) | null = null
   let documentloadedHandler: ((data: unknown) => void) | null = null
   let applicationRef: PdfViewerApplication | null = null
@@ -237,7 +243,7 @@ export function usePdfViewPageTracking() {
     pdfOutlineEntries = buildPdfOutlineEntries(outlineEntries)
 
     if (tabId) {
-      bookViewStore.registerPdfBridge(tabId, {
+      registeredBridge = {
         get outlineEntries() { return pdfOutlineEntries },
         navigateToEntry: navigateToPdfEntry,
         // Live dirty state, read straight from the viewer. Covers annotation
@@ -251,7 +257,8 @@ export function usePdfViewPageTracking() {
             return false
           }
         },
-      })
+      }
+      bookViewStore.registerPdfBridge(tabId, registeredBridge)
     }
 
     // Apply any page change that arrived while the index was being built.
@@ -292,7 +299,14 @@ export function usePdfViewPageTracking() {
     // rehydrates into the same document.
     const khWindow = contentWindow as KhViewerWindow
     const notifyTabId = tabId
-    const notifyFilePath = paneNavigation.activeTab?.localFilePath ?? ''
+    // Snapshot identity: HebrewBooks tabs have no localFilePath (only a
+    // virtual URL + book id), so keying on path alone would collapse to
+    // tab-only for them — a different HB book downloaded into the same tab
+    // would rehydrate the previous book's TOC edits into it.
+    const activeTab = paneNavigation.activeTab
+    const notifyFilePath =
+      activeTab?.localFilePath ??
+      (activeTab?.localFileHbBookId ? `hb:${activeTab.localFileHbBookId}` : '')
     khWindow.__khOutlineHostNotify = (state) => {
       if (!notifyTabId) return
       bookViewStore.setPdfEditState(notifyTabId, {
@@ -307,10 +321,14 @@ export function usePdfViewPageTracking() {
     // bar (button state is racy — see CUSTOMIZATIONS.md); poll briefly for it.
     const parked = notifyTabId ? bookViewStore.getPdfEditState(notifyTabId) : null
     if (parked && parked.dirty && parked.filePath === notifyFilePath) {
+      const myGeneration = ++attachGeneration
       const tryRehydrate = (attempt: number) => {
-        // The iframe may have navigated on to another document — bail if this
-        // attach is stale.
-        if (contentWindowRef !== contentWindow) return
+        // Bail if a newer attach superseded this one. Comparing contentWindow
+        // identity is NOT enough: a reused iframe keeps the same WindowProxy
+        // across navigations, so a poll started for document A would otherwise
+        // keep running after the iframe navigated to document B and inject A's
+        // outline into B once B's readiness flag appears.
+        if (myGeneration !== attachGeneration || contentWindowRef !== contentWindow) return
         const doc = contentWindow.document
         const settled =
           doc.getElementById('outlineSearchBar')?.dataset.outlineLoaded === '1' &&
@@ -343,9 +361,11 @@ export function usePdfViewPageTracking() {
         // contentWindow may already be gone — nothing to silence.
       }
     }
-    if (tabId) {
+    attachGeneration++ // invalidate any in-flight rehydrate poll
+    if (tabId && registeredBridge && bookViewStore.getPdfBridge(tabId) === registeredBridge) {
       bookViewStore.unregisterPdfBridge(tabId)
     }
+    registeredBridge = null
 
     if (contentWindowRef) {
       const application = (

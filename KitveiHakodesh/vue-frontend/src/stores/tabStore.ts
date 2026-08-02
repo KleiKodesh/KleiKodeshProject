@@ -535,7 +535,16 @@ export const useTabStore = defineStore('tabs', () => {
       dirty.map((t) => t.title || t.localFileName || ''),
       () => {
         for (const t of dirty) approvedPdfClose.add(t.id)
-        retry()
+        try {
+          retry()
+        } finally {
+          // The re-run is synchronous; anything still approved afterwards was
+          // NOT closed by it (e.g. the tab moved panes while the dialog was
+          // up and the recomputed close set no longer includes it). A stale
+          // approval would let a later dirty close of that tab skip the
+          // prompt entirely — release the whole round.
+          for (const t of dirty) approvedPdfClose.delete(t.id)
+        }
       },
     )
     return true

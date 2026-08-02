@@ -185,7 +185,7 @@ const iframeSrc = computed(() => {
 // contentWindow still belongs to the outgoing document. The unmount path needs
 // no equivalent: pageTracking.detach() sets the same flag before the
 // about:blank navigation in onBeforeUnmount.
-watch(iframeSrc, () => {
+watch(iframeSrc, (next) => {
   const w = iframeRef.value?.contentWindow as
     | (Window & { __khSuppressUnloadPrompt?: boolean })
     | null
@@ -197,7 +197,17 @@ watch(iframeSrc, () => {
       // cross-origin or already-dead window — nothing to silence
     }
   }
+  // iframeSrc going null removes the iframe via v-else-if WITHOUT unmounting
+  // this component — detach explicitly so the bridge doesn't linger as a
+  // dead-realm entry (a stale bridge can phantom-block beforeunload).
+  if (!next) pageTracking.detach()
 }, { flush: 'pre' })
+
+// Same reason: flipping into the converting state replaces the iframe branch.
+// (Getter form — `converting` is declared further down in this file.)
+watch(() => paneNavigation.activeTab.localFileConverting ?? false, (isConverting) => {
+  if (isConverting) pageTracking.detach()
+})
 
 // Computed pane-specific converting state (localFileStore.converting reads pane 1 only)
 const converting = computed(() => paneNavigation.activeTab.localFileConverting ?? false)
