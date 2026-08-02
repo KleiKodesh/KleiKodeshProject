@@ -490,10 +490,11 @@
   color: var(--treeitem-color);
 }
 
-/* --- Outline editing (add / rename / delete / re-nest TOC entries) ---
-   The edit toggle shares the search row; the action bar is a second row shown
-   only in edit mode. See outline-search.js — "Editing". */
-#outlineEditToggle {
+/* --- Outline editing: direct manipulation, no mode ---
+   The + button shares the search row (Acrobat's "new bookmark" header button);
+   row actions live in a right-click / hover-⋯ context menu; drag moves rows.
+   See outline-search.js — "Editing". */
+#outlineAddButton {
   flex: 0 0 auto;
   position: relative; /* anchors the .dirty::after dot */
   width: 20px;
@@ -504,24 +505,20 @@
   border-radius: 2px;
   background: none;
   color: var(--main-color);
-  opacity: 0.55;
-  font-size: 12px;
+  opacity: 0.6;
+  font-size: 15px;
   line-height: 18px;
   cursor: pointer;
 }
-#outlineEditToggle::before {
-  content: '\270E'; /* ✎ */
+#outlineAddButton::before {
+  content: '+';
 }
-#outlineEditToggle:hover {
-  opacity: 0.9;
+#outlineAddButton:hover {
+  opacity: 1;
   background: var(--button-hover-color);
 }
-#outlineEditToggle.active {
-  opacity: 1;
-  background: var(--toggled-btn-bg-color);
-}
-/* Unsaved-edits marker: a small dot on the toggle. */
-#outlineEditToggle.dirty::after {
+/* Unsaved-edits marker: a small dot on the + button. */
+#outlineAddButton.dirty::after {
   content: '';
   position: absolute;
   top: -1px;
@@ -532,32 +529,78 @@
   background: var(--progressBar-color, #0a84ff);
 }
 
-#outlineEditBar {
+/* Context menu — floats at the cursor, styled on PDF.js's doorhanger tokens. */
+#outlineContextMenu {
+  position: fixed;
+  z-index: 40000;
+  min-width: 160px;
+  padding: 4px;
+  border: 1px solid var(--doorhanger-border-color);
+  border-radius: 6px;
+  background: var(--doorhanger-bg-color);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.25);
+  direction: rtl;
+}
+.outlineMenuItem {
   display: flex;
-  gap: 2px;
-  padding: 3px 6px 1px;
-  border-top: 1px solid var(--separator-color);
-  margin-top: 3px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--main-color);
+  font-size: 12px;
+  text-align: start;
+  cursor: pointer;
 }
-#outlineEditBar.hidden {
-  display: none;
+.outlineMenuItem:hover {
+  background: var(--button-hover-color);
 }
-.outlineEditAction {
-  flex: 1;
-  height: 20px;
+.outlineMenuHint {
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+/* Hover ⋯ — one floating button parked at the hovered row's end (left, RTL). */
+#outlineRowMenuButton {
+  position: fixed;
+  z-index: 39999;
+  width: 18px;
+  height: 16px;
   padding: 0;
   border: none;
   border-radius: 2px;
-  background: none;
+  background: var(--doorhanger-bg-color);
   color: var(--main-color);
   opacity: 0.75;
-  font-size: 13px;
-  line-height: 20px;
+  font-size: 12px;
+  line-height: 14px;
   cursor: pointer;
 }
-.outlineEditAction:hover {
+#outlineRowMenuButton:hover {
   opacity: 1;
   background: var(--button-hover-color);
+}
+
+/* Drag & drop */
+#outlinesView .treeItem.outlineDragging > a {
+  opacity: 0.4;
+}
+#outlineDropIndicator {
+  position: fixed;
+  z-index: 40001;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--progressBar-color, #0a84ff);
+  pointer-events: none;
+}
+/* "Drop INTO" (become a child): highlight the prospective parent row. */
+#outlinesView .treeItem.outlineDropIntoRow > a {
+  background-color: color-mix(in srgb, var(--progressBar-color, #0a84ff) 22%, transparent);
+  border-radius: 2px;
 }
 
 /* Renaming: the anchor becomes contentEditable — make that visible. */
@@ -567,9 +610,9 @@
   background: var(--field-bg-color);
 }
 
-/* Rows the user added have no PDF destination yet (no underline cue needed —
-   they look like every other row; the dashed start-edge marks them as new). */
-#outlinesView.outlineEditing .treeItem[data-toc-new] > a {
+/* Rows with unsaved editor-owned targets (added or retargeted): a dashed
+   start-edge marks them until the file is saved. */
+#outlinesView .treeItem[data-toc-new] > a {
   border-inline-start: 2px dashed var(--progressBar-color, #0a84ff);
   padding-inline-start: 2px;
 }
