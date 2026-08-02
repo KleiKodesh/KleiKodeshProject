@@ -26,6 +26,9 @@ import { query } from '@/webview-host/seforimDb'
 import { SQL } from '@/webview-host/queries.sql'
 import { isDbHosted } from '@/webview-host/seforimApi'
 import { serviceCall } from '@/webview-host/serviceClient'
+import {
+  groupByCorpus, queryUserBooks, shiftRowIds, userTocHasLineIndex,
+} from '@/webview-host/userBooksDb'
 import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 // The only remaining cross-feature import here. `stripTocTitleRoots` carries a
 // hardcoded FORCE_STRIP_BOOK_IDS list, so it is not generic enough for utils/ —
@@ -161,23 +164,45 @@ export async function fetchTocRowsForBooks(
   const filterWord = lastTocWord?.toLowerCase() ?? ''
   const usePrefilter = filterWord.length > 0 && LIKE_SAFE_WORD_RE.test(filterWord)
 
-  // Dev routes through the service (which owns the prefilter/escape/batch logic);
-  // hosted keeps the SQL here (prefiltered query, or parallel batches by book id).
+  // Dev routes through the service (which owns the prefilter/escape/batch logic AND
+  // the personal-books split); hosted keeps the SQL here, split per corpus — the
+  // candidate list can mix library and personal books once the catalog is unioned.
+  const fetchHosted = async (
+    ids: number[],
+    run: <T>(sql: string, params: unknown[]) => Promise<T[]>,
+    tocHasLineIndex: boolean,
+  ): Promise<TocRow[]> => {
+    if (usePrefilter)
+      return run<TocRow>(SQL.GET_TOC_TITLES_MATCHING_FOR_BOOKS(ids.length, tocHasLineIndex), [
+        ...ids,
+        escapeLikeWord(filterWord),
+      ])
+    const batches = await Promise.all(
+      splitIntoBatches(ids).map((batch) =>
+        run<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length, tocHasLineIndex), batch),
+      ),
+    )
+    return batches.flat()
+  }
+
   let rawRows: TocRow[]
   if (!isDbHosted()) {
     rawRows = (await serviceCall<{ rows: TocRow[] }>('getTocTitlesForBooks', { bookIds, filterWord })).rows
-  } else if (usePrefilter) {
-    rawRows = await query<TocRow>(SQL.GET_TOC_TITLES_MATCHING_FOR_BOOKS(bookIds.length), [
-      ...bookIds,
-      escapeLikeWord(filterWord),
-    ])
   } else {
-    const batches = await Promise.all(
-      splitIntoBatches(bookIds).map((batch) =>
-        query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
-      ),
-    )
-    rawRows = batches.flat()
+    const { library, userBooks } = groupByCorpus(bookIds)
+    const parts: TocRow[][] = []
+    if (library.length > 0)
+      parts.push(await fetchHosted(library, (s, p) => query(s, p), false))
+    if (userBooks.length > 0) {
+      try {
+        const hasIdx = await userTocHasLineIndex()
+        const rows = await fetchHosted(userBooks, (s, p) => queryUserBooks(s, p), hasIdx)
+        parts.push(shiftRowIds(rows, ['id', 'parentId', 'bookId']))
+      } catch (e) {
+        console.warn('[tocHeuristics] personal-books TOC search failed — library only:', e)
+      }
+    }
+    rawRows = parts.flat()
   }
   if (isCancelled()) return null
 
