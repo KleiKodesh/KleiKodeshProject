@@ -1275,6 +1275,8 @@
      * next save writes exactly this tree.
      */
     function rebuildFromState(outline) {
+      closeContextMenu();
+      clearDrag();
       outlinesView.replaceChildren();
       var total = 0;
       function build(items, container) {
@@ -1451,7 +1453,7 @@
       }
       focusedIndex = -1;
       afterEdit();
-      var target = firstPromoted ?? focusNext
+      var target = firstPromoted ?? focusNext;
       if (target && outlinesView.contains(target)) {
         focusRow(target);
       }
@@ -1618,6 +1620,10 @@
         contextMenu = null;
         contextMenuRow = null;
       }
+      if (hoverMenuButton && hoverMenuButton.isConnected) {
+        hoverMenuButton.remove();
+        hoverRow = null;
+      }
     }
 
     var MENU_ITEMS = [
@@ -1689,6 +1695,11 @@
     }
 
     outlinesView.addEventListener('contextmenu', function (e) {
+      if (dragState && dragState.started) {
+        e.preventDefault();
+        clearDrag();
+        return;
+      }
       var target = e.target;
       if (!target || !target.closest) {
         return;
@@ -1712,13 +1723,27 @@
       }
     }, true);
     document.addEventListener('keydown', function (e) {
-      if (e.key === 'Escape' && contextMenu) {
+      if (e.key !== 'Escape') {
+        return;
+      }
+      if (dragState && dragState.started) {
+        e.stopPropagation();
+        clearDrag(); // nulls dragState — the eventual pointerup drops nothing
+        return;
+      }
+      if (contextMenu) {
         e.stopPropagation();
         closeContextMenu();
         input.focus({ preventScroll: true });
       }
     }, true);
-    content.addEventListener('scroll', closeContextMenu, true);
+    content.addEventListener('scroll', function () {
+      closeContextMenu();
+      if (hoverMenuButton.isConnected) {
+        hoverMenuButton.remove();
+        hoverRow = null;
+      }
+    }, true);
 
     // ── Hover ⋯ — one floating button, repositioned onto the hovered row ─────
     // A single element (not one per row) so the tree DOM PDF.js owns stays
@@ -1750,8 +1775,20 @@
         document.body.append(hoverMenuButton);
       }
     });
-    outlinesView.addEventListener('mouseleave', function () {
+    outlinesView.addEventListener('mouseleave', function (e) {
+      // Moving onto the ⋯ button itself IS a DOM mouseleave of the outline
+      // (the button is a body child positioned over the row) — keep it, or it
+      // strobes on/off under the pointer and clicks fall through to the row.
+      if (e.relatedTarget === hoverMenuButton) {
+        return;
+      }
       if (hoverMenuButton.isConnected && !contextMenu) {
+        hoverMenuButton.remove();
+        hoverRow = null;
+      }
+    });
+    hoverMenuButton.addEventListener('mouseleave', function (e) {
+      if (!contextMenu && !(e.relatedTarget && outlinesView.contains(e.relatedTarget))) {
         hoverMenuButton.remove();
         hoverRow = null;
       }
@@ -1846,10 +1883,11 @@
     function completeDrop() {
       var row = dragState.row;
       var target = dropTarget;
-      if (!target || !target.row || !outlinesView.contains(target.row)) {
+      if (!target || !target.row || !outlinesView.contains(target.row) || !outlinesView.contains(row)) {
         return false;
       }
       var oldHost = row.parentNode;
+      var oldNext = row.nextSibling;
       if (target.mode === 'into') {
         ensureToggler(target.row);
         ensureItemsContainer(target.row).append(row);
@@ -1875,6 +1913,12 @@
           target.row.after(row);
         }
       }
+      if (row.parentNode === oldHost && row.nextSibling === oldNext) {
+        // Positional no-op (dropped right back where it was) — don't dirty
+        // the document for it, same as an unchanged rename.
+        focusRow(row);
+        return true;
+      }
       if (oldHost && oldHost !== row.parentNode && oldHost.classList && oldHost.classList.contains('treeItems') && oldHost.parentNode) {
         cleanupItem(oldHost.parentNode);
       }
@@ -1895,6 +1939,7 @@
       if (!anchor) {
         return;
       }
+      clearDrag(); // a lost pointerup must not leave an orphaned gesture
       dragState = {
         row: anchor.parentNode,
         started: false,
@@ -1906,6 +1951,10 @@
 
     document.addEventListener('pointermove', function (e) {
       if (!dragState) {
+        return;
+      }
+      if ((e.buttons & 1) === 0) {
+        clearDrag(); // primary button no longer down — the pointerup was lost
         return;
       }
       if (!dragState.started) {
