@@ -116,6 +116,7 @@ namespace KitveiHakodeshLib
         private HebrewBooksDb _hebrewBooksDb;
         private FileSystemSearchHandler _fileSystemSearch;
         private UserSettingsDbHandler _userSettings;
+        private UserBooksDbHandler _userBooks;
         private string _dbInjectionScriptId;
 
         // A file path queued before the Vue app has finished mounting.
@@ -531,6 +532,9 @@ namespace KitveiHakodeshLib
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
             _fileSystemSearch.UiControl = this;
             _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
+            // A delegate, not the current path: the sibling candidate must follow the
+            // user's seforim-DB changes without a re-wire (the handler is otherwise lazy).
+            _userBooks = new UserBooksDbHandler(_bridge, AppSettings.LoadDbPath);
 
             _db.OnDbPathPicked = path =>
             {

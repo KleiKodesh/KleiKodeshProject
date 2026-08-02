@@ -47,6 +47,22 @@ export const SQL = {
     ORDER BY te.id
   `,
 
+  /**
+   * Variant for DBs whose tocEntry carries lineIndex DIRECTLY (Otzaria-built
+   * user_books.db): there te.lineId is NULL and `line` is empty, so the JOIN
+   * variant above would return NULL for every entry and the TOC couldn't
+   * navigate. Same column order as the JOIN variant. Pick by probing
+   * pragma_table_info('tocEntry') on the target DB — see userTocHasLineIndex().
+   */
+  GET_ALL_TOC_ENTRIES_TOC_LINEINDEX: `
+    SELECT te.id, te.parentId, te.level, te.lineId, te.hasChildren,
+           tt.text, te.lineIndex
+    FROM tocEntry te
+    JOIN tocText tt ON tt.id = te.textId
+    WHERE te.bookId = ?
+    ORDER BY te.id
+  `,
+
   /** TOC entry ids, parentIds, bookIds, titles and lineIndex for multiple books — used for TOC search fallback */
   GET_TOC_TITLES_FOR_BOOKS: (count: number) => `
     SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
@@ -517,6 +533,17 @@ export const SQL = {
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
     LEFT JOIN line l ON l.id = te.lineId
+    WHERE te.bookId = ?
+      AND tt.text LIKE ?
+    ORDER BY te.id ASC
+    LIMIT 1
+  `,
+
+  /** Direct-lineIndex variant — see GET_ALL_TOC_ENTRIES_TOC_LINEINDEX. */
+  GET_TOC_ENTRY_BY_TEXT_PREFIX_TOC_LINEINDEX: `
+    SELECT te.id, te.lineIndex
+    FROM tocEntry te
+    JOIN tocText tt ON tt.id = te.textId
     WHERE te.bookId = ?
       AND tt.text LIKE ?
     ORDER BY te.id ASC

@@ -5,6 +5,8 @@ namespace KitveiHakodeshLib.Bridge
     /// Exposes Promise-based functions on window:
     ///   __webviewQuery(sql, params)        — run a SQL query against the main DB
     ///   __webviewDictQuery(sql, params)    — run a SQL query against KitveiHakodesh_dictionary.db
+    ///   __webviewUserBooksQuery(sql, params) — run a SQL query against Otzaria's user_books.db
+    ///   __webviewUserBooksInfo()           — { present, path } availability of user_books.db
     ///   __webviewSetDbPath(path)           — set the DB path programmatically
     ///   __webviewPickDbPath()              — open the native DB file picker (push event)
     ///   __webviewAction(action, args)      — generic bridge for all other actions
@@ -53,6 +55,8 @@ namespace KitveiHakodeshLib.Bridge
     window.__webviewAction         = function (action, args) { return post(Object.assign({ action: action }, args || {})); };
     window.__webviewUserSettingsQuery   = function (sql, params) { return post({ action: 'userSettingsQuery',   sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
     window.__webviewUserSettingsExecute = function (sql, params) { return post({ action: 'userSettingsExecute', sql: sql, params: params || [] }).then(function (m) { return { lastInsertId: m.lastInsertId }; }); };
+    window.__webviewUserBooksQuery      = function (sql, params) { return post({ action: 'userBooks-sql', sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows, unavailable: !!m.unavailable }; }); };
+    window.__webviewUserBooksInfo       = function ()             { return post({ action: 'userBooksInfo' }); };
 })();";
 
         /// <summary>
