@@ -1580,6 +1580,38 @@ processing (including the empty-outline dance) has settled, and removed on
 button state alone is a racy readiness probe — tests and the host app should key on this
 attribute instead.
 
+### Host (Vue app) integration — unsaved-edits guard
+
+The viewer's iframe is destroyed or navigated by the host on tab switches, so unsaved
+edits are pushed OUT eagerly — after every edit, not at teardown (there is no reliable
+teardown moment). Contract, all on the iframe `window`:
+
+- **`__khOutlineHostNotify({dirty, outline})`** — assigned by the host
+  (`usePdfViewPageTracking.attach`); called after every edit and, with `dirty:false`,
+  after a COMPLETED save. The host parks the snapshot per tab
+  (`bookViewStore.pdfEditStateByTabId`) and its close guards read it for background tabs
+  whose viewer no longer exists.
+- **`__khOutlineEditor`** — `{getState, setState, isDirty}`. The host calls
+  `setState({outline})` to rehydrate parked edits when a tab returns with the same file
+  (rows are rebuilt with `data-toc-page` and no href — navigation goes through the
+  `goToPage` fallback, and the next save writes exactly this tree).
+- **`__khSuppressUnloadPrompt`** — set by the host just before a Vue-initiated
+  navigation/teardown. The `_hasChanges` wrapper returns false while set, silencing
+  PDF.js's own beforeunload prompt for navigations whose state the host already holds.
+  Without it, switching between two PDF tabs pops the browser's native English prompt
+  mid-switch — and cancelling that desyncs the iframe from the already-switched tab.
+- **`kh-save-complete`** (DOM event on `document`) — dispatched by the patched
+  `_triggerDownload` in `viewer.mjs` only after the file was actually written (or the
+  fallback anchor download fired). A cancelled save picker dispatches nothing, so edits
+  correctly stay dirty. Clears the editor's dirty flag and notifies the host.
+
+Vue side (not in this folder): `bookViewStore` (snapshots + `hasUnsavedPdfChanges` +
+dialog state), `tabStore` (synchronous close guards at the single chokepoint all close
+paths funnel through, including the native chrome-tabs mirror), `App.vue` (themed
+ConfirmDialog + window `beforeunload`). **Known gap:** the WinForms WebView2 host closing
+its window does not run `beforeunload` — the C# side needs a FormClosing hook that asks
+the Vue app (`bookViewStore.hasAnyUnsavedPdfChanges()`) before allowing close.
+
 ### If the outline DOM changes on upgrade
 
 Only two assumptions matter, both in `indexOutline()`:

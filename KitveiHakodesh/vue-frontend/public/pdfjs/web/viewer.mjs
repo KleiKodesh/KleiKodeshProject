@@ -5645,6 +5645,10 @@ class DownloadManager extends BaseDownloadManager {
           await writable.write(blob);
           await writable.close();
           if (blobUrl.startsWith("blob:")) URL.revokeObjectURL(blobUrl);
+          // PATCH: signal a COMPLETED save (file actually written). A cancelled
+          // picker never reaches here, so unsaved-state consumers (the outline
+          // editor's dirty flag) correctly stay dirty on cancel.
+          document.dispatchEvent(new CustomEvent("kh-save-complete"));
           return;
         } catch {
           // User cancelled or API error — fall through to default anchor download
@@ -5653,6 +5657,12 @@ class DownloadManager extends BaseDownloadManager {
       return;
     }
     this._defaultTriggerDownload(blobUrl, originalUrl, filename, isAttachment);
+    if (!isAttachment) {
+      // PATCH: the anchor-download fallback has no cancel affordance — the
+      // download starts immediately, so the save is complete for dirty-state
+      // purposes.
+      document.dispatchEvent(new CustomEvent("kh-save-complete"));
+    }
   }
   _defaultTriggerDownload(blobUrl, originalUrl, filename, isAttachment = false) {
     if (!blobUrl && !isAttachment) {

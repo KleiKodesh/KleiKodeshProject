@@ -16,7 +16,7 @@
 import { onBeforeUnmount } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import type { PdfOutlineEntry } from '@/stores/bookViewStore'
+import type { PdfOutlineEntry, PdfOutlineEditEntry } from '@/stores/bookViewStore'
 
 // PDF.js types — just enough for what we access at runtime.
 interface PdfDestinationRef {
@@ -46,6 +46,21 @@ interface PdfViewerApplication {
     _on(event: string, handler: (data: unknown) => void): void
     _off(event: string, handler: (data: unknown) => void): void
   }
+  /** Dirty check — wrapped by outline-search.js to include outline edits. */
+  _hasChanges?: () => boolean
+}
+
+/** The outline editor's host API, exposed by outline-search.js on the iframe window. */
+interface KhOutlineEditor {
+  getState(): { dirty: boolean; outline: PdfOutlineEditEntry[] }
+  setState(state: { outline: PdfOutlineEditEntry[] }): void
+  isDirty(): boolean
+}
+
+interface KhViewerWindow extends Window {
+  __khOutlineHostNotify?: (state: { dirty: boolean; outline: PdfOutlineEditEntry[] }) => void
+  __khOutlineEditor?: KhOutlineEditor
+  __khSuppressUnloadPrompt?: boolean
 }
 
 // A flat, sorted record of an outline entry with its resolved page number.
@@ -225,6 +240,17 @@ export function usePdfViewPageTracking() {
       bookViewStore.registerPdfBridge(tabId, {
         get outlineEntries() { return pdfOutlineEntries },
         navigateToEntry: navigateToPdfEntry,
+        // Live dirty state, read straight from the viewer. Covers annotation
+        // edits AND outline edits (the viewer wraps _hasChanges to include
+        // both). Only callable while this iframe is alive — the close guard
+        // falls back to the parked snapshot otherwise.
+        hasUnsavedChanges: () => {
+          try {
+            return applicationRef?._hasChanges?.() === true
+          } catch {
+            return false
+          }
+        },
       })
     }
 
@@ -259,6 +285,45 @@ export function usePdfViewPageTracking() {
     }
     application.eventBus._on('documentloaded', documentloadedHandler)
 
+    // ── Unsaved outline edits: eager snapshot + rehydrate ─────────────────────
+    // The viewer pushes {dirty, outline} after EVERY edit (there is no reliable
+    // teardown moment — tab switches navigate or destroy this iframe). Snapshots
+    // are keyed by tab and file so a tab that navigated elsewhere and back only
+    // rehydrates into the same document.
+    const khWindow = contentWindow as KhViewerWindow
+    const notifyTabId = tabId
+    const notifyFilePath = paneNavigation.activeTab?.localFilePath ?? ''
+    khWindow.__khOutlineHostNotify = (state) => {
+      if (!notifyTabId) return
+      bookViewStore.setPdfEditState(notifyTabId, {
+        filePath: notifyFilePath,
+        dirty: state.dirty,
+        outline: state.outline,
+      })
+    }
+
+    // Rehydrate parked edits once the viewer's outline processing settles.
+    // outline-search.js flags readiness via data-outline-loaded on its search
+    // bar (button state is racy — see CUSTOMIZATIONS.md); poll briefly for it.
+    const parked = notifyTabId ? bookViewStore.getPdfEditState(notifyTabId) : null
+    if (parked && parked.dirty && parked.filePath === notifyFilePath) {
+      const tryRehydrate = (attempt: number) => {
+        // The iframe may have navigated on to another document — bail if this
+        // attach is stale.
+        if (contentWindowRef !== contentWindow) return
+        const doc = contentWindow.document
+        const settled =
+          doc.getElementById('outlineSearchBar')?.dataset.outlineLoaded === '1' &&
+          khWindow.__khOutlineEditor != null
+        if (settled) {
+          khWindow.__khOutlineEditor!.setState({ outline: parked.outline })
+          return
+        }
+        if (attempt < 100) setTimeout(() => tryRehydrate(attempt + 1), 100)
+      }
+      tryRehydrate(0)
+    }
+
     // Already loaded — init immediately.
     if (application.pdfDocument) {
       initOutlineAndSync(application)
@@ -266,6 +331,18 @@ export function usePdfViewPageTracking() {
   }
 
   function detach() {
+    // Vue-initiated teardown: the snapshot already holds the edits (pushed on
+    // every edit), so silence the iframe's own beforeunload prompt for the
+    // upcoming navigation/removal. Without this, switching between two PDF tabs
+    // pops the browser's native dialog — and cancelling it desyncs the iframe
+    // from the already-switched tab state.
+    if (contentWindowRef) {
+      try {
+        ;(contentWindowRef as KhViewerWindow).__khSuppressUnloadPrompt = true
+      } catch {
+        // contentWindow may already be gone — nothing to silence.
+      }
+    }
     if (tabId) {
       bookViewStore.unregisterPdfBridge(tabId)
     }

@@ -80,3 +80,10 @@ void Promise.all(
 if (hasHostBridge) {
   window.chrome?.webview?.postMessage({ id: '0', action: 'appReady' })
 }
+
+// DEV-only test hook: lets the Playwright rigs open a local file and inspect
+// tab/PDF-edit state without UI scraping. Stripped from production builds by
+// the import.meta.env.DEV guard (dead-code eliminated).
+if (import.meta.env.DEV) {
+  void import('./devTestHook').then((m) => m.installDevTestHook())
+}
