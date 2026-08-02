@@ -95,10 +95,15 @@ namespace KitveiHakodeshLib.Db
 
         public void HandleInfo(string id)
         {
-            var db = Current();
+            _ = Current(); // refresh resolution, then read both facts under ONE lock
+            bool present;
             string path;
-            lock (_lock) path = _path;
-            _bridge.Reply(id, new { present = db != null, path });
+            lock (_lock)
+            {
+                present = _db != null;
+                path = _path;
+            }
+            _bridge.Reply(id, new { present, path });
         }
 
         // ── Resolution ────────────────────────────────────────────────────────────
@@ -121,9 +126,11 @@ namespace KitveiHakodeshLib.Db
                 if (path == null) return null;
                 try
                 {
-                    // Small pool (personal-book queries are a trickle next to the main
-                    // DB's) and STRICTLY no writes — this is another app's live file.
-                    _db = new DbAccess(path, poolSize: 2, ensureIndexes: false);
+                    // Same pool size as the main DB: opening a personal book fires the
+                    // same concurrent query fan-out (bookById + TOC + line pages + …),
+                    // and SQLiteConnection instances must not run commands concurrently.
+                    // STRICTLY no index writes — this is another app's live file.
+                    _db = new DbAccess(path, ensureIndexes: false);
                     _path = path;
                 }
                 catch (Exception ex)
