@@ -390,4 +390,10 @@ KitveiHakodesh/scripts/**/baseline_source6/
 KitveiHakodesh/scripts/**/__pycache__/
 KitveiHakodesh/scripts/**/*.json
 
+# Separate projects that happen to sit in this folder. Neither is a dependency of
+# the add-in — nothing here builds against them — so this repo does not track them.
+# Each is its own git repo with its own remote; clone it yourself if you need it:
+#   https://github.com/KleiKodesh/hebrew-typing-tutor
+#   https://github.com/KleiKodesh/kleikodesh.github.io
 hebrew-typing-tutor
+kleikodesh-website
