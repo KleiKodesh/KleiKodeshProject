@@ -133,10 +133,11 @@ const {
 // the lookup round-trip, then the tab becomes a normal /pdf-view (or /html-view) tab.
 // txt personal books stay here — BookView serves them line-by-line from the file.
 if (bookId != null && isUserBooksId(bookId)) {
-  void getUserBookFile(bookId).then((f) => {
-    const type = f?.fileType?.toLowerCase()
+  const redirectBookId = bookId
+  void getUserBookFile(redirectBookId).then((f) => {
+    const type = f?.fileType?.trim().toLowerCase()
     if (!f?.filePath || !type || type === 'txt') return
-    void useLocalFileStore().openUserBookFile(tabId, f.filePath)
+    void useLocalFileStore().openUserBookFile(tabId, redirectBookId, f.filePath)
   })
 }
 
