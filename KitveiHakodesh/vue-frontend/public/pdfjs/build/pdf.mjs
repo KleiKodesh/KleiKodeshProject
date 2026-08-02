@@ -16137,6 +16137,10 @@ class WorkerTransport {
       isPureXfa: !!this._htmlForXfa,
       numPages: this._numPages,
       annotationStorage: map,
+      // PATCH: user-edited outline (תוכן עניינים) from the sidebar editor.
+      // Set by outline-search.js (pushOutlineToTransport); null/undefined means
+      // "no outline edits" and the worker leaves the outline untouched.
+      editedOutline: this.editedOutline ?? null,
       filename: this.#fullReader?.filename ?? null
     }, transfer).finally(() => {
       this.annotationStorage.resetModified();

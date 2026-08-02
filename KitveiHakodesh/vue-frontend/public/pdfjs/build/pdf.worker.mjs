@@ -62908,6 +62908,7 @@ class WorkerMessageHandler {
       isPureXfa,
       numPages,
       annotationStorage,
+      editedOutline,
       filename
     }) {
       const globalPromises = [pdfManager.requestLoadedStream(), pdfManager.ensureCatalog("acroForm"), pdfManager.ensureCatalog("acroFormRef"), pdfManager.ensureDoc("startXRef"), pdfManager.ensureDoc("xref"), pdfManager.ensureCatalog("structTreeRoot")];
@@ -62977,6 +62978,83 @@ class WorkerMessageHandler {
         }
       }
       const refs = await Promise.all(promises);
+      // PATCH: write a user-edited outline (תוכן עניינים) into the incremental
+      // update. `editedOutline` is [{title, page, items}] serialized from the
+      // sidebar editor (outline-search.js); null means no outline edits. New
+      // outline-item dicts are added to `changes` alongside a copied catalog
+      // whose /Outlines points at the new root — same-ref catalog, so the
+      // trailer's Root stays valid. This block MUST run before the
+      // `changes.size === 0` early return below, or an outline-only save would
+      // return the original bytes unchanged.
+      if (editedOutline != null && catalogRef && !isPureXfa) {
+        const pageRefCache = new Map();
+        const getPageRef = async pageNumber => {
+          const idx = Math.max(0, Math.min(numPages - 1, (pageNumber | 0) - 1));
+          let pageRef = pageRefCache.get(idx);
+          if (!pageRef) {
+            const page = await pdfManager.getPage(idx);
+            pageRef = page.ref;
+            pageRefCache.set(idx, pageRef);
+          }
+          return pageRef;
+        };
+        const fillOutline = async (items, parentRef) => {
+          let count = 0;
+          const itemRefs = items.map(() => xref.getNewTemporaryRef());
+          for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const dict = new Dict(xref);
+            dict.set("Title", stringToAsciiOrUTF16BE(String(item.title || "")));
+            dict.set("Parent", parentRef);
+            if (i > 0) {
+              dict.set("Prev", itemRefs[i - 1]);
+            }
+            if (i < items.length - 1) {
+              dict.set("Next", itemRefs[i + 1]);
+            }
+            dict.set("Dest", [await getPageRef(item.page), Name.get("XYZ"), null, null, null]);
+            if (Array.isArray(item.items) && item.items.length > 0) {
+              const child = await fillOutline(item.items, itemRefs[i]);
+              dict.set("First", child.first);
+              dict.set("Last", child.last);
+              dict.set("Count", child.count);
+              count += child.count;
+            }
+            changes.put(itemRefs[i], {
+              data: dict
+            });
+            count += 1;
+          }
+          return {
+            first: itemRefs[0],
+            last: itemRefs.at(-1),
+            count
+          };
+        };
+        const catalogDict = await xref.fetchAsync(catalogRef);
+        const newCatalog = new Dict(xref);
+        for (const [key, value] of catalogDict.getRawEntries()) {
+          if (key !== "Outlines") {
+            newCatalog.set(key, value);
+          }
+        }
+        if (editedOutline.length > 0) {
+          const outlineRootRef = xref.getNewTemporaryRef();
+          const outlineRoot = new Dict(xref);
+          outlineRoot.set("Type", Name.get("Outlines"));
+          const rootInfo = await fillOutline(editedOutline, outlineRootRef);
+          outlineRoot.set("First", rootInfo.first);
+          outlineRoot.set("Last", rootInfo.last);
+          outlineRoot.set("Count", rootInfo.count);
+          changes.put(outlineRootRef, {
+            data: outlineRoot
+          });
+          newCatalog.set("Outlines", outlineRootRef);
+        }
+        changes.put(catalogRef, {
+          data: newCatalog
+        });
+      }
       let xfaData = null;
       if (isPureXfa) {
         xfaData = refs[0];

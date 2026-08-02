@@ -18865,7 +18865,12 @@ const PDFViewerApplication = {
         data: this.pdfThumbnailViewer.getStructuralChanges()
       });
     } else {
-      await (this.pdfDocument?.annotationStorage.size > 0 ? this.save() : this.download());
+      // PATCH: also route through save() when the outline (תוכן עניינים) was
+      // edited in the sidebar. Without this, an outline-only edit has an empty
+      // annotationStorage, takes the download() branch, and writes the ORIGINAL
+      // bytes — silently discarding the user's TOC edits.
+      const hasOutlineEdits = this.pdfDocument?._transport?.editedOutline != null;
+      await (this.pdfDocument?.annotationStorage.size > 0 || hasOutlineEdits ? this.save() : this.download());
     }
     delete this._mergedDocumentNeedsSaving;
     this.setTitle();

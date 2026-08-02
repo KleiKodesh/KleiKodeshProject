@@ -490,6 +490,89 @@
   color: var(--treeitem-color);
 }
 
+/* --- Outline editing (add / rename / delete / re-nest TOC entries) ---
+   The edit toggle shares the search row; the action bar is a second row shown
+   only in edit mode. See outline-search.js — "Editing". */
+#outlineEditToggle {
+  flex: 0 0 auto;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  margin-inline-start: 4px;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: var(--main-color);
+  opacity: 0.55;
+  font-size: 12px;
+  line-height: 18px;
+  cursor: pointer;
+}
+#outlineEditToggle::before {
+  content: '\270E'; /* ✎ */
+}
+#outlineEditToggle:hover {
+  opacity: 0.9;
+  background: var(--button-hover-color);
+}
+#outlineEditToggle.active {
+  opacity: 1;
+  background: var(--toggled-btn-bg-color);
+}
+/* Unsaved-edits marker: a small dot on the toggle. */
+#outlineEditToggle.dirty::after {
+  content: '';
+  position: absolute;
+  margin-inline-start: -3px;
+  margin-top: -2px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--progressBar-color, #0a84ff);
+}
+
+#outlineEditBar {
+  display: flex;
+  gap: 2px;
+  padding: 3px 6px 1px;
+  border-top: 1px solid var(--separator-color);
+  margin-top: 3px;
+}
+#outlineEditBar.hidden {
+  display: none;
+}
+.outlineEditAction {
+  flex: 1;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 2px;
+  background: none;
+  color: var(--main-color);
+  opacity: 0.75;
+  font-size: 13px;
+  line-height: 20px;
+  cursor: pointer;
+}
+.outlineEditAction:hover {
+  opacity: 1;
+  background: var(--button-hover-color);
+}
+
+/* Renaming: the anchor becomes contentEditable — make that visible. */
+#outlinesView .treeItem > a.outlineRenaming {
+  outline: 1px solid var(--progressBar-color, #0a84ff);
+  outline-offset: 1px;
+  background: var(--field-bg-color);
+}
+
+/* Rows the user added have no PDF destination yet (no underline cue needed —
+   they look like every other row; the dashed start-edge marks them as new). */
+#outlinesView.outlineEditing .treeItem[data-toc-new] > a {
+  border-inline-start: 2px dashed var(--progressBar-color, #0a84ff);
+  padding-inline-start: 2px;
+}
+
 /* Ancestor path subtitle under each result, mirroring the Vue panel's rows.
    `isolate` keeps its own bidi run: the path is built by joining ancestor titles
    with " · ", and without isolation a title ending in ":" or "." would let that

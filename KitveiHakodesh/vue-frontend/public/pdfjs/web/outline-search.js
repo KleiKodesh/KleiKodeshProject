@@ -501,8 +501,44 @@
       'aria-label',
       'חיפוש בתוכן הענינים',
     );
-    searchInner.append(input);
+    // Edit-mode toggle, sharing the search row. Icon-only: the sidebar is
+    // narrow and a labelled button would crowd the input.
+    var editToggle = document.createElement('button');
+    editToggle.id = 'outlineEditToggle';
+    editToggle.type = 'button';
+    editToggle.title = 'עריכת תוכן הענינים';
+    editToggle.setAttribute('aria-label', 'עריכת תוכן הענינים');
+    editToggle.setAttribute('aria-pressed', 'false');
+    searchInner.append(input, editToggle);
     searchBar.append(searchInner);
+
+    // Second row, shown only in edit mode. Every action targets the focused
+    // row, which the existing keyboard ring already tracks.
+    var editBar = document.createElement('div');
+    editBar.id = 'outlineEditBar';
+    editBar.className = 'hidden';
+    var EDIT_ACTIONS = [
+      { key: 'add', label: '+', title: 'הוספת פריט בעמוד הנוכחי' },
+      { key: 'rename', label: '✎', title: 'שינוי שם הפריט' },
+      { key: 'delete', label: '−', title: 'מחיקת הפריט' },
+      { key: 'outdent', label: '→', title: 'הזזה שמאלה (רמה מעלה)' },
+      { key: 'indent', label: '←', title: 'הזזה ימינה (רמה מטה)' },
+    ];
+    var editButtons = {};
+    for (var ea = 0; ea < EDIT_ACTIONS.length; ea++) {
+      var spec = EDIT_ACTIONS[ea];
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'outlineEditAction';
+      btn.dataset.action = spec.key;
+      btn.textContent = spec.label;
+      btn.title = spec.title;
+      btn.setAttribute('aria-label', spec.title);
+      editButtons[spec.key] = btn;
+      editBar.append(btn);
+    }
+    searchBar.append(editBar);
+
     // Sits below the scrollable content, like BookView's .toc-search.
     content.after(searchBar);
 
@@ -558,7 +594,12 @@
                 byHash.set(href, anchors[a].parentNode);
               }
             }
-            var entries = [];
+            // Stamp the resolved page onto each row rather than building the
+            // index directly. The DOM then owns the page for every row —
+            // including rows the user adds while editing, which have no
+            // destination to resolve — so the index can be rebuilt from the DOM
+            // alone after any edit.
+            var stamped = 0;
             for (var i = 0; i < flat.length; i++) {
               if (pages[i] == null || !linkService) {
                 continue;
@@ -570,26 +611,50 @@
                 continue;
               }
               var row = byHash.get(hash);
-              if (row) {
-                entries.push({ page: pages[i], item: row });
+              if (row && !row.dataset.tocPage) {
+                row.dataset.tocPage = String(pages[i]);
+                stamped++;
               }
             }
-            entries.sort(function (x, y) {
-              return x.page - y.page;
-            });
-            return entries;
+            return stamped;
           });
         })
-        .then(function (entries) {
-          if (token !== pageIndexToken || !entries) {
+        .then(function (stamped) {
+          if (token !== pageIndexToken || stamped === null) {
             return;
           }
-          pageIndex = entries;
+          rebuildPageIndexFromDom();
           syncCurrentEntry(app.page);
         })
         .catch(function () {
           // Tracking is a nicety — a failure here must never break the panel.
         });
+    }
+
+    /**
+     * Rebuild the sorted page index from `data-toc-page` in the DOM.
+     *
+     * Cheap (one querySelectorAll + sort), and the single place the index is
+     * produced — so an edit only has to stamp/remove rows and call this, rather
+     * than re-resolving any destinations.
+     */
+    function rebuildPageIndexFromDom() {
+      var items = outlinesView.querySelectorAll('.treeItem');
+      var entries = [];
+      for (var i = 0; i < items.length; i++) {
+        var page = Number(items[i].dataset.tocPage);
+        if (page > 0) {
+          entries.push({ page: page, item: items[i] });
+        }
+      }
+      entries.sort(function (x, y) {
+        return x.page - y.page;
+      });
+      pageIndex = entries;
+      // The previously-current row may have been deleted.
+      if (activeItem && !outlinesView.contains(activeItem)) {
+        activeItem = null;
+      }
     }
 
     /** Highlight the outline row covering `pageNumber`, and reveal it. */
@@ -860,6 +925,9 @@
     document.addEventListener(
       'focusin',
       function (e) {
+        if (renaming) {
+          return; // the contentEditable anchor must keep focus while renaming
+        }
         if (performance.now() > reclaimUntil) {
           return;
         }
@@ -1009,6 +1077,364 @@
       renderResults(tree.search(nodes, query, RESULT_LIMIT));
     }
 
+    // ── Editing ───────────────────────────────────────────────────────────────
+    // Add / rename / delete / re-nest outline entries, including building one
+    // from nothing on a PDF that has no TOC.
+    //
+    // The DOM is the model. PDF.js's rendered tree is already the source of
+    // truth for search (indexOutline), tracking (data-toc-page) and keyboard
+    // nav, and normalizeOutlineDom already rewrites it in place — so editing
+    // the same DOM keeps every one of those features working with no parallel
+    // data structure to keep in sync. Rows keep PDF.js's exact shape
+    // (`.treeItem > a`, `.treeItems`, `.treeItemToggler`) so the styling and
+    // collapse behaviour come for free.
+    //
+    // NOTE: edits currently live in the DOM only — nothing is written back to
+    // the PDF yet. `outlineDirty` feeds _hasChanges() so the viewer already
+    // knows the document is modified.
+    var editMode = false;
+    var outlineDirty = false;
+    var renaming = false;
+
+    function markDirty() {
+      outlineDirty = true;
+      editToggle.classList.add('dirty');
+    }
+
+    /** The `.treeItem` behind the keyboard ring, or null. */
+    function focusedRow() {
+      if (inResults()) {
+        return null;
+      }
+      var items = navItems();
+      var anchor = items[focusedIndex];
+      return anchor ? anchor.parentNode : null;
+    }
+
+    /** Put the ring on a specific row and scroll it into view. */
+    function focusRow(row) {
+      var anchor = row && row.querySelector(':scope > a');
+      if (!anchor) {
+        return;
+      }
+      var items = navItems();
+      for (var i = 0; i < items.length; i++) {
+        if (items[i] === anchor) {
+          focusedIndex = i;
+          paintFocus();
+          items[i].scrollIntoView({ block: 'nearest' });
+          return;
+        }
+      }
+    }
+
+    /** Runs after every mutation: mark dirty and re-derive the dependent state. */
+    function afterEdit() {
+      markDirty();
+      invalidateIndex(); // search index is rebuilt lazily on the next query
+      rebuildPageIndexFromDom();
+      paintFocus();
+      pushOutlineToTransport();
+      // Current-entry tracking is deliberately NOT re-synced here — it scrolls,
+      // which would yank the list mid-edit. The next pagechanging picks it up.
+    }
+
+    /**
+     * Serialize the tree DOM to [{title, page, items}] and hand it to the
+     * WorkerTransport, where the patched saveDocument() picks it up and the
+     * patched SaveDocument worker handler writes it into the PDF's incremental
+     * update (see CUSTOMIZATIONS.md). Titles are the DISPLAYED text — i.e.
+     * after the mangled-title correction — so saving also persists that fix.
+     *
+     * Pages come from data-toc-page. A row whose destination never resolved has
+     * no stamp; inherit the nearest previous row's page so the entry stays
+     * navigable rather than being dropped.
+     */
+    function serializeOutlineDom() {
+      var lastPage = 1;
+      function walk(container) {
+        var out = [];
+        var rows = container.querySelectorAll(':scope > .treeItem');
+        for (var i = 0; i < rows.length; i++) {
+          var row = rows[i];
+          var anchor = row.querySelector(':scope > a');
+          if (!anchor) {
+            continue;
+          }
+          var page = Number(row.dataset.tocPage);
+          if (!(page > 0)) {
+            page = lastPage;
+          }
+          lastPage = page;
+          var kids = row.querySelector(':scope > .treeItems');
+          out.push({
+            title: (anchor.textContent || '').trim(),
+            page: page,
+            items: kids ? walk(kids) : [],
+          });
+        }
+        return out;
+      }
+      return walk(outlinesView);
+    }
+
+    function pushOutlineToTransport() {
+      var app = window.PDFViewerApplication;
+      var pdfDocument = app && app.pdfDocument;
+      if (pdfDocument && pdfDocument._transport) {
+        pdfDocument._transport.editedOutline = serializeOutlineDom();
+      }
+    }
+
+    // PDF.js marks a `.treeItem` as having children with a `.treeItemToggler`
+    // first child plus a sibling `.treeItems` container; `.withNesting` on the
+    // view is what makes the toggler visible at all.
+    function ensureToggler(item) {
+      if (!item.querySelector(':scope > .treeItemToggler')) {
+        var toggler = document.createElement('div');
+        toggler.className = 'treeItemToggler';
+        item.prepend(toggler);
+      }
+      outlinesView.classList.add('withNesting');
+    }
+
+    function ensureItemsContainer(item) {
+      var container = item.querySelector(':scope > .treeItems');
+      if (!container) {
+        container = document.createElement('div');
+        container.className = 'treeItems';
+        item.append(container);
+      }
+      return container;
+    }
+
+    /** Drop the toggler + empty container once an item has no children left. */
+    function cleanupItem(item) {
+      var container = item.querySelector(':scope > .treeItems');
+      if (container && !container.querySelector(':scope > .treeItem')) {
+        container.remove();
+        var toggler = item.querySelector(':scope > .treeItemToggler');
+        if (toggler) {
+          toggler.remove();
+        }
+      }
+    }
+
+    /**
+     * A new row. It has no PDF destination — nothing to resolve — so its target
+     * page is carried in `data-toc-page`, which is also what the page index
+     * reads. The anchor deliberately has NO href: PDF.js only binds navigation
+     * to anchors it created, and an empty href would push a history entry.
+     */
+    function createRow(title, page) {
+      var row = document.createElement('div');
+      row.className = 'treeItem';
+      row.dataset.tocPage = String(page);
+      row.dataset.tocNew = '1';
+      var anchor = document.createElement('a');
+      anchor.textContent = title;
+      anchor.dataset.navItem = '';
+      row.append(anchor);
+      return row;
+    }
+
+    function addItem() {
+      var app = window.PDFViewerApplication;
+      var page = (app && app.page) || 1;
+      var row = createRow('פריט חדש', page);
+      var reference = focusedRow();
+      if (reference && reference.parentNode) {
+        reference.after(row); // sibling of the focused row, at its level
+      } else {
+        outlinesView.append(row);
+      }
+      afterEdit();
+      focusRow(row);
+      startRename(); // a new row is always named immediately
+    }
+
+    /**
+     * Delete the focused row, PROMOTING its children into its place rather than
+     * discarding the subtree — losing a whole branch to one keystroke is a much
+     * worse mistake than leaving entries at the wrong depth.
+     */
+    function deleteItem() {
+      var row = focusedRow();
+      if (!row) {
+        return;
+      }
+      var host = row.parentNode;
+      var kids = row.querySelector(':scope > .treeItems');
+      if (kids) {
+        var children = Array.prototype.slice.call(kids.querySelectorAll(':scope > .treeItem'));
+        for (var i = children.length - 1; i >= 0; i--) {
+          row.after(children[i]);
+        }
+      }
+      row.remove();
+      if (host && host.classList && host.classList.contains('treeItems') && host.parentNode) {
+        cleanupItem(host.parentNode);
+      }
+      focusedIndex = -1;
+      afterEdit();
+    }
+
+    function startRename() {
+      var row = focusedRow();
+      var anchor = row && row.querySelector(':scope > a');
+      if (!anchor || renaming) {
+        return;
+      }
+      var original = anchor.textContent || '';
+      renaming = true;
+      anchor.contentEditable = 'true';
+      anchor.classList.add('outlineRenaming');
+      anchor.focus();
+      var range = document.createRange();
+      range.selectNodeContents(anchor);
+      var selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+
+      function finish(commit) {
+        if (!renaming) {
+          return;
+        }
+        renaming = false;
+        anchor.contentEditable = 'false';
+        anchor.classList.remove('outlineRenaming');
+        anchor.removeEventListener('keydown', onKey);
+        anchor.removeEventListener('blur', onBlur);
+        var text = (anchor.textContent || '').replace(/\s+/g, ' ').trim();
+        anchor.textContent = commit && text ? text : original;
+        afterEdit();
+        input.focus({ preventScroll: true });
+      }
+      function onKey(e) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation(); // do not also clear the query / close the sidebar
+          finish(false);
+        }
+      }
+      function onBlur() {
+        finish(true);
+      }
+      anchor.addEventListener('keydown', onKey);
+      anchor.addEventListener('blur', onBlur);
+    }
+
+    /** Nest the focused row under the row above it, at the same level. */
+    function indentItem() {
+      var row = focusedRow();
+      if (!row) {
+        return;
+      }
+      var previous = row.previousElementSibling;
+      while (previous && !previous.classList.contains('treeItem')) {
+        previous = previous.previousElementSibling;
+      }
+      if (!previous) {
+        return; // nothing above at this level to nest under
+      }
+      ensureToggler(previous);
+      ensureItemsContainer(previous).append(row);
+      var toggler = previous.querySelector(':scope > .treeItemToggler');
+      if (toggler) {
+        toggler.classList.remove('treeItemsHidden'); // reveal what we just moved
+      }
+      afterEdit();
+      focusRow(row);
+    }
+
+    /** Move the focused row out to its parent's level, just after the parent. */
+    function outdentItem() {
+      var row = focusedRow();
+      if (!row) {
+        return;
+      }
+      var container = row.parentNode;
+      if (!container || !container.classList || !container.classList.contains('treeItems')) {
+        return; // already at the top level
+      }
+      var owner = container.parentNode;
+      if (!owner) {
+        return;
+      }
+      owner.after(row);
+      cleanupItem(owner);
+      afterEdit();
+      focusRow(row);
+    }
+
+    function setEditMode(on) {
+      editMode = !!on;
+      editToggle.setAttribute('aria-pressed', String(editMode));
+      editToggle.classList.toggle('active', editMode);
+      editBar.classList.toggle('hidden', !editMode);
+      outlinesView.classList.toggle('outlineEditing', editMode);
+      if (editMode && focusedIndex < 0 && !seedFocusFromCurrent()) {
+        moveTo(0); // every action targets a row, so make sure one is picked
+      }
+    }
+
+    editToggle.addEventListener('click', function () {
+      setEditMode(!editMode);
+      input.focus({ preventScroll: true });
+    });
+
+    editBar.addEventListener('click', function (e) {
+      var button = e.target.closest ? e.target.closest('.outlineEditAction') : null;
+      if (!button) {
+        return;
+      }
+      e.preventDefault();
+      var action = button.dataset.action;
+      if (action === 'add') {
+        addItem();
+      } else if (action === 'rename') {
+        startRename();
+      } else if (action === 'delete') {
+        deleteItem();
+      } else if (action === 'indent') {
+        indentItem();
+      } else if (action === 'outdent') {
+        outdentItem();
+      }
+      if (action !== 'add' && action !== 'rename') {
+        input.focus({ preventScroll: true });
+      }
+    });
+
+    // In edit mode a click should SELECT a row, not navigate away from the page
+    // being edited. PDF.js binds navigation via `element.onclick` on the anchor
+    // itself, so this has to run in the CAPTURE phase on the container to stop
+    // the event before it reaches the target.
+    outlinesView.addEventListener(
+      'click',
+      function (e) {
+        if (!editMode || renaming) {
+          return;
+        }
+        var target = e.target;
+        if (!target || !target.closest || target.classList.contains('treeItemToggler')) {
+          return; // togglers still expand/collapse while editing
+        }
+        var anchor = target.closest('.treeItem > a');
+        if (!anchor) {
+          return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        focusRow(anchor.parentNode);
+        input.focus({ preventScroll: true });
+      },
+      true,
+    );
+
     resultsView.addEventListener('click', function (e) {
       var anchor = e.target.closest ? e.target.closest('a[data-outline-node-id]') : null;
       if (!anchor || !nodes) {
@@ -1155,7 +1581,12 @@
     var wasVisible = false;
 
     function updateVisibility() {
-      var show = currentView === SIDEBAR_VIEW_OUTLINE && outlineCount > 0;
+      // Shown whenever the outline view is active and a document is loaded —
+      // even with zero entries, so a TOC can be created from scratch on a PDF
+      // that has none (the edit toggle is the affordance for that).
+      var app = window.PDFViewerApplication;
+      var hasDocument = !!(app && app.pdfDocument);
+      var show = currentView === SIDEBAR_VIEW_OUTLINE && (outlineCount > 0 || hasDocument);
       searchBar.classList.toggle('hidden', !show);
       if (!show && input.value) {
         input.value = '';
@@ -1183,6 +1614,18 @@
         return;
       }
 
+      // Let outline edits participate in the viewer's dirty state. _hasChanges()
+      // drives both the beforeunload alert and the toolbar save indicator; a
+      // runtime wrap means no viewer.mjs patch and survives PDF.js's own logic
+      // changing. (The onBeforeUnload listener is bound to the app object, so
+      // this wrapper is what it calls.)
+      var originalHasChanges = app._hasChanges;
+      if (typeof originalHasChanges === 'function') {
+        app._hasChanges = function () {
+          return outlineDirty || originalHasChanges.call(app);
+        };
+      }
+
       app.eventBus._on('outlineloaded', function (evt) {
         outlineCount = evt.outlineCount || 0;
         input.value = '';
@@ -1198,6 +1641,21 @@
         if (outlineCount > 0) {
           buildPageIndex();
         }
+        // A PDF with no outline: PDF.js disables the תוכן עניינים view in the
+        // selector (onTreeLoaded sets button.disabled = !count), which would
+        // make creating one from scratch impossible. Re-enable it — this
+        // handler registers after ViewsManager's, so it runs after the disable.
+        if (outlineCount === 0) {
+          var outlineMenuButton = document.getElementById('outlinesViewMenu');
+          if (outlineMenuButton) {
+            outlineMenuButton.disabled = false;
+          }
+        }
+        // Signal that outline processing (including the empty-outline dance
+        // above) has settled — PDF.js re-enables the view buttons early during
+        // document setup, so button state alone is not a reliable readiness
+        // probe. Read by tests and available to the host app.
+        searchBar.dataset.outlineLoaded = '1';
       });
 
       app.eventBus._on('pagechanging', function (evt) {
@@ -1219,6 +1677,11 @@
         pageIndexToken++;
         pageIndex = null;
         activeItem = null;
+        // Edits belong to the previous document — reset the editor entirely.
+        outlineDirty = false;
+        editToggle.classList.remove('dirty');
+        setEditMode(false);
+        delete searchBar.dataset.outlineLoaded;
         showTree();
         updateVisibility();
       });
