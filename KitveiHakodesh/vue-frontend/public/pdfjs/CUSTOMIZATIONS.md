@@ -1502,6 +1502,37 @@ No custom CSS is involved — the current row is styled by PDF.js's existing
 separate and can sit on a different row, which is correct: one means "where the page is",
 the other "where the keyboard is".
 
+### Outline tree restyled to match BookView's TOC
+
+PDF.js's stock tree looks dated next to the app: translucent black/white overlays for
+every state, a 20px flat indent, and a toggler floating in zero-size space (so its hit
+area is only the 16px glyph). The rules in `viewer-custom.css` (search "Outline tree
+restyled") bring it to BookView's `TreeView`/`TreeNode.vue` reference:
+
+| | stock PDF.js | now (= BookView) |
+|---|---|---|
+| row | `inline-block`, ~2px padding | `flex`, **28px** min-height, 4px radius |
+| label | 13px, `--treeitem-color` | **0.8rem**, `--text-primary-custom` |
+| hover / press | `rgb(0 0 0 / .15)` overlay | **6% / 10%** mix of the text color |
+| current entry | 0.25 filled block | **8%** tint + **accent color**, weight 500 |
+| indent | 20px | **24px** (= the chevron column) |
+| chevron | 16px glyph, zero-size float; collapsed swaps to a 2nd icon flipped by `scaleX(--dir-factor)` | **24×28 column**; one Fluent `ChevronDown16Regular` that **rotates 90°** |
+
+All colors come from the `--*-custom` tokens `themes.ts` injects, so the panel tracks the
+app theme (verified against the real `default-light` / `default-dark` values). The DOM is
+untouched — editor, search, keyboard nav and tracking are unaffected.
+
+Two specificity notes for upgrades: the collapsed-chevron rule must carry an **id**
+(`.treeItemsHidden:is(#outlinesView.treeView…)`) because PDF.js's own collapsed rule is
+`(0,3,1)`, and it must re-declare `mask-image` or the stock collapsed-icon swap wins,
+leaving a horizontal flip instead of a rotation.
+
+**Testing note:** the chevron has a 120ms transition, so reading its computed `transform`
+in the same tick as the class change returns the animation's *start* value (identity) —
+which will make a naive "did it change?" assertion pass over a completely broken
+rotation. Assert the matrix (`matrix(0,1,-1,0)` = 90° rotation; `matrix(-1,0,0,1)` =
+scaleX flip) after waiting out the transition.
+
 ### Outline EDITING (add / rename / delete / move / re-nest, and create-from-scratch)
 
 **Direct manipulation, no edit mode** — the interaction model every PDF editor

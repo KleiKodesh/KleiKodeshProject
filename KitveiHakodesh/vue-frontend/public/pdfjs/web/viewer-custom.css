@@ -242,6 +242,133 @@
   unicode-bidi: embed;
 }
 
+/* --- Outline tree restyled to match BookView's TOC ---------------------------
+   PDF.js's stock tree is a dated look: translucent white/black overlays for
+   every state, a 20px flat indent, and a toggler that floats in zero-size
+   space so its hit area is a 16px glyph. BookView's TreeView is the app's
+   reference: full-width 28px rows, hover/active as a text-color mix rather
+   than an overlay, the active row in the accent color at weight 500, a 24px
+   chevron column, and Fluent chevrons that rotate rather than swapping icons.
+
+   Everything below overrides viewer.css by load order (equal specificity where
+   it matters), using the --*-custom tokens themes.ts injects into the iframe so
+   the panel tracks the app's theme exactly. The DOM shape is untouched — the
+   editor, search, keyboard nav and tracking all keep working. */
+
+/* Indent: BookView uses a 24px chevron column, so nest by the same amount. */
+#outlinesView.treeView.withNesting > .treeItem,
+#outlinesView.treeView.withNesting .treeItem > .treeItems {
+  margin-inline-start: 24px;
+}
+
+/* Rows: full-width, BookView's 28px rhythm and 0.8rem label. */
+#outlinesView.treeView .treeItem > a {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  min-width: 0;
+  width: auto;
+  margin-bottom: 0;
+  padding: 4px 4px 4px 0;
+  border-radius: 4px;
+  color: var(--text-primary-custom, var(--treeitem-color));
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+/* Hover / active / selected as text-color MIXES (BookView), not the stock
+   translucent overlays. Percentages match TreeNode.vue exactly. */
+#outlinesView.treeView .treeItem > a:hover {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 6%, transparent);
+  color: var(--text-primary-custom, var(--treeitem-hover-color));
+}
+#outlinesView.treeView .treeItem > a:active {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 10%, transparent);
+}
+/* Current entry (the page you are on) — BookView's `.is-active`: a tinted row
+   plus accent-colored, slightly heavier text. Overrides the stock `.selected`
+   rule, which paints a heavy filled block. */
+#outlinesView.treeView .treeItem.selected > a {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 8%, transparent);
+  color: var(--accent-color-custom, #3478f6);
+  font-weight: 500;
+}
+
+/* Chevron: a real 24px column (BookView's `.chevron-btn`) instead of PDF.js's
+   zero-size float, so the hit target is the whole column. `float: inline-start`
+   is kept — it is what keeps the following anchor on the same line. */
+#outlinesView.treeView.withNesting .treeItemToggler {
+  float: inline-start;
+  position: relative;
+  width: 24px;
+  height: 28px;
+  margin-inline-start: -24px; /* occupy the indent the parent reserved */
+  cursor: pointer;
+}
+#outlinesView.treeView.withNesting .treeItemToggler::before {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 16px;
+  height: 16px;
+  content: '';
+  background-color: var(--text-secondary-custom, var(--toolbar-icon-bg-color));
+  /* Fluent ChevronDown16Regular — expanded state. Collapsed rotates this to
+     point inline-start, mirroring BookView's ChevronLeft/ChevronDown pair
+     (one icon + a transform, so the two states cannot drift apart). */
+  -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  -webkit-mask-size: cover;
+  mask-size: cover;
+  transition: transform 120ms ease;
+}
+/* Collapsed: rotate the SAME chevron to point inline-start, instead of PDF.js
+   swapping in a second icon and flipping it with scaleX(var(--dir-factor)).
+   That stock rule is `.treeItemsHidden:is(.treeView.withNesting
+   .treeItemToggler)::before` — the leading class makes it (0,3,1), so this
+   must carry an id to win, or its scaleX(-1) survives as a horizontal flip and
+   the chevron keeps pointing down while collapsed.
+   +90deg because the panel is RTL (--dir-factor is -1 here): the chevron's
+   tip swings from "down" round to the left, matching BookView's collapsed
+   ChevronLeft. Mask is re-declared so the stock collapsed-icon swap loses. */
+.treeItemsHidden:is(#outlinesView.treeView.withNesting .treeItemToggler)::before {
+  -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
+  transform: rotate(90deg);
+}
+/* Stock PDF.js tints the row AND the whole subtree on toggler hover — heavy
+   and unlike BookView. Just brighten the chevron itself. */
+#outlinesView.treeView.withNesting .treeItemToggler:hover + a,
+#outlinesView.treeView.withNesting .treeItemToggler:hover ~ .treeItems {
+  background-color: transparent;
+  color: inherit;
+}
+#outlinesView.treeView.withNesting .treeItemToggler:hover::before {
+  background-color: var(--text-primary-custom, var(--main-color));
+}
+
+/* Panel surface: BookView's tree sits on --bg-primary with a little breathing
+   room at the top; PDF.js leaves the tree flush against the header. */
+#viewsManager #viewsManagerContent #outlinesView,
+#viewsManager #viewsManagerContent #outlineSearchResults {
+  padding: 4px 4px 8px;
+  background: var(--bg-primary-custom, transparent);
+}
+
+/* Flat search results reuse the same row look, minus the indent. */
+#outlineSearchResults.treeView .treeItem > a {
+  display: block;
+  min-height: 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  color: var(--text-primary-custom, var(--treeitem-color));
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+#outlineSearchResults.treeView .treeItem > a:hover {
+  background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 6%, transparent);
+}
+
 /* --- Page count floating badge ---
    Visible only when the toolbar is too narrow to show #numPages (≤580px).
    Fades in on page change and fades out after 2s of inactivity.
