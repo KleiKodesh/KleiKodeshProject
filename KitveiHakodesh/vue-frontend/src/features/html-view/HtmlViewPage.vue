@@ -83,9 +83,16 @@ function onIframeLoad() {
   if (isOtzariaAddin.value) bridge.onIframeLoaded()
 
   // Use the HTML page's <title> as the tab title — this is meaningful for multi-file
-  // HTML pages (addins, exported documents) where the entry point is always index.html
-  // and the file name itself carries no useful information.
-  const pageTitle = iframeRef.value?.contentDocument?.title?.trim()
+  // HTML pages (exported documents) where the entry point is always index.html and the
+  // file name itself carries no useful information.
+  //
+  // Addins are the exception: the manifest's name is authoritative — it is the name
+  // Otzaria itself shows, and the search result was already presented under it — while
+  // an entry point's <title> is usually a placeholder. Letting it win here would undo
+  // the addin title a moment after the user sees it.
+  const pageTitle = isOtzariaAddin.value
+    ? undefined
+    : iframeRef.value?.contentDocument?.title?.trim()
   if (pageTitle) {
     tabStore.updateTab(tabId, { title: pageTitle })
     // Patch the recently opened entry for this file so the home page dropdown and

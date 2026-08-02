@@ -139,21 +139,26 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
     const isHtmlLike = extension === '.htm' || extension === '.html'
     const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
 
+    // The addin name is known synchronously, so the placeholder tab gets it too —
+    // otherwise a Ctrl/⌘-clicked addin reads "index" until restoreLocalFile returns.
+    const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension
+
     // For a Ctrl/⌘-click, open a fresh tab up front and patch it by id. The PDF/
     // HTML path awaits restoreLocalFile, during which the active tab may change,
     // so we must never rely on "the active tab" after the await — always target
     // the captured id. .txt has no async step but takes the same path for parity.
     const targetTabId = openInNewTab
-      ? paneNavigation.openTab({ route, title: titleWithoutExtension }).id
+      ? paneNavigation.openTab({ route, title: displayTitle }).id
       : fileSearchTabId
 
     if (extension === '.txt') {
       tabStore.updateTab(targetTabId, {
         route: '/txt-view',
-        title: titleWithoutExtension,
+        title: displayTitle,
         localFileName: item.fileName,
         localFilePath: item.fullPath,
         localFileVirtualUrl: undefined,
+        isOtzariaAddin: false,
       })
       return
     }
@@ -171,7 +176,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
     // served route, since only /html-view ever reads it.
     tabStore.updateTab(targetTabId, {
       route: servedRoute as '/html-view' | '/pdf-view',
-      title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
+      title: displayTitle,
       localFileName: item.fileName,
       localFilePath: item.fullPath,
       localFileVirtualUrl: restored.url,
