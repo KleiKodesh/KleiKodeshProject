@@ -68,6 +68,12 @@ export interface PdfOutlineEditEntry {
   title: string
   page: number
   items: PdfOutlineEditEntry[]
+  /**
+   * Index into the document's ORIGINAL outline (BFS order). Present on rows
+   * that came from the PDF; the save path uses it to preserve the original
+   * destination/action/styling verbatim. Absent on user-created rows.
+   */
+  src?: number
 }
 
 /**
