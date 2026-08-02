@@ -28,12 +28,17 @@ namespace KitveiHakodeshLib.Db
         private int _nextSlot = 0;
         private bool _disposed = false;
 
-        public DbAccess(string path)
+        /// <param name="poolSize">Concurrent-connection count; the default matches the
+        /// frontend's max concurrent queries against the main DB (see class doc).</param>
+        /// <param name="ensureIndexes">Pass false for databases we do not own (Otzaria's
+        /// user_books.db) — index creation opens a WRITE connection to a file another
+        /// app may hold open, and we must never write to it.</param>
+        public DbAccess(string path, int poolSize = POOL_SIZE, bool ensureIndexes = true)
         {
             _connectionString = "Data Source=" + path + ";Version=3;Read Only=True;";
-            _EnsureIndexes(path);
-            _pool = new SQLiteConnection[POOL_SIZE];
-            for (int i = 0; i < POOL_SIZE; i++)
+            if (ensureIndexes) _EnsureIndexes(path);
+            _pool = new SQLiteConnection[poolSize];
+            for (int i = 0; i < poolSize; i++)
                 _pool[i] = _OpenConnection();
         }
 
@@ -88,7 +93,7 @@ namespace KitveiHakodeshLib.Db
             lock (_lock)
             {
                 conn = _pool[_nextSlot];
-                _nextSlot = (_nextSlot + 1) % POOL_SIZE;
+                _nextSlot = (_nextSlot + 1) % _pool.Length;
             }
 
             int index = 0;
