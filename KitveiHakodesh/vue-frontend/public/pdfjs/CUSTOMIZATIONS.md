@@ -1504,34 +1504,37 @@ the other "where the keyboard is".
 
 ### Outline tree restyled to match BookView's TOC
 
-PDF.js's stock tree looks dated next to the app: translucent black/white overlays for
-every state, a 20px flat indent, and a toggler floating in zero-size space (so its hit
-area is only the 16px glyph). The rules in `viewer-custom.css` (search "Outline tree
-restyled") bring it to BookView's `TreeView`/`TreeNode.vue` reference:
+The panel is a copy of BookView's TOC system, matched against **measurements of the
+live BookView panel** (`capture-both-tocs.mjs` captured both panels under the real
+theme and dumped computed styles + geometry) — not against a reading of its source:
 
-| | stock PDF.js | now (= BookView) |
-|---|---|---|
-| row | `inline-block`, ~2px padding | `flex`, **28px** min-height, 4px radius |
-| label | 13px, `--treeitem-color` | **0.8rem**, `--text-primary-custom` |
-| hover / press | `rgb(0 0 0 / .15)` overlay | **6% / 10%** mix of the text color |
-| current entry | 0.25 filled block | **8%** tint + **accent color**, weight 500 |
-| indent | 20px | **24px** (= the chevron column) |
-| chevron | 16px glyph, zero-size float; collapsed swaps to a 2nd icon flipped by `scaleX(--dir-factor)` | **24×28 column**; one Fluent `ChevronDown16Regular` that **rotates 90°** |
+- rows span the **full panel width** (hover/press/current are full-bleed strips), 28px,
+  line-height 28px, 0.8rem, **no radius**, Segoe UI stack
+- chevron: a 24×28 flex-centred column at the row's inline-start (right), shifted
+  **depth × 10px**; text starts at `24 + depth*10` from the right — the exact numbers
+  measured from `TreeNode.vue` rows (`chevFromRight: 0/10…`, `textFromRight: 24/34…`)
+- hover 6% / press 10% / current 8% text-color mixes; current label = accent, weight 500
+- one Fluent `ChevronDown16Regular` mask that **rotates 90°** when collapsed
+- the search box is BookView's **pill**: 999px radius, 10% text-secondary fill, 1px
+  border, `padding: 4px 8px`, on the `.toc-search`-style bar
 
-All colors come from the `--*-custom` tokens `themes.ts` injects, so the panel tracks the
-app theme (verified against the real `default-light` / `default-dark` values). The DOM is
-untouched — editor, search, keyboard nav and tracking are unaffected.
+**The structural trick — indent INSIDE full-width rows.** PDF.js indents by nesting
+`.treeItems` containers, so a row's box starts at its indent and a highlight can never
+span the panel (the old "floating grey box" look). The container margins are zeroed and
+`outline-search.js` stamps `--toc-depth` on every `.treeItem` (`stampDepths()`, one O(N)
+pass on every tree build/edit); the anchor pads by `depth*10px + 24px` and the toggler
+sits absolutely in that gutter. `inset-inline-start` resolves to the RIGHT because
+PDF.js sets `dir=rtl` on the document at runtime under `locale=he`.
 
-Two specificity notes for upgrades: the collapsed-chevron rule must carry an **id**
-(`.treeItemsHidden:is(#outlinesView.treeView…)`) because PDF.js's own collapsed rule is
-`(0,3,1)`, and it must re-declare `mask-image` or the stock collapsed-icon swap wins,
-leaving a horizontal flip instead of a rotation.
+Colors come from the `--*-custom` tokens `themes.ts` injects. The DOM is untouched —
+editor, search, keyboard nav, tracking, and DnD are unaffected (verified 26/26 + 18/18
+after the change; 4,400-entry perf unchanged).
 
-**Testing note:** the chevron has a 120ms transition, so reading its computed `transform`
-in the same tick as the class change returns the animation's *start* value (identity) —
-which will make a naive "did it change?" assertion pass over a completely broken
-rotation. Assert the matrix (`matrix(0,1,-1,0)` = 90° rotation; `matrix(-1,0,0,1)` =
-scaleX flip) after waiting out the transition.
+Upgrade traps: the margin-zeroing and collapsed-chevron rules need the `#outlinesView`
+id to beat viewer.css (the collapsed rule must also re-declare `mask-image`, or the
+stock icon swap survives as a `scaleX` flip). Testing trap: the chevron transition
+(120ms) means reading its computed `transform` in the same tick as the class change
+returns the START value — assert the matrix (`matrix(0,1,-1,0)`) after waiting it out.
 
 ### Outline EDITING (add / rename / delete / move / re-nest, and create-from-scratch)
 

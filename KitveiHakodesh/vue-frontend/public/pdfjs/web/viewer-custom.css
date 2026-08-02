@@ -242,42 +242,57 @@
   unicode-bidi: embed;
 }
 
-/* --- Outline tree restyled to match BookView's TOC ---------------------------
-   PDF.js's stock tree is a dated look: translucent white/black overlays for
-   every state, a 20px flat indent, and a toggler that floats in zero-size
-   space so its hit area is a 16px glyph. BookView's TreeView is the app's
-   reference: full-width 28px rows, hover/active as a text-color mix rather
-   than an overlay, the active row in the accent color at weight 500, a 24px
-   chevron column, and Fluent chevrons that rotate rather than swapping icons.
-
-   Everything below overrides viewer.css by load order (equal specificity where
-   it matters), using the --*-custom tokens themes.ts injects into the iframe so
-   the panel tracks the app's theme exactly. The DOM shape is untouched — the
-   editor, search, keyboard nav and tracking all keep working. */
-
-/* Indent: BookView uses a 24px chevron column, so nest by the same amount. */
-#outlinesView.treeView.withNesting > .treeItem,
-#outlinesView.treeView.withNesting .treeItem > .treeItems {
-  margin-inline-start: 24px;
+/* --- Outline tree: BookView's TOC system, measured from the live app --------
+   Reference numbers captured from the running BookView TOC (TreeView/TreeNode)
+   under the real theme — NOT re-imagined from its source:
+     rows full panel width, 28px, NO radius, align flex-start
+     chevron: 24x28 flex-centred column at the row's inline-start, shifted
+       depth*10px; label follows it (leaves keep the same 24px gutter)
+     label: 0.8rem / 28px line-height, padding-inline-end 4px
+     hover 6% / press 10% / active 8% text-color mixes, full-bleed strips
+     active label: accent color, weight 500
+     font: Segoe UI Variable stack
+   PDF.js indents by nesting .treeItems containers, so a row's box STARTS at
+   its indent and a highlight can never span the panel. The container margins
+   are therefore zeroed and the indent moves INSIDE each full-width row:
+   outline-search.js stamps --toc-depth on every .treeItem (stampDepths), the
+   anchor pads by depth*10px+24px, and the toggler sits absolutely in that
+   gutter. This is exactly TreeNode.vue's geometry. */
+#outlinesView.treeView,
+#outlineSearchResults.treeView,
+#outlineSearchBar,
+#outlineContextMenu {
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
 }
 
-/* Rows: full-width, BookView's 28px rhythm and 0.8rem label. */
+/* Kill the structural indent — beats viewer.css's 20px rule via the id. */
+#outlinesView.treeView.withNesting > .treeItem,
+#outlinesView.treeView.withNesting .treeItem > .treeItems {
+  margin-inline-start: 0;
+}
+
+#outlinesView.treeView .treeItem {
+  position: relative; /* anchors the absolutely-positioned toggler */
+}
+
+/* Full-width rows; the indent lives in padding-inline-start. */
 #outlinesView.treeView .treeItem > a {
-  display: flex;
-  align-items: center;
+  display: block;
   min-height: 28px;
   min-width: 0;
   width: auto;
-  margin-bottom: 0;
-  padding: 4px 4px 4px 0;
-  border-radius: 4px;
+  margin: 0;
+  padding: 0 4px 0 8px; /* RTL: 4px before the text side, 8px at the far end */
+  padding-inline-start: calc(var(--toc-depth, 0) * 10px + 24px);
+  border-radius: 0;
   color: var(--text-primary-custom, var(--treeitem-color));
   font-size: 0.8rem;
-  line-height: 1.35;
+  line-height: 28px; /* BookView's label rhythm — single lines centred */
+  white-space: normal;
+  word-break: break-word;
 }
 
-/* Hover / active / selected as text-color MIXES (BookView), not the stock
-   translucent overlays. Percentages match TreeNode.vue exactly. */
+/* Hover / press / current: full-bleed strips, BookView's exact mixes. */
 #outlinesView.treeView .treeItem > a:hover {
   background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 6%, transparent);
   color: var(--text-primary-custom, var(--treeitem-hover-color));
@@ -285,24 +300,21 @@
 #outlinesView.treeView .treeItem > a:active {
   background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 10%, transparent);
 }
-/* Current entry (the page you are on) — BookView's `.is-active`: a tinted row
-   plus accent-colored, slightly heavier text. Overrides the stock `.selected`
-   rule, which paints a heavy filled block. */
 #outlinesView.treeView .treeItem.selected > a {
   background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 8%, transparent);
   color: var(--accent-color-custom, #3478f6);
   font-weight: 500;
 }
 
-/* Chevron: a real 24px column (BookView's `.chevron-btn`) instead of PDF.js's
-   zero-size float, so the hit target is the whole column. `float: inline-start`
-   is kept — it is what keeps the following anchor on the same line. */
+/* Chevron: BookView's 24x28 column at the row's inline-start, shifted by the
+   row's depth. Absolute inside the .treeItem so the anchor keeps full width. */
 #outlinesView.treeView.withNesting .treeItemToggler {
-  float: inline-start;
-  position: relative;
+  float: none;
+  position: absolute;
+  inset-inline-start: calc(var(--toc-depth, 0) * 10px);
+  top: 0;
   width: 24px;
   height: 28px;
-  margin-inline-start: -24px; /* occupy the indent the parent reserved */
   cursor: pointer;
 }
 #outlinesView.treeView.withNesting .treeItemToggler::before {
@@ -313,31 +325,22 @@
   height: 16px;
   content: '';
   background-color: var(--text-secondary-custom, var(--toolbar-icon-bg-color));
-  /* Fluent ChevronDown16Regular — expanded state. Collapsed rotates this to
-     point inline-start, mirroring BookView's ChevronLeft/ChevronDown pair
-     (one icon + a transform, so the two states cannot drift apart). */
+  /* Fluent ChevronDown16Regular; collapsed rotates it (see below). */
   -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
   mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
   -webkit-mask-size: cover;
   mask-size: cover;
   transition: transform 120ms ease;
 }
-/* Collapsed: rotate the SAME chevron to point inline-start, instead of PDF.js
-   swapping in a second icon and flipping it with scaleX(var(--dir-factor)).
-   That stock rule is `.treeItemsHidden:is(.treeView.withNesting
-   .treeItemToggler)::before` — the leading class makes it (0,3,1), so this
-   must carry an id to win, or its scaleX(-1) survives as a horizontal flip and
-   the chevron keeps pointing down while collapsed.
-   +90deg because the panel is RTL (--dir-factor is -1 here): the chevron's
-   tip swings from "down" round to the left, matching BookView's collapsed
-   ChevronLeft. Mask is re-declared so the stock collapsed-icon swap loses. */
+/* Collapsed: the SAME chevron rotated to point inline-start (Fluent
+   ChevronLeft in this RTL panel). Needs the id to beat PDF.js's (0,3,1)
+   collapsed rule, and must re-declare the mask or the stock icon swap wins. */
 .treeItemsHidden:is(#outlinesView.treeView.withNesting .treeItemToggler)::before {
   -webkit-mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
   mask-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="black" d="M3.146 5.646a.5.5 0 0 1 .708 0L8 9.793l4.146-4.147a.5.5 0 0 1 .708.708l-4.5 4.5a.5.5 0 0 1-.708 0l-4.5-4.5a.5.5 0 0 1 0-.708"/></svg>');
   transform: rotate(90deg);
 }
-/* Stock PDF.js tints the row AND the whole subtree on toggler hover — heavy
-   and unlike BookView. Just brighten the chevron itself. */
+/* No subtree tinting on toggler hover (stock behaviour) — chevron brightens. */
 #outlinesView.treeView.withNesting .treeItemToggler:hover + a,
 #outlinesView.treeView.withNesting .treeItemToggler:hover ~ .treeItems {
   background-color: transparent;
@@ -347,20 +350,20 @@
   background-color: var(--text-primary-custom, var(--main-color));
 }
 
-/* Panel surface: BookView's tree sits on --bg-primary with a little breathing
-   room at the top; PDF.js leaves the tree flush against the header. */
+/* Panel surface: BookView's tree sits on --bg-primary, full-bleed rows =
+   no side padding. */
 #viewsManager #viewsManagerContent #outlinesView,
 #viewsManager #viewsManagerContent #outlineSearchResults {
-  padding: 4px 4px 8px;
+  padding: 4px 0 8px;
   background: var(--bg-primary-custom, transparent);
 }
 
-/* Flat search results reuse the same row look, minus the indent. */
+/* Flat search results: BookView's filtered-row look (is-filtered). */
 #outlineSearchResults.treeView .treeItem > a {
   display: block;
   min-height: 0;
-  padding: 6px 8px;
-  border-radius: 4px;
+  padding: 8px 12px;
+  border-radius: 0;
   color: var(--text-primary-custom, var(--treeitem-color));
   font-size: 0.8rem;
   line-height: 1.4;
@@ -505,19 +508,24 @@
   flex: 0 0 auto;
   align-self: stretch;
   box-sizing: border-box;
-  padding: 4px 4px 5px;
+  padding: 5px 6px 6px; /* BookView's .toc-search */
   border-top: 1px solid var(--separator-color);
-  background: var(--toolbar-bg-color);
+  background: var(--bg-primary-custom, var(--toolbar-bg-color));
 }
 
 #outlineSearchBar.hidden {
   display: none;
 }
 
+/* The pill — measured from BookView's live search box: 999px radius, a 10%
+   text-secondary fill, 1px border, 4px 8px padding. */
 #outlineSearchInner {
   display: flex;
   align-items: center;
-  padding: 3px 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--border-color-custom, var(--separator-color));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--text-secondary-custom, var(--main-color)) 10%, transparent);
 }
 
 #outlineSearchInput {
@@ -527,8 +535,8 @@
   padding: 0;
   /* The UA gives search inputs their own height/line-height; pin both so the row
      height is only the 12px text plus the paddings above, with no hidden extra. */
-  height: 18px;
-  line-height: 18px;
+  height: 14px;
+  line-height: 14px;
   /* Same bidi reason as `.treeItem > a` above: the viewer root is dir="ltr", so a
      typed Hebrew query ending in ":" or "." (e.g. "ד:") renders with the weak
      punctuation jumping to the wrong end. The input needs its own RTL base
