@@ -1502,24 +1502,53 @@ No custom CSS is involved — the current row is styled by PDF.js's existing
 separate and can sit on a different row, which is correct: one means "where the page is",
 the other "where the keyboard is".
 
-### Outline EDITING (add / rename / delete / re-nest, and create-from-scratch)
+### Outline EDITING (add / rename / delete / move / re-nest, and create-from-scratch)
 
-An edit mode for the outline panel: the ✎ toggle next to the search input reveals an
-action bar (add / rename / delete / outdent / indent), every action targeting the row
-under the keyboard ring. Edits are written into the **PDF itself** on save via the
-standard save pipeline — NOT stored app-side. Verified live end-to-end: edit → save →
-reload the saved bytes → outline persists (including on an encrypted-free doc with no
-outline at all).
+**Direct manipulation, no edit mode** — the interaction model every PDF editor
+(Acrobat, PDF Expert, PDF-XChange, Calibre's Edit-ToC) converged on. Rows always
+navigate on click; editing happens on the rows themselves:
+
+- **`+` button** in the search row (`#outlineAddButton`, Ctrl+B): adds an entry
+  pointing at the CURRENT page — after the ring row, else after the current-entry row,
+  else at the end — and drops straight into rename with the name pre-selected. Pressed
+  while search results are showing, it clears the query first so the insertion is
+  visible. Carries the unsaved-edits dot.
+- **Right-click context menu** (`#outlineContextMenu`) on any row — the action hub:
+  שינוי שם (F2) / עדכון יעד לעמוד הנוכחי / הוספת פריט אחרי / הוספת תת־פריט / מחיקה
+  (Del). Also reachable via the hover `⋯` button (`#outlineRowMenuButton` — a single
+  floating element repositioned onto the hovered row, so the PDF.js-owned tree DOM
+  stays untouched and per-row cost is zero).
+- **Drag & drop** (pointer-based, 5px threshold so plain clicks still navigate): drop
+  zones per hovered row are top quarter = before, bottom quarter = after, middle =
+  INTO (last child, prospective parent highlighted). A fixed-position insertion line
+  (`#outlineDropIndicator`) tracks the sibling positions; drops into/beside the dragged
+  row's own subtree are rejected; the container auto-scrolls near its edges. After a
+  real drop, the click that follows pointerup is swallowed via a capture listener
+  removed on a 0-timeout — NOT `{once:true}`, which would linger if no click ever
+  fires (pointer released outside the window) and eat the next unrelated click.
+- **Double-click renames** (the first click of the pair navigates — harmless); Escape
+  cancels, Enter/blur commits, and only an ACTUAL text change dirties the document.
+- **Keyboard** (from the search input, ring row as target): F2 rename, Delete remove
+  (empty query only — the key must stay typable), Ctrl+B add, **Alt+↑/↓ move among
+  siblings, Alt+←/→ indent/outdent** (RTL: Alt+← nests deeper, matching plain ←'s
+  expand direction).
+- **עדכון יעד לעמוד הנוכחי** (retarget) re-points a row at the current page: it
+  becomes editor-owned — `data-toc-page` set, `src` stamp and href/onclick dropped —
+  and navigates like an added row.
+
+Edits are written into the **PDF itself** on save via the standard save pipeline — NOT
+stored app-side. Verified live end-to-end: edit → save → reload the saved bytes →
+outline persists (including on a doc with no outline at all).
 
 **The DOM is the model.** The rendered tree is already the source of truth for search,
 tracking, and keyboard nav, so editing it directly keeps all of those working with no
 parallel structure. Rows keep PDF.js's exact shape (`.treeItem > a`, `.treeItems`,
-`.treeItemToggler`), so styling and collapse come for free. New rows carry
-`data-toc-new` and **no href** (PDF.js only binds navigation to anchors it created; an
-empty href would push history entries). Delete **promotes children** rather than
-dropping the subtree. In edit mode, a capture-phase click listener turns row clicks into
-selection instead of navigation (capture is required — PDF.js binds navigation via
-`element.onclick` on the anchor itself).
+`.treeItemToggler`), so styling and collapse come for free. Rows with editor-owned
+targets (added or retargeted) carry `data-toc-new` (dashed start-edge marker) and **no
+href** (PDF.js only binds navigation to anchors it created; an empty href would push
+history entries). Delete **promotes children** rather than dropping the subtree.
+XFA documents: every interaction trigger checks `editingDisabled()` (the worker's
+outline block skips isPureXfa, so edits would silently discard on save).
 
 **Page stamps.** `buildPageIndex` was refactored to stamp each row with
 `data-toc-page` instead of building a detached index; `rebuildPageIndexFromDom()`
@@ -1582,7 +1611,7 @@ nearest previous row's page rather than being dropped.
 
 **Dirty state.** `outlineDirty` is OR-ed into the viewer's dirty logic by wrapping
 `app._hasChanges` at runtime (no viewer.mjs patch; the `beforeunload` handler is bound to
-the app object, so the wrapper is what it calls). The ✎ toggle shows a dot while dirty.
+the app object, so the wrapper is what it calls). The + button shows a dot while dirty.
 Verified live: the beforeunload alert fires for outline-only edits. Everything resets on
 `documentloaded`.
 
@@ -1590,7 +1619,7 @@ Verified live: the beforeunload alert fires for outline-only edits. Everything r
 and bounces the sidebar off the outline view (`onTreeLoaded` → `switchView(THUMBS)`).
 The panel re-enables the option in its own `outlineloaded` handler (registered later, so
 it runs after the disable), and `updateVisibility` shows the bar whenever a document is
-loaded — even with zero entries — so the ✎ toggle is reachable and the first added entry
+loaded — even with zero entries — so the + button is reachable and the first added entry
 starts the outline. The worker patch handles the no-existing-outline case natively: it
 builds a new `/Outlines` root and points the copied catalog at it. (`PDFEditor`'s own
 `#makeOutline` was NOT reused — it builds a whole new document; the patch reuses only its

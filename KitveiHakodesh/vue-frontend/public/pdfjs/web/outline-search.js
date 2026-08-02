@@ -501,41 +501,18 @@
       'aria-label',
       'חיפוש בתוכן הענינים',
     );
-    // Edit-mode toggle, sharing the search row. Icon-only: the sidebar is
-    // narrow and a labelled button would crowd the input.
-    var editToggle = document.createElement('button');
-    editToggle.id = 'outlineEditToggle';
-    editToggle.type = 'button';
-    editToggle.title = 'עריכת תוכן הענינים';
-    editToggle.setAttribute('aria-label', 'עריכת תוכן הענינים');
-    editToggle.setAttribute('aria-pressed', 'false');
-    searchInner.append(input, editToggle);
+    // Add button, sharing the search row — the panel's single always-visible
+    // editing affordance, matching Acrobat/PDF-XChange's "new bookmark" header
+    // button: one click adds an entry pointing at the CURRENT page, name
+    // pre-selected for typing. Everything else is direct manipulation on the
+    // rows (context menu, double-click rename, drag to move) — no edit mode.
+    var addButton = document.createElement('button');
+    addButton.id = 'outlineAddButton';
+    addButton.type = 'button';
+    addButton.title = 'הוספת סימנייה לעמוד הנוכחי (Ctrl+B)';
+    addButton.setAttribute('aria-label', 'הוספת סימנייה לעמוד הנוכחי');
+    searchInner.append(input, addButton);
     searchBar.append(searchInner);
-
-    // Second row, shown only in edit mode. Every action targets the focused
-    // row, which the existing keyboard ring already tracks.
-    var editBar = document.createElement('div');
-    editBar.id = 'outlineEditBar';
-    editBar.className = 'hidden';
-    var EDIT_ACTIONS = [
-      { key: 'add', label: '+', title: 'הוספת פריט בעמוד הנוכחי' },
-      { key: 'rename', label: '✎', title: 'שינוי שם הפריט' },
-      { key: 'delete', label: '−', title: 'מחיקת הפריט' },
-      { key: 'outdent', label: '→', title: 'הזזה שמאלה (רמה מעלה)' },
-      { key: 'indent', label: '←', title: 'הזזה ימינה (רמה מטה)' },
-    ];
-    for (var ea = 0; ea < EDIT_ACTIONS.length; ea++) {
-      var spec = EDIT_ACTIONS[ea];
-      var btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'outlineEditAction';
-      btn.dataset.action = spec.key;
-      btn.textContent = spec.label;
-      btn.title = spec.title;
-      btn.setAttribute('aria-label', spec.title);
-      editBar.append(btn);
-    }
-    searchBar.append(editBar);
 
     // Sits below the scrollable content, like BookView's .toc-search.
     content.after(searchBar);
@@ -1110,10 +1087,11 @@
     // (`.treeItem > a`, `.treeItems`, `.treeItemToggler`) so the styling and
     // collapse behaviour come for free.
     //
-    // NOTE: edits currently live in the DOM only — nothing is written back to
-    // the PDF yet. `outlineDirty` feeds _hasChanges() so the viewer already
-    // knows the document is modified.
-    var editMode = false;
+    // Edits live in the DOM until save (SaveDocument writes them into the
+    // PDF); `outlineDirty` feeds _hasChanges() so the viewer knows the
+    // document is modified. There is NO edit mode: rows navigate on click and
+    // are edited by direct manipulation (context menu, double-click rename,
+    // drag to move), the convention every PDF editor converged on.
     var outlineDirty = false;
     var renaming = false;
     var renamingAnchor = null; // the contentEditable anchor while renaming
@@ -1125,7 +1103,17 @@
 
     function markDirty() {
       outlineDirty = true;
-      editToggle.classList.add('dirty');
+      addButton.classList.add('dirty');
+    }
+
+    /**
+     * XFA documents: the worker's SaveDocument skips the outline block for
+     * isPureXfa, so edits would silently discard on save. With no edit mode to
+     * disable, every interaction trigger checks this instead.
+     */
+    function editingDisabled() {
+      var app = window.PDFViewerApplication;
+      return !!(app && app.pdfDocument && app.pdfDocument.isPureXfa);
     }
 
     /** The `.treeItem` behind the keyboard ring, or null. */
@@ -1313,7 +1301,7 @@
         outlineMenuButton.disabled = false;
       }
       outlineDirty = true;
-      editToggle.classList.add('dirty');
+      addButton.classList.add('dirty');
       invalidateIndex();
       rebuildPageIndexFromDom();
       pushOutlineToTransport();
@@ -1386,25 +1374,40 @@
       return row;
     }
 
-    function addItem() {
+    /**
+     * Add an entry pointing at the CURRENT page (the Acrobat convention).
+     * `reference` — insert after this row (same level); `asChild` — insert as
+     * its last child instead. No reference: after the ring row, else after the
+     * current-entry row, else appended at the end. The new row drops straight
+     * into rename with the placeholder name selected.
+     */
+    function addItem(reference, asChild) {
       if (inResults()) {
-        // Every other action no-ops safely in results mode via the null
-        // focusedRow(); add is the one with a fallback path — it would append
-        // an invisible row to the HIDDEN tree and mark the document dirty.
-        return;
+        // Adding into the hidden tree while results are showing would be
+        // invisible — leave search first, then insert relative to something
+        // the user can see.
+        input.value = '';
+        applyFilter();
       }
       var app = window.PDFViewerApplication;
       var page = (app && app.page) || 1;
       var row = createRow('פריט חדש', page);
-      var reference = focusedRow();
-      if (reference && reference.parentNode) {
-        reference.after(row); // sibling of the focused row, at its level
+      var target = reference || focusedRow() || activeItem;
+      if (asChild && target) {
+        ensureToggler(target);
+        ensureItemsContainer(target).append(row);
+        var toggler = target.querySelector(':scope > .treeItemToggler');
+        if (toggler) {
+          toggler.classList.remove('treeItemsHidden'); // reveal the new child
+        }
+      } else if (target && target.parentNode && outlinesView.contains(target)) {
+        target.after(row); // sibling, at the target's level
       } else {
         outlinesView.append(row);
       }
       afterEdit();
       focusRow(row);
-      startRename(); // a new row is always named immediately
+      startRename(row); // a new row is always named immediately
     }
 
     /**
@@ -1412,9 +1415,9 @@
      * discarding the subtree — losing a whole branch to one keystroke is a much
      * worse mistake than leaving entries at the wrong depth.
      */
-    function deleteItem() {
-      var row = focusedRow();
-      if (!row) {
+    function deleteItem(targetRow) {
+      var row = targetRow || focusedRow();
+      if (!row || !outlinesView.contains(row)) {
         return;
       }
       // Where the ring should land after the delete: next sibling row, else
@@ -1454,8 +1457,8 @@
       }
     }
 
-    function startRename() {
-      var row = focusedRow();
+    function startRename(targetRow) {
+      var row = targetRow || focusedRow();
       var anchor = row && row.querySelector(':scope > a');
       if (!anchor || renaming) {
         return;
@@ -1510,9 +1513,9 @@
       anchor.addEventListener('blur', onBlur);
     }
 
-    /** Nest the focused row under the row above it, at the same level. */
-    function indentItem() {
-      var row = focusedRow();
+    /** Nest a row under the row above it, at the same level. */
+    function indentItem(targetRow) {
+      var row = targetRow || focusedRow();
       if (!row) {
         return;
       }
@@ -1533,9 +1536,9 @@
       focusRow(row);
     }
 
-    /** Move the focused row out to its parent's level, just after the parent. */
-    function outdentItem() {
-      var row = focusedRow();
+    /** Move a row out to its parent's level, just after the parent. */
+    function outdentItem(targetRow) {
+      var row = targetRow || focusedRow();
       if (!row) {
         return;
       }
@@ -1553,80 +1556,433 @@
       focusRow(row);
     }
 
-    function setEditMode(on) {
-      editMode = !!on;
-      editToggle.setAttribute('aria-pressed', String(editMode));
-      editToggle.classList.toggle('active', editMode);
-      editBar.classList.toggle('hidden', !editMode);
-      outlinesView.classList.toggle('outlineEditing', editMode);
-      if (editMode && focusedIndex < 0 && !seedFocusFromCurrent()) {
-        moveTo(0); // every action targets a row, so make sure one is picked
+    /** Move a row up/down among its visible siblings (Alt+↑/↓). */
+    function moveItem(targetRow, direction) {
+      var row = targetRow || focusedRow();
+      if (!row) {
+        return;
+      }
+      if (direction < 0) {
+        var previous = row.previousElementSibling;
+        while (previous && !previous.classList.contains('treeItem')) {
+          previous = previous.previousElementSibling;
+        }
+        if (!previous) {
+          return;
+        }
+        previous.before(row);
+      } else {
+        var next = row.nextElementSibling;
+        while (next && !next.classList.contains('treeItem')) {
+          next = next.nextElementSibling;
+        }
+        if (!next) {
+          return;
+        }
+        next.after(row);
+      }
+      afterEdit();
+      focusRow(row);
+    }
+
+    /**
+     * Re-point a row at the CURRENT page ("עדכון יעד לעמוד הנוכחי" — the
+     * set-destination-to-current-view every PDF editor offers). The row
+     * becomes editor-owned: original dest/action no longer apply, so the src
+     * stamp and PDF.js's bound navigation are dropped and it navigates via
+     * data-toc-page like an added row.
+     */
+    function retargetItem(targetRow) {
+      var row = targetRow || focusedRow();
+      var anchor = row && row.querySelector(':scope > a');
+      if (!anchor) {
+        return;
+      }
+      var app = window.PDFViewerApplication;
+      row.dataset.tocPage = String((app && app.page) || 1);
+      row.dataset.tocNew = '1'; // shows the "modified, unsaved" edge marker
+      delete row.dataset.tocSrc;
+      anchor.removeAttribute('href');
+      anchor.onclick = null;
+      afterEdit();
+      focusRow(row);
+    }
+
+    // ── Context menu — the hub for row actions (the PDF Expert/Acrobat way) ──
+    var contextMenu = null;
+    var contextMenuRow = null;
+
+    function closeContextMenu() {
+      if (contextMenu) {
+        contextMenu.remove();
+        contextMenu = null;
+        contextMenuRow = null;
       }
     }
 
-    editToggle.addEventListener('click', function () {
-      setEditMode(!editMode);
-      input.focus({ preventScroll: true });
-    });
+    var MENU_ITEMS = [
+      { key: 'rename', label: 'שינוי שם', hint: 'F2' },
+      { key: 'retarget', label: 'עדכון יעד לעמוד הנוכחי', hint: '' },
+      { key: 'add', label: 'הוספת פריט אחרי', hint: '' },
+      { key: 'addChild', label: 'הוספת תת־פריט', hint: '' },
+      { key: 'delete', label: 'מחיקה', hint: 'Del' },
+    ];
 
-    editBar.addEventListener('click', function (e) {
-      var button = e.target.closest ? e.target.closest('.outlineEditAction') : null;
-      if (!button) {
+    function openContextMenu(row, clientX, clientY) {
+      closeContextMenu();
+      contextMenuRow = row;
+      focusRow(row); // menu target and ring agree — actions hit what you see
+      var menu = document.createElement('div');
+      menu.id = 'outlineContextMenu';
+      menu.setAttribute('role', 'menu');
+      for (var i = 0; i < MENU_ITEMS.length; i++) {
+        var item = MENU_ITEMS[i];
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'outlineMenuItem';
+        button.dataset.action = item.key;
+        button.setAttribute('role', 'menuitem');
+        var label = document.createElement('span');
+        label.textContent = item.label;
+        button.append(label);
+        if (item.hint) {
+          var hint = document.createElement('span');
+          hint.className = 'outlineMenuHint';
+          hint.textContent = item.hint;
+          button.append(hint);
+        }
+        menu.append(button);
+      }
+      document.body.append(menu);
+      // Clamp to the viewport; in RTL open toward the left of the cursor.
+      var rect = menu.getBoundingClientRect();
+      var x = Math.max(4, Math.min(clientX, window.innerWidth - rect.width - 4));
+      var y = Math.max(4, Math.min(clientY, window.innerHeight - rect.height - 4));
+      menu.style.left = x + 'px';
+      menu.style.top = y + 'px';
+      contextMenu = menu;
+
+      menu.addEventListener('click', function (e) {
+        var button = e.target.closest ? e.target.closest('.outlineMenuItem') : null;
+        if (!button) {
+          return;
+        }
+        var action = button.dataset.action;
+        var target = contextMenuRow;
+        closeContextMenu();
+        if (!target || !outlinesView.contains(target)) {
+          return;
+        }
+        if (action === 'rename') {
+          startRename(target);
+        } else if (action === 'retarget') {
+          retargetItem(target);
+        } else if (action === 'add') {
+          addItem(target, false);
+        } else if (action === 'addChild') {
+          addItem(target, true);
+        } else if (action === 'delete') {
+          deleteItem(target);
+          input.focus({ preventScroll: true });
+        }
+      });
+    }
+
+    outlinesView.addEventListener('contextmenu', function (e) {
+      var target = e.target;
+      if (!target || !target.closest) {
+        return;
+      }
+      var anchor = target.closest('.treeItem > a');
+      if (!anchor || inResults() || editingDisabled()) {
         return;
       }
       e.preventDefault();
-      var action = button.dataset.action;
-      if (action === 'add') {
-        addItem();
-      } else if (action === 'rename') {
-        startRename();
-      } else if (action === 'delete') {
-        deleteItem();
-      } else if (action === 'indent') {
-        indentItem();
-      } else if (action === 'outdent') {
-        outdentItem();
+      e.stopPropagation();
+      if (renaming) {
+        return; // finish the rename first
       }
-      if (action !== 'add' && action !== 'rename') {
-        input.focus({ preventScroll: true });
-      }
+      openContextMenu(anchor.parentNode, e.clientX, e.clientY);
     });
 
-    // In edit mode a click should SELECT a row, not navigate away from the page
-    // being edited. PDF.js binds navigation via `element.onclick` on the anchor
-    // itself, so this has to run in the CAPTURE phase on the container to stop
-    // the event before it reaches the target.
+    // Any interaction elsewhere dismisses the menu.
+    document.addEventListener('pointerdown', function (e) {
+      if (contextMenu && !(e.target && contextMenu.contains(e.target))) {
+        closeContextMenu();
+      }
+    }, true);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && contextMenu) {
+        e.stopPropagation();
+        closeContextMenu();
+        input.focus({ preventScroll: true });
+      }
+    }, true);
+    content.addEventListener('scroll', closeContextMenu, true);
+
+    // ── Hover ⋯ — one floating button, repositioned onto the hovered row ─────
+    // A single element (not one per row) so the tree DOM PDF.js owns stays
+    // untouched and there is zero per-row cost at 4,000+ entries.
+    var hoverMenuButton = document.createElement('button');
+    hoverMenuButton.id = 'outlineRowMenuButton';
+    hoverMenuButton.type = 'button';
+    hoverMenuButton.textContent = '⋯';
+    hoverMenuButton.title = 'פעולות';
+    hoverMenuButton.setAttribute('aria-label', 'פעולות פריט');
+    var hoverRow = null;
+
+    outlinesView.addEventListener('mouseover', function (e) {
+      if (renaming || dragState || inResults() || editingDisabled()) {
+        return;
+      }
+      var target = e.target;
+      var anchor = target && target.closest ? target.closest('.treeItem > a') : null;
+      if (!anchor) {
+        return;
+      }
+      hoverRow = anchor.parentNode;
+      var rect = anchor.getBoundingClientRect();
+      hoverMenuButton.style.top = rect.top + 'px';
+      // RTL: rows start at the right; park the button at the row's LEFT edge
+      // (the visual end) so it never covers the title's first words.
+      hoverMenuButton.style.left = Math.max(0, rect.left) + 'px';
+      if (!hoverMenuButton.isConnected) {
+        document.body.append(hoverMenuButton);
+      }
+    });
+    outlinesView.addEventListener('mouseleave', function () {
+      if (hoverMenuButton.isConnected && !contextMenu) {
+        hoverMenuButton.remove();
+        hoverRow = null;
+      }
+    });
+    hoverMenuButton.addEventListener('click', function (e) {
+      if (hoverRow && outlinesView.contains(hoverRow)) {
+        var rect = hoverMenuButton.getBoundingClientRect();
+        openContextMenu(hoverRow, rect.left, rect.bottom + 2);
+      }
+      e.stopPropagation();
+    });
+
+    // ── Drag & drop — reorder and nest in one gesture (the Acrobat way) ──────
+    // Pointer-based rather than HTML5 DnD for full control of the insertion
+    // line. Dragging starts from anywhere on a row after a 5px threshold, so
+    // plain clicks still navigate. Drop zones per hovered row: top quarter =
+    // before it, bottom quarter = after it, middle = INTO it (last child).
+    var dragState = null; // { row, started, startX, startY, suppressClick }
+    var dropIndicator = null;
+    var dropTarget = null; // { row, mode: 'before' | 'after' | 'into' }
+
+    function ensureDropIndicator() {
+      if (!dropIndicator) {
+        dropIndicator = document.createElement('div');
+        dropIndicator.id = 'outlineDropIndicator';
+        document.body.append(dropIndicator);
+      }
+      return dropIndicator;
+    }
+
+    function clearDrag() {
+      if (dropIndicator) {
+        dropIndicator.remove();
+        dropIndicator = null;
+      }
+      if (dragState && dragState.row) {
+        dragState.row.classList.remove('outlineDragging');
+      }
+      outlinesView.classList.remove('outlineDropInto');
+      if (dropTarget && dropTarget.row) {
+        dropTarget.row.classList.remove('outlineDropIntoRow');
+      }
+      dragState = null;
+      dropTarget = null;
+    }
+
+    function updateDropTarget(e) {
+      var element = document.elementFromPoint(e.clientX, e.clientY);
+      var anchor = element && element.closest ? element.closest('#outlinesView .treeItem > a') : null;
+      if (dropTarget && dropTarget.row) {
+        dropTarget.row.classList.remove('outlineDropIntoRow');
+      }
+      dropTarget = null;
+      if (!anchor) {
+        if (dropIndicator) {
+          dropIndicator.style.display = 'none';
+        }
+        return;
+      }
+      var row = anchor.parentNode;
+      // Never drop a row into or beside its own subtree.
+      if (row === dragState.row || dragState.row.contains(row)) {
+        if (dropIndicator) {
+          dropIndicator.style.display = 'none';
+        }
+        return;
+      }
+      var rect = anchor.getBoundingClientRect();
+      var ratio = (e.clientY - rect.top) / Math.max(1, rect.height);
+      var mode = ratio < 0.25 ? 'before' : ratio > 0.75 ? 'after' : 'into';
+      dropTarget = { row: row, mode: mode };
+      var indicator = ensureDropIndicator();
+      if (mode === 'into') {
+        indicator.style.display = 'none';
+        row.classList.add('outlineDropIntoRow');
+      } else {
+        indicator.style.display = 'block';
+        indicator.style.top = (mode === 'before' ? rect.top : rect.bottom) - 1 + 'px';
+        // RTL: the line spans from the row's indented start (right) leftward.
+        indicator.style.left = rect.left + 'px';
+        indicator.style.width = rect.width + 'px';
+      }
+      // Auto-scroll near the container's edges.
+      var containerRect = content.getBoundingClientRect();
+      if (e.clientY < containerRect.top + 24) {
+        content.scrollTop -= 8;
+      } else if (e.clientY > containerRect.bottom - 24) {
+        content.scrollTop += 8;
+      }
+    }
+
+    function completeDrop() {
+      var row = dragState.row;
+      var target = dropTarget;
+      if (!target || !target.row || !outlinesView.contains(target.row)) {
+        return false;
+      }
+      var oldHost = row.parentNode;
+      if (target.mode === 'into') {
+        ensureToggler(target.row);
+        ensureItemsContainer(target.row).append(row);
+        var toggler = target.row.querySelector(':scope > .treeItemToggler');
+        if (toggler) {
+          toggler.classList.remove('treeItemsHidden');
+        }
+      } else if (target.mode === 'before') {
+        target.row.before(row);
+      } else {
+        // 'after': when the target has visible children, dropping "after" it
+        // visually means "before its first child" — otherwise the row would
+        // jump below the whole subtree the user was aiming just under.
+        var kids = target.row.querySelector(':scope > .treeItems');
+        var expanded =
+          kids &&
+          !(target.row.querySelector(':scope > .treeItemToggler') || {}).classList?.contains(
+            'treeItemsHidden',
+          );
+        if (kids && expanded && kids.querySelector(':scope > .treeItem')) {
+          kids.prepend(row);
+        } else {
+          target.row.after(row);
+        }
+      }
+      if (oldHost && oldHost !== row.parentNode && oldHost.classList && oldHost.classList.contains('treeItems') && oldHost.parentNode) {
+        cleanupItem(oldHost.parentNode);
+      }
+      afterEdit();
+      focusRow(row);
+      return true;
+    }
+
+    outlinesView.addEventListener('pointerdown', function (e) {
+      if (e.button !== 0 || renaming || inResults() || editingDisabled()) {
+        return;
+      }
+      var target = e.target;
+      if (!target || !target.closest || target.classList.contains('treeItemToggler')) {
+        return;
+      }
+      var anchor = target.closest('.treeItem > a');
+      if (!anchor) {
+        return;
+      }
+      dragState = {
+        row: anchor.parentNode,
+        started: false,
+        startX: e.clientX,
+        startY: e.clientY,
+        pointerId: e.pointerId,
+      };
+    });
+
+    document.addEventListener('pointermove', function (e) {
+      if (!dragState) {
+        return;
+      }
+      if (!dragState.started) {
+        var dx = e.clientX - dragState.startX;
+        var dy = e.clientY - dragState.startY;
+        if (dx * dx + dy * dy < 25) {
+          return; // below the 5px threshold — still a click
+        }
+        dragState.started = true;
+        dragState.row.classList.add('outlineDragging');
+        closeContextMenu();
+        if (hoverMenuButton.isConnected) {
+          hoverMenuButton.remove();
+        }
+      }
+      e.preventDefault();
+      updateDropTarget(e);
+    });
+
+    document.addEventListener('pointerup', function (e) {
+      if (!dragState) {
+        return;
+      }
+      var started = dragState.started;
+      if (started) {
+        completeDrop();
+        // The pointerup is followed (same task queue) by a click on whatever
+        // the pointer is over — swallow it so the drop doesn't also navigate.
+        // Removed on a 0-timeout rather than {once:true}: a once-listener that
+        // no click ever consumes (pointer released outside the window, or a
+        // programmatic drop) would linger and eat the NEXT unrelated click.
+        var suppressClick = function (ev) {
+          ev.stopPropagation();
+          ev.preventDefault();
+        };
+        document.addEventListener('click', suppressClick, true);
+        setTimeout(function () {
+          document.removeEventListener('click', suppressClick, true);
+        }, 0);
+      }
+      clearDrag();
+    });
+
+    document.addEventListener('pointercancel', clearDrag);
+
+    // ── Double-click renames (the Calibre way; Acrobat's click-pause-click is
+    // the same idea). The first click of the pair navigates — harmless, the
+    // rename then starts in place.
+    outlinesView.addEventListener('dblclick', function (e) {
+      var target = e.target;
+      var anchor = target && target.closest ? target.closest('.treeItem > a') : null;
+      if (!anchor || renaming || inResults() || editingDisabled()) {
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      startRename(anchor.parentNode);
+    });
+
+    // While renaming, a caret-positioning click INSIDE the text being renamed
+    // must not reach PDF.js's element.onclick — goToDestination would scroll
+    // the page and its async textLayer focus would blur-commit mid-edit.
     outlinesView.addEventListener(
       'click',
       function (e) {
-        if (renaming) {
-          // A caret-positioning click INSIDE the text being renamed must not
-          // reach PDF.js's element.onclick — goToDestination would scroll the
-          // page and its async textLayer focus would blur-commit mid-edit.
-          // (Caret placement itself is a mousedown default action, unaffected.)
-          if (renamingAnchor && e.target && renamingAnchor.contains(e.target)) {
-            e.stopPropagation();
-          }
-          return;
+        if (renaming && renamingAnchor && e.target && renamingAnchor.contains(e.target)) {
+          e.stopPropagation();
         }
-        if (!editMode) {
-          return;
-        }
-        var target = e.target;
-        if (!target || !target.closest || target.classList.contains('treeItemToggler')) {
-          return; // togglers still expand/collapse while editing
-        }
-        var anchor = target.closest('.treeItem > a');
-        if (!anchor) {
-          return;
-        }
-        e.preventDefault();
-        e.stopPropagation();
-        focusRow(anchor.parentNode);
-        input.focus({ preventScroll: true });
       },
       true,
     );
+
+    addButton.addEventListener('click', function () {
+      if (!editingDisabled()) {
+        addItem(null, false);
+      }
+    });
 
     resultsView.addEventListener('click', function (e) {
       var anchor = e.target.closest ? e.target.closest('a[data-outline-node-id]') : null;
@@ -1658,10 +2014,9 @@
     // rows rebuilt from a host snapshot have no href and no bound onclick, so
     // clicking them would otherwise do nothing. Route them through goToPage
     // using the row's data-toc-page (page-level — the same fidelity their
-    // saved destination will have). Skipped in edit mode, where the capture
-    // handler above turns clicks into selection.
+    // saved destination will have).
     outlinesView.addEventListener('click', function (e) {
-      if (editMode || renaming) {
+      if (renaming) {
         return;
       }
       var target = e.target;
@@ -1724,6 +2079,50 @@
         input.value = '';
         applyFilter();
         return;
+      }
+
+      // Editing shortcuts, PDF-editor conventions: Ctrl+B adds a bookmark for
+      // the current page; F2 renames the ring row; Delete removes it (only
+      // with an empty query, like Space — the key must stay typable);
+      // Alt+arrows move the ring row (↑/↓ among siblings, ←/→ indent/outdent
+      // in this RTL tree).
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault();
+        if (!editingDisabled()) {
+          addItem(null, false);
+        }
+        return;
+      }
+      if (e.key === 'F2') {
+        e.preventDefault();
+        if (!editingDisabled()) {
+          startRename();
+        }
+        return;
+      }
+      if (e.key === 'Delete' && input.value === '' && !inResults() && focusedIndex >= 0) {
+        e.preventDefault();
+        if (!editingDisabled()) {
+          deleteItem();
+        }
+        return;
+      }
+      if (e.altKey && !inResults() && focusedIndex >= 0 && !editingDisabled()) {
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          moveItem(null, e.key === 'ArrowUp' ? -1 : 1);
+          return;
+        }
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          // RTL: Alt+← nests deeper (like plain ← expands), Alt+→ un-nests.
+          e.preventDefault();
+          if (e.key === 'ArrowLeft') {
+            indentItem();
+          } else {
+            outdentItem();
+          }
+          return;
+        }
       }
 
       // Navigation drives whichever list is showing — the flat results while a
@@ -1818,10 +2217,8 @@
       // isPureXfa (their save path is XFA-specific), so editing would silently
       // discard on save — hide the affordance instead.
       var isXfa = !!(hasDocument && app.pdfDocument.isPureXfa);
-      editToggle.classList.toggle('hidden', isXfa);
-      if (isXfa && editMode) {
-        setEditMode(false);
-      }
+      addButton.classList.toggle('hidden', isXfa);
+      outlinesView.classList.toggle('outlineNoEdit', isXfa);
       searchBar.classList.toggle('hidden', !show);
       if (!show && input.value) {
         input.value = '';
@@ -1872,7 +2269,7 @@
       // dialog dispatches nothing, so the edits correctly stay dirty.
       document.addEventListener('kh-save-complete', function () {
         outlineDirty = false;
-        editToggle.classList.remove('dirty');
+        addButton.classList.remove('dirty');
         notifyHost();
       });
 
@@ -1926,7 +2323,7 @@
       // 'documentloaded', which only fires after getDownloadInfo() resolves,
       // i.e. after the FULL file downloads; under this app's
       // disableAutoFetch:true that is late or never for an in-place open(),
-      // which left the previous document's edit state (editMode, dirty)
+      // which left the previous document's edit state (dirty flag, etc.)
       // dangling. 'documentinit' fires right after setInitialView, per
       // document, regardless of download progress.
       app.eventBus._on('documentinit', function () {
@@ -1949,8 +2346,9 @@
         activeItem = null;
         // Edits belong to the previous document — reset the editor entirely.
         outlineDirty = false;
-        editToggle.classList.remove('dirty');
-        setEditMode(false);
+        addButton.classList.remove('dirty');
+        closeContextMenu();
+        clearDrag();
         // A rename active when the document switches never gets its blur (the
         // focused anchor is removed with the old tree, which fires no blur) —
         // without this reset `renaming` would stay true for the session,
