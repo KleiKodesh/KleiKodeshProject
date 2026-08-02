@@ -61,6 +61,18 @@ public sealed class BookInfo
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookByIdResult { public BookInfo? Book { get; set; } }
 
+/// <summary>Where a PERSONAL book's content lives on disk (user_books.db keeps text
+/// in files). Null fields for library books, which have neither column.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserBookFileInfo
+{
+    public string? FilePath { get; set; }
+    public string? FileType { get; set; }
+}
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UserBookFileResult { public UserBookFileInfo? File { get; set; } }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LinesPagedArgs
 {
