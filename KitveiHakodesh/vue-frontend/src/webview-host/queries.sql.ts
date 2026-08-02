@@ -25,6 +25,11 @@ export const SQL = {
 
   // ── Books ────────────────────────────────────────────────────────────────────
 
+  /** Where a PERSONAL book's content lives on disk (user_books.db only — the
+   * library book table has neither column). Routes PDF/docx personal books into
+   * the local-file viewer flow. */
+  GET_USER_BOOK_FILE: `SELECT filePath, fileType FROM book WHERE id = ?`,
+
   /** Single book by id — totalLines for virtual scroll init + has* flags for toolbar */
   GET_BOOK_BY_ID: `
     SELECT totalLines, hasTeamim,

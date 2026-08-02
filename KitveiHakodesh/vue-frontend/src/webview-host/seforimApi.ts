@@ -98,6 +98,31 @@ export async function getAllBooks(): Promise<BookRow[]> {
 
 // ── Book + lines ──────────────────────────────────────────────────────────────
 
+/**
+ * Where a PERSONAL book's content lives on disk — null for library books (their
+ * book table has neither column) and when the personal-books DB is unavailable.
+ * BookViewPage uses this to route PDF/docx personal books into the local-file
+ * viewer flow instead of the (empty) text view.
+ */
+export async function getUserBookFile(
+  bookId: number,
+): Promise<{ filePath: string | null; fileType: string | null } | null> {
+  if (!isUserBooksId(bookId)) return null
+  try {
+    if (!isDbHosted()) {
+      return (await serviceCall<{ file: { filePath: string | null; fileType: string | null } | null }>(
+        'getUserBookFile', { id: bookId },
+      )).file
+    }
+    const rows = await queryUserBooks<{ filePath: string | null; fileType: string | null }>(
+      SQL.GET_USER_BOOK_FILE, [toLocalId(bookId)])
+    return rows[0] ?? null
+  } catch (e) {
+    console.warn('[seforimApi] getUserBookFile failed:', e)
+    return null
+  }
+}
+
 export async function getBookById(id: number): Promise<BookInfo | undefined> {
   if (!isDbHosted())
     return (await serviceCall<{ book: BookInfo | null }>('getBookById', { id })).book ?? undefined

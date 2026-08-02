@@ -161,4 +161,32 @@ public sealed partial class SeforimDbService
     /// <summary>File-backed line count (0 when the book is not file-backed text).</summary>
     private int GetUserFileTotalLines(int localBookId) =>
         GetUserBookFileLines(localBookId)?.Length ?? 0;
+
+    /// <summary>
+    /// Where a PERSONAL book's content lives on disk — null for library ids (their
+    /// book table has neither column). The frontend uses this to route PDF/docx
+    /// personal books into the local-file viewer flow instead of the text view.
+    /// </summary>
+    public UserBookFileInfo? GetUserBookFile(int bookId)
+    {
+        if (!CorpusIds.IsUserBooks(bookId)) return null;
+        UserBookFileInfo? result = null;
+        Run(Corpus.UserBooks, () =>
+        {
+            using var conn = Open(Corpus.UserBooks);
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT filePath, fileType FROM book WHERE id = @id";
+            cmd.Parameters.AddWithValue("@id", CorpusIds.ToLocalId(bookId));
+            using var r = cmd.ExecuteReader();
+            if (r.Read())
+            {
+                result = new UserBookFileInfo
+                {
+                    FilePath = r.IsDBNull(0) ? null : r.GetString(0),
+                    FileType = r.IsDBNull(1) ? null : r.GetString(1),
+                };
+            }
+        }, "getUserBookFile");
+        return result;
+    }
 }

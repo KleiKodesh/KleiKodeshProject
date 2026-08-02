@@ -453,6 +453,14 @@ internal static class CorpusRoutingVerify
             // Books 1/2 have no filePath — totalLines stays the DB value.
             Eq("non-file-backed totalLines untouched", svc.GetBookById(Base + 1)!.TotalLines, 9);
 
+            // GetUserBookFile: personal books report their file; library ids get null
+            // (their book table has neither column — must not even be queried).
+            var file = svc.GetUserBookFile(Base + 3);
+            Eq("GetUserBookFile.fileType", file?.FileType, "txt");
+            Eq("GetUserBookFile.filePath", file?.FilePath, bookFile);
+            Eq("GetUserBookFile(library id) is null", svc.GetUserBookFile(1) is null, true);
+            Eq("GetUserBookFile(no filePath) has null path", svc.GetUserBookFile(Base + 1)?.FilePath, null);
+
             Console.WriteLine("  file-backed content: done");
         }
         finally
@@ -529,6 +537,16 @@ internal static class CorpusRoutingVerify
         var ids = svc.GetBookIdByExactTitle(title);
         if (!ids.Exists(x => x.Id == Base + tocBook))
             Fail($"real title lookup: '{title}' missing shifted id {Base + tocBook}");
+
+        // PDF personal books report their fileType so the frontend can route them to
+        // the PDF viewer instead of the (empty) text view.
+        int pdfBook = ScalarInt(real, "SELECT id FROM book WHERE fileType = 'pdf' LIMIT 1");
+        if (pdfBook > 0)
+        {
+            var pdf = svc.GetUserBookFile(Base + pdfBook);
+            Eq($"real GetUserBookFile(pdf book {pdfBook}).fileType", pdf?.FileType, "pdf");
+            Eq("real pdf filePath present", string.IsNullOrEmpty(pdf?.FilePath), false);
+        }
 
         Console.WriteLine($"  real user DB: {userBooks} books, {userCats} categories, TOC({tocBook})={tocDirect} rows — done");
     }
