@@ -175,6 +175,30 @@ const iframeSrc = computed(() => {
   return `/pdfjs/web/viewer.html?${p}`
 })
 
+// A reactive :src change (switching between two PDF tabs, or another file
+// replacing this tab's PDF) NAVIGATES the iframe — and a dirty viewer would
+// pop the browser's native beforeunload prompt mid-switch, desyncing the
+// iframe from the already-switched tab state. The viewer pushes its edits out
+// eagerly after every change (parked per tab in bookViewStore), so the prompt
+// protects nothing here — silence it on the OLD document before the patch
+// applies. flush:'pre' runs before the render effect that updates :src, so
+// contentWindow still belongs to the outgoing document. The unmount path needs
+// no equivalent: pageTracking.detach() sets the same flag before the
+// about:blank navigation in onBeforeUnmount.
+watch(iframeSrc, () => {
+  const w = iframeRef.value?.contentWindow as
+    | (Window & { __khSuppressUnloadPrompt?: boolean })
+    | null
+    | undefined
+  if (w) {
+    try {
+      w.__khSuppressUnloadPrompt = true
+    } catch {
+      // cross-origin or already-dead window — nothing to silence
+    }
+  }
+}, { flush: 'pre' })
+
 // Computed pane-specific converting state (localFileStore.converting reads pane 1 only)
 const converting = computed(() => paneNavigation.activeTab.localFileConverting ?? false)
 const loadingType = computed(() => paneNavigation.activeTab.localFileLoadingType ?? 'converting')

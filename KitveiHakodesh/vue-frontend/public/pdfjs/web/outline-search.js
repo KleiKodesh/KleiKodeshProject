@@ -1135,6 +1135,7 @@
       rebuildPageIndexFromDom();
       paintFocus();
       pushOutlineToTransport();
+      notifyHost();
       // Current-entry tracking is deliberately NOT re-synced here — it scrolls,
       // which would yank the list mid-edit. The next pagechanging picks it up.
     }
@@ -1185,6 +1186,87 @@
         pdfDocument._transport.editedOutline = serializeOutlineDom();
       }
     }
+
+    // ── Host (Vue app) integration ────────────────────────────────────────────
+    // The viewer lives in an iframe that the host destroys or navigates on tab
+    // switches, so unsaved edits must be pushed OUT eagerly — after every edit,
+    // not on teardown (there is no reliable teardown moment). The host stores
+    // the snapshot per tab and rehydrates via setState() when the tab returns.
+    //
+    //   window.__khOutlineHostNotify — assigned by the host on iframe load;
+    //     called with {dirty, outline} after every edit and after a completed
+    //     save ({dirty:false}).
+    //   window.__khOutlineEditor — {getState, setState, isDirty} for the host.
+    //   window.__khSuppressUnloadPrompt — set by the host just before a
+    //     Vue-initiated navigation/teardown. The _hasChanges wrapper returns
+    //     false while set, so PDF.js's own beforeunload prompt stays quiet for
+    //     navigations whose state the host has already preserved. Without this,
+    //     switching between two PDF tabs (same iframe, src change) pops the
+    //     browser's native English prompt — and cancelling it desyncs the
+    //     iframe from the already-switched Vue tab state.
+
+    function notifyHost() {
+      if (typeof window.__khOutlineHostNotify === 'function') {
+        try {
+          window.__khOutlineHostNotify({
+            dirty: outlineDirty,
+            outline: serializeOutlineDom(),
+          });
+        } catch (e) {
+          // Host callback failures must never break the editor.
+        }
+      }
+    }
+
+    /**
+     * Rebuild the tree DOM from a host snapshot ([{title, page, items}]).
+     * Used when a tab returns after its iframe was torn down mid-edit. The
+     * rebuilt rows carry data-toc-page and no href (same as freshly added
+     * rows), so navigation goes through the goToPage fallback below and the
+     * next save writes exactly this tree.
+     */
+    function rebuildFromState(outline) {
+      outlinesView.replaceChildren();
+      var total = 0;
+      function build(items, container) {
+        for (var i = 0; i < items.length; i++) {
+          var item = items[i];
+          var row = createRow(String(item.title || ''), Number(item.page) || 1);
+          container.append(row);
+          total++;
+          if (Array.isArray(item.items) && item.items.length > 0) {
+            ensureToggler(row);
+            build(item.items, ensureItemsContainer(row));
+          }
+        }
+      }
+      build(outline, outlinesView);
+      outlineCount = total;
+      var outlineMenuButton = document.getElementById('outlinesViewMenu');
+      if (outlineMenuButton) {
+        outlineMenuButton.disabled = false;
+      }
+      outlineDirty = true;
+      editToggle.classList.add('dirty');
+      invalidateIndex();
+      rebuildPageIndexFromDom();
+      pushOutlineToTransport();
+      updateVisibility();
+    }
+
+    window.__khOutlineEditor = {
+      getState: function () {
+        return { dirty: outlineDirty, outline: serializeOutlineDom() };
+      },
+      setState: function (state) {
+        if (state && Array.isArray(state.outline)) {
+          rebuildFromState(state.outline);
+        }
+      },
+      isDirty: function () {
+        return outlineDirty;
+      },
+    };
 
     // PDF.js marks a `.treeItem` as having children with a `.treeItemToggler`
     // first child plus a sibling `.treeItems` container; `.withNesting` on the
@@ -1461,6 +1543,40 @@
       refocusInput(); // clicking an <a> focuses it — keep the caret in the box
     });
 
+    // Navigation for rows PDF.js did not create: freshly added entries and
+    // rows rebuilt from a host snapshot have no href and no bound onclick, so
+    // clicking them would otherwise do nothing. Route them through goToPage
+    // using the row's data-toc-page (page-level — the same fidelity their
+    // saved destination will have). Skipped in edit mode, where the capture
+    // handler above turns clicks into selection.
+    outlinesView.addEventListener('click', function (e) {
+      if (editMode || renaming) {
+        return;
+      }
+      var target = e.target;
+      if (!target || !target.closest) {
+        return;
+      }
+      var anchor = target.closest('.treeItem > a');
+      if (!anchor || anchor.getAttribute('href')) {
+        return; // PDF.js-bound rows keep their own handler
+      }
+      var page = Number(anchor.parentNode.dataset.tocPage);
+      if (!(page > 0)) {
+        return;
+      }
+      e.preventDefault();
+      var app = window.PDFViewerApplication;
+      if (app && app.pdfLinkService) {
+        app.pdfLinkService.goToPage(page);
+      }
+      var outlineViewer = app && app.pdfOutlineViewer;
+      if (outlineViewer && typeof outlineViewer._updateCurrentTreeItem === 'function') {
+        outlineViewer._updateCurrentTreeItem(anchor.parentNode);
+      }
+      refocusInput();
+    });
+
     // Same treatment for clicks in the real tree. PDF.js's own handler runs on
     // the anchor (it is bound via element.onclick, so this listener does not
     // interfere); we only sync the ring and reclaim focus afterwards. Skip
@@ -1622,9 +1738,24 @@
       var originalHasChanges = app._hasChanges;
       if (typeof originalHasChanges === 'function') {
         app._hasChanges = function () {
+          // Suppressed only around Vue-initiated teardowns, whose state the
+          // host has already snapshotted — see the host-integration comment.
+          if (window.__khSuppressUnloadPrompt) {
+            return false;
+          }
           return outlineDirty || originalHasChanges.call(app);
         };
       }
+
+      // A COMPLETED save resolves the dirty state. viewer.mjs's patched
+      // _triggerDownload dispatches this only after the file was actually
+      // written (or the fallback anchor download fired) — a cancelled save
+      // dialog dispatches nothing, so the edits correctly stay dirty.
+      document.addEventListener('kh-save-complete', function () {
+        outlineDirty = false;
+        editToggle.classList.remove('dirty');
+        notifyHost();
+      });
 
       app.eventBus._on('outlineloaded', function (evt) {
         outlineCount = evt.outlineCount || 0;

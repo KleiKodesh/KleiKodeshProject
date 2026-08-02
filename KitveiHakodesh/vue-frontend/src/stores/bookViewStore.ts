@@ -51,6 +51,43 @@ export interface PdfOutlineEntry {
 export interface PdfBridge {
   outlineEntries: PdfOutlineEntry[]
   navigateToEntry: (entry: PdfOutlineEntry) => void
+  /**
+   * Live unsaved-changes state, read straight from the viewer's
+   * PDFViewerApplication._hasChanges() (annotations + structural page edits +
+   * outline edits). Only meaningful while the tab's iframe is mounted — for
+   * background tabs use the parked snapshot in pdfEditStateByTabId instead.
+   */
+  hasUnsavedChanges?: () => boolean
+}
+
+/**
+ * One serialized outline entry, as produced by the viewer's outline editor
+ * (outline-search.js serializeOutlineDom). Page-level destinations.
+ */
+export interface PdfOutlineEditEntry {
+  title: string
+  page: number
+  items: PdfOutlineEditEntry[]
+}
+
+/**
+ * A parked snapshot of unsaved PDF outline edits for one tab.
+ *
+ * The PDF viewer lives in ONE iframe per pane rendering the ACTIVE tab, so
+ * switching tabs destroys (or navigates) the viewer — a background PDF tab has
+ * no live viewer to ask about unsaved state. The viewer therefore pushes its
+ * edited outline out EAGERLY after every edit; this is where it lands. When
+ * the tab becomes active again with the SAME file, the snapshot is rehydrated
+ * into the viewer (setState) and editing continues seamlessly.
+ *
+ * In-memory only, never persisted: surviving an app restart would require
+ * writing the edits somewhere, and the design keeps the PDF file itself as the
+ * only durable store — that is exactly what the close/unload guards are for.
+ */
+export interface PdfEditState {
+  filePath: string
+  dirty: boolean
+  outline: PdfOutlineEditEntry[]
 }
 
 export const useBookViewStore = defineStore('bookView', () => {
@@ -334,7 +371,74 @@ export const useBookViewStore = defineStore('bookView', () => {
     return pdfBridgeByTabId.get(tabId) ?? null
   }
 
+  // ── PDF unsaved-edit snapshots + close guard state ─────────────────────────
+
+  const pdfEditStateByTabId = reactive(new Map<string, PdfEditState>())
+
+  /** Called by the PDF view on every viewer notification (edit or save). */
+  function setPdfEditState(tabId: string, state: PdfEditState) {
+    if (state.dirty) pdfEditStateByTabId.set(tabId, state)
+    else pdfEditStateByTabId.delete(tabId) // a completed save resolves the debt
+  }
+
+  function getPdfEditState(tabId: string): PdfEditState | null {
+    return pdfEditStateByTabId.get(tabId) ?? null
+  }
+
+  function clearPdfEditState(tabId: string) {
+    pdfEditStateByTabId.delete(tabId)
+  }
+
+  /**
+   * True when closing this tab would lose PDF edits: the live viewer says so
+   * (active tab), or a parked snapshot is dirty (background tab / same-tab
+   * navigation that replaced the PDF).
+   */
+  function hasUnsavedPdfChanges(tabId: string): boolean {
+    const live = pdfBridgeByTabId.get(tabId)?.hasUnsavedChanges?.()
+    if (live) return true
+    return pdfEditStateByTabId.get(tabId)?.dirty === true
+  }
+
+  /** True when ANY tab has unsaved PDF edits — the app-close guard. */
+  function hasAnyUnsavedPdfChanges(): boolean {
+    for (const [tabId] of pdfEditStateByTabId) {
+      if (hasUnsavedPdfChanges(tabId)) return true
+    }
+    for (const [tabId, bridge] of pdfBridgeByTabId) {
+      if (bridge.hasUnsavedChanges?.()) return true
+      void tabId
+    }
+    return false
+  }
+
+  /**
+   * Pending close confirmation. tabStore's close paths set this instead of
+   * closing when a tab has unsaved PDF edits; PdfUnsavedDialog (App.vue)
+   * renders it. `proceed` re-runs the close with the tabs pre-approved.
+   */
+  const pdfClosePending = ref<{ tabTitles: string[]; proceed: () => void } | null>(null)
+
+  function requestPdfCloseConfirm(tabTitles: string[], proceed: () => void) {
+    pdfClosePending.value = { tabTitles, proceed }
+  }
+
+  function resolvePdfCloseConfirm(confirmed: boolean) {
+    const pending = pdfClosePending.value
+    pdfClosePending.value = null
+    if (confirmed && pending) pending.proceed()
+  }
+
   return {
+    pdfEditStateByTabId,
+    setPdfEditState,
+    getPdfEditState,
+    clearPdfEditState,
+    hasUnsavedPdfChanges,
+    hasAnyUnsavedPdfChanges,
+    pdfClosePending,
+    requestPdfCloseConfirm,
+    resolvePdfCloseConfirm,
     toolbarVisible,
     toolbarPosition,
     getToolbarVisible,

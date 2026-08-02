@@ -3,8 +3,9 @@ import AppShell from '@/layout/AppShell.vue'
 import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
+import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { ref, computed, defineAsyncComponent, watch } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
+import { useResizeObserver, useEventListener } from '@vueuse/core'
 import { resetting } from '@/features/settings/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -86,6 +87,30 @@ function onPointerMove(event: PointerEvent) {
 function onPointerUp() {
   isDragging = false
 }
+
+// ── Unsaved PDF edits guards ─────────────────────────────────────────────────
+
+// Tab-close confirmation: tabStore's close paths park a pending request in
+// bookViewStore instead of closing when a tab has unsaved PDF (TOC) edits.
+const pdfClosePending = computed(() => bookViewStore.pdfClosePending)
+const pdfCloseDesc = computed(() => {
+  const titles = (pdfClosePending.value?.tabTitles ?? []).filter(Boolean)
+  const names = titles.length ? ` (${titles.join(', ')})` : ''
+  return `השינויים שבוצעו בתוכן העניינים${names} לא נשמרו ויאבדו אם הכרטיסייה תיסגר.`
+})
+
+// App close / reload / workspace switch (workspace switching ends in
+// window.location.reload()): the browser prompt is the only interception
+// point at window level. Any live-dirty viewer or parked dirty snapshot
+// blocks a silent exit. NOTE: covers browser/dev contexts; the WinForms
+// WebView2 host closing its window does not run beforeunload — that needs a
+// FormClosing hook on the C# side (documented follow-up).
+useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
+  if (bookViewStore.hasAnyUnsavedPdfChanges()) {
+    e.preventDefault()
+    e.returnValue = ''
+  }
+})
 </script>
 
 <template>
@@ -116,6 +141,13 @@ function onPointerUp() {
     <SetupWizard v-if="!setupDone" />
     <GlobalContextMenu />
     <ToastBanner />
+    <ConfirmDialog
+      v-if="pdfClosePending"
+      title="שינויים שלא נשמרו"
+      :desc="pdfCloseDesc"
+      @confirm="bookViewStore.resolvePdfCloseConfirm(true)"
+      @cancel="bookViewStore.resolvePdfCloseConfirm(false)"
+    />
     <div v-if="resetting" class="reset-overlay" />
   </div>
 </template>

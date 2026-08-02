@@ -330,6 +330,8 @@ export const useTabStore = defineStore('tabs', () => {
     const idx = tabs.value.findIndex((t) => t.id === id && t.pane === 2)
     if (idx === -1) return
     const tab = tabs.value[idx]!
+    if (guardPdfClose([tab], () => closePane2Tab(id))) return
+    releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
     deleteAllStateForTab(id)
     dropUncheckedCommentaryForTab(id)
@@ -494,7 +496,9 @@ export const useTabStore = defineStore('tabs', () => {
     // "close all" closes everything the user sees, orphans included.
     const splitOn = useBookViewStore().splitViewEnabled
     const closing = splitOn ? tabs.value.filter((t) => !t.pane || t.pane === 1) : [...tabs.value]
+    if (guardPdfClose(closing, () => closeAllTabs())) return
     for (const tab of closing) {
+      releasePdfCloseState(tab.id)
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
       deleteAllStateForTab(tab.id)
     }
@@ -503,6 +507,44 @@ export const useTabStore = defineStore('tabs', () => {
     tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
     pruneUncheckedCommentary(tabs.value.map((t) => t.id))
+  }
+
+  // ── PDF unsaved-edits close guard ──────────────────────────────────────────
+  // Tabs whose close was explicitly confirmed in the dialog. Consulted (and
+  // consumed) by guardPdfClose so the re-run after confirmation passes through.
+  const approvedPdfClose = new Set<string>()
+
+  /**
+   * Returns true when the close must WAIT for user confirmation — the caller
+   * bails out, and `retry` re-runs it with the tabs pre-approved if the user
+   * confirms. Synchronous by design: every close path (UI buttons, Ctrl+W, the
+   * native chrome-tabs mirror, close-all) stays a plain function call, and the
+   * guard lives here at the single chokepoint they all funnel through.
+   *
+   * The dirty check covers both the LIVE viewer (active tab, via the bridge's
+   * hasUnsavedChanges → PDF.js _hasChanges) and PARKED snapshots (background
+   * tabs — their iframe is long gone, but the eagerly-pushed edits are not).
+   */
+  function guardPdfClose(candidates: Tab[], retry: () => void): boolean {
+    const bookViewStore = useBookViewStore()
+    const dirty = candidates.filter(
+      (t) => !approvedPdfClose.has(t.id) && bookViewStore.hasUnsavedPdfChanges(t.id),
+    )
+    if (dirty.length === 0) return false
+    bookViewStore.requestPdfCloseConfirm(
+      dirty.map((t) => t.title || t.localFileName || ''),
+      () => {
+        for (const t of dirty) approvedPdfClose.add(t.id)
+        retry()
+      },
+    )
+    return true
+  }
+
+  /** Post-close cleanup shared by every close path. */
+  function releasePdfCloseState(id: string) {
+    approvedPdfClose.delete(id)
+    useBookViewStore().clearPdfEditState(id)
   }
 
   function closeTab(id: string) {
@@ -515,6 +557,8 @@ export const useTabStore = defineStore('tabs', () => {
       closePane2Tab(id)
       return
     }
+    if (guardPdfClose([tab], () => closeTab(id))) return
+    releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
     deleteAllStateForTab(id)
     dropUncheckedCommentaryForTab(id)
