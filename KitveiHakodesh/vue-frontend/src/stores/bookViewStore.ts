@@ -408,30 +408,32 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   /** True when ANY tab has unsaved PDF edits — the app-close guard. */
   function hasAnyUnsavedPdfChanges(): boolean {
-    for (const [tabId] of pdfEditStateByTabId) {
-      if (hasUnsavedPdfChanges(tabId)) return true
-    }
-    for (const [tabId, bridge] of pdfBridgeByTabId) {
+    // Snapshots are dirty by construction — setPdfEditState deletes on clean.
+    if (pdfEditStateByTabId.size > 0) return true
+    for (const bridge of pdfBridgeByTabId.values()) {
       if (bridge.hasUnsavedChanges?.()) return true
-      void tabId
     }
     return false
   }
 
   /**
-   * Pending close confirmation. tabStore's close paths set this instead of
-   * closing when a tab has unsaved PDF edits; PdfUnsavedDialog (App.vue)
-   * renders it. `proceed` re-runs the close with the tabs pre-approved.
+   * Pending close confirmations, FIFO. tabStore's close paths enqueue instead
+   * of closing when a tab has unsaved PDF edits; App.vue renders the head.
+   * `proceed` re-runs the close with the tabs pre-approved. A queue rather
+   * than a single slot: a second close request (e.g. from the native
+   * chrome-tabs strip, which the web dialog does not block) must not evaporate
+   * the first.
    */
-  const pdfClosePending = ref<{ tabTitles: string[]; proceed: () => void } | null>(null)
+  const pdfClosePendingQueue = ref<{ tabTitles: string[]; proceed: () => void }[]>([])
+
+  const pdfClosePending = computed(() => pdfClosePendingQueue.value[0] ?? null)
 
   function requestPdfCloseConfirm(tabTitles: string[], proceed: () => void) {
-    pdfClosePending.value = { tabTitles, proceed }
+    pdfClosePendingQueue.value.push({ tabTitles, proceed })
   }
 
   function resolvePdfCloseConfirm(confirmed: boolean) {
-    const pending = pdfClosePending.value
-    pdfClosePending.value = null
+    const pending = pdfClosePendingQueue.value.shift()
     if (confirmed && pending) pending.proceed()
   }
 
