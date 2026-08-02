@@ -457,6 +457,7 @@ export const useTabStore = defineStore('tabs', () => {
       tab.localFileHbBookId,
       tab.localFileHbBookTitle,
       tab.localFileName,
+      tab.isOtzariaAddin,
     )
   }
 

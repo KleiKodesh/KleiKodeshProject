@@ -135,6 +135,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFileName: msg.fileName as string,
         localFilePath: msg.filePath as string,
         localFileConverting: false,
+        isOtzariaAddin: false,
       }
       const tabId = resolveOpenInNewTab(msg.openInNewTab)
         ? openInTargetPane(tabFields)
@@ -156,7 +157,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFilePath: msg.filePath as string,
         localFileVirtualUrl: msg.url as string,
         localFileConverting: false,
-        ...(isHtmlLike && msg.isOtzariaAddin ? { isOtzariaAddin: true } : {}),
+        // Written unconditionally: these fields are MERGED onto the tab, so spreading
+        // the key in only when true would leave a previous addin's flag on a tab that
+        // is now showing an unrelated HTML file — and the bridge would inject into it.
+        isOtzariaAddin: isHtmlLike && !!msg.isOtzariaAddin,
       }
       const tabId = resolveOpenInNewTab(msg.openInNewTab)
         ? openInTargetPane(tabFields)

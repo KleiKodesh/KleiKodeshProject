@@ -78,20 +78,26 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
     const isHtmlLike = extension === '.htm' || extension === '.html'
     const route = extension === '.txt' ? '/txt-view' : isHtmlLike ? '/html-view' : '/pdf-view'
 
+    // The addin name is known synchronously, so the placeholder tab gets it too —
+    // otherwise a Ctrl/⌘-clicked addin reads "index" for as long as restoreLocalFile
+    // takes, which is the very title this treatment exists to replace.
+    const displayTitle = item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension
+
     // Capture the target tab id up front (a new tab for Ctrl/⌘-click, else the
     // current active tab) and patch it by id — restoreLocalFile awaits, and the
     // active tab may change during that await.
     const targetTabId = openInNewTab
-      ? paneNavigation.openTab({ route, title: titleWithoutExtension }).id
+      ? paneNavigation.openTab({ route, title: displayTitle }).id
       : paneNavigation.activeTabId
 
     if (extension === '.txt') {
       tabStore.updateTab(targetTabId, {
         route: '/txt-view',
-        title: titleWithoutExtension,
+        title: displayTitle,
         localFileName: fileName,
         localFilePath: fullPath,
         localFileVirtualUrl: undefined,
+        isOtzariaAddin: false,
       })
       return
     }
@@ -112,7 +118,7 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
     // localFileStore.ts gate theirs — only /html-view ever reads the flag.
     tabStore.updateTab(targetTabId, {
       route: servedRoute,
-      title: item.addinName ? addinDisplayTitle(item.addinName) : titleWithoutExtension,
+      title: displayTitle,
       localFileName: fileName,
       localFilePath: fullPath,
       localFileVirtualUrl: restored.url,
