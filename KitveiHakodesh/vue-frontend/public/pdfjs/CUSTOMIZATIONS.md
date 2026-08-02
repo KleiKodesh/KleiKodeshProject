@@ -1502,6 +1502,84 @@ No custom CSS is involved — the current row is styled by PDF.js's existing
 separate and can sit on a different row, which is correct: one means "where the page is",
 the other "where the keyboard is".
 
+### Outline EDITING (add / rename / delete / re-nest, and create-from-scratch)
+
+An edit mode for the outline panel: the ✎ toggle next to the search input reveals an
+action bar (add / rename / delete / outdent / indent), every action targeting the row
+under the keyboard ring. Edits are written into the **PDF itself** on save via the
+standard save pipeline — NOT stored app-side. Verified live end-to-end: edit → save →
+reload the saved bytes → outline persists (including on an encrypted-free doc with no
+outline at all).
+
+**The DOM is the model.** The rendered tree is already the source of truth for search,
+tracking, and keyboard nav, so editing it directly keeps all of those working with no
+parallel structure. Rows keep PDF.js's exact shape (`.treeItem > a`, `.treeItems`,
+`.treeItemToggler`), so styling and collapse come for free. New rows carry
+`data-toc-new` and **no href** (PDF.js only binds navigation to anchors it created; an
+empty href would push history entries). Delete **promotes children** rather than
+dropping the subtree. In edit mode, a capture-phase click listener turns row clicks into
+selection instead of navigation (capture is required — PDF.js binds navigation via
+`element.onclick` on the anchor itself).
+
+**Page stamps.** `buildPageIndex` was refactored to stamp each row with
+`data-toc-page` instead of building a detached index; `rebuildPageIndexFromDom()`
+re-derives the sorted index from those stamps. This is what lets edits participate in
+current-entry tracking immediately, and it is where an added row's target page lives
+(the page being viewed at add time). `serializeOutlineDom()` walks the tree to
+`[{title, page, items}]` — titles are the DISPLAYED text, so saving persists the
+mangled-title correction permanently. Rows whose destination never resolved inherit the
+nearest previous row's page rather than being dropped.
+
+**Save path — 4 patched files, re-apply all on upgrade:**
+
+1. **`web/outline-search.js`** (added file, no re-apply needed) —
+   `pushOutlineToTransport()` sets `pdfDocument._transport.editedOutline` after every
+   edit; null means "no edits" and save behaves exactly as stock.
+
+2. **`build/pdf.mjs`** — in `WorkerTransport.saveDocument()`, add
+   `editedOutline: this.editedOutline ?? null` to the `SaveDocument` payload (search for
+   `sendWithPromise("SaveDocument"`).
+
+3. **`build/pdf.worker.mjs`** — two edits. Add `editedOutline` to the `SaveDocument`
+   handler's destructured params. Then, immediately after
+   `const refs = await Promise.all(promises);`, insert the outline-writing block (search
+   for "PATCH: write a user-edited outline"): it builds outline-item `Dict`s with
+   Title (`stringToAsciiOrUTF16BE`) / Parent / Prev / Next / First / Last / Count and a
+   `[pageRef, /XYZ null null null]` Dest per entry, puts them into `changes`, and puts a
+   **copied catalog** (same ref, `/Outlines` re-pointed or omitted) alongside — the
+   trailer's Root ref is unchanged, so the incremental update stays valid. The
+   `changes.put(ref, {data: dict})` form is serialized by `writeChanges` →
+   `writeObject`, the same path annotations use — encryption transforms included.
+   **Placement is critical: the block must run BEFORE the `changes.size === 0` early
+   return**, or an outline-only save returns the original bytes unchanged.
+
+4. **`web/viewer.mjs`** — in `downloadOrSave()`, the save/download decision checks only
+   `annotationStorage.size > 0`; add `|| this.pdfDocument?._transport?.editedOutline != null`
+   (search for "PATCH: also route through save()"). Without this an outline-only edit
+   takes the `download()` branch and silently writes the ORIGINAL bytes.
+
+**Dirty state.** `outlineDirty` is OR-ed into the viewer's dirty logic by wrapping
+`app._hasChanges` at runtime (no viewer.mjs patch; the `beforeunload` handler is bound to
+the app object, so the wrapper is what it calls). The ✎ toggle shows a dot while dirty.
+Verified live: the beforeunload alert fires for outline-only edits. Everything resets on
+`documentloaded`.
+
+**Create-from-scratch.** A PDF with no outline: PDF.js disables the תוכן עניינים option
+and bounces the sidebar off the outline view (`onTreeLoaded` → `switchView(THUMBS)`).
+The panel re-enables the option in its own `outlineloaded` handler (registered later, so
+it runs after the disable), and `updateVisibility` shows the bar whenever a document is
+loaded — even with zero entries — so the ✎ toggle is reachable and the first added entry
+starts the outline. The worker patch handles the no-existing-outline case natively: it
+builds a new `/Outlines` root and points the copied catalog at it. (`PDFEditor`'s own
+`#makeOutline` was NOT reused — it builds a whole new document; the patch reuses only its
+dict-shape conventions.)
+
+**Readiness signal.** `#outlineSearchBar[data-outline-loaded="1"]` is set once outline
+processing (including the empty-outline dance) has settled, and removed on
+`documentloaded`. PDF.js re-enables all view buttons early during document setup, so
+button state alone is a racy readiness probe — tests and the host app should key on this
+attribute instead.
+
 ### If the outline DOM changes on upgrade
 
 Only two assumptions matter, both in `indexOutline()`:
