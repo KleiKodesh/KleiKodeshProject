@@ -739,10 +739,17 @@
 }
 
 /* Renaming: the anchor becomes contentEditable — make that visible. */
+/* Rows are full-bleed now, so a ring drawn OUTSIDE the box (outline-offset:
+   1px) extends past the panel edges and is clipped by the scroll container on
+   both sides. Draw it INSIDE with an inset box-shadow instead — box-shadow
+   also follows the border-radius-less row cleanly. */
 #outlinesView .treeItem > a.outlineRenaming {
-  outline: 1px solid var(--progressBar-color, #0a84ff);
-  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--progressBar-color, #0a84ff);
   background: var(--field-bg-color);
+  /* Chrome draws its own `outline: auto` focus ring on a focused
+     contentEditable — outside the box, so the full-bleed row gets it clipped
+     at the panel edges too. The inset shadow above is the focus indicator. */
+  outline: none;
 }
 
 /* Rows with unsaved editor-owned targets (added or retargeted): a dashed
