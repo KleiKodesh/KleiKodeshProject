@@ -1,0 +1,12 @@
+[submodule "KitveiHakodesh/CSharpBackend/DocumentLocator"]
+	path = KitveiHakodesh/CSharpBackend/DocumentLocator
+	url = https://github.com/KleiKodesh/DocumentLocator.git
+	branch = main
+[submodule "hebrew-typing-tutor"]
+	path = hebrew-typing-tutor
+	url = https://github.com/KleiKodesh/hebrew-typing-tutor.git
+	branch = main
+[submodule "kleikodesh-website"]
+	path = kleikodesh-website
+	url = https://github.com/KleiKodesh/kleikodesh.github.io.git
+	branch = main
