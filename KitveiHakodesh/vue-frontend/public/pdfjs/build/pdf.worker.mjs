@@ -62987,13 +62987,39 @@ class WorkerMessageHandler {
       // `changes.size === 0` early return below, or an outline-only save would
       // return the original bytes unchanged.
       if (editedOutline != null && catalogRef && !isPureXfa) {
+        // Entries carry `src` — their index into the ORIGINAL outline flattened
+        // in the same BFS order the viewer uses — so everything the editor does
+        // not model (precise/named destinations, URL and other /A actions,
+        // bold/italic /F, color /C, closed-branch state) is preserved verbatim
+        // from the original item's rawDict. This is a SAME-document save, so
+        // raw values (including indirect refs) can be copied as-is — no
+        // cross-document cloning like PDFEditor's #setOutlineItemDest needs.
+        // Entries without `src` are user-created rows: page-level XYZ dest.
+        const origOutline = await pdfManager.ensureCatalog("documentOutlineForEditor");
+        const origFlat = [];
+        {
+          const bfs = origOutline ? [{
+            items: origOutline
+          }] : [];
+          while (bfs.length > 0) {
+            const level = bfs.shift();
+            for (const it of level.items) {
+              origFlat.push(it);
+              if (it.items?.length) {
+                bfs.push({
+                  items: it.items
+                });
+              }
+            }
+          }
+        }
         const pageRefCache = new Map();
         const getPageRef = async pageNumber => {
           const idx = Math.max(0, Math.min(numPages - 1, (pageNumber | 0) - 1));
           let pageRef = pageRefCache.get(idx);
-          if (!pageRef) {
+          if (pageRef === undefined) {
             const page = await pdfManager.getPage(idx);
-            pageRef = page.ref;
+            pageRef = page.ref ?? null;
             pageRefCache.set(idx, pageRef);
           }
           return pageRef;
@@ -63003,6 +63029,8 @@ class WorkerMessageHandler {
           const itemRefs = items.map(() => xref.getNewTemporaryRef());
           for (let i = 0; i < items.length; i++) {
             const item = items[i];
+            const orig = Number.isInteger(item.src) ? origFlat[item.src] : undefined;
+            const rawDict = orig?.rawDict;
             const dict = new Dict(xref);
             dict.set("Title", stringToAsciiOrUTF16BE(String(item.title || "")));
             dict.set("Parent", parentRef);
@@ -63012,18 +63040,52 @@ class WorkerMessageHandler {
             if (i < items.length - 1) {
               dict.set("Next", itemRefs[i + 1]);
             }
-            dict.set("Dest", [await getPageRef(item.page), Name.get("XYZ"), null, null, null]);
+            let targetSet = false;
+            if (rawDict) {
+              const rawDest = rawDict.getRaw("Dest");
+              if (rawDest !== undefined) {
+                dict.set("Dest", rawDest);
+                targetSet = true;
+              } else {
+                const rawAction = rawDict.getRaw("A");
+                if (rawAction !== undefined) {
+                  dict.set("A", rawAction);
+                  targetSet = true;
+                }
+              }
+              const rawFlags = rawDict.getRaw("F");
+              if (rawFlags !== undefined) {
+                dict.set("F", rawFlags);
+              }
+              const rawColor = rawDict.getRaw("C");
+              if (rawColor !== undefined) {
+                dict.set("C", rawColor);
+              }
+            }
+            if (!targetSet) {
+              const pageRef = await getPageRef(item.page);
+              if (pageRef) {
+                dict.set("Dest", [pageRef, Name.get("XYZ"), null, null, null]);
+              }
+              // A malformed page ref leaves the entry title-only rather than
+              // writing Dest [null ...], which other readers reject.
+            }
             if (Array.isArray(item.items) && item.items.length > 0) {
               const child = await fillOutline(item.items, itemRefs[i]);
               dict.set("First", child.first);
               dict.set("Last", child.last);
-              dict.set("Count", child.count);
-              count += child.count;
+              // Closed-branch state (negative Count, spec 12.3.3) is preserved
+              // from the original item; user-created rows default open. The
+              // totalCount arithmetic mirrors PDFEditor.#makeOutline.
+              const closed = orig ? Number.isInteger(orig.count) && orig.count < 0 : false;
+              dict.set("Count", closed ? -child.count : child.count);
+              count += closed ? 1 : child.count + 1;
+            } else {
+              count += 1;
             }
             changes.put(itemRefs[i], {
               data: dict
             });
-            count += 1;
           }
           return {
             first: itemRefs[0],
@@ -63031,7 +63093,14 @@ class WorkerMessageHandler {
             count
           };
         };
-        const catalogDict = await xref.fetchAsync(catalogRef);
+        // The catalog may ALREADY have a pending updated copy in `changes` —
+        // StructTreeRoot.createStructureTree puts one when saving annotations
+        // creates a structure tree on an untagged PDF. Seeding from the
+        // original would clobber its /StructTreeRoot (and orphan the whole
+        // structure tree), so seed from the pending copy when there is one.
+        const pendingCatalog = changes.get(catalogRef)?.data;
+        const catalogDict =
+          pendingCatalog instanceof Dict ? pendingCatalog : await xref.fetchAsync(catalogRef);
         const newCatalog = new Dict(xref);
         for (const [key, value] of catalogDict.getRawEntries()) {
           if (key !== "Outlines") {

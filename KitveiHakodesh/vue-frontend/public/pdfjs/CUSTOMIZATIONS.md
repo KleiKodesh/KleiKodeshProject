@@ -1544,14 +1544,36 @@ nearest previous row's page rather than being dropped.
    handler's destructured params. Then, immediately after
    `const refs = await Promise.all(promises);`, insert the outline-writing block (search
    for "PATCH: write a user-edited outline"): it builds outline-item `Dict`s with
-   Title (`stringToAsciiOrUTF16BE`) / Parent / Prev / Next / First / Last / Count and a
-   `[pageRef, /XYZ null null null]` Dest per entry, puts them into `changes`, and puts a
-   **copied catalog** (same ref, `/Outlines` re-pointed or omitted) alongside — the
-   trailer's Root ref is unchanged, so the incremental update stays valid. The
-   `changes.put(ref, {data: dict})` form is serialized by `writeChanges` →
-   `writeObject`, the same path annotations use — encryption transforms included.
+   Title (`stringToAsciiOrUTF16BE`) / Parent / Prev / Next / First / Last / Count, puts
+   them into `changes`, and puts a **copied catalog** (same ref, `/Outlines` re-pointed
+   or omitted) alongside — the trailer's Root ref is unchanged, so the incremental
+   update stays valid. The `changes.put(ref, {data: dict})` form is serialized by
+   `writeChanges` → `writeObject`, the same path annotations use — encryption
+   transforms included.
    **Placement is critical: the block must run BEFORE the `changes.size === 0` early
    return**, or an outline-only save returns the original bytes unchanged.
+
+   **Attribute preservation (`src`).** Entries carry `src` — their index into the
+   ORIGINAL outline flattened in the same BFS order the viewer uses — and the worker
+   fetches `pdfManager.ensureCatalog("documentOutlineForEditor")` (whose items keep
+   `rawDict`) to copy everything the editor does not model **verbatim from the raw
+   dict**: `/Dest` (precise XYZ, named destinations) or `/A` (URL and other actions),
+   `/F` (bold/italic), `/C` (color), and the closed-branch state (negative `/Count`,
+   recomputed over the possibly-changed children but keeping the original sign). This
+   is a SAME-document save, so raw values including indirect refs are valid as-is — no
+   cross-document cloning like `PDFEditor.#setOutlineItemDest` needs. Without `src`
+   (user-created rows) the entry gets a `[pageRef /XYZ null null null]` Dest; a
+   malformed page ref leaves the entry title-only rather than writing `Dest [null …]`.
+   Verified live: renaming one entry + adding one preserves, byte-exact in semantics,
+   a precise XYZ dest with coordinates/zoom, a named destination (still resolving
+   through `/Dests`), a URL action, bold, italic+color, a `/Fit` dest, a closed branch
+   (`count:-2`), and a nested child's coordinates.
+
+   **Catalog seeding.** The block seeds its catalog copy from
+   `changes.get(catalogRef)?.data` when present — `StructTreeRoot.createStructureTree`
+   puts an updated catalog into `changes` when saving annotations creates a structure
+   tree on an untagged PDF, and seeding from the original would clobber its
+   `/StructTreeRoot` and orphan the whole structure tree.
 
 4. **`web/viewer.mjs`** — in `downloadOrSave()`, the save/download decision checks only
    `annotationStorage.size > 0`; add `|| this.pdfDocument?._transport?.editedOutline != null`
@@ -1612,11 +1634,32 @@ ConfirmDialog + window `beforeunload`). **Known gap:** the WinForms WebView2 hos
 its window does not run `beforeunload` — the C# side needs a FormClosing hook that asks
 the Vue app (`bookViewStore.hasAnyUnsavedPdfChanges()`) before allowing close.
 
+**Known limitations (deliberate):**
+
+- **Page-organizer combo:** `downloadOrSave` takes the `hasStructuralChanges()` →
+  `onSavePages` branch first, and that pipeline (`PDFEditor.extractPages`) rebuilds the
+  outline itself from the original — sidebar outline edits do not ride it, and the
+  `data-toc-page` stamps would be stale after reordering anyway. Combining TOC edits
+  with page reorganization in one session is unsupported; save one before doing the
+  other.
+- **`close()` auto-save not extended:** PDF.js's `close()` auto-saves only when
+  `_annotationStorageModified`. Outline edits are deliberately NOT wired into it — in
+  this app `close()` runs during host-driven teardown, where popping a save dialog is
+  exactly what the Vue-side snapshot/guard system exists to prevent.
+- **Per-document reset rides `documentinit`, not `documentloaded`:** the latter only
+  fires after `getDownloadInfo()` resolves — i.e. after the FULL file downloads — which
+  under this viewer's `disableAutoFetch: true` is late or never for an in-place
+  `open()`. `documentinit` fires right after `setInitialView`, per document, regardless
+  of download progress.
+
 ### If the outline DOM changes on upgrade
 
 Only two assumptions matter, both in `indexOutline()`:
 `.treeItem` is the per-item wrapper class, and an item's own anchor is `:scope > a`.
 Verify those in `PDFOutlineViewer.render()` (search for `div.className = "treeItem"`).
+The editor additionally assumes top-level `.treeItem`s are DIRECT children of
+`#outlinesView` (`serializeOutlineDom`'s root walk and `addItem`'s fallback append),
+and that `.treeItemToggler` is prepended as the row's first child.
 
 ---
 

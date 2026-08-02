@@ -495,6 +495,7 @@
    only in edit mode. See outline-search.js — "Editing". */
 #outlineEditToggle {
   flex: 0 0 auto;
+  position: relative; /* anchors the .dirty::after dot */
   width: 20px;
   height: 18px;
   padding: 0;
@@ -523,8 +524,8 @@
 #outlineEditToggle.dirty::after {
   content: '';
   position: absolute;
-  margin-inline-start: -3px;
-  margin-top: -2px;
+  top: -1px;
+  inset-inline-end: -2px;
   width: 5px;
   height: 5px;
   border-radius: 50%;
