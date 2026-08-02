@@ -727,6 +727,28 @@
     }
 
     /**
+     * Stamp --toc-depth on every row. The BookView-style CSS keeps rows full
+     * panel width and indents INSIDE them (padding = depth*10px + the 24px
+     * chevron column), so each row must know its depth; PDF.js's structural
+     * container margins are zeroed. Runs on every tree (re)build and edit —
+     * one cheap O(N) pass.
+     */
+    function stampDepths() {
+      var items = outlinesView.querySelectorAll('.treeItem');
+      for (var i = 0; i < items.length; i++) {
+        var depth = 0;
+        var node = items[i].parentElement;
+        while (node && node !== outlinesView) {
+          if (node.classList.contains('treeItems')) {
+            depth++;
+          }
+          node = node.parentElement;
+        }
+        items[i].style.setProperty('--toc-depth', String(depth));
+      }
+    }
+
+    /**
      * Rewrite mangled titles in PDF.js's own outline DOM, in place.
      *
      * The Vue app already corrects these for the titlebar breadcrumb, but the
@@ -1146,6 +1168,7 @@
     /** Runs after every mutation: mark dirty and re-derive the dependent state. */
     function afterEdit() {
       markDirty();
+      stampDepths(); // structure may have changed (indent/outdent/drag/add)
       invalidateIndex(); // search index is rebuilt lazily on the next query
       rebuildPageIndexFromDom();
       paintFocus();
@@ -1297,6 +1320,7 @@
         }
       }
       build(outline, outlinesView);
+      stampDepths();
       outlineCount = total;
       var outlineMenuButton = document.getElementById('outlinesViewMenu');
       if (outlineMenuButton) {
@@ -2328,6 +2352,7 @@
         // _finishRendering() appends the tree BEFORE dispatching this event, so
         // the DOM is present and can be corrected in place here.
         normalizeOutlineDom();
+        stampDepths();
         // withNesting at THIS point can only have come from PDF.js's own render
         // (edits haven't happened yet) — it marks that PDF.js bound its
         // container-level toggler listener. See the fallback listener above.
