@@ -3,10 +3,7 @@ import { ref, computed, watch, inject } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { useLocalFileStore } from '@/stores/localFileStore'
 import { exportToWord as bridgeExportToWord } from '@/webview-host/bridge'
-import { getUserBookFile } from '@/webview-host/seforimApi'
-import { isUserBooksId } from '@/webview-host/userBooksDb'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
@@ -126,20 +123,6 @@ const {
   () => searchBarRef.value,
   () => commentaryViewRef.value,
 )
-
-// PDF/docx PERSONAL books cannot render as text — user_books.db keeps their content
-// in the file at book.filePath (the line queries correctly answer empty). Redirect
-// this tab into the local-file viewer flow; the book view shows its empty state for
-// the lookup round-trip, then the tab becomes a normal /pdf-view (or /html-view) tab.
-// txt personal books stay here — BookView serves them line-by-line from the file.
-if (bookId != null && isUserBooksId(bookId)) {
-  const redirectBookId = bookId
-  void getUserBookFile(redirectBookId).then((f) => {
-    const type = f?.fileType?.trim().toLowerCase()
-    if (!f?.filePath || !type || type === 'txt') return
-    void useLocalFileStore().openUserBookFile(tabId, redirectBookId, f.filePath)
-  })
-}
 
 // Works in both modes — hosted drives Word through the Office PIA, dev through the service.
 // There is deliberately no isHosted guard: isHosted is TRUE in dev, so it never blocked

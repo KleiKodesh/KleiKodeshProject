@@ -25,11 +25,6 @@ export const SQL = {
 
   // ── Books ────────────────────────────────────────────────────────────────────
 
-  /** Where a PERSONAL book's content lives on disk (user_books.db only — the
-   * library book table has neither column). Routes PDF/docx personal books into
-   * the local-file viewer flow. */
-  GET_USER_BOOK_FILE: `SELECT filePath, fileType FROM book WHERE id = ?`,
-
   /** Single book by id — totalLines for virtual scroll init + has* flags for toolbar */
   GET_BOOK_BY_ID: `
     SELECT totalLines, hasTeamim,
@@ -52,30 +47,12 @@ export const SQL = {
     ORDER BY te.id
   `,
 
-  /**
-   * Variant for DBs whose tocEntry carries lineIndex DIRECTLY (Otzaria-built
-   * user_books.db): there te.lineId is NULL and `line` is empty, so the JOIN
-   * variant above would return NULL for every entry and the TOC couldn't
-   * navigate. Same column order as the JOIN variant. Pick by probing
-   * pragma_table_info('tocEntry') on the target DB — see userTocHasLineIndex().
-   */
-  GET_ALL_TOC_ENTRIES_TOC_LINEINDEX: `
-    SELECT te.id, te.parentId, te.level, te.lineId, te.hasChildren,
-           tt.text, te.lineIndex
+  /** TOC entry ids, parentIds, bookIds, titles and lineIndex for multiple books — used for TOC search fallback */
+  GET_TOC_TITLES_FOR_BOOKS: (count: number) => `
+    SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
-    WHERE te.bookId = ?
-    ORDER BY te.id
-  `,
-
-  /** TOC entry ids, parentIds, bookIds, titles and lineIndex for multiple books — used
-   * for TOC search fallback. tocHasLineIndex picks the direct-read variant for
-   * Otzaria-built DBs — see GET_ALL_TOC_ENTRIES_TOC_LINEINDEX. */
-  GET_TOC_TITLES_FOR_BOOKS: (count: number, tocHasLineIndex = false) => `
-    SELECT te.id, te.parentId, te.bookId, tt.text, ${tocHasLineIndex ? 'te.lineIndex' : 'l.lineIndex'}
-    FROM tocEntry te
-    JOIN tocText tt ON tt.id = te.textId
-    ${tocHasLineIndex ? '' : 'LEFT JOIN line l ON l.id = te.lineId'}
+    LEFT JOIN line l ON l.id = te.lineId
     WHERE te.bookId IN (${Array(count).fill('?').join(', ')})
     ORDER BY te.id
   `,
@@ -89,7 +66,7 @@ export const SQL = {
    * scoring this subset yields identical results to scoring all rows (any node
    * matching only through its ancestors is suppressed by that ancestor anyway).
    */
-  GET_TOC_TITLES_MATCHING_FOR_BOOKS: (count: number, tocHasLineIndex = false) => `
+  GET_TOC_TITLES_MATCHING_FOR_BOOKS: (count: number) => `
     WITH RECURSIVE matched(id, parentId) AS (
       SELECT te.id, te.parentId
       FROM tocEntry te
@@ -102,10 +79,10 @@ export const SQL = {
       UNION
       SELECT te.parentId FROM tocEntry te JOIN anc ON te.id = anc.id WHERE te.parentId IS NOT NULL
     )
-    SELECT te.id, te.parentId, te.bookId, tt.text, ${tocHasLineIndex ? 'te.lineIndex' : 'l.lineIndex'}
+    SELECT te.id, te.parentId, te.bookId, tt.text, l.lineIndex
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
-    ${tocHasLineIndex ? '' : 'LEFT JOIN line l ON l.id = te.lineId'}
+    LEFT JOIN line l ON l.id = te.lineId
     WHERE te.id IN (SELECT id FROM matched UNION SELECT id FROM anc)
     ORDER BY te.id
   `,
@@ -540,17 +517,6 @@ export const SQL = {
     FROM tocEntry te
     JOIN tocText tt ON tt.id = te.textId
     LEFT JOIN line l ON l.id = te.lineId
-    WHERE te.bookId = ?
-      AND tt.text LIKE ?
-    ORDER BY te.id ASC
-    LIMIT 1
-  `,
-
-  /** Direct-lineIndex variant — see GET_ALL_TOC_ENTRIES_TOC_LINEINDEX. */
-  GET_TOC_ENTRY_BY_TEXT_PREFIX_TOC_LINEINDEX: `
-    SELECT te.id, te.lineIndex
-    FROM tocEntry te
-    JOIN tocText tt ON tt.id = te.textId
     WHERE te.bookId = ?
       AND tt.text LIKE ?
     ORDER BY te.id ASC

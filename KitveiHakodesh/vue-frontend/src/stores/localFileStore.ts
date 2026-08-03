@@ -403,42 +403,6 @@ export const useLocalFileStore = defineStore('localFile', () => {
     })
   }
 
-  /**
-   * Routes a PERSONAL book (user_books.db) whose content is a non-txt FILE into the
-   * local-file viewer flow, in place, on the tab that opened as /book-view. PDF and
-   * docx personal books cannot render as text — Otzaria keeps their content in the
-   * file at book.filePath — so the tab becomes a normal local-file tab (same serving,
-   * conversion, persistence and restore as "open file"). txt books never come here
-   * (BookView serves them line-by-line from the file).
-   */
-  async function openUserBookFile(tabId: string, bookId: number, filePath: string): Promise<void> {
-    const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
-    const fileName = filePath.substring(Math.max(filePath.lastIndexOf('\\'), filePath.lastIndexOf('/')) + 1)
-    // catch: the hosted restoreLocalFile branch can reject (dev's cannot) — a served
-    // failure must degrade to "stay in BookView", never an unhandled rejection.
-    const res = await restoreLocalFile(filePath).catch(() => null)
-    if (!res) {
-      console.warn('[localFile] personal-book file could not be served:', filePath)
-      return
-    }
-    // The await above can span a full Word conversion (first-open docx runs for
-    // seconds) — the user may have navigated this tab elsewhere or closed it.
-    // Patch ONLY if it is still the /book-view tab showing the book that asked;
-    // anything else would hijack the tab back to an abandoned book's file.
-    const tab = tabStore.tabs.find((t) => t.id === tabId)
-    if (!tab || tab.route !== '/book-view' || tab.bookId !== bookId) return
-    // Route by what is actually served (dev Word docs may come back as HTML).
-    const isHtmlLike = res.kind === 'html' || (!res.kind && (ext === '.htm' || ext === '.html'))
-    tabStore.updateTab(tabId, {
-      route: isHtmlLike ? '/html-view' : '/pdf-view',
-      localFileName: fileName,
-      localFilePath: filePath,
-      localFileVirtualUrl: res.url,
-      localFileConverting: false,
-      isOtzariaAddin: false,
-    })
-  }
-
   /** Called on app init for every restored /pdf-view or /html-view tab. */
   async function restoreTab(tabId: string) {
     const tab = tabStore.tabs.find((t) => t.id === tabId)
@@ -570,6 +534,5 @@ export const useLocalFileStore = defineStore('localFile', () => {
     openHbBook,
     restoreTab,
     openFromHistory,
-    openUserBookFile,
   }
 })

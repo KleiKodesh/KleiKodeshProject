@@ -515,12 +515,6 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new BookByIdResult { Book = seforim.GetBookById(a.Id) }));
                 }
 
-                case "getUserBookFile":
-                {
-                    var a = MsgPack.De<BookByIdArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new UserBookFileResult { File = seforim.GetUserBookFile(a.Id) }));
-                }
-
                 case "getLinesPaged":
                 {
                     var a = MsgPack.De<LinesPagedArgs>(req.Args);
