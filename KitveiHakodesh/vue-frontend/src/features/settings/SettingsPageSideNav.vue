@@ -19,9 +19,10 @@ const emit = defineEmits<{
       <li v-for="entry in props.tree" :key="entry.id" class="side-nav-section">
         <button
           class="side-nav-section-btn"
-          @click="entry.children.length > 0 ? emit('toggle-section', entry.id) : emit('navigate', entry.id)"
+          :class="{ active: props.expandedSections.has(entry.id) }"
+          @click="() => { emit('navigate', entry.id); if (entry.children.length > 0) emit('toggle-section', entry.id) }"
         >
-          <span class="side-nav-section-label" @click.stop="emit('navigate', entry.id)">
+          <span class="side-nav-section-label">
             {{ entry.label }}
           </span>
           <component
@@ -89,7 +90,13 @@ const emit = defineEmits<{
 }
 
 .side-nav-section-btn:hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  background: var(--hover-bg);
+}
+
+.side-nav-section-btn.active {
+  background: var(--accent-bg);
+  color: var(--accent-color);
+  font-weight: 600;
 }
 
 .side-nav-section-label {
@@ -107,8 +114,13 @@ const emit = defineEmits<{
   transition: opacity 100ms;
 }
 
-.side-nav-section-btn:hover .side-nav-chevron {
+.side-nav-section-btn:hover .side-nav-chevron,
+.side-nav-section-btn.active .side-nav-chevron {
   opacity: 1;
+}
+
+.side-nav-section-btn.active .side-nav-chevron {
+  color: var(--accent-color);
 }
 
 .side-nav-children {
