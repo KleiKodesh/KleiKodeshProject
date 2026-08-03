@@ -2,7 +2,7 @@
 import { ref, nextTick, onMounted } from 'vue'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useSettingsSearch, type SettingsNavEntry } from './useSettingsSearch'
+import { useSettingsSearch } from './useSettingsSearch'
 import SettingsPageSideNav from './SettingsPageSideNav.vue'
 import SettingsPageThemeAndApplicationSection from './SettingsPageThemeAndApplicationSection.vue'
 import SettingsPageReadingAndBookDisplaySection from './SettingsPageReadingAndBookDisplaySection.vue'
@@ -13,27 +13,11 @@ import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcut
 
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
-const { searchQuery, getSectionNavEntries, getSectionNavTree } = useSettingsSearch(scrollContainerRef)
+const { searchQuery, getSectionNavEntries } = useSettingsSearch(scrollContainerRef)
 
-// ── Side nav tree (wide screen) ───────────────────────────────────────────────
+// ── Side nav (wide screen) ────────────────────────────────────────────────────
 
-const sideNavTree = ref<SettingsNavEntry[]>([])
-const sideNavExpandedSections = ref<Set<string>>(new Set())
-
-function rebuildSideNavTree() {
-  sideNavTree.value = getSectionNavTree()
-  sideNavExpandedSections.value = new Set()
-}
-
-function toggleSideNavSection(sectionId: string) {
-  const expanded = new Set(sideNavExpandedSections.value)
-  if (expanded.has(sectionId)) {
-    expanded.delete(sectionId)
-  } else {
-    expanded.add(sectionId)
-  }
-  sideNavExpandedSections.value = expanded
-}
+const sideNavEntries = ref<{ id: string; label: string }[]>([])
 
 // ── Nav dropdown (narrow screen) ─────────────────────────────────────────────
 
@@ -49,7 +33,7 @@ const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value 
 onMounted(() => {
   nextTick(() => {
     navEntries.value = getSectionNavEntries()
-    rebuildSideNavTree()
+    sideNavEntries.value = getSectionNavEntries()
   })
 })
 
@@ -75,10 +59,8 @@ async function navigateToSection(sectionId: string) {
   <div class="settings-page">
 
     <SettingsPageSideNav
-      :tree="sideNavTree"
-      :expanded-sections="sideNavExpandedSections"
+      :entries="sideNavEntries"
       @navigate="navigateToSection"
-      @toggle-section="toggleSideNavSection"
     />
 
     <!-- ── Full-width scroller — scrollbar at page edge ── -->
