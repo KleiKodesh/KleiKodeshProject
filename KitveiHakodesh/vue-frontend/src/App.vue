@@ -4,9 +4,9 @@ import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
-import { ref, computed, defineAsyncComponent, watch } from 'vue'
+import SetupWizard from '@/features/settings/SetupWizard.vue'
+import { ref, computed, watch } from 'vue'
 import { useResizeObserver, useEventListener } from '@vueuse/core'
-import { resetting } from '@/features/settings/appResetState'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -16,11 +16,6 @@ import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 useTabSwipeNavigation()
-
-// Loaded lazily — only needed when setupDone is false (first launch).
-const SetupWizard = defineAsyncComponent(
-  () => import('@/features/settings/SetupWizard.vue'),
-)
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -192,7 +187,6 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
       @cancel="bookViewStore.resolvePdfCloseConfirm(false)"
       @extra="pdfCloseSaveAs"
     />
-    <div v-if="resetting" class="reset-overlay" />
   </div>
 </template>
 
@@ -231,13 +225,5 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
 .split-divider:hover,
 .split-divider:active {
   background: color-mix(in srgb, var(--accent-color) 50%, transparent);
-}
-
-.reset-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: rgba(0, 0, 0, 0.4);
-  pointer-events: all;
 }
 </style>
