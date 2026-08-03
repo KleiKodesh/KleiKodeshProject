@@ -281,7 +281,7 @@ function getTabIcon(route: string): FileIconInfo {
           class="home-search-dropdown__item"
           :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
           data-nav-item
-          :title="withNewTabHint(entry.title)"
+          :title="withNewTabHint(entry.tocPath ? `${entry.title} · ${entry.tocPath}` : entry.title)"
           @click="emit('selectRecent', entry, wantsNewTab($event))"
           @auxclick.middle="emit('selectRecent', entry, wantsNewTab($event))"
         >
@@ -290,7 +290,9 @@ function getTabIcon(route: string): FileIconInfo {
             class="home-search-dropdown__item-icon"
             :style="{ color: getRecentIcon(entry).color }"
           />
-          <span class="home-search-dropdown__item-title">{{ entry.title }}</span>
+          <span class="home-search-dropdown__item-title">
+            {{ entry.title }}<span v-if="entry.tocPath" class="home-search-dropdown__item-toc"> · {{ entry.tocPath }}</span>
+          </span>
         </div>
       </template>
 
