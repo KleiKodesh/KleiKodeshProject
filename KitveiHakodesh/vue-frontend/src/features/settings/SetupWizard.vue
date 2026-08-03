@@ -3,6 +3,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { dbReady } from '@/webview-host/seforimDb'
 import { getDbPathInfo } from '@/webview-host/bridge'
+import { resetting } from './appResetState'
 import SetupWizardStepDb from './SetupWizardStepDb.vue'
 import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
 import SetupWizardStepGeneral from './SetupWizardStepGeneral.vue'
@@ -62,6 +63,7 @@ function back() {
 }
 
 function skip() {
+  if (resetting.value) return
   settings.completeSetup()
   dismissed.value = true
 }
@@ -101,7 +103,7 @@ function skip() {
     <!-- Footer — centered to match card width -->
     <div class="wizard-footer">
       <div class="wizard-footer-inner">
-        <button class="skip-btn" @click="skip">דלג</button>
+        <button class="skip-btn" :disabled="resetting" @click="skip">דלג</button>
         <div class="nav-btns">
           <button v-if="stepIndex > 0" class="back-btn" @click="back">הקודם</button>
           <button class="next-btn" :disabled="currentStep === 'db' && !dbReady" @click="next">
@@ -283,6 +285,10 @@ function skip() {
 .skip-btn:hover {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.skip-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 @keyframes fade-up {
