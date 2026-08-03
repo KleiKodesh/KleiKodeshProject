@@ -42,6 +42,12 @@ export interface RecentlyOpenedEntry {
    * keeping it out of this store avoids rewriting the whole recents list on scroll.
    */
   tocPath?: string
+  /**
+   * The saved line index that `tocPath` describes, attached alongside it from the
+   * same `lastRead` record and likewise never persisted here. Lets selecting the
+   * row jump straight to that position, so a recent behaves like a bookmark.
+   */
+  tocLineIndex?: number
 }
 
 const RECENTLY_OPENED_DB = 'app-recently-opened'

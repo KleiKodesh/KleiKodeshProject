@@ -107,14 +107,20 @@ const recentEntries = ref<RecentlyOpenedEntry[]>([])
 // records predate the field, so a missing path just renders the bare title.
 recentlyOpenedStore.getList().then(async (list) => {
   recentEntries.value = list
-  const paths = await Promise.all(
+  const saved = await Promise.all(
     list.map((e) =>
       e.route === '/book-view' && e.bookId !== undefined
-        ? tabStore.getLastReadPos(e.bookId).then((p) => p?.tocPath)
-        : Promise.resolve(undefined),
+        ? tabStore.getLastReadPos(e.bookId)
+        : Promise.resolve(null),
     ),
   )
-  recentEntries.value = list.map((e, i) => (paths[i] ? { ...e, tocPath: paths[i] } : e))
+  recentEntries.value = list.map((e, i) => {
+    const p = saved[i]
+    if (!p?.tocPath) return e
+    // scrollIndex is a line index — the same unit openTocLineIndex takes — so the
+    // row can navigate to exactly the spot its caption names.
+    return { ...e, tocPath: p.tocPath, tocLineIndex: p.scrollIndex }
+  })
 })
 const dropdownRecentEntries = computed(() => (hasAnyResults() ? [] : recentEntries.value))
 
@@ -134,7 +140,18 @@ function onCloseTab(id: string) {
 // (openFromHistory) fill it in.
 function onSelectRecent(entry: RecentlyOpenedEntry, openInNewTab = false) {
   if (entry.route === '/book-view' && entry.bookId !== undefined) {
-    pane.openOrUpdateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId }, openInNewTab)
+    // A recent behaves like a bookmark: jump to the position its caption names,
+    // even when that book is already open here and has since been scrolled away.
+    // BookView reads the target once at setup, so bump navNonce to force the
+    // remount the same-book case wouldn't otherwise get (see AppPageView.pageKey).
+    pane.openOrUpdateActiveTab({
+      route: '/book-view',
+      title: entry.title,
+      bookId: entry.bookId,
+      ...(entry.tocLineIndex !== undefined
+        ? { openTocLineIndex: entry.tocLineIndex, navNonce: tabStore.nextNavNonce() }
+        : {}),
+    }, openInNewTab)
   } else {
     localFileStore.openFromHistory(entry, openInNewTab)
   }
