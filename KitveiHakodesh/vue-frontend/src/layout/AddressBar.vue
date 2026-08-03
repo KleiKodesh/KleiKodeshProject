@@ -101,27 +101,7 @@ const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
 
 const recentlyOpenedStore = useRecentlyOpenedStore()
 const recentEntries = ref<RecentlyOpenedEntry[]>([])
-// Book rows show the same "title · TOC path" caption an open tab shows. The path is
-// position data, so it lives on the per-book lastRead record rather than on the
-// recently-opened entry — joined here by bookId. File routes have no TOC and older
-// records predate the field, so a missing path just renders the bare title.
-recentlyOpenedStore.getList().then(async (list) => {
-  recentEntries.value = list
-  const saved = await Promise.all(
-    list.map((e) =>
-      e.route === '/book-view' && e.bookId !== undefined
-        ? tabStore.getLastReadPos(e.bookId)
-        : Promise.resolve(null),
-    ),
-  )
-  recentEntries.value = list.map((e, i) => {
-    const p = saved[i]
-    if (!p?.tocPath) return e
-    // scrollIndex is a line index — the same unit openTocLineIndex takes — so the
-    // row can navigate to exactly the spot its caption names.
-    return { ...e, tocPath: p.tocPath, tocLineIndex: p.scrollIndex }
-  })
-})
+recentlyOpenedStore.getList().then((list) => { recentEntries.value = list })
 const dropdownRecentEntries = computed(() => (hasAnyResults() ? [] : recentEntries.value))
 
 function onSelectTab(id: string) {
@@ -140,18 +120,7 @@ function onCloseTab(id: string) {
 // (openFromHistory) fill it in.
 function onSelectRecent(entry: RecentlyOpenedEntry, openInNewTab = false) {
   if (entry.route === '/book-view' && entry.bookId !== undefined) {
-    // A recent behaves like a bookmark: jump to the position its caption names,
-    // even when that book is already open here and has since been scrolled away.
-    // BookView reads the target once at setup, so bump navNonce to force the
-    // remount the same-book case wouldn't otherwise get (see AppPageView.pageKey).
-    pane.openOrUpdateActiveTab({
-      route: '/book-view',
-      title: entry.title,
-      bookId: entry.bookId,
-      ...(entry.tocLineIndex !== undefined
-        ? { openTocLineIndex: entry.tocLineIndex, navNonce: tabStore.nextNavNonce() }
-        : {}),
-    }, openInNewTab)
+    pane.openOrUpdateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId }, openInNewTab)
   } else {
     localFileStore.openFromHistory(entry, openInNewTab)
   }

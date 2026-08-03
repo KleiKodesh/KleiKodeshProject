@@ -17,16 +17,10 @@ const route = computed(() => activeTab.value.route)
 // for in-place changes). Book view reads bookId once, so switching to a
 // DIFFERENT book on the SAME tab (e.g. picking a result from the address bar
 // while already in book view) must force a remount — include bookId in the key.
-// navNonce covers the same-book case: jumping to a different position within the
-// book already open (a recently-opened row, a catalog TOC hit) leaves bookId
-// unchanged, so the caller bumps the nonce to force the remount.
 // Other keyed routes just key by tab id.
 const pageKey = computed(() => {
   const r = route.value
-  if (r === '/book-view') {
-    const t = activeTab.value
-    return `${activeTabId.value}:${t.bookId ?? ''}:${t.navNonce ?? ''}`
-  }
+  if (r === '/book-view') return `${activeTabId.value}:${activeTab.value.bookId ?? ''}`
   if (r === '/search' || r === '/txt-view') return activeTabId.value
   return undefined
 })

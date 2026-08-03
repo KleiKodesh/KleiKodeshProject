@@ -19,6 +19,7 @@ const {
   divineNameMode,
   elokimMode,
   otherNamesMode,
+  resumeLastRead,
   defaultAutoSyncCommentary,
   headerFont,
   textFont,
@@ -68,6 +69,21 @@ const commentaryMaxWidthSlider = computed({
   <!-- ── קריאה ── -->
   <div data-section="section-reading" data-section-label="קריאה">
     <div id="section-reading" class="section-label">קריאה</div>
+
+    <SettingRow
+      id="nav-resume-last-read"
+      data-nav-label="זכור מיקום אחרון"
+      label="זכור מיקום אחרון בספר"
+      hint="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+    >
+      <ToggleGroup
+        v-model="resumeLastRead"
+        :options="[
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
+        ]"
+      />
+    </SettingRow>
 
     <SettingRow
       id="nav-auto-sync-commentary"
