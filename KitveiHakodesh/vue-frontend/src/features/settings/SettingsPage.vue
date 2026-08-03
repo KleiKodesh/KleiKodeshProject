@@ -152,9 +152,9 @@ async function navigateToSection(sectionId: string) {
 }
 
 .settings-body-inner {
-  max-width: 680px;
+  max-width: 720px;
   margin: 0 auto;
-  padding: 12px 16px 40px;
+  padding: 0 24px 40px;
   box-sizing: border-box;
 }
 
@@ -164,10 +164,9 @@ async function navigateToSection(sectionId: string) {
   top: 0;
   z-index: 10;
   background: var(--bg-primary);
-  padding: 8px 0;
+  padding: 24px 24px 20px;
   margin-bottom: 4px;
-  margin-inline: -16px;
-  padding-inline: 16px;
+  margin-inline: -24px;
 }
 
 .nav-toggle-wrapper {
@@ -274,18 +273,16 @@ async function navigateToSection(sectionId: string) {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
+  padding: 8px 24px 16px;
+  margin-bottom: 24px;
   scroll-margin-top: 64px;
 }
 
 .section-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  padding: 0 0 8px;
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--border-color);
+  padding: 14px 0;
   scroll-margin-top: 56px;
 }
 
@@ -302,5 +299,24 @@ async function navigateToSection(sectionId: string) {
 
 [data-section-hidden] {
   display: none !important;
+}
+
+/* ── Row-style settings (Edge-like): hairline divider between rows instead
+   of separate boxes. Control keeps its original full-width line below the
+   label — untouched button-group layout — so ToggleGroup's grid always gets
+   the same available width it always had. ── */
+[data-section] .setting-row-item {
+  margin-bottom: 0;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-color);
+}
+
+[data-section] .setting-row-item:first-of-type {
+  border-top: none;
+}
+
+[data-section] .setting-row-item .setting-label {
+  font-size: 13.5px;
+  color: var(--text-primary);
 }
 </style>
