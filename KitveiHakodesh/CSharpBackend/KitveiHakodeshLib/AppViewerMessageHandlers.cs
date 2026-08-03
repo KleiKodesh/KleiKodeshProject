@@ -85,9 +85,6 @@ namespace KitveiHakodeshLib
                         case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
-                        case "userBooks-sql": await _userBooks.HandleQuery(root, id); break;
-                        case "userBooksInfo": _userBooks.HandleInfo(id); break;
-                        case "userBooksFileLines": await _userBooks.HandleFileLines(root, id); break;
                         case "exportToWord": HandleExportToWord(root, id); break;
                         case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;

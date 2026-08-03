@@ -123,9 +123,6 @@ export function useBookViewHighlights(bookId: number) {
     endOffset: number,
     colorArgb: number,
   ): Promise<Highlight> {
-    // File-backed personal-book lines carry id 0 — highlights key on lineId, so a
-    // highlight saved against 0 would surface on EVERY id-less line. Guarded off.
-    if (!lineId) throw new Error('highlights are not available on file-backed personal books')
     const createdAt = Date.now()
     const insertedId = await executeUserSettings(USER_SETTINGS_SQL.INSERT_HIGHLIGHT, [
       bookId,

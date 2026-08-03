@@ -29,7 +29,6 @@ bool forceRebuild = false;
 bool benchMode = false;
 bool watcherMode = false;
 bool variantMode = false;
-bool corpusMode = false;
 var ktivSimQueries = new List<string>();
 for (int i = 0; i < args.Length; i++)
 {
@@ -44,7 +43,6 @@ for (int i = 0; i < args.Length; i++)
         case "--bench": benchMode = true; break;
         case "--watcher": watcherMode = true; break;
         case "--variant": variantMode = true; break;
-        case "--corpus": corpusMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
     }
 }
@@ -53,8 +51,6 @@ if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
 if (variantMode)
     return VariantVerify.Run();
-if (corpusMode)
-    return CorpusRoutingVerify.Run();
 
 dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))

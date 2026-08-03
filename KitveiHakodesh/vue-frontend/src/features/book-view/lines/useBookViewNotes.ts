@@ -133,10 +133,6 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
     endOffset: number,
     quote: string,
   ): Promise<Note> {
-    // File-backed personal-book lines carry id 0 (their text lives in a file, not
-    // the DB) — notes key on lineId, so saving against 0 would make one note appear
-    // on EVERY id-less line. Guarded off, like Otzaria's own file-backed books.
-    if (!lineId) throw new Error('notes are not available on file-backed personal books')
     const now = Date.now()
     const insertedId = await executeUserSettings(USER_SETTINGS_SQL.INSERT_NOTE, [
       bookId,

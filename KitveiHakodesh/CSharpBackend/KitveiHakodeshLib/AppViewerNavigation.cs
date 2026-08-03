@@ -112,10 +112,6 @@ namespace KitveiHakodeshLib
             _userSettings?.Dispose();
             _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
 
-            // Re-init the personal-books handler too (cheap — it opens lazily).
-            _userBooks?.Dispose();
-            _userBooks = new UserBooksDbHandler(_bridge, AppSettings.LoadDbPath);
-
             // Always call OnDbReady — if the file doesn't exist it pushes ftsDbNotFound
             // to the frontend; if it does exist it starts or resumes indexing.
             _search.OnDbReady(savedPath);

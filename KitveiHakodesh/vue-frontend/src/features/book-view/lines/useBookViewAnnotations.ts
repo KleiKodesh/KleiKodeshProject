@@ -135,12 +135,6 @@ export function useBookViewAnnotations(
     const selection = extractSelectionOnLine()
     if (!selection) return
     for (const line of selection.lines) {
-      // File-backed personal-book lines carry id 0 — highlights key on lineId and
-      // cannot attach to them (an id-0 save would surface on every id-less line).
-      if (!line.lineId) {
-        console.warn('[annotations] highlights are not available on file-backed personal books')
-        continue
-      }
       applyHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)
     }
     window.getSelection()?.removeAllRanges()
@@ -159,11 +153,6 @@ export function useBookViewAnnotations(
     const selection = extractSelectionOnLine()
     if (!selection || selection.lines.length === 0) return
     const firstLine = selection.lines[0]!
-    if (!firstLine.lineId) {
-      // See onHighlight — notes key on lineId; file-backed lines have none.
-      console.warn('[annotations] notes are not available on file-backed personal books')
-      return
-    }
     const rawQuote = window.getSelection()?.toString() ?? ''
     const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
     window.getSelection()?.removeAllRanges()
