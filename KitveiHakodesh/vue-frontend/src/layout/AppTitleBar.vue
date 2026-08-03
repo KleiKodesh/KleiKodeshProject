@@ -11,12 +11,12 @@ import {
   IconHome20Regular,
   IconOptions24Regular,
   IconOptions24Filled,
-  IconColor24Regular,
-  IconColor24Filled,
   IconConvertToText24Regular,
   IconSearch24Regular,
   IconSplitVertical20Regular,
   IconSplitVertical20Filled,
+  // IconColor24Regular,
+  // IconColor24Filled,
 } from '@iconify-prerendered/vue-fluent'
 import ThemeToggle from '@/theme/ThemeToggle.vue'
 // The dropdown is v-if — lazy-load it so its imports (including fluent-color icons)
@@ -79,9 +79,9 @@ const navDropdownOpen = ref(false)
 const barRef = ref<HTMLElement | null>(null)
 const navBtnRef = ref<HTMLElement | null>(null)
 
-const isPdfTab = computed(
-  () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
-)
+// const isPdfTab = computed(
+//   () => activeTab.value?.route === '/pdf-view' || activeTab.value?.route === '/html-view',
+// )
 
 // bookViewStore.isBookViewActive and isTxtViewActive read from tabStore.activeTab (pane 1).
 // For pane 2 we compute these directly from the pane's active tab.
@@ -106,9 +106,9 @@ const toolbarTitle = computed(() => {
   return `${baseTitle} (Ctrl+B)`
 })
 
-const pdfFilterTitle = computed(() =>
-  settingsStore.pdfPageFilters ? 'בטל החלת ערכת נושא על דפי PDF' : 'החל ערכת נושא על דפי PDF',
-)
+// const pdfFilterTitle = computed(() =>
+//   settingsStore.pdfPageFilters ? 'בטל החלת ערכת נושא על דפי PDF' : 'החל ערכת נושא על דפי PDF',
+// )
 
 // ── Title-bar search (Explorer-style address bar) ─────────────────────────────
 // The title becomes an editable search field, reusing the home-page search.
@@ -177,7 +177,7 @@ useAppTitleBarShortcuts({
       >
         <IconSearch24Regular />
       </button>
-      <button
+      <!-- <button
         v-if="isTitleBarButtonVisible('pdf-filter') && isPdfTab"
         class="bar-btn"
         tabindex="-1"
@@ -186,7 +186,7 @@ useAppTitleBarShortcuts({
       >
         <IconColor24Filled v-if="settingsStore.pdfPageFilters" />
         <IconColor24Regular v-else />
-      </button>
+      </button> -->
       <button
         v-if="isTitleBarButtonVisible('toolbar-toggle') && (isBookViewActive || activeTab?.route === '/pdf-view')"
         class="bar-btn"
@@ -206,6 +206,16 @@ useAppTitleBarShortcuts({
       >
         <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
         <IconSplitVertical20Regular v-else />
+      </button>
+      <button
+        v-if="isTitleBarButtonVisible('ocr') && activeTab?.route === '/pdf-view'"
+        class="bar-btn"
+        tabindex="-1"
+        :class="{ active: pdfOcrStore.isActive }"
+        title="בחירת טקסט באזור (OCR)"
+        @click.stop="pdfOcrStore.toggle()"
+      >
+        <IconConvertToText24Regular />
       </button>
     </div>
 
@@ -241,16 +251,6 @@ useAppTitleBarShortcuts({
     </span>
 
     <div class="bar-end">
-      <button
-        v-if="isTitleBarButtonVisible('ocr') && activeTab?.route === '/pdf-view'"
-        class="bar-btn"
-        tabindex="-1"
-        :class="{ active: pdfOcrStore.isActive }"
-        title="בחירת טקסט באזור (OCR)"
-        @click.stop="pdfOcrStore.toggle()"
-      >
-        <IconConvertToText24Regular />
-      </button>
       <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" tabindex="-1" title="לשונית חדשה (Ctrl+N)" @click.stop="pane.openNewTab()">
         <IconAdd20Regular />
       </button>
