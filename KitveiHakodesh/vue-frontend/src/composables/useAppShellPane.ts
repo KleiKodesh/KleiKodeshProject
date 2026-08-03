@@ -36,6 +36,20 @@ export function useAppShellPane(paneId: 1 | 2) {
     tabStore.switchPaneTab(id, paneId)
   }
 
+  /**
+   * Step the active tab by ±1 through this pane's tabs, wrapping at both ends.
+   * Walks `tabs` — the stable strip order — not `mruTabs`, so repeated steps
+   * advance through the list instead of oscillating between the last two.
+   * Shared by the title bar's prev/next buttons and Ctrl+Tab.
+   */
+  function cycleTab(step: 1 | -1) {
+    const paneTabs = tabs.value
+    if (!paneTabs.length) return
+    const currentIndex = paneTabs.findIndex((t) => t.id === activeTabId.value)
+    const nextIndex = (currentIndex + step + paneTabs.length) % paneTabs.length
+    switchTab(paneTabs[nextIndex]!.id)
+  }
+
   function closeTab(id: string) {
     if (paneId === 1) tabStore.closeTab(id)
     else tabStore.closePane2Tab(id)
@@ -130,6 +144,7 @@ export function useAppShellPane(paneId: 1 | 2) {
     activeTabId,
     activeTab,
     switchTab,
+    cycleTab,
     closeTab,
     closeAllTabs,
     openTab,

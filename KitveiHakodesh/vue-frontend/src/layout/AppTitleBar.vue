@@ -6,7 +6,8 @@ import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
   IconLineHorizontal320Regular,
   IconAdd20Regular,
-  IconDismiss20Regular,
+  IconArrowRight20Regular,
+  IconArrowLeft20Regular,
   IconHome20Regular,
   IconOptions24Regular,
   IconOptions24Filled,
@@ -250,18 +251,30 @@ useAppTitleBarShortcuts({
       >
         <IconConvertToText24Regular />
       </button>
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" tabindex="-1" title="לשונית חדשה (Ctrl+N)" @click.stop="pane.openNewTab()">
         <IconAdd20Regular />
       </button>
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <!-- Step through the tab list in its own order (same pane.cycleTab as
+           Ctrl+Tab), wrapping at both ends. RTL: previous points right, next left,
+           following the direction of reading rather than the array index. -->
       <button
-        v-if="isTitleBarButtonVisible('close-tab')"
+        v-if="isTitleBarButtonVisible('prev-tab')"
         class="bar-btn"
         tabindex="-1"
-        title="סגור לשונית (Ctrl+W)"
-        @click.stop="pane.closeTab(pane.activeTabId.value)"
+        title="הלשונית הקודמת (Ctrl+Shift+Tab)"
+        @click.stop="pane.cycleTab(-1)"
       >
-        <IconDismiss20Regular />
+        <IconArrowRight20Regular />
+      </button>
+      <button
+        v-if="isTitleBarButtonVisible('next-tab')"
+        class="bar-btn"
+        tabindex="-1"
+        title="הלשונית הבאה (Ctrl+Tab)"
+        @click.stop="pane.cycleTab(1)"
+      >
+        <IconArrowLeft20Regular />
       </button>
     </div>
 

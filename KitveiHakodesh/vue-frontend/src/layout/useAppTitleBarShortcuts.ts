@@ -69,14 +69,9 @@ export function useAppTitleBarShortcuts(options: {
     'סביבות עבודה',
   ]
 
-  /** Step the active tab by ±1 through this pane's tabs, wrapping at both ends. */
-  function cycleTab(step: 1 | -1) {
-    const paneTabs = pane.tabs.value
-    if (!paneTabs.length) return
-    const currentIndex = paneTabs.findIndex((t) => t.id === pane.activeTabId.value)
-    const nextIndex = (currentIndex + step + paneTabs.length) % paneTabs.length
-    pane.switchTab(paneTabs[nextIndex]!.id)
-  }
+  // Ctrl+Tab steps through the tab list; the title bar's prev/next buttons use the
+  // same pane.cycleTab, so keyboard and buttons can never disagree on the order.
+  const cycleTab = pane.cycleTab
 
   // Forward Ctrl+key shortcuts from child iframes (HTML/txt viewer) back into the
   // top-level keydown pipeline. Only pane 1 needs this — iframes only appear there.

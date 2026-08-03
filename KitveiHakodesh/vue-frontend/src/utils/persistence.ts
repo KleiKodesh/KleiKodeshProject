@@ -96,6 +96,7 @@ export function lsDeleteRaw(key: string): void {
 // (app-hb-history, app-recently-opened) are deliberately not among them.
 const handles: Record<string, IDBDatabase | null> = {
   'app-tabs': null,
+  'app-recent-tabs': null,
   'app-lastread': null,
   'app-search-cache': null,
   'app-dict-cache': null,

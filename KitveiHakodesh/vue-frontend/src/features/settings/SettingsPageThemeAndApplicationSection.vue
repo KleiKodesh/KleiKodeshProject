@@ -30,9 +30,10 @@ const TITLE_BAR_BUTTONS = [
   { id: 'toolbar-toggle', label: 'סרגל כלים' },
   { id: 'pdf-filter',     label: 'ערכת נושא ב-PDF' },
   { id: 'ocr',            label: 'OCR' },
-  { id: 'home',           label: 'בית' },
   { id: 'new-tab',        label: 'לשונית חדשה' },
-  { id: 'close-tab',      label: 'סגור לשונית' },
+  { id: 'home',           label: 'בית' },
+  { id: 'prev-tab',       label: 'הלשונית הקודמת' },
+  { id: 'next-tab',       label: 'הלשונית הבאה' },
 ]
 
 function isTitleBarButtonEnabled(buttonId: string): boolean {
