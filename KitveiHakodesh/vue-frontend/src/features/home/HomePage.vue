@@ -264,6 +264,10 @@ async function onTap(label: string) {
   opacity: 0.7;
 }
 
+.home-search-bar__field::-webkit-search-cancel-button {
+  filter: grayscale(1) opacity(0.4);
+}
+
 .home-search-bar__search-button {
   flex-shrink: 0;
   display: flex;
