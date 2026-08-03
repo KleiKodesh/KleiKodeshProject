@@ -86,6 +86,7 @@ const {
   isLoadingHebrewBooks,
   isLoadingFiles,
   hasAnyResults,
+  isLoadingAny,
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
@@ -108,6 +109,14 @@ const visibleTabs = computed(() =>
     .sort((a, b) => b.recentStamp - a.recentStamp),
 )
 const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
+
+// An empty panel is just a floating blank rectangle, so render nothing at all
+// until there is something in it. The loading flags count as content: a search in
+// flight shows spinners, and hiding the panel until the first row lands would
+// make it flicker in and out mid-type.
+const hasDropdownContent = computed(
+  () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny(),
+)
 
 // No separate recently-opened section: the tab list above already keeps an entry
 // after its tab closes, so a "recently opened" list beside it would show the same
@@ -322,7 +331,7 @@ nextTick(() => {
       <IconSearch20Regular />
     </button>
     <HomeSearchDropdown
-      v-if="isDropdownOpen"
+      v-if="isDropdownOpen && hasDropdownContent"
       ref="dropdownRef"
       :catalog-results="catalogResults"
       :catalog-toc-results="catalogTocResults"
