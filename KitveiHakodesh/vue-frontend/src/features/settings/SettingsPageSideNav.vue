@@ -103,6 +103,12 @@ const emit = defineEmits<{
 .side-nav-chevron {
   flex-shrink: 0;
   color: var(--text-secondary);
+  opacity: 0;
+  transition: opacity 100ms;
+}
+
+.side-nav-section-btn:hover .side-nav-chevron {
+  opacity: 1;
 }
 
 .side-nav-children {
