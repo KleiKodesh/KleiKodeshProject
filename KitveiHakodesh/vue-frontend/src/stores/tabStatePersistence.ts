@@ -69,8 +69,9 @@ function workspaceId(): string {
 }
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
-// One entry per open tab×book. Bounded by what the user has open, and evicted by
-// deleteAllStateForTab when a tab closes, so it needs no size cap.
+// One entry per tab×book. Bounded by the recent-tab list (see recentTabs.ts): a
+// closed tab keeps its state so it can reopen where it left off, and
+// deleteAllStateForTab runs only when LRU finally evicts the entry.
 
 const bookStateCache = new Map<string, BookState | null>()
 

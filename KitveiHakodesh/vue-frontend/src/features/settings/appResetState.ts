@@ -95,6 +95,7 @@ async function clearAllLocalStorage(): Promise<void> {
   const { dropRecentlyOpenedDb } = await import('@/stores/recentlyOpenedStore')
   await Promise.all([
     dropDatabase('app-tabs'),
+    dropDatabase('app-recent-tabs'),
     dropDatabase('app-lastread'),
     dropHbHistoryDb(),
     dropRecentlyOpenedDb(),

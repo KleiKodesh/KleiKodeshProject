@@ -12,6 +12,7 @@ import {
   deleteAllStateForTab,
 } from './tabStatePersistence'
 import { getLastReadPos, setLastReadPos } from './bookLastRead'
+import { loadRecentTabs, saveRecentTabs, evictLru, type RecentTab } from './recentTabs'
 import { useBookViewStore } from './bookViewStore'
 import { disposeLocalFileHost } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
@@ -114,6 +115,14 @@ export const useTabStore = defineStore('tabs', () => {
   const accessOrder = ref(new Map<string, number>())
   let accessTick = 0
 
+  // ── Recent tabs — the parallel list that doesn't forget ───────────────────
+  // A copy of `tabs` under the same ids, kept in step by syncRecentTab() on every
+  // open / navigate / switch. The one divergence is closeTab, which removes from
+  // `tabs` and leaves the entry here; entries go only by LRU eviction. See
+  // recentTabs.ts for why per-tab state follows the same rule.
+  const recentTabs = ref<RecentTab[]>([])
+  let recentStampTick = 0
+
   // ── Init (called once from main.ts before mount) ──────────────────────────
 
   // Synchronous — tab list is in localStorage
@@ -138,6 +147,22 @@ export const useTabStore = defineStore('tabs', () => {
         accessTick = live.size > 0 ? Math.max(...live.values()) : 0
       }
     }
+
+    // The recent list lives in IDB, so it arrives after the synchronous restore
+    // above. Reconcile `open` against the tabs that actually came back: a tab the
+    // live list dropped (a singleton, or a session that ended mid-write) must not
+    // stay flagged open, or LRU would never consider it.
+    void loadRecentTabs(wsId).then((saved) => {
+      const liveIds = new Set(tabs.value.map((t) => t.id))
+      recentTabs.value = saved.map((t) => ({ ...t, open: liveIds.has(t.id) }))
+      recentStampTick = saved.reduce((max, t) => Math.max(max, t.recentStamp ?? 0), 0)
+      // Tabs restored from localStorage that this list has never seen (saved by a
+      // build without it) join now, so the list starts complete rather than empty.
+      for (const tab of tabs.value) {
+        if (!recentTabs.value.some((r) => r.id === tab.id)) syncRecentTab(tab)
+      }
+      evictRecentTabs()
+    })
   }
 
   // ── Singleton routes — never persisted across sessions ───────────────────
@@ -200,6 +225,111 @@ export const useTabStore = defineStore('tabs', () => {
     })
   }
 
+  // ── Recent-tabs sync ──────────────────────────────────────────────────────
+
+  /**
+   * True when a tab is not showing a "place" worth remembering, so it gets no row
+   * of its own — and, crucially, navigating a tab into this state must not
+   * overwrite the row for the document that tab was showing.
+   *
+   * Home and the singletons never qualify. The search page is conditional: an
+   * unused one is a blank form, not a result the user could return to, so it earns
+   * a row only once it actually carries a query.
+   */
+  function isUnlistedTab(tab: Tab): boolean {
+    if (tab.route === '/' || SINGLETON_ROUTES.includes(tab.route)) return true
+    if (tab.route === '/search' && !tab.searchQuery?.trim()) return true
+    return false
+  }
+
+  /**
+   * Mirror a live tab into the recent list: insert it if new, otherwise refresh
+   * the copy in place. Called wherever `tabs` gains a tab or an existing one
+   * changes identity/caption — the parallel list only diverges on close.
+   */
+  function syncRecentTab(tab: Tab) {
+    if (isUnlistedTab(tab)) {
+      // The tab navigated in place onto home, a singleton, or a blank search form
+      // (a book tab became מילון, say). Those are never listed, but this tab's
+      // PREVIOUS entry is still here flagged open — leave it that way and the list
+      // shows a live row for a place the tab has left, which duplicates the moment
+      // that document is reopened. Demote it instead: overwriting would ERASE the
+      // document from the list, and pressing "home" must not forget where you were
+      // reading.
+      markRecentTabClosed(tab.id)
+      return
+    }
+    const snapshot: RecentTab = {
+      ...JSON.parse(JSON.stringify(stripTransient(tab))) as Tab,
+      recentStamp: ++recentStampTick,
+      open: true,
+    }
+    const idx = recentTabs.value.findIndex((t) => t.id === tab.id)
+    if (idx === -1) recentTabs.value.push(snapshot)
+    else recentTabs.value[idx] = snapshot
+  }
+
+  /** Mark an entry closed — it stays in the list, now eligible for LRU eviction. */
+  function markRecentTabClosed(id: string) {
+    const entry = recentTabs.value.find((t) => t.id === id)
+    if (entry) entry.open = false
+  }
+
+  /** Drop entries and tear down the per-tab state that belonged to them. */
+  function disposeRecentTabs(ids: string[]) {
+    if (!ids.length) return
+    const doomed = new Set(ids)
+    recentTabs.value = recentTabs.value.filter((t) => !doomed.has(t.id))
+    for (const id of doomed) {
+      deleteAllStateForTab(id)
+      dropUncheckedCommentaryForTab(id)
+    }
+  }
+
+  /**
+   * Drop the least-recently-used closed entries. Together with forgetRecentTab
+   * below, this is the ONLY way a remembered tab's state dies — closeTab
+   * deliberately no longer does it.
+   */
+  function evictRecentTabs() {
+    const { evicted } = evictLru(recentTabs.value)
+    disposeRecentTabs(evicted)
+  }
+
+  /**
+   * Remove an entry outright — the dropdown's trash action. Closing a tab only
+   * demotes its row, so this is the one gesture that actually forgets a place.
+   * An open tab is closed first, otherwise the live tab would carry on with its
+   * state already deleted underneath it.
+   */
+  function forgetRecentTab(id: string) {
+    if (tabs.value.some((t) => t.id === id)) closeTab(id)
+    // closeTab may have been blocked awaiting PDF-save confirmation; in that case
+    // the tab is still live and the entry must stay until the close goes through.
+    if (tabs.value.some((t) => t.id === id)) return
+    disposeRecentTabs([id])
+  }
+
+  /** Strips the in-memory-only fields, matching what persistTabs drops. */
+  function stripTransient(tab: Tab): Tab {
+    const {
+      localFileVirtualUrl: _a,
+      localFileConverting: _b,
+      localFileLoadingType: _c,
+      localFileDownloadProgress: _d,
+      openToc: _e,
+      openTocEntryId: _f,
+      openTocLineIndex: _g,
+      flashOpenLine: _h,
+      searchHighlightLineIndex: _i,
+      searchHighlightQuery: _j,
+      searchHighlightSnippet: _k,
+      searchHighlightTerms: _l,
+      ...rest
+    } = tab
+    return rest as Tab
+  }
+
   // Only watch the fields that are actually persisted — avoids IDB writes on every
   // in-memory-only mutation (pdfVirtualUrl, pdfConverting, etc.)
   const _persistedSnapshot = computed(() =>
@@ -222,6 +352,14 @@ export const useTabStore = defineStore('tabs', () => {
   // nor activeTabId) still persists the new recency.
   watch([_persistedSnapshot, activeTabId, accessOrder], persistTabs)
 
+  // The recent list is already a stripped snapshot, so it can be persisted whole.
+  // Deep watch: entries are refreshed in place by syncRecentTab.
+  watch(
+    recentTabs,
+    () => { void saveRecentTabs(useWorkspaceStore().activeId, recentTabs.value) },
+    { deep: true },
+  )
+
   const activeTab = computed(
     (): Tab => tabs.value.find((t) => t.id === activeTabId.value) ?? tabs.value[0]!,
   )
@@ -239,6 +377,9 @@ export const useTabStore = defineStore('tabs', () => {
     // Reassign so the ref's own dependents (mruTabsForPane) re-evaluate — Map
     // mutation alone isn't tracked by Vue's reactivity for a plain ref.
     accessOrder.value = new Map(accessOrder.value)
+    // Same signal drives LRU: a tab kept in use outlives one left untouched.
+    const entry = recentTabs.value.find((t) => t.id === id)
+    if (entry) entry.recentStamp = ++recentStampTick
   }
 
   /**
@@ -333,8 +474,8 @@ export const useTabStore = defineStore('tabs', () => {
     if (guardPdfClose([tab], () => closePane2Tab(id))) return
     releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-    deleteAllStateForTab(id)
-    dropUncheckedCommentaryForTab(id)
+    // State outlives the close — see closeTab.
+    markRecentTabClosed(id)
     tabs.value.splice(idx, 1)
     // Update pane2ActiveTabId if the closed tab was active
     if (pane2ActiveTabId.value === id) {
@@ -472,7 +613,34 @@ export const useTabStore = defineStore('tabs', () => {
     if (TRACKABLE_ROUTES.has(tab.route)) {
       trackTabNavigation(tab)
     }
+    syncRecentTab(tab)
+    evictRecentTabs()
     return tab
+  }
+
+  /**
+   * Bring a remembered tab back. It re-enters the live list under its ORIGINAL id,
+   * so the per-tab state still keyed by that id — reading position, commentary
+   * layout, per-tab zoom — comes back with it. Two remembered tabs on one book
+   * therefore reopen to their own places. Already-open entries just get focus.
+   */
+  function reopenRecentTab(id: string) {
+    const existing = tabs.value.find((t) => t.id === id)
+    if (existing) {
+      switchTab(id)
+      return existing
+    }
+    const entry = recentTabs.value.find((t) => t.id === id)
+    if (!entry) return undefined
+    const { recentStamp: _s, open: _o, ...tab } = entry
+    // Reopening into pane 1: a stale pane-2 marker would hide the tab in a pane
+    // that may not even be open.
+    const revived: Tab = { ...(tab as Tab), pane: 1 }
+    tabs.value.push(revived)
+    activeTabId.value = revived.id
+    entry.open = true
+    markAccessed(revived.id)
+    return revived
   }
 
   function switchTab(id: string) {
@@ -500,13 +668,18 @@ export const useTabStore = defineStore('tabs', () => {
     for (const tab of closing) {
       releasePdfCloseState(tab.id)
       if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-      deleteAllStateForTab(tab.id)
+      // State outlives the close — see closeTab.
+      markRecentTabClosed(tab.id)
     }
     const home: Tab = { id: String(++nextId), title: 'בית', route: '/' }
     // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
     tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
-    pruneUncheckedCommentary(tabs.value.map((t) => t.id))
+    // Remembered tabs keep their commentary state too — prune against both lists.
+    pruneUncheckedCommentary([
+      ...tabs.value.map((t) => t.id),
+      ...recentTabs.value.map((t) => t.id),
+    ])
   }
 
   // ── PDF unsaved-edits close guard ──────────────────────────────────────────
@@ -570,8 +743,10 @@ export const useTabStore = defineStore('tabs', () => {
     if (guardPdfClose([tab], () => closeTab(id))) return
     releasePdfCloseState(id)
     if (tab.localFilePath) disposeLocalFileHost(tab.localFilePath)
-    deleteAllStateForTab(id)
-    dropUncheckedCommentaryForTab(id)
+    // The entry survives in recentTabs, so its per-tab state must survive too —
+    // that is what lets it reopen where it left off, distinctly from any other
+    // tab on the same book. Teardown moves to LRU eviction (evictRecentTabs).
+    markRecentTabClosed(id)
     // The next active tab must be the closed tab's neighbor among the tabs pane 1
     // can display — picking by index from the mixed array could land on a pane-2
     // tab, making both panes render the same tab.
@@ -602,6 +777,7 @@ export const useTabStore = defineStore('tabs', () => {
       if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)
       }
+      syncRecentTab(tab)
     }
   }
 
@@ -613,6 +789,7 @@ export const useTabStore = defineStore('tabs', () => {
       if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)
       }
+      syncRecentTab(tab)
     }
   }
 
@@ -627,6 +804,7 @@ export const useTabStore = defineStore('tabs', () => {
       if (TRACKABLE_ROUTES.has(tab.route) && (patch.route || patch.bookId || patch.localFilePath || patch.localFileHbBookId || patch.localFileName)) {
         trackTabNavigation(tab)
       }
+      syncRecentTab(tab)
     }
   }
 
@@ -709,6 +887,9 @@ export const useTabStore = defineStore('tabs', () => {
     switchTab,
     closeTab,
     closeAllTabs,
+    recentTabs,
+    reopenRecentTab,
+    forgetRecentTab,
     updateActiveTab,
     updateTab,
     openNewHomeTab,
