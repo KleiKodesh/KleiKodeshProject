@@ -88,7 +88,7 @@ namespace KitveiHakodeshLib.Db
             lock (_lock)
             {
                 conn = _pool[_nextSlot];
-                _nextSlot = (_nextSlot + 1) % POOL_SIZE;
+                _nextSlot = (_nextSlot + 1) % _pool.Length;
             }
 
             int index = 0;
