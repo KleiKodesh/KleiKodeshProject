@@ -40,6 +40,7 @@ namespace KitveiHakodeshLib.Search
             bool   reqOrdered   = root.TryGetProperty("3", out var o) && o.GetBoolean();
             int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimIndex.DefaultContextWords;
             bool   expandKetiv  = root.TryGetProperty("5", out var ek) && ek.GetBoolean();
+            bool   expandRelated = root.TryGetProperty("6", out var er) && er.GetBoolean();
 
             bool         ready = _state.IsReady;
             SeforimIndex index = _state.GetIndex();
@@ -55,6 +56,12 @@ namespace KitveiHakodeshLib.Search
                 string reason = !ready ? "indexNotReady" : "indexNotReady";
                 _bridge.Reply(id, new { searchId = (string)null, failReason = reason });
                 return;
+            }
+
+            if (expandRelated)
+            {
+                try { query = SearchExpansion.RewriteQuery(query); }
+                catch (Exception ex) { Console.WriteLine("[FtsSearchExecutor] expansion rewrite failed: " + ex.Message); }
             }
 
             string searchId = "s" + Interlocked.Increment(ref _nextSearchId);

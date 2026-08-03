@@ -67,6 +67,7 @@ const {
   maxWordDistance,
   requireOrdered,
   expandKetiv,
+  expandRelated,
   grammarWrap,
   sortOrder,
   executeSearch,
@@ -148,6 +149,7 @@ watch(
     maxWordDistance,
     requireOrdered,
     expandKetiv,
+    expandRelated,
     grammarWrap,
     () => settings.searchContextMarginWords,
   ],
@@ -398,6 +400,8 @@ onBeforeUnmount(() => {
       :at-filter-count="atFilters.length"
       :is-advanced-open="isAdvancedOpen"
       :is-advanced-active="isAdvancedActive"
+      :expand-related="expandRelated"
+      @update:expand-related="expandRelated = $event"
       v-model:sort-order="sortOrder"
       @search="onSearch"
       @cancel="cancelSearch"
