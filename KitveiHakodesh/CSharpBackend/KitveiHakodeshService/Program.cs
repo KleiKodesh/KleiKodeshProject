@@ -33,6 +33,7 @@ builder.Services.AddSingleton<DocumentLocatorService>();
 builder.Services.AddSingleton<HebrewBooksService>();
 builder.Services.AddSingleton<DictionaryService>();
 builder.Services.AddSingleton<SeforimDbService>();
+builder.Services.AddSingleton<SearchExpansionService>();
 builder.Services.AddSingleton<FullTextSearchService>();
 builder.Services.AddSingleton<CatalogTocSearchService>();
 builder.Services.AddSingleton<UserSettingsService>();

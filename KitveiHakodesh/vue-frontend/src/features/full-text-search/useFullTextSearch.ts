@@ -135,7 +135,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const cache = useSearchCacheStore()
   const settings = useSettingsStore()
   const booksStore = useBooksDataStore()
-  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchGrammarWrap } = storeToRefs(settings)
+  const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchGrammarWrap } = storeToRefs(settings)
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
   // 'lineId' (original streamed order), so results always finish in document order and the
@@ -162,6 +162,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       `d${settings.searchMaxWordDistance}`,
       settings.searchRequireOrdered ? 'ord' : '',
       settings.searchExpandKetiv ? 'ktv' : '',
+      settings.searchExpandRelated ? 'rel' : '',
       `ctx${settings.searchContextMarginWords}`,
     ]
       .filter(Boolean)
@@ -368,6 +369,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       settings.searchRequireOrdered,
       settings.searchContextMarginWords,
       settings.searchExpandKetiv,
+      settings.searchExpandRelated,
     )
     const searchId = reply?.searchId
     if (!searchId) {
@@ -489,6 +491,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           requireOrdered: settings.searchRequireOrdered,
           contextWords: settings.searchContextMarginWords,
           expandKetiv: settings.searchExpandKetiv,
+          expandRelated: settings.searchExpandRelated,
         }, abort.signal)
 
         // Flush the accumulator into the reactive ref on the adaptive cadence
@@ -618,6 +621,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     maxWordDistance: searchMaxWordDistance,
     requireOrdered: searchRequireOrdered,
     expandKetiv: searchExpandKetiv,
+    expandRelated: searchExpandRelated,
     grammarWrap: searchGrammarWrap,
     sortOrder,
     executeSearch,

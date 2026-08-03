@@ -6,6 +6,7 @@ import {
   IconDismiss20Regular,
   IconFilter20Regular,
   IconOptions20Regular,
+  IconTextExpand20Regular,
   IconArrowSort20Regular,
   IconCheckmark20Regular,
 } from '@iconify-prerendered/vue-fluent'
@@ -24,6 +25,7 @@ const props = defineProps<{
   atFilterCount: number
   isAdvancedOpen: boolean
   isAdvancedActive: boolean
+  expandRelated: boolean
   sortOrder: FullTextSearchSortOrder
   disabled?: boolean
 }>()
@@ -35,6 +37,7 @@ const emit = defineEmits<{
   clear: []
   'update:searchQuery': [string]
   'update:sortOrder': [FullTextSearchSortOrder]
+  'update:expandRelated': [boolean]
 }>()
 
 const filterBtnRef = ref<HTMLElement | null>(null)
@@ -152,6 +155,14 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
         @click.stop="$emit('toggleAdvanced')"
       >
         <IconOptions20Regular />
+      </button>
+      <button
+        class="bar-btn expand-related-btn"
+        :class="{ 'filter-active': expandRelated }"
+        title="חיפוש מורחב"
+        @click.stop="$emit('update:expandRelated', !expandRelated)"
+      >
+        <IconTextExpand20Regular />
       </button>
     </template>
     <input

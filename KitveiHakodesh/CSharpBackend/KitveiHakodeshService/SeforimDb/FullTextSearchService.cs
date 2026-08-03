@@ -17,7 +17,7 @@ namespace KitveiHakodeshService.SeforimDb;
 /// which DB it came from (resume is refused when that no longer matches).
 /// Search returns one capped batch (the hosted C# path streams; dev doesn't need to).
 /// </summary>
-public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger, SeforimDbService seforim)
+public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger, SeforimDbService seforim, SearchExpansionService expansion)
 {
     /// <summary>Prefix for the fts.ver stamp. Bump when the FtsLib on-disk segment
     /// format or the indexing pipeline changes, so existing indexes rebuild even when
@@ -360,9 +360,11 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     }
 
     public FtsSearchResult Search(
-        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv)
+        string query, int cap, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
+        bool expandRelated = false)
     {
         EnsureIndexing();
+        if (expandRelated) query = expansion.RewriteQuery(query);
         var result = new FtsSearchResult();
         if (!HasDb || !_isReady)
         {
@@ -428,9 +430,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     /// an emit that writes one frame per chunk on the client's pipe connection.</summary>
     public async Task StreamSearch(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt)
+        Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, bool expandRelated = false)
     {
         EnsureIndexing();
+        if (expandRelated) query = expansion.RewriteQuery(query);
         if (!HasDb || !_isReady) { await emit(new FtsStreamChunk { Ready = false, Done = true }); return; }
         if (string.IsNullOrWhiteSpace(query)) { await emit(new FtsStreamChunk { Done = true }); return; }
 

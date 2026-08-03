@@ -45,6 +45,7 @@ const KEYS = {
   SETTINGS_SEARCH_MAX_WORD_DISTANCE: 'search.maxWordDistance',
   SETTINGS_SEARCH_REQUIRE_ORDERED: 'search.requireOrdered',
   SETTINGS_SEARCH_EXPAND_KETIV: 'search.expandKetiv',
+  SETTINGS_SEARCH_EXPAND_RELATED: 'search.expandRelated',
   SETTINGS_SEARCH_WILDCARD_WRAP: 'search.wildcardWrap',
   SETTINGS_SEARCH_GRAMMAR_WRAP: 'search.grammarWrap',
 
@@ -121,6 +122,7 @@ const DEFAULTS = {
   searchMaxWordDistance: 10,
   searchRequireOrdered: false,
   searchExpandKetiv: true,
+  searchExpandRelated: false,
   searchWildcardWrap: false,
   searchGrammarWrap: false,
   copyCleanText: false,
@@ -190,6 +192,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
   const searchExpandKetiv = ref(DEFAULTS.searchExpandKetiv)
+  const searchExpandRelated = ref(DEFAULTS.searchExpandRelated)
   const searchWildcardWrap = ref(DEFAULTS.searchWildcardWrap)
   const searchGrammarWrap = ref(DEFAULTS.searchGrammarWrap)
   const copyCleanText = ref(DEFAULTS.copyCleanText)
@@ -291,6 +294,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
     loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_KETIV, searchExpandKetiv)
+    loadSetting(KEYS.SETTINGS_SEARCH_EXPAND_RELATED, searchExpandRelated)
     loadSetting(KEYS.SETTINGS_SEARCH_WILDCARD_WRAP, searchWildcardWrap)
     loadSetting(KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP, searchGrammarWrap)
     loadSetting(KEYS.SETTINGS_COPY_CLEAN_TEXT, copyCleanText)
@@ -366,6 +370,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(searchMaxWordDistance, KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE)
   persistSetting(searchRequireOrdered, KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED)
   persistSetting(searchExpandKetiv, KEYS.SETTINGS_SEARCH_EXPAND_KETIV)
+  persistSetting(searchExpandRelated, KEYS.SETTINGS_SEARCH_EXPAND_RELATED)
   persistSetting(searchWildcardWrap, KEYS.SETTINGS_SEARCH_WILDCARD_WRAP)
   persistSetting(searchGrammarWrap, KEYS.SETTINGS_SEARCH_GRAMMAR_WRAP)
   persistSetting(copyCleanText, KEYS.SETTINGS_COPY_CLEAN_TEXT)
@@ -465,6 +470,7 @@ export const useSettingsStore = defineStore('settings', () => {
     searchMaxWordDistance.value = DEFAULTS.searchMaxWordDistance
     searchRequireOrdered.value = DEFAULTS.searchRequireOrdered
     searchExpandKetiv.value = DEFAULTS.searchExpandKetiv
+    searchExpandRelated.value = DEFAULTS.searchExpandRelated
     searchWildcardWrap.value = DEFAULTS.searchWildcardWrap
     searchGrammarWrap.value = DEFAULTS.searchGrammarWrap
     copyCleanText.value = DEFAULTS.copyCleanText
@@ -490,7 +496,7 @@ export const useSettingsStore = defineStore('settings', () => {
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
-    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,
+    searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
     copyJoinLines,
     copySourcePosition,

@@ -361,6 +361,9 @@ public sealed class FtsSearchArgs
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
     public bool ExpandKetiv { get; set; }
+    /// <summary>Expand each query word with its related forms (inflections,
+    /// vetted synonyms, Targum bridge) from the expansion artifact.</summary>
+    public bool ExpandRelated { get; set; }
 }
 
 /// <summary>One FTS hit — matches the frontend FullTextSearchResult shape.</summary>
@@ -411,6 +414,9 @@ public sealed class FtsSearchStreamArgs
     public bool RequireOrdered { get; set; }
     public int ContextWords { get; set; } = 8;
     public bool ExpandKetiv { get; set; }
+    /// <summary>Expand each query word with its related forms (inflections,
+    /// vetted synonyms, Targum bridge) from the expansion artifact.</summary>
+    public bool ExpandRelated { get; set; }
 }
 
 /// <summary>One pushed frame of a streaming search. The final frame has <c>Done</c> true

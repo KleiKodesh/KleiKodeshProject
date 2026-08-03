@@ -692,7 +692,7 @@ public sealed class Dispatcher(
                 case "ftsSearch":
                 {
                     var a = MsgPack.De<FtsSearchArgs>(req.Args);
-                    var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv);
+                    var res = fts.Search(a.Query ?? "", a.Cap, a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv, a.ExpandRelated);
                     return RpcResponse.Ok(MsgPack.Ser(res));
                 }
 
@@ -753,7 +753,7 @@ public sealed class Dispatcher(
                 var a = MsgPack.De<FtsSearchStreamArgs>(req.Args);
                 await fts.StreamSearch(
                     a.Query ?? "", a.MaxWordDistance, a.RequireOrdered, a.ContextWords, a.ExpandKetiv,
-                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct);
+                    chunk => writeFrame(RpcResponse.Ok(MsgPack.Ser(chunk))), ct, a.ExpandRelated);
                 return true;
             }
 
