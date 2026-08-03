@@ -30,6 +30,10 @@ namespace KitveiHakodeshLib
         // gesture handlers so programmatic changes don't echo back to Vue.
         private bool _syncing;
 
+        // Latest recently-opened documents from Vue (not currently open in any tab),
+        // shown as the "נסגרו לאחרונה" section of the tab-list dropdown.
+        private IReadOnlyList<MirroredRecentInfo> _recentItems = new List<MirroredRecentInfo>();
+
         public ChromeTabsMirror(FluentChromeTabsForm form, AppViewer viewer)
         {
             _form = form ?? throw new ArgumentNullException(nameof(form));
@@ -53,6 +57,7 @@ namespace KitveiHakodeshLib
             _form.SelectedTabChanged += OnSelectedTabChanged;
             _form.TabClosing += OnTabClosing;
             _form.NewTabRequested += OnNewTabRequested;
+            _form.TabListOpening += OnTabListOpening;
             _form.SplitRatioChanged += OnSplitRatioChanged;
             _form.TabDraggedToGroup += OnTabDraggedToGroup;
 
@@ -106,6 +111,23 @@ namespace KitveiHakodeshLib
             // The strip's SplitRatio is region 0's (pane 1's) share; Vue's splitViewFraction
             // is pane 2's share — mirror images of the same divider.
             _viewer.NotifyChromeSplitFractionChanged(1.0 - _form.SplitRatio);
+        }
+
+        private void OnTabListOpening(object sender, TabListOpeningEventArgs e)
+        {
+            if (_recentItems.Count == 0) return;
+
+            var recent = new TabListSection("נסגרו לאחרונה");
+            foreach (var item in _recentItems)
+            {
+                string key = item.Key;
+                recent.Items.Add(new TabListItem(item.Title, false, () =>
+                {
+                    _viewer.NotifyChromeRecentActivated(key);
+                    _viewer.FocusWebContent();
+                }));
+            }
+            e.Sections.Add(recent);
         }
 
         // ── Vue Ctrl+T → open the strip's tab-list dropdown ─────────────────────────
@@ -190,6 +212,8 @@ namespace KitveiHakodeshLib
         private void Reconcile(TabsStateChangedEventArgs e)
         {
             if (_form.IsDisposed) return;
+
+            _recentItems = e.RecentItems ?? _recentItems;
 
             _syncing = true;
             try

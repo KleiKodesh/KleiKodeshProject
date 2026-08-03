@@ -56,6 +56,7 @@ const KEYS = {
   SETTINGS_COMPACT_MODE: 'app.compactMode',
   SETTINGS_CONTENT_BORDER: 'app.contentBorder',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
+  SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
 
   // Per-feature preferences
@@ -111,6 +112,7 @@ const DEFAULTS = {
   newTabPage: 'homepage' as NewTabPage,
   booksView: 'list' as BooksView,
   pdfPageFilters: false,
+  resumeLastRead: true,
   showClock: false,
   defaultAutoSyncCommentary: false,
   // Number of characters of context shown before and after the matched terms in a search snippet.
@@ -179,6 +181,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const dictionaryZoom = ref(DEFAULTS.dictionaryZoom)
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
   const pdfPageFilters = ref(DEFAULTS.pdfPageFilters)
+  const resumeLastRead = ref(DEFAULTS.resumeLastRead)
   const showClock = ref(DEFAULTS.showClock)
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
@@ -279,6 +282,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const storedNewTabPage = normalizeNewTabPage(lsGet<LegacyNewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE))
     if (storedNewTabPage != null) newTabPage.value = storedNewTabPage
     loadSetting(KEYS.SETTINGS_PDF_FILTERS, pdfPageFilters)
+    loadSetting(KEYS.SETTINGS_RESUME_LAST_READ, resumeLastRead)
     loadSetting(KEYS.SETTINGS_SHOW_CLOCK, showClock)
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
@@ -355,6 +359,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
   persistSetting(pdfPageFilters, KEYS.SETTINGS_PDF_FILTERS)
+  persistSetting(resumeLastRead, KEYS.SETTINGS_RESUME_LAST_READ)
   persistSetting(showClock, KEYS.SETTINGS_SHOW_CLOCK)
   persistSetting(defaultAutoSyncCommentary, KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY)
   persistSetting(searchContextMarginWords, KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN)
@@ -453,6 +458,7 @@ export const useSettingsStore = defineStore('settings', () => {
     dictionaryZoom.value = DEFAULTS.dictionaryZoom
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
+    resumeLastRead.value = DEFAULTS.resumeLastRead
     showClock.value = DEFAULTS.showClock
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
@@ -481,7 +487,7 @@ export const useSettingsStore = defineStore('settings', () => {
     divineNameMode, elokimMode, otherNamesMode, censorOptions, censorCacheKey,
     diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters,
+    useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchWildcardWrap, searchGrammarWrap,

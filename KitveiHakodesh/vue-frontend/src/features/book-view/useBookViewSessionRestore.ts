@@ -9,6 +9,7 @@
 import { ref } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import type { Ref } from 'vue'
 import type { CommentaryTreeState } from './bookViewTypes'
 import { isCommentaryBookUnchecked } from './commentary/uncheckedCommentaryBooks'
@@ -29,6 +30,7 @@ export function useBookViewSessionRestore(
 ) {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
+  const settingsStore = useSettingsStore()
 
   const initialLineIndex = ref<number | undefined>(openTocLineIndex)
   const initialScrollTop = ref<number | undefined>()
@@ -66,11 +68,14 @@ export function useBookViewSessionRestore(
     bookSaved: Awaited<ReturnType<typeof tabStore.getBookViewState>>,
     lastRead: Awaited<ReturnType<typeof tabStore.getLastReadPos>>,
   ) {
-    // Per-tab state wins; the per-book lastRead record is always the fallback, so
-    // opening a book in a brand-new tab resumes where the user left off.
-    const restoredLineId = bookSaved?.selectedLineId ?? lastRead?.selectedLineId
-    const si = bookSaved?.commentaryScrollIndex ?? lastRead?.commentaryScrollIndex
-    const so = bookSaved?.commentaryScrollOffset ?? lastRead?.commentaryScrollOffset
+    // When resumeLastRead is off, only use lastRead as a fallback if there is
+    // already a per-tab bookSaved entry — i.e. the user has visited this book
+    // in this tab before. Opening the same book in a brand-new tab should start
+    // from scratch when the setting is disabled.
+    const useLastRead = settingsStore.resumeLastRead || bookSaved != null
+    const restoredLineId = bookSaved?.selectedLineId ?? (useLastRead ? lastRead?.selectedLineId : undefined)
+    const si = bookSaved?.commentaryScrollIndex ?? (useLastRead ? lastRead?.commentaryScrollIndex : undefined)
+    const so = bookSaved?.commentaryScrollOffset ?? (useLastRead ? lastRead?.commentaryScrollOffset : undefined)
 
     if (bookSaved?.zoom != null) bookViewStore.setLinesZoom(tabId, bookId!, bookSaved.zoom)
     if (bookSaved?.commentaryZoom != null) bookViewStore.setCommentaryZoom(tabId, bookId!, bookSaved.commentaryZoom)
@@ -79,7 +84,8 @@ export function useBookViewSessionRestore(
     }
 
     const savedFilter =
-      bookSaved?.commentaryFilterState ?? lastRead?.commentaryFilterState
+      bookSaved?.commentaryFilterState ??
+      (settingsStore.resumeLastRead ? lastRead?.commentaryFilterState : undefined)
     if (savedFilter) {
       commentaryTreeState.searchQuery = savedFilter.searchQuery
       commentaryTreeState.tokens = savedFilter.tokens ?? []
@@ -93,8 +99,8 @@ export function useBookViewSessionRestore(
     }
 
     if (openTocLineIndex == null) {
-      const scrollIndex = bookSaved?.scrollIndex ?? lastRead?.scrollIndex
-      const scrollOffset = bookSaved?.scrollOffset ?? lastRead?.scrollOffset
+      const scrollIndex = bookSaved?.scrollIndex ?? (useLastRead ? lastRead?.scrollIndex : undefined)
+      const scrollOffset = bookSaved?.scrollOffset ?? (useLastRead ? lastRead?.scrollOffset : undefined)
       if (scrollIndex != null) {
         initialScrollTop.value = scrollIndex
         initialScrollOffset.value = scrollOffset ?? 0
@@ -106,7 +112,7 @@ export function useBookViewSessionRestore(
     // then fall back to old saves that only have commentaryVisible (backward compat).
     const commentaryMode: 'off' | 'bottom' | 'side' | undefined =
       bookSaved?.commentaryMode ??
-      lastRead?.commentaryMode ??
+      (settingsStore.resumeLastRead ? lastRead?.commentaryMode : undefined) ??
       (bookSaved?.commentaryVisible ? 'bottom' : undefined)
 
     if (restoredLineId != null) {
@@ -121,18 +127,20 @@ export function useBookViewSessionRestore(
     }
 
     const commentaryFraction: number | undefined =
-      bookSaved?.commentaryFraction ?? lastRead?.commentaryFraction
+      bookSaved?.commentaryFraction ??
+      (settingsStore.resumeLastRead ? lastRead?.commentaryFraction : undefined)
 
     const stackedCommentaryFraction: number | undefined =
-      bookSaved?.stackedCommentaryFraction ?? lastRead?.stackedCommentaryFraction
+      bookSaved?.stackedCommentaryFraction ??
+      (settingsStore.resumeLastRead ? lastRead?.stackedCommentaryFraction : undefined)
 
     const pinnedCommentaryGroup: import('./bookViewTypes').PinnedCommentaryGroup | null | undefined =
       bookSaved?.pinnedCommentaryGroup ??
-      lastRead?.pinnedCommentaryGroup ??
+      (settingsStore.resumeLastRead ? lastRead?.pinnedCommentaryGroup : undefined) ??
       // Backward compat: old saves only have pinnedCommentaryBookId (bare number)
       (bookSaved?.pinnedCommentaryBookId != null
         ? { bookId: bookSaved.pinnedCommentaryBookId, sectionLabel: '', subSectionLabel: '' }
-        : lastRead?.pinnedCommentaryBookId != null
+        : settingsStore.resumeLastRead && lastRead?.pinnedCommentaryBookId != null
           ? { bookId: lastRead.pinnedCommentaryBookId, sectionLabel: '', subSectionLabel: '' }
           : undefined)
 

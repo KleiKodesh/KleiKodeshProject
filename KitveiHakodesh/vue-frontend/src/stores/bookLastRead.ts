@@ -16,14 +16,6 @@ const LASTREAD_DB = 'app-lastread'
 export interface LastReadState {
   scrollIndex: number
   scrollOffset: number
-  /**
-   * The " · "-joined TOC path the reader was last at, copied from the tab's live
-   * `tocPath` at save time. Display-only: it lets the address-bar's recently-opened
-   * rows show the same "title · path" caption an open tab shows, without having to
-   * resolve the path from `selectedLineId` on every dropdown open. Absent on records
-   * written before this field existed, and on books with no TOC.
-   */
-  tocPath?: string
   selectedLineId?: number | null
   commentaryScrollIndex?: number | null
   commentaryScrollOffset?: number | null
@@ -99,13 +91,6 @@ export function getLastReadPos(bookId: number): Promise<LastReadState | null> {
 }
 
 export function setLastReadPos(bookId: number, position: LastReadState): Promise<void> {
-  // tocPath is resolved asynchronously by the scroll sync, so a save can legitimately
-  // arrive before the breadcrumb exists. Writes replace the whole record, so carry the
-  // last known path forward instead of letting an early save erase it.
-  if (position.tocPath === undefined) {
-    const previous = lastReadCache.get(bookId)?.tocPath
-    if (previous !== undefined) position = { ...position, tocPath: previous }
-  }
   lastReadCache.set(bookId, position)
   // FIFO eviction — Map iterates in insertion order, so the first key is the oldest.
   if (lastReadCache.size > MEMORY_CACHE_MAX) {

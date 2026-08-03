@@ -11,7 +11,8 @@ import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 
 const settings = useSettingsStore()
-const { divineNameMode, newTabPage, defaultAutoSyncCommentary } = storeToRefs(settings)
+const { divineNameMode, newTabPage, resumeLastRead, defaultAutoSyncCommentary } =
+  storeToRefs(settings)
 
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
@@ -77,6 +78,18 @@ function pickCity(name: string) {
       <div class="step-card">
         <SettingRow label="כיסוי שם ה'" wrap>
           <ToggleGroup v-model="divineNameMode" :options="[...DIVINE_NAME_MODE_OPTIONS]" />
+        </SettingRow>
+        <SettingRow
+          label="זכור מיקום אחרון בספר"
+          title="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+        >
+          <ToggleGroup
+            v-model="resumeLastRead"
+            :options="[
+              { label: 'כן', value: true },
+              { label: 'לא', value: false },
+            ]"
+          />
         </SettingRow>
         <SettingRow label="פתח טאב חדש אל" wrap>
           <ToggleGroup
