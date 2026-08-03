@@ -156,6 +156,14 @@ export const useTabStore = defineStore('tabs', () => {
       const liveIds = new Set(tabs.value.map((t) => t.id))
       recentTabs.value = saved.map((t) => ({ ...t, open: liveIds.has(t.id) }))
       recentStampTick = saved.reduce((max, t) => Math.max(max, t.recentStamp ?? 0), 0)
+      // Closed entries still own their tab ids, but nextId was restored from the
+      // LIVE list alone — so a new tab could be minted with an id a remembered
+      // entry already holds. Reopening that entry would then collide with the live
+      // tab and appear to do nothing. Reserve past every id this list knows.
+      for (const t of saved) {
+        const n = Number(t.id)
+        if (Number.isFinite(n) && n > nextId) nextId = n
+      }
       // Tabs restored from localStorage that this list has never seen (saved by a
       // build without it) join now, so the list starts complete rather than empty.
       for (const tab of tabs.value) {
@@ -627,18 +635,28 @@ export const useTabStore = defineStore('tabs', () => {
   function reopenRecentTab(id: string) {
     const existing = tabs.value.find((t) => t.id === id)
     if (existing) {
-      switchTab(id)
+      // Live tab: activate it wherever it actually lives. A pane-2 tab has to be
+      // switched in pane 2 — switchTab would set pane2ActiveTabId and return,
+      // leaving pane 1 unchanged and the click looking dead.
+      if (existing.pane === 2 && useBookViewStore().splitViewEnabled) {
+        switchPaneTab(id, 2)
+      } else {
+        switchTab(id)
+      }
       return existing
     }
     const entry = recentTabs.value.find((t) => t.id === id)
     if (!entry) return undefined
     const { recentStamp: _s, open: _o, ...tab } = entry
-    // Reopening into pane 1: a stale pane-2 marker would hide the tab in a pane
-    // that may not even be open.
+    // Revive into pane 1. The entry may carry pane: 2 from the session in which it
+    // was closed (a strip close of a split-view tab keeps that marker); leaving it
+    // set would file the tab into a pane that need not even be open, so the row
+    // would appear to do nothing.
     const revived: Tab = { ...(tab as Tab), pane: 1 }
     tabs.value.push(revived)
-    activeTabId.value = revived.id
     entry.open = true
+    entry.pane = 1
+    switchTab(revived.id)
     markAccessed(revived.id)
     return revived
   }
