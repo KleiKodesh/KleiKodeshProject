@@ -18,10 +18,11 @@ The exact reading position must survive:
 1. **Tab switches** — leaving a book-view tab and returning to it (the page component
    is keyed by tab and remounts).
 2. **Session reload** — closing and reopening the app.
-3. **"זכרו מיקום אחרון בספר"** (Settings → resumeLastRead, default on) — opening the
-   same book in a *new* tab restores the last position saved for that book
-   (per-book `lastRead` record). When the setting is off, a brand-new tab starts
-   from the top, but an existing tab's own saved state still restores.
+3. **Reopening a book in a new tab** — opening the same book in a *new* tab restores
+   the last position saved for that book (per-book `lastRead` record). This is
+   always on: it used to be the optional "זכור מיקום אחרון בספר" setting, which was
+   removed in favor of hardcoded resume. Per-tab `bookViewState` still takes
+   precedence over the per-book record when both exist.
 
 **How the position is stored:** not as a raw `scrollTop` — that is meaningless in a
 virtualized list whose sizes are estimates — but as

@@ -21,7 +21,6 @@ export function useSettings() {
     useSeparateCommentarySettings,
     appZoom,
     newTabPage,
-    resumeLastRead,
   } = storeToRefs(settings)
 
   watch([useSeparateCommentarySettings, headerFont, textFont, fontSize, linePadding], () => {
@@ -63,7 +62,6 @@ export function useSettings() {
     useSeparateCommentarySettings,
     appZoom,
     newTabPage,
-    resumeLastRead,
     resetSettings,
     resetSearchIndex: resetSearchIndexAction,
     resetDocumentLocatorIndex: resetDocumentLocatorIndexAction,
