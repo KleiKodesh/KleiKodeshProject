@@ -101,7 +101,21 @@ const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
 
 const recentlyOpenedStore = useRecentlyOpenedStore()
 const recentEntries = ref<RecentlyOpenedEntry[]>([])
-recentlyOpenedStore.getList().then((list) => { recentEntries.value = list })
+// Book rows show the same "title · TOC path" caption an open tab shows. The path is
+// position data, so it lives on the per-book lastRead record rather than on the
+// recently-opened entry — joined here by bookId. File routes have no TOC and older
+// records predate the field, so a missing path just renders the bare title.
+recentlyOpenedStore.getList().then(async (list) => {
+  recentEntries.value = list
+  const paths = await Promise.all(
+    list.map((e) =>
+      e.route === '/book-view' && e.bookId !== undefined
+        ? tabStore.getLastReadPos(e.bookId).then((p) => p?.tocPath)
+        : Promise.resolve(undefined),
+    ),
+  )
+  recentEntries.value = list.map((e, i) => (paths[i] ? { ...e, tocPath: paths[i] } : e))
+})
 const dropdownRecentEntries = computed(() => (hasAnyResults() ? [] : recentEntries.value))
 
 function onSelectTab(id: string) {

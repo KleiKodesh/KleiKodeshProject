@@ -350,8 +350,14 @@ export function useBookViewLinesScroll(
         autoSelectTopLine: autoSelectTopLine.value,
         pinnedCommentaryGroup: pinnedGroup,
       })
+      // Carry the tab's live breadcrumb into the per-book record so the
+      // recently-opened rows can show "title · path" like an open tab does.
+      // Omitted while the breadcrumb is still unresolved; setLastReadPos then
+      // keeps whatever path was saved before.
+      const tocPath = tabStore.tabs.find((t) => t.id === tabId)?.tocPath
       tabStore.setLastReadPos(bookId, {
         ...position,
+        ...(tocPath ? { tocPath } : {}),
         selectedLineId: props.selectedLineId,
         commentaryScrollIndex: props.commentaryScrollIndex,
         commentaryScrollOffset: props.commentaryScrollOffset,
