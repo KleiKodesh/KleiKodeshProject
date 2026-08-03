@@ -8,17 +8,21 @@
  * results, and Enter → full-text search in the active tab.
  *
  * The dropdown doubles as the pane's tab list (replacing the old title-bar tab
- * dropdown): it is open for the whole life of the address bar, showing the
- * open tabs — with the recently-opened documents (the home-page tile
- * collection) below them — whenever there are no search results: empty input,
- * a too-short query, or a query that matched nothing. Results otherwise.
+ * dropdown): it is open for the whole life of the address bar, showing the tab
+ * list whenever there are no search results — empty input, a too-short query, or
+ * a query that matched nothing. Results otherwise.
+ *
+ * That list is tabStore.recentTabs, which keeps an entry after its tab closes, so
+ * open and recently-closed tabs appear together as one list. There is deliberately
+ * no second "recently opened" section: it would repeat the same documents without
+ * their TOC breadcrumbs.
  *
  * The title bar owns when this component is shown (search mode) and reuses the
  * pane it belongs to for all navigation, so results open in the right pane.
  */
 import { ref, computed, nextTick, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
-import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeSearchDropdown from '@/features/home/HomeSearchDropdown.vue'
 import { useHomeSearch, type FileSearchResult } from '@/features/home/useHomeSearch'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
@@ -29,7 +33,6 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
-import { useRecentlyOpenedStore, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 
@@ -90,41 +93,37 @@ const {
 
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
 
-// ── Tab list + recents (dropdown fallback content) ────────────────────────────
-// The dropdown shows the pane's open tabs — with the recently-opened documents
-// (the home-page tile collection) below them — whenever the search has nothing
-// to show: empty/short query or a query with no matches. Results otherwise.
-// Ordered most-recently-active first (pane.mruTabs) — a display order for this
-// list only; the pane's real tab order and the chrome tab strip are untouched.
-const visibleTabs = computed(() => pane.mruTabs.value.filter((t) => t.route !== '/settings'))
+// ── Tab list (dropdown fallback content) ──────────────────────────────────────
+// Shown whenever the search has nothing to display: empty/short query, or a query
+// with no matches. Results otherwise.
+//
+// The source is tabStore.recentTabs, which keeps an entry after its tab closes, so
+// this single list covers both the open tabs and the recently closed ones. Sorted
+// most-recently-used first, which puts the live tabs on top in practice without
+// needing a separate section. A display order for this list only — the pane's real
+// tab order and the chrome tab strip are untouched.
+const visibleTabs = computed(() =>
+  [...tabStore.recentTabs]
+    .filter((t) => t.route !== '/settings')
+    .sort((a, b) => b.recentStamp - a.recentStamp),
+)
 const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
 
-const recentlyOpenedStore = useRecentlyOpenedStore()
-const recentEntries = ref<RecentlyOpenedEntry[]>([])
-recentlyOpenedStore.getList().then((list) => { recentEntries.value = list })
-const dropdownRecentEntries = computed(() => (hasAnyResults() ? [] : recentEntries.value))
+// No separate recently-opened section: the tab list above already keeps an entry
+// after its tab closes, so a "recently opened" list beside it would show the same
+// documents twice — once with its TOC breadcrumb and once without.
+// recentlyOpenedStore still backs the home-page tiles; it just isn't a section here.
 
 function onSelectTab(id: string) {
-  pane.switchTab(id)
+  // The row may be a closed tab — reopening revives it under its original id, so
+  // its own reading position comes back with it. Live tabs just get focus.
+  tabStore.reopenRecentTab(id)
   close()
 }
 
-function onCloseTab(id: string) {
-  // Keep the dropdown open — closing tabs from the list is a batch gesture.
-  pane.closeTab(id)
-}
-
-// Recents navigate the CURRENT tab (like search results); a Ctrl/⌘/middle-click
-// opens a new tab instead (openInNewTab, mirroring HomePage). File entries
-// follow the tabMirror flow: place the tab, then let the shared history-restore
-// (openFromHistory) fill it in.
-function onSelectRecent(entry: RecentlyOpenedEntry, openInNewTab = false) {
-  if (entry.route === '/book-view' && entry.bookId !== undefined) {
-    pane.openOrUpdateActiveTab({ route: '/book-view', title: entry.title, bookId: entry.bookId }, openInNewTab)
-  } else {
-    localFileStore.openFromHistory(entry, openInNewTab)
-  }
-  close()
+function onForgetTab(id: string) {
+  // Keep the dropdown open — pruning the list is a batch gesture.
+  tabStore.forgetRecentTab(id)
 }
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
@@ -314,13 +313,13 @@ nextTick(() => {
       @keydown="onKeydown"
     />
     <button
+      v-if="searchQuery.trim()"
       class="address-bar__button"
       tabindex="-1"
-      :title="searchQuery.trim() ? 'חיפוש תוכן במאגר (Enter)' : 'סגור'"
-      @click.stop="searchQuery.trim() ? launchFullTextSearch() : close()"
+      title="חיפוש תוכן במאגר (Enter)"
+      @click.stop="launchFullTextSearch()"
     >
-      <IconSearch20Regular v-if="searchQuery.trim()" />
-      <IconDismiss20Regular v-else />
+      <IconSearch20Regular />
     </button>
     <HomeSearchDropdown
       v-if="isDropdownOpen"
@@ -339,14 +338,12 @@ nextTick(() => {
       :max-height="maxHeight"
       :tabs="dropdownTabs"
       :active-tab-id="pane.activeTabId.value"
-      :recent-entries="dropdownRecentEntries"
       @select-catalog-book="onSelectCatalogBook"
       @select-catalog-toc="onSelectCatalogToc"
       @select-hebrew-book="onSelectHebrewBook"
       @select-file="onSelectFile"
       @select-tab="onSelectTab"
-      @close-tab="onCloseTab"
-      @select-recent="onSelectRecent"
+      @forget-tab="onForgetTab"
       @dropdown-focused="pauseSearch"
       @dropdown-blurred="resumeSearch"
     />
@@ -396,9 +393,8 @@ nextTick(() => {
   color: var(--text-secondary);
   opacity: 0.7;
 }
-/* Hide the native search-type clear (×) — we render our own trailing button. */
 .address-bar__field::-webkit-search-cancel-button {
-  display: none;
+  filter: grayscale(1) opacity(0.4);
 }
 .address-bar__button {
   flex-shrink: 0;
