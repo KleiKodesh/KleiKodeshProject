@@ -59,6 +59,12 @@ export interface Tab {
   openToc?: boolean
   openTocEntryId?: number
   openTocLineIndex?: number
+  // Bumped to force a book-view remount when navigating within the SAME book.
+  // BookView reads openTocEntryId/openTocLineIndex once at setup, and AppPageView's
+  // pageKey is tabId:bookId — unchanged for the same book — so a same-book jump
+  // (a "נפתחו לאחרונה" row, a catalog TOC hit) would otherwise do nothing.
+  // Not persisted: it only matters for the navigation that sets it.
+  navNonce?: number
   // Set when the book is opened from a VSTO host deep link (otzaria:// / zayit://).
   // Triggers a momentary background flash on the target line, then fades. Consumed
   // and cleared on open like the openToc* fields.
@@ -90,7 +96,7 @@ export interface Tab {
 }
 
 interface PersistedTabList {
-  tabs: Omit<Tab, 'localFileVirtualUrl' | 'openToc'>[]
+  tabs: Omit<Tab, 'localFileVirtualUrl' | 'openToc' | 'navNonce'>[]
   activeTabId: string
   nextId: number
   /**
@@ -108,6 +114,14 @@ export const useTabStore = defineStore('tabs', () => {
   // Active tab for the secondary (right) pane in split view. Empty string means no pane 2 tab exists yet.
   const pane2ActiveTabId = ref('')
   let nextId = 1
+
+  // Monotonic counter for Tab.navNonce — see its declaration. Callers navigating
+  // within an already-open book bump it so the page remounts and picks up the new
+  // openTocLineIndex/openTocEntryId.
+  let navNonceCounter = 0
+  function nextNavNonce(): number {
+    return ++navNonceCounter
+  }
 
   // Access order (MRU) — see the mruTabsForPane section below. Declared up here
   // because init() restores it alongside the tab list.
@@ -177,6 +191,7 @@ export const useTabStore = defineStore('tabs', () => {
           openToc,
           openTocEntryId,
           openTocLineIndex,
+          navNonce,
           searchHighlightLineIndex,
           searchHighlightQuery,
           searchHighlightSnippet,
@@ -713,6 +728,7 @@ export const useTabStore = defineStore('tabs', () => {
     updateTab,
     openNewHomeTab,
     navigateToSingleton,
+    nextNavNonce,
     getLastReadPos,
     setLastReadPos,
     getTabViewState,
