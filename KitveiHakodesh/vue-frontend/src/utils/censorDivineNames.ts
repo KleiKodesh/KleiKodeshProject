@@ -12,7 +12,7 @@
  * How the four-letter name (יהוה) is rendered.
  *
  * This setting covers the tetragrammaton only. The other divine names have their
- * own settings — see ElokimMode (אלהים family) and OtherNamesMode (אדני, אל, שדי).
+ * own settings — see ElokimMode (אלהים family) and OtherNameKey (אדני, אל, שדי).
  * 'none' here is the master off switch: it disables all censoring.
  *
  * - 'none'      — no censoring at all, text passes through untouched
@@ -80,25 +80,35 @@ export const ELOKIM_MODE_OPTIONS: readonly { value: ElokimMode; label: string }[
 export const DEFAULT_ELOKIM_MODE: ElokimMode = 'hyphen'
 
 /**
- * How the divine names with no ה (אדני, אל, שדי) are censored.
- *
- * Letter substitution does not apply to these — there is no ה to swap — so the
- * only choice is whether to break them with a separator or leave them as-is.
- *
- * - 'hyphen' — אדנ‑י, א‑ל, ש‑די
- * - 'none'   — printed in full, uncensored
+ * The remaining names from the Shulchan Aruch's list of seven that may not be
+ * erased (YD 276): אדני, אל, שדי, יה, צבאות, אהיה. None of these get letter
+ * substitution — for אדני/אל/שדי/צבאות there is no ה to swap; for יה/אהיה the
+ * ה carries the whole word, so swapping it would leave nothing recognisable.
+ * Each name is independently either hyphen-separated (אדנ‑י) or left as-is.
+ * Selection replaces the old single hyphen/none toggle: the user picks which
+ * names to censor.
  */
-export type OtherNamesMode = 'hyphen' | 'none'
+export type OtherNameKey = 'adnai' | 'el' | 'shadai' | 'yah' | 'tzevaot' | 'ehyeh'
 
-export const OTHER_NAMES_MODES: readonly OtherNamesMode[] = ['hyphen', 'none']
+export const OTHER_NAME_KEYS: readonly OtherNameKey[] = ['adnai', 'el', 'shadai', 'yah', 'tzevaot', 'ehyeh']
 
 /** Hebrew labels for the settings UI, in display order. */
-export const OTHER_NAMES_MODE_OPTIONS: readonly { value: OtherNamesMode; label: string }[] = [
-  { value: 'hyphen', label: 'א‑ל' },
-  { value: 'none', label: 'כתיב מלא' },
+export const OTHER_NAME_OPTIONS: readonly { value: OtherNameKey; label: string }[] = [
+  { value: 'adnai', label: 'אדנ‑י' },
+  { value: 'el', label: 'א‑ל' },
+  { value: 'shadai', label: 'ש‑די' },
+  { value: 'yah', label: 'י‑ה' },
+  { value: 'tzevaot', label: 'צ‑באות' },
+  { value: 'ehyeh', label: 'א‑היה' },
 ]
 
-export const DEFAULT_OTHER_NAMES_MODE: OtherNamesMode = 'hyphen'
+/**
+ * Every name except אהיה is censored by default. אהיה is spelled identically
+ * to the mundane verb "I will be" outside of its one appearance in Shemot 3:14
+ * (אהיה אשר אהיה), so blanket-censoring it would hit ordinary text; leave it
+ * opt-in rather than on by default.
+ */
+export const DEFAULT_OTHER_NAMES_SELECTED: readonly OtherNameKey[] = ['adnai', 'el', 'shadai', 'yah', 'tzevaot']
 
 /**
  * Coerce a persisted value into a valid mode.
@@ -122,10 +132,16 @@ export function normalizeElokimMode(value: unknown): ElokimMode | null {
   return null
 }
 
-/** Coerce a persisted value into a valid OtherNamesMode, or null to keep the default. */
-export function normalizeOtherNamesMode(value: unknown): OtherNamesMode | null {
-  if (typeof value === 'string' && (OTHER_NAMES_MODES as readonly string[]).includes(value)) {
-    return value as OtherNamesMode
+/**
+ * Coerce a persisted value into a valid list of selected other-name keys, or
+ * null to keep the default. Migrates the legacy mode string: 'hyphen' → all
+ * names selected, 'none' → none selected.
+ */
+export function normalizeOtherNamesSelected(value: unknown): OtherNameKey[] | null {
+  if (value === 'hyphen') return [...DEFAULT_OTHER_NAMES_SELECTED]
+  if (value === 'none') return []
+  if (Array.isArray(value) && value.every((v) => (OTHER_NAME_KEYS as readonly string[]).includes(v))) {
+    return value as OtherNameKey[]
   }
   return null
 }
@@ -229,22 +245,6 @@ function tetragrammatonRule(mode: Exclude<DivineNameMode, 'none'>): Rule {
 }
 
 /**
- * יה — always hyphenated (י‑הּ), in every mode.
- *
- * It does contain a ה, but it is a two-letter name where the ה carries the whole
- * word: swapping it (יק / יד) leaves nothing recognisable, so the אלהים
- * substitution setting deliberately does not reach this rule.
- */
-function yahRule(): Rule {
-  // Matches י with kamatz (ָ) followed by ה with any diacritics/teamim, as a standalone word.
-  // Must come after the יהוה rule so it never fires mid-match on the four-letter name.
-  return {
-    regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
-    replacement: (_m: string, y: string, h: string) => y + SEP + h,
-  }
-}
-
-/**
  * The אלהים family (אלהים, אלוהים, אלהי, אלוה).
  *
  * Each rule captures the ה as its own group, so 'kuf'/'daled' can swap just that
@@ -294,19 +294,27 @@ function elokimRules(mode: ElokimMode): Rule[] {
 
 /**
  * The divine names containing no ה: אדני, אל, שדי.
+ * Also covers יה: it does contain a ה, but it is a two-letter name where the ה
+ * carries the whole word — swapping it (יק / יד) would leave nothing
+ * recognisable — so it only ever gets the hyphen treatment, never substitution.
  *
- * There is no letter to substitute here, so these are either separated or left
- * alone — see OtherNamesMode.
+ * There is no letter to substitute in any of these four, so each is either
+ * separated or left alone, independently of the others — see OtherNameKey.
  */
-function noHeNameRules(): Rule[] {
-  return [
+function noHeNameRules(selected: readonly OtherNameKey[]): Rule[] {
+  const rules: Rule[] = []
+
+  if (selected.includes('adnai')) {
     // אדני → אדנ-י
     // Only censor when the נ carries a kamatz (ָ), which identifies the divine name אֲדֹנָי.
     // Any other vowel on the נ (chirik, patach, etc.) is a regular word — skip.
-    {
+    rules.push({
       regex: new RegExp(`(א${D})(ד${D})(נ[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
       replacement: `$1$2$3${SEP}$4`,
-    },
+    })
+  }
+
+  if (selected.includes('el')) {
     // אל with tsere (צרה) → א-ל
     // Tsere is ֵ. Only censor when אל stands as its own word — meaning the character
     // before any prefix must be a non-Hebrew character (space, punctuation, start of string).
@@ -314,7 +322,7 @@ function noHeNameRules(): Rule[] {
     // Prefix letters are listed as plain Unicode code points to avoid embedding nikkud inside
     // the character class. The prefix(es) are captured as group 1 and restored unchanged.
     // ב=ב ו=ו כ=כ ל=ל מ=מ ש=ש ה=ה
-    {
+    rules.push({
       regex: new RegExp(
         `(?:^|(?<=[^\\u05D0-\\u05EA\\u0591-\\u05C7]))` +
         `([\\u05D1\\u05D5\\u05DB\\u05DC\\u05DE\\u05E9\\u05D4]${D}(?:[\\u05D1\\u05D5\\u05DB\\u05DC\\u05DE\\u05E9\\u05D4]${D})?)?(א[\\u0591-\\u05C7]*\\u05B5[\\u0591-\\u05C7]*)(ל${D})${HWB}`,
@@ -322,19 +330,65 @@ function noHeNameRules(): Rule[] {
       ),
       replacement: (_m: string, prefix: string | undefined, a: string, l: string) =>
         (prefix ?? '') + a + SEP + l,
-    },
+    })
+  }
+
+  if (selected.includes('shadai')) {
     // שדי with patach under shin and kamatz under dalet → ש-די
     // Patach = ַ, Kamatz = ָ
-    {
+    rules.push({
       regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B8[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
       replacement: (_m: string, sh: string, d: string, y: string) => sh + SEP + d + y,
-    },
+    })
     // שדי with patach under shin and patach under dalet → ש-די
-    {
+    rules.push({
       regex: new RegExp(`(ש\\u05B7[\\u0591-\\u05C7]*)(ד\\u05B7[\\u0591-\\u05C7]*)(י${D})${HWB}`, 'g'),
       replacement: (_m: string, sh: string, d: string, y: string) => sh + SEP + d + y,
-    },
-  ]
+    })
+  }
+
+  if (selected.includes('yah')) {
+    // יה → י-ה
+    // Matches י with kamatz (ָ) followed by ה with any diacritics/teamim, as a standalone word.
+    // Must run after the יהוה rule so it never fires mid-match on the four-letter name.
+    rules.push({
+      regex: new RegExp(`(י[\\u0591-\\u05C7]*\\u05B8[\\u0591-\\u05C7]*)(ה${D})${HWB}`, 'g'),
+      replacement: (_m: string, y: string, h: string) => y + SEP + h,
+    })
+  }
+
+  if (selected.includes('tzevaot')) {
+    // צבאות → צ-באות
+    // Standalone word — צ ב א ו ת with any diacritics, split after the צ.
+    rules.push({
+      regex: new RegExp(`(צ${D})(ב${D}א${D}ו${D}ת${D})${HWB}`, 'g'),
+      replacement: (_m: string, tz: string, rest: string) => tz + SEP + rest,
+    })
+  }
+
+  if (selected.includes('ehyeh')) {
+    // אהיה → א-היה  (only the phrase אהיה אשר אהיה, Shemot 3:14)
+    // The bare word אהיה is also the ordinary verb "I will be" everywhere else in
+    // Tanach, so only censor when followed by אשר אהיה — the specific divine Name.
+    rules.push({
+      regex: new RegExp(
+        `(א${D})(ה${D}י${D}ה${D})(?=\\s+א${D}ש${D}ר${D}\\s+א${D}ה${D}י${D}ה${D})`,
+        'g',
+      ),
+      replacement: (_m: string, a: string, rest: string) => a + SEP + rest,
+    })
+    // The trailing אהיה in the phrase — censor it too, once the phrase is confirmed
+    // by the lookbehind mirroring the lookahead above.
+    rules.push({
+      regex: new RegExp(
+        `(?<=א${D}ש${D}ר${D}\\s+)(א${D})(ה${D}י${D}ה${D})${HWB}`,
+        'g',
+      ),
+      replacement: (_m: string, a: string, rest: string) => a + SEP + rest,
+    })
+  }
+
+  return rules
 }
 
 /** The three independent censoring choices. */
@@ -343,8 +397,8 @@ export interface CensorOptions {
   mode?: DivineNameMode
   /** How the אלהים family is censored. */
   elokim?: ElokimMode
-  /** How the names with no ה (אדני, אל, שדי) are censored. */
-  otherNames?: OtherNamesMode
+  /** Which of the names with no ה (אדני, אל, שדי) are censored. */
+  otherNames?: readonly OtherNameKey[]
 }
 
 /**
@@ -364,16 +418,15 @@ export function censorDivineNames(
   const {
     mode = DEFAULT_DIVINE_NAME_MODE,
     elokim = DEFAULT_ELOKIM_MODE,
-    otherNames = DEFAULT_OTHER_NAMES_MODE,
+    otherNames = DEFAULT_OTHER_NAMES_SELECTED,
   } = typeof options === 'string' ? { mode: options } : options
 
   if (mode === 'none') return text
 
   const rules = [
     tetragrammatonRule(mode),
-    yahRule(),
     ...elokimRules(elokim),
-    ...(otherNames === 'hyphen' ? noHeNameRules() : []),
+    ...noHeNameRules(otherNames),
   ]
 
   let result = text

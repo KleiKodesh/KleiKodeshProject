@@ -72,14 +72,14 @@ import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
   DEFAULT_DIVINE_NAME_MODE,
   DEFAULT_ELOKIM_MODE,
-  DEFAULT_OTHER_NAMES_MODE,
+  DEFAULT_OTHER_NAMES_SELECTED,
   normalizeDivineNameMode,
   normalizeElokimMode,
-  normalizeOtherNamesMode,
+  normalizeOtherNamesSelected,
   type CensorOptions,
   type DivineNameMode,
   type ElokimMode,
-  type OtherNamesMode,
+  type OtherNameKey,
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
@@ -96,7 +96,7 @@ const DEFAULTS = {
   // ('none' disables all censoring); the other two cover the other names.
   divineNameMode: DEFAULT_DIVINE_NAME_MODE,
   elokimMode: DEFAULT_ELOKIM_MODE,
-  otherNamesMode: DEFAULT_OTHER_NAMES_MODE,
+  otherNamesSelected: DEFAULT_OTHER_NAMES_SELECTED,
   diacriticsState: 0,
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
@@ -166,7 +166,7 @@ function clearPersistedSettings(): void {
 export const useSettingsStore = defineStore('settings', () => {
   const divineNameMode = ref<DivineNameMode>(DEFAULTS.divineNameMode)
   const elokimMode = ref<ElokimMode>(DEFAULTS.elokimMode)
-  const otherNamesMode = ref<OtherNamesMode>(DEFAULTS.otherNamesMode)
+  const otherNamesSelected = ref<OtherNameKey[]>([...DEFAULTS.otherNamesSelected])
   const diacriticsState = ref(DEFAULTS.diacriticsState)
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
@@ -265,8 +265,8 @@ export const useSettingsStore = defineStore('settings', () => {
     if (storedDivineNameMode != null) divineNameMode.value = storedDivineNameMode
     const storedElokimMode = normalizeElokimMode(lsGet(KEYS.SETTINGS_CENSOR_ELOKIM))
     if (storedElokimMode != null) elokimMode.value = storedElokimMode
-    const storedOtherNamesMode = normalizeOtherNamesMode(lsGet(KEYS.SETTINGS_CENSOR_OTHER_NAMES))
-    if (storedOtherNamesMode != null) otherNamesMode.value = storedOtherNamesMode
+    const storedOtherNamesSelected = normalizeOtherNamesSelected(lsGet(KEYS.SETTINGS_CENSOR_OTHER_NAMES))
+    if (storedOtherNamesSelected != null) otherNamesSelected.value = storedOtherNamesSelected
     loadSetting(KEYS.SETTINGS_DIACRITICS, diacriticsState)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
@@ -344,7 +344,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   persistSetting(divineNameMode, KEYS.SETTINGS_CENSOR_DIVINE, applyCSSVariables)
   persistSetting(elokimMode, KEYS.SETTINGS_CENSOR_ELOKIM)
-  persistSetting(otherNamesMode, KEYS.SETTINGS_CENSOR_OTHER_NAMES)
+  persistSetting(otherNamesSelected, KEYS.SETTINGS_CENSOR_OTHER_NAMES)
   persistSetting(diacriticsState, KEYS.SETTINGS_DIACRITICS)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
@@ -397,12 +397,12 @@ export const useSettingsStore = defineStore('settings', () => {
   const censorOptions = computed<CensorOptions>(() => ({
     mode: divineNameMode.value,
     elokim: elokimMode.value,
-    otherNames: otherNamesMode.value,
+    otherNames: otherNamesSelected.value,
   }))
 
   /** Stable cache key for the censoring settings. */
   const censorCacheKey = computed(
-    () => `${divineNameMode.value}:${elokimMode.value}:${otherNamesMode.value}`,
+    () => `${divineNameMode.value}:${elokimMode.value}:${[...otherNamesSelected.value].sort().join(',')}`,
   )
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -443,7 +443,7 @@ export const useSettingsStore = defineStore('settings', () => {
   function reset() {
     divineNameMode.value = DEFAULTS.divineNameMode
     elokimMode.value = DEFAULTS.elokimMode
-    otherNamesMode.value = DEFAULTS.otherNamesMode
+    otherNamesSelected.value = [...DEFAULTS.otherNamesSelected]
     diacriticsState.value = DEFAULTS.diacriticsState
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
@@ -484,7 +484,7 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   return {
-    divineNameMode, elokimMode, otherNamesMode, censorOptions, censorCacheKey,
+    divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
     diacriticsState, headerFont, textFont, fontSize, linePadding,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
