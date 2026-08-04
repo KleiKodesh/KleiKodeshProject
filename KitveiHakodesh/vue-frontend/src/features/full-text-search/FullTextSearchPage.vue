@@ -376,40 +376,42 @@ onBeforeUnmount(() => {
 
     <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />
 
-    <FullTextSearchAdvancedPanel
-      v-if="isAdvancedOpen"
-      :max-word-distance="maxWordDistance"
-      :require-ordered="requireOrdered"
-      :context-words="settings.searchContextMarginWords"
-      :expand-ketiv="expandKetiv"
-      :expand-related="expandRelated"
-      :grammar-wrap="grammarWrap"
-      @update:max-word-distance="maxWordDistance = $event"
-      @update:require-ordered="requireOrdered = $event"
-      @update:context-words="settings.searchContextMarginWords = $event"
-      @update:expand-ketiv="expandKetiv = $event"
-      @update:expand-related="expandRelated = $event"
-      @update:grammar-wrap="grammarWrap = $event"
-      @close="isAdvancedOpen = false"
-    />
+    <div class="search-bar-dock">
+      <FullTextSearchAdvancedPanel
+        v-if="isAdvancedOpen"
+        :max-word-distance="maxWordDistance"
+        :require-ordered="requireOrdered"
+        :context-words="settings.searchContextMarginWords"
+        :expand-ketiv="expandKetiv"
+        :expand-related="expandRelated"
+        :grammar-wrap="grammarWrap"
+        @update:max-word-distance="maxWordDistance = $event"
+        @update:require-ordered="requireOrdered = $event"
+        @update:context-words="settings.searchContextMarginWords = $event"
+        @update:expand-ketiv="expandKetiv = $event"
+        @update:expand-related="expandRelated = $event"
+        @update:grammar-wrap="grammarWrap = $event"
+        @close="isAdvancedOpen = false"
+      />
 
-    <FullTextSearchBar
-      ref="searchBarRef"
-      v-model:search-query="searchQuery"
-      :is-searching="isSearching"
-      :result-count="filteredResults.length"
-      :total-result-count="results.length"
-      :filter-count="checkedBookIds.size"
-      :at-filter-count="atFilters.length"
-      :is-advanced-open="isAdvancedOpen"
-      :is-advanced-active="isAdvancedActive"
-      v-model:sort-order="sortOrder"
-      @search="onSearch"
-      @cancel="cancelSearch"
-      @toggle-filter="isFilterOpen = !isFilterOpen"
-      @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
-      @clear="onClearSearch"
-    />
+      <FullTextSearchBar
+        ref="searchBarRef"
+        v-model:search-query="searchQuery"
+        :is-searching="isSearching"
+        :result-count="filteredResults.length"
+        :total-result-count="results.length"
+        :filter-count="checkedBookIds.size"
+        :at-filter-count="atFilters.length"
+        :is-advanced-open="isAdvancedOpen"
+        :is-advanced-active="isAdvancedActive"
+        v-model:sort-order="sortOrder"
+        @search="onSearch"
+        @cancel="cancelSearch"
+        @toggle-filter="isFilterOpen = !isFilterOpen"
+        @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
+        @clear="onClearSearch"
+      />
+    </div>
   </div>
 </template>
 
@@ -427,6 +429,15 @@ onBeforeUnmount(() => {
   position: relative;
   display: flex;
   flex-direction: column;
+}
+/* Anchor for the advanced panel: on wide screens it floats as a popup above
+   the search bar, so it needs the bar's top edge as its containing block. */
+.search-bar-dock {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 .results-list-wrap {
   flex: 1;
