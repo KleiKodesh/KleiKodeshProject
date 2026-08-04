@@ -23,10 +23,20 @@ SearchExpansion/
     tools/
       masked.py               masked stdout (see "Output masking")
       sanitize.py             make a Hebrew-free copy of any file
-      syn_blocklist.txt       curated bad dictionary synonym links
+      -- curated INPUTS (committed; edit to change the artifact) --
+      syn_blocklist.txt       bad dictionary synonym links to ignore
       aramaic_fold_manual.tsv human-verified biblical-Aramaic folds (wins over rules)
       aramaic_fold_blocklist.txt surfaces excluded from rule-based folding
+      -- generated OUTPUTS (gitignored; nothing reads them back) --
+      aramaic_fold_overrides.txt  what the Aramaic rules decided this run,
+                                  written for human review (see "Auditing")
+      hashmap.tsv                 [H:xxxx] -> word decode map
 ```
+
+The distinction matters when tuning: the three curated files are **inputs** the
+build consults, so editing them changes the next artifact. The overrides file is
+a **report** the build emits — regenerated from scratch every run, useful only
+to review what the rules did.
 
 ## Schema
 
@@ -135,8 +145,12 @@ Editing these changes the artifact, so re-verify a sample afterwards (see
 
 ## Auditing a regenerated artifact
 
-Word-level quality cannot be judged from counts. The audit method that produced
-the current artifact: render candidate rows to a local HTML page and have a
+Word-level quality cannot be judged from counts. Start from
+`build/tools/aramaic_fold_overrides.txt`, which the build writes with every
+`surface -> lemma` decision its Aramaic rules made — that list is what the
+review rounds below were driven from.
+
+The audit method that produced the current artifact: render candidate rows to a local HTML page and have a
 Hebrew-literate reviewer judge them (fold correctness per surface, channel
 quality per row), reporting by row number. The rule sets are small enough that
 every decision can be reviewed rather than sampled — the biblical-Aramaic fold

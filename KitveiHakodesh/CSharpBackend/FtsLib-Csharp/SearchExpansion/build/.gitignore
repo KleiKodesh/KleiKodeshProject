@@ -3,6 +3,10 @@ expansion-tanach.db
 expansion-seforim.db
 expansion-routed.db
 
+# Audit record of this run's Aramaic fold decisions — regenerated every build,
+# for human review only (the curated inputs are the .tsv/.txt files below).
+tools/aramaic_fold_overrides.txt
+
 # Local hash -> word decode map written by tools/masked.py. Contains corpus
 # words in the clear; never commit it.
 tools/hashmap.tsv

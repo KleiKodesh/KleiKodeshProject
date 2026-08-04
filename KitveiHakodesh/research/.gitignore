@@ -18,3 +18,7 @@ __pycache__/
 *.html
 samples-latest.txt
 dict-link-review.txt
+
+# Generated audit record of the Aramaic fold decisions (written by
+# build_expansion_routed.py for human review; nothing reads it back).
+**/tools/aramaic_fold_overrides.txt
