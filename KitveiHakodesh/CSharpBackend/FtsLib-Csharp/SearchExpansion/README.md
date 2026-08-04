@@ -93,6 +93,27 @@ fold: 39,764 tanach + 1,380,914 library-only
 exp rows: {'tanach': ..., 'library': ..., 'merged_forms': ...}
 ```
 
+## Reproducibility — the artifact tracks its inputs
+
+The build is deterministic **for fixed inputs**, but the inputs are live
+databases outside this repo, so regenerating at a later date legitimately
+produces slightly different numbers. Verified 2026-08-04: rebuilding from an
+untouched checkout reproduced the fold table exactly (1,420,678 rows) and the
+inflection/bridge channels within a few dozen rows, while the synonym channel
+moved by ~1,900 rows (~1%) because `seforim.db` had been updated in between —
+the synonym shape gate depends on corpus frequencies, so a corpus refresh
+shifts which alternatives qualify.
+
+Practical consequences:
+
+- A small diff after regeneration is expected, not a defect. Compare channel
+  counts (`select channel, count(*) from exp group by channel`) rather than
+  file hashes.
+- A LARGE diff means an input changed materially (or a knob was edited) — audit
+  a sample before committing the new artifact.
+- Record which corpus a shipped artifact was built from if that ever matters
+  for a bug report; `meta` holds the design/policy notes but not input versions.
+
 ## Tuning knobs
 
 Editing these changes the artifact, so re-verify a sample afterwards (see
