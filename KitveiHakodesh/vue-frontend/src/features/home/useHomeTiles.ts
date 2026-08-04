@@ -49,7 +49,7 @@ export function useHomeTiles(containerWidth: Ref<number>) {
       // and the native tab strip all show the same thing. The rest are tile-only.
       dbMissing
         ? { label: 'הורד מסד ספרים', icon: IconArrowDownload24Filled, color: '#B5451B' }
-        : { label: 'ספרים', ...tileIcon('library') },
+        : { label: 'קטלוג הספרים', ...tileIcon('library') },
       dbMissing
         ? { label: 'בחר מסד ספרים', icon: IconDatabase24Filled, color: '#3478f6' }
         : { label: 'חיפוש', ...tileIcon('search') },

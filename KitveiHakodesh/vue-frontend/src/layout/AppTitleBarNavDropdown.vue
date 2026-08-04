@@ -32,7 +32,7 @@ function navIcon(key: DocumentIconKey) {
 }
 
 const tiles = [
-  { label: 'ספרים', ...navIcon('library'), shortcut: 'Ctrl+1' },
+  { label: 'קטלוג הספרים', ...navIcon('library'), shortcut: 'Ctrl+1' },
   { label: 'חיפוש', ...navIcon('search'), shortcut: 'Ctrl+2' },
   { label: 'היברו-בוקס', ...navIcon('hbooks'), shortcut: 'Ctrl+3' },
   { label: 'פתח קובץ', ...navIcon('folder'), shortcut: 'Ctrl+4' },

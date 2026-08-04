@@ -16,7 +16,7 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>L</kbd></div><span class="shortcut-description">החלף ערכת נושא</span></div>
     <!-- Quick navigation -->
     <div class="shortcuts-group-label">ניווט מהיר</div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>1</kbd></div><span class="shortcut-description">ספרים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>1</kbd></div><span class="shortcut-description">קטלוג הספרים</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>2</kbd></div><span class="shortcut-description">חיפוש</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>3</kbd></div><span class="shortcut-description">היברו-בוקס</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>4</kbd></div><span class="shortcut-description">פתח קובץ</span></div>

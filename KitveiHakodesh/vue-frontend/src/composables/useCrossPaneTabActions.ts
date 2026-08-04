@@ -45,7 +45,7 @@ export function closeTabAnyPane(tabId: string) {
 // Mirrors ROUTE_MAP in useAppShellPane.ts — the user's configured new-tab page.
 const NEW_TAB_ROUTES: Record<string, { title: string; route: TabRoute }> = {
   homepage: { title: 'בית', route: '/' },
-  openfile: { title: 'ספרים', route: '/books' },
+  openfile: { title: 'קטלוג הספרים', route: '/books' },
   hebrewbooks: { title: 'היברו-בוקס', route: '/hebrewbooks' },
   search: { title: 'חיפוש', route: '/search' },
 }

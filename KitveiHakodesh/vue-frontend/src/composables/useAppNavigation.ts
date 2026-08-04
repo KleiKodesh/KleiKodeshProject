@@ -16,7 +16,7 @@ export function useAppNavigation() {
   const pane = usePaneNavigation()
 
   const SINGLETON_ROUTES: Partial<Record<string, TabRoute>> = {
-    ספרים: '/books',
+    'קטלוג הספרים': '/books',
     הגדרות: '/settings',
     'היברו-בוקס': '/hebrewbooks',
     'סביבות עבודה': '/workspaces',
