@@ -58,7 +58,7 @@ export function useAppTitleBarShortcuts(options: {
 
   /** Quick-nav destinations for Ctrl+1..Ctrl+9, in order. */
   const QUICK_NAV_LABELS = [
-    'ספרים',
+    'קטלוג הספרים',
     'חיפוש',
     'היברו-בוקס',
     'פתח קובץ',
