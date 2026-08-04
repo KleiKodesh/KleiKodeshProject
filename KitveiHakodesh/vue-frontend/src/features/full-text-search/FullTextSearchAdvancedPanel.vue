@@ -135,7 +135,7 @@ function onContextWordsInput(event: Event) {
       <div class="option-row">
         <span class="option-label">
           חיפוש מורחב
-          <span class="option-hint">(נטיות, מילים נרדפות ומקבילות בארמית)</span>
+          <span class="option-hint">(נטיות ומילים נרדפות)</span>
         </span>
         <div class="toggle-group">
           <button
