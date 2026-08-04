@@ -1,0 +1,20 @@
+# Generated indexes and intermediate artifacts — all regenerable, none shipped.
+# The one artifact that ships lives in
+# CSharpBackend/FtsLib-Csharp/SearchExpansion/ and is committed there.
+*.db
+index*/
+wassoc_*/
+
+# Masked-output decode map: contains corpus words in the clear.
+**/tools/hashmap.tsv
+
+# Build output
+**/bin/
+**/obj/
+__pycache__/
+
+# Rendered review pages and word lists: raw corpus words, local-only by policy
+# (regenerate with the build_*_demo / build_*_audit scripts when reviewing).
+*.html
+samples-latest.txt
+dict-link-review.txt

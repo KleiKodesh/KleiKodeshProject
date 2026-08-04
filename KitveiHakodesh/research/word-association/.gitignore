@@ -1,0 +1,25 @@
+# Build output — regenerate with `python build_index.py` (~3.5 s)
+index/
+index-*/
+__pycache__/
+
+# Binary index artifacts, wherever they land
+*.bin
+*.db
+*.db-shm
+*.db-wal
+
+# External-merge scratch (build_large.py spills sorted runs here; can reach
+# tens of GB mid-build and is deleted on success)
+wassoc_*/
+
+# Cached pass-1 vocabulary (regenerated; ~275 KB - 30 MB depending on corpus)
+.vocab-*.json
+
+# Build logs and generated reports
+*.log
+report-*.html
+
+# C# builder output
+**/bin/
+**/obj/

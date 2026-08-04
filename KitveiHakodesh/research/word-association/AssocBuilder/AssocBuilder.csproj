@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- net10 only: this is a build-time tool, and it wants the newest JIT plus
+         Span/SIMD-friendly APIs. Nothing here ships to the net48 hosted path. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>AssocBuilder</RootNamespace>
+    <AssemblyName>AssocBuilder</AssemblyName>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Server GC: the counting phase allocates and drops large arrays in a
+         tight loop across all cores. -->
+    <ServerGarbageCollection>true</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Pinned to match FtsLib / KitveiHakodeshService (avoids a diamond conflict). -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+  </ItemGroup>
+
+</Project>
