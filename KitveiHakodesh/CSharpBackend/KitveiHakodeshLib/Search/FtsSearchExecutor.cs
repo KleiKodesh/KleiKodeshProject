@@ -58,12 +58,6 @@ namespace KitveiHakodeshLib.Search
                 return;
             }
 
-            if (expandRelated)
-            {
-                try { query = SearchExpansion.RewriteQuery(query); }
-                catch (Exception ex) { Console.WriteLine("[FtsSearchExecutor] expansion rewrite failed: " + ex.Message); }
-            }
-
             string searchId = "s" + Interlocked.Increment(ref _nextSearchId);
             var cts = new CancellationTokenSource();
             _searches[searchId] = cts;
@@ -72,7 +66,7 @@ namespace KitveiHakodeshLib.Search
             Console.WriteLine($"[FtsSearchExecutor] Search {searchId} started — query=\"{query}\" skip={skipCount} maxDist={maxWordDist} ordered={reqOrdered} context={contextWords} ketiv={expandKetiv}");
 
             Task searchTask = Task.Run(
-                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, expandKetiv, index, cts.Token));
+                () => RunSearch(searchId, query, skipCount, maxWordDist, reqOrdered, contextWords, expandKetiv, expandRelated, index, cts.Token));
 
             // Observe the task so that any exception escaping RunSearch's own try/catch
             // is logged rather than silently swallowed by the thread pool.
@@ -96,12 +90,21 @@ namespace KitveiHakodeshLib.Search
 
         private void RunSearch(string searchId, string query, int skipCount,
                                int maxWordDistance, bool requireOrdered, int contextWords,
-                               bool expandKetiv,
+                               bool expandKetiv, bool expandRelated,
                                SeforimIndex index, CancellationToken ct)
         {
             int totalResults = 0;
             try
             {
+                // Inside the worker task: the rewrite opens a SQLite file, which
+                // must never run on the UI thread (HandleSearchStart fires on the
+                // WebView2 message thread). Failure degrades to unexpanded search.
+                if (expandRelated)
+                {
+                    try { query = SearchExpansion.RewriteQuery(query); }
+                    catch (Exception ex) { Console.WriteLine("[FtsSearchExecutor] expansion rewrite failed: " + ex.Message); }
+                }
+
                 // Batching strategy:
                 //   Phase 1 — doubling: flush at 1, 2, 4, 8, 16 results.
                 //              Gives the user instant first-result feedback and

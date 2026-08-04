@@ -60,6 +60,20 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
     /// </summary>
     public string RewriteQuery(string query, int perTerm = PerTermLimit)
     {
+        // Expansion must never break a search: any artifact problem (corrupt,
+        // truncated, locked file) degrades to the unexpanded query. On the
+        // streaming path an escaping exception would close the socket with no
+        // response and read as a service outage on the frontend.
+        try { return RewriteCore(query, perTerm); }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "FTS expansion rewrite failed — searching unexpanded");
+            return query;
+        }
+    }
+
+    private string RewriteCore(string query, int perTerm)
+    {
         if (string.IsNullOrWhiteSpace(query) || !IsAvailable) return query;
         if (query.IndexOf('|') >= 0) return query;
 
@@ -102,6 +116,13 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
                     string source = rd.GetString(2);
                     if (channel == "syn" && source != "tanach") continue;
                     if (form == bare || alts.Contains(form)) continue;
+                    // A form the query parser would DROP (too short/long, non-
+                    // Hebrew, whitespace) must never reach the query string: a
+                    // dropped OR-alternative silently merges the next query
+                    // word into this OR group (parser quirk), turning AND into
+                    // OR. Same shape rule as the tokens we expand.
+                    string bareForm = BareHebrew(form);
+                    if (bareForm.Length < 2 || bareForm.Length > 29 || bareForm.Length != form.Length) continue;
                     alts.Add(form);
                 }
             }

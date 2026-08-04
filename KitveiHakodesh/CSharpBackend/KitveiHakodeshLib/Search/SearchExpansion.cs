@@ -81,6 +81,10 @@ namespace KitveiHakodeshLib.Search
                                 string source = rd.GetString(2);
                                 if (channel == "syn" && source != "tanach") continue;
                                 if (form == bare || alts.Contains(form)) continue;
+                                // forms the query parser would drop must never
+                                // reach the query (see the service twin)
+                                string bareForm = BareHebrew(form);
+                                if (bareForm.Length < 2 || bareForm.Length > 29 || bareForm.Length != form.Length) continue;
                                 alts.Add(form);
                             }
                         }
