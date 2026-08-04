@@ -121,6 +121,7 @@ let lastScrollOffset: number | undefined
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
      || !expandKetiv.value
+     || expandRelated.value
      || grammarWrap.value
      || settings.searchContextMarginWords !== 30,
 )
@@ -381,11 +382,13 @@ onBeforeUnmount(() => {
       :require-ordered="requireOrdered"
       :context-words="settings.searchContextMarginWords"
       :expand-ketiv="expandKetiv"
+      :expand-related="expandRelated"
       :grammar-wrap="grammarWrap"
       @update:max-word-distance="maxWordDistance = $event"
       @update:require-ordered="requireOrdered = $event"
       @update:context-words="settings.searchContextMarginWords = $event"
       @update:expand-ketiv="expandKetiv = $event"
+      @update:expand-related="expandRelated = $event"
       @update:grammar-wrap="grammarWrap = $event"
       @close="isAdvancedOpen = false"
     />
@@ -400,8 +403,6 @@ onBeforeUnmount(() => {
       :at-filter-count="atFilters.length"
       :is-advanced-open="isAdvancedOpen"
       :is-advanced-active="isAdvancedActive"
-      :expand-related="expandRelated"
-      @update:expand-related="expandRelated = $event"
       v-model:sort-order="sortOrder"
       @search="onSearch"
       @cancel="cancelSearch"
