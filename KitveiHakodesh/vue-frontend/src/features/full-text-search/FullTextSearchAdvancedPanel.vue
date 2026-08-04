@@ -7,6 +7,7 @@ const props = defineProps<{
   requireOrdered: boolean
   contextWords: number
   expandKetiv: boolean
+  expandRelated: boolean
   grammarWrap: boolean
 }>()
 
@@ -15,6 +16,7 @@ const emit = defineEmits<{
   'update:requireOrdered': [boolean]
   'update:contextWords': [number]
   'update:expandKetiv': [boolean]
+  'update:expandRelated': [boolean]
   'update:grammarWrap': [boolean]
   close: []
 }>()
@@ -125,6 +127,23 @@ function onContextWordsInput(event: Event) {
             class="toggle-btn"
             :class="{ active: props.expandKetiv }"
             @click="emit('update:expandKetiv', true)"
+          >כן</button>
+        </div>
+      </div>
+
+      <!-- Related-forms expansion (inflections / vetted synonyms / Targum bridge) -->
+      <div class="option-row">
+        <span class="option-label">חיפוש מורחב</span>
+        <div class="toggle-group">
+          <button
+            class="toggle-btn"
+            :class="{ active: !props.expandRelated }"
+            @click="emit('update:expandRelated', false)"
+          >לא</button>
+          <button
+            class="toggle-btn"
+            :class="{ active: props.expandRelated }"
+            @click="emit('update:expandRelated', true)"
           >כן</button>
         </div>
       </div>
