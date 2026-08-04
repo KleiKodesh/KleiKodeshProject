@@ -1,0 +1,10 @@
+# Intermediate build products — only the routed artifact (one level up) ships.
+expansion-tanach.db
+expansion-seforim.db
+expansion-routed.db
+
+# Local hash -> word decode map written by tools/masked.py. Contains corpus
+# words in the clear; never commit it.
+tools/hashmap.tsv
+
+__pycache__/
