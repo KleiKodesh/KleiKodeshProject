@@ -133,7 +133,10 @@ function onContextWordsInput(event: Event) {
 
       <!-- Related-forms expansion (inflections / vetted synonyms / Targum bridge) -->
       <div class="option-row">
-        <span class="option-label">חיפוש מורחב</span>
+        <span class="option-label">
+          חיפוש מורחב
+          <span class="option-hint">(נטיות, מילים נרדפות ומקבילות בארמית)</span>
+        </span>
         <div class="toggle-group">
           <button
             class="toggle-btn"
@@ -254,6 +257,11 @@ function onContextWordsInput(event: Event) {
   font-size: 12px;
   color: var(--text-primary);
   flex-shrink: 0;
+}
+.option-hint {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-right: 4px;
 }
 .distance-input {
   width: 56px;
