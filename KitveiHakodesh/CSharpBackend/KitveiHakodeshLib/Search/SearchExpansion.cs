@@ -61,7 +61,7 @@ namespace KitveiHakodeshLib.Search
                         if (sb.Length > 0) sb.Append(' ');
 
                         string bare = BareHebrew(tok);
-                        if (bare.Length < 2 || bare.Length != tok.Length)
+                        if (bare.Length < 2)
                         {
                             sb.Append(tok);
                             continue;
@@ -108,6 +108,7 @@ namespace KitveiHakodeshLib.Search
             foreach (char c in tok)
             {
                 if (c >= 'א' && c <= 'ת') sb.Append(c);
+                else if (c >= '֑' && c <= 'ׇ' && c != '־') continue; // nikud/teamim (maqaf is a separator)
                 else if (c == '"' || c == '\'' || c == '׳' || c == '״') continue;
                 else return "";
             }
