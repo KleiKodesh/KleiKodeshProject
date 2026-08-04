@@ -50,7 +50,13 @@ export function loadRecentTabs(wsId: string): Promise<RecentTab[]> {
 }
 
 export function saveRecentTabs(wsId: string, tabs: RecentTab[]): Promise<void> {
-  return dbSet<PersistedRecentTabs>(RECENT_TABS_DB, key(wsId), { tabs })
+  // IndexedDB structured-clones what it stores, and a Vue reactive proxy is not
+  // cloneable — passing `recentTabs.value` straight through throws DataCloneError.
+  // Deep-copy to plain objects here rather than at each call site, so no caller can
+  // forget. This also drops any accidentally-attached function or DOM value.
+  return dbSet<PersistedRecentTabs>(RECENT_TABS_DB, key(wsId), {
+    tabs: JSON.parse(JSON.stringify(tabs)) as RecentTab[],
+  })
 }
 
 /**

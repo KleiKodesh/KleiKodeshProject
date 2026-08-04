@@ -267,8 +267,10 @@ export const useTabStore = defineStore('tabs', () => {
       markRecentTabClosed(tab.id)
       return
     }
+    // A shallow copy is enough: stripTransient drops the non-serializable fields,
+    // and saveRecentTabs deep-copies before handing anything to IndexedDB.
     const snapshot: RecentTab = {
-      ...JSON.parse(JSON.stringify(stripTransient(tab))) as Tab,
+      ...stripTransient(tab),
       recentStamp: ++recentStampTick,
       open: true,
     }
