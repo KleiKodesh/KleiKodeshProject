@@ -22,4 +22,17 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
   </ItemGroup>
 
+  <!-- The related-forms expansion artifact (research/word-association, FINDINGS
+       26/27). ONE canonical copy shared by every FtsLib flavour lives in
+       FtsLib-Csharp/SearchExpansion/ - updating that file updates all outputs.
+       Copied next to consumers as SearchExpansion/expansion-routed.db and read
+       at runtime relative to the binary (see SearchExpansionService /
+       SearchExpansion). -->
+  <ItemGroup>
+    <Content Include="..\SearchExpansion\expansion-routed.db">
+      <Link>SearchExpansion\expansion-routed.db</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>
