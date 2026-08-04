@@ -95,9 +95,9 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
             if (sb.Length > 0) sb.Append(' ');
 
             string bare = BareHebrew(tok);
-            if (bare.Length < 2 || bare.Length != tok.Length)
+            if (bare.Length < 2)
             {
-                // carries syntax characters / nikud / non-Hebrew — pass through
+                // carries syntax characters / non-Hebrew — pass through
                 sb.Append(tok);
                 continue;
             }
@@ -141,14 +141,17 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
     }
 
     /// <summary>The token stripped to bare Hebrew letters (final forms kept as
-    /// typed). Returns "" when any non-letter is present so syntax-bearing tokens
-    /// are never expanded; intra-word quotes are tolerated and removed.</summary>
+    /// typed). Nikud/cantillation marks (except maqaf, which is a separator) and
+    /// intra-word quotes are STRIPPED — text pasted from pointed sources must
+    /// still expand. Returns "" when any other character is present so
+    /// syntax-bearing tokens are never expanded.</summary>
     private static string BareHebrew(string tok)
     {
         var sb = new StringBuilder(tok.Length);
         foreach (char c in tok)
         {
             if (c >= 'א' && c <= 'ת') sb.Append(c);
+            else if (c >= '֑' && c <= 'ׇ' && c != '־') continue; // nikud/teamim
             else if (c == '"' || c == '\'' || c == '׳' || c == '״') continue;
             else return "";
         }
