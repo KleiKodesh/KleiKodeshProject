@@ -4,21 +4,14 @@ import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
   IconArrowSync20Regular,
-  IconDocument20Filled,
-  IconDocumentPdf20Filled,
-  IconDocumentText20Filled,
-  IconDocumentGlobe20Filled,
   IconDelete20Regular,
-  IconHome20Regular,
-  IconDocument20Regular,
-  IconDocumentText20Regular,
-  IconSearch20Regular,
-  IconLibrary20Regular,
-  IconDocumentPdf20Regular,
-  IconApps20Regular,
-  IconPuzzlePiece20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import {
+  documentIcon,
+  iconKeyForRoute,
+  iconKeyForFileName,
+  type DocumentIconKey,
+} from '@/utils/documentIcons'
 import { useListKeys } from '@/composables/useListKeyNav'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type {
@@ -170,65 +163,26 @@ function onDropdownBlur(e: FocusEvent) {
   }
 }
 
+// All three of these read the ONE shared mapping in utils/documentIcons — the
+// same table the home tiles use, so a document looks identical wherever it is
+// listed. They used to be separate local copies that had drifted apart.
 type FileIconInfo = { component: unknown; color: string }
 
+function iconInfo(key: DocumentIconKey): FileIconInfo {
+  const icon = documentIcon(key)
+  return { component: icon.icon20, color: icon.color }
+}
+
 function getFileIcon(item: FileSearchResult): FileIconInfo {
-  if (item.addinName) return { component: IconPuzzlePiece20Regular, color: '#7b5ea7' }
-  const extension = item.fileName.toLowerCase().split('.').pop()
-  switch (extension) {
-    case 'pdf':
-      return { component: IconDocumentPdf20Filled, color: '#F40F02' }
-    case 'html':
-    case 'htm':
-    case 'mht':
-    case 'mhtml':
-      return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
-    case 'txt':
-      return { component: IconDocumentText20Filled, color: '#9e9e9e' }
-    default:
-      return { component: IconDocument20Filled, color: '#3478f6' }
-  }
+  return iconInfo(iconKeyForFileName(item.fileName, !!item.addinName))
 }
 
-// Route → icon for the recently-opened rows — the 20px versions of the
-// home-page tile icons (RECENTLY_OPENED_ICON_MAP), same colors.
 function getRecentIcon(entry: RecentlyOpenedEntry): FileIconInfo {
-  if (entry.route === '/html-view' && entry.isOtzariaAddin)
-    return { component: IconPuzzlePiece20Regular, color: '#7b5ea7' }
-  switch (entry.route) {
-    case '/pdf-view':
-      return { component: IconDocumentPdf20Filled, color: '#F40F02' }
-    case '/html-view':
-      return { component: IconDocumentGlobe20Filled, color: '#0097fb' }
-    case '/txt-view':
-      return { component: IconDocumentText20Filled, color: '#9e9e9e' }
-    default: // '/book-view'
-      return { component: IconBookRtl20, color: '#c1440e' }
-  }
+  return iconInfo(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
 }
 
-// Route → icon for the open-tab rows (same mapping the old title-bar tab
-// dropdown used). The book icon keeps its warm accent color.
 function getTabIcon(route: string): FileIconInfo {
-  switch (route) {
-    case '/':
-      return { component: IconHome20Regular, color: '' }
-    case '/book-view':
-    case '/hebrewbooks':
-      return { component: IconBookRtl20, color: '#c1440e' }
-    case '/pdf-view':
-      return { component: IconDocumentPdf20Regular, color: '' }
-    case '/txt-view':
-      return { component: IconDocumentText20Regular, color: '' }
-    case '/search':
-      return { component: IconSearch20Regular, color: '' }
-    case '/books':
-      return { component: IconLibrary20Regular, color: '' }
-    case '/workspaces':
-      return { component: IconApps20Regular, color: '' }
-    default:
-      return { component: IconDocument20Regular, color: '' }
-  }
+  return iconInfo(iconKeyForRoute(route))
 }
 </script>
 

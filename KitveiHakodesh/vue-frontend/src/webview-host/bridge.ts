@@ -649,6 +649,8 @@ export interface MirroredTab {
   /** "prefix: title" — strip caption used only when the tab is wide enough to fit it. */
   stripTitle: string
   pane: 1 | 2
+  /** Which favicon to draw — a key into the set sent by notifyTabIcons. */
+  iconKey: string
 }
 
 /** A recently opened document (not currently open) for the native tab-list dropdown. */
@@ -686,6 +688,17 @@ export interface TabsSnapshot {
 export function notifyTabsChanged(snapshot: TabsSnapshot): void {
   if (typeof window.__webviewAction !== 'function') return
   action('tabsChanged', { ...snapshot }).catch(() => {})
+}
+
+/**
+ * Push the rasterized favicon set to the C# host, keyed by icon name. Sent once at
+ * startup and again whenever the device pixel ratio changes, so the bitmaps match
+ * the size the strip draws them at. Tab snapshots reference these by `iconKey`,
+ * which keeps the per-snapshot payload unchanged. Fire-and-forget.
+ */
+export function notifyTabIcons(icons: { key: string; png: string }[]): void {
+  if (typeof window.__webviewAction !== 'function') return
+  action('tabIcons', { icons }).catch(() => {})
 }
 
 /**

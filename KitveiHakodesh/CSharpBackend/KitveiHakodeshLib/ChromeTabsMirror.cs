@@ -30,6 +30,17 @@ namespace KitveiHakodeshLib
         // gesture handlers so programmatic changes don't echo back to Vue.
         private bool _syncing;
 
+        // Favicons by icon key, rasterized by Vue at the current device pixel ratio so
+        // the strip and the in-page lists show the very same glyph. Arrives out of band
+        // from the tab snapshots (they change constantly; these almost never do).
+        private IReadOnlyDictionary<string, Image> _tabIcons = new Dictionary<string, Image>();
+
+        // Which icon key each strip tab is currently showing, by Vue tab id. Kept here
+        // rather than on FluentTab so the shared strip library stays unaware of Vue's
+        // icon vocabulary; needed to re-stamp every tab when the set is resent on a DPI
+        // change.
+        private readonly Dictionary<string, string> _iconKeyByTabId = new Dictionary<string, string>();
+
         // Latest recently-opened documents from Vue (not currently open in any tab),
         // shown as the "נסגרו לאחרונה" section of the tab-list dropdown.
         private IReadOnlyList<MirroredRecentInfo> _recentItems = new List<MirroredRecentInfo>();
@@ -62,6 +73,7 @@ namespace KitveiHakodeshLib
             _form.TabDraggedToGroup += OnTabDraggedToGroup;
 
             _viewer.TabsStateChanged += OnTabsStateChanged;
+            _viewer.TabIconsChanged += OnTabIconsChanged;
             _viewer.ChromeThemeChanged += OnChromeThemeChanged;
             _viewer.ChromeTabListToggleRequested += OnChromeTabListToggleRequested;
         }
@@ -198,6 +210,40 @@ namespace KitveiHakodeshLib
 
         // ── Vue snapshots → strip ───────────────────────────────────────────────────
 
+        private void OnTabIconsChanged(object sender, TabIconsChangedEventArgs e)
+        {
+            if (_form.IsDisposed) return;
+            if (_form.InvokeRequired)
+            {
+                _form.BeginInvoke(new Action(() => ApplyTabIcons(e.Icons)));
+                return;
+            }
+            ApplyTabIcons(e.Icons);
+        }
+
+        private void ApplyTabIcons(IReadOnlyDictionary<string, Image> icons)
+        {
+            if (_form.IsDisposed) return;
+            _tabIcons = icons;
+
+            // Re-stamp the tabs already on the strip — a DPI change resends the set, and
+            // the existing tabs are still holding bitmaps rendered for the old scale.
+            foreach (var tab in _form.Tabs)
+            {
+                string tabId = tab.Tag as string;
+                string iconKey;
+                if (tabId != null && _iconKeyByTabId.TryGetValue(tabId, out iconKey))
+                    tab.Icon = LookupIcon(iconKey);
+            }
+        }
+
+        private Image LookupIcon(string iconKey)
+        {
+            if (string.IsNullOrEmpty(iconKey)) return null;
+            Image image;
+            return _tabIcons.TryGetValue(iconKey, out image) ? image : null;
+        }
+
         private void OnTabsStateChanged(object sender, TabsStateChangedEventArgs e)
         {
             if (_form.IsDisposed) return;
@@ -246,6 +292,9 @@ namespace KitveiHakodeshLib
                 foreach (var tab in _form.Tabs.Where(t => !(t.Tag is string id && wanted.Contains(id))).ToList())
                     _form.CloseTab(tab);
 
+                foreach (var staleId in _iconKeyByTabId.Keys.Where(k => !wanted.Contains(k)).ToList())
+                    _iconKeyByTabId.Remove(staleId);
+
                 // Index the surviving strip tabs by Vue tab id.
                 var byId = new Dictionary<string, FluentTab>();
                 foreach (var tab in _form.Tabs)
@@ -272,6 +321,16 @@ namespace KitveiHakodeshLib
                     // "prefix: title" caption, drawn only when the tab has room for it
                     // (the setter no-ops when unchanged, so no repaint churn).
                     tab.WideTitle = info.StripTitle;
+
+                    // Favicon. The set may not have arrived yet on a cold start, or may
+                    // not know this key — either way the tab simply draws without one,
+                    // and ApplyTabIcons stamps it as soon as the set lands.
+                    string previousKey;
+                    if (!_iconKeyByTabId.TryGetValue(info.Id, out previousKey) || previousKey != info.IconKey)
+                    {
+                        _iconKeyByTabId[info.Id] = info.IconKey;
+                        tab.Icon = LookupIcon(info.IconKey);
+                    }
 
                     // Group follows the pane only while split view is open; an adopted
                     // orphan (pane 2, split off) lives in region 0 and can be pane 1's

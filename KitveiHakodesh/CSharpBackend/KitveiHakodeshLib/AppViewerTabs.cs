@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Text.Json;
 
 namespace KitveiHakodeshLib
@@ -13,6 +14,11 @@ namespace KitveiHakodeshLib
         public string ListTitle { get; set; }
         /// <summary>"prefix: title" strip caption, drawn only when the tab is wide enough to fit it.</summary>
         public string StripTitle { get; set; }
+        /// <summary>
+        /// Which favicon this tab shows ("book", "pdf", …). Looked up in the icon set Vue
+        /// sends separately via 'tabIcons'; empty or unknown means draw no icon.
+        /// </summary>
+        public string IconKey { get; set; }
         /// <summary>Which Vue split pane the tab belongs to (1 = main shell, 2 = secondary shell).</summary>
         public int Pane { get; set; } = 1;
     }
@@ -23,6 +29,17 @@ namespace KitveiHakodeshLib
         /// <summary>Stable key from the Vue recently-opened store; echoed back on activation.</summary>
         public string Key { get; set; }
         public string Title { get; set; }
+    }
+
+    /// <summary>The rasterized favicon set from Vue, keyed by icon name.</summary>
+    public class TabIconsChangedEventArgs : EventArgs
+    {
+        public TabIconsChangedEventArgs(IReadOnlyDictionary<string, Image> icons)
+        {
+            Icons = icons;
+        }
+
+        public IReadOnlyDictionary<string, Image> Icons { get; }
     }
 
     /// <summary>Full snapshot of the Vue tab store, sent via the 'tabsChanged' bridge action.</summary>
@@ -91,6 +108,12 @@ namespace KitveiHakodeshLib
         public event EventHandler<TabsStateChangedEventArgs> TabsStateChanged;
 
         /// <summary>
+        /// Raised on the UI thread when Vue sends its rasterized favicon set — once at
+        /// startup and again on a DPI change.
+        /// </summary>
+        public event EventHandler<TabIconsChangedEventArgs> TabIconsChanged;
+
+        /// <summary>
         /// Raised when Vue asks to toggle the native chrome tab-strip's tab-list dropdown
         /// (Ctrl+T in the standalone/demo app). ChromeTabsMirror handles it by calling
         /// <c>ShowTabListMenu</c> on the strip form; it must work even in fullscreen.
@@ -114,6 +137,7 @@ namespace KitveiHakodeshLib
                         Title = t.TryGetProperty("title", out var ti) ? (ti.GetString() ?? "") : "",
                         ListTitle = t.TryGetProperty("listTitle", out var lt) ? (lt.GetString() ?? "") : "",
                         StripTitle = t.TryGetProperty("stripTitle", out var st) ? (st.GetString() ?? "") : "",
+                        IconKey = t.TryGetProperty("iconKey", out var ik) ? (ik.GetString() ?? "") : "",
                         Pane = t.TryGetProperty("pane", out var p) && p.TryGetInt32(out int pane) ? pane : 1,
                     });
                 }
@@ -152,6 +176,50 @@ namespace KitveiHakodeshLib
                 new TabsStateChangedEventArgs(
                     tabs, activeTabId, pane2ActiveTabId, splitView, focusedPane, splitFraction,
                     dividerLeftPx, dividerWidthPx, recent));
+        }
+
+        /// <summary>
+        /// Vue's rasterized favicon set, keyed by icon name. Sent once per session and
+        /// again whenever the device pixel ratio changes, so the bitmaps always match the
+        /// size the strip draws them at.
+        /// </summary>
+        private void HandleTabIcons(JsonElement root, string id)
+        {
+            _bridge.Reply(id, new { });
+
+            var icons = new Dictionary<string, Image>();
+            if (root.TryGetProperty("icons", out var arr) && arr.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var entry in arr.EnumerateArray())
+                {
+                    string key = entry.TryGetProperty("key", out var k) ? k.GetString() : null;
+                    string png = entry.TryGetProperty("png", out var p) ? p.GetString() : null;
+                    if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(png)) continue;
+
+                    // "data:image/png;base64,...." — take what follows the comma.
+                    int comma = png.IndexOf(',');
+                    if (comma >= 0) png = png.Substring(comma + 1);
+
+                    try
+                    {
+                        byte[] bytes = Convert.FromBase64String(png);
+                        // The stream must stay alive for the Image's lifetime (GDI+ reads
+                        // lazily), so no using block here.
+                        icons[key] = Image.FromStream(new System.IO.MemoryStream(bytes));
+                    }
+                    catch
+                    {
+                        // A malformed icon just means that tab draws without one.
+                    }
+                }
+            }
+
+            if (icons.Count == 0) return;
+
+            if (InvokeRequired)
+                Invoke(new Action(() => TabIconsChanged?.Invoke(this, new TabIconsChangedEventArgs(icons))));
+            else
+                TabIconsChanged?.Invoke(this, new TabIconsChangedEventArgs(icons));
         }
 
         private void HandleToggleChromeTabList(string id)

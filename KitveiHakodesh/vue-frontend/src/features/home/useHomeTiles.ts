@@ -1,23 +1,10 @@
 import { ref, computed, onMounted, type Component, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
-  IconLibrary24Filled,
-  IconFolder24Filled,
-  IconBookOpen24Filled,
-  IconApps24Filled,
   IconDatabase24Filled,
   IconArrowDownload24Filled,
-  IconCalendarRtl24Filled,
-  IconBookLetter24Filled,
-  IconRuler24Filled,
-  IconDocumentPdf24Filled,
-  IconDocumentText24Filled,
-  IconDocumentGlobe24Filled,
-  IconPuzzlePiece24Regular,
 } from '@iconify-prerendered/vue-fluent'
-import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
-import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
-import IconBookRtl24 from '@/components/IconBookRtl24.vue'
+import { documentIcon, iconKeyForRoute, type DocumentIconKey } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
@@ -31,12 +18,6 @@ const TILE_GAP = 16
 /** Hard ceiling on recently-opened tiles, regardless of available row space. */
 const RECENTLY_OPENED_MAX = 20
 
-const RECENTLY_OPENED_ICON_MAP: Record<string, { icon: Component; color: string }> = {
-  '/book-view': { icon: IconBookRtl24, color: '#c1440e' },
-  '/pdf-view': { icon: IconDocumentPdf24Filled, color: '#F40F02' },
-  '/html-view': { icon: IconDocumentGlobe24Filled, color: '#0097fb' },
-  '/txt-view': { icon: IconDocumentText24Filled, color: '#9e9e9e' },
-}
 
 /**
  * The home tile grid: the static navigation tiles plus however many
@@ -54,23 +35,32 @@ export function useHomeTiles(containerWidth: Ref<number>) {
 
   const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
 
+  /** A static tile's icon + colour, taken from the shared table. */
+  function tileIcon(key: DocumentIconKey): { icon: Component; color: string } {
+    const icon = documentIcon(key)
+    return { icon: icon.icon24, color: icon.color }
+  }
+
   const tiles = computed(() => {
     const dbMissing = !dbReady.value
     return [
+      // Tiles whose destination also appears as a tab read their glyph and colour
+      // from the shared table (utils/documentIcons), so the tile, the dropdown row
+      // and the native tab strip all show the same thing. The rest are tile-only.
       dbMissing
         ? { label: 'הורד מסד ספרים', icon: IconArrowDownload24Filled, color: '#B5451B' }
-        : { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B' },
+        : { label: 'ספרים', ...tileIcon('library') },
       dbMissing
         ? { label: 'בחר מסד ספרים', icon: IconDatabase24Filled, color: '#3478f6' }
-        : { label: 'חיפוש', icon: IconSearchSparkle24 },
-      { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E' },
-      { label: 'פתח קובץ', icon: IconFolder24Filled, color: 'var(--status-warning)' },
-      { label: 'חיפוש קבצים', icon: IconEverythingSearch, iconScale: 0.93 },
-      { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7' },
-      { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32' },
-      { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914' },
-      { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4' },
-      { label: 'הגדרות', icon: IconSettings24 },
+        : { label: 'חיפוש', ...tileIcon('search') },
+      { label: 'היברו-בוקס', ...tileIcon('hbooks') },
+      { label: 'פתח קובץ', ...tileIcon('folder') },
+      { label: 'חיפוש קבצים', ...tileIcon('fileSearch'), iconScale: 0.93 },
+      { label: 'מילון', ...tileIcon('dict') },
+      { label: 'לוח שנה', ...tileIcon('calendar') },
+      { label: 'מידות ושיעורים', ...tileIcon('ruler') },
+      { label: 'סביבות עבודה', ...tileIcon('apps') },
+      { label: 'הגדרות', ...tileIcon('settings') },
     ]
   })
 
@@ -92,9 +82,9 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   const totalTileCount = computed(() => tiles.value.length + visibleRecentlyOpenedList.value.length)
 
   function getRecentTileIcon(entry: RecentlyOpenedEntry): { icon: Component; color: string } {
-    if (entry.route === '/html-view' && entry.isOtzariaAddin)
-      return { icon: IconPuzzlePiece24Regular, color: '#7b5ea7' }
-    return RECENTLY_OPENED_ICON_MAP[entry.route]!
+    // The one shared table — see utils/documentIcons.
+    const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
+    return { icon: icon.icon24, color: icon.color }
   }
 
   function onTogglePinRecent(entry: RecentlyOpenedEntry) {

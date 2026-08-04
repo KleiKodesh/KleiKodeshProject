@@ -3,18 +3,9 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
-import {
-  IconLibrary24Filled,
-  IconFolder24Filled,
-  IconBookOpen24Filled,
-  IconApps24Filled,
-  IconOpen28Regular,
-  IconBookLetter24Filled,
-  IconRuler24Filled,
-  IconCalendarRtl24Filled,
-} from '@iconify-prerendered/vue-fluent'
-import IconEverythingSearch from '@/components/IconEverythingSearch.vue'
-import { IconSettings24, IconSearchSparkle24 } from '@iconify-prerendered/vue-fluent-color'
+import { IconOpen28Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSettings24 } from '@iconify-prerendered/vue-fluent-color'
+import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { showPopOutButton } from '@/webview-host/bridge'
 import { togglePopOut } from '@/webview-host/bridge'
@@ -31,17 +22,25 @@ useDropdownClose(menuRef, () => emit('close'), {
   toggleButton: computed(() => props.toggleButtonEl ?? null),
 })
 
-// All nav items in order — tiles + settings + (conditionally) pop-out
+// All nav items in order — tiles + settings + (conditionally) pop-out.
+// Icons come from the shared table (utils/documentIcons) rather than being listed
+// again here: this list, the home tiles and the tab strip must agree, and every
+// time they were separate copies they drifted.
+function navIcon(key: DocumentIconKey) {
+  const icon = documentIcon(key)
+  return { icon: icon.icon24, color: icon.color || undefined }
+}
+
 const tiles = [
-  { label: 'ספרים', icon: IconLibrary24Filled, color: '#B5451B', shortcut: 'Ctrl+1' },
-  { label: 'חיפוש', icon: IconSearchSparkle24, color: undefined, shortcut: 'Ctrl+2' },
-  { label: 'היברו-בוקס', icon: IconBookOpen24Filled, color: '#D94F1E', shortcut: 'Ctrl+3' },
-  { label: 'פתח קובץ', icon: IconFolder24Filled, color: 'var(--status-warning)', shortcut: 'Ctrl+4' },
-  { label: 'חיפוש קבצים', icon: IconEverythingSearch, color: undefined, shortcut: 'Ctrl+5' },
-  { label: 'מילון', icon: IconBookLetter24Filled, color: '#7b5ea7', shortcut: 'Ctrl+6' },
-  { label: 'לוח שנה', icon: IconCalendarRtl24Filled, color: '#2e7d32', shortcut: 'Ctrl+7' },
-  { label: 'מידות ושיעורים', icon: IconRuler24Filled, color: '#8b6914', shortcut: 'Ctrl+8' },
-  { label: 'סביבות עבודה', icon: IconApps24Filled, color: '#6b7fc4', shortcut: 'Ctrl+9' },
+  { label: 'ספרים', ...navIcon('library'), shortcut: 'Ctrl+1' },
+  { label: 'חיפוש', ...navIcon('search'), shortcut: 'Ctrl+2' },
+  { label: 'היברו-בוקס', ...navIcon('hbooks'), shortcut: 'Ctrl+3' },
+  { label: 'פתח קובץ', ...navIcon('folder'), shortcut: 'Ctrl+4' },
+  { label: 'חיפוש קבצים', ...navIcon('fileSearch'), shortcut: 'Ctrl+5' },
+  { label: 'מילון', ...navIcon('dict'), shortcut: 'Ctrl+6' },
+  { label: 'לוח שנה', ...navIcon('calendar'), shortcut: 'Ctrl+7' },
+  { label: 'מידות ושיעורים', ...navIcon('ruler'), shortcut: 'Ctrl+8' },
+  { label: 'סביבות עבודה', ...navIcon('apps'), shortcut: 'Ctrl+9' },
 ]
 
 // Count includes tiles + settings row + optional pop-out row

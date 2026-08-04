@@ -3,7 +3,9 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
 import { useLocalFileStore } from '@/stores/localFileStore'
-import { notifyTabsChanged, hasNativeChromeTabs } from './bridge'
+import { notifyTabsChanged, notifyTabIcons, hasNativeChromeTabs } from './bridge'
+import { rasterizeTabIcons } from './rasterizeTabIcons'
+import { iconKeyForRoute } from '@/utils/documentIcons'
 import { onWebviewEvent } from './seforimDb'
 import {
   activateTabAnyPane,
@@ -110,6 +112,25 @@ export function initTabMirror(): void {
     resizeTick.value++
   })
 
+  // ── Favicons ────────────────────────────────────────────────────────────────
+  // Rasterized once for the whole set and referenced by key, so tab snapshots stay
+  // small however often they fire. Re-sent when the device pixel ratio changes
+  // (moving the window to a differently-scaled monitor), because the bitmaps are
+  // rendered for the exact pixel size the strip draws them at — that is what keeps
+  // them crisp instead of scaled-and-soft.
+  let lastRatio = 0
+  function sendTabIcons() {
+    const ratio = window.devicePixelRatio || 1
+    if (ratio === lastRatio) return
+    lastRatio = ratio
+    void rasterizeTabIcons().then((icons) => {
+      if (icons.length) notifyTabIcons(icons)
+    })
+  }
+  sendTabIcons()
+  // devicePixelRatio changes fire as a resize, not as their own event.
+  window.addEventListener('resize', sendTabIcons)
+
   const snapshot = computed(() => {
     void resizeTick.value
     const splitOn = bookViewStore.splitViewEnabled
@@ -124,6 +145,9 @@ export function initTabMirror(): void {
           listTitle: listTitleFor(t),
           stripTitle: stripTitleFor(t),
           pane: t.pane === 2 ? 2 : 1,
+          // Favicon key into the set pushed by sendTabIcons — same shared mapping
+          // the in-page lists use, so the strip shows the identical glyph.
+          iconKey: iconKeyForRoute(t.route, t.isOtzariaAddin),
         })),
       activeTabId: tabStore.activeTabId,
       pane2ActiveTabId: splitOn ? tabStore.pane2ActiveTabId : '',
