@@ -274,6 +274,12 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
   border-radius: 4px;
   flex-shrink: 0;
 }
+.bar-btn:not(:disabled):hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+.bar-btn:not(:disabled):active {
+  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
+}
 .bar-btn:disabled {
   opacity: 0.35;
   cursor: not-allowed;
