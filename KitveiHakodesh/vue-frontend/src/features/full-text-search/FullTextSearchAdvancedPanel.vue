@@ -193,6 +193,25 @@ function onContextWordsInput(event: Event) {
   max-height: 60%;
   min-height: 0;
 }
+
+/* Wide screens: stop stretching to the full page width — which stranded every
+   control far from its label — and float as a bounded popup above the search
+   bar instead. Narrow screens keep the full-width docked strip above. */
+@media (min-width: 700px) {
+  .advanced-panel {
+    position: absolute;
+    inset-inline-start: 8px;
+    bottom: 100%;
+    z-index: 20;
+    width: 360px;
+    max-width: calc(100% - 16px);
+    max-height: min(60vh, 420px);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
+    overflow: hidden;
+  }
+}
 .panel-header {
   display: flex;
   align-items: stretch;
