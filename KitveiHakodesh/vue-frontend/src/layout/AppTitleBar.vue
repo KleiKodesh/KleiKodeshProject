@@ -256,23 +256,25 @@ useAppTitleBarShortcuts({
       </button>
       <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
-           not between tabs (Ctrl+Tab still does that). Each appears only once its
-           direction has somewhere to go, rather than sitting there greyed out, so
-           the bar stays quiet in a tab with no history. RTL: back points right,
-           forward left, following the direction of reading not the array index. -->
+           not between tabs (Ctrl+Tab still does that). Greyed out rather than hidden
+           at the ends of the stack: hiding them would shift every button beside them
+           as history comes and goes. RTL: back points right, forward left, following
+           the direction of reading not the array index. -->
       <button
-        v-if="isTitleBarButtonVisible('prev-tab') && pane.canGoBack.value"
+        v-if="isTitleBarButtonVisible('prev-tab')"
         class="bar-btn"
         tabindex="-1"
+        :disabled="!pane.canGoBack.value"
         title="חזור"
         @click.stop="pane.goBack()"
       >
         <IconArrowRight20Regular />
       </button>
       <button
-        v-if="isTitleBarButtonVisible('next-tab') && pane.canGoForward.value"
+        v-if="isTitleBarButtonVisible('next-tab')"
         class="bar-btn"
         tabindex="-1"
+        :disabled="!pane.canGoForward.value"
         title="קדימה"
         @click.stop="pane.goForward()"
       >
@@ -431,5 +433,13 @@ useAppTitleBarShortcuts({
   color: var(--accent-color);
   background: color-mix(in srgb, var(--accent-color) 15%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
+/* Unavailable rather than absent — the Back/Forward pair greys out at the ends of a
+   tab's history instead of unmounting, so the buttons beside them never shift.
+   Matches the disabled treatment already used in FullTextSearchBar. */
+.bar-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 </style>
