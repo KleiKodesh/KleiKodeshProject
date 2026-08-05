@@ -255,15 +255,17 @@ useAppTitleBarShortcuts({
         <IconAdd20Regular />
       </button>
       <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
-      <!-- Step through the tab list in its own order (same pane.cycleTab as
-           Ctrl+Tab), wrapping at both ends. RTL: previous points right, next left,
-           following the direction of reading rather than the array index. -->
+      <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
+           not between tabs (Ctrl+Tab still does that). Disabled at the ends of the
+           stack. RTL: back points right, forward left, following the direction of
+           reading rather than the array index. -->
       <button
         v-if="isTitleBarButtonVisible('prev-tab')"
         class="bar-btn"
         tabindex="-1"
-        title="הלשונית הקודמת (Ctrl+Shift+Tab)"
-        @click.stop="pane.cycleTab(-1)"
+        :disabled="!pane.canGoBack.value"
+        title="חזור"
+        @click.stop="pane.goBack()"
       >
         <IconArrowRight20Regular />
       </button>
@@ -271,8 +273,9 @@ useAppTitleBarShortcuts({
         v-if="isTitleBarButtonVisible('next-tab')"
         class="bar-btn"
         tabindex="-1"
-        title="הלשונית הבאה (Ctrl+Tab)"
-        @click.stop="pane.cycleTab(1)"
+        :disabled="!pane.canGoForward.value"
+        title="קדימה"
+        @click.stop="pane.goForward()"
       >
         <IconArrowLeft20Regular />
       </button>

@@ -23,9 +23,23 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 
 **tabStore** — central store. Tab lifecycle and navigation. Most features read from it. It re-exports the persistence API from the two modules below, so callers keep using `tabStore.getBookViewState(...)` etc. as before.
 
-**tabStatePersistence.ts** — the `app-tabs` slice: everything keyed by workspace + tab. `TabState` get/set (search filters, scroll restore, per-tab zoom), `BookState` get/set/clear (reading position and commentary layout, per tab *and* book), the in-memory book-state cache, and `deleteAllStateForTab(tabId)`. Use that last one for teardown — it drops the `TabState`, every `BookState` beneath the tab, and the cache entries together. It is called from ONE place: LRU eviction in `tabStore` (see `recentTabs.ts`). Closing a tab deliberately does not call it, because the entry lives on in the recent-tab list and must keep its own reading position.
+**tabStatePersistence.ts** — the `app-tabs` slice: everything keyed by workspace + tab. `TabState` get/set (search filters, scroll restore, per-tab zoom), `BookState` get/set/clear (reading position and commentary layout, per tab *and* book), the in-memory book-state cache, and `deleteAllStateForTab(tabId)`. Use that last one for teardown — it drops the `TabState`, every `BookState` beneath the tab, and the cache entries together, and every close path calls it. A closed tab's reading position is not lost with it: `disposeClosedTab` copies it into the tab's location record first (see `navLocation.ts`). Also exposes `peekTabViewState` / `peekBookViewState`, synchronous reads of the write-through caches, for callers that must capture a position mid-navigation and cannot await.
 
-**recentTabs.ts** — the `app-recent-tabs` slice: a PARALLEL COPY of `tabStore.tabs`, same `Tab` objects under the same tab ids, kept in step by `syncRecentTab` on open/navigate/switch. Exactly one difference: closing a tab removes it from `tabs` but not from here — entries leave only by LRU eviction past `RECENT_TABS_MAX` (50), and open tabs are never evicted. Because the ids match, everything keyed by tab id keeps working for a closed entry, so two closed tabs on one book reopen to their own positions instead of sharing the per-book `lastRead`. `reopenRecentTab(id)` revives one under its original id. The native chrome tab strip mirrors `tabs`, never this list.
+**The three tab collections.** The app follows the browser model, and the three are deliberately separate — same idea of "a place", different scope and different eviction:
+
+| | browser equivalent | scope | lifetime | eviction |
+|---|---|---|---|---|
+| `tabStore.tabs` | open tabs | window | until closed | closed → removed |
+| `recentLocations` | History + Recently-closed | app-wide, persisted | outlives the tab | LRU, deduped per document |
+| `navHistory` | Back/Forward stack | ONE tab | dies with the tab | in memory only |
+
+**navLocation.ts** — the shared record. A `NavLocation` is SELF-DESCRIBING: it carries its own `position`, so it does not depend on any live tab. That is what decouples recents from tabs. Also owns `locationKey` (document identity, for dedupe) and `isRecordableLocation` (home, the singletons and an empty search page are not places worth remembering — navigating onto one records nothing, so pressing Home does not bury the book you were reading).
+
+**recentLocations.ts** — the `app-recent-tabs` slice: locations visited, persisted per workspace, LRU-capped at `RECENT_LOCATIONS_MAX` (50) and deduped per document so revisiting a book bumps its row rather than stacking duplicates. Selecting one navigates the current tab; removing one closes nothing.
+
+**navHistory.ts** — per-tab Back/Forward, in memory. A list plus a cursor rather than two stacks, because navigating from anywhere other than the end must TRUNCATE the forward branch — the rule that makes back-then-navigate behave as people expect.
+
+Recording happens in `tabStore.applyTabPatch`, and only when a patch changes which DOCUMENT a tab shows (`isNavigationPatch`). `tocPath` arrives on every scroll event, so treating it as a navigation would push a history frame per scroll. The native chrome tab strip mirrors `tabs`, never these lists.
 
 **bookLastRead.ts** — the `app-lastread` slice: the global per-book last-read position. Not tab-scoped, and it deliberately outlives tab close — that is what separates it from `BookState`, which has nearly the same shape but describes one tab's view of a book. Owns `LastReadState` and both caps: the 200-entry in-memory cache and the 1000-entry on-disk cap. Always write through `setLastReadPos()` so both are applied. Use `updateActiveTab` for in-place navigation, `openTab` only for explicitly creating a new tab, and `navigateToSingleton(route, pane, openInNewTab)` for singleton routes (singletons are enforced per-pane).
 

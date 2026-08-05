@@ -223,18 +223,17 @@ if (typeof window !== 'undefined') {
 export function useTabSwipeNavigation() {
   const tabStore = useTabStore()
 
+  /**
+   * A swipe is Back / Forward within the CURRENT tab, as on a phone browser — it no
+   * longer switches tabs (Ctrl+Tab still does). 'next' is forward, 'previous' is
+   * back; the caller maps swipe direction to those, and the RTL mapping it already
+   * had happens to be the right one for history too.
+   *
+   * Only the action changed here. Everything above — the momentum, re-strike and
+   * runt handling — is gesture DETECTION and is deliberately untouched.
+   */
   function switchToAdjacentTab(direction: 'next' | 'previous') {
-    const tabs = tabStore.pane1Tabs
-    if (tabs.length < 2) return
-    const currentIndex = tabs.findIndex((tab) => tab.id === tabStore.activeTabId)
-    if (currentIndex === -1) return
-
-    const targetIndex =
-      direction === 'next'
-        ? (currentIndex + 1) % tabs.length
-        : (currentIndex - 1 + tabs.length) % tabs.length
-
-    tabStore.switchTab(tabs[targetIndex]!.id)
+    tabStore.goHistory(tabStore.activeTabId, direction === 'next' ? 1 : -1)
   }
 
   // ── Touch swipe (native — document body) ────────────────────────────────────

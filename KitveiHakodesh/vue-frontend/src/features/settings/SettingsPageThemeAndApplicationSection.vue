@@ -32,8 +32,8 @@ const TITLE_BAR_BUTTONS = [
   { id: 'ocr',            label: 'OCR' },
   { id: 'new-tab',        label: 'לשונית חדשה' },
   { id: 'home',           label: 'בית' },
-  { id: 'prev-tab',       label: 'הלשונית הקודמת' },
-  { id: 'next-tab',       label: 'הלשונית הבאה' },
+  { id: 'prev-tab',       label: 'חזור' },
+  { id: 'next-tab',       label: 'קדימה' },
 ]
 
 function isTitleBarButtonEnabled(buttonId: string): boolean {
