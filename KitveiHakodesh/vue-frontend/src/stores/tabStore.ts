@@ -328,21 +328,23 @@ export const useTabStore = defineStore('tabs', () => {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
     const position = capturePosition(tab)
-    if (!position) return
+    // The breadcrumb is worth recording even with no scroll position yet — it is what
+    // gives the row its "בראשית · פרק יג" caption — so only bail when there is
+    // nothing at all to fold in.
+    if (!position && !tab.tocPath) return
 
-    // The history frame takes the position whatever the route is — a tool page has
-    // no position to capture, so this is a no-op there rather than a special case.
-    updateCurrentLocation(tabId, { position, tocPath: tab.tocPath })
+    const patch: Partial<NavLocation> = { tocPath: tab.tocPath }
+    if (position) patch.position = position
+
+    // The history frame takes it whatever the route is — a tool page has nothing to
+    // capture, so this is a no-op there rather than a special case.
+    updateCurrentLocation(tabId, patch)
 
     if (!isRecentsWorthy(tab)) return
     const docKey = locationKey(tab)
     const idx = recentLocations.value.findIndex((l) => locationKey(l) === docKey)
     if (idx !== -1) {
-      recentLocations.value[idx] = {
-        ...recentLocations.value[idx]!,
-        position,
-        tocPath: tab.tocPath,
-      }
+      recentLocations.value[idx] = { ...recentLocations.value[idx]!, ...patch }
     }
   }
 
@@ -379,6 +381,29 @@ export const useTabStore = defineStore('tabs', () => {
     // Assign directly rather than through applyTabPatch: this is a history MOVE,
     // and recording it would push the frame we just stepped off onto the stack.
     Object.assign(tab, patch)
+  }
+
+  /**
+   * The position writers, wrapped so a save also folds the new position into the
+   * records that describe where the tab is.
+   *
+   * Without this, a book being READ never updates its recents row: the row is
+   * created when the tab arrives, and captureCurrentPosition only runs when the tab
+   * navigates away or closes. Scroll saves land in `bookViewState` and nothing tells
+   * recents, so the row keeps the position the reader had on arrival — usually none
+   * at all. Wrapping the writer is the narrowest hook: every position save in the
+   * app already goes through it.
+   */
+  function setBookViewStateTracked(tabId: string, bookId: number, state: Parameters<typeof setBookViewState>[2]) {
+    const result = setBookViewState(tabId, bookId, state)
+    captureCurrentPosition(tabId)
+    return result
+  }
+
+  function setTabViewStateTracked(tabId: string, state: Parameters<typeof setTabViewState>[1]) {
+    const result = setTabViewState(tabId, state)
+    captureCurrentPosition(tabId)
+    return result
   }
 
   /** Removes a location from the recents list. Touches no tab — they are decoupled. */
@@ -878,7 +903,14 @@ export const useTabStore = defineStore('tabs', () => {
     if (navigating && TRACKABLE_ROUTES.has(tab.route)) {
       trackTabNavigation(tab)
     }
-    if (navigating) recordNavigation(tab)
+    if (navigating) {
+      recordNavigation(tab)
+    } else if (patch.tocPath !== undefined) {
+      // Not a navigation, so it records no frame — but the breadcrumb is what gives
+      // a row its "בראשית · פרק יג" caption, so fold it into the records the tab is
+      // already described by. Cheap: an in-place field update on one entry.
+      captureCurrentPosition(tab.id)
+    }
   }
 
   function updateActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
@@ -992,9 +1024,9 @@ export const useTabStore = defineStore('tabs', () => {
     getLastReadPos,
     setLastReadPos,
     getTabViewState,
-    setTabViewState,
+    setTabViewState: setTabViewStateTracked,
     getBookViewState,
-    setBookViewState,
+    setBookViewState: setBookViewStateTracked,
     clearBookViewState,
     togglePdfViewerTitleBar,
   }
