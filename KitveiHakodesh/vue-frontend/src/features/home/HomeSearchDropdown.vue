@@ -22,7 +22,7 @@ import type {
 } from './useHomeSearch'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
-import type { RecentTab } from '@/stores/recentTabs'
+import type { NavLocation } from '@/stores/navLocation'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 
 const props = defineProps<{
@@ -46,13 +46,13 @@ const props = defineProps<{
   anchorRight: number
   maxHeight: number
   /**
-   * Optional tab list (address-bar mode). These are RECENT tabs — the parallel
-   * list that keeps an entry after its tab closes — so the section shows open and
-   * closed tabs together, distinguished by `open`. The parent passes them only
-   * when it wants them shown (empty query / no search results), so in practice
-   * the dropdown shows either tabs or results, not both.
+   * Optional recents list (address-bar mode) — LOCATIONS the reader has visited,
+   * most recent first. Not tabs: selecting one navigates the current tab, and
+   * nothing here reflects which tabs are open. The parent passes them only when it
+   * wants them shown (empty query / no search results), so in practice the dropdown
+   * shows either recents or results, not both.
    */
-  tabs?: RecentTab[]
+  tabs?: NavLocation[]
   activeTabId?: string
   /**
    * Optional recently-opened documents (address-bar mode, same collection as
@@ -67,7 +67,7 @@ const emit = defineEmits<{
   selectCatalogToc: [item: TocFsItem, openInNewTab: boolean]
   selectHebrewBook: [book: HebrewBook, openInNewTab: boolean]
   selectFile: [item: FileSearchResult, openInNewTab: boolean]
-  selectTab: [id: string]
+  selectTab: [id: string, openInNewTab: boolean]
   forgetTab: [id: string]
   selectRecent: [entry: RecentlyOpenedEntry, openInNewTab: boolean]
   dropdownFocused: []
@@ -133,7 +133,7 @@ const allItems = computed(() => {
 function activateItem(index: number, openInNewTab = false) {
   const item = allItems.value[index]
   if (!item) return
-  if (item.kind === 'tab') emit('selectTab', item.id)
+  if (item.kind === 'tab') emit('selectTab', item.id, openInNewTab)
   else if (item.kind === 'recent') emit('selectRecent', item.entry, openInNewTab)
   else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title, openInNewTab)
   else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item, openInNewTab)
@@ -197,11 +197,10 @@ function getTabIcon(route: string): FileIconInfo {
       @focus="onDropdownFocus"
       @blur="onDropdownBlur"
     >
-      <!-- ── Tabs (address-bar mode: empty query / no results) ──
-           Open AND closed tabs in one list: closing a tab does not remove it, it
-           only clears `open`, so the row stays here until LRU evicts it. Closed
-           rows dim the icon and carry no × (there is nothing to close).
-           Headerless — it is the only list here, so a header would just cost a row. -->
+      <!-- ── Recents (address-bar mode: empty query / no results) ──
+           Locations the reader has been, most recent first. Selecting one navigates
+           the CURRENT tab (Ctrl/middle-click opens a new one), like any address-bar
+           row. Headerless — it is the only list here, so a header would cost a row. -->
       <template v-if="tabs && tabs.length > 0">
         <div
           v-for="tab in tabs"
@@ -210,12 +209,11 @@ function getTabIcon(route: string): FileIconInfo {
           class="home-search-dropdown__item"
           :class="{
             'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
-            'is-active-tab': tab.id === activeTabId,
-            'is-closed-tab': !tab.open,
           }"
           data-nav-item
-          :title="tab.tocPath ? `${tab.title} · ${tab.tocPath}` : tab.title"
-          @click="emit('selectTab', tab.id)"
+          :title="withNewTabHint(tab.tocPath ? `${tab.title} · ${tab.tocPath}` : tab.title)"
+          @click="emit('selectTab', tab.id, wantsNewTab($event))"
+          @auxclick.middle="emit('selectTab', tab.id, wantsNewTab($event))"
         >
           <component
             :is="getTabIcon(tab.route).component"
@@ -225,9 +223,8 @@ function getTabIcon(route: string): FileIconInfo {
           <span class="home-search-dropdown__item-title">
             {{ tab.title }}<span v-if="tab.tocPath" class="home-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
           </span>
-          <!-- Removes the row from the list (and closes the tab if it is open).
-               Closing a tab only demotes its row, so this is the one gesture that
-               actually forgets a place — hence a trash icon, not a dismiss ×. -->
+          <!-- Forgets the location. Closes nothing: locations and tabs are
+               independent, so this is "remove from history", hence a trash icon. -->
           <button
             class="home-search-dropdown__tab-close"
             title="הסר מהרשימה"
@@ -266,7 +263,7 @@ function getTabIcon(route: string): FileIconInfo {
         <!-- ── Book catalog section ── -->
         <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc)">
           <div class="home-search-dropdown__section-header">
-            ספרים
+            קטלוג הספרים
             <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="home-search-dropdown__spinner" />
           </div>
           <div

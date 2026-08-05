@@ -36,11 +36,26 @@ export function useAppShellPane(paneId: 1 | 2) {
     tabStore.switchPaneTab(id, paneId)
   }
 
+  // ── Back / Forward within the pane's active tab ───────────────────────────
+  // The browser model: these move through the ACTIVE TAB's own history, not
+  // between tabs. Ctrl+Tab still switches tabs (cycleTab below).
+
+  const canGoBack = computed(() => tabStore.canGoBack(activeTabId.value))
+  const canGoForward = computed(() => tabStore.canGoForward(activeTabId.value))
+
+  function goBack() {
+    tabStore.goHistory(activeTabId.value, -1)
+  }
+
+  function goForward() {
+    tabStore.goHistory(activeTabId.value, 1)
+  }
+
   /**
    * Step the active tab by ±1 through this pane's tabs, wrapping at both ends.
    * Walks `tabs` — the stable strip order — not `mruTabs`, so repeated steps
    * advance through the list instead of oscillating between the last two.
-   * Shared by the title bar's prev/next buttons and Ctrl+Tab.
+   * Still used by Ctrl+Tab, which keeps its tab-switching meaning.
    */
   function cycleTab(step: 1 | -1) {
     const paneTabs = tabs.value
@@ -102,7 +117,7 @@ export function useAppShellPane(paneId: 1 | 2) {
 
   const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
     homepage: { title: 'בית', route: '/' },
-    openfile: { title: 'ספרים', route: '/books' },
+    openfile: { title: 'קטלוג הספרים', route: '/books' },
     hebrewbooks: { title: 'היברו-בוקס', route: '/hebrewbooks' },
     search: { title: 'חיפוש', route: '/search' as TabRoute },
   }
@@ -145,6 +160,10 @@ export function useAppShellPane(paneId: 1 | 2) {
     activeTab,
     switchTab,
     cycleTab,
+    canGoBack,
+    canGoForward,
+    goBack,
+    goForward,
     closeTab,
     closeAllTabs,
     openTab,

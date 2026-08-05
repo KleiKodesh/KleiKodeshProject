@@ -12,10 +12,11 @@
  * list whenever there are no search results — empty input, a too-short query, or
  * a query that matched nothing. Results otherwise.
  *
- * That list is tabStore.recentTabs, which keeps an entry after its tab closes, so
- * open and recently-closed tabs appear together as one list. There is deliberately
- * no second "recently opened" section: it would repeat the same documents without
- * their TOC breadcrumbs.
+ * That list is tabStore.recentLocations — places the reader has been, not tabs.
+ * Selecting one navigates the CURRENT tab, because an address bar belongs to its
+ * tab; Ctrl/⌘/middle-click opens a new tab instead, exactly as a browser link does.
+ * Nothing in the list reflects which tabs are open, and removing a row closes
+ * nothing. Back/Forward through a tab's own history lives on the title bar.
  *
  * The title bar owns when this component is shown (search mode) and reuses the
  * pane it belongs to for all navigation, so results open in the right pane.
@@ -30,7 +31,8 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
 import { useLocalFileStore } from '@/stores/localFileStore'
-import { useTabStore } from '@/stores/tabStore'
+import { useTabStore, type Tab } from '@/stores/tabStore'
+import { sortedByRecency } from '@/stores/recentLocations'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
@@ -94,21 +96,16 @@ const {
 
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
 
-// ── Tab list (dropdown fallback content) ──────────────────────────────────────
+// ── Recents list (dropdown fallback content) ──────────────────────────────────
 // Shown whenever the search has nothing to display: empty/short query, or a query
 // with no matches. Results otherwise.
 //
-// The source is tabStore.recentTabs, which keeps an entry after its tab closes, so
-// this single list covers both the open tabs and the recently closed ones. Sorted
-// most-recently-used first, which puts the live tabs on top in practice without
-// needing a separate section. A display order for this list only — the pane's real
-// tab order and the chrome tab strip are untouched.
-const visibleTabs = computed(() =>
-  [...tabStore.recentTabs]
-    .filter((t) => t.route !== '/settings')
-    .sort((a, b) => b.recentStamp - a.recentStamp),
-)
-const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleTabs.value))
+// These are LOCATIONS, not tabs — places the reader has been, most recent first.
+// Selecting one navigates the current tab, exactly as an address bar does; a
+// Ctrl-click opens a new tab instead. Nothing here switches tabs or reflects which
+// tabs are open, and removing a row closes nothing.
+const visibleLocations = computed(() => sortedByRecency(tabStore.recentLocations))
+const dropdownTabs = computed(() => (hasAnyResults() ? [] : visibleLocations.value))
 
 // An empty panel is just a floating blank rectangle, so render nothing at all
 // until there is something in it. The loading flags count as content: a search in
@@ -118,21 +115,20 @@ const hasDropdownContent = computed(
   () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny(),
 )
 
-// No separate recently-opened section: the tab list above already keeps an entry
-// after its tab closes, so a "recently opened" list beside it would show the same
-// documents twice — once with its TOC breadcrumb and once without.
-// recentlyOpenedStore still backs the home-page tiles; it just isn't a section here.
-
-function onSelectTab(id: string) {
-  // The row may be a closed tab — reopening revives it under its original id, so
-  // its own reading position comes back with it. Live tabs just get focus.
-  tabStore.reopenRecentTab(id)
+// The address bar belongs to the current tab, so its rows navigate IN PLACE —
+// the same rule every other row here follows, and the same one a browser applies
+// to a link. Ctrl/⌘/middle-click is the single exception and opens a new tab.
+function onSelectLocation(id: string, openInNewTab = false) {
+  const patch = tabStore.locationPatch(id)
+  if (!patch) return
+  pane.openOrUpdateActiveTab(patch as Omit<Tab, 'id'>, openInNewTab)
   close()
 }
 
-function onForgetTab(id: string) {
-  // Keep the dropdown open — pruning the list is a batch gesture.
-  tabStore.forgetRecentTab(id)
+function onForgetLocation(id: string) {
+  // Keep the dropdown open — pruning the list is a batch gesture. This only
+  // forgets the location; any tab showing that document is untouched.
+  tabStore.forgetLocation(id)
 }
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
@@ -351,8 +347,8 @@ nextTick(() => {
       @select-catalog-toc="onSelectCatalogToc"
       @select-hebrew-book="onSelectHebrewBook"
       @select-file="onSelectFile"
-      @select-tab="onSelectTab"
-      @forget-tab="onForgetTab"
+      @select-tab="onSelectLocation"
+      @forget-tab="onForgetLocation"
       @dropdown-focused="pauseSearch"
       @dropdown-blurred="resumeSearch"
     />
