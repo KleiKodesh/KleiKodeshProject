@@ -32,7 +32,7 @@ provide(PANE_NAVIGATION_KEY, {
   updateActiveTab: pane.updateActiveTab,
   openTab: pane.openTab,
   openOrUpdateActiveTab: pane.openOrUpdateActiveTab,
-  navigateToSingleton: pane.navigateToSingleton,
+  navigateToDestination: pane.navigateToDestination,
   switchTab: pane.switchTab,
   get activeTabId() { return pane.activeTabId.value },
   get activeTab() { return pane.activeTab.value },

@@ -55,7 +55,7 @@ export const useLocalFileStore = defineStore('localFile', () => {
    * An "Open With" launch lands exactly here: its push event asks for a new tab,
    * and honouring that would leave the untouched home tab behind as a redundant
    * first tab, so the file takes that tab over instead. Mirrors the same "unless
-   * the current tab is home" rule navigateToSingleton uses.
+   * the current tab is home" rule navigateToDestination uses.
    */
   function targetPaneHasOnlyHomeTab(): boolean {
     const pane = targetPaneId()

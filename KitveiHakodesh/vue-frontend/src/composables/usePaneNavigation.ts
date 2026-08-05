@@ -17,7 +17,7 @@ export interface PaneNavigation {
    * tab is opened and focused; otherwise the active tab is updated in place.
    */
   openOrUpdateActiveTab: (patch: Partial<Omit<Tab, 'id'>>, openInNewTab?: boolean) => void
-  navigateToSingleton: (route: import('@/stores/tabStore').TabRoute, openInNewTab?: boolean) => void
+  navigateToDestination: (route: import('@/stores/tabStore').TabRoute, openInNewTab?: boolean) => void
   switchTab: (id: string) => void
   readonly activeTabId: string
   readonly activeTab: Tab
@@ -40,7 +40,7 @@ export function usePaneNavigation(): PaneNavigation {
     updateActiveTab: pane.updateActiveTab,
     openTab: pane.openTab,
     openOrUpdateActiveTab: pane.openOrUpdateActiveTab,
-    navigateToSingleton: pane.navigateToSingleton,
+    navigateToDestination: pane.navigateToDestination,
     switchTab: pane.switchTab,
     get activeTabId() { return pane.activeTabId.value },
     get activeTab() { return pane.activeTab.value },

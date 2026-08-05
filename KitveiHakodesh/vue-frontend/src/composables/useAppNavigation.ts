@@ -5,8 +5,9 @@ import type { TabRoute } from '@/stores/tabStore'
 
 /**
  * Central navigation handler for all app destinations.
- * Singletons are routed via navigateToSingleton (enforces one-tab rule).
- * Multi-instance pages use updateActiveTab (in-place navigation).
+ * Tool pages (settings, dictionary, calendar…) route via navigateToDestination;
+ * everything else uses updateActiveTab. Both navigate IN PLACE by default — a tab
+ * shows one thing at a time, and nothing here is unique across tabs.
  * Side-effects (file picker, external links) are handled here too.
  *
  * Uses the PANE_NAVIGATION_KEY injection provided by AppShell so all navigation
@@ -15,7 +16,7 @@ import type { TabRoute } from '@/stores/tabStore'
 export function useAppNavigation() {
   const pane = usePaneNavigation()
 
-  const SINGLETON_ROUTES: Partial<Record<string, TabRoute>> = {
+  const DESTINATION_ROUTES: Partial<Record<string, TabRoute>> = {
     'קטלוג הספרים': '/books',
     הגדרות: '/settings',
     'היברו-בוקס': '/hebrewbooks',
@@ -54,9 +55,9 @@ export function useAppNavigation() {
   // ── Public navigation functions ───────────────────────────────────────────
 
   async function navigate(label: string): Promise<void> {
-    const singleton = SINGLETON_ROUTES[label]
-    if (singleton) {
-      pane.navigateToSingleton(singleton)
+    const destination = DESTINATION_ROUTES[label]
+    if (destination) {
+      pane.navigateToDestination(destination)
       return
     }
     if (label === 'חיפוש') {
@@ -70,11 +71,11 @@ export function useAppNavigation() {
   }
 
   async function navigateInNewTab(label: string): Promise<void> {
-    const singleton = SINGLETON_ROUTES[label]
-    if (singleton) {
-      // openInNewTab=true: opens a new tab unless the current tab is home (/),
-      // in which case it replaces in-place. If a singleton tab already exists, just switch to it.
-      pane.navigateToSingleton(singleton, true)
+    const destination = DESTINATION_ROUTES[label]
+    if (destination) {
+      // openInNewTab=true: opens a new tab unless the current tab is home (/), in
+      // which case it replaces in-place rather than leaving an empty home behind.
+      pane.navigateToDestination(destination, true)
       return
     }
     if (label === 'חיפוש') {

@@ -244,7 +244,7 @@ export function useOtzariaAddinBridge(
     if (method === 'navigation.goTo') {
       const routeMap: Record<string, string> = { library: '/books', settings: '/settings' }
       const mapped = routeMap[p.target as string]
-      if (mapped) tabStore.navigateToSingleton(mapped as '/books' | '/settings')
+      if (mapped) tabStore.navigateToDestination(mapped as '/books' | '/settings')
       return { ok: true }
     }
 

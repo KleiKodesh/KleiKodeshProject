@@ -33,7 +33,7 @@ import {
   canGoForward as historyCanGoForward,
 } from './navHistory'
 import { useBookViewStore } from './bookViewStore'
-import { disposeLocalFileHost } from '@/webview-host/bridge'
+import { disposeLocalFileHost, isVstoEnvironment } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 import {
@@ -201,9 +201,14 @@ export const useTabStore = defineStore('tabs', () => {
     })
   }
 
-  // ── Singleton routes — never persisted across sessions ───────────────────
+  // ── Destination routes — tool pages, never persisted across sessions ─────
+  // These used to be "singletons", enforced as one-tab-per-route. They no longer
+  // are: a tab shows one thing at a time, so a destination is unique within a tab
+  // for free, and across tabs it should not be unique at all — two tabs may each
+  // hold their own מילון. What survives is this list, which still decides what is
+  // stripped from the persisted tab list and what stays out of recents.
 
-  const SINGLETON_ROUTES: TabRoute[] = [
+  const DESTINATION_ROUTES: TabRoute[] = [
     '/settings',
     '/books',
     '/hebrewbooks',
@@ -213,7 +218,7 @@ export const useTabStore = defineStore('tabs', () => {
     '/midot',
     '/file-search',
   ]
-  const SINGLETON_TITLES: Record<string, string> = {
+  const DESTINATION_TITLES: Record<string, string> = {
     '/settings': 'הגדרות',
     '/books': 'קטלוג הספרים',
     '/hebrewbooks': 'היברו-בוקס',
@@ -228,7 +233,7 @@ export const useTabStore = defineStore('tabs', () => {
 
   function persistTabs() {
     const wsId = useWorkspaceStore().activeId
-    const persistable = tabs.value.filter((t) => !SINGLETON_ROUTES.includes(t.route))
+    const persistable = tabs.value.filter((t) => !DESTINATION_ROUTES.includes(t.route))
     lsSet<PersistedTabList>(tabsListKey(wsId), {
       tabs: persistable.map(
         ({
@@ -448,7 +453,7 @@ export const useTabStore = defineStore('tabs', () => {
   // in-memory-only mutation (pdfVirtualUrl, pdfConverting, etc.)
   const _persistedSnapshot = computed(() =>
     tabs.value
-      .filter((t) => !SINGLETON_ROUTES.includes(t.route))
+      .filter((t) => !DESTINATION_ROUTES.includes(t.route))
       .map((t) => ({
         id: t.id,
         title: t.title,
@@ -597,7 +602,7 @@ export const useTabStore = defineStore('tabs', () => {
         pane2ActiveTabId.value = remaining[0]!.id
       } else {
         // Pane 2 must never be left with no tab — mirror the pane-1 closeTab guarantee.
-        // Without this, pane2ActiveTabId stays '' and any subsequent navigateToSingleton
+        // Without this, pane2ActiveTabId stays '' and any subsequent navigateToDestination
         // call hits the `if (!id) return` guard in updatePane2ActiveTab and silently does nothing.
         const home: Tab = { id: String(++nextId), pane: 2, title: 'בית', route: '/' }
         tabs.value.push(home)
@@ -939,45 +944,44 @@ export const useTabStore = defineStore('tabs', () => {
     else openTab({ title: 'בית', route: '/' })
   }
 
-  // Singleton pages — only one tab per route allowed *within a pane*.
-  // Pane 1 and pane 2 each enforce their own singleton independently.
-  // These routes are never persisted across sessions — they are always stripped before saving.
+  // Destination pages (the tool routes listed in DESTINATION_ROUTES). Never
+  // persisted across sessions — always stripped before saving.
   //
   // openInNewTab (default false):
-  //   false — replace the current tab in-place (home page tiles, nav dropdown)
-  //   true  — open a new tab, UNLESS the current tab is the home page in which case
-  //           replace in-place (keyboard shortcuts like F1)
+  //   false — replace the current tab in place (home tiles, nav dropdown)
+  //   true  — open a new tab, unless the current tab is home, in which case replace
+  //           it in place rather than leaving an empty home behind
   //
-  // In both modes, if a singleton tab for the route already exists, switch to it
-  // without closing or replacing anything.
+  // No route is unique across tabs: each tab may hold its own מילון or לוח שנה.
 
-  function navigateToSingleton(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
-    // pane1Tabs is split-aware: while split view is off it includes adopted orphans,
-    // so an orphaned singleton (e.g. settings opened in pane 2) is reused, not duplicated.
-    const paneTabs = pane === 1
-      ? pane1Tabs.value
-      : tabs.value.filter((t) => t.pane === 2)
-    const existing = paneTabs.find((t) => t.route === route)
-    if (pane === 1) {
-      if (existing) {
-        if (existing.id === activeTabId.value) return
-        switchTab(existing.id)
-      } else if (openInNewTab && activeTab.value.route !== '/') {
-        openTab({ route, title: SINGLETON_TITLES[route] ?? route })
-      } else {
-        updateActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
-      }
-    } else {
-      const currentPane2Route = tabs.value.find((t) => t.id === pane2ActiveTabId.value)?.route
-      if (existing) {
-        if (existing.id === pane2ActiveTabId.value) return
-        switchPaneTab(existing.id, 2)
-      } else if (openInNewTab && currentPane2Route !== '/') {
-        openPane2Tab({ route, title: SINGLETON_TITLES[route] ?? route })
-      } else {
-        updatePane2ActiveTab({ route, title: SINGLETON_TITLES[route] ?? route })
-      }
+  /**
+   * Routes that always want a tab of their own: they are whole-app surfaces rather
+   * than something you read alongside your work, so replacing the current tab with
+   * one would throw away what the reader had open.
+   *
+   * Except under VSTO, where the task pane shows a single tab and there is nowhere
+   * for a new one to go — there they must navigate in place like everything else.
+   */
+  const OWN_TAB_ROUTES: TabRoute[] = ['/settings', '/workspaces']
+
+  function navigateToDestination(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
+    const patch = { route, title: DESTINATION_TITLES[route] ?? route }
+
+    // A tab shows one thing at a time, so a destination is inherently unique WITHIN
+    // a tab and needs no enforcing. Across tabs it is not unique at all: two tabs may
+    // each hold their own מילון, exactly as a browser lets you open Settings twice.
+    const wantsOwnTab = OWN_TAB_ROUTES.includes(route) && !isVstoEnvironment
+
+    // Replacing an empty home tab is never worth a new tab — there is nothing to lose.
+    const onHome = activeTabForPane(pane).route === '/'
+
+    if ((openInNewTab || wantsOwnTab) && !onHome) {
+      if (pane === 1) openTab(patch)
+      else openPane2Tab(patch)
+      return
     }
+    if (pane === 1) updateActiveTab(patch)
+    else updatePane2ActiveTab(patch)
   }
 
   // ── PDF viewer title bar visibility ───────────────────────────────────────
@@ -1020,7 +1024,7 @@ export const useTabStore = defineStore('tabs', () => {
     updateActiveTab,
     updateTab,
     openNewHomeTab,
-    navigateToSingleton,
+    navigateToDestination,
     getLastReadPos,
     setLastReadPos,
     getTabViewState,

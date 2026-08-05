@@ -111,8 +111,8 @@ export function useAppShellPane(paneId: 1 | 2) {
     }
   }
 
-  function navigateToSingleton(route: TabRoute, openInNewTab = false) {
-    tabStore.navigateToSingleton(route, paneId, openInNewTab)
+  function navigateToDestination(route: TabRoute, openInNewTab = false) {
+    tabStore.navigateToDestination(route, paneId, openInNewTab)
   }
 
   const ROUTE_MAP: Record<string, { title: string; route: TabRoute }> = {
@@ -171,7 +171,7 @@ export function useAppShellPane(paneId: 1 | 2) {
     openNewHomeTab,
     updateActiveTab,
     openOrUpdateActiveTab,
-    navigateToSingleton,
+    navigateToDestination,
     goHome,
     togglePdfViewerTitleBar,
   }
