@@ -45,14 +45,15 @@ export const useHostSearchStore = defineStore('hostSearch', () => {
     const target = msg.target as string | undefined
 
     if (target === 'catalog') {
-      // '/books' is a singleton — reuse the existing catalog tab if present,
-      // otherwise open one. Either way stamp catalogQuery so the page seeds it.
+      // Deliberately reuses an open catalog tab rather than adding another: repeated
+      // lookups from the host would otherwise pile up tabs the user never asked for.
+      // Either way stamp catalogQuery so the page seeds it.
       const existing = tabStore.tabs.find((t) => t.route === '/books')
       if (existing) {
         tabStore.updateTab(existing.id, { catalogQuery: text })
         tabStore.switchTab(existing.id)
       } else {
-        tabStore.openTab({ route: '/books', title: 'ספרים', catalogQuery: text })
+        tabStore.openTab({ route: '/books', title: 'קטלוג הספרים', catalogQuery: text })
       }
       return
     }

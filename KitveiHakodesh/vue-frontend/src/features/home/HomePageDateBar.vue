@@ -133,7 +133,7 @@ function toggleZmanPopup() {
 }
 
 function openHebrewCalendar() {
-  paneNavigation.navigateToSingleton('/hebrew-calendar')
+  paneNavigation.navigateToDestination('/hebrew-calendar')
 }
 
 function openDafYomi() {
