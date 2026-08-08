@@ -182,14 +182,6 @@ if (-not $AnyCpuOnly) {
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 
-# Stable, version-independent copy of the AnyCPU installer. Lets the website link to
-# https://github.com/KleiKodesh/KleiKodeshProject/releases/latest/download/KleiKodeshSetup.exe
-# — a direct download that needs NO api.github.com call, so it works behind content
-# filters / anonymous rate limits where the JS-driven link used to fail.
-$installerStable = Join-Path $ReleasesDir "KleiKodeshSetup.exe"
-Copy-Item $installerAny $installerStable -Force
-Write-Host "OK: $(Split-Path -Leaf $installerStable) (stable-named copy of AnyCPU)" -ForegroundColor Green
-
 Write-Host ""
 Write-Host "All variants built successfully." -ForegroundColor Green
 
@@ -264,7 +256,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-foreach ($asset in @($installerX64, $installerX86, $installerAny, $installerStable, $portableZip) | Where-Object { $_ }) {
+foreach ($asset in @($installerX64, $installerX86, $installerAny, $portableZip) | Where-Object { $_ }) {
     Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
     gh release upload $version $asset --repo KleiKodesh/KleiKodeshProject --clobber
     if ($LASTEXITCODE -ne 0) {
@@ -280,45 +272,99 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# ── 6. Verify the website's download link actually resolves ──────────────────
+# ── 6. Point the website at this release's AnyCPU installer ──────────────────
 #
-# The website links to a fixed, version-independent URL. GitHub resolves "latest"
-# server-side, but the *filename* is literal — it cannot interpolate a version. So
-# this URL is only valid while the release keeps carrying an asset named exactly
-# KleiKodeshSetup.exe (the stable copy made above).
+# The website's download button holds a full, versioned URL to the AnyCPU installer.
+# It cannot be a fixed "/releases/latest/download/..." link: GitHub resolves "latest"
+# server-side but matches the *filename* literally, so any URL naming a versioned
+# asset dies the moment the next version ships. Instead the URL is rewritten here,
+# once per release, and committed to the website repo.
 #
-# This check exists because that agreement is invisible: the filename is decided
-# here, in the website's HTML, and in its JS regex — and a mismatch downloads
-# nothing while looking perfectly fine to anyone whose browser can reach the
-# GitHub API. Fail the release instead of shipping a dead button.
+# Order matters. The asset is verified live BEFORE the site is touched, so the button
+# is never pointed at a URL that 404s. If anything below fails the release itself is
+# already published and intact — only the website lags, and re-running this section
+# (or editing the href by hand) is enough to catch it up.
 Write-Host ""
-Write-Host "Verifying website download link..." -ForegroundColor Yellow
+Write-Host "Updating website download link..." -ForegroundColor Yellow
 
-$downloadUrl = "https://github.com/KleiKodesh/KleiKodeshProject/releases/latest/download/KleiKodeshSetup.exe"
+$downloadUrl = "https://github.com/KleiKodesh/KleiKodeshProject/releases/download/$version/KleiKodeshSetup-$version.exe"
+
+# 6a. Confirm the asset really is downloadable before linking to it.
 $linkOk = $false
 try {
-    # -MaximumRedirection 0 would reject the 302 to the CDN; follow it but read
-    # only headers so the installer body is never downloaded.
+    # Follow the 302 to the CDN but read headers only — never pull the installer body.
     $resp = Invoke-WebRequest -Uri $downloadUrl -Method Head -UseBasicParsing -TimeoutSec 30
     $linkOk = ($resp.StatusCode -eq 200)
 } catch {
-    $linkOk = $false
     Write-Host "  $($_.Exception.Message)" -ForegroundColor DarkGray
 }
 
-if ($linkOk) {
-    Write-Host "OK: $downloadUrl -> 200" -ForegroundColor Green
-} else {
-    Write-Host ""
-    Write-Host "ERROR: The website's download link does not resolve." -ForegroundColor Red
+if (-not $linkOk) {
+    Write-Host "ERROR: Release asset is not downloadable — website NOT updated." -ForegroundColor Red
     Write-Host "  $downloadUrl" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  The release published, but the website button is dead. Assets in $version" -ForegroundColor Yellow
-    Write-Host "  must include a file named exactly 'KleiKodeshSetup.exe'." -ForegroundColor Yellow
     Write-Host "  Assets currently in the release:" -ForegroundColor Yellow
     gh release view $version --repo KleiKodesh/KleiKodeshProject --json assets --jq '.assets[].name' |
         ForEach-Object { Write-Host "    $_" -ForegroundColor Gray }
     exit 1
+}
+Write-Host "  asset verified: $downloadUrl -> 200" -ForegroundColor Gray
+
+# 6b. Rewrite the href in index.html.
+if (-not (Test-Path $WebsiteRepo)) {
+    Write-Host "WARNING: Website repo not found at $WebsiteRepo — skipping link update." -ForegroundColor Yellow
+    Write-Host "         Set the download button href manually to:" -ForegroundColor Yellow
+    Write-Host "         $downloadUrl" -ForegroundColor Yellow
+} else {
+    $indexPath = Join-Path $WebsiteRepo "index.html"
+    $html = [System.IO.File]::ReadAllText($indexPath)
+
+    # Anchor on the data-download-button attribute rather than the URL itself, so this
+    # keeps working no matter what the previous release left in the href.
+    $pattern     = '(?s)(href=")[^"]*("[^>]*?data-download-button="main")'
+    $replacement = '${1}' + $downloadUrl + '${2}'
+    $updated     = [regex]::Replace($html, $pattern, $replacement)
+
+    if ($updated -eq $html -and $html -notmatch [regex]::Escape($downloadUrl)) {
+        Write-Host "ERROR: Could not find the download button in index.html." -ForegroundColor Red
+        Write-Host "       Expected an <a href=\"...\" data-download-button=\"main\">." -ForegroundColor Yellow
+        Write-Host "       Set the href manually to: $downloadUrl" -ForegroundColor Yellow
+        exit 1
+    }
+
+    if ($updated -ne $html) {
+        # UTF8 without BOM — the file is UTF-8 and a BOM would show up as stray
+        # characters at the top of the rendered page.
+        [System.IO.File]::WriteAllText($indexPath, $updated, (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host "  index.html updated" -ForegroundColor Gray
+    } else {
+        Write-Host "  index.html already current" -ForegroundColor Gray
+    }
+
+    # 6c. Commit and push, but only if something actually changed.
+    Push-Location $WebsiteRepo
+    try {
+        $dirty = git status --porcelain -- index.html
+        if (-not $dirty) {
+            Write-Host "OK: website already up to date (nothing to push)." -ForegroundColor Green
+        } else {
+            git add index.html
+            git commit -m "download button: point at $version" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "ERROR: Website commit failed — link updated locally but not pushed." -ForegroundColor Red
+                exit 1
+            }
+
+            git push origin HEAD
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "ERROR: Website push failed. The commit is local; push it manually:" -ForegroundColor Red
+                Write-Host "       cd $WebsiteRepo; git push origin HEAD" -ForegroundColor Yellow
+                exit 1
+            }
+            Write-Host "OK: website updated -> $downloadUrl" -ForegroundColor Green
+        }
+    } finally {
+        Pop-Location
+    }
 }
 
 Write-Host ""
