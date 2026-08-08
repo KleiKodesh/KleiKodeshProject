@@ -507,20 +507,18 @@ const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
   flex-direction: row;
   min-height: 0;
   position: relative;
-  /* Side padding for everything in the reading column. Custom properties
-     inherit past scoped-style boundaries, so CommentaryHeader picks these up
-     too and widens in lockstep with the lines. Declared on .body (not
-     .commentary-view) because an element never matches a container query on
-     its OWN container. */
+  /* Side padding for everything in the reading column — headers and lines share
+     the ONE value so their start edges line up. Custom properties inherit past
+     scoped-style boundaries, so CommentaryHeader picks this up too. Declared on
+     .body (not .commentary-view) because an element never matches a container
+     query on its OWN container. */
   --commentary-pad-inline: 12px;
-  --commentary-header-pad-inline: 14px;
 }
 /* On a wide commentary panel give the text a bit more breathing room from the
    edges (רווח נוסף מהצדדים במסך רחב), matching the lines view. */
 @container commentary-view (min-width: 600px) {
   .body {
     --commentary-pad-inline: 22px;
-    --commentary-header-pad-inline: 24px;
   }
 }
 .content-col {

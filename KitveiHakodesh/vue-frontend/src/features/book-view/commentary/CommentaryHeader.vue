@@ -77,9 +77,10 @@ function onHeaderClick(e: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 8px;
-  /* Set by CommentaryView's .body so the header widens in lockstep with the
-     lines on a wide panel; the 6px end padding stays fixed for the actions. */
-  padding-inline: var(--commentary-header-pad-inline, 14px) 6px;
+  /* Same value the lines use (set by CommentaryView's .body) so the header text
+     and the commentary text share a start edge; the 6px end padding stays fixed
+     for the action buttons. */
+  padding-inline: var(--commentary-pad-inline, 12px) 6px;
   height: 36px;
   flex-shrink: 0;
   max-width: var(--commentary-max-width, none);
