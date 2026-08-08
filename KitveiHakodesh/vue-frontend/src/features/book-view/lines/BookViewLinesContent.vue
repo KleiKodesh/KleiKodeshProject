@@ -8,7 +8,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { LineItem } from './useBookViewLinesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
-import type { CommentaryTreeState, PinnedCommentaryGroup } from '../bookViewTypes'
+import type { BookViewLinesScrollProps } from './useBookViewLinesScroll'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '../useTextSelectionKeys'
@@ -34,37 +34,27 @@ const emit = defineEmits<{
   lineSelected: [lineId: number, isShiftClick: boolean]
   'ctrl-f': []
 }>()
-const props = defineProps<{
-  lines: LineItem[]
-  prioritise: (lineIndex: number) => void
-  altTocLabelMap?: Map<number, string>
-  selectedLineId?: number | null
-  commentaryVisible?: boolean
-  commentaryMode?: 'off' | 'bottom' | 'side'
-  commentaryFraction?: number
-  stackedCommentaryFraction?: number
-  commentaryScrollIndex?: number | null
-  commentaryScrollOffset?: number | null
-  commentaryFilterState?: CommentaryTreeState
-  searchQuery?: string
-  currentMatchLineIndex?: number
-  currentMatchOccurrence?: number
-  initialLineIndex?: number
-  initialScrollIndex?: number
-  initialScrollOffset?: number
-  flashLineOnOpen?: boolean
-  searchHighlightLineIndex?: number
-  searchHighlightQuery?: string
-  searchHighlightSnippet?: string
-  searchHighlightTerms?: string[]
-  searchBarVisible?: boolean
-  idbResolved?: boolean
-  getActiveTocEntry?: (lineIndex: number) => TocEntry | null
-  getTocPath?: (entry: TocEntry) => string
-  pinnedCommentaryGroup?: PinnedCommentaryGroup | null
-  selectedSectionLineIds?: number[] | null
-  multiSelectLineIds?: number[] | null
-}>()
+// The scroll-related props come from useBookViewLinesScroll's own interface —
+// never re-declare them here. The hand-copied list diverged once: all of those
+// props are optional, so a renamed prop compiled clean while Vue silently
+// dropped the page's binding into $attrs and saves went out empty.
+const props = defineProps<
+  BookViewLinesScrollProps & {
+    lines: LineItem[]
+    prioritise: (lineIndex: number) => void
+    altTocLabelMap?: Map<number, string>
+    searchQuery?: string
+    currentMatchLineIndex?: number
+    currentMatchOccurrence?: number
+    searchHighlightQuery?: string
+    searchHighlightSnippet?: string
+    searchHighlightTerms?: string[]
+    getActiveTocEntry?: (lineIndex: number) => TocEntry | null
+    getTocPath?: (entry: TocEntry) => string
+    selectedSectionLineIds?: number[] | null
+    multiSelectLineIds?: number[] | null
+  }
+>()
 
 const tabStore = useTabStore()
 const settingsStore = useSettingsStore()

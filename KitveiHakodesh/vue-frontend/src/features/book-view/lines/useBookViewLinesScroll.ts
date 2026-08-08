@@ -14,14 +14,22 @@
  *   push item.start down), re-issues scrollToIndex. Exits once stable for 3 consecutive frames.
  *   After stabilization, applies the saved sub-line pixel offset via scrollToOffset — but only
  *   if the offset fits within the item's actual height (guards against stale saves).
- *   A post-stabilization watch continues tracking in case late-loading chunks cause further drift.
+ *   A post-stabilization MutationObserver keeps tracking for a bounded window (10s,
+ *   cancelled by user input): late chunks above the target re-measure when they
+ *   RENDER, which arrives as a DOM mutation, not as a lines-array change - a
+ *   watch on lines() slept through exactly those shifts.
  */
 import { watch, nextTick, onBeforeUnmount } from 'vue'
 import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
 import type { LineItem } from './useBookViewLinesTable'
-import type { CommentaryTreeState, CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
+import { COMMENTARY_SLOTS } from '../bookViewTypes'
+import type {
+  CommentaryPanelPersistStates,
+  CommentarySlot,
+  CommentaryTreeState,
+} from '../bookViewTypes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { useBookViewStore } from '@/stores/bookViewStore'
 
@@ -34,14 +42,16 @@ export interface BookViewLinesScrollProps {
   flashLineOnOpen?: boolean
   searchHighlightLineIndex?: number
   idbResolved?: boolean
+  /** True when EITHER commentary panel is open. */
   commentaryVisible?: boolean
-  commentaryMode?: 'off' | 'bottom' | 'side'
-  commentaryFraction?: number
-  stackedCommentaryFraction?: number
-  commentaryScrollIndex?: number | null
-  commentaryScrollOffset?: number | null
-  commentaryFilterState?: CommentaryTreeState
-  pinnedCommentaryGroup?: PinnedCommentaryGroup | null
+  /**
+   * Both commentary panels' persistable state, read at save time.
+   *
+   * A getter rather than eight pass-through props: this composable owns none of it
+   * and only ferries it to IDB alongside the scroll position it does own. The
+   * panels themselves own it - see useCommentaryPanelSlot.
+   */
+  commentaryPersistState?: () => CommentaryPanelPersistStates
   selectedLineId?: number | null
   searchBarVisible?: boolean
 }
@@ -184,29 +194,59 @@ export function useBookViewLinesScroll(
                       programmaticScrolling = false
                     }
 
-                    // Post-stabilization: keep correcting if late chunks shift item.start.
+                    // Post-stabilization: late chunks above the target re-measure when
+                    // they render and push the content under the viewport. The shifts
+                    // arrive with DOM mutations, NOT with lines-array changes (backfill
+                    // mutates line objects in place), so a watch on lines() slept through
+                    // them - the drift the reader saw as "restored to the wrong place".
+                    // Mirror the commentary panels' startRestoreCorrection instead:
+                    // observe the scroller and re-anchor whenever the target's measured
+                    // start moves, for a bounded window. The reader taking over (wheel /
+                    // touch / pointer) cancels immediately - their scroll wins.
+                    const POST_RESTORE_WINDOW_MS = 10000
+                    const postEl = scrollerEl.value
                     let postLastStart = lastStart
-                    const postStopWatch = watch(
-                      () => lines(),
-                      () => {
-                        if (cancelled) { postStopWatch(); return }
-                        const postCache = virtualizer().measurementsCache.find((m) => m.index === target)
-                        if (!postCache) return
-                        if (postCache.start !== postLastStart) {
-                          postLastStart = postCache.start
-                          virtualizer().scrollToIndex(target, { align: 'start' })
-                          if (offsetToApply > 0) {
-                            requestAnimationFrame(() => {
-                              if (cancelled) return
-                              const driftCache = virtualizer().measurementsCache.find((m) => m.index === target)
-                              if (driftCache) virtualizer().scrollToOffset(driftCache.start + offsetToApply)
-                            })
-                          }
-                        }
-                        if (lines().every(l => l.content !== null)) postStopWatch()
-                      },
-                      { flush: 'post' },
-                    )
+                    let postDone = false
+                    let postObserver: MutationObserver | null = null
+                    const postStartedAt = performance.now()
+
+                    function postFinish() {
+                      if (postDone) return
+                      postDone = true
+                      postObserver?.disconnect()
+                      postEl?.removeEventListener('wheel', postFinish)
+                      postEl?.removeEventListener('touchstart', postFinish)
+                      postEl?.removeEventListener('pointerdown', postFinish)
+                    }
+
+                    function postCorrect() {
+                      if (postDone) return
+                      if (cancelled || performance.now() - postStartedAt > POST_RESTORE_WINDOW_MS) {
+                        postFinish()
+                        return
+                      }
+                      const postCache = virtualizer().measurementsCache.find((m) => m.index === target)
+                      if (!postCache) return
+                      if (postCache.start === postLastStart) return
+                      postLastStart = postCache.start
+                      virtualizer().scrollToIndex(target, { align: 'start' })
+                      if (offsetToApply > 0) {
+                        requestAnimationFrame(() => {
+                          if (cancelled || postDone) return
+                          const driftCache = virtualizer().measurementsCache.find((m) => m.index === target)
+                          if (driftCache) virtualizer().scrollToOffset(driftCache.start + offsetToApply)
+                        })
+                      }
+                    }
+
+                    if (postEl) {
+                      postEl.addEventListener('wheel', postFinish, { passive: true })
+                      postEl.addEventListener('touchstart', postFinish, { passive: true })
+                      postEl.addEventListener('pointerdown', postFinish, { passive: true })
+                      postObserver = new MutationObserver(() => postCorrect())
+                      postObserver.observe(postEl, { childList: true, subtree: true, attributes: false })
+                      setTimeout(postFinish, POST_RESTORE_WINDOW_MS + 100)
+                    }
 
                     // FTS: scroll to the highlighted mark once positioned.
                     if (props.searchHighlightLineIndex != null) {
@@ -302,78 +342,69 @@ export function useBookViewLinesScroll(
   // ── Persist scroll position ─────────────────────────────────────────────────
 
   let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
-  // Last known good filter snapshot — captured whenever visibilityList is non-empty.
-  // Replayed on save when the commentary panel is closed (visibilityList empty), so we
-  // never overwrite a previously valid filter with an empty list.
-  let lastValidFilterState: import('../bookViewTypes').CommentaryTreeState | undefined
+
+  // Last known good filter snapshot PER PANEL. A panel's visibilityList is empty
+  // until its filter tree has been opened (and again once it closes), so saving the
+  // live value blindly would overwrite a good saved filter with an empty one.
+  const lastValidFilterState: Partial<Record<CommentarySlot, CommentaryTreeState>> = {}
+
+  function cloneFilterState(state: CommentaryTreeState): CommentaryTreeState {
+    return {
+      searchQuery: state.searchQuery,
+      tokens: [...state.tokens],
+      visibilityList: state.visibilityList.map((item) => ({ ...item })),
+    }
+  }
+
+  /** Both panels' state for this save, each filter backfilled from its last good one. */
+  function commentaryPanelsForSave(): CommentaryPanelPersistStates {
+    const live = props.commentaryPersistState?.() ?? {}
+    const result: CommentaryPanelPersistStates = {}
+    for (const slot of COMMENTARY_SLOTS) {
+      const panel = live[slot]
+      if (!panel) continue
+      const filterState = panel.filterState?.visibilityList.length
+        ? cloneFilterState(panel.filterState)
+        : lastValidFilterState[slot]
+      result[slot] = { ...panel, filterState }
+    }
+    return result
+  }
 
   function savePos() {
     if (programmaticScrolling) return
     const position = lastKnownPos ?? captureScrollPos()
-    if (position) {
-      // Snapshot the filter state only when the visibilityList is populated (panel has
-      // been opened and syncVisibilityList has run). Store the snapshot in
-      // lastValidFilterState so we can replay it when the panel is closed.
-      if (
-        props.commentaryFilterState &&
-        props.commentaryFilterState.visibilityList.length > 0
-      ) {
-        lastValidFilterState = {
-          searchQuery: props.commentaryFilterState.searchQuery,
-          tokens: [...props.commentaryFilterState.tokens],
-          visibilityList: props.commentaryFilterState.visibilityList.map(
-            (item: CommentaryVisibilityItem) => ({ ...item }),
-          ),
-        }
-      }
-      // Use the most recent valid snapshot; undefined if the panel was never opened.
-      const filterState = lastValidFilterState
-      const pinnedGroup = props.pinnedCommentaryGroup
-        ? {
-            bookId: props.pinnedCommentaryGroup.bookId,
-            sectionLabel: props.pinnedCommentaryGroup.sectionLabel,
-            subSectionLabel: props.pinnedCommentaryGroup.subSectionLabel,
-          }
-        : null
-      tabStore.setBookViewState(tabId, bookId, {
-        ...position,
-        selectedLineId: props.selectedLineId,
-        commentaryScrollIndex: props.commentaryScrollIndex,
-        commentaryScrollOffset: props.commentaryScrollOffset,
-        commentaryFilterState: filterState,
-        zoom: zoom.value,
-        commentaryZoom: bookViewStore.getCommentaryZoom(tabId, bookId),
-        commentaryVisible: props.commentaryVisible,
-        commentaryMode: props.commentaryMode,
-        commentaryFraction: props.commentaryFraction,
-        stackedCommentaryFraction: props.stackedCommentaryFraction,
-        autoSelectTopLine: autoSelectTopLine.value,
-        pinnedCommentaryGroup: pinnedGroup,
-      })
-      tabStore.setLastReadPos(bookId, {
-        ...position,
-        selectedLineId: props.selectedLineId,
-        commentaryScrollIndex: props.commentaryScrollIndex,
-        commentaryScrollOffset: props.commentaryScrollOffset,
-        commentaryFilterState: filterState,
-        commentaryMode: props.commentaryMode,
-        commentaryFraction: props.commentaryFraction,
-        stackedCommentaryFraction: props.stackedCommentaryFraction,
-        pinnedCommentaryGroup: pinnedGroup,
-      })
-    }
+    if (!position) return
+
+    const commentaryPanels = commentaryPanelsForSave()
+
+    tabStore.setBookViewState(tabId, bookId, {
+      ...position,
+      selectedLineId: props.selectedLineId,
+      zoom: zoom.value,
+      autoSelectTopLine: autoSelectTopLine.value,
+      commentaryPanels,
+    })
+    tabStore.setLastReadPos(bookId, {
+      ...position,
+      selectedLineId: props.selectedLineId,
+      commentaryPanels,
+    })
   }
 
+  // Snapshot each panel's filter as soon as it has content, so a later close (which
+  // empties the live list) still persists the filter the reader had set.
   watch(
-    () => props.commentaryFilterState?.visibilityList.length,
-    (length) => {
-      if (length && props.commentaryFilterState) {
-        lastValidFilterState = {
-          searchQuery: props.commentaryFilterState.searchQuery,
-          tokens: [...props.commentaryFilterState.tokens],
-          visibilityList: props.commentaryFilterState.visibilityList.map(
-            (item: CommentaryVisibilityItem) => ({ ...item }),
-          ),
+    () => {
+      const live = props.commentaryPersistState?.() ?? {}
+      return COMMENTARY_SLOTS.map((slot) => live[slot]?.filterState?.visibilityList.length ?? 0)
+    },
+    () => {
+      const live = props.commentaryPersistState?.() ?? {}
+      for (const slot of COMMENTARY_SLOTS) {
+        const filterState = live[slot]?.filterState
+        if (filterState?.visibilityList.length) {
+          lastValidFilterState[slot] = cloneFilterState(filterState)
         }
       }
     },

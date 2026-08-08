@@ -17,15 +17,8 @@ export interface LastReadState {
   scrollIndex: number
   scrollOffset: number
   selectedLineId?: number | null
-  commentaryScrollIndex?: number | null
-  commentaryScrollOffset?: number | null
-  commentaryFilterState?: import('@/features/book-view/bookViewTypes').CommentaryTreeState
-  commentaryMode?: 'off' | 'bottom' | 'side'
-  commentaryFraction?: number
-  stackedCommentaryFraction?: number
-  /** @deprecated use pinnedCommentaryGroup — kept for reading old saves */
-  pinnedCommentaryBookId?: number | null
-  pinnedCommentaryGroup?: import('@/features/book-view/bookViewTypes').PinnedCommentaryGroup | null
+  /** Both commentary panels' saved place, keyed by slot. */
+  commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
 }
 
 // ── On-disk store (LRU-capped) ────────────────────────────────────────────────

@@ -1,12 +1,28 @@
 # book-view
 
-Main book reader. Split pane with text above and commentary below, shared side panel for tools, search bar, and toolbar.
+Main book reader: the text, up to two independent commentary panels, a shared side panel for tools, a search bar, and a toolbar.
+
+## Two commentary panels
+
+The reader can open a **bottom** commentary panel (stacked under the text) and a **side** one (beside it, wide panes only), together or separately, from two independent toolbar toggles (`Ctrl+J` / `Ctrl+Shift+J`). Both are anchored to the same clicked line and share one `useCommentary` fetch, because re-querying the same line would be byte-identical work on the app's heaviest payload.
+
+Everything downstream of the fetch is **per panel**, assembled by `commentary/useCommentaryPanelSlot.ts`:
+
+| Per panel | Shared |
+| --- | --- |
+| pinned book (and which default commentator it opens on: bottom takes the first, side the second) | the fetched `groups` for the current line |
+| filter tree state + check-tree scope (`commentaryScopeKey(tabId, slot)`) | highlights, notes, word-link anchors, TOC paths |
+| scroll position and its save/restore | `staticFilterGroups` / `filterGroups` |
+| in-panel search (Ctrl+F) and render cache | the anchor line (`selectedLineId` / `commentaryLineId`) |
+| divider position | |
+
+`CommentarySlot` (`'bottom' | 'side'`) keys all of it, and both panels persist under `BookState.commentaryPanels` / `LastReadState.commentaryPanels`. There is one filter-tree component; the side panel binds it to whichever panel's filter button was pressed (`commentaryTreeSlot`).
 
 ## Top-Level Components
 
 **BookViewPage.vue** - top-level orchestrator. The right place to add new panels or cross-cutting book-view behavior.
 
-**BookViewToolbar.vue** - zoom, search, TOC toggle, and bottom panel toggle. Add new toolbar actions here.
+**BookViewToolbar.vue** - zoom, search, TOC toggle, and one toggle per commentary panel. Add new toolbar actions here.
 
 **BookViewSidePanel.vue** - shared side-panel shell for book-view tools such as TOC and commentary filters.
 
@@ -77,9 +93,11 @@ Ctrl+Click (or Cmd+Click on Mac) a line to start a consecutive range selection, 
 
 **useBookViewScrollSync.ts** - syncs the active TOC entry and auto-selects commentary as the user scrolls. Updates `activeTocEntryId` and triggers commentary load on scroll.
 
-**useBookViewSessionRestore.ts** - restores per-book view state from IDB on mount: scroll position, selected line, commentary scroll, zoom, and divider fraction.
+**useBookViewSessionRestore.ts** - restores per-book view state from IDB on mount: lines scroll position, selected line, zoom, and each commentary panel's visibility, scroll position, filter and pin.
 
-**useBookViewPinnedCommentary.ts** - manages the pinned commentary group for the split-pane bottom panel. Tracks which commentary group is visible and handles pin transitions on line navigation.
+**useBookViewPinnedCommentary.ts** - manages one commentary panel's pinned group. Tracks which group is visible and handles pin transitions on line navigation. Instantiated once per panel, with a `defaultRank` deciding which of the book's default commentators that panel opens on.
+
+**useBookViewCommentaryPanel.ts** - one commentary panel's visibility and scroll save/restore lifecycle. Instantiated once per panel by `useCommentaryPanelSlot`.
 
 **useBookViewHighlights.ts** - lives in `lines/`. See `lines/README.md`.
 
@@ -89,7 +107,7 @@ Ctrl+Click (or Cmd+Click on Mac) a line to start a consecutive range selection, 
 
 ### bookViewTypes.ts
 
-Shared types for the book-view feature: `SearchMode`, `SidePanelMode`, and `CommentaryEntryVisibility`.
+Shared types for the book-view feature: `CommentarySlot`, `SearchMode` (`'content' | 'commentary-bottom' | 'commentary-side'`), `SidePanelMode`, `CommentaryVisibilityItem`, `CommentaryTreeState`, `CommentaryPinSnapshot`, and the persisted `CommentaryPanelPersistState(s)`.
 
 ### Highlights
 

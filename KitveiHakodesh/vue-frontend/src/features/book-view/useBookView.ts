@@ -3,15 +3,23 @@
  * Owns all data loading, state, event handlers, and watchers.
  * BookViewPage.vue is a shell that calls this and passes results to the template.
  *
+ * TWO COMMENTARY PANELS
+ * The book view hosts a 'bottom' and a 'side' commentary panel (see CommentarySlot).
+ * Both are anchored to the same clicked line and share ONE useCommentary fetch —
+ * re-querying would be byte-identical work on the app's heaviest payload — while
+ * everything downstream of the fetch (pin, filter tree, scroll, search, render) is
+ * built per panel by useCommentaryPanelSlot. Anything here that used to be "the"
+ * commentary state now loops over `panels`.
+ *
  * Concerns extracted into focused composables:
  * - useBookViewKeyboardShortcuts  — Ctrl+zoom and Ctrl+arrow section navigation
  * - useBookViewLineSelection      — single-click and shift-click multi-select
  * - useBookViewSidePanel          — TOC / commentary-tree panel open/close
  * - useBookViewSearchPanel        — search panel state and match navigation
- * - useBookViewCommentaryPanel    — commentary panel visibility and scroll restore
+ * - useCommentaryPanelSlot        — everything one commentary panel owns
  * - useBookViewLinesBackfillGate  — full-book lines backfill yields to commentary loads
  */
-import { ref, reactive, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
@@ -23,21 +31,29 @@ import { useLines } from './lines/useBookViewLinesTable'
 import { useCommentary } from './commentary/useCommentary'
 import { ensureConnectionTypeNamesLoaded } from './commentary/commentaryConnectionTypes'
 import { useBookViewSearch } from './useBookViewSearch'
-import { useCommentarySearch } from './commentary/useCommentarySearch'
 import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
-import { usePinnedCommentary } from './useBookViewPinnedCommentary'
 import { useCommentaryNavigation } from './commentary/useCommentaryNavigation'
+import { useCommentaryPanelSlot } from './commentary/useCommentaryPanelSlot'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
 import { useBookViewKeyboardShortcuts } from './useBookViewKeyboardShortcuts'
 import { useBookViewLineSelection } from './useBookViewLineSelection'
 import { useBookViewSidePanel } from './useBookViewSidePanel'
 import { useBookViewSearchPanel } from './useBookViewSearchPanel'
-import { useBookViewCommentaryPanel } from './useBookViewCommentaryPanel'
 import { useBookViewLinesBackfillGate } from './lines/useBookViewLinesBackfillGate'
 import { useBookViewTocNavigation } from './useBookViewTocNavigation'
 import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotations'
-import type { CommentaryTreeState } from './bookViewTypes'
+import { COMMENTARY_SLOTS } from './bookViewTypes'
+import type { CommentaryGroup } from './commentary/useCommentary'
+import type { CommentaryPanel } from './commentary/useCommentaryPanelSlot'
+import type {
+  CommentaryPanelPersistStates,
+  CommentaryPinSnapshot,
+  CommentarySlot,
+} from './bookViewTypes'
+import type { Highlight } from './lines/useBookViewHighlights'
+import type { Note } from './lines/useBookViewNotes'
+import type { WordLinkAnchor } from '@/webview-host/queries.types'
 export type { SearchMode } from './bookViewTypes'
 
 // Component instance types — used only for ref typing
@@ -54,10 +70,11 @@ type CommentaryViewInstance = {
   activeBookId: number | null
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   getFilterButtonEl?: () => HTMLElement | null
-  scrollToGroup: (bookId: number) => void
+  scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
+  claimRestoreIntent?: () => void
   $el?: HTMLElement
 }
 
@@ -65,7 +82,8 @@ export function useBookView(
   toolbarRef: () => ToolbarInstance | null,
   linesContentRef: () => LinesContentInstance | null,
   searchBarRef: () => SearchBarInstance | null,
-  commentaryViewRef: () => CommentaryViewInstance | null,
+  /** One CommentaryView ref per panel, set by BookViewPage. */
+  commentaryViewRefs: Record<CommentarySlot, () => CommentaryViewInstance | null>,
 ) {
   const bookViewStore = useBookViewStore()
   const tabStore = useTabStore()
@@ -131,25 +149,30 @@ export function useBookView(
   // ── Core reactive state ───────────────────────────────────────────────────
 
   const activeTocEntryId = ref<number | undefined>(undefined)
-  const commentaryTreeState = reactive<CommentaryTreeState>({ searchQuery: '', tokens: [], visibilityList: [] })
-  const restoredCommentaryMode = ref<'off' | 'bottom' | 'side' | undefined>(undefined)
-  const restoredCommentaryFraction = ref<number | undefined>(undefined)
-  const restoredStackedCommentaryFraction = ref<number | undefined>(undefined)
-
   const selectedLineId = ref<number | null>(null)
   const commentaryLineId = ref<number | null>(null)
 
-  // Placeholder ref updated once pinnedCommentary is set up below, so that
-  // useCommentary can read the pinned group without a circular dependency.
-  const pinnedCommentaryGroupForDisplay = ref<import('./bookViewTypes').PinnedCommentaryGroup | null>(null)
+  // ── Deferred wiring ────────────────────────────────────────────
+  // Several cycles have to be broken here, all the same way — a holder whose members
+  // are replaced once the real owner exists:
+  //   line selection needs pin capture <-> pins live on the panels
+  //   panels need annotation getters   <-> annotations need the panels' groups
+  //   panels need to close their filter tree <-> the side panel needs the panels
+  // Every call site runs after setup (a render, or a user action), so the holders are
+  // always populated by the time they are read.
+
+  const pinFns = {
+    captureActivePins: (): CommentaryPinSnapshot => ({}),
+    applyPendingPins: (_snapshot: CommentaryPinSnapshot) => {},
+  }
+  const annotationFns = {
+    getHighlightsForLine: (_lineId: number): Highlight[] => [],
+    getNotesForLine: (_lineId: number): Note[] => [],
+    getWordLinkAnchorsForLine: (_lineId: number): WordLinkAnchor[] => [],
+  }
+  const sidePanelFns = { closeCommentaryTreeFor: (_slot: CommentarySlot) => {} }
 
   // ── Line selection ────────────────────────────────────────────────────────
-  // setPendingPin is resolved after usePinnedCommentary is set up; we pass a
-  // closure so the dependency is only evaluated at call time, not at setup time.
-  const pendingPinFns = {
-    setPendingPin: (_group: { bookId: number; sectionLabel: string; subSectionLabel: string } | null) => {},
-    getActivePinnedGroup: (): { bookId: number; sectionLabel: string; subSectionLabel: string } | null => null,
-  }
 
   const {
     manualSelectionLineIds,
@@ -159,62 +182,126 @@ export function useBookView(
     () => tocEntries.value,
     commentaryLineId,
     selectedLineId,
-    (group) => pendingPinFns.setPendingPin(group),
-    () => pendingPinFns.getActivePinnedGroup(),
+    () => pinFns.captureActivePins(),
+    (snapshot) => pinFns.applyPendingPins(snapshot),
   )
 
-  /**
-   * An explicit line click invalidates any saved commentary scroll position:
-   * the pinned-group jump owns positioning for fresh navigation, and a stale
-   * session-restored position must not be applied to the new line's commentary
-   * (it would land on an arbitrary commentator and suppress the pinned jump).
-   * The position refs repopulate naturally — the pinned jump's programmatic
-   * scroll fires a scroll event that re-captures them.
-   * (commentaryPanel is initialized below; clicks can only happen after setup.)
-   */
-  function onLineSelected(lineId: number, isShiftClick: boolean) {
-    commentaryPanel.commentaryScrollIndex.value = null
-    commentaryPanel.commentaryScrollOffset.value = null
-    // Re-clicking the already-selected line changes no reactive state, so no
-    // commentary reload fires and setupGroupReloadScroll never wakes — jump to
-    // the pinned group explicitly (e.g. the session-restored line: restore put
-    // the panel at the saved position; a deliberate click should still show the
-    // default commentator).
-    const isSameLineReclick = !isShiftClick && commentaryLineId.value === lineId
-    onLineSelectedRaw(lineId, isShiftClick)
-    if (isSameLineReclick) {
-      const pinned = pinnedCommentaryGroupForDisplay.value
-      if (pinned) {
-        void nextTick(() =>
-          commentaryViewRef()?.scrollToGroup(pinned.bookId),
-        )
-      }
-    }
-  }
+  // ── Commentary data (shared by both panels) ───────────────────────────────
 
-  // ── Commentary data ───────────────────────────────────────────────────────
-
-  const { groups, groupsForDisplay, filterGroups, staticFilterGroups, loading: commentaryLoading, loadError: commentaryLoadError, staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, requestContentPriority } = useCommentary(
+  const {
+    groups, filterGroups, staticFilterGroups,
+    loading: commentaryLoading, loadError: commentaryLoadError,
+    staticFilterGroupsLoaded, ensureStaticFilterGroupsLoaded, requestContentPriority,
+  } = useCommentary(
     () => commentaryLineId.value,
     () => selectedSectionLineIds.value,
     () => bookId ?? undefined,
-    () => false, // commentaryTreeVisible injected post-setup via sidePanel
-    () => pinnedCommentaryGroupForDisplay.value?.bookId ?? null,
   )
+
+  // ── The two commentary panels ─────────────────────────────────────────────
+
+  const sharedCommentaryDeps = {
+    bookId,
+    groups,
+    staticFilterGroups,
+    loading: commentaryLoading,
+    selectedLineId,
+    commentaryLineId,
+    hasCommentaries,
+    lines: () => lines.value,
+    ensureStaticFilterGroupsLoaded,
+    getHighlightsForLine: (lineId: number) => annotationFns.getHighlightsForLine(lineId),
+    getNotesForLine: (lineId: number) => annotationFns.getNotesForLine(lineId),
+    getWordLinkAnchorsForLine: (lineId: number) => annotationFns.getWordLinkAnchorsForLine(lineId),
+  }
+
+  const panels = Object.fromEntries(
+    COMMENTARY_SLOTS.map((slot) => [
+      slot,
+      useCommentaryPanelSlot(slot, tabId, commentaryViewRefs[slot], sharedCommentaryDeps, () =>
+        sidePanelFns.closeCommentaryTreeFor(slot),
+      ),
+    ]),
+  ) as Record<CommentarySlot, CommentaryPanel>
+
+  /** True when either panel is open — gates line selection and the backfill hold. */
+  const anyCommentaryVisible = computed(() =>
+    COMMENTARY_SLOTS.some((slot) => panels[slot].visible.value),
+  )
+
+  /** The open panels in display order, for the search bar's mode cycle. */
+  const openCommentarySlots = computed(() =>
+    COMMENTARY_SLOTS.filter((slot) => panels[slot].visible.value),
+  )
+
+  // ── Pin capture across both panels ────────────────────────────────────────
+
+  /**
+   * Each panel's currently-shown group, captured synchronously at the moment of a
+   * user action — groups are still loaded and activePinnedGroup is still valid. A
+   * snapshot rather than one value because the panels sit on different books.
+   */
+  function captureActivePins(): CommentaryPinSnapshot {
+    const snapshot: CommentaryPinSnapshot = {}
+    for (const slot of COMMENTARY_SLOTS) {
+      // Three-step fallback, because a null here does NOT mean "no preference":
+      //   1. what the panel is actually showing right now (its sticky header)
+      //   2. the pin it already holds - a panel that is mid-load has an empty list
+      //      and reports no active group, and staging null for it would make the
+      //      pin watcher fall back to the DEFAULT commentator, silently throwing
+      //      away the commentator the reader had chosen. Under hosted bridge
+      //      latency, consecutive section-nav clicks hit this on every click.
+      //   3. genuinely nothing - the very first load, where the default is right.
+      snapshot[slot] =
+        commentaryViewRefs[slot]()?.activePinnedGroup ??
+        panels[slot].pinnedCommentaryGroup.value ??
+        null
+    }
+    return snapshot
+  }
+
+  /** Stage a captured snapshot so each panel's commentaryLineId watcher applies it. */
+  function applyPendingPins(snapshot: CommentaryPinSnapshot) {
+    for (const slot of COMMENTARY_SLOTS) {
+      panels[slot].setPendingPin(snapshot[slot] ?? null)
+    }
+  }
+
+  pinFns.captureActivePins = captureActivePins
+  pinFns.applyPendingPins = applyPendingPins
+
+  /**
+   * An explicit line click invalidates every panel's saved commentary scroll
+   * position: the pinned-group jump owns positioning for fresh navigation, and a
+   * stale session-restored position must not be applied to the new line's
+   * commentary (it would land on an arbitrary commentator and suppress the pinned
+   * jump). The position refs repopulate naturally — the pinned jump's programmatic
+   * scroll fires a scroll event that re-captures them.
+   */
+  function onLineSelected(lineId: number, isShiftClick: boolean) {
+    for (const slot of COMMENTARY_SLOTS) {
+      panels[slot].scrollIndex.value = null
+      panels[slot].scrollOffset.value = null
+    }
+    // Re-clicking the already-selected line changes no reactive state, so no
+    // commentary reload fires and setupGroupReloadScroll never wakes — jump each
+    // panel to its own pinned group explicitly (e.g. the session-restored line:
+    // restore put the panels at their saved positions; a deliberate click should
+    // still show each panel's default commentator).
+    const isSameLineReclick = !isShiftClick && commentaryLineId.value === lineId
+    onLineSelectedRaw(lineId, isShiftClick)
+    if (!isSameLineReclick) return
+    void nextTick(() => {
+      for (const slot of COMMENTARY_SLOTS) {
+        const pinned = panels[slot].pinnedCommentaryGroup.value
+        if (pinned) commentaryViewRefs[slot]()?.scrollToGroup(pinned.bookId, undefined, undefined, 'same-line-reclick')
+      }
+    })
+  }
 
   // ── TOC ───────────────────────────────────────────────────────────────────
 
   const { beginTocScroll, checkTocScrollProgress } = useBookViewTocScrollTracking()
-
-  const { pinnedCommentaryGroup, restorePin, setPendingPin } = usePinnedCommentary(
-    bookId, () => commentaryLineId.value, () => groups.value,
-  )
-
-  // Wire the deferred pin callbacks now that pinnedCommentary is available.
-  pendingPinFns.setPendingPin = setPendingPin
-  pendingPinFns.getActivePinnedGroup = () => commentaryViewRef()?.activePinnedGroup ?? null
-
-  watch(pinnedCommentaryGroup, (group) => { pinnedCommentaryGroupForDisplay.value = group }, { immediate: true })
 
   const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled, syncTocPathForLineIndex } = useBookViewScrollSync(
     () => lines.value,
@@ -224,39 +311,53 @@ export function useBookView(
     checkTocScrollProgress,
     getActiveTocEntry,
     getTocPath,
-    setPendingPin,
-    () => commentaryViewRef()?.activePinnedGroup ?? null,
+    captureActivePins,
+    applyPendingPins,
   )
 
-  // ── Commentary annotation & rendering (hoisted — survive v-if toggle) ────
+  // ── Commentary annotations (shared — hoisted above the panels' v-if) ─────
+
+  /**
+   * Every group either panel displays. The two lists agree on the real groups and
+   * differ only by each panel's pinned placeholder, so union them by identity: notes,
+   * highlights and TOC paths must resolve for both pins, and running the fetchers
+   * twice would double every query for the same rows.
+   */
+  const annotationGroups = computed<CommentaryGroup[]>(() => {
+    const bottom = panels.bottom.groupsForDisplay.value
+    const side = panels.side.groupsForDisplay.value
+    if (bottom === side) return bottom
+    const inBottom = new Set(bottom)
+    return [...bottom, ...side.filter((group) => !inBottom.has(group))]
+  })
 
   const {
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
-    scheduleWordLinkAnchorsLoad,
-    commentaryFontPx, renderContent, setCurrentMark,
+    getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad,
     commentaryTocPaths, buildExportHtml,
   } = useBookViewCommentaryAnnotations(
-    () => groupsForDisplay.value,
+    () => annotationGroups.value,
     () => selectedSectionLineIds.value,
     () => lines.value,
     bookTitle,
     settingsStore,
-    tabId,
-    bookId ?? undefined,
   )
+
+  annotationFns.getHighlightsForLine = getHighlightsForLine
+  annotationFns.getNotesForLine = getNotesForLine
+  annotationFns.getWordLinkAnchorsForLine = getWordLinkAnchorsForLine
 
   // ── Search panel ──────────────────────────────────────────────────────────
 
   const contentSearch = useBookViewSearch(() => lines.value, () => currentFullLineIndex.value)
-  const commentarySearch = useCommentarySearch(
-    () => groups.value,
-    () => commentaryViewRef()?.topVisibleFlatIndex ?? 0,
-  )
 
   const searchPanel = useBookViewSearchPanel(
-    contentSearch, commentarySearch,
-    linesContentRef, commentaryViewRef, searchBarRef,
+    contentSearch,
+    { bottom: panels.bottom.search, side: panels.side.search },
+    linesContentRef,
+    commentaryViewRefs,
+    searchBarRef,
     () => {
       paneNavigation.updateActiveTab({
         searchHighlightLineIndex: undefined,
@@ -272,47 +373,34 @@ export function useBookView(
   // shows it again, then keep the store in sync as the user types. Cleared on
   // tab close by the store's prune watch. Results are only *shown* while the
   // search bar is visible — see the searchVisible-gated props in BookViewPage.
+  // The commentary query is stored per panel for the same reason the panels are
+  // separate at all: each keeps its own place.
   contentSearch.query.value = bookViewStore.getSearchQuery(tabId)
-  commentarySearch.query.value = bookViewStore.getCommentarySearchQuery(tabId)
   watch(contentSearch.query, (q) => bookViewStore.setSearchQuery(tabId, q))
-  watch(commentarySearch.query, (q) => bookViewStore.setCommentarySearchQuery(tabId, q))
+  for (const slot of COMMENTARY_SLOTS) {
+    const search = panels[slot].search
+    search.query.value = bookViewStore.getCommentarySearchQuery(tabId, slot)
+    watch(search.query, (q) => bookViewStore.setCommentarySearchQuery(tabId, slot, q))
+  }
 
-  // ── Side panel + commentary panel ─────────────────────────────────────────
-  // commentaryPanel is instantiated first because sidePanel takes commentaryVisible
-  // as a parameter. The closeSidePanel callback is deferred via a wrapper object.
+  // ── Side panel ────────────────────────────────────────────────────────────
 
-  const sidePanelCloseFn = { close: () => {} }
-
-  const commentaryPanel = useBookViewCommentaryPanel(
-    commentaryViewRef,
-    groups,
-    commentaryLoading,
-    pinnedCommentaryGroup,
-    selectedLineId,
-    commentaryLineId,
-    () => lines.value,
-    hasCommentaries,
-    { value: null } as import('vue').Ref<string | null>,
-    () => sidePanelCloseFn.close(),
+  const sidePanel = useBookViewSidePanel(
+    toolbarRef,
+    commentaryViewRefs,
+    { bottom: panels.bottom.visible, side: panels.side.visible },
+    loadAltTocSections,
     ensureStaticFilterGroupsLoaded,
   )
+
+  sidePanelFns.closeCommentaryTreeFor = sidePanel.closeCommentaryTreeFor
 
   // Make the full-book lines backfill yield to commentary loading — commentary
   // queries must never queue behind ~100 large chunk fetches.
   const backfillGate = useBookViewLinesBackfillGate(
     holdBackfill, releaseBackfill,
-    commentaryPanel.commentaryVisible, commentaryLoading,
+    anyCommentaryVisible, commentaryLoading,
   )
-
-  const sidePanel = useBookViewSidePanel(
-    toolbarRef,
-    commentaryViewRef,
-    commentaryPanel.commentaryVisible,
-    loadAltTocSections,
-    ensureStaticFilterGroupsLoaded,
-  )
-
-  sidePanelCloseFn.close = sidePanel.closeSidePanel
 
   // ── TOC navigation + keyboard shortcuts ──────────────────────────────────
 
@@ -330,26 +418,62 @@ export function useBookView(
   )
 
   useBookViewKeyboardShortcuts(
-    linesContentRef, commentaryViewRef,
+    linesContentRef,
+    COMMENTARY_SLOTS.map((slot) => commentaryViewRefs[slot]),
     () => hasToc.value,
     navigateToAdjacentTocSection,
   )
 
-  // ── Commentary navigation ─────────────────────────────────────────────────
+  // ── Commentary section navigation ─────────────────────────────────────────
+  // One instance per panel: the next/prev buttons live inside a panel's header, so
+  // the navigation must reopen and re-pin THAT panel.
 
-  const { onNavigateSection: navigateSection } = useCommentaryNavigation(
-    bookId, selectedLineId, commentaryLineId, commentaryPanel.commentaryVisible,
-    () => lines.value, () => tocEntries.value, linesContentRef,
-    () => manualSelectionLineIds.value,
-    clearManualSelection,
-  )
+  const commentaryNavigation = Object.fromEntries(
+    COMMENTARY_SLOTS.map((slot) => [
+      slot,
+      useCommentaryNavigation(
+        bookId, selectedLineId, commentaryLineId, panels[slot].visible,
+        () => lines.value, () => tocEntries.value, linesContentRef,
+        () => manualSelectionLineIds.value,
+        clearManualSelection,
+        (_targetLineId, commentaryBookId, anchorChanges) =>
+          stagePinsForNavigation(slot, commentaryBookId, anchorChanges),
+      ),
+    ]),
+  ) as Record<CommentarySlot, ReturnType<typeof useCommentaryNavigation>>
 
-  function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
+  /**
+   * Staged by useCommentaryNavigation at the instant the anchor line changes.
+   *
+   * The navigation changes commentaryLineId, which fires EVERY panel's pin watcher
+   * - and a panel with no pending pin falls back to its default commentator. So
+   * snapshot all panels (as a line tap does), then override the navigating slot: it
+   * re-pins to the book it navigated, the other keeps whatever it was showing.
+   */
+  function stagePinsForNavigation(
+    slot: CommentarySlot,
+    commentaryBookId: number,
+    anchorChanges: boolean,
+  ) {
+    // The anchor is already on the target line, so no pin watcher will fire and a
+    // staged pin would sit unclaimed until some later change picked it up. Apply
+    // this panel's pin directly and scroll it, leaving the other panel alone.
+    if (!anchorChanges) {
+      panels[slot].pinExplicitly(commentaryBookId)
+      void nextTick(() => commentaryViewRefs[slot]()?.scrollToGroup(
+        commentaryBookId, undefined, undefined, 'nav-same-anchor',
+      ))
+      return
+    }
+    applyPendingPins(captureActivePins())
     const group = groups.value.find((group) => group.bookId === commentaryBookId)
-    setPendingPin(group
+    panels[slot].setPendingPin(group
       ? { bookId: commentaryBookId, sectionLabel: group.sectionLabel ?? '', subSectionLabel: group.subSectionLabel ?? '' }
       : { bookId: commentaryBookId, sectionLabel: '', subSectionLabel: '' })
-    return navigateSection(direction, commentaryBookId)
+  }
+
+  function onNavigateSection(slot: CommentarySlot, direction: 'next' | 'prev', commentaryBookId: number) {
+    return commentaryNavigation[slot].onNavigateSection(direction, commentaryBookId)
   }
 
   function openBookInTab(targetBookId: number, lineIndex: number | undefined) {
@@ -361,6 +485,31 @@ export function useBookView(
     })
   }
 
+  // ── Persistence ───────────────────────────────────────────────────────────
+
+  /**
+   * Both panels' persistable state, read at save time by BookViewLinesContent (which
+   * owns the scroll-position save this rides along with). Plain objects only — the
+   * values end up in IndexedDB, which cannot clone a reactive proxy.
+   */
+  function commentaryPersistState(): CommentaryPanelPersistStates {
+    const result: CommentaryPanelPersistStates = {}
+    for (const slot of COMMENTARY_SLOTS) {
+      const panel = panels[slot]
+      const pinned = panel.pinnedCommentaryGroup.value
+      result[slot] = {
+        visible: panel.visible.value,
+        scrollIndex: panel.scrollIndex.value,
+        scrollOffset: panel.scrollOffset.value,
+        filterState: panel.treeState,
+        pinnedGroup: pinned ? { ...pinned } : null,
+        fraction: panel.fraction.value,
+        zoom: bookId != null ? bookViewStore.getCommentaryZoom(tabId, bookId, slot) : undefined,
+      }
+    }
+    return result
+  }
+
   // ── Session restore ───────────────────────────────────────────────────────
 
   const {
@@ -368,15 +517,8 @@ export function useBookView(
     scrollStateReady, idbResolved, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
-    commentaryPanel.commentaryVisible, selectedLineId, commentaryLineId,
-    commentaryTreeState,
-    (index, offset) => {
-      // A user line-click before the IDB read resolves sets commentaryLineId and
-      // invalidates any saved position — don't overwrite that with stale values.
-      if (commentaryLineId.value != null) return
-      commentaryPanel.commentaryScrollIndex.value = index
-      commentaryPanel.commentaryScrollOffset.value = offset
-    },
+    panels,
+    selectedLineId, commentaryLineId,
   )
 
   watch(() => bookId, () => {
@@ -394,13 +536,9 @@ export function useBookView(
 
   onMounted(async () => {
     groups.value = []
-    const result = await restoreSession()
-    if (result?.commentaryMode) restoredCommentaryMode.value = result.commentaryMode
-    if (result?.commentaryFraction != null) restoredCommentaryFraction.value = result.commentaryFraction
-    if (result?.stackedCommentaryFraction != null) restoredStackedCommentaryFraction.value = result.stackedCommentaryFraction
-    if (result?.pinnedCommentaryGroup != null) restorePin(result.pinnedCommentaryGroup)
+    await restoreSession()
 
-    // commentaryVisible is final for this restore — release the lines backfill
+    // Panel visibility is final for this restore — release the lines backfill
     // right away when no commentary panel is reopening.
     backfillGate.onSessionRestoreSettled()
 
@@ -454,45 +592,45 @@ export function useBookView(
     // book metadata
     bookHasTeamim,
     // UI state
-    commentaryTreeState,
     selectedLineId,
     searchMode: searchPanel.searchMode,
     activeTocEntryId,
     tocVisible: sidePanel.tocVisible,
     commentaryTreeVisible: sidePanel.commentaryTreeVisible,
+    commentaryTreeSlot: sidePanel.commentaryTreeSlot,
+    isCommentaryTreeOpenFor: sidePanel.isCommentaryTreeOpenFor,
     sidePanelVisible: sidePanel.sidePanelVisible,
     sidePanelMode: sidePanel.sidePanelMode,
     sidePanelToggleButtonEl: sidePanel.sidePanelToggleButtonEl,
-    commentaryVisible: commentaryPanel.commentaryVisible,
     searchVisible: searchPanel.searchVisible,
-    commentaryScrollIndex: commentaryPanel.commentaryScrollIndex,
-    commentaryScrollOffset: commentaryPanel.commentaryScrollOffset,
+    // the two commentary panels
+    panels,
+    anyCommentaryVisible,
+    openCommentarySlots,
+    commentaryPersistState,
     // data
     tabId, bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
-    groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
+    groups, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
     tocEntries, tocSearchTree, altTocSections, selectedAltTocSection, tocLoading, tocError,
-    altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
-    // commentary annotation & render (hoisted — survive v-if toggle)
+    altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
+    // commentary annotation (hoisted — survive v-if toggle)
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     scheduleWordLinkAnchorsLoad,
-    commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
+    commentaryTocPaths,
     // export
     buildExportHtml, bookTitle,
     // scroll / search state
     currentScrollLineIndex,
     scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
     flashOpenLine,
-    restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
     activeMatchCount: searchPanel.activeMatchCount,
     activeMatchIdx: searchPanel.activeMatchIdx,
-    contentSearch, commentarySearch,
+    contentSearch,
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,
     onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
-    onCommentaryScroll: commentaryPanel.onCommentaryScroll,
-    onCommentaryTreeChanged: commentaryPanel.onCommentaryTreeChanged,
     openBookInTab,
     openContentSearch: searchPanel.openContentSearch,
     openCommentarySearch: searchPanel.openCommentarySearch,
@@ -505,7 +643,6 @@ export function useBookView(
     toggleCommentaryTreePanel: sidePanel.toggleCommentaryTreePanel,
     closeSidePanel: sidePanel.closeSidePanel,
     ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
-    onCommentaryPanelMounted: commentaryPanel.onCommentaryPanelMounted,
     getActiveTocEntry, getTocPath,
   }
 }

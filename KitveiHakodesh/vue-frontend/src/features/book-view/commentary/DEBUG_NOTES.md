@@ -78,3 +78,27 @@ Additionally, `lastRestoredCommentaryKey` was not reset on close. Even if the sc
 **Generation superseded:** `setupGroupReloadScroll gen=N superseded` — a newer groups change arrived while the watcher was awaiting, so this invocation correctly aborted.
 
 **Token cancelled:** `scrollToGroup token=N CANCELLED` — a newer `scrollToGroup` (or `restoreCommentaryScrollPos`) invalidated this call's token.
+
+## Capturing a trace for a rare bug (2026-08-06)
+
+`__commentaryScrollTrace` now survives reloads and can write a file, because some of
+these only reproduce after many attempts:
+
+```js
+__commentaryScrollTrace.on()        // persists; re-arms itself after a reload
+// ...reproduce, however many tries it takes (reloads are fine)...
+__commentaryScrollTrace.summary()   // confirm you caught it before moving on
+__commentaryScrollTrace.save()      // downloads a .json to attach
+__commentaryScrollTrace.off()
+```
+
+- Events are mirrored to localStorage (throttled, flushed on page hide), so a crash
+  or reload mid-capture does not lose the run; `on()` reports how many it recovered.
+- `save()` / `copy()` / `summary()` / `dump()` **mask corpus text** — Hebrew runs
+  become stable `[H:xxxx]` placeholders, so a trace is safe to paste into a report.
+  Pass `{ raw: true }` for an unmasked local copy.
+- Flows are slot-tagged (`scrollToGroup:bottom`, `restore:side`) with a clock per
+  flow. Order across panels by `seq`, never by `t`.
+- Reading it: exactly ONE `scrollToGroup` BEGIN per panel per anchor change is
+  correct. Zero means nothing scrolled (the panel keeps a stale offset); two means a
+  superseded callback is firing. Every BEGIN carries the `reason` that triggered it.

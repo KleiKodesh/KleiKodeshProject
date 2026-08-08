@@ -3,12 +3,14 @@ import { ref, watch, computed, nextTick, inject } from 'vue'
 import {
   IconLayoutRowTwoFocusTop20Filled,
   IconLayoutRowTwoFocusBottom20Filled,
+  IconLayoutColumnTwoFocusLeft20Filled,
   IconChevronUp20Regular,
   IconChevronDown20Regular,
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
-import type { SearchMode } from './bookViewTypes'
+import { searchModeForSlot, slotForSearchMode } from './bookViewTypes'
+import type { CommentarySlot, SearchMode } from './bookViewTypes'
 
 const props = defineProps<{
   visible: boolean
@@ -16,7 +18,10 @@ const props = defineProps<{
   toolbarPosition: 'top' | 'bottom' | 'right' | 'left'
   matchCount: number
   currentMatch: number
+  /** True when either commentary panel is open — gates the mode button. */
   commentaryVisible: boolean
+  /** The commentary panels currently open, in display order. */
+  openCommentarySlots: CommentarySlot[]
   mode: SearchMode
   query?: string
 }>()
@@ -40,9 +45,12 @@ watch(() => props.mode, (m) => { if (searchMode.value !== m) searchMode.value = 
 watch(inputValue, (v) => emit('queryChange', v))
 watch(searchMode, (m) => { emit('modeChange', m); nextTick(() => inputRef.value?.focus()) })
 watch(() => props.visible, (v) => { if (v) nextTick(() => inputRef.value?.focus()) })
-watch(() => props.commentaryVisible, (v) => {
-  if (!v && searchMode.value === 'commentary') searchMode.value = 'content'
-})
+// Fall back to content search when the panel being searched closes. Keyed by slot
+// so closing one panel never disturbs a search running in the other.
+watch(() => props.openCommentarySlots, (slots) => {
+  const slot = slotForSearchMode(searchMode.value)
+  if (slot && !slots.includes(slot)) searchMode.value = 'content'
+}, { deep: true })
 
 const paneId = inject<1 | 2>('paneId', 1)
 const { titleBarVisible } = useUiChromeVisibility(paneId)
@@ -93,8 +101,17 @@ function onKeydown(event: KeyboardEvent) {
   else if (event.key === 'Escape') onClose()
 }
 
+// Cycles content -> each open commentary panel -> back to content, so the button
+// only ever offers a panel the user can actually see.
+const searchModeCycle = computed<SearchMode[]>(() => [
+  'content',
+  ...props.openCommentarySlots.map(searchModeForSlot),
+])
+
 function toggleSearchMode() {
-  searchMode.value = searchMode.value === 'content' ? 'commentary' : 'content'
+  const cycle = searchModeCycle.value
+  const index = cycle.indexOf(searchMode.value)
+  searchMode.value = cycle[(index + 1) % cycle.length]!
 }
 
 defineExpose({ focus: () => inputRef.value?.focus() })
@@ -121,11 +138,12 @@ defineExpose({ focus: () => inputRef.value?.focus() })
       <button
         v-if="props.commentaryVisible"
         class="mode-btn"
-        :class="{ active: searchMode === 'commentary' }"
+        :class="{ active: searchMode !== 'content' }"
         :title="searchMode === 'content' ? 'עבור לחיפוש במפרשים' : 'עבור לחיפוש בטקסט'"
         @click="toggleSearchMode"
       >
-        <IconLayoutRowTwoFocusBottom20Filled v-if="searchMode === 'commentary'" />
+        <IconLayoutColumnTwoFocusLeft20Filled v-if="searchMode === 'commentary-side'" />
+        <IconLayoutRowTwoFocusBottom20Filled v-else-if="searchMode === 'commentary-bottom'" />
         <IconLayoutRowTwoFocusTop20Filled v-else />
       </button>
       <span v-if="props.commentaryVisible" class="sep" />

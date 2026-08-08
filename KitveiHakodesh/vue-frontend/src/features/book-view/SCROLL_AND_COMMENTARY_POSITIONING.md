@@ -5,6 +5,12 @@ commentary-panel positioning, as specified by the product owner. It exists so th
 behavior never has to be re-explained: **any change to data loading, virtualization,
 or commentary rendering must preserve every rule below.**
 
+Since 2026-08 there are **two** commentary panels ('bottom' and 'side'), and every
+rule below applies to each of them independently: each keeps its own pin, filter,
+saved scroll position and restore lifecycle. Where this document says "the
+commentary pane", read "each commentary panel" - the composables named here are
+instantiated once per panel by `commentary/useCommentaryPanelSlot.ts`.
+
 All of this is delicate because both the lines pane and the commentary pane are
 TanStack virtual lists with **dynamic item measurement** (`measureElement`): item
 heights start as estimates and change when items render — and, since the two-phase
@@ -31,11 +37,13 @@ plus the pixel offset *within* that item.
 - Lines pane: captured in `useBookViewLinesScroll.captureScrollPos`, saved through
   the tab store (per-tab `bookViewState` + per-book `lastRead` in IDB), restored via
   `initialScrollTop`/`initialScrollOffset` (`useBookViewSessionRestore`).
-- Commentary pane: captured in `useCommentaryScroll.captureScrollPos` on every
-  scroll (emitted to `useBookViewCommentaryPanel.onCommentaryScroll`), restored by
-  `restoreCommentaryScrollPos(index, offset)` — on session restore
-  (`useBookViewSessionRestore.restore`) and on every panel remount
-  (`onCommentaryPanelMounted`: v-if toggle, bottom↔side layout switch, tab return).
+- Commentary panes: captured per panel in `useCommentaryScroll.captureScrollPos` on
+  every scroll (emitted to that panel's `useBookViewCommentaryPanel.onCommentaryScroll`),
+  restored by `restoreCommentaryScrollPos(index, offset)` -- on session restore
+  (`useBookViewSessionRestore.restore`, which seeds each panel from
+  `commentaryPanels[slot]`) and on every panel remount (`onCommentaryPanelMounted`:
+  v-if toggle, tab return). The two panels' positions are stored under separate
+  slots and can never overwrite each other.
 
 **How restore must work (the two-stage pattern):**
 
@@ -62,17 +70,145 @@ and grow later when the backfill batch arrives. Therefore:
   restore target and anything scrolled to fills within one small query instead of
   waiting for the display-order backfill to reach it.
 
+**Async-watcher rule (learned the hard way, twice):** any watcher that awaits
+before acting on a virtualized list must
+
+1. bump its generation counter **before** every early return, not after the guards.
+   A callback that bails (empty list, still loading) still has to invalidate a
+   callback already sitting on its `await`; and
+2. re-read the list **live** after the await instead of trusting the value the
+   watcher was handed.
+
+A single line tap runs `useCommentary.load()` twice (the `selectedLineId` and
+`selectedLineIds` watchers both fire), so a panel's list goes
+`groups -> [] -> groups`. With the bump after the guards, the first
+`setupGroupReloadScroll` callback resumed while the list was empty, still saw its
+own captured non-empty array, and called `scrollToGroup` on a panel whose scroller
+the empty-state branch had already unmounted: `ABORT_no_scroller`, no scroll, and
+the panel silently kept whatever offset the virtualizer left it at. That is what
+"the commentary panel loses its place when I switch lines" was.
+
+**Pin matching rule:** a pin is `(bookId, sectionLabel, subSectionLabel)`, but the
+labels only disambiguate a book that appears in several sections. They are captured
+on the PREVIOUS line, and the same book can sit under a different section on the
+next one, so `scrollToGroup` matches exact-first then falls back to `bookId` alone
+(traced as `resolveIndex_label_fallback`). Refusing to scroll on a label mismatch
+looked identical to losing the position.
+
+**Pin-staging rule:** a pin is staged (`setPendingPin`) so that the next
+`commentaryLineId` change consumes it; a panel whose pin was NOT staged falls back
+to its default commentator. So stage it synchronously at the instant the anchor line
+changes — never before an `await`.
+
+Section navigation runs DB queries before it knows its target, and staging up-front
+left the pins in flight across the round trip. Two ways that broke:
+a navigation that found no target left them staged indefinitely, for some later,
+unrelated `commentaryLineId` change to consume; and anything that changed the anchor
+during the round trip (a line tap, the auto-select timer) consumed them early, so the
+navigation's own change found nothing staged and reset the panel to its default.
+`useCommentaryNavigation` therefore takes an `onBeforeNavigate` hook and calls it
+inside `afterNavigate`, immediately before mutating the refs.
+
+**The correction window must outlive the load, not the animation.** A pin scroll is
+not done when it lands: items ABOVE the target render as near-empty stubs and grow as
+their text, TOC-path labels, notes and highlights arrive, and each one pushes the
+target down. `scrollToGroup` re-anchors on every DOM mutation, but only for
+`CORRECTION_WINDOW_MS`. At 800ms that window closed while a cold section-mode load
+was still filling in, so the panel landed on the pinned commentator and then drifted
+off it with nothing left to re-anchor — "it lands on Rashi and then jumps away". It is
+now 6000ms, matching the lines pane's 10s post-restore window and for the same
+reason.
+
+A long window is only safe because it yields immediately: `finish()` runs on wheel,
+touchstart, pointerdown AND keydown (the scroller is focusable and arrow keys scroll
+it), and any newer `scrollToGroup` / `restoreCommentaryScrollPos` / `scrollToFlatIndex`
+bumps `scrollToGroupToken` and cancels it. `scrollToFlatIndex` had to start bumping
+the token for this: jumping to a search match is a competing programmatic scroll, and
+at 800ms the overlap was too short to matter while at 6s it would have dragged the
+panel back off the match.
+
+**Payload size decides whether any of this is observable, and the dev corpus is too
+small.** Measured on this machine: the heaviest chapter reaches ~7.8k px with 8
+commentators, and the content settles inside 800ms (`correct_applied=0`,
+`correct_noop=3`). A rich book's chapter is an order of magnitude larger. A probe that
+passes here says nothing about a large corpus — see
+[[dev-latency-hides-races-2026-08-06]] for the latency-injection technique, and use it
+together with a section-mode (TOC-heading) click, which is the heaviest load the
+reader can trigger.
+
+**A pin can arrive AFTER its groups — owe the scroll and settle it later.**
+`usePinnedCommentary` awaits `getDefaultCommentators`, and that query runs ONCE per
+book. So on the FIRST commentary load of a book it can still be in flight when the
+groups land: `setupGroupReloadScroll` finds no pin, returns, and nothing re-triggers
+it milliseconds later when the pin appears — the panel never scrolls to the default
+commentator at all. Every later load has the list cached and works, which is why it
+reads as "the FIRST time I open a chapter it doesn't scroll to Rashi".
+
+The `!pinned` branch therefore records `pinScrollOwed`, and a watcher on
+`pinnedGroup` settles the debt (traced as `pin-arrived-late`). The debt is voided
+when the next load starts (the `groups = []` fire) so it can never leak into a later
+load. Reproduce by delaying ONLY the `getDefaultCommentators` service call, in a
+fresh page, and arm the delay BEFORE opening a panel — opening one syncs
+`commentaryLineId` from the selected line, which already asks for the pin. Without
+the fix: `begins=0`, `scrollTop=0`, panel on the first group. With it:
+`begins=1 reason=pin-arrived-late`, panel on its pin.
+
+**Consume `isFirstLoad` only when ready to position.** It used to be consumed by the
+watcher's FIRST fire, which is the `groups = []` that `load()` starts with — so the
+"a restore owns first positioning" skip it guards never actually applied to a real
+load. The flag is now consumed after the empty/loading/restoring guards.
+
+**Serialize section navigation.** `onNavigateSection` resolves its target with a
+DB query, reading the CURRENT anchor to decide where "next" is. Two clicks that
+overlap therefore both read the pre-click anchor, resolve to the SAME target, and
+the reader advances one section instead of two — and the second `afterNavigate`
+assigns `commentaryLineId` a value it already holds, so no watcher fires. Clicks are
+chained (capped at a few queued steps) so each starts from where the previous
+landed. Reproduced under injected latency: 4 clicks 120ms apart advanced 1 section
+with 3 duplicate navigations and 3 × `ABORT_no_scroller`; chained, the same input
+advances 4 sections with zero aborts.
+
+**A null "active group" is not a preference.** `captureActivePins` must fall back to
+the pin a panel already holds when the live view cannot report one — a panel that is
+mid-load has an empty list and no active group, and staging null makes the pin
+watcher fall back to the DEFAULT commentator, discarding the reader's choice. Only a
+panel that has never had a pin should get the default. Under bridge latency this hit
+the non-navigating panel on essentially every consecutive nav click.
+
+**This class of bug is invisible in dev.** The local service answers in single-digit
+ms, so consecutive clicks never overlap; the WebView2 host round-trips through
+postMessage and they always do. To reproduce in a Playwright probe, delay the
+service traffic (`context.route` on the non-vite port) — 700ms is enough.
+
+**Never navigate "book 0":** the sticky nav derives its section-nav target from
+`activePinnedGroup`, which is null while a panel is empty. It used to emit
+`?? 0`, which pinned the panel to a nonexistent book and then silently refused to
+scroll on every later line change. Those buttons are now disabled without an active
+group, and `onNavigateSection` rejects a falsy bookId.
+
+**Identity in the DOM:** `.commentary-header` carries `data-book-id`. Its rendered
+label includes the TOC path, so the label changes whenever the anchor line moves even
+though the commentator has not — compare `data-book-id`, never the text, when asking
+"is this panel still on the same commentator?".
+
+**Debugging two panels:** trace flows are slot-tagged (`scrollToGroup:bottom`,
+`restore:side`) and each flow keeps its own relative clock, so filter a dump by
+`flow` to read one panel and order across panels by `seq`, never by `t`. Every
+`scrollToGroup` records a `reason` (`groups-reload`, `panel-mounted`,
+`same-line-reclick`, `header-nav-picker`, `already-restored`) — one `BEGIN` per
+panel per line switch is correct; two means a stale callback is firing.
+
 ## B. Blank slate → default commentary
 
 When a line is selected and there is **no pending pin** (fresh open, no saved
 state), the panel must position itself on the book's **default commentator**
 (`default_commentator` table, lowest `position`). Implemented in
 `usePinnedCommentary`: the `commentaryLineId` watcher falls back to
-`defaultCommentatorBookIds[0]` when no pin was captured; if that book has no group
+`defaultCommentatorBookIds[defaultRank]` (bottom panel 0, side panel 1) when no pin was captured; if that book has no group
 for this line, the next default that does is used (groups watcher).
 
 Note: line clicks are intentionally inert while the commentary panel is closed
-(`onLineClick` checks `commentaryVisible`), so the blank-slate flow is always
+(`onLineClick` checks whether either panel is open), so the blank-slate flow is always
 *open panel → click line*. That means the **first** groups load happens with the
 panel already mounted — the first-load branch of `setupGroupReloadScroll` must
 scroll to the pinned/default group when there is no saved scroll position
@@ -92,7 +228,10 @@ they were reading:
 - If the pinned book has **no commentary on the new line**, a placeholder group
   ("אין טקסט לשורה זו") is injected at the pinned book's canonical position
   (ordering taken from `staticFilterGroups`) so the panel doesn't jump — see
-  `groupsForDisplay` / the pinned-placeholder branch in `useCommentary`.
+  `useGroupsForDisplay` in `useCommentary.ts`, which each panel calls with its own
+  pin. (The shared fetch deliberately injects nothing: it would have to pick one
+  panel's pin, and injecting there also made `usePinnedCommentary`'s groups watcher
+  believe the pin had real links for the line.)
 - Placeholder lines use `lineId: -1` and must never be content-backfilled.
 
 ## D. Header next/prev navigation scrolls to the target commentary
@@ -104,9 +243,10 @@ The commentary header (and `CommentaryHeaderNav`) has next/previous-section butt
    (multi-select mode) that has commentary for the given book.
 2. Set `selectedLineId`/`commentaryLineId`, scroll the **lines pane** to the target
    line (`scrollToLineId`).
-3. Pin the target book (`setPendingPin` in `useBookView.onNavigateSection`), so when
-   the new groups load, `setupGroupReloadScroll` scrolls the **commentary pane** to
-   that book's group — the same path as a line click. No manual scroll wiring.
+3. Pin the target book in the **navigating panel only** (`setPendingPin` on that
+   slot, via `useBookView.onNavigateSection(slot, ...)`), so when the new groups load
+   `setupGroupReloadScroll` scrolls that panel to the book's group -- the same path as
+   a line click. No manual scroll wiring. The other panel keeps what it was showing.
 
 `scrollToGroup` itself is two-stage like restore: `scrollToIndex` first, then a
 MutationObserver correction that re-reads the header's measured `start`. Because
@@ -115,24 +255,32 @@ correction must stay active (bounded, cancellable by a newer scroll request via 
 token) until the target's position is stable — a single one-shot correction lands
 wrong if a batch arrives right after it.
 
-## E. Lines pane keeps its position across layout-mode switches
+## E. Lines pane keeps its position when the side commentary opens or closes
 
-Switching commentary layout bottom ↔ side swaps template branches in BookViewPage
-(SplitPane vs .side-by-side), which unmounts and **remounts BookViewLinesContent**.
+Both commentary panels are rendered by one nested layout (a side column beside the
+text, a SplitPane row beneath it), so opening the bottom panel remounts nothing.
+Opening or closing the **side** column does change the text column's width, which
+re-wraps every line, so BookViewLinesContent is re-keyed on `sideCommentaryOpen` and
+restored deliberately.
+
 The remounted instance re-runs its initial-scroll restore from
 `initialLineIndex`/`initialScrollTop`/`initialScrollOffset` — refs frozen at
 session-restore time — so without intervention it jumps to the stale position (or
-the top when nothing was saved). A pre-flush `watch(sideBySide)` in BookViewPage
-captures the live position (`linesContentRef.captureScrollPos()`, old instance
-still mounted at pre-flush time) and writes it into those same refs, clearing
-`initialLineIndex` so the captured index wins over a TOC-open index. Dragging the
-divider does not remount anything and needs no handling.
+the top when nothing was saved). A pre-flush `watch(sideCommentaryOpen)` in
+BookViewPage captures the live position (`linesContentRef.captureScrollPos()`, old
+instance still mounted at pre-flush time) and writes it into those same refs,
+clearing `initialLineIndex` so the captured index wins over a TOC-open index.
+The capture is skipped while `idbResolved` is still false: session restore reopens
+the side panel BEFORE the lines instance has applied its restore, and capturing at
+that moment would read `{0,0}` and overwrite the seeded position (the whole view
+then lands at the top). The seeded values are exactly what the remounted instance
+should restore from, so restore-driven remounts capture nothing.
+Dragging either divider does not remount anything and needs no handling.
 
-Known limitation: the restore is (index, offset)-based, and the two modes have
-different lines-pane widths, so line heights differ — the same line is kept at
-the top, but the sub-line pixel offset may land slightly differently. A
-no-remount single-container layout was tried (2026-07-13) and reverted at the
-product owner's request.
+Known limitation: the restore is (index, offset)-based, and the two widths give
+different line heights — the same line is kept at the top, but the sub-line pixel
+offset may land slightly differently. A no-remount single-container layout for the
+lines pane was tried (2026-07-13) and reverted at the product owner's request.
 
 ## Interaction rules / gotchas (learned the hard way)
 

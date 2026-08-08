@@ -24,8 +24,18 @@
  * tab store drops a tab's entry when the tab closes.
  */
 import { reactive } from 'vue'
+import type { CommentarySlot } from '../bookViewTypes'
 
-interface TabCheckState {
+/**
+ * Scope key for one panel's check-tree. The two commentary panels of a tab keep
+ * entirely separate check state, so every entry is keyed by tab AND slot.
+ * `dropForTab`/`prune` below match on the `${tabId}::` prefix to clear both.
+ */
+export function commentaryScopeKey(tabId: string, slot: CommentarySlot): string {
+  return `${tabId}::${slot}`
+}
+
+interface ScopeCheckState {
   /** הצג הכל default; undefined = checked. */
   root?: boolean
   /** sectionLabel → default for everything under it. */
@@ -38,23 +48,23 @@ interface TabCheckState {
   expanded: Set<string>
 }
 
-const stateByTab = reactive(new Map<string, TabCheckState>())
+const stateByScope = reactive(new Map<string, ScopeCheckState>())
 
 function subKey(sectionLabel: string, subSectionLabel: string): string {
   return `${sectionLabel}::${subSectionLabel}`
 }
 
-function ensureState(tabId: string): TabCheckState {
-  let state = stateByTab.get(tabId)
+function ensureState(scopeKey: string): ScopeCheckState {
+  let state = stateByScope.get(scopeKey)
   if (!state) {
     state = { sections: new Map(), subsections: new Map(), books: new Map(), expanded: new Set() }
-    stateByTab.set(tabId, state)
+    stateByScope.set(scopeKey, state)
   }
   return state
 }
 
-function dropIfEmpty(tabId: string): void {
-  const state = stateByTab.get(tabId)
+function dropIfEmpty(scopeKey: string): void {
+  const state = stateByScope.get(scopeKey)
   if (
     state &&
     state.root === undefined &&
@@ -63,12 +73,12 @@ function dropIfEmpty(tabId: string): void {
     state.books.size === 0 &&
     state.expanded.size === 0
   ) {
-    stateByTab.delete(tabId)
+    stateByScope.delete(scopeKey)
   }
 }
 
 /** Effective default for books under a subsection (ignoring book overrides). */
-function nodeDefault(state: TabCheckState, sectionLabel: string, subSectionLabel: string): boolean {
+function nodeDefault(state: ScopeCheckState, sectionLabel: string, subSectionLabel: string): boolean {
   return (
     state.subsections.get(subKey(sectionLabel, subSectionLabel)) ??
     state.sections.get(sectionLabel) ??
@@ -80,12 +90,12 @@ function nodeDefault(state: TabCheckState, sectionLabel: string, subSectionLabel
 // ── Queries ───────────────────────────────────────────────────────────────────
 
 export function isCommentaryBookUnchecked(
-  tabId: string,
+  scopeKey: string,
   sectionLabel: string,
   subSectionLabel: string,
   bookId: number,
 ): boolean {
-  const state = stateByTab.get(tabId)
+  const state = stateByScope.get(scopeKey)
   if (!state) return false
   const override = state.books.get(bookId)
   if (override !== undefined) return !override.checked
@@ -100,19 +110,19 @@ export function isCommentaryBookUnchecked(
  * persists as checked on every line; one matching its surroundings costs nothing.
  */
 export function setCommentaryBookChecked(
-  tabId: string,
+  scopeKey: string,
   sectionLabel: string,
   subSectionLabel: string,
   bookId: number,
   checked: boolean,
 ): void {
-  const state = ensureState(tabId)
+  const state = ensureState(scopeKey)
   if (checked === nodeDefault(state, sectionLabel, subSectionLabel)) {
     state.books.delete(bookId)
   } else {
     state.books.set(bookId, { path: subKey(sectionLabel, subSectionLabel), checked })
   }
-  dropIfEmpty(tabId)
+  dropIfEmpty(scopeKey)
 }
 
 /**
@@ -121,12 +131,12 @@ export function setCommentaryBookChecked(
  * state, so all child entries under the node are wiped.
  */
 export function setCommentaryNodeChecked(
-  tabId: string,
+  scopeKey: string,
   sectionLabel: string,
   subSectionLabel: string | null,
   checked: boolean,
 ): void {
-  const state = ensureState(tabId)
+  const state = ensureState(scopeKey)
   if (subSectionLabel == null) {
     const prefix = `${sectionLabel}::`
     for (const key of state.subsections.keys()) {
@@ -145,33 +155,33 @@ export function setCommentaryNodeChecked(
     if (checked === (state.sections.get(sectionLabel) ?? state.root ?? true)) state.subsections.delete(key)
     else state.subsections.set(key, checked)
   }
-  dropIfEmpty(tabId)
+  dropIfEmpty(scopeKey)
 }
 
 /** הצג הכל — the root toggle: wipes everything and stores at most one boolean. */
-export function setCommentaryAllChecked(tabId: string, checked: boolean): void {
-  const state = ensureState(tabId)
+export function setCommentaryAllChecked(scopeKey: string, checked: boolean): void {
+  const state = ensureState(scopeKey)
   state.sections.clear()
   state.subsections.clear()
   state.books.clear()
   state.root = checked ? undefined : false
-  dropIfEmpty(tabId)
+  dropIfEmpty(scopeKey)
 }
 
 // ── Expanded/collapsed persistence ────────────────────────────────────────────
 
-export function isCommentaryNodeExpanded(tabId: string, nodeKey: string): boolean {
-  return stateByTab.get(tabId)?.expanded.has(nodeKey) ?? false
+export function isCommentaryNodeExpanded(scopeKey: string, nodeKey: string): boolean {
+  return stateByScope.get(scopeKey)?.expanded.has(nodeKey) ?? false
 }
 
-export function setCommentaryNodeExpanded(tabId: string, nodeKey: string, expanded: boolean): void {
+export function setCommentaryNodeExpanded(scopeKey: string, nodeKey: string, expanded: boolean): void {
   if (expanded) {
-    ensureState(tabId).expanded.add(nodeKey)
+    ensureState(scopeKey).expanded.add(nodeKey)
   } else {
-    const state = stateByTab.get(tabId)
+    const state = stateByScope.get(scopeKey)
     if (!state) return
     state.expanded.delete(nodeKey)
-    dropIfEmpty(tabId)
+    dropIfEmpty(scopeKey)
   }
 }
 
@@ -179,13 +189,17 @@ export function setCommentaryNodeExpanded(tabId: string, nodeKey: string, expand
 
 /** Called by the tab store when a single tab closes. */
 export function dropUncheckedCommentaryForTab(tabId: string): void {
-  stateByTab.delete(tabId)
+  const prefix = `${tabId}::`
+  for (const key of stateByScope.keys()) {
+    if (key.startsWith(prefix)) stateByScope.delete(key)
+  }
 }
 
 /** Called by the tab store after bulk tab removal — keeps only live tab ids. */
 export function pruneUncheckedCommentary(liveTabIds: Iterable<string>): void {
   const live = new Set(liveTabIds)
-  for (const tabId of stateByTab.keys()) {
-    if (!live.has(tabId)) stateByTab.delete(tabId)
+  for (const key of stateByScope.keys()) {
+    // Keys are `${tabId}::${slot}` - liveness is decided by the tab part alone.
+    if (!live.has(key.slice(0, key.indexOf('::')))) stateByScope.delete(key)
   }
 }

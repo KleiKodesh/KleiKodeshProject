@@ -13,9 +13,7 @@ import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import type { CommentaryGroup } from './useCommentary'
-import type { CommentaryVisibilityItem, PinnedCommentaryGroup } from '../bookViewTypes'
-import { isCommentaryItemVisible } from '../bookViewTypes'
-import { isCommentaryBookUnchecked } from './uncheckedCommentaryBooks'
+import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
@@ -28,13 +26,22 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
 const props = defineProps<{
+  /**
+     * Which commentary panel this is. Stamped on the root so Ctrl+F can tell them
+     * apart. Named slotName, not slot: `slot` is a reserved attribute in templates.
+     */
+  slotName: CommentarySlot
   selectedLineId: number | null
+  /**
+   * The rows to draw, already filtered by this panel's check-tree and filter-tree
+   * search (see filterVisibleGroups). Do not filter again here - the panel's search
+   * scans this same list, and a second filter would desync their flat indices.
+   */
   groups: CommentaryGroup[]
   loading: boolean
   // True when the commentary load failed (DB/bridge error) — show an error
   // message instead of the misleading "no commentaries for this line".
   loadError?: boolean
-  visibilityList: CommentaryVisibilityItem[]
   // Hoisted annotation & render state — initialized in useBookView, survive v-if toggle
   getHighlightsForLine: (lineId: number) => Highlight[]
   applyHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void
@@ -113,29 +120,12 @@ const _paneNavigation = usePaneNavigation()
 const _tabId = _paneNavigation.activeTabId
 const _bookId = _paneNavigation.activeTab.bookId!
 const _commentaryZoom = computed({
-  get: () => _bookViewStore.getCommentaryZoom(_tabId, _bookId),
-  set: (value: number) => _bookViewStore.setCommentaryZoom(_tabId, _bookId, value),
+  get: () => _bookViewStore.getCommentaryZoom(_tabId, _bookId, props.slotName),
+  set: (value: number) => _bookViewStore.setCommentaryZoom(_tabId, _bookId, props.slotName, value),
 })
 useZoomHandler({ zoom: _commentaryZoom, target: scrollerEl, keyboard: true })
 
-const visibleGroups = computed(() => {
-  // This tab's unchecked books/categories are excluded unconditionally —
-  // applies even when the filter tree was never opened in this tab, and
-  // section/subsection rules cover books first appearing on new lines.
-  const base = props.groups.filter(
-    (group) =>
-      !isCommentaryBookUnchecked(_tabId, group.sectionLabel ?? '', group.subSectionLabel ?? '', group.bookId),
-  )
-  if (!props.visibilityList.length) return base
-  const visibleKeys = new Set(
-    props.visibilityList
-      .filter(isCommentaryItemVisible)
-      .map((item) => `${item.bookId}::${item.sectionLabel}::${item.subSectionLabel}`),
-  )
-  return base.filter((group) =>
-    visibleKeys.has(`${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`),
-  )
-})
+const visibleGroups = computed(() => props.groups)
 
 const flatItems = computed<FlatItem[]>(() => {
   const tocPaths = props.commentaryTocPaths
@@ -248,6 +238,7 @@ const {
   () => visibleGroups.value,
   () => virtualizer.value,
   () => scrollerEl.value,
+  props.slotName,
 )
 
 setupGroupReloadScroll(
@@ -393,7 +384,14 @@ const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
 </script>
 
 <template>
-  <div class="commentary-view">
+  <div class="commentary-view" :data-commentary-slot="slotName">
+    <!--
+      Nothing may sit between <template> and this root div - a comment there
+      fragments the root and points $el at the comment node, silently breaking
+      every $el.contains(focus) consumer (that regression double-zoomed the
+      panels once). data-commentary-slot itself exists so Ctrl+F and text
+      selection can tell the two panels apart; both carry .commentary-view.
+    -->
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
     <BookViewNoteBubble
       v-if="activeBubbleNote && activeBubbleAnchorRect"
@@ -509,6 +507,21 @@ const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
   flex-direction: row;
   min-height: 0;
   position: relative;
+  /* Side padding for everything in the reading column. Custom properties
+     inherit past scoped-style boundaries, so CommentaryHeader picks these up
+     too and widens in lockstep with the lines. Declared on .body (not
+     .commentary-view) because an element never matches a container query on
+     its OWN container. */
+  --commentary-pad-inline: 12px;
+  --commentary-header-pad-inline: 14px;
+}
+/* On a wide commentary panel give the text a bit more breathing room from the
+   edges (רווח נוסף מהצדדים במסך רחב), matching the lines view. */
+@container commentary-view (min-width: 600px) {
+  .body {
+    --commentary-pad-inline: 22px;
+    --commentary-header-pad-inline: 24px;
+  }
 }
 .content-col {
   flex: 1;
@@ -571,7 +584,7 @@ const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
   overflow-y: auto;
 }
 .line {
-  padding-inline: 12px;
+  padding-inline: var(--commentary-pad-inline, 12px);
   padding-block: 2px;
   max-width: var(--commentary-max-width, none);
   margin-inline: auto;
@@ -580,13 +593,6 @@ const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
   line-height: var(--commentary-line-height, 1.7);
   color: var(--text-primary);
   text-align: justify;
-}
-/* On a wide commentary panel give the text a bit more breathing room from the
-   edges (רווח נוסף מהצדדים במסך רחב), matching the lines view. */
-@container commentary-view (min-width: 600px) {
-  .line {
-    padding-inline: 22px;
-  }
 }
 .line :deep(h1),
 .line :deep(h2),

@@ -15,7 +15,7 @@ import type { PinnedCommentaryGroup } from '../bookViewTypes'
 
 const props = defineProps<{
   groups: CommentaryGroup[]
-  scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string) => void
+  scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   activePinnedGroup: PinnedCommentaryGroup | null
   filterVisible?: boolean
   activeTocPath?: string
@@ -40,7 +40,7 @@ onMounted(() => nextTick(() => inputRef.value?.focus()))
 const groupLabel = (g: CommentaryGroup) => g.path
 
 function navigateToGroup(g: CommentaryGroup) {
-  props.scrollToGroup(g.bookId, g.sectionLabel, g.subSectionLabel)
+  props.scrollToGroup(g.bookId, g.sectionLabel, g.subSectionLabel, 'header-nav-picker')
   if (inputRef.value) inputRef.value.value = ''
 }
 
@@ -170,14 +170,16 @@ function handleKeydown(e: KeyboardEvent) {
     <button
       class="btn c-pointer hover-bg"
       title="קטע קודם"
-      @click="emit('navigate-section', 'prev', activePinnedGroup?.bookId ?? 0)"
+      :disabled="!activePinnedGroup"
+      @click="activePinnedGroup && emit('navigate-section', 'prev', activePinnedGroup.bookId)"
     >
       <IconChevronRight20Regular />
     </button>
     <button
       class="btn c-pointer hover-bg"
       title="קטע הבא"
-      @click="emit('navigate-section', 'next', activePinnedGroup?.bookId ?? 0)"
+      :disabled="!activePinnedGroup"
+      @click="activePinnedGroup && emit('navigate-section', 'next', activePinnedGroup.bookId)"
     >
       <IconChevronLeft20Regular />
     </button>

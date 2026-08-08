@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref, computed, watch, inject } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
 import { useBookView } from './useBookView'
@@ -11,19 +11,18 @@ import BookViewSearchBar from './BookViewSearchBar.vue'
 import BookViewSidePanel from './BookViewSidePanel.vue'
 import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
-import CommentaryView from './commentary/CommentaryView.vue'
+import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
+import { slotForSearchMode } from './bookViewTypes'
+import type { CommentarySlot } from './bookViewTypes'
 
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
 const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(null)
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
-const commentaryViewRef = ref<InstanceType<typeof CommentaryView> | null>(null)
+const bottomHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
+const sideHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
 const paneId = inject<1 | 2>('paneId', 1)
-
-type CommentaryMode = 'off' | 'bottom' | 'side'
-const commentaryMode = ref<CommentaryMode>('off')
-const sideBySide = computed(() => commentaryMode.value === 'side')
 
 // Track the shell's own width instead of the viewport width so that in split
 // view each pane responds to its own size, not the full window size.
@@ -32,10 +31,112 @@ useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.content
 const isWideScreen = computed(() => shellWidth.value >= 650)
 const isSidePanelWideScreen = computed(() => shellWidth.value >= 520)
 const sidePanelIsOverlay = computed(() => !isSidePanelWideScreen.value)
-const commentaryFraction = ref(0.4)
-const stackedCommentaryFraction = ref(0.5)
 
-// Commentary side-by-side divider drag state
+const {
+  toolbarPosition, toolbarVisible,
+  searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
+  searchVisible, sidePanelMode,
+  selectedLineId, searchMode,
+  activeTocEntryId,
+  tocVisible, commentaryTreeSlot, isCommentaryTreeOpenFor,
+  sidePanelVisible, sidePanelToggleButtonEl,
+  panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState,
+  tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
+  bookHasTeamim,
+  filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
+  tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
+  altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
+  getHighlightsForLine, applyHighlight, clearHighlight,
+  getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
+  scheduleWordLinkAnchorsLoad,
+  commentaryTocPaths,
+  currentScrollLineIndex,
+  scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
+  flashOpenLine,
+  activeMatchCount, activeMatchIdx, contentSearch,
+  onLinesScrolled, onTocSelect, onAltTocSelect,
+  onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
+  openBookInTab,
+  openContentSearch, openCommentarySearch, toggleSearch,
+  onQueryChange, onSearchNext, onSearchPrev, onModeChange,
+  toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
+  ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
+  getActiveTocEntry, getTocPath,
+  buildExportHtml,
+  bookTitle,
+} = useBookView(
+  () => toolbarRef.value,
+  () => linesContentRef.value,
+  () => searchBarRef.value,
+  {
+    bottom: () => bottomHostRef.value?.view ?? null,
+    side: () => sideHostRef.value?.view ?? null,
+  },
+)
+
+// The side panel needs a pane wide enough to sit beside the text. Rendering is
+// gated on both flags so a pane that narrows never shows a cramped column, and
+// the watcher below closes it so its toggle and the search bar agree.
+const sideCommentaryOpen = computed(() => panels.side.visible.value && isWideScreen.value)
+
+// Everything a commentary panel needs that is NOT per panel. Bound with v-bind on
+// both hosts so the shared list is written once.
+const commentarySharedProps = computed(() => ({
+  bookId,
+  selectedLineId: selectedLineId.value,
+  loading: commentaryLoading.value,
+  loadError: commentaryLoadError.value,
+  getHighlightsForLine,
+  applyHighlight,
+  clearHighlight,
+  getNotesForLine,
+  scheduleNotesLoad,
+  scheduleWordLinkAnchorsLoad,
+  requestContentPriority,
+  createNote,
+  updateNote,
+  deleteNote,
+  commentaryTocPaths: commentaryTocPaths.value,
+}))
+
+// All toolbar props that do not depend on its position, so the three placements
+// (top / side / bottom) each spread one object instead of repeating the list.
+const toolbarProps = computed(() => ({
+  searchVisible: searchVisible.value,
+  tocVisible: tocVisible.value,
+  hasToc: hasToc.value,
+  hasCommentaries: hasCommentaries.value,
+  hasRelatedBooks: hasRelatedBooks.value,
+  tabId,
+  bookId,
+  bookHasTeamim: bookHasTeamim.value,
+  filterGroups: staticFilterGroups.value,
+  relatedBooksLoaded: staticFilterGroupsLoaded.value,
+  currentScrollLineIndex: currentScrollLineIndex.value,
+  lines: lines.value,
+  onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
+  bottomCommentaryVisible: panels.bottom.visible.value,
+  sideCommentaryVisible: sideCommentaryOpen.value,
+  canUseSidePanel: isWideScreen.value,
+}))
+
+// The search bar shows one query at a time: the content query, or the query of
+// whichever commentary panel it is currently aimed at.
+const activeSearchQuery = computed(() => {
+  const slot = slotForSearchMode(searchMode.value)
+  return slot ? panels[slot].search.query.value : contentSearch.query.value
+})
+
+// Clicking a book in the filter tree scrolls the panel that tree is bound to -
+// never the other one, which may be showing a different book entirely.
+function scrollTreeSelectionIntoView(targetBookId: number) {
+  const slot = commentaryTreeSlot.value
+  if (!slot) return
+  const host = slot === 'bottom' ? bottomHostRef.value : sideHostRef.value
+  host?.view?.scrollToGroup(targetBookId)
+}
+
+// ── Divider drag: side commentary column ─────────────────────────────────────
 const splitContainer = ref<HTMLElement | null>(null)
 const isSplitDragging = ref(false)
 
@@ -46,15 +147,15 @@ function onSplitDividerPointerDown(e: PointerEvent) {
 function onSplitPointerMove(e: PointerEvent) {
   if (!isSplitDragging.value || !splitContainer.value) return
   const rect = splitContainer.value.getBoundingClientRect()
-  commentaryFraction.value = Math.min(0.9, Math.max(0.1, (rect.right - e.clientX) / rect.width))
+  panels.side.fraction.value = Math.min(0.9, Math.max(0.1, (rect.right - e.clientX) / rect.width))
 }
 function onSplitPointerUp() {
   isSplitDragging.value = false
 }
 
-// Side panel inline divider drag state.
-// sidePanelResizeArea ref wraps the side panel + divider + content-area so we
-// can measure the total available width for fraction calculations.
+// ── Divider drag: TOC / filter side panel ────────────────────────────────────
+// sidePanelResizeArea wraps the side panel + divider + content-area so we can
+// measure the total available width for fraction calculations.
 const sidePanelResizeArea = ref<HTMLElement | null>(null)
 const isSidePanelDragging = ref(false)
 const sidePanelFraction = ref<number | null>(null)
@@ -73,73 +174,36 @@ function onSidePanelResizePointerUp() {
   isSidePanelDragging.value = false
 }
 
-function cycleCommentaryMode() {
-  if (commentaryMode.value === 'off') {
-    commentaryMode.value = 'bottom'
-  } else if (commentaryMode.value === 'bottom') {
-    // Side-by-side only fits a wide pane; on a narrow pane skip it and close,
-    // so we don't flash into a mode a watcher would immediately bounce back.
-    commentaryMode.value = isWideScreen.value ? 'side' : 'off'
-  } else {
-    commentaryMode.value = 'off'
-  }
+// ── Panel toggles ────────────────────────────────────────────────────────────
+
+function toggleCommentaryPanel(slot: CommentarySlot) {
+  if (slot === 'side' && !isWideScreen.value) return
+  panels[slot].visible.value = !panels[slot].visible.value
 }
 
-const {
-  toolbarPosition, toolbarVisible,
-  searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
-  commentaryVisible, searchVisible, sidePanelMode,
-  selectedLineId, commentaryTreeState, searchMode,
-  activeTocEntryId, commentaryScrollIndex, commentaryScrollOffset,
-  tocVisible, commentaryTreeVisible, sidePanelVisible, sidePanelToggleButtonEl,
-  tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
-  bookHasTeamim,
-  groups, groupsForDisplay, filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
-  tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
-  altTocLabelMap, pinnedCommentaryGroup, selectedSectionLineIds, manualSelectionLineIds,
-  getHighlightsForLine, applyHighlight, clearHighlight,
-  getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
-  scheduleWordLinkAnchorsLoad,
-  commentaryFontPx, renderContent, setCurrentMark, commentaryTocPaths,
-  currentScrollLineIndex,
-  scrollStateReady, idbResolved, initialLineIndex, initialScrollTop, initialScrollOffset,
-  flashOpenLine,
-  restoredCommentaryMode, restoredCommentaryFraction, restoredStackedCommentaryFraction,
-  activeMatchCount, activeMatchIdx, contentSearch, commentarySearch,
-  onLinesScrolled, onTocSelect, onAltTocSelect,
-  onLineSelected, onNavigateSection, navigateToAdjacentTocSection, onCommentaryScroll,
-  onCommentaryTreeChanged, openBookInTab,
-  openContentSearch, openCommentarySearch, toggleSearch,
-  onQueryChange, onSearchNext, onSearchPrev, onModeChange,
-  toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
-  ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
-  onCommentaryPanelMounted,
-  getActiveTocEntry, getTocPath,
-  buildExportHtml,
-  bookTitle,
-} = useBookView(
-  () => toolbarRef.value,
-  () => linesContentRef.value,
-  () => searchBarRef.value,
-  () => commentaryViewRef.value,
-)
-
-// Works in both modes — hosted drives Word through the Office PIA, dev through the service.
-// There is deliberately no isHosted guard: isHosted is TRUE in dev, so it never blocked
-// anything here, and the bridge call it let through could only reject (silently, via the
-// catch) until dev got a real export path.
+// Works in both modes — hosted drives Word through the Office PIA, dev through the
+// service. There is deliberately no isHosted guard: isHosted is TRUE in dev, so it
+// never blocked anything here, and the bridge call it let through could only reject
+// (silently, via the catch) until dev got a real export path.
 async function onExportToWord() {
   const html = buildExportHtml()
   await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
 }
 
-// Switching between the stacked (SplitPane) and side-by-side layouts swaps template
-// branches, which unmounts and remounts BookViewLinesContent. The remounted instance
-// re-runs its initial-scroll restore using initialLineIndex/initialScrollTop — values
-// frozen at session-restore time — so it would jump back to the stale position (or to
-// the top when nothing was saved). Capture the live position before the swap (pre-flush,
-// old instance still mounted) and feed it through the same initial-scroll props.
-watch(sideBySide, () => {
+// Opening or closing the side commentary column re-wraps the text, so the lines
+// scroller is re-keyed and restored from the position captured just before the
+// swap. Without the capture the remounted instance would re-apply
+// initialLineIndex/initialScrollTop — values frozen at session-restore time — and
+// jump back to a stale position (or to the top when nothing was saved).
+watch(sideCommentaryOpen, () => {
+  // Session restore opens the side panel BEFORE idbResolved flips (the visible
+  // watchers flush first), so this fires against a lines instance that has not
+  // applied its restore yet - capturing would read {0,0} and overwrite the seeded
+  // initialScrollTop, landing the whole view at the top. Skip: the seeded values
+  // are exactly what the remounted instance should restore from. (The old
+  // single-panel code dodged this by deferring the layout flip until after
+  // restoreSession, which let the pre-flip instance finish its stage-1 scroll.)
+  if (!idbResolved.value) return
   const pos = linesContentRef.value?.captureScrollPos?.()
   if (!pos) return
   initialLineIndex.value = undefined
@@ -147,20 +211,20 @@ watch(sideBySide, () => {
   initialScrollOffset.value = pos.scrollOffset
 })
 
-watch(commentaryMode, (mode) => { commentaryVisible.value = mode !== 'off' })
-watch(commentaryVisible, (v) => { if (!v) commentaryMode.value = 'off' })
-watch(isWideScreen, (wide) => { if (!wide && commentaryMode.value === 'side') commentaryMode.value = 'bottom' })
-watch(commentaryMode, (mode) => { if (mode === 'side' && !isWideScreen.value) commentaryMode.value = 'off' })
-watch(commentaryMode, (mode, previous) => {
-  if (mode !== 'off' && previous !== 'off' && mode !== previous) {
-    setTimeout(() => onCommentaryPanelMounted(), 0)
-  }
+// A pane too narrow for the side column closes it rather than leaving it open but
+// unrendered, so its toggle button and the search bar's mode cycle stay truthful.
+// Watching visible TOO (not just width changes) matters for session restore on an
+// already-narrow shell: isWideScreen never changes there, but restore flips
+// visible true - without the clamp that panel stays logically open while never
+// rendering (phantom search mode, held backfill gate, no way to close it).
+watch([() => panels.side.visible.value, isWideScreen], ([visible, wide]) => {
+  if (visible && !wide) panels.side.visible.value = false
 })
-watch(restoredCommentaryMode, (mode) => { if (mode) commentaryMode.value = mode }, { once: true })
-watch(restoredCommentaryFraction, (fraction) => { if (fraction != null) commentaryFraction.value = fraction }, { once: true })
-watch(restoredStackedCommentaryFraction, (fraction) => { if (fraction != null) stackedCommentaryFraction.value = fraction }, { once: true })
+
 watch(() => bookViewStore.openSearchSignal, (signal) => { if (signal.paneId === paneId) openContentSearch() })
-watch(() => bookViewStore.toggleBottomPanelSignal, (signal) => { if (signal.paneId === paneId) cycleCommentaryMode() })
+watch(() => bookViewStore.toggleCommentaryPanelSignal, (signal) => {
+  if (signal.paneId === paneId) toggleCommentaryPanel(signal.slot)
+})
 watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId === paneId) toggleTocPanel() })
 </script>
 
@@ -170,23 +234,9 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
     <BookViewToolbar
       v-if="toolbarVisible && toolbarPosition === 'top'"
       ref="toolbarRef"
-      :commentary-visible="commentaryVisible"
-      :search-visible="searchVisible"
-      :toc-visible="tocVisible"
-      :has-toc="hasToc"
-      :has-commentaries="hasCommentaries"
-      :has-related-books="hasRelatedBooks"
-      :tab-id="tabId"
-      :book-id="bookId"
-      :book-has-teamim="bookHasTeamim"
-      :filter-groups="staticFilterGroups"
-      :related-books-loaded="staticFilterGroupsLoaded"
-      :current-scroll-line-index="currentScrollLineIndex"
-      :lines="lines"
-      :on-related-books-open="ensureStaticFilterGroupsLoaded"
-      :commentary-mode="commentaryMode"
-      :can-use-side-by-side="isWideScreen"
-      @cycle-commentary-mode="cycleCommentaryMode"
+      v-bind="toolbarProps"
+      @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
+      @toggle-side-commentary="toggleCommentaryPanel('side')"
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
@@ -198,24 +248,10 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       <BookViewToolbar
         v-if="toolbarVisible && (toolbarPosition === 'right' || toolbarPosition === 'left')"
         ref="toolbarRef"
-        :commentary-visible="commentaryVisible"
-        :search-visible="searchVisible"
-        :toc-visible="tocVisible"
-        :has-toc="hasToc"
-        :has-commentaries="hasCommentaries"
-        :has-related-books="hasRelatedBooks"
-        :tab-id="tabId"
-        :book-id="bookId"
-        :book-has-teamim="bookHasTeamim"
-        :filter-groups="staticFilterGroups"
-        :related-books-loaded="staticFilterGroupsLoaded"
-        :current-scroll-line-index="currentScrollLineIndex"
-        :lines="lines"
+        v-bind="toolbarProps"
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
-        :on-related-books-open="ensureStaticFilterGroupsLoaded"
-        :commentary-mode="commentaryMode"
-        :can-use-side-by-side="isWideScreen"
-        @cycle-commentary-mode="cycleCommentaryMode"
+        @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
+        @toggle-side-commentary="toggleCommentaryPanel('side')"
         @toggle-search="toggleSearch"
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
@@ -257,10 +293,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
               @alt-select="onAltTocSelect"
             />
             <CommentaryTreePanel
-              v-else-if="sidePanelMode === 'commentary-tree'"
+              v-else-if="sidePanelMode === 'commentary-tree' && commentaryTreeSlot"
+              :key="commentaryTreeSlot"
               :groups="filterGroups"
-              :tree-state="commentaryTreeState"
-              :scroll-to-book="(bookId: number) => commentaryViewRef?.scrollToGroup(bookId)"
+              :tree-state="panels[commentaryTreeSlot].treeState"
+              :scope-key="panels[commentaryTreeSlot].scopeKey"
+              :scroll-to-book="scrollTreeSelectionIntoView"
             />
           </BookViewSidePanel>
           <div class="side-panel-divider" @pointerdown="onSidePanelDividerPointerDown" />
@@ -268,171 +306,87 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
 
         <!-- content-area: always fills remaining horizontal space -->
         <div class="content-area">
-          <!-- Commentary side-by-side layout -->
+          <!--
+            One nested layout, always: the side commentary is a column beside the text,
+            the bottom commentary a row beneath it. They are independent panels, so
+            both can be open at once and neither branch excludes the other.
+          -->
           <div
-            v-if="sideBySide && commentaryVisible"
             ref="splitContainer"
             class="side-by-side"
             @pointermove="onSplitPointerMove"
             @pointerup="onSplitPointerUp"
           >
-            <div class="side-commentary" :style="{ width: `${commentaryFraction * 100}%` }">
-              <CommentaryView
-                v-if="commentaryVisible"
-                :key="bookId"
-                ref="commentaryViewRef"
-                :selected-line-id="selectedLineId"
-                :groups="groupsForDisplay"
-                :loading="commentaryLoading"
-                :load-error="commentaryLoadError"
-                :visibility-list="commentaryTreeState.visibilityList"
-                :pinned-group="pinnedCommentaryGroup"
-                :filter-visible="commentaryTreeVisible"
-                :get-highlights-for-line="getHighlightsForLine"
-                :apply-highlight="applyHighlight"
-                :clear-highlight="clearHighlight"
-                :get-notes-for-line="getNotesForLine"
-                :schedule-notes-load="scheduleNotesLoad"
-                :schedule-word-link-anchors-load="scheduleWordLinkAnchorsLoad"
-                :request-content-priority="requestContentPriority"
-                :has-saved-scroll-pos="commentaryScrollIndex != null"
-                :create-note="createNote"
-                :update-note="updateNote"
-                :delete-note="deleteNote"
-                :commentary-font-px="commentaryFontPx"
-                :render-content="renderContent"
-                :set-current-mark="setCurrentMark"
-                :commentary-toc-paths="commentaryTocPaths"
-                :search-query="searchVisible && searchMode === 'commentary' ? commentarySearch.query.value : ''"
-                :current-match-flat-index="searchVisible && searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
-                :current-match-occurrence="searchVisible && searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
-                @close="commentaryVisible = false"
-                @navigate-section="onNavigateSection"
-                @scroll="onCommentaryScroll"
-                @toggle-filter-panel="toggleCommentaryTreePanel"
-                @toggle-search="openCommentarySearch"
-                @open-book="openBookInTab"
-              />
-            </div>
-            <div class="side-divider" @pointerdown="onSplitDividerPointerDown" />
+            <template v-if="sideCommentaryOpen">
+              <div class="side-commentary" :style="{ width: `${panels.side.fraction.value * 100}%` }">
+                <CommentaryPanelHost
+                  ref="sideHostRef"
+                  :panel="panels.side"
+                  v-bind="commentarySharedProps"
+                  :filter-visible="isCommentaryTreeOpenFor('side')"
+                  :search-active="searchVisible && searchMode === 'commentary-side'"
+                  @close="panels.side.visible.value = false"
+                  @navigate-section="(direction, id) => onNavigateSection('side', direction, id)"
+                  @toggle-filter-panel="toggleCommentaryTreePanel('side')"
+                  @toggle-search="openCommentarySearch('side')"
+                  @open-book="openBookInTab"
+                />
+              </div>
+              <div class="side-divider" @pointerdown="onSplitDividerPointerDown" />
+            </template>
+
             <div class="side-lines">
-              <BookViewLinesContent
-                v-if="scrollStateReady"
-                ref="linesContentRef"
-                :lines="lines"
-                :prioritise="prioritise"
-                :alt-toc-label-map="altTocLabelMap"
-                :selected-line-id="selectedLineId"
-                :commentary-visible="commentaryVisible"
-                :commentary-mode="commentaryMode"
-                :commentary-fraction="commentaryFraction"
-                :initial-line-index="initialLineIndex"
-                :initial-scroll-index="initialScrollTop"
-                :initial-scroll-offset="initialScrollOffset"
-                :flash-line-on-open="flashOpenLine"
-                :idb-resolved="idbResolved"
-                :search-highlight-line-index="searchHighlightLineIndex"
-                :search-highlight-query="searchHighlightQuery"
-                :search-highlight-snippet="searchHighlightSnippet"
-                :search-highlight-terms="searchHighlightTerms"
-                :search-bar-visible="searchVisible"
-                :commentary-scroll-index="commentaryScrollIndex"
-                :commentary-scroll-offset="commentaryScrollOffset"
-                :commentary-filter-state="commentaryTreeState"
-                :search-query="searchVisible && searchMode === 'content' ? contentSearch.query.value : ''"
-                :current-match-line-index="searchVisible && searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
-                :current-match-occurrence="searchVisible && searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
-                :get-active-toc-entry="getActiveTocEntry"
-                :get-toc-path="getTocPath"
-                :pinned-commentary-group="pinnedCommentaryGroup"
-                :selected-section-line-ids="selectedSectionLineIds"
-                :multi-select-line-ids="manualSelectionLineIds"
-                @scrolled="onLinesScrolled"
-                @line-selected="onLineSelected"
-                @ctrl-f="openContentSearch"
-              />
+              <SplitPane v-model="panels.bottom.fraction.value" :bottom-visible="panels.bottom.visible.value">
+                <template #top>
+                  <BookViewLinesContent
+                    v-if="scrollStateReady"
+                    :key="String(sideCommentaryOpen)"
+                    ref="linesContentRef"
+                    :lines="lines"
+                    :prioritise="prioritise"
+                    :alt-toc-label-map="altTocLabelMap"
+                    :selected-line-id="selectedLineId"
+                    :commentary-visible="anyCommentaryVisible"
+                    :commentary-persist-state="commentaryPersistState"
+                    :initial-line-index="initialLineIndex"
+                    :initial-scroll-index="initialScrollTop"
+                    :initial-scroll-offset="initialScrollOffset"
+                    :flash-line-on-open="flashOpenLine"
+                    :idb-resolved="idbResolved"
+                    :search-highlight-line-index="searchHighlightLineIndex"
+                    :search-highlight-query="searchHighlightQuery"
+                    :search-highlight-snippet="searchHighlightSnippet"
+                    :search-highlight-terms="searchHighlightTerms"
+                    :search-bar-visible="searchVisible"
+                    :search-query="searchVisible && searchMode === 'content' ? contentSearch.query.value : ''"
+                    :current-match-line-index="searchVisible && searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
+                    :current-match-occurrence="searchVisible && searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
+                    :get-active-toc-entry="getActiveTocEntry"
+                    :get-toc-path="getTocPath"
+                    :selected-section-line-ids="selectedSectionLineIds"
+                    :multi-select-line-ids="manualSelectionLineIds"
+                    @scrolled="onLinesScrolled"
+                    @line-selected="onLineSelected"
+                    @ctrl-f="openContentSearch"
+                  />
+                </template>
+                <template #bottom>
+                  <CommentaryPanelHost
+                    ref="bottomHostRef"
+                    :panel="panels.bottom"
+                    v-bind="commentarySharedProps"
+                    :filter-visible="isCommentaryTreeOpenFor('bottom')"
+                    :search-active="searchVisible && searchMode === 'commentary-bottom'"
+                    @close="panels.bottom.visible.value = false"
+                    @navigate-section="(direction, id) => onNavigateSection('bottom', direction, id)"
+                    @toggle-filter-panel="toggleCommentaryTreePanel('bottom')"
+                    @toggle-search="openCommentarySearch('bottom')"
+                    @open-book="openBookInTab"
+                  />
+                </template>
+              </SplitPane>
             </div>
           </div>
-
-          <!-- Commentary stacked (bottom) layout -->
-          <SplitPane v-else v-model="stackedCommentaryFraction" :bottom-visible="commentaryVisible">
-            <template #top>
-              <BookViewLinesContent
-                v-if="scrollStateReady"
-                ref="linesContentRef"
-                :lines="lines"
-                :prioritise="prioritise"
-                :alt-toc-label-map="altTocLabelMap"
-                :selected-line-id="selectedLineId"
-                :commentary-visible="commentaryVisible"
-                :commentary-mode="commentaryMode"
-                :commentary-fraction="commentaryFraction"
-                :stacked-commentary-fraction="stackedCommentaryFraction"
-                :initial-line-index="initialLineIndex"
-                :initial-scroll-index="initialScrollTop"
-                :initial-scroll-offset="initialScrollOffset"
-                :flash-line-on-open="flashOpenLine"
-                :idb-resolved="idbResolved"
-                :search-highlight-line-index="searchHighlightLineIndex"
-                :search-highlight-query="searchHighlightQuery"
-                :search-highlight-snippet="searchHighlightSnippet"
-                :search-highlight-terms="searchHighlightTerms"
-                :search-bar-visible="searchVisible"
-                :commentary-scroll-index="commentaryScrollIndex"
-                :commentary-scroll-offset="commentaryScrollOffset"
-                :commentary-filter-state="commentaryTreeState"
-                :search-query="searchVisible && searchMode === 'content' ? contentSearch.query.value : ''"
-                :current-match-line-index="searchVisible && searchMode === 'content' ? contentSearch.currentMatchLineIndex.value : undefined"
-                :current-match-occurrence="searchVisible && searchMode === 'content' ? contentSearch.currentMatchOccurrence.value : undefined"
-                :get-active-toc-entry="getActiveTocEntry"
-                :get-toc-path="getTocPath"
-                :pinned-commentary-group="pinnedCommentaryGroup"
-                :selected-section-line-ids="selectedSectionLineIds"
-                :multi-select-line-ids="manualSelectionLineIds"
-                @scrolled="onLinesScrolled"
-                @line-selected="onLineSelected"
-                @ctrl-f="openContentSearch"
-              />
-            </template>
-            <template #bottom>
-              <CommentaryView
-                v-if="commentaryVisible"
-                :key="bookId"
-                ref="commentaryViewRef"
-                :selected-line-id="selectedLineId"
-                :groups="groupsForDisplay"
-                :loading="commentaryLoading"
-                :load-error="commentaryLoadError"
-                :visibility-list="commentaryTreeState.visibilityList"
-                :pinned-group="pinnedCommentaryGroup"
-                :filter-visible="commentaryTreeVisible"
-                :get-highlights-for-line="getHighlightsForLine"
-                :apply-highlight="applyHighlight"
-                :clear-highlight="clearHighlight"
-                :get-notes-for-line="getNotesForLine"
-                :schedule-notes-load="scheduleNotesLoad"
-                :schedule-word-link-anchors-load="scheduleWordLinkAnchorsLoad"
-                :request-content-priority="requestContentPriority"
-                :has-saved-scroll-pos="commentaryScrollIndex != null"
-                :create-note="createNote"
-                :update-note="updateNote"
-                :delete-note="deleteNote"
-                :commentary-font-px="commentaryFontPx"
-                :render-content="renderContent"
-                :set-current-mark="setCurrentMark"
-                :commentary-toc-paths="commentaryTocPaths"
-                :search-query="searchVisible && searchMode === 'commentary' ? commentarySearch.query.value : ''"
-                :current-match-flat-index="searchVisible && searchMode === 'commentary' ? commentarySearch.currentMatchFlatIndex.value : undefined"
-                :current-match-occurrence="searchVisible && searchMode === 'commentary' ? commentarySearch.currentMatchOccurrence.value : undefined"
-                @close="commentaryVisible = false"
-                @navigate-section="onNavigateSection"
-                @scroll="onCommentaryScroll"
-                @toggle-filter-panel="toggleCommentaryTreePanel"
-                @toggle-search="openCommentarySearch"
-                @open-book="openBookInTab"
-              />
-            </template>
-          </SplitPane>
 
           <!-- Search bar (floats inside content-area) -->
           <BookViewSearchBar
@@ -442,9 +396,10 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             :toolbar-position="toolbarPosition"
             :match-count="activeMatchCount"
             :current-match="activeMatchIdx"
-            :commentary-visible="commentaryVisible"
+            :commentary-visible="anyCommentaryVisible"
+            :open-commentary-slots="openCommentarySlots"
             :mode="searchMode"
-            :query="searchMode === 'content' ? contentSearch.query.value : commentarySearch.query.value"
+            :query="activeSearchQuery"
             @close="searchVisible = false"
             @query-change="onQueryChange"
             @next="onSearchNext"
@@ -471,10 +426,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
               @alt-select="onAltTocSelect"
             />
             <CommentaryTreePanel
-              v-else-if="sidePanelMode === 'commentary-tree'"
+              v-else-if="sidePanelMode === 'commentary-tree' && commentaryTreeSlot"
+              :key="commentaryTreeSlot"
               :groups="filterGroups"
-              :tree-state="commentaryTreeState"
-              :scroll-to-book="(bookId: number) => commentaryViewRef?.scrollToGroup(bookId)"
+              :tree-state="panels[commentaryTreeSlot].treeState"
+              :scope-key="panels[commentaryTreeSlot].scopeKey"
+              :scroll-to-book="scrollTreeSelectionIntoView"
             />
           </BookViewSidePanel>
         </div><!-- end .content-area -->
@@ -485,23 +442,9 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
     <BookViewToolbar
       v-if="toolbarVisible && toolbarPosition === 'bottom'"
       ref="toolbarRef"
-      :commentary-visible="commentaryVisible"
-      :search-visible="searchVisible"
-      :toc-visible="tocVisible"
-      :has-toc="hasToc"
-      :has-commentaries="hasCommentaries"
-      :has-related-books="hasRelatedBooks"
-      :tab-id="tabId"
-      :book-id="bookId"
-      :book-has-teamim="bookHasTeamim"
-      :filter-groups="staticFilterGroups"
-      :related-books-loaded="staticFilterGroupsLoaded"
-      :current-scroll-line-index="currentScrollLineIndex"
-      :lines="lines"
-      :on-related-books-open="ensureStaticFilterGroupsLoaded"
-      :commentary-mode="commentaryMode"
-      :can-use-side-by-side="isWideScreen"
-      @cycle-commentary-mode="cycleCommentaryMode"
+      v-bind="toolbarProps"
+      @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
+      @toggle-side-commentary="toggleCommentaryPanel('side')"
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
@@ -591,7 +534,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
   background: color-mix(in srgb, var(--accent-color) 50%, transparent);
 }
 
-/* ── Commentary side-by-side layout ───────────────────────────────────────── */
+/* ── Side commentary column + text column ─────────────────────────────────── */
 .side-by-side {
   display: flex;
   flex-direction: row;

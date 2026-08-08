@@ -20,7 +20,8 @@ type CommentaryViewInstance = Record<string, unknown>
 
 export function useBookViewKeyboardShortcuts(
   linesContentRef: () => (LinesContentInstance & { $el?: HTMLElement }) | null,
-  commentaryViewRef: () => (CommentaryViewInstance & { $el?: HTMLElement }) | null,
+  /** Every commentary scroller in this pane — one per commentary panel. */
+  commentaryViewRefs: Array<() => (CommentaryViewInstance & { $el?: HTMLElement }) | null>,
   hasToc: () => boolean,
   navigateToAdjacentTocSection: (direction: 'next' | 'previous') => void,
 ) {
@@ -46,10 +47,14 @@ export function useBookViewKeyboardShortcuts(
 
     const focused = document.activeElement
     const linesRoot = linesContentRef()?.$el
-    const commentaryRoot = commentaryViewRef()?.$el
+    // The commentary check is structural (the slot attribute on each panel's
+    // root) rather than $el-based: a stray comment beside a template root turns
+    // the component into a fragment and $el into a comment node, which silently
+    // breaks contains() - that exact regression double-zoomed the panels once.
     const focusInScroller =
-      (linesRoot != null && focused != null && linesRoot.contains(focused)) ||
-      (commentaryRoot != null && focused != null && commentaryRoot.contains(focused))
+      focused != null &&
+      ((linesRoot != null && linesRoot.contains(focused)) ||
+        (focused instanceof Element && focused.closest('[data-commentary-slot]') != null))
 
     if (isNextSection || isPreviousSection) {
       if (!hasToc()) return

@@ -7,7 +7,8 @@
  */
 import { ref, computed, nextTick } from 'vue'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
-import type { SearchMode } from './bookViewTypes'
+import { COMMENTARY_SLOTS, searchModeForSlot, slotForSearchMode } from './bookViewTypes'
+import type { CommentarySlot, SearchMode } from './bookViewTypes'
 
 type ContentSearch = {
   query: import('vue').Ref<string>
@@ -44,9 +45,10 @@ type CommentaryViewInstance = {
 
 export function useBookViewSearchPanel(
   contentSearch: ContentSearch,
-  commentarySearch: CommentarySearch,
+  /** One search per commentary panel: each scans only the rows its panel renders. */
+  commentarySearches: Record<CommentarySlot, CommentarySearch>,
   linesContentRef: () => LinesContentInstance | null,
-  commentaryViewRef: () => CommentaryViewInstance | null,
+  commentaryViewRefs: Record<CommentarySlot, () => CommentaryViewInstance | null>,
   searchBarRef: () => { focus: () => void } | null,
   clearFullTextSearchHighlights: () => void,
 ) {
@@ -56,26 +58,37 @@ export function useBookViewSearchPanel(
   // Tracks whether the user has pressed next/prev at least once since the
   // panel opened or the mode changed. On the first press we jump to the
   // nearest match rather than advancing past it.
-  const searchNavigationState = { content: false, commentary: false }
+  const searchNavigationState: Record<SearchMode, boolean> = {
+    content: false,
+    'commentary-bottom': false,
+    'commentary-side': false,
+  }
 
-  const activeSearch = computed(() => searchMode.value === 'content' ? contentSearch : commentarySearch)
+  function searchForMode(mode: SearchMode): ContentSearch | CommentarySearch {
+    const slot = slotForSearchMode(mode)
+    return slot ? commentarySearches[slot] : contentSearch
+  }
+
+  const activeSearch = computed(() => searchForMode(searchMode.value))
   const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
   const activeMatchIdx = computed(() => activeSearch.value.currentMatchIdx.value)
 
   function scrollContentMatch() {
-    if (searchMode.value === 'content') {
+    const slot = slotForSearchMode(searchMode.value)
+    if (!slot) {
       if (contentSearch.currentMatchLineIndex.value === -1) return
       linesContentRef()?.scrollToLineIndex(
         contentSearch.currentMatchLineIndex.value,
         contentSearch.currentMatchOccurrence.value,
       )
-    } else {
-      if (commentarySearch.currentMatchFlatIndex.value === -1) return
-      commentaryViewRef()?.scrollToFlatIndex(
-        commentarySearch.currentMatchFlatIndex.value,
-        commentarySearch.currentMatchOccurrence.value,
-      )
+      return
     }
+    const search = commentarySearches[slot]
+    if (search.currentMatchFlatIndex.value === -1) return
+    commentaryViewRefs[slot]()?.scrollToFlatIndex(
+      search.currentMatchFlatIndex.value,
+      search.currentMatchOccurrence.value,
+    )
   }
 
   // Element the current selection (or caret) is anchored in, if any.
@@ -83,6 +96,17 @@ export function useBookViewSearchPanel(
     const node = window.getSelection()?.anchorNode
     if (!node) return null
     return node instanceof Element ? node : node.parentElement
+  }
+
+  /**
+   * Which commentary panel the selection/caret is inside, or null for the book text.
+   * Both panels render a CommentaryView, so the slot comes from the data attribute
+   * each one stamps on its root rather than from the shared `.commentary-view` class.
+   */
+  function selectionCommentarySlot(): CommentarySlot | null {
+    const host = selectionAnchorElement()?.closest('[data-commentary-slot]')
+    const slot = host?.getAttribute('data-commentary-slot')
+    return slot === 'bottom' || slot === 'side' ? slot : null
   }
 
   // Text currently selected in the lines or commentary view, normalized for
@@ -120,39 +144,44 @@ export function useBookViewSearchPanel(
     nextTick(() => searchBarRef()?.focus())
   }
 
-  // Toolbar toggle: close if open in any mode; otherwise open in the mode
-  // matching where the selection/caret sits — commentary search when it is
-  // in the commentary view, content search everywhere else.
+  /**
+   * Ctrl+F inside a commentary panel searches THAT panel — pressing it again in the
+   * same panel closes the bar, pressing it in the other panel re-targets the bar.
+   */
+  function openCommentarySearch(slot: CommentarySlot) {
+    const mode = searchModeForSlot(slot)
+    if (searchVisible.value && searchMode.value === mode) {
+      searchVisible.value = false
+      return
+    }
+    searchVisible.value = true
+    searchMode.value = mode
+    searchNavigationState[mode] = false
+    prefillFromSelection(commentarySearches[slot])
+    nextTick(() => searchBarRef()?.focus())
+  }
+
+  // Toolbar toggle: close if open in any mode; otherwise open in the mode matching
+  // where the selection/caret sits — the commentary panel it is inside, or the book
+  // text everywhere else.
   function toggleSearch() {
     if (searchVisible.value) {
       searchVisible.value = false
       return
     }
-    if (selectionAnchorElement()?.closest('.commentary-view')) openCommentarySearch()
+    const slot = selectionCommentarySlot()
+    if (slot) openCommentarySearch(slot)
     else openContentSearch()
-  }
-
-  function openCommentarySearch() {
-    if (searchVisible.value && searchMode.value === 'commentary') {
-      searchVisible.value = false
-      return
-    }
-    searchVisible.value = true
-    searchMode.value = 'commentary'
-    searchNavigationState.commentary = false
-    prefillFromSelection(commentarySearch)
-    nextTick(() => searchBarRef()?.focus())
   }
 
   function onModeChange(mode: SearchMode) {
     const currentQuery = activeSearch.value.query.value
     contentSearch.clear()
-    commentarySearch.clear()
+    for (const slot of COMMENTARY_SLOTS) commentarySearches[slot].clear()
     searchMode.value = mode
     searchNavigationState[mode] = false
     if (!currentQuery) return
-    const target = mode === 'content' ? contentSearch : commentarySearch
-    target.query.value = currentQuery
+    searchForMode(mode).query.value = currentQuery
   }
 
   function onQueryChange(query: string) {
