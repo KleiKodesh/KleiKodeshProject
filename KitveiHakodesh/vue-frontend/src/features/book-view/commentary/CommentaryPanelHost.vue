@@ -38,7 +38,7 @@ const props = defineProps<{
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
   deleteNote: (note: Note) => Promise<void>
-  commentaryTocPaths: Map<number, string>
+  commentaryTocPaths: Map<string, string>
 }>()
 
 const emit = defineEmits<{

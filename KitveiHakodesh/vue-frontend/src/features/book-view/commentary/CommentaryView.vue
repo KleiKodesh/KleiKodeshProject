@@ -13,6 +13,7 @@ import CommentaryHeaderNav from './CommentaryHeaderNav.vue'
 import ContextMenu from '@/components/ContextMenu.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import type { CommentaryGroup } from './useCommentary'
+import { commentaryGroupKey } from './useCommentary'
 import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
@@ -59,7 +60,7 @@ const props = defineProps<{
   commentaryFontPx: number
   renderContent: (content: string, flatIndex: number, lineId: number | undefined, searchQuery: string | undefined) => string
   setCurrentMark: (scroller: HTMLElement, flatIndex: number, occurrence: number) => void
-  commentaryTocPaths: Map<number, string>
+  commentaryTocPaths: Map<string, string>
   searchQuery?: string
   currentMatchFlatIndex?: number
   currentMatchOccurrence?: number
@@ -139,7 +140,7 @@ const flatItems = computed<FlatItem[]>(() => {
       sectionLabel: g.sectionLabel,
       subSectionLabel: g.subSectionLabel,
       firstLineIndex: g.lines[0]?.lineIndex,
-      tocPath: tocPaths.get(g.bookId),
+      tocPath: tocPaths.get(commentaryGroupKey(g)),
     })
     for (const l of g.lines) items.push({ type: 'line', content: l.content, lineId: l.lineId })
   }
@@ -293,7 +294,7 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onPa
         ) ?? null
       : null
   },
-  (bookId) => props.commentaryTocPaths.get(bookId),
+  (group) => props.commentaryTocPaths.get(commentaryGroupKey(group)),
   selectAllInContainer,
   scrollerEl,
   (lineId, startOffset, endOffset, colorArgb) =>
@@ -354,7 +355,9 @@ defineExpose({
 })
 
 const activeTocPath = computed(() =>
-  activePinnedGroup.value ? props.commentaryTocPaths.get(activePinnedGroup.value.bookId) : undefined,
+  activePinnedGroup.value
+    ? props.commentaryTocPaths.get(commentaryGroupKey(activePinnedGroup.value))
+    : undefined,
 )
 
 // Delayed loading spinner — the panel's original LoadingAnimation, mounted only
