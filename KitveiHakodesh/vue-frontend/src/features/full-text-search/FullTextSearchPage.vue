@@ -203,6 +203,32 @@ watch(
   },
 )
 
+// A /search → /search navigation that carries a position: picking a search row from the
+// address-bar dropdown (or Back/Forward onto one). The page is keyed by tabId alone, so
+// navigating in place does NOT remount it and none of the mount-time restore above runs.
+// The tab patch carries the position instead (tabStore.applyLocationPosition), and this
+// watcher is the consuming half — it seeds the same initialScrollIndex the mount path uses
+// and re-arms the results list, whose restore watcher is one-shot.
+//
+// `searchRestore` and `searchQuery` arrive in the SAME patch, so this watcher and the
+// searchQuery watcher above both fire for one navigation. We deliberately do NOT depend on
+// which runs first: executeSearch is async and awaits cancelSearch() before clearing
+// results, so there is no instant at which "results are already the new set" is guaranteed.
+// Seeding the target is safe regardless — the child re-arms rather than restoring on the
+// spot, and its watcher waits for the target row to actually arrive.
+watch(
+  () => paneNavigation.tabs.find((t) => t.id === tabId)?.searchRestore,
+  (restore) => {
+    if (!restore) return
+    initialScrollIndex.value = restore.index
+    initialScrollOffset.value = restore.offset
+    // Consume it, like openTocLineIndex: the field describes ONE navigation, and leaving it
+    // set would make an unrelated later patch (a title refresh) re-trigger this restore.
+    paneNavigation.updateActiveTab({ searchRestore: undefined })
+    resultsListRef.value?.armRestore()
+  },
+)
+
 function onSaveScroll(pos: { scrollIndex: number; scrollOffset: number }) {
   lastScrollIndex = pos.scrollIndex
   lastScrollOffset = pos.scrollOffset
