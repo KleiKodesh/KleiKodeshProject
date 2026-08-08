@@ -14,6 +14,9 @@ $ReleasesDir         = Join-Path $BuildDir    "releases"
 $ReleaseNotesFile    = Join-Path $ProjectRoot "RELEASE_NOTES.txt"
 $DemoAppProjectPath  = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\KitveiHakodeshDemoApp.csproj"
 $DemoAppReleaseDir   = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\bin\Release"
+# Separate git repo (kleikodesh.github.io), gitignored by this one. The release step
+# rewrites its download link to the new version and pushes it.
+$WebsiteRepo         = Join-Path $ProjectRoot "kleikodesh-website"
 
 # -- Read current version from source -----------------------------------------
 function Get-CurrentVersion {
