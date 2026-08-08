@@ -141,6 +141,12 @@ function captureScrollPos() {
   }
 }
 
+// Generation of the restore currently in charge. Bumped by armRestore when a new target
+// supersedes an older one; any attempt whose captured generation no longer matches gives up
+// instead of scrolling to a place the user has already navigated away from. Assigned by the
+// restore block below — before then no restore can be in flight, so 0 is a safe stand-in.
+let currentGeneration = () => 0
+
 function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   // Pre-paint restore: the first applyOffset attempt runs synchronously (see call at the
   // bottom) so the scroll lands before the browser paints — no flash of the list top.
@@ -148,14 +154,20 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   // shift from the target rows' first real measurement. If the item isn't in
   // measurementsCache yet (e.g. filtered set still building), retry up to 10 times at
   // 100ms intervals before giving up.
+  const myGeneration = currentGeneration()
+  const superseded = () => currentGeneration() !== myGeneration
   programmaticScrolling = true
   virtualizer.value.scrollToIndex(scrollIndex, { align: 'start' })
   let attempts = 0
   function applyOffset() {
+    // A newer restore has taken over (the retry loop can span seconds while results stream,
+    // and a recents pick lands mid-flight) — stop touching scrollTop and let it own the view.
+    if (superseded()) return
     const item = virtualizer.value.measurementsCache.find((m) => m.index === scrollIndex)
     if (item && scrollEl.value) {
       scrollEl.value.scrollTop = item.start + scrollOffset
       requestAnimationFrame(() => {
+        if (superseded()) return
         // Re-assert once after TanStack's dynamic-measurement pass: the rows rendered at
         // the target measure their real heights on this first frame, which can shift
         // item.start under us. Same coordinates re-read → at most a sub-row settle,
@@ -178,6 +190,14 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
   // isn't measurable yet.
   applyOffset()
 }
+
+// Re-arms the restore watcher below for a NEW target. The watcher is one-shot by design —
+// it stops itself the moment it restores — which is right for the mount-time restore but
+// leaves nothing armed for a SECOND navigation into this same (never remounted) page:
+// picking a search row from the address bar patches the tab in place, so the page stays
+// mounted and only initialScrollIndex changes. armRestore resets the latch and re-runs the
+// watch; the parent calls it after updating the target.
+let armRestore = () => {}
 
 {
   // Restore scroll once the target row is actually reachable. This is the tricky case on
@@ -225,16 +245,39 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
     nextTick(() => restoreScrollPos(index, props.initialScrollOffset ?? 0))
     return true
   }
-  let stopWatch = () => {}
-  stopWatch = watch(
+  // `generation` is what makes re-arming safe. Stopping and re-creating the watcher would
+  // race: an in-flight restoreScrollPos retry loop from the PREVIOUS target keeps running
+  // and would fight the new one for scrollTop. Instead the watcher lives for the component's
+  // lifetime and every attempt captures the generation it started in — a stale attempt sees
+  // the bump and bails rather than scrolling somewhere the user has already left.
+  let generation = 0
+  // Read by restoreScrollPos to abandon a superseded attempt.
+  currentGeneration = () => generation
+  watch(
     // initialScrollIndex is a watched source too: on reload it arrives asynchronously
     // (parent onMounted IDB read), and the watcher must re-fire when it lands.
     [() => props.results.length, () => props.isSearching, () => props.initialScrollIndex],
-    () => {
-      if (tryRestore()) stopWatch()
-    },
+    () => { tryRestore() },
     { flush: 'post', immediate: true },
   )
+  armRestore = () => {
+    generation++   // abandon any retry loop still running for the previous target
+    restored = false
+    // Do NOT attempt the restore synchronously here. The navigation that re-armed us also
+    // kicked off handleSearch → executeSearch, which is async and `await`s cancelSearch()
+    // BEFORE it does `results.value = []`. So at this instant props.results may still hold
+    // the OUTGOING search's rows: restoring against them would scroll into a list that is
+    // about to be wiped, and the real results would then stream in with the latch already
+    // spent. Leaving it to the watcher is both simpler and correct — it re-fires on every
+    // results-length change and on isSearching, which is exactly the streaming case its
+    // wait/clamp logic was written for.
+    //
+    // The one case the watcher would miss is a re-arm where NOTHING it watches ever changes
+    // (the same query re-selected from recents, results already settled). nextTick catches
+    // that: by then executeSearch has either emptied the list (watcher takes over) or the
+    // navigation didn't re-search at all and the settled rows are the right ones.
+    nextTick(() => { if (!restored) tryRestore() })
+  }
 }
 
 function savePos() {
@@ -287,7 +330,7 @@ function scrollToBook(bookId: number) {
 
 function onScroll() {}
 
-defineExpose({ captureScrollPos, scrollToBook })
+defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
 </script>
 
 <template>

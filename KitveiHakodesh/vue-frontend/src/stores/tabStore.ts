@@ -94,6 +94,14 @@ export interface Tab {
   searchHighlightSnippet?: string
   searchHighlightTerms?: string[]
   searchQuery?: string
+  // Where in the RESULTS LIST an incoming /search navigation should land, carried
+  // from the location record that supplied searchQuery (a recents row, or Back).
+  // The FTS page keys on tabId and does NOT remount for an in-place /search →
+  // /search navigation, so this is how a position reaches it: the page watches the
+  // field, seeds its restore target from it, and clears it once consumed — exactly
+  // like openTocLineIndex for book view. Not persisted: per-tab scroll already is
+  // (TabState.searchScroll*), and this only describes one navigation.
+  searchRestore?: { index: number; offset: number; nonce: number }
   // Seed query for the book-catalog page (route '/books'), pushed from the VSTO
   // host's "חיפוש ספר בכתבי הקודש" context menu. BookCatalogPage reads this on mount
   // into its reactive searchQuery. Kept separate from searchQuery, which the FTS page owns.
@@ -248,6 +256,7 @@ export const useTabStore = defineStore('tabs', () => {
           searchHighlightQuery,
           searchHighlightSnippet,
           searchHighlightTerms,
+          searchRestore,
           ...t
         }) => t,
       ),
@@ -378,11 +387,7 @@ export const useTabStore = defineStore('tabs', () => {
     if (!target) return
 
     const patch = tabPatchForLocation(target)
-    const index = target.position?.scrollIndex
-    if (index != null) {
-      patch.openTocLineIndex = index
-      patch.navNonce = nextNavNonce()
-    }
+    applyLocationPosition(patch, target)
     // Assign directly rather than through applyTabPatch: this is a history MOVE,
     // and recording it would push the frame we just stepped off onto the stack.
     Object.assign(tab, patch)
@@ -444,6 +449,7 @@ export const useTabStore = defineStore('tabs', () => {
       searchHighlightQuery: _j,
       searchHighlightSnippet: _k,
       searchHighlightTerms: _l,
+      searchRestore: _m,
       ...rest
     } = tab
     return rest as Tab
@@ -736,6 +742,35 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   /**
+   * Folds a location's saved position into the patch that navigates to it. Each
+   * route carries its position in its own unit, so each gets its own translation:
+   *
+   *  - book view: `scrollIndex` is a line index, the same unit openTocLineIndex
+   *    takes, so the tab lands where the reader stopped. BookView reads its target
+   *    once at setup and AppPageView keys on tabId:bookId, so a same-book jump needs
+   *    the nonce to force a remount.
+   *  - search: `searchScroll*` index into the RESULTS list. The FTS page keys on
+   *    tabId alone and so does NOT remount for /search → /search; it watches
+   *    `searchRestore` instead. The nonce here is what makes returning to the SAME
+   *    row twice register as two navigations rather than an unchanged object.
+   */
+  function applyLocationPosition(patch: Partial<Omit<Tab, 'id'>>, location: NavLocation) {
+    const index = location.position?.scrollIndex
+    if (index != null) {
+      patch.openTocLineIndex = index
+      patch.navNonce = nextNavNonce()
+    }
+    const searchIndex = location.position?.searchScrollIndex
+    if (location.route === '/search' && searchIndex != null) {
+      patch.searchRestore = {
+        index: searchIndex,
+        offset: location.position?.searchScrollOffset ?? 0,
+        nonce: nextNavNonce(),
+      }
+    }
+  }
+
+  /**
    * The patch that navigates a tab to a recents location, including the position it
    * was left at. Callers apply it with updateActiveTab (navigate in place, the
    * address-bar default) or openTab (Ctrl-click, a new tab) — the choice belongs to
@@ -745,15 +780,7 @@ export const useTabStore = defineStore('tabs', () => {
     const location = recentLocations.value.find((l) => l.id === locationId)
     if (!location) return undefined
     const patch = tabPatchForLocation(location)
-    // scrollIndex is a line index, the same unit openTocLineIndex takes, so the tab
-    // lands where the reader stopped rather than at the top of the document.
-    const index = location.position?.scrollIndex
-    if (index != null) {
-      patch.openTocLineIndex = index
-      // BookView reads its target once at setup and AppPageView keys on tabId:bookId,
-      // so a same-book jump needs the nonce to force a remount.
-      patch.navNonce = nextNavNonce()
-    }
+    applyLocationPosition(patch, location)
     return patch
   }
 
