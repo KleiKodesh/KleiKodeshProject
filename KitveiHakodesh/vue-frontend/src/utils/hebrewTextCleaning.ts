@@ -38,6 +38,26 @@ function isCommonQuoteBoundary(ch: string | undefined): boolean {
   return ch === ',' || ch === '.' || ch === '"' || ch === '\u05F4' || isWhitespace(ch)
 }
 
+/**
+ * True when the quote at `quoteIndex` marks \u05E8\u05D0\u05E9\u05D9 \u05EA\u05D9\u05D1\u05D5\u05EA rather than a real quotation.
+ *
+ * Being flanked by Hebrew letters is not enough: in \u05E8\u05D0\u05E9\u05D9 \u05EA\u05D9\u05D1\u05D5\u05EA the gershayim
+ * always sits between the last two letters of the word (\u05E8\u05E9\u05D1"\u05D0, \u05E9\u05DC\u05D9\u05D8"\u05D0). A mark
+ * anywhere earlier belongs to a quoted particle \u2014 \u05D5\u05F4\u05D0\u05D9\u05DF \u05D3\u05E7\u05D0\u05DE\u05E8\u05D9 \u05DC\u05D9\u05D4 \u05E7\u05D5\u05E9\u05D8\u05D0 \u05D4\u05D5\u05D0 \u2014
+ * where the quote opens a citation and the following letters are a whole word,
+ * not an acronym tail. Those must survive cleaning untouched.
+ *
+ * So the mark qualifies only when a Hebrew letter precedes it and exactly one
+ * Hebrew letter follows before the word ends.
+ */
+function isAbbreviationQuote(source: string, quoteIndex: number, length: number): boolean {
+  if (!isHebrewLetter(quoteIndex > 0 ? source[quoteIndex - 1] : undefined)) return false
+  const after = quoteIndex + 1
+  if (!isHebrewLetter(after < length ? source[after] : undefined)) return false
+  // Exactly one trailing letter \u21D2 the next position must end the word.
+  return !isHebrewLetter(after + 1 < length ? source[after + 1] : undefined)
+}
+
 // charCode -> 1 lookup table for characters that trigger special handling:
 // tag delimiters, colon, both quote forms, the entity-quote opener '&',
 // period, and space. A single typed-array read replaces the chain of
@@ -67,7 +87,10 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
  *   - Colons kept when at end-of-line (followed by a tag or end of string) or when
  *     they separate two letters/digits with no surrounding space (chapter:verse
  *     citations); other mid-sentence colons (vowel-pointing artifacts) are dropped
- *   - Stray double-quotes ("  ״) not between two words are dropped
+ *   - Double-quotes are kept only as ראשי תיבות — flanked by Hebrew letters
+ *     with exactly one letter following, so the mark sits between the word's
+ *     last two letters (רשב"א). Every other quote is dropped, including one
+ *     opening a quoted particle mid-word (ו״אין), which is not an acronym
  *   - Multiple consecutive spaces collapsed to one
  *   - A space inserted after a period when the immediately following character
  *     is a Hebrew letter and the period does not follow a single-letter word
@@ -171,7 +194,14 @@ export function cleanHebrewText(html: string): string {
           nextCharacter === '<' ||
           isCommonQuoteBoundary(nextCharacter)
 
-        if (!(precededByBoundary || followedByBoundary)) {
+        // The entity spans 6 chars, so its neighbours are not adjacent in
+        // `source` the way a literal quote's are — check them directly.
+        const isAbbreviation =
+          isHebrewLetter(previousCharacter) &&
+          isHebrewLetter(nextCharacter) &&
+          !isHebrewLetter(quoteEnd + 1 < length ? source[quoteEnd + 1] : undefined)
+
+        if (!(precededByBoundary || followedByBoundary) && isAbbreviation) {
           output.push('"')
           lastOutputChar = '"'
         }
@@ -202,7 +232,10 @@ export function cleanHebrewText(html: string): string {
         nextCharacter === '<' ||
         isCommonQuoteBoundary(nextCharacter)
 
-      if (!(precededByBoundary || followedByBoundary)) {
+      if (
+        !(precededByBoundary || followedByBoundary) &&
+        isAbbreviationQuote(source, specialIndex, length)
+      ) {
         output.push(character)
         lastOutputChar = character
       }
