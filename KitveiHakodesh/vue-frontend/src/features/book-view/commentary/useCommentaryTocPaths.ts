@@ -1,8 +1,11 @@
 import { ref, watch } from 'vue'
 import { getTocPathsForLines, getEnclosingTocPathForLineRanges } from '@/webview-host/seforimApi'
+import { commentaryGroupKey } from './useCommentary'
 
 /**
- * Fetches and caches TOC paths for commentary groups. Keyed by bookId — resolved
+ * Fetches and caches TOC paths for commentary groups. Keyed by group identity
+ * (see commentaryGroupKey) — NOT by bookId, since one book can produce several
+ * groups whose differing line subsets resolve to different TOC paths. Resolved
  * asynchronously after groups load, never blocks rendering.
  *
  * In single-line mode the path comes from the first line of each group (the existing
@@ -17,7 +20,7 @@ export function useCommentaryTocPaths(
   groups: () => any[],
   isSectionMode: () => boolean,
 ) {
-  const commentaryTocPaths = ref<Map<number, string>>(new Map())
+  const commentaryTocPaths = ref<Map<string, string>>(new Map())
 
   async function fetchSingleLineTocPaths(groupList: any[]) {
     const lineIds = groupList
@@ -27,12 +30,12 @@ export function useCommentaryTocPaths(
 
     const rows = await getTocPathsForLines(lineIds)
     const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
-    const resolved = new Map<number, string>()
+    const resolved = new Map<string, string>()
     for (const g of groupList) {
       const lineId = g.lines[0]?.lineId
       if (lineId != null && lineId > 0) {
         const tocPath = pathsByLineId.get(lineId)
-        if (tocPath) resolved.set(g.bookId, tocPath)
+        if (tocPath) resolved.set(commentaryGroupKey(g), tocPath)
       }
     }
     commentaryTocPaths.value = resolved
@@ -42,8 +45,8 @@ export function useCommentaryTocPaths(
     // Build (groupKey, firstLineId, lastLineId) triples.
     // Skip placeholder groups (lineId === -1) and groups with only one real line
     // (for those, fall back to the single-line path since first === last).
-    const triples: Array<{ groupKey: number; firstLineId: number; lastLineId: number; bookId: number }> = []
-    const singleLineGroups: Array<{ groupKey: number; lineId: number; bookId: number }> = []
+    const triples: Array<{ groupKey: number; firstLineId: number; lastLineId: number; key: string }> = []
+    const singleLineGroups: Array<{ groupKey: number; lineId: number; key: string }> = []
 
     for (let index = 0; index < groupList.length; index++) {
       const g = groupList[index]
@@ -51,15 +54,23 @@ export function useCommentaryTocPaths(
       if (realLines.length === 0) continue
 
       if (realLines.length === 1) {
-        singleLineGroups.push({ groupKey: index, lineId: realLines[0].lineId, bookId: g.bookId })
+        singleLineGroups.push({ groupKey: index, lineId: realLines[0].lineId, key: commentaryGroupKey(g) })
       } else {
-        const firstLineId = realLines[0].lineId
-        const lastLineId = realLines[realLines.length - 1].lineId
-        triples.push({ groupKey: index, firstLineId, lastLineId, bookId: g.bookId })
+        // Endpoints by min/max of lineId, NOT array position: g.lines is ordered
+        // by lineIndex (per-book position) while these are line.id (global row
+        // id), and the two orders need not agree. Reading [0] / [last] can hand
+        // the query a non-enclosing pair, which resolves to a too-deep entry.
+        let firstLineId = realLines[0].lineId
+        let lastLineId = realLines[0].lineId
+        for (const l of realLines) {
+          if (l.lineId < firstLineId) firstLineId = l.lineId
+          if (l.lineId > lastLineId) lastLineId = l.lineId
+        }
+        triples.push({ groupKey: index, firstLineId, lastLineId, key: commentaryGroupKey(g) })
       }
     }
 
-    const resolved = new Map<number, string>()
+    const resolved = new Map<string, string>()
 
     // Batch the common-ancestor query for all multi-line groups.
     if (triples.length > 0) {
@@ -69,9 +80,9 @@ export function useCommentaryTocPaths(
       }
       const rows = await getEnclosingTocPathForLineRanges(params)
       const pathsByGroupKey = new Map(rows.map((r) => [r.groupKey, r.tocPath]))
-      for (const { groupKey, bookId } of triples) {
+      for (const { groupKey, key } of triples) {
         const tocPath = pathsByGroupKey.get(groupKey)
-        if (tocPath) resolved.set(bookId, tocPath)
+        if (tocPath) resolved.set(key, tocPath)
       }
     }
 
@@ -80,9 +91,9 @@ export function useCommentaryTocPaths(
       const lineIds = singleLineGroups.map((g) => g.lineId)
       const rows = await getTocPathsForLines(lineIds)
       const pathsByLineId = new Map(rows.map((r) => [r.lineId, r.tocPath]))
-      for (const { lineId, bookId } of singleLineGroups) {
+      for (const { lineId, key } of singleLineGroups) {
         const tocPath = pathsByLineId.get(lineId)
-        if (tocPath) resolved.set(bookId, tocPath)
+        if (tocPath) resolved.set(key, tocPath)
       }
     }
 

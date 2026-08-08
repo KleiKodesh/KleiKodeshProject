@@ -33,6 +33,20 @@ export interface CommentaryGroup {
   subSectionLabel?: string
 }
 
+/**
+ * Identity of a group within a load. A single book yields one group per
+ * connection type / category (SOURCE, TARGUM, COMMENTARY·ראשונים …), each with
+ * its own line subset — so bookId alone does NOT identify a group, and anything
+ * keyed by it silently collapses those groups together.
+ */
+export function commentaryGroupKey(group: {
+  bookId: number
+  sectionLabel?: string
+  subSectionLabel?: string
+}): string {
+  return `${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`
+}
+
 export interface CommentaryBookEntry {
   bookId: number
   bookTitle: string
@@ -507,12 +521,6 @@ export function filterVisibleGroups(
       ),
   )
   if (!visibilityList.length) return base
-  const visibleKeys = new Set(
-    visibilityList
-      .filter(isCommentaryItemVisible)
-      .map((item) => `${item.bookId}::${item.sectionLabel}::${item.subSectionLabel}`),
-  )
-  return base.filter((group) =>
-    visibleKeys.has(`${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`),
-  )
+  const visibleKeys = new Set(visibilityList.filter(isCommentaryItemVisible).map(commentaryGroupKey))
+  return base.filter((group) => visibleKeys.has(commentaryGroupKey(group)))
 }

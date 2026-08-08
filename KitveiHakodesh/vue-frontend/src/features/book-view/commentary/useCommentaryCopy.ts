@@ -10,9 +10,20 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { triggerCopy } from '@/composables/useLineCopy'
 
+/** The bits of a CommentaryGroup this composable needs: a title to cite, plus
+ *  enough identity to look its TOC path up. */
+type CommentaryGroupRef = {
+  bookTitle: string
+  bookId: number
+  sectionLabel?: string
+  subSectionLabel?: string
+}
+
 export function useCommentaryCopy(
-  getActiveGroup: () => { bookTitle: string; bookId: number } | null,
-  getTocPath: (bookId: number) => string | undefined,
+  getActiveGroup: () => CommentaryGroupRef | null,
+  /** Takes the group, not its bookId — one book can span several groups with
+   *  different TOC paths (see commentaryGroupKey). */
+  getTocPath: (group: CommentaryGroupRef) => string | undefined,
   selectAllInContainer: () => void,
   scrollerEl: Ref<HTMLElement | null>,
   onHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void,
@@ -304,7 +315,7 @@ export function useCommentaryCopy(
     if (!settingsStore.copyAsSourceWithQuotation && (position === 'start' || position === 'end')) {
       const activeGroup = getActiveGroup()
       if (activeGroup) {
-        const tocPath = getTocPath(activeGroup.bookId)
+        const tocPath = getTocPath(activeGroup)
         const source = buildCommentarySource(activeGroup.bookTitle, tocPath)
         if (position === 'start') {
           html = `<h2 dir="rtl">${source}</h2>${html}`
@@ -323,7 +334,7 @@ export function useCommentaryCopy(
     if (settingsStore.copyAsSourceWithQuotation) {
       const activeGroup = getActiveGroup()
       const source = activeGroup
-        ? buildCommentarySource(activeGroup.bookTitle, getTocPath(activeGroup.bookId))
+        ? buildCommentarySource(activeGroup.bookTitle, getTocPath(activeGroup))
         : ''
       // Collect full line content into one inline run. On the select-all path (or
       // when copyJoinLines already ran), `html` already holds the complete content
