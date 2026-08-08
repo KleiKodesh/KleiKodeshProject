@@ -12,11 +12,12 @@ import {
   setCommentaryAllChecked,
   isCommentaryBookUnchecked,
 } from './uncheckedCommentaryBooks'
-import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
 const props = defineProps<{
   groups: CommentaryGroup[]
-  treeState: CommentaryTreeState // reactive object owned by useBookView, mutated directly
+  treeState: CommentaryTreeState // reactive object owned by one commentary panel, mutated directly
+  /** Check-tree scope of the panel this tree is filtering (see commentaryScopeKey). */
+  scopeKey: string
   scrollToBook: (bookId: number) => void
 }>()
 
@@ -49,9 +50,11 @@ watch(
 )
 
 // ── Search / tree logic ───────────────────────────────────────────────────────
-const tabId = usePaneNavigation().activeTabId
+// Captured at setup: BookViewPage keys this component by slot, so re-targeting
+// the tree at the other commentary panel remounts it with fresh state.
+const scopeKey = props.scopeKey
 const { syncVisibilityList, applyFilter, isSearching, tree, searchResults } =
-  useCommentaryTreeSearch(() => props.groups, props.treeState, tabId)
+  useCommentaryTreeSearch(() => props.groups, props.treeState, scopeKey)
 
 watch(() => props.groups, syncVisibilityList, { immediate: true })
 watch(() => props.treeState.visibilityList, () => { if (isSearching.value) applyFilter() })
@@ -102,7 +105,7 @@ const allState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
 // so the tree reflects the virtual check-tree (defaults + overrides).
 function syncCheckedFromStore() {
   for (const item of props.treeState.visibilityList) {
-    item.isChecked = !isCommentaryBookUnchecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId)
+    item.isChecked = !isCommentaryBookUnchecked(scopeKey, item.sectionLabel, item.subSectionLabel, item.bookId)
   }
 }
 
@@ -115,20 +118,20 @@ function toggleAll() {
     })
     return
   }
-  setCommentaryAllChecked(tabId, shouldCheck)
+  setCommentaryAllChecked(scopeKey, shouldCheck)
   syncCheckedFromStore()
 }
 
 function toggleNode(payload: { sectionLabel: string; subSectionLabel: string | null; shouldCheck: boolean }) {
   // Toggling a category cascades to all its children — present and future.
-  setCommentaryNodeChecked(tabId, payload.sectionLabel, payload.subSectionLabel, payload.shouldCheck)
+  setCommentaryNodeChecked(scopeKey, payload.sectionLabel, payload.subSectionLabel, payload.shouldCheck)
   syncCheckedFromStore()
 }
 
 function toggleItem(item: CommentaryVisibilityItem) {
   // A book override persists across lines regardless of its parent's state —
   // e.g. re-checking one book inside an unchecked category keeps it visible.
-  setCommentaryBookChecked(tabId, item.sectionLabel, item.subSectionLabel, item.bookId, !item.isChecked)
+  setCommentaryBookChecked(scopeKey, item.sectionLabel, item.subSectionLabel, item.bookId, !item.isChecked)
   syncCheckedFromStore()
 }
 </script>
@@ -154,6 +157,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           v-for="node in tree"
           :key="node.label"
           :node="node"
+          :scope-key="scopeKey"
           @toggle-item="toggleItem"
           @toggle-node="toggleNode"
           @navigate-to-book="scrollToBook"

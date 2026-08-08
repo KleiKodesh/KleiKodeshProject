@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
   IconLayoutRowTwo20Regular,
+  IconLayoutColumnTwo20Regular,
   IconLayoutRowTwoFocusBottom20Filled,
   IconLayoutColumnTwoFocusLeft20Filled,
   IconZoomIn20Regular,
@@ -22,7 +23,6 @@ import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
 
 const props = defineProps<{
-  commentaryVisible: boolean
   searchVisible: boolean
   tocVisible: boolean
   hasToc: boolean
@@ -38,12 +38,13 @@ const props = defineProps<{
   currentScrollLineIndex: number
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
-  commentaryMode?: 'off' | 'bottom' | 'side'
-  // Side-by-side commentary needs a pane wide enough; when the pane is narrow
-  // the toggle skips the 'side' stage, so the tooltip must too.
-  canUseSideBySide?: boolean
+  bottomCommentaryVisible?: boolean
+  sideCommentaryVisible?: boolean
+  // The side panel needs a pane wide enough to hold it; on a narrow pane its
+  // button is hidden entirely rather than offering a mode that cannot apply.
+  canUseSidePanel?: boolean
 }>()
-defineEmits<{ cycleCommentaryMode: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
+defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -113,29 +114,35 @@ const linesZoomPct = computed(() =>
     ? bookViewStore.getLinesZoom(props.tabId, props.bookId)
     : zoom.value,
 )
-const commentaryZoomPct = computed(() =>
-  props.tabId != null && props.bookId != null
-    ? bookViewStore.getCommentaryZoom(props.tabId, props.bookId)
-    : commentaryZoom.value,
-)
+// One label for both panels' zooms: a single number while they agree, both
+// numbers once the panels have been zoomed apart.
+const commentaryZoomLabel = computed(() => {
+  if (props.tabId == null || props.bookId == null) return `${Math.round(commentaryZoom.value)}%`
+  const bottom = bookViewStore.getCommentaryZoom(props.tabId, props.bookId, 'bottom')
+  const side = bookViewStore.getCommentaryZoom(props.tabId, props.bookId, 'side')
+  return bottom === side
+    ? `${Math.round(bottom)}%`
+    : `${Math.round(bottom)}% / ${Math.round(side)}%`
+})
 
 const zoomOutTitle = computed(
-  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${Math.round(commentaryZoomPct.value)}%\nאיפוס: Ctrl+0`,
+  () => `הקטן (Ctrl-)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
 )
 
 const zoomInTitle = computed(
-  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${Math.round(commentaryZoomPct.value)}%\nאיפוס: Ctrl+0`,
+  () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
 )
 
-const commentaryModeTitle = computed(() => {
-  if (props.commentaryMode === 'off') return 'פאנל מפרשים (Ctrl+J)'
-  // In 'bottom' mode the next press switches to side view — but only when the
-  // pane is wide enough for it; otherwise the press closes the panel.
-  if (props.commentaryMode === 'bottom') {
-    return props.canUseSideBySide ? 'עבור לתצוגה צדדית' : 'סגור פאנל מפרשים'
-  }
-  return 'סגור פאנל מפרשים'
-})
+// Titles reuse the existing phrases: the bottom button keeps the original
+// "commentary panel (Ctrl+J)" wording, and the side button borrows the phrase that
+// used to describe switching to the side view, with its own shortcut hint.
+const bottomCommentaryTitle = computed(() =>
+  props.bottomCommentaryVisible ? 'סגור פאנל מפרשים' : 'פאנל מפרשים (Ctrl+J)',
+)
+
+const sideCommentaryTitle = computed(() =>
+  props.sideCommentaryVisible ? 'סגור פאנל מפרשים' : 'עבור לתצוגה צדדית (Ctrl+Shift+J)',
+)
 
 defineExpose({ tocBtnRef })
 </script>
@@ -175,14 +182,24 @@ defineExpose({ tocBtnRef })
       :on-open="onRelatedBooksOpen"
     />
     <button
-      :class="{ active: commentaryMode !== 'off' }"
+      :class="{ active: bottomCommentaryVisible }"
       :disabled="!hasCommentaries"
-      :title="commentaryModeTitle"
-      @click="$emit('cycleCommentaryMode')"
+      :title="bottomCommentaryTitle"
+      @click="$emit('toggleBottomCommentary')"
     >
-      <IconLayoutColumnTwoFocusLeft20Filled v-if="commentaryMode === 'side'" />
-      <IconLayoutRowTwoFocusBottom20Filled v-else-if="commentaryMode === 'bottom'" />
+      <IconLayoutRowTwoFocusBottom20Filled v-if="bottomCommentaryVisible" />
       <IconLayoutRowTwo20Regular v-else />
+    </button>
+    <!-- Side panel: wide panes only, so the button is absent on a narrow one. -->
+    <button
+      v-if="canUseSidePanel"
+      :class="{ active: sideCommentaryVisible }"
+      :disabled="!hasCommentaries"
+      :title="sideCommentaryTitle"
+      @click="$emit('toggleSideCommentary')"
+    >
+      <IconLayoutColumnTwoFocusLeft20Filled v-if="sideCommentaryVisible" />
+      <IconLayoutColumnTwo20Regular v-else />
     </button>
     <button
       :class="{ active: autoSelectTopLine }"

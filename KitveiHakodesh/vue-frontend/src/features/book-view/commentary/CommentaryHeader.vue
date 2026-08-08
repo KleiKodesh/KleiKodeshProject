@@ -46,6 +46,7 @@ function onHeaderClick(e: MouseEvent) {
   <div
     ref="headerEl"
     class="commentary-header"
+    :data-book-id="props.bookId"
     :title="tooltipText"
     @click="onHeaderClick"
   >
@@ -76,7 +77,9 @@ function onHeaderClick(e: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-inline: 14px 6px;
+  /* Set by CommentaryView's .body so the header widens in lockstep with the
+     lines on a wide panel; the 6px end padding stays fixed for the actions. */
+  padding-inline: var(--commentary-header-pad-inline, 14px) 6px;
   height: 36px;
   flex-shrink: 0;
   max-width: var(--commentary-max-width, none);

@@ -35,11 +35,59 @@ export function useCommentaryNavigation(
   linesContentRef: () => LinesContentRef | null,
   manualSelectionLineIds: () => number[] | null,
   onClearManualSelection: () => void,
+  /**
+   * Called synchronously the instant before commentaryLineId changes, i.e. at the
+   * only moment when every panel's currently-shown group is still valid AND the
+   * change is certain to happen.
+   *
+   * Section navigation runs DB queries first, so a caller that staged its pins
+   * before awaiting left them staged across the round trip: any other path that
+   * changed commentaryLineId meanwhile (a line tap, the auto-select timer) consumed
+   * them, and a navigation that found no target left them staged indefinitely for
+   * some later unrelated change to pick up. Staging here closes both windows.
+   */
+  onBeforeNavigate: (
+    targetLineId: number,
+    commentaryBookId: number,
+    /**
+     * False when the resolved target IS the current anchor, so no watcher will
+     * fire: the caller must then apply the pin itself instead of staging one that
+     * nothing would consume.
+     */
+    anchorChanges: boolean,
+  ) => void = () => {},
 ) {
-  async function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number) {
+  // Navigations are serialized. Each run reads the CURRENT anchor to decide where
+  // "next" is, so two fast clicks that overlap both read the pre-click anchor,
+  // resolve to the SAME target, and the user advances one section instead of two.
+  // Worse, the second afterNavigate then assigns commentaryLineId a value it
+  // already holds - no watcher fires, and the pin it staged is left behind for
+  // some later, unrelated anchor change to consume. Chaining makes each click
+  // start from where the previous one landed.
+  let navChain: Promise<void> = Promise.resolve()
+  let queued = 0
+  // A held-down or hammered button must not build an unbounded backlog that keeps
+  // scrolling after the user stops; a few queued steps is all that stays useful.
+  const MAX_QUEUED = 4
+
+  function onNavigateSection(direction: 'next' | 'prev', commentaryBookId: number): Promise<void> {
+    if (queued >= MAX_QUEUED) return navChain
+    queued += 1
+    navChain = navChain
+      .then(() => runNavigation(direction, commentaryBookId))
+      .catch(() => { /* a failed step must not break the chain for later clicks */ })
+      .then(() => { queued -= 1 })
+    return navChain
+  }
+
+  async function runNavigation(direction: 'next' | 'prev', commentaryBookId: number) {
     if (selectedLineId.value == null || bookId == null) return
+    // A panel with no active group reports bookId 0; navigating "the sections of
+    // book 0" can only fail, and staging a pin for it would poison the panel.
+    if (!commentaryBookId) return
 
     function afterNavigate(targetLineId: number) {
+      onBeforeNavigate(targetLineId, commentaryBookId, commentaryLineId.value !== targetLineId)
       onClearManualSelection()
       selectedLineId.value = targetLineId
       commentaryLineId.value = targetLineId

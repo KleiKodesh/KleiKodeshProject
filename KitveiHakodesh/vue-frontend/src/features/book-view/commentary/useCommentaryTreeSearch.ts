@@ -19,7 +19,7 @@ interface CommentarySearchNode extends SearchableNode {
 export function useCommentaryTreeSearch(
   groups: () => CommentaryGroup[],
   treeState: CommentaryTreeState,
-  tabId: string,
+  scopeKey: string,
 ) {
   // ── Flat list sync ────────────────────────────────────────────────────────
   function itemKey(item: CommentaryVisibilityItem): string {
@@ -39,7 +39,7 @@ export function useCommentaryTreeSearch(
       // tab switches but not app restarts. Section/subsection rules cover books
       // that first appear on later lines. See uncheckedCommentaryBooks.ts.
       const isChecked = !isCommentaryBookUnchecked(
-        tabId,
+        scopeKey,
         group.sectionLabel ?? '',
         group.subSectionLabel ?? '',
         group.bookId,

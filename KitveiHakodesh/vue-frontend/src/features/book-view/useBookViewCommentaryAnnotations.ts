@@ -1,35 +1,40 @@
 /**
- * Commentary annotation and rendering for the book view.
+ * Line-level commentary data shared by BOTH commentary panels: highlights, notes,
+ * word-link anchors, TOC paths, and the export-only book line renderer.
  *
- * Owns highlights, notes, content rendering, TOC paths for commentary entries,
- * and the export-only book line renderer. These composables are intentionally
- * hoisted here (above the v-if toggle on CommentaryView) so their watchers
- * and caches survive the panel being unmounted and remounted.
+ * Shared, not per panel, because the two panels are anchored to the same line and
+ * therefore need the same annotations - two instances would double every notes and
+ * highlights query for identical results. Rendering is the exception and lives in
+ * useCommentaryPanelSlot: its cache is keyed partly by the panel's own search
+ * query, so one shared cache would thrash.
+ *
+ * These composables are also deliberately hoisted above the v-if on CommentaryView
+ * so their watchers and caches survive a panel being unmounted and remounted.
  */
-import { computed } from 'vue'
-import { useBookViewStore } from '@/stores/bookViewStore'
 import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
 import { useCommentaryNotes } from './commentary/useCommentaryNotes'
-import { useCommentaryRender } from './commentary/useCommentaryRender'
 import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
 import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
 import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
+import { computed } from 'vue'
 import type { useSettingsStore } from '@/stores/settingsStore'
 
 type Line = { id: number; lineIndex: number; content: string | null }
 type GroupsForDisplay = Parameters<typeof useCommentaryHighlights>[0] extends () => infer T ? T : never
 
 export function useBookViewCommentaryAnnotations(
+  /**
+   * Every group either panel currently displays. Pass the UNION of the panels'
+   * groupsForDisplay: they agree on the real lines, but each injects a placeholder
+   * for its own pinned book, and commentaryTocPaths must resolve a path for both.
+   */
   groupsForDisplay: () => GroupsForDisplay,
   selectedSectionLineIds: () => number[] | null,
   lines: () => Line[],
   bookTitle: string | undefined,
   settings: ReturnType<typeof useSettingsStore>,
-  tabId: string,
-  bookId: number | undefined,
 ) {
-  const bookViewStore = useBookViewStore()
   const diacriticsStateForExport = computed(() => settings.diacriticsState)
 
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
@@ -38,23 +43,10 @@ export function useBookViewCommentaryAnnotations(
   const { getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote } =
     useCommentaryNotes(groupsForDisplay)
 
-  // Use a pane-scoped zoom getter so split view pane 2 reads its own zoom
-  // rather than the store-level computed (which always resolves to the active tab).
-  const getCommentaryZoom = () =>
-    bookId != null ? bookViewStore.getCommentaryZoom(tabId, bookId) : 100
-
   // Word-level link anchors for commentary lines (they are source lines of their own
   // links, e.g. a Mishnah Berurah line citing Chosen Mishpat). Schedule-driven from
   // CommentaryView's virtualizer watcher, same as notes.
   const { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad } = useWordLinkAnchors()
-
-  const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
-    groupsForDisplay,
-    getCommentaryZoom,
-    getHighlightsForLine,
-    getNotesForLine,
-    getWordLinkAnchorsForLine,
-  )
 
   const { commentaryTocPaths } = useCommentaryTocPaths(
     groupsForDisplay,
@@ -77,8 +69,7 @@ export function useBookViewCommentaryAnnotations(
   return {
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
-    scheduleWordLinkAnchorsLoad,
-    commentaryFontPx, renderContent, setCurrentMark,
+    getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad,
     commentaryTocPaths,
     buildExportHtml,
   }

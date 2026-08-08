@@ -11,6 +11,7 @@
  */
 import { ref, computed } from 'vue'
 import type { TocEntry } from '@/webview-host/queries.types'
+import type { CommentaryPinSnapshot } from './bookViewTypes'
 type Line = { id: number; lineIndex: number; content: string | null }
 
 export function useBookViewLineSelection(
@@ -18,8 +19,8 @@ export function useBookViewLineSelection(
   tocEntries: () => TocEntry[],
   commentaryLineId: import('vue').Ref<number | null>,
   selectedLineId: import('vue').Ref<number | null>,
-  setPendingPin: (group: { bookId: number; sectionLabel: string; subSectionLabel: string } | null) => void,
-  getActivePinnedGroup: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null,
+  captureActivePins: () => CommentaryPinSnapshot,
+  applyPendingPins: (snapshot: CommentaryPinSnapshot) => void,
 ) {
   const manualSelectionAnchorLineId = ref<number | null>(null)
   const manualSelectionLineIds = ref<number[] | null>(null)
@@ -51,9 +52,9 @@ export function useBookViewLineSelection(
   })
 
   function onLineSelected(lineId: number, isShiftClick: boolean) {
-    // Capture synchronously before any reactive state changes — activePinnedGroup
-    // is still valid here (groups haven't been cleared yet).
-    setPendingPin(getActivePinnedGroup())
+    // Capture synchronously before any reactive state changes: every panel's
+    // activePinnedGroup is still valid here (groups haven't been cleared yet).
+    applyPendingPins(captureActivePins())
 
     if (isShiftClick && manualSelectionAnchorLineId.value != null) {
       const anchorId = manualSelectionAnchorLineId.value

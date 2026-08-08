@@ -10,6 +10,8 @@ import {
   resetZoom as resetZoomUtil,
 } from '@/composables/useZoom'
 import type { TocEntry } from '@/webview-host/queries.types'
+import { COMMENTARY_SLOTS } from '@/features/book-view/bookViewTypes'
+import type { CommentarySlot } from '@/features/book-view/bookViewTypes'
 
 /** Disk names for the book-view UI state this store owns. Nothing else reads them. */
 const KEYS = {
@@ -119,15 +121,24 @@ export const useBookViewStore = defineStore('bookView', () => {
   const toolbarVisible = computed(() => getToolbarVisible(1))
 
   const toolbarPosition = ref<ToolbarPosition>('top')
-  const toggleBottomPanelSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
+  const toggleCommentaryPanelSignal = ref<{ count: number; paneId: 1 | 2; slot: CommentarySlot }>({
+    count: 0,
+    paneId: 1,
+    slot: 'bottom',
+  })
   const openSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const toggleTocPanelSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const txtViewToggleSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const txtViewSearchVisible = ref(false)
   const autoSelectTopLine = ref(false)
 
-  function toggleBottomPanel(paneId: 1 | 2 = 1) {
-    toggleBottomPanelSignal.value = { count: toggleBottomPanelSignal.value.count + 1, paneId }
+  /** Toggles ONE commentary panel of a pane. Ctrl+J targets 'bottom', Ctrl+Shift+J 'side'. */
+  function toggleCommentaryPanel(paneId: 1 | 2 = 1, slot: CommentarySlot = 'bottom') {
+    toggleCommentaryPanelSignal.value = {
+      count: toggleCommentaryPanelSignal.value.count + 1,
+      paneId,
+      slot,
+    }
   }
 
   function openSearch(paneId: 1 | 2 = 1) {
@@ -162,12 +173,18 @@ export const useBookViewStore = defineStore('bookView', () => {
     linesZoomMap.value.set(zoomKey(tabId, bookId), value)
   }
 
-  function getCommentaryZoom(tabId: string, bookId: number): number {
-    return commentaryZoomMap.value.get(zoomKey(tabId, bookId)) ?? ZOOM_CONFIG.DEFAULT
+  // Keyed by tab AND panel: the two commentary panels zoom independently, so a
+  // reader can enlarge the side panel's commentator without touching the bottom.
+  function commentaryZoomKey(tabId: string, bookId: number, slot: CommentarySlot) {
+    return `${tabId}:${bookId}:${slot}`
   }
 
-  function setCommentaryZoom(tabId: string, bookId: number, value: number) {
-    commentaryZoomMap.value.set(zoomKey(tabId, bookId), value)
+  function getCommentaryZoom(tabId: string, bookId: number, slot: CommentarySlot): number {
+    return commentaryZoomMap.value.get(commentaryZoomKey(tabId, bookId, slot)) ?? ZOOM_CONFIG.DEFAULT
+  }
+
+  function setCommentaryZoom(tabId: string, bookId: number, slot: CommentarySlot, value: number) {
+    commentaryZoomMap.value.set(commentaryZoomKey(tabId, bookId, slot), value)
   }
 
   // Keep old getZoom/setZoom as aliases for lines zoom so callers that haven't
@@ -197,12 +214,18 @@ export const useBookViewStore = defineStore('bookView', () => {
     if (value) searchQueryByTabId.value.set(tabId, value)
     else searchQueryByTabId.value.delete(tabId)
   }
-  function getCommentarySearchQuery(tabId: string): string {
-    return commentarySearchQueryByTabId.value.get(tabId) ?? ''
+  // Keyed by tab AND panel: the two commentary panels search independently, so one
+  // shared query would make reopening the bar show the other panel's search.
+  function commentaryQueryKey(tabId: string, slot: CommentarySlot): string {
+    return `${tabId}::${slot}`
   }
-  function setCommentarySearchQuery(tabId: string, value: string) {
-    if (value) commentarySearchQueryByTabId.value.set(tabId, value)
-    else commentarySearchQueryByTabId.value.delete(tabId)
+  function getCommentarySearchQuery(tabId: string, slot: CommentarySlot): string {
+    return commentarySearchQueryByTabId.value.get(commentaryQueryKey(tabId, slot)) ?? ''
+  }
+  function setCommentarySearchQuery(tabId: string, slot: CommentarySlot, value: string) {
+    const key = commentaryQueryKey(tabId, slot)
+    if (value) commentarySearchQueryByTabId.value.set(key, value)
+    else commentarySearchQueryByTabId.value.delete(key)
   }
 
   // Prune per-tab entries for tabs that no longer exist (zoom + in-session search)
@@ -221,8 +244,11 @@ export const useBookViewStore = defineStore('bookView', () => {
       for (const tabId of searchQueryByTabId.value.keys()) {
         if (!idSet.has(tabId)) searchQueryByTabId.value.delete(tabId)
       }
-      for (const tabId of commentarySearchQueryByTabId.value.keys()) {
-        if (!idSet.has(tabId)) commentarySearchQueryByTabId.value.delete(tabId)
+      for (const key of commentarySearchQueryByTabId.value.keys()) {
+        // Keys are `${tabId}::${slot}` - liveness is decided by the tab part alone.
+        if (!idSet.has(key.slice(0, key.indexOf('::')))) {
+          commentarySearchQueryByTabId.value.delete(key)
+        }
       }
     },
   )
@@ -246,12 +272,14 @@ export const useBookViewStore = defineStore('bookView', () => {
     get() {
       const tab = tabStore.activeTab
       if (tab.route !== '/book-view' || tab.bookId == null) return ZOOM_CONFIG.DEFAULT
-      return getCommentaryZoom(tab.id, tab.bookId)
+      // The zooms can differ per panel; the store-level computed reports the
+      // bottom panel's (the fallback consumers predate the side panel).
+      return getCommentaryZoom(tab.id, tab.bookId, 'bottom')
     },
     set(value: number) {
       const tab = tabStore.activeTab
       if (tab.route !== '/book-view' || tab.bookId == null) return
-      setCommentaryZoom(tab.id, tab.bookId, value)
+      for (const slot of COMMENTARY_SLOTS) setCommentaryZoom(tab.id, tab.bookId, slot, value)
     },
   })
 
@@ -336,19 +364,22 @@ export const useBookViewStore = defineStore('bookView', () => {
     const t = zoomTarget(tabId, bookId)
     if (!t) return
     setLinesZoom(t.tabId, t.bookId, zoomInUtil(getLinesZoom(t.tabId, t.bookId)))
-    setCommentaryZoom(t.tabId, t.bookId, zoomInUtil(getCommentaryZoom(t.tabId, t.bookId)))
+    for (const slot of COMMENTARY_SLOTS)
+      setCommentaryZoom(t.tabId, t.bookId, slot, zoomInUtil(getCommentaryZoom(t.tabId, t.bookId, slot)))
   }
   function zoomOut(tabId?: string, bookId?: number) {
     const t = zoomTarget(tabId, bookId)
     if (!t) return
     setLinesZoom(t.tabId, t.bookId, zoomOutUtil(getLinesZoom(t.tabId, t.bookId)))
-    setCommentaryZoom(t.tabId, t.bookId, zoomOutUtil(getCommentaryZoom(t.tabId, t.bookId)))
+    for (const slot of COMMENTARY_SLOTS)
+      setCommentaryZoom(t.tabId, t.bookId, slot, zoomOutUtil(getCommentaryZoom(t.tabId, t.bookId, slot)))
   }
   function resetZoom(tabId?: string, bookId?: number) {
     const t = zoomTarget(tabId, bookId)
     if (!t) return
     setLinesZoom(t.tabId, t.bookId, resetZoomUtil())
-    setCommentaryZoom(t.tabId, t.bookId, resetZoomUtil())
+    for (const slot of COMMENTARY_SLOTS)
+      setCommentaryZoom(t.tabId, t.bookId, slot, resetZoomUtil())
   }
 
   // ── TOC bridge — per-tab registration for title bar navigation ────────────
@@ -468,8 +499,8 @@ export const useBookViewStore = defineStore('bookView', () => {
     toolbarVisible,
     toolbarPosition,
     getToolbarVisible,
-    toggleBottomPanelSignal,
-    toggleBottomPanel,
+    toggleCommentaryPanelSignal,
+    toggleCommentaryPanel,
     openSearchSignal,
     openSearch,
     toggleTocPanelSignal,

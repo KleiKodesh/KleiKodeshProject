@@ -4,15 +4,16 @@ import { IconChevronDown20Regular } from '@iconify-prerendered/vue-fluent'
 import type { CommentaryVisibilityItem } from '../bookViewTypes'
 import type { CommentaryTreeNode } from './commentaryTreeTypes'
 import { isTreeNode } from './commentaryTreeTypes'
-import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { isCommentaryNodeExpanded, setCommentaryNodeExpanded } from './uncheckedCommentaryBooks'
 
 const props = defineProps<{
   node: CommentaryTreeNode
   depth?: number
+  /** Check-tree scope of the panel this tree is filtering (see commentaryScopeKey). */
+  scopeKey: string
 }>()
 
-const tabId = usePaneNavigation().activeTabId
+const scopeKey = props.scopeKey
 
 const emit = defineEmits<{
   'toggle-item': [item: CommentaryVisibilityItem]
@@ -47,8 +48,8 @@ const nodeKey = computed(() => {
 })
 
 const expanded = computed({
-  get: () => isCommentaryNodeExpanded(tabId, nodeKey.value),
-  set: (value: boolean) => setCommentaryNodeExpanded(tabId, nodeKey.value, value),
+  get: () => isCommentaryNodeExpanded(scopeKey, nodeKey.value),
+  set: (value: boolean) => setCommentaryNodeExpanded(scopeKey, nodeKey.value, value),
 })
 
 const sectionState = computed<'checked' | 'unchecked' | 'indeterminate'>(() => {
@@ -104,6 +105,7 @@ function navigateToFirstBook() {
           v-if="isTreeNode(child)"
           :node="child"
           :depth="(depth ?? 0) + 1"
+          :scope-key="scopeKey"
           @toggle-item="emit('toggle-item', $event)"
           @toggle-node="emit('toggle-node', $event)"
           @navigate-to-book="emit('navigate-to-book', $event)"

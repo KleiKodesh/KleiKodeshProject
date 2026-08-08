@@ -13,6 +13,7 @@ import { useBookViewStore } from '@/stores/bookViewStore'
 import type { Ref } from 'vue'
 import type { LineItem } from './lines/useBookViewLinesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
+import type { CommentaryPinSnapshot } from './bookViewTypes'
 export function useBookViewScrollSync(
   lines: () => LineItem[],
   activeTocEntryId: Ref<number | undefined>,
@@ -21,8 +22,8 @@ export function useBookViewScrollSync(
   checkTocScrollProgress: (lineIndex: number) => boolean,
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
-  setPendingPin: (group: { bookId: number; sectionLabel: string; subSectionLabel: string } | null) => void,
-  getActivePinnedGroup: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null,
+  captureActivePins: () => CommentaryPinSnapshot,
+  applyPendingPins: (snapshot: CommentaryPinSnapshot) => void,
 ) {
   const paneNavigation = usePaneNavigation()
   const bookViewStore = useBookViewStore()
@@ -51,10 +52,10 @@ export function useBookViewScrollSync(
       // Capture the active pinned group synchronously now — groups are still loaded
       // and activePinnedGroup is valid. By the time the timer fires and sets
       // commentaryLineId (triggering a load + groups clear), this value is gone.
-      const capturedPin = getActivePinnedGroup()
+      const capturedPins = captureActivePins()
       if (autoSelectCommentaryTimer) clearTimeout(autoSelectCommentaryTimer)
       autoSelectCommentaryTimer = setTimeout(() => {
-        setPendingPin(capturedPin)
+        applyPendingPins(capturedPins)
         commentaryLineId.value = line.id
       }, 120)
     }

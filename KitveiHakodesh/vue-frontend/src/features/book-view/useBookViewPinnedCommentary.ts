@@ -14,10 +14,36 @@ import { getDefaultCommentators } from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
 
+// One default-commentators query per book, EVER: both commentary panels create a
+// usePinnedCommentary instance, and without this cache each ran the identical
+// query. The PROMISE is cached (same pattern as staticFilterGroupsByBook) so the
+// two instances racing at mount share one in-flight request; a rejection is
+// evicted so a transient service error retries next time.
+const defaultCommentatorsByBook = new Map<number, Promise<number[]>>()
+
+function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
+  let pending = defaultCommentatorsByBook.get(bookId)
+  if (!pending) {
+    pending = getDefaultCommentators(bookId).then((rows) => rows.map((r) => r.commentatorBookId))
+    defaultCommentatorsByBook.set(bookId, pending)
+    pending.catch(() => defaultCommentatorsByBook.delete(bookId))
+  }
+  return pending
+}
+
+/**
+ * One instance per commentary panel.
+ *
+ * `defaultRank` picks which of the book's default commentators this panel opens
+ * on: the bottom panel takes the first, the side panel the second, so opening
+ * both immediately shows two different commentators rather than the same one
+ * twice. Books with only one default fall back to it for both panels.
+ */
 export function usePinnedCommentary(
   bookId: number | undefined,
   commentaryLineId: () => number | null,
   groups: () => CommentaryGroup[],
+  defaultRank = 0,
 ) {
   const pinnedCommentaryGroup = ref<PinnedCommentaryGroup | null>(null)
   let defaultCommentatorBookIds: number[] = []
@@ -32,8 +58,12 @@ export function usePinnedCommentary(
   async function ensureDefaultCommentatorsLoaded() {
     if (defaultCommentatorsLoaded || bookId == null) return
     defaultCommentatorsLoaded = true
-    const rows = await getDefaultCommentators(bookId)
-    defaultCommentatorBookIds = rows.map((r) => r.commentatorBookId)
+    defaultCommentatorBookIds = await loadDefaultCommentatorIds(bookId).catch(() => [])
+  }
+
+  /** This panel's default commentator, falling back to the first one. */
+  function preferredDefaultId(): number | undefined {
+    return defaultCommentatorBookIds[defaultRank] ?? defaultCommentatorBookIds[0]
   }
 
   // Called by onLineSelected / onNavigateSection synchronously before setting
@@ -53,7 +83,7 @@ export function usePinnedCommentary(
     if (captured) {
       pinnedCommentaryGroup.value = captured
     } else if (defaultCommentatorBookIds.length > 0) {
-      const defaultId = defaultCommentatorBookIds[0]!
+      const defaultId = preferredDefaultId()!
       const defaultGroup = groups().find((g) => g.bookId === defaultId)
       pinnedCommentaryGroup.value = defaultGroup
         ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }
@@ -81,7 +111,7 @@ export function usePinnedCommentary(
       }
       return
     }
-    const defaultId = defaultCommentatorBookIds[0]!
+    const defaultId = preferredDefaultId()!
     const defaultGroup = newGroups.find((g) => g.bookId === defaultId)
     pinnedCommentaryGroup.value = defaultGroup
       ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }

@@ -10,6 +10,10 @@ Commentary display, filtering, and navigation for the book view. All commentary-
 
 **CommentaryHeaderNav.vue** - previous/next section navigation within a commentary book.
 
+**useCommentaryPanelSlot.ts** - the per-panel factory. The book view runs TWO commentary panels ('bottom' and 'side', see `CommentarySlot`); this assembles everything one panel owns - pin, filter tree state + check-tree scope, scroll lifecycle, in-panel search, render cache, divider fraction - on top of the one shared `useCommentary` fetch. See `../README.md` for the per-panel vs shared table.
+
+**CommentaryPanelHost.vue** - renders one panel: binds a `CommentaryPanel` slot object plus the shared line-level props to `CommentaryView`, so `BookViewPage` does not repeat a thirty-prop block twice.
+
 **CommentaryTreePanel.vue** - side-panel content for toggling individual commentary books on/off. Uses `buildCommentaryTree` from `useCommentary.ts` to render the tree in normal mode. In search mode, renders a flat result list using `SegmentSearchTree` — matches query words across the full path (sectionLabel / subSectionLabel / bookTitle). When a search is active, emits an effective hidden set that merges the user's explicit hidden set with all groups outside the search results, so the commentary view automatically shows only what is both checked and in the search results.
 
 **CommentaryTreeSectionNode.vue** - single node in the commentary filter tree.
@@ -56,15 +60,15 @@ DB names map to canonical types as follows:
 
 **useCommentaryCopy.ts** - mirrors the book view copy logic for multi-line commentary selections. Provides the same three copy modes (block, source at end, source at start). Selection extraction uses `[data-line-id]` attributes on `.line` elements and counts stripped (diacritic-removed) character offsets, matching the same offset model used by the highlight storage layer.
 
-**useCommentaryNavigation.ts** - next/prev section navigation for the commentary panel.
+**useCommentaryNavigation.ts** - next/prev section navigation for a commentary panel. One instance per panel (see `useCommentaryPanelSlot.ts`), so navigating reopens and re-pins only the panel whose header button was pressed.
 
 **useCommentarySearch.ts** - commentary search against a flat index.
 
 **useCommentaryTreeSearch.ts** - search logic for the commentary filter tree. Matches query words across the full path using `SegmentSearchTree`.
 
-**useCommentaryHighlights.ts** - manages user highlights for all commentary books visible in the commentary panel. Loads highlights lazily per commentary bookId as groups become visible. Supports apply/clear with overlap rules, persisted to `user_settings.db`.
+**useCommentaryHighlights.ts** - manages user highlights for all commentary books visible in either commentary panel (one shared instance over the union of both panels' groups). Loads highlights lazily per commentary bookId as groups become visible. Supports apply/clear with overlap rules, persisted to `user_settings.db`.
 
-**useCommentaryNotes.ts** - manages user notes for all commentary books visible in the commentary panel. Lazy viewport-driven loading by commentary bookId, with create/update/delete mutations.
+**useCommentaryNotes.ts** - manages user notes for all commentary books visible in either commentary panel (one shared instance over the union of both panels' groups). Lazy viewport-driven loading by commentary bookId, with create/update/delete mutations.
 
 ## Utilities
 

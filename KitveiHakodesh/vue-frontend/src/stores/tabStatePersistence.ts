@@ -33,7 +33,6 @@ export interface BookState {
   scrollOffset: number
   selectedLineId?: number | null
   zoom?: number
-  commentaryZoom?: number
   autoSelectTopLine?: boolean
   /** Both commentary panels' saved place, keyed by slot. */
   commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates

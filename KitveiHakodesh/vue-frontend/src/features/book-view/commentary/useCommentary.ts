@@ -1,6 +1,9 @@
 import { computed, nextTick, onScopeDispose, ref, watch } from 'vue'
 import { getCommentaryLinksForSourceLineRange, getLineContents } from '@/webview-host/seforimApi'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { isCommentaryItemVisible } from '../bookViewTypes'
+import type { CommentaryVisibilityItem } from '../bookViewTypes'
+import { isCommentaryBookUnchecked } from './uncheckedCommentaryBooks'
 import {
   ensureConnectionTypeNamesLoaded,
   getPrimaryConnectionType,
@@ -108,12 +111,18 @@ const NO_TEXT_PLACEHOLDER_CONTENT = 'אין טקסט לשורה זו'
 // so there is no invalidation.
 const staticFilterGroupsByBook = new Map<number, Promise<CommentaryGroup[]>>()
 
+/**
+ * Loads the commentary of the current line. ONE instance per book view, shared by
+ * both commentary panels: with a single anchor line the two panels would issue
+ * byte-identical queries, and commentary is the app's heaviest payload.
+ *
+ * Everything that differs per panel - pin, filter, scroll, search - is layered on
+ * top of `groups` by `useGroupsForDisplay` / `filterVisibleGroups` below.
+ */
 export function useCommentary(
   selectedLineId: () => number | null,
   selectedLineIds: () => number[] | null = () => null,
   sourceBookId: () => number | undefined = () => undefined,
-  filterPanelVisible: () => boolean = () => false,
-  pinnedBookId: () => number | null = () => null,
 ) {
   const groups = ref<CommentaryGroup[]>([])
   const staticFilterGroups = ref<CommentaryGroup[]>([])
@@ -304,37 +313,6 @@ export function useCommentary(
       // IMPORTANT: mutate through groups.value (the reactive proxy), not `built` —
       // writes to the raw array would not trigger a re-render of already-built rows.
       if (pendingLines.length > CONTENT_FIRST_BATCH) void backfillLineContents(groups.value, lineId)
-
-      const pinned = pinnedBookId()
-      if (pinned != null && !groups.value.some((g) => g.bookId === pinned)) {
-        const staticOrder = staticFilterGroups.value
-        const pinnedRank = staticOrder.findIndex((g) => g.bookId === pinned)
-        const staticGroup = pinnedRank !== -1 ? staticOrder[pinnedRank] : undefined
-        const book = booksDataStore.allBooksMap.get(pinned)
-        const bookTitle = book?.title ?? String(pinned)
-        const placeholder: CommentaryGroup = {
-          bookId: pinned,
-          bookTitle,
-          path: staticGroup?.path ?? bookTitle,
-          connectionTypes: staticGroup?.connectionTypes ?? [],
-          lines: [{ lineId: -1, lineIndex: -1, content: NO_TEXT_PLACEHOLDER_CONTENT }],
-          category: staticGroup?.category ?? '',
-          sectionLabel: staticGroup?.sectionLabel,
-          subSectionLabel: staticGroup?.subSectionLabel,
-        }
-        if (pinnedRank === -1 || !staticOrder.length) {
-          groups.value = [placeholder, ...groups.value]
-        } else {
-          const insertBefore = groups.value.findIndex((g) => {
-            const rank = staticOrder.findIndex((s) => s.bookId === g.bookId)
-            return rank !== -1 && rank > pinnedRank
-          })
-          const updated = [...groups.value]
-          if (insertBefore === -1) updated.push(placeholder)
-          else updated.splice(insertBefore, 0, placeholder)
-          groups.value = updated
-        }
-      }
     } catch {
       // Link/content queries failed (older or mismatched seforim DB, service
       // error). Without this catch the rejection was unhandled and the panel
@@ -429,24 +407,52 @@ export function useCommentary(
     { immediate: true },
   )
 
-  // When the pinned book has no commentary for the current line, insert a placeholder
-  // group so the user can see the book they were reading rather than a confusing jump.
-  const groupsForDisplay = computed<CommentaryGroup[]>(() => {
+  return {
+    groups,
+    filterGroups,
+    staticFilterGroups,
+    loading,
+    loadError,
+    staticFilterGroupsLoaded,
+    ensureStaticFilterGroupsLoaded,
+    requestContentPriority,
+  }
+}
+
+/**
+ * One panel's view of the loaded commentary: the shared groups, plus a placeholder
+ * for THIS panel's pinned book when the current line has no commentary from it, so
+ * the reader still sees the book they were following instead of a silent jump.
+ *
+ * Per panel rather than per book view: the two commentary panels pin different
+ * books (and start on different default commentators), so each needs its own list.
+ */
+export function useGroupsForDisplay(
+  groups: () => CommentaryGroup[],
+  pinnedBookId: () => number | null,
+  staticFilterGroups: () => CommentaryGroup[],
+  loading: () => boolean,
+  selectedLineId: () => number | null,
+) {
+  const booksDataStore = useBooksDataStore()
+
+  return computed<CommentaryGroup[]>(() => {
     const pinned = pinnedBookId()
+    const currentGroups = groups()
     if (
       !pinned ||
       selectedLineId() == null ||
-      loading.value ||
-      groups.value.some((g) => g.bookId === pinned)
+      loading() ||
+      currentGroups.some((g) => g.bookId === pinned)
     )
-      return groups.value
+      return currentGroups
 
-    // Pinned book is absent from this line's commentary — inject a placeholder at the
-    // correct position using staticFilterGroups as the canonical order reference.
     const book = booksDataStore.allBooksMap.get(pinned)
     const bookTitle = book?.title ?? String(pinned)
 
-    const staticOrder = staticFilterGroups.value
+    // staticFilterGroups is the canonical ordering of every book that ever links
+    // to this one, so it decides where the placeholder slots in.
+    const staticOrder = staticFilterGroups()
     const pinnedRank = staticOrder.findIndex((g) => g.bookId === pinned)
     const staticGroup = pinnedRank !== -1 ? staticOrder[pinnedRank] : undefined
 
@@ -461,33 +467,52 @@ export function useCommentary(
       subSectionLabel: staticGroup?.subSectionLabel,
     }
 
-    if (pinnedRank === -1 || !staticOrder.length) {
-      return [placeholder, ...groups.value]
-    }
+    if (pinnedRank === -1 || !staticOrder.length) return [placeholder, ...currentGroups]
 
-    const insertBefore = groups.value.findIndex((g) => {
+    const insertBefore = currentGroups.findIndex((g) => {
       const rank = staticOrder.findIndex((s) => s.bookId === g.bookId)
       return rank !== -1 && rank > pinnedRank
     })
+    if (insertBefore === -1) return [...currentGroups, placeholder]
 
-    if (insertBefore === -1) {
-      return [...groups.value, placeholder]
-    }
-
-    const result = [...groups.value]
+    const result = [...currentGroups]
     result.splice(insertBefore, 0, placeholder)
     return result
   })
+}
 
-  return {
-    groups,
-    groupsForDisplay,
-    filterGroups,
-    staticFilterGroups,
-    loading,
-    loadError,
-    staticFilterGroupsLoaded,
-    ensureStaticFilterGroupsLoaded,
-    requestContentPriority,
-  }
+/**
+ * The groups one panel actually renders: its own check-tree exclusions first, then
+ * its own filter-tree search result.
+ *
+ * Shared deliberately between CommentaryView (what it draws) and that panel's
+ * in-panel search (what a flat index means), so the two can never disagree about
+ * which rows exist - they used to, because search scanned the unfiltered groups.
+ */
+export function filterVisibleGroups(
+  groups: CommentaryGroup[],
+  scopeKey: string,
+  visibilityList: CommentaryVisibilityItem[],
+): CommentaryGroup[] {
+  // Unchecked books/categories are excluded unconditionally - this applies even
+  // when the filter tree was never opened for this panel, and the section rules
+  // cover books that first appear on a later line.
+  const base = groups.filter(
+    (group) =>
+      !isCommentaryBookUnchecked(
+        scopeKey,
+        group.sectionLabel ?? '',
+        group.subSectionLabel ?? '',
+        group.bookId,
+      ),
+  )
+  if (!visibilityList.length) return base
+  const visibleKeys = new Set(
+    visibilityList
+      .filter(isCommentaryItemVisible)
+      .map((item) => `${item.bookId}::${item.sectionLabel}::${item.subSectionLabel}`),
+  )
+  return base.filter((group) =>
+    visibleKeys.has(`${group.bookId}::${group.sectionLabel ?? ''}::${group.subSectionLabel ?? ''}`),
+  )
 }

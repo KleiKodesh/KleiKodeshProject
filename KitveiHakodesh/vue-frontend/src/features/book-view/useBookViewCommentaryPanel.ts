@@ -1,12 +1,14 @@
 /**
- * Commentary panel lifecycle for the book view.
+ * Lifecycle of ONE commentary panel: visibility, and scroll position save/restore
+ * across the panel being closed, reopened, or remounted by a layout change.
  *
- * Owns commentary panel visibility, scroll position save/restore across panel
- * open/close and layout-mode switches, and the onCommentaryPanelMounted handler
- * that wires all the pieces together when the panel appears.
+ * The book view runs two of these - one per CommentarySlot - so nothing here may
+ * reach for shared book-view state. Where the old single-panel version closed the
+ * side filter panel directly, it now calls `onHidden` and lets the caller decide
+ * whether that filter panel belonged to this slot.
  *
- * Commentary scroll position is persisted as a flat virtualizer index + offset
- * so it survives the panel being unmounted (v-if) and remounted.
+ * Scroll position is kept as a flat virtualizer index + offset so it survives the
+ * panel being unmounted (v-if) and remounted.
  */
 import { ref, watch, nextTick } from 'vue'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
@@ -17,7 +19,7 @@ type CommentaryViewInstance = {
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
   restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
   claimRestoreIntent?: () => void
-  scrollToGroup: (bookId: number) => void
+  scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
 }
 
 export function useBookViewCommentaryPanel(
@@ -29,9 +31,9 @@ export function useBookViewCommentaryPanel(
   commentaryLineId: import('vue').Ref<number | null>,
   lines: () => { content: string | null }[],
   hasCommentaries: import('vue').Ref<boolean>,
-  sidePanelMode: import('vue').Ref<string | null>,
-  closeSidePanel: () => void,
   ensureStaticFilterGroupsLoaded: () => void,
+  /** Called whenever this panel goes from shown to hidden, for any reason. */
+  onHidden: () => void = () => {},
 ) {
   const commentaryVisible = ref(false)
   const commentaryScrollIndex = ref<number | null>(null)
@@ -39,7 +41,7 @@ export function useBookViewCommentaryPanel(
 
   // Tracks the scroll position that was last successfully restored so that
   // onCommentaryPanelMounted does not redundantly restore the same position again
-  // when the panel remounts after a layout-mode switch.
+  // when the panel remounts after a layout change.
   let lastRestoredCommentaryKey: string | null = null
 
   function onCommentaryScroll(scrollIndex: number, scrollOffset: number) {
@@ -47,23 +49,14 @@ export function useBookViewCommentaryPanel(
     commentaryScrollOffset.value = scrollOffset
   }
 
-  // Preserve commentary scroll position when the tree changes (items toggled or
-  // search query changes) so the user does not lose their place.
-  async function onCommentaryTreeChanged() {
-    const savedPos = commentaryViewRef()?.captureScrollPos?.()
-    await nextTick()
-    if (savedPos)
-      commentaryViewRef()?.restoreCommentaryScrollPos(savedPos.scrollIndex, savedPos.scrollOffset)
-  }
-
   /**
-   * Called when CommentaryView mounts (v-if becomes true) or after a layout-mode
-   * switch (bottom ↔ side) that causes CommentaryView to remount.
+   * Called when this panel's CommentaryView mounts (v-if becomes true) or remounts
+   * after a layout change.
    *
    * Responsibilities:
    * 1. Ensure static filter groups are loaded (may be a no-op if already loaded).
    * 2. Sync commentaryLineId from selectedLineId when the panel first opens after
-   *    session restore (commentaryVisible was true in IDB but commentaryLineId is
+   *    session restore (the panel was visible in IDB but commentaryLineId is
    *    still null because lines haven't loaded yet).
    * 3. Restore the saved scroll position, or scroll to the pinned group if no
    *    saved position exists.
@@ -72,9 +65,9 @@ export function useBookViewCommentaryPanel(
     if (!commentaryVisible.value) return
     void ensureStaticFilterGroupsLoaded()
 
-    // Sync commentaryLineId from selectedLineId when the commentary panel first
-    // opens after session restore (commentaryVisible=true but commentaryLineId
-    // is still null because lines haven't loaded yet).
+    // Sync commentaryLineId from selectedLineId when a commentary panel first
+    // opens after session restore (visible=true but commentaryLineId is still
+    // null because lines haven't loaded yet).
     if (selectedLineId.value != null && commentaryLineId.value == null) {
       let stop: (() => void) | undefined
       stop = watch(
@@ -95,11 +88,11 @@ export function useBookViewCommentaryPanel(
       const restoreKey = `${savedScrollIndex}:${savedScrollOffset}`
 
       if (restoreKey === lastRestoredCommentaryKey) {
-        // Position already restored — just scroll to pinned group if groups are loaded.
+        // Position already restored - just scroll to pinned group if groups are loaded.
         if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
           nextTick(() => {
             const pinned = pinnedCommentaryGroup.value
-            if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId)
+            if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId, undefined, undefined, 'already-restored')
           })
         }
         return
@@ -117,7 +110,7 @@ export function useBookViewCommentaryPanel(
         (ready) => {
           if (!ready) return
           // A line click while commentary was loading clears the saved position
-          // (see onLineSelected in useBookView) — the queued restore is stale and
+          // (see onLineSelected in useBookView) - the queued restore is stale and
           // must yield to the pinned-group jump for the newly clicked line.
           if (commentaryScrollIndex.value == null) { cancelRestore(); return }
           stopLoading?.()
@@ -150,32 +143,29 @@ export function useBookViewCommentaryPanel(
         { flush: 'post', immediate: true },
       )
     } else if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
-      // No saved scroll position — scroll to pinned group (e.g. layout-mode switch).
+      // No saved scroll position - scroll to pinned group (e.g. after a layout change).
       nextTick(() => {
         const pinned = pinnedCommentaryGroup.value
-        if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId)
+        if (pinned) commentaryViewRef()?.scrollToGroup(pinned.bookId, undefined, undefined, 'panel-mounted')
       })
     }
   }
 
-  // flush: 'post' — runs after Vue has flushed the DOM so the commentary panel is
+  // flush: 'post' - runs after Vue has flushed the DOM so the commentary panel is
   // painted before any reactive side-effects (metadata load, commentaryLineId set,
   // scroll restore) begin. Without this the 'pre' flush meant everything ran before
-  // the SplitPane bottom slot appeared, causing a visible hang.
+  // the panel's slot appeared, causing a visible hang.
   watch(commentaryVisible, (visible) => {
-    if (!visible && sidePanelMode.value === 'commentary-tree') closeSidePanel()
     if (!visible) {
       lastRestoredCommentaryKey = null
+      onHidden()
       return
     }
     setTimeout(() => onCommentaryPanelMounted(), 0)
   }, { flush: 'post' })
 
   watch(hasCommentaries, (has) => {
-    if (!has) {
-      commentaryVisible.value = false
-      if (sidePanelMode.value === 'commentary-tree') closeSidePanel()
-    }
+    if (!has) commentaryVisible.value = false
   })
 
   return {
@@ -183,7 +173,5 @@ export function useBookViewCommentaryPanel(
     commentaryScrollIndex,
     commentaryScrollOffset,
     onCommentaryScroll,
-    onCommentaryTreeChanged,
-    onCommentaryPanelMounted,
   }
 }
