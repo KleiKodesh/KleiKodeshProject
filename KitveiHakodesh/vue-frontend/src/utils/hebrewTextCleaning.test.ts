@@ -53,3 +53,27 @@ describe('cleanHebrewText — colon handling', () => {
     expect(output).toContain('כשמיר')
   })
 })
+
+describe('cleanHebrewText — gershayim / quote handling', () => {
+  it('keeps gershayim that sit between the last two letters (ראשי תיבות)', () => {
+    expect(cleanHebrewText('רשב"א')).toBe('רשב"א')
+    expect(cleanHebrewText('שליט"א')).toBe('שליט"א')
+    expect(cleanHebrewText('אמר רשב״א כאן')).toBe('אמר רשב״א כאן')
+  })
+
+  it('drops a mid-word quote that opens a quoted particle, not an acronym', () => {
+    // The mark sits after the first letter — two letters follow before the
+    // word ends, so this is not ראשי תיבות and the quote must go.
+    expect(cleanHebrewText('ו״אין דקאמרי ליה קושטא הוא')).toBe('ואין דקאמרי ליה קושטא הוא')
+    expect(cleanHebrewText('ו"אין')).toBe('ואין')
+  })
+
+  it('applies the same rule to &quot; entities', () => {
+    expect(cleanHebrewText('רשב&quot;א')).toBe('רשב"א')
+    expect(cleanHebrewText('ו&quot;אין')).toBe('ואין')
+  })
+
+  it('still drops quotes at word boundaries', () => {
+    expect(cleanHebrewText('"שלום"')).toBe('שלום')
+  })
+})
