@@ -6,6 +6,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useFullTextSearchCopyMenu, useFullTextSearchScopedCopy } from './useFullTextSearchCopyMenu'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
@@ -26,7 +27,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  resultClick: [FullTextSearchResult]
+  resultClick: [FullTextSearchResult, boolean?]
   saveScroll: [{ scrollIndex: number; scrollOffset: number }]
 }>()
 
@@ -116,10 +117,8 @@ function recenterPreview(result: FullTextSearchResult) {
 }
 
 function resultTitle(result: FullTextSearchResult): string {
-  const base = result.tocText
-    ? `${result.bookTitle} › ${result.tocText}\nלחץ לניווט למיקום`
-    : `${result.bookTitle}\nלחץ לניווט למיקום`
-  return base
+  const base = result.tocText ? `${result.bookTitle} › ${result.tocText}` : result.bookTitle
+  return withNewTabHint(base)
 }
 
 function captureScrollPos() {
@@ -328,7 +327,8 @@ defineExpose({ captureScrollPos, scrollToBook })
               <div
                 class="result-header"
                 :title="resultTitle(results[vRow.index]!)"
-                @click="emit('resultClick', results[vRow.index]!)"
+                @click="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
+                @auxclick.middle="emit('resultClick', results[vRow.index]!, true)"
               >
                 <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
                 <span v-if="results[vRow.index]!.tocText" class="sep">›</span>

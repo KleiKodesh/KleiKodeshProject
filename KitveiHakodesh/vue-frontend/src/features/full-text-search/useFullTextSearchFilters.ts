@@ -4,6 +4,7 @@ import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
+import { useTabStore } from '@/stores/tabStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
 import type { CategoryNode } from '../book-catalog/bookCatalogTree'
@@ -30,6 +31,7 @@ export function useFullTextSearchFilters(
 ) {
   const paneNavigation = usePaneNavigation()
   const booksStore = useBooksDataStore()
+  const tabStore = useTabStore()
 
   const searchQuery = ref('')
   const isFilterOpen = ref(false)
@@ -226,13 +228,19 @@ export function useFullTextSearchFilters(
     paneNavigation.updateActiveTab({ title: 'חיפוש' })
   }
 
-  async function handleResultClick(result: FullTextSearchResult) {
+  async function handleResultClick(result: FullTextSearchResult, openInNewTab = false) {
     try {
+      // Capture the target tab up front and patch it by id: the lookup below awaits,
+      // and the active tab may change during that await (same reasoning as AddressBar).
+      const targetTabId = openInNewTab
+        ? paneNavigation.openTab({ title: result.bookTitle, route: '/book-view' }).id
+        : paneNavigation.activeTabId
+
       const rows = await getLineIndexFromLineId(result.lineId)
       const lineIndex = rows[0]?.lineIndex
       const bookId = rows[0]?.bookId
       if (lineIndex == null || bookId == null) return
-      paneNavigation.openTab({
+      tabStore.updateTab(targetTabId, {
         title: result.bookTitle,
         route: '/book-view',
         bookId,
