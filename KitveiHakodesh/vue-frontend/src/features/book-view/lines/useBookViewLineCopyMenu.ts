@@ -209,9 +209,10 @@ export function buildBookExportHtml(
 // ALL copy paths (menu העתק, Ctrl+C) go through useScopedCopy's copy event handler
 // which calls buildFormattedHtml and writes to event.clipboardData.
 // onCopy fires document.execCommand('copy') to trigger that event.
-// onPasteIntoWord calls buildFormattedHtml directly, sets clipboard via
-// execCopyHtmlToClipboard, then sends the pasteIntoWord bridge message so C# opens
-// Word and calls Selection.Paste().
+// onPasteIntoWord goes through the SAME path — triggerCopy with an afterCopy callback
+// that sends the pasteIntoWord bridge message so C# opens Word and calls
+// Selection.Paste(). The callback runs inside the copy event handler, after the
+// clipboard write, so Word can never paste a stale clipboard.
 //
 // copyJoinLines — "העתק כרצף (ללא מעברי שורה)" (independent checkbox)
 //   Controls whether the selected lines keep a line break between them on paste.

@@ -1,7 +1,7 @@
 import { ref, type Ref } from 'vue'
 import type ContextMenu from '@/components/ContextMenu.vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
-import { execCopyHtmlToClipboard } from '@/composables/useLineCopy'
+import { attachScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { pasteIntoWord, copyImageToClipboard } from '@/webview-host/bridge'
 
 // The page is rendered at the highest scale that still fits within
@@ -77,26 +77,62 @@ export function usePdfContextMenu(
 
   // Selection captured at the moment the menu opened (right-click never clears it).
   let capturedText = ''
+  // The live Range behind capturedText, cloned at menu-open time. ContextMenu.vue does
+  // exactly this for in-page menus, but its save/restore reads window.getSelection() —
+  // the PARENT window — so it saves nothing for a selection living in the iframe. We
+  // keep the iframe-side range ourselves and restore it before copying.
+  let capturedRange: Range | null = null
+  let capturedWin: Window | null = null
 
-  function captureSelectionText(win: Window): string {
+  function captureSelection(win: Window): void {
+    capturedWin = win
     const sel = win.getSelection()
-    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return ''
-    return sel.toString()
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      capturedText = ''
+      capturedRange = null
+      return
+    }
+    capturedText = sel.toString()
+    capturedRange = sel.getRangeAt(0).cloneRange()
+  }
+
+  /**
+   * Re-selects the captured range inside the iframe and focuses that window, then fires
+   * the copy there. Both steps are required: execCommand('copy') acts on the FOCUSED
+   * document's selection, and clicking our menu (which lives in the parent document)
+   * moves focus out of the iframe. Without the focus() the command is a no-op — the
+   * original bug, where "העתק" did nothing and "העתק לתוך וורד" pasted whatever the
+   * user had copied earlier.
+   *
+   * Returns whether the clipboard was actually written.
+   */
+  function copyCapturedSelection(afterCopy?: () => void): boolean {
+    const win = capturedWin
+    if (!win || !capturedRange || !selectionToHtml(capturedText)) return false
+
+    const sel = win.getSelection()
+    if (!sel) return false
+    sel.removeAllRanges()
+    sel.addRange(capturedRange)
+    win.focus()
+
+    // The copy listener attached to the iframe document rewrites the payload into the
+    // RTL Word-friendly shape; execCommand alone would copy PDF.js's span soup.
+    return triggerCopy(afterCopy, win.document)
   }
 
   function onCopy(): void {
-    const html = selectionToHtml(capturedText)
-    if (!html) return
-    execCopyHtmlToClipboard(html)
+    copyCapturedSelection()
   }
 
   function onCopyIntoWord(): void {
-    const html = selectionToHtml(capturedText)
-    if (!html) return
-    // Set the clipboard synchronously, then ask C# to paste from it — same
-    // ordering the book view relies on (clipboard first, bridge second).
-    execCopyHtmlToClipboard(html)
-    pasteIntoWord().catch(() => {})
+    // pasteIntoWord runs INSIDE the copy event, after clipboardData is written — the
+    // same guarantee book view relies on. If the copy never happens the callback never
+    // fires, so Word is never told to paste a stale clipboard.
+    const copied = copyCapturedSelection(() => {
+      pasteIntoWord().catch(() => {})
+    })
+    if (!copied) options.notify?.('לא ניתן היה להעתיק את הטקסט שנבחר.')
   }
 
   async function copyPageAsImage(): Promise<void> {
@@ -206,7 +242,7 @@ export function usePdfContextMenu(
     if (!target?.closest?.('#viewerContainer')) return
 
     event.preventDefault()
-    capturedText = captureSelectionText(win)
+    captureSelection(win)
     items.value = buildItems(capturedText.trim().length > 0)
 
     // The event's coordinates are relative to the iframe viewport; the menu is
@@ -216,14 +252,30 @@ export function usePdfContextMenu(
     menuRef.value?.showAtPosition(rect.left + event.clientX, rect.top + event.clientY)
   }
 
+  let detachCopy: (() => void) | null = null
+
   function attach(win: Window): void {
     // Capture phase so we intercept the right-click before PDF.js's own handlers
     // and reliably suppress the browser's native context menu.
     win.document.addEventListener('contextmenu', onContextMenu, true)
+
+    // Intercept copies inside the iframe and rewrite the payload into the RTL
+    // Word-friendly shape. This serves BOTH our menu's העתק and the user's own Ctrl+C
+    // on the PDF text layer — matching book view, where every copy path funnels through
+    // the same event handler.
+    detachCopy = attachScopedCopy(win.document, () => {
+      const sel = win.getSelection()
+      const text = sel && !sel.isCollapsed && sel.rangeCount > 0 ? sel.toString() : capturedText
+      return selectionToHtml(text) || null
+    })
   }
 
   function detach(win: Window | null): void {
     win?.document.removeEventListener('contextmenu', onContextMenu, true)
+    detachCopy?.()
+    detachCopy = null
+    capturedRange = null
+    capturedWin = null
     menuRef.value?.hide()
   }
 
