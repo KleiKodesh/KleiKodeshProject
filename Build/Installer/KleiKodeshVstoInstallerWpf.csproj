@@ -158,6 +158,14 @@
       compression stream, no entry paths) and reads its own PayloadArchive format.
     -->
     <PackageReference Include="SharpCompress" Version="0.30.1" />
+
+    <!--
+      SharpCompress declares System.Text.Encoding.CodePages for its archive readers
+      (legacy zip/rar filename code pages). Nothing here reads archives — only
+      LZipStream, which has no filenames — so the package is excluded outright rather
+      than merely skipped at embed time. See UnusedFacades in EmbedDependencies below.
+    -->
+    <PackageReference Update="System.Text.Encoding.CodePages" ExcludeAssets="all" />
   </ItemGroup>
 
   <ItemGroup>
@@ -165,6 +173,23 @@
 
   <!-- Embed all dependency DLLs into the exe as resources -->
   <Target Name="EmbedDependencies" AfterTargets="ResolveReferences">
+    <PropertyGroup>
+      <!--
+        Transitive packages SharpCompress pulls in but never actually binds against.
+        Verified by loading it and reading GetReferencedAssemblies(): it names only
+        System.Memory, System.Buffers and System.Runtime.CompilerServices.Unsafe.
+
+        System.Text.Encoding.CodePages (759 KB) is used by SharpCompress's ARCHIVE
+        READERS to decode legacy zip/rar filename code pages. This installer only uses
+        LZipStream, a raw compression stream with no filenames, so it is never touched
+        — confirmed by tracing AssemblyResolve across a full 588-file extraction.
+        System.Numerics.Vectors (116 KB) is the same story via System.Memory on net48.
+
+        Together they are 874 KB of an otherwise ~1.6 MB dependency set. If SharpCompress
+        is ever used for real archive formats here, drop the relevant name from this list.
+      -->
+      <UnusedFacades>|System.Text.Encoding.CodePages|System.Numerics.Vectors|</UnusedFacades>
+    </PropertyGroup>
     <ItemGroup>
       <EmbeddedResource Include="@(ReferenceCopyLocalPaths)" Condition="'%(ReferenceCopyLocalPaths.Extension)' == '.dll'">
         <LogicalName>%(ReferenceCopyLocalPaths.DestinationSubDirectory)%(ReferenceCopyLocalPaths.Filename)%(ReferenceCopyLocalPaths.Extension)</LogicalName>
@@ -178,17 +203,18 @@
         succeeds and the installer then throws FileNotFoundException for
         'SharpCompress' the moment extraction starts, on the user's machine.
 
-        ReferencePath still carries the resolved package assemblies, so filter it to
-        the NuGet cache and embed those under the same simple-name convention
-        App.xaml.cs resolves against.
+        RuntimeCopyLocalItems — NOT ReferencePath — is what must be embedded here.
+        ReferencePath resolves to each package's ref/ assembly: a metadata-only stub
+        with [ReferenceAssembly] on it. Those compile fine and then die at runtime with
+        "Cannot load a reference assembly for execution" the first time Assembly.Load
+        touches one. System.Runtime.CompilerServices.Unsafe, System.Buffers and
+        System.Numerics.Vectors all ship ref/ and lib/ variants and hit exactly that.
+        RuntimeCopyLocalItems carries the lib/ implementations.
       -->
-      <EmbeddedResource Include="@(ReferencePath)"
-                        Condition="'%(ReferencePath.NuGetPackageId)' != ''
-                                   AND '%(ReferencePath.Extension)' == '.dll'
-                                   AND '%(ReferencePath.NuGetPackageId)' != 'NETStandard.Library'
-                                   AND '%(ReferencePath.Filename)' != 'mscorlib'
-                                   AND '%(ReferencePath.Filename)' != 'netstandard'">
-        <LogicalName>%(ReferencePath.Filename)%(ReferencePath.Extension)</LogicalName>
+      <EmbeddedResource Include="@(RuntimeCopyLocalItems)"
+                        Condition="'%(RuntimeCopyLocalItems.Extension)' == '.dll'
+                                   AND !$(UnusedFacades.Contains('|%(RuntimeCopyLocalItems.Filename)|'))">
+        <LogicalName>%(RuntimeCopyLocalItems.Filename)%(RuntimeCopyLocalItems.Extension)</LogicalName>
       </EmbeddedResource>
     </ItemGroup>
   </Target>
