@@ -1,6 +1,25 @@
 ﻿; KleiKodesh Simple NSIS Wrapper
 ; Purpose: Check .NET dependencies, run WPF installer, and provide uninstaller
 
+; ── Compression ───────────────────────────────────────────────────────────────
+; MUST be the first statement in the script — before !include, pages, or anything
+; else that emits data. MUI2.nsh and the MUI_PAGE/MUI_LANGUAGE macros write
+; compressed data as they are processed, and NSIS refuses a compressor change
+; after that with "can't change compressor after data already got compressed".
+;
+; zlib is deliberate, and is NOT the "weak" choice it looks like. KleiKodesh.pkg
+; arrives already packed with solid LZMA (see the prebuild target in
+; Build/Installer/KleiKodeshVstoInstallerWpf.csproj), so there is nothing left for
+; NSIS to compress — pointing LZMA at it again only makes the installer slow to
+; START, because NSIS must decompress the entire datablock to %TEMP% before it can
+; launch anything. Measured on the 153 MB payload: solid LZMA here = ~7.6 s before
+; the window appears; zlib over the pre-packed payload = ~0.9 s, same final size.
+;
+; The two settings are a pair. If the payload ever goes back to being stored
+; uncompressed, this must go back to `SetCompressor /SOLID lzma` or the installer
+; will balloon.
+SetCompressor zlib
+
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"
@@ -64,6 +83,11 @@ LangString MSG_WORD_RUNNING ${LANG_HEBREW} "Microsoft Word פועל כעת.$\r$\
 LangString MSG_WORD_CLOSE_FAILED ${LANG_HEBREW} "לא ניתן לסגור את Word אוטומטית.$\r$\n$\r$\nאנא סגור את Word באופן ידני ונסה שוב."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_HEBREW} "האם אתה בטוח שברצונך להסיר לחלוטין את ${PRODUCT_NAME} ואת כל הרכיבים שלו?"
 
+; Progress text shown while this wrapper stages the payload to %TEMP%.
+LangString MSG_PREPARING  ${LANG_HEBREW} "מכין את ההתקנה..."
+LangString MSG_EXTRACTING ${LANG_HEBREW} "פורק קבצים..."
+LangString MSG_STARTING   ${LANG_HEBREW} "מפעיל את אשף ההתקנה..."
+
 ; Language strings for English (fallback)
 LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_ENGLISH} ".NET Framework ${DOTNET_FRAMEWORK_VERSION} or higher is required.$\r$\n$\r$\nThis component is needed to run KleiKodesh.$\r$\n$\r$\nWould you like to open the download page now?"
 LangString MSG_VSTO_RUNTIME_REQUIRED ${LANG_ENGLISH} "Microsoft Visual Studio ${VSTO_RUNTIME_VERSION} Tools for Office Runtime is required.$\r$\n$\r$\nThis component is needed to run Office add-ins.$\r$\n$\r$\nWould you like to download and install it now?$\r$\n$\r$\nDownload: https://www.microsoft.com/download/details.aspx?id=48217"
@@ -73,6 +97,10 @@ LangString MSG_INSTALL_VSTO ${LANG_ENGLISH} "Installing VSTO Runtime..."
 LangString MSG_WORD_RUNNING ${LANG_ENGLISH} "Microsoft Word is currently running.$\r$\n$\r$\nWould you like to close Word and continue with uninstallation?"
 LangString MSG_WORD_CLOSE_FAILED ${LANG_ENGLISH} "Could not close Word automatically.$\r$\n$\r$\nPlease close Word manually and try again."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_ENGLISH} "Are you sure you want to completely remove ${PRODUCT_NAME} and all of its components?"
+
+LangString MSG_PREPARING  ${LANG_ENGLISH} "Preparing installation..."
+LangString MSG_EXTRACTING ${LANG_ENGLISH} "Extracting files..."
+LangString MSG_STARTING   ${LANG_ENGLISH} "Starting the setup wizard..."
 
 ; Classic NSIS UI for minimal window
 Icon "..\Installer\KleiKodesh_Main.ico"
@@ -92,18 +120,6 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
 !ifndef WPF_EXE_PATH
   !define WPF_EXE_PATH "..\Installer\bin\Release\net48\KleiKodeshVstoInstallerWpf.exe"
 !endif
-
-; ── Compression ───────────────────────────────────────────────────────────────
-; Without this line NSIS silently defaults to zlib, which is not enough to fit the
-; payload under the 30 MB target. Solid LZMA over the whole datablock is what makes
-; the size work: it dedupes across files, which a per-file zip cannot do.
-;
-; This ONLY pays off because KleiKodesh.zip is built with -CompressionLevel
-; NoCompression (see the prebuild target in Build/Installer/KleiKodeshVstoInstallerWpf.csproj).
-; If that zip ever goes back to Deflate, NSIS gets incompressible bytes and this
-; directive buys nothing — measured 66.27 MB with a Deflated zip vs 23.75 MB without.
-; The two settings are a pair; change them together or not at all.
-SetCompressor /SOLID lzma
 
 Name "מתקין ${PRODUCT_NAME}"
 OutFile "${OUTPUT_DIR}\KleiKodeshSetup-${PRODUCT_VERSION}${OUTPUT_SUFFIX}.exe"
@@ -126,8 +142,15 @@ InstallDir "$LOCALAPPDATA\KleiKodesh"
 ; Both exist only because a per-user app registers a machine-wide service. The fix
 ; is removing the service (KitveiHakodeshService indexes in-process), not elevating.
 RequestExecutionLevel user
-SilentInstall silent
+
+; NOT `SilentInstall silent` any more. The payload is now a pre-packed solid-LZMA
+; archive that this wrapper writes to %TEMP% before handing over to the WPF
+; installer; on a slow disk that write is long enough to look like a hang with no
+; window at all. Showing the INSTFILES page gives it a progress bar and a Hebrew
+; status line. AutoCloseWindow keeps the old behaviour of not making the user
+; click through anything once the work is done.
 AutoCloseWindow true
+ShowInstDetails hide
 
 Function .onInit
   ; Detect system language and set appropriate language
@@ -273,20 +296,31 @@ FunctionEnd
 Section "Main"
   ; Extract WPF installer to temp directory
   SetOutPath "$TEMP\KleiKodeshInstaller"
-  
-  ; Copy WPF installer files (built for .NET Framework 4.8)
-  ;
-  ; KleiKodesh.zip is NOT copied here on purpose. It is embedded in the exe as a
-  ; managed resource (EmbeddedResource in the csproj) and AddinInstaller.ExtractAsync
-  ; reads it with GetManifestResourceStream — it never looks for a file on disk.
-  ; Shipping it alongside the exe put the whole payload in the installer twice and
-  ; cost ~33 MB for nothing (65.93 MB → 33.02 MB just by dropping it).
+
+  ; The WPF exe is small (~0.7 MB) because the payload is no longer embedded in it.
+  ; It lands almost instantly, which is the whole point of the split.
+  DetailPrint "$(MSG_PREPARING)"
+  SetDetailsPrint both
   File "${WPF_EXE_PATH}"
   File /nonfatal "${WPF_EXE_PATH}\..\*.config"
-  
+
+  ; KleiKodesh.pkg — the solid-LZMA payload, written next to the exe.
+  ; AddinInstaller.OpenPayloadStream() looks for it here first.
+  ;
+  ; This is a plain byte copy: the archive is already compressed and NSIS is set to
+  ; `SetCompressor zlib`, so nothing is decompressed here beyond a trivial pass.
+  ; It is still ~25 MB of disk write, hence the status line above.
+  DetailPrint "$(MSG_EXTRACTING)"
+  File "..\Installer\KleiKodesh.pkg"
+
+  ; Hand the progress bar over: everything past this point belongs to the WPF
+  ; installer, which shows its own progress while it unpacks the payload.
+  DetailPrint "$(MSG_STARTING)"
+  SetDetailsPrint none
+
   ; Pass all command-line arguments through to the WPF installer unchanged
   ${GetParameters} $R0
-  
+
   ; Run WPF installer with all original arguments
   ExecWait '"$TEMP\KleiKodeshInstaller\KleiKodeshVstoInstallerWpf.exe" $R0' $0
   

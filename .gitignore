@@ -1,6 +1,8 @@
 # Project-specific ignores
 Build/releases/
 Build/Installer/KleiKodesh.zip
+# Solid-LZMA payload built by the installer prebuild target (~25 MB, regenerated each build)
+Build/Installer/KleiKodesh.pkg
 **/seforim.db
 *.exe
 
