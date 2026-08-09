@@ -36,6 +36,17 @@ namespace KitveiHakodeshLib.UserSettings
         private readonly WebBridge _bridge;
         private readonly Control _owner;
 
+        /// <summary>
+        /// Target path of the path change currently being handled, or null when idle.
+        /// MessageBox.Show pumps the message queue, so another BeginInvoke'd path change
+        /// for the same target runs re-entrantly while the dialog is up — at that point
+        /// UserSettingsDbAccess.Current still holds the OLD path, so the "path unchanged"
+        /// check below cannot catch it and the user gets a second dialog. Static because
+        /// the connection is process-wide: the duplicate may arrive through a different
+        /// AppViewer instance, or through the fresh handler HandleReload constructs.
+        /// </summary>
+        private static string _pathChangeInProgress;
+
         public UserSettingsDbHandler(WebBridge bridge, Control owner, string seforimDbPath)
         {
             _bridge = bridge;
@@ -103,6 +114,24 @@ namespace KitveiHakodeshLib.UserSettings
             if (string.Equals(oldUserSettingsPath, newUserSettingsPath, StringComparison.OrdinalIgnoreCase))
                 return;
 
+            // A duplicate request for the same target that arrived while the dialog below
+            // was pumping messages. The path change is already under way — drop it.
+            if (string.Equals(_pathChangeInProgress, newUserSettingsPath, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            _pathChangeInProgress = newUserSettingsPath;
+            try
+            {
+                _DoDbPathChange(newSeforimDbPath, oldUserSettingsPath, newUserSettingsPath);
+            }
+            finally
+            {
+                _pathChangeInProgress = null;
+            }
+        }
+
+        private void _DoDbPathChange(string newSeforimDbPath, string oldUserSettingsPath, string newUserSettingsPath)
+        {
             bool oldHasData = !string.IsNullOrEmpty(oldUserSettingsPath) && File.Exists(oldUserSettingsPath);
             bool newAlreadyExists = File.Exists(newUserSettingsPath);
 
