@@ -1,11 +1,11 @@
 /**
  * Everything ONE commentary panel owns.
  *
- * The book view builds two of these (see useBookView): a 'bottom' panel stacked
- * under the text and a 'side' panel beside it. Both are anchored to the same
- * clicked line and share one `useCommentary` fetch - re-querying would be
- * byte-identical work on the app's heaviest payload - but everything downstream
- * of the fetch is per panel:
+ * The book view builds one of these per CommentarySlot (see useBookView): a
+ * 'bottom' panel stacked under the text, and a 'side' / 'side-left' column on
+ * either side of it. All are anchored to the same clicked line and share one
+ * `useCommentary` fetch - re-querying would be byte-identical work on the app's
+ * heaviest payload - but everything downstream of the fetch is per panel:
  *
  *   - which book is pinned (and which default commentator it opens on)
  *   - the filter tree: search query, tokens, visibility list, check-tree scope
@@ -29,14 +29,39 @@ import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 
-/** Default divider position per slot: fraction of the pane the panel takes. */
-const DEFAULT_FRACTION: Record<CommentarySlot, number> = { bottom: 0.5, side: 0.4 }
+/**
+ * Default divider position per slot: fraction of the pane the panel takes.
+ *
+ * Both side columns take a third, so opening them together splits the row into
+ * three equal zones - commentary | text | commentary - rather than leaving the
+ * text a different width from the panels flanking it.
+ */
+const DEFAULT_FRACTION: Record<CommentarySlot, number> = {
+  bottom: 0.5,
+  side: 1 / 3,
+  'side-left': 1 / 3,
+}
 
 /**
- * Which of the book's default commentators each panel opens on. Opening both
- * panels on a book with several defaults then shows two different commentators.
+ * Which of the book's default commentators each panel opens on. Opening all three
+ * panels on a book with several defaults then shows three different commentators.
  */
-const DEFAULT_COMMENTATOR_RANK: Record<CommentarySlot, number> = { bottom: 0, side: 1 }
+const DEFAULT_COMMENTATOR_RANK: Record<CommentarySlot, number> = { bottom: 0, side: 1, 'side-left': 2 }
+
+/**
+ * Whether a panel falls back to the FIRST default commentator when the book has
+ * no default at its own rank.
+ *
+ * The two original panels do: a book with one default opens that commentator in
+ * both. The left panel does not - a third panel showing a third copy of the same
+ * commentator is noise, so with no third default it stays unpinned and simply
+ * renders the commentary list from the top without scrolling anywhere.
+ */
+const FALLS_BACK_TO_FIRST_DEFAULT: Record<CommentarySlot, boolean> = {
+  bottom: true,
+  side: true,
+  'side-left': false,
+}
 
 type CommentaryViewInstance = {
   topVisibleFlatIndex: number
@@ -91,6 +116,7 @@ export function useCommentaryPanelSlot(
     () => shared.commentaryLineId.value,
     () => shared.groups.value,
     DEFAULT_COMMENTATOR_RANK[slot],
+    FALLS_BACK_TO_FIRST_DEFAULT[slot],
   )
 
   const groupsForDisplay = useGroupsForDisplay(

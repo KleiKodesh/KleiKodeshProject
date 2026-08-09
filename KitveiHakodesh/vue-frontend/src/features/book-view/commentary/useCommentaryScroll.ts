@@ -16,7 +16,7 @@ export function useCommentaryScroll(
   virtualizer: () => Virtualizer<any, any>,
   scrollerEl: () => HTMLElement | null,
   /**
-   * Which commentary panel this instance drives ('bottom' | 'side'). Only used to
+   * Which commentary panel this instance drives (see CommentarySlot). Only used to
    * tag trace flows: two panels scroll concurrently, and with a shared flow name
    * their BEGIN calls reset each other's relative clock, making a dump unreadable
    * and impossible to attribute. See utils/commentaryScrollTrace.ts.

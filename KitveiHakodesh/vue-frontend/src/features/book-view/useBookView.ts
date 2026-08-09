@@ -3,13 +3,13 @@
  * Owns all data loading, state, event handlers, and watchers.
  * BookViewPage.vue is a shell that calls this and passes results to the template.
  *
- * TWO COMMENTARY PANELS
- * The book view hosts a 'bottom' and a 'side' commentary panel (see CommentarySlot).
- * Both are anchored to the same clicked line and share ONE useCommentary fetch —
- * re-querying would be byte-identical work on the app's heaviest payload — while
- * everything downstream of the fetch (pin, filter tree, scroll, search, render) is
- * built per panel by useCommentaryPanelSlot. Anything here that used to be "the"
- * commentary state now loops over `panels`.
+ * THE COMMENTARY PANELS
+ * The book view hosts one panel per CommentarySlot — 'bottom' under the text, and
+ * 'side' / 'side-left' on either side of it. All are anchored to the same clicked
+ * line and share ONE useCommentary fetch — re-querying would be byte-identical work
+ * on the app's heaviest payload — while everything downstream of the fetch (pin,
+ * filter tree, scroll, search, render) is built per panel by useCommentaryPanelSlot.
+ * Nothing here names a slot: add one to COMMENTARY_SLOTS and this file follows.
  *
  * Concerns extracted into focused composables:
  * - useBookViewKeyboardShortcuts  — Ctrl+zoom and Ctrl+arrow section navigation
@@ -198,7 +198,7 @@ export function useBookView(
     () => bookId ?? undefined,
   )
 
-  // ── The two commentary panels ─────────────────────────────────────────────
+  // ── The commentary panels (one per slot) ──────────────────────────────────
 
   const sharedCommentaryDeps = {
     bookId,
@@ -224,7 +224,7 @@ export function useBookView(
     ]),
   ) as Record<CommentarySlot, CommentaryPanel>
 
-  /** True when either panel is open — gates line selection and the backfill hold. */
+  /** True when any panel is open — gates line selection and the backfill hold. */
   const anyCommentaryVisible = computed(() =>
     COMMENTARY_SLOTS.some((slot) => panels[slot].visible.value),
   )
@@ -318,17 +318,26 @@ export function useBookView(
   // ── Commentary annotations (shared — hoisted above the panels' v-if) ─────
 
   /**
-   * Every group either panel displays. The two lists agree on the real groups and
-   * differ only by each panel's pinned placeholder, so union them by identity: notes,
-   * highlights and TOC paths must resolve for both pins, and running the fetchers
-   * twice would double every query for the same rows.
+   * Every group any panel displays. The lists agree on the real groups and differ
+   * only by each panel's pinned placeholder, so union them by identity: notes,
+   * highlights and TOC paths must resolve for every pin, and running the fetchers
+   * once per panel would multiply every query over the same rows.
    */
   const annotationGroups = computed<CommentaryGroup[]>(() => {
-    const bottom = panels.bottom.groupsForDisplay.value
-    const side = panels.side.groupsForDisplay.value
-    if (bottom === side) return bottom
-    const inBottom = new Set(bottom)
-    return [...bottom, ...side.filter((group) => !inBottom.has(group))]
+    const lists = COMMENTARY_SLOTS.map((slot) => panels[slot].groupsForDisplay.value)
+    // Overwhelmingly the common case: no panel holds a placeholder the others lack,
+    // so every list is the same array and the union is a no-op.
+    if (lists.every((list) => list === lists[0])) return lists[0]!
+    const seen = new Set<CommentaryGroup>()
+    const union: CommentaryGroup[] = []
+    for (const list of lists) {
+      for (const group of list) {
+        if (seen.has(group)) continue
+        seen.add(group)
+        union.push(group)
+      }
+    }
+    return union
   })
 
   const {
@@ -354,7 +363,9 @@ export function useBookView(
 
   const searchPanel = useBookViewSearchPanel(
     contentSearch,
-    { bottom: panels.bottom.search, side: panels.side.search },
+    Object.fromEntries(
+      COMMENTARY_SLOTS.map((slot) => [slot, panels[slot].search]),
+    ) as Record<CommentarySlot, CommentaryPanel['search']>,
     linesContentRef,
     commentaryViewRefs,
     searchBarRef,
@@ -388,7 +399,9 @@ export function useBookView(
   const sidePanel = useBookViewSidePanel(
     toolbarRef,
     commentaryViewRefs,
-    { bottom: panels.bottom.visible, side: panels.side.visible },
+    Object.fromEntries(
+      COMMENTARY_SLOTS.map((slot) => [slot, panels[slot].visible]),
+    ) as Record<CommentarySlot, import('vue').Ref<boolean>>,
     loadAltTocSections,
     ensureStaticFilterGroupsLoaded,
   )
@@ -448,7 +461,7 @@ export function useBookView(
    * The navigation changes commentaryLineId, which fires EVERY panel's pin watcher
    * - and a panel with no pending pin falls back to its default commentator. So
    * snapshot all panels (as a line tap does), then override the navigating slot: it
-   * re-pins to the book it navigated, the other keeps whatever it was showing.
+   * re-pins to the book it navigated, the others keep whatever they were showing.
    */
   function stagePinsForNavigation(
     slot: CommentarySlot,
@@ -488,7 +501,7 @@ export function useBookView(
   // ── Persistence ───────────────────────────────────────────────────────────
 
   /**
-   * Both panels' persistable state, read at save time by BookViewLinesContent (which
+   * Every panel's persistable state, read at save time by BookViewLinesContent (which
    * owns the scroll-position save this rides along with). Plain objects only — the
    * values end up in IndexedDB, which cannot clone a reactive proxy.
    */

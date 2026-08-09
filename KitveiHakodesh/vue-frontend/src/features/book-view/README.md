@@ -1,22 +1,26 @@
 # book-view
 
-Main book reader: the text, up to two independent commentary panels, a shared side panel for tools, a search bar, and a toolbar.
+Main book reader: the text, up to three independent commentary panels, a shared side panel for tools, a search bar, and a toolbar.
 
-## Two commentary panels
+## Three commentary panels
 
-The reader can open a **bottom** commentary panel (stacked under the text) and a **side** one (beside it, wide panes only), together or separately, from two independent toolbar toggles (`Ctrl+J` / `Ctrl+Shift+J`). Both are anchored to the same clicked line and share one `useCommentary` fetch, because re-querying the same line would be byte-identical work on the app's heaviest payload.
+The reader can open a **bottom** commentary panel (stacked under the text) and a column on each side of it — **side** on the RTL start edge (physically right) and **side-left** on the end edge — together or in any combination, from three independent toolbar toggles (`Ctrl+J` / `Ctrl+Shift+J` / `Ctrl+Alt+J`). Both side columns need a wide pane; the bottom panel works at any width. All are anchored to the same clicked line and share one `useCommentary` fetch, because re-querying the same line would be byte-identical work on the app's heaviest payload.
 
 Everything downstream of the fetch is **per panel**, assembled by `commentary/useCommentaryPanelSlot.ts`:
 
 | Per panel | Shared |
 | --- | --- |
-| pinned book (and which default commentator it opens on: bottom takes the first, side the second) | the fetched `groups` for the current line |
+| pinned book (and which default commentator it opens on — see below) | the fetched `groups` for the current line |
 | filter tree state + check-tree scope (`commentaryScopeKey(tabId, slot)`) | highlights, notes, word-link anchors, TOC paths |
 | scroll position and its save/restore | `staticFilterGroups` / `filterGroups` |
 | in-panel search (Ctrl+F) and render cache | the anchor line (`selectedLineId` / `commentaryLineId`) |
 | divider position | |
 
-`CommentarySlot` (`'bottom' | 'side'`) keys all of it, and both panels persist under `BookState.commentaryPanels` / `LastReadState.commentaryPanels`. There is one filter-tree component; the side panel binds it to whichever panel's filter button was pressed (`commentaryTreeSlot`).
+Each panel opens on a different one of the book's default commentators (bottom takes the first, side the second, side-left the third), so opening several shows several commentators rather than one repeated. Bottom and side fall back to the first default when the book has fewer; **side-left does not** — with no third default it stays unpinned and simply renders the list from the top without scrolling anywhere.
+
+`CommentarySlot` (`'bottom' | 'side' | 'side-left'`) keys all of it, and every panel persists under `BookState.commentaryPanels` / `LastReadState.commentaryPanels`. There is one filter-tree component; the side panel binds it to whichever panel's filter button was pressed (`commentaryTreeSlot`).
+
+Adding a fourth panel means adding a slot to `COMMENTARY_SLOTS` plus its layout and toggle: the composables, the store, persistence and session restore all loop over the constant and need no edit.
 
 ## Top-Level Components
 

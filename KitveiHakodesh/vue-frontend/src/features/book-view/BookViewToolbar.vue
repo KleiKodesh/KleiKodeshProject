@@ -7,6 +7,7 @@ import {
   IconLayoutColumnTwo20Regular,
   IconLayoutRowTwoFocusBottom20Filled,
   IconLayoutColumnTwoFocusRight20Filled,
+  IconLayoutColumnTwoFocusLeft20Filled,
   IconZoomIn20Regular,
   IconZoomOut20Regular,
   IconTimeline20Regular,
@@ -19,6 +20,7 @@ import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
+import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
 
@@ -40,11 +42,12 @@ const props = defineProps<{
   onRelatedBooksOpen?: () => void
   bottomCommentaryVisible?: boolean
   sideCommentaryVisible?: boolean
-  // The side panel needs a pane wide enough to hold it; on a narrow pane its
-  // button is hidden entirely rather than offering a mode that cannot apply.
+  sideLeftCommentaryVisible?: boolean
+  // The side panels need a pane wide enough to hold them; on a narrow pane their
+  // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
+defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -114,15 +117,16 @@ const linesZoomPct = computed(() =>
     ? bookViewStore.getLinesZoom(props.tabId, props.bookId)
     : zoom.value,
 )
-// One label for both panels' zooms: a single number while they agree, both
-// numbers once the panels have been zoomed apart.
+// One label for every panel's zoom: a single number while they all agree, one
+// number per panel once any panel has been zoomed apart from the rest.
 const commentaryZoomLabel = computed(() => {
   if (props.tabId == null || props.bookId == null) return `${Math.round(commentaryZoom.value)}%`
-  const bottom = bookViewStore.getCommentaryZoom(props.tabId, props.bookId, 'bottom')
-  const side = bookViewStore.getCommentaryZoom(props.tabId, props.bookId, 'side')
-  return bottom === side
-    ? `${Math.round(bottom)}%`
-    : `${Math.round(bottom)}% / ${Math.round(side)}%`
+  const zooms = COMMENTARY_SLOTS.map((slot) =>
+    Math.round(bookViewStore.getCommentaryZoom(props.tabId!, props.bookId!, slot)),
+  )
+  return zooms.every((z) => z === zooms[0])
+    ? `${zooms[0]}%`
+    : zooms.map((z) => `${z}%`).join(' / ')
 })
 
 const zoomOutTitle = computed(
@@ -133,8 +137,9 @@ const zoomInTitle = computed(
   () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
 )
 
-// The two panels are independent, so each title names its own panel in both
-// states — a shared "close the commentary panel" phrase left them indistinguishable.
+// The panels are independent, so each title names its own panel in both states —
+// a shared "close the commentary panel" phrase left them indistinguishable. The
+// two side panels are named by their edge, not just "בצד".
 const bottomCommentaryTitle = computed(() =>
   props.bottomCommentaryVisible
     ? 'סגור חלונית מפרשים תחתונה (Ctrl+J)'
@@ -143,8 +148,14 @@ const bottomCommentaryTitle = computed(() =>
 
 const sideCommentaryTitle = computed(() =>
   props.sideCommentaryVisible
-    ? 'סגור חלונית מפרשים בצד (Ctrl+Shift+J)'
-    : 'חלונית מפרשים בצד (Ctrl+Shift+J)',
+    ? 'סגור חלונית מפרשים מימין (Ctrl+Shift+J)'
+    : 'חלונית מפרשים מימין (Ctrl+Shift+J)',
+)
+
+const sideLeftCommentaryTitle = computed(() =>
+  props.sideLeftCommentaryVisible
+    ? 'סגור חלונית מפרשים משמאל (Ctrl+Alt+J)'
+    : 'חלונית מפרשים משמאל (Ctrl+Alt+J)',
 )
 
 defineExpose({ tocBtnRef })
@@ -185,9 +196,9 @@ defineExpose({ tocBtnRef })
       :on-open="onRelatedBooksOpen"
     />
     <!--
-      RTL: first child sits physically right. The side panel opens on the right of
-      the text, so its button comes first — matching the panel it controls. Wide
-      panes only, so the button is absent on a narrow one.
+      RTL: first child sits physically right. The three buttons run right → bottom
+      → left, so each sits on the side of the panel it controls. Both side panels
+      need a wide pane, so their buttons are absent on a narrow one.
     -->
     <button
       v-if="canUseSidePanel"
@@ -207,6 +218,16 @@ defineExpose({ tocBtnRef })
     >
       <IconLayoutRowTwoFocusBottom20Filled v-if="bottomCommentaryVisible" />
       <IconLayoutRowTwo20Regular v-else />
+    </button>
+    <button
+      v-if="canUseSidePanel"
+      :class="{ active: sideLeftCommentaryVisible }"
+      :disabled="!hasCommentaries"
+      :title="sideLeftCommentaryTitle"
+      @click="$emit('toggleSideLeftCommentary')"
+    >
+      <IconLayoutColumnTwoFocusLeft20Filled v-if="sideLeftCommentaryVisible" />
+      <IconLayoutColumnTwo20Regular v-else />
     </button>
     <button
       :class="{ active: autoSelectTopLine }"

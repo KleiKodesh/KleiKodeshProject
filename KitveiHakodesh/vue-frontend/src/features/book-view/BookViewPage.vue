@@ -12,7 +12,7 @@ import BookViewSidePanel from './BookViewSidePanel.vue'
 import BookViewTocTree from './toc/BookViewTocTree.vue'
 import CommentaryTreePanel from './commentary/CommentaryTreePanel.vue'
 import CommentaryPanelHost from './commentary/CommentaryPanelHost.vue'
-import { slotForSearchMode } from './bookViewTypes'
+import { slotForSearchMode, isSideCommentarySlot, SIDE_COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentarySlot } from './bookViewTypes'
 
 const toolbarRef = ref<InstanceType<typeof BookViewToolbar> | null>(null)
@@ -20,6 +20,7 @@ const linesContentRef = ref<InstanceType<typeof BookViewLinesContent> | null>(nu
 const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 const bottomHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const sideHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
+const sideLeftHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
 const paneId = inject<1 | 2>('paneId', 1)
@@ -29,6 +30,8 @@ const paneId = inject<1 | 2>('paneId', 1)
 const shellWidth = ref(window.innerWidth)
 useResizeObserver(bookViewRoot, ([entry]) => { shellWidth.value = entry!.contentRect.width })
 const isWideScreen = computed(() => shellWidth.value >= 650)
+/** Share of the split row the book text keeps when both side columns are open. */
+const MIN_LINES_FRACTION = 0.2
 const isSidePanelWideScreen = computed(() => shellWidth.value >= 520)
 const sidePanelIsOverlay = computed(() => !isSidePanelWideScreen.value)
 
@@ -71,13 +74,26 @@ const {
   {
     bottom: () => bottomHostRef.value?.view ?? null,
     side: () => sideHostRef.value?.view ?? null,
+    'side-left': () => sideLeftHostRef.value?.view ?? null,
   },
 )
 
-// The side panel needs a pane wide enough to sit beside the text. Rendering is
+/** The host component for a slot, for the code paths that must reach into one. */
+const hostRefs: Record<CommentarySlot, () => InstanceType<typeof CommentaryPanelHost> | null> = {
+  bottom: () => bottomHostRef.value,
+  side: () => sideHostRef.value,
+  'side-left': () => sideLeftHostRef.value,
+}
+
+// The side panels need a pane wide enough to sit beside the text. Rendering is
 // gated on both flags so a pane that narrows never shows a cramped column, and
-// the watcher below closes it so its toggle and the search bar agree.
+// the watcher below closes them so their toggles and the search bar agree.
 const sideCommentaryOpen = computed(() => panels.side.visible.value && isWideScreen.value)
+const sideLeftCommentaryOpen = computed(() => panels['side-left'].visible.value && isWideScreen.value)
+
+// Re-keys the lines scroller: opening or closing EITHER side column re-wraps the
+// text, so both belong in the key (see the capture watcher below).
+const sideColumnsKey = computed(() => `${sideCommentaryOpen.value}:${sideLeftCommentaryOpen.value}`)
 
 // Everything a commentary panel needs that is NOT per panel. Bound with v-bind on
 // both hosts so the shared list is written once.
@@ -117,6 +133,7 @@ const toolbarProps = computed(() => ({
   onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
   bottomCommentaryVisible: panels.bottom.visible.value,
   sideCommentaryVisible: sideCommentaryOpen.value,
+  sideLeftCommentaryVisible: sideLeftCommentaryOpen.value,
   canUseSidePanel: isWideScreen.value,
 }))
 
@@ -128,29 +145,37 @@ const activeSearchQuery = computed(() => {
 })
 
 // Clicking a book in the filter tree scrolls the panel that tree is bound to -
-// never the other one, which may be showing a different book entirely.
+// never another one, which may be showing a different book entirely.
 function scrollTreeSelectionIntoView(targetBookId: number) {
   const slot = commentaryTreeSlot.value
   if (!slot) return
-  const host = slot === 'bottom' ? bottomHostRef.value : sideHostRef.value
-  host?.view?.scrollToGroup(targetBookId)
+  hostRefs[slot]()?.view?.scrollToGroup(targetBookId)
 }
 
-// ── Divider drag: side commentary column ─────────────────────────────────────
+// ── Divider drag: the side commentary columns ────────────────────────────────
+// One handler pair for both columns; the dragging slot decides which edge the
+// fraction is measured from (RTL: 'side' hugs the right edge, 'side-left' the left).
 const splitContainer = ref<HTMLElement | null>(null)
-const isSplitDragging = ref(false)
+const draggingSideSlot = ref<CommentarySlot | null>(null)
 
-function onSplitDividerPointerDown(e: PointerEvent) {
-  isSplitDragging.value = true
+function onSplitDividerPointerDown(e: PointerEvent, slot: CommentarySlot) {
+  draggingSideSlot.value = slot
   ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
 }
 function onSplitPointerMove(e: PointerEvent) {
-  if (!isSplitDragging.value || !splitContainer.value) return
+  const slot = draggingSideSlot.value
+  if (!slot || !splitContainer.value) return
   const rect = splitContainer.value.getBoundingClientRect()
-  panels.side.fraction.value = Math.min(0.9, Math.max(0.1, (rect.right - e.clientX) / rect.width))
+  const distance = slot === 'side' ? rect.right - e.clientX : e.clientX - rect.left
+  // With both columns open the text keeps at least MIN_LINES_FRACTION of the row,
+  // so dragging one column wide can never squeeze the text out between them.
+  const otherSlot: CommentarySlot = slot === 'side' ? 'side-left' : 'side'
+  const otherOpen = otherSlot === 'side' ? sideCommentaryOpen.value : sideLeftCommentaryOpen.value
+  const max = otherOpen ? 1 - MIN_LINES_FRACTION - panels[otherSlot].fraction.value : 0.9
+  panels[slot].fraction.value = Math.min(max, Math.max(0.1, distance / rect.width))
 }
 function onSplitPointerUp() {
-  isSplitDragging.value = false
+  draggingSideSlot.value = null
 }
 
 // ── Divider drag: TOC / filter side panel ────────────────────────────────────
@@ -177,7 +202,7 @@ function onSidePanelResizePointerUp() {
 // ── Panel toggles ────────────────────────────────────────────────────────────
 
 function toggleCommentaryPanel(slot: CommentarySlot) {
-  if (slot === 'side' && !isWideScreen.value) return
+  if (isSideCommentarySlot(slot) && !isWideScreen.value) return
   panels[slot].visible.value = !panels[slot].visible.value
 }
 
@@ -190,12 +215,12 @@ async function onExportToWord() {
   await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
 }
 
-// Opening or closing the side commentary column re-wraps the text, so the lines
+// Opening or closing EITHER side commentary column re-wraps the text, so the lines
 // scroller is re-keyed and restored from the position captured just before the
 // swap. Without the capture the remounted instance would re-apply
 // initialLineIndex/initialScrollTop — values frozen at session-restore time — and
 // jump back to a stale position (or to the top when nothing was saved).
-watch(sideCommentaryOpen, () => {
+watch(sideColumnsKey, () => {
   // Session restore opens the side panel BEFORE idbResolved flips (the visible
   // watchers flush first), so this fires against a lines instance that has not
   // applied its restore yet - capturing would read {0,0} and overwrite the seeded
@@ -211,14 +236,31 @@ watch(sideCommentaryOpen, () => {
   initialScrollOffset.value = pos.scrollOffset
 })
 
-// A pane too narrow for the side column closes it rather than leaving it open but
-// unrendered, so its toggle button and the search bar's mode cycle stay truthful.
-// Watching visible TOO (not just width changes) matters for session restore on an
-// already-narrow shell: isWideScreen never changes there, but restore flips
-// visible true - without the clamp that panel stays logically open while never
+// A pane too narrow for the side columns closes them rather than leaving one open
+// but unrendered, so their toggle buttons and the search bar's mode cycle stay
+// truthful. Watching visible TOO (not just width changes) matters for session
+// restore on an already-narrow shell: isWideScreen never changes there, but restore
+// flips visible true - without the clamp that panel stays logically open while never
 // rendering (phantom search mode, held backfill gate, no way to close it).
-watch([() => panels.side.visible.value, isWideScreen], ([visible, wide]) => {
-  if (visible && !wide) panels.side.visible.value = false
+watch(
+  [() => SIDE_COMMENTARY_SLOTS.map((slot) => panels[slot].visible.value), isWideScreen],
+  ([, wide]) => {
+    if (wide) return
+    for (const slot of SIDE_COMMENTARY_SLOTS) panels[slot].visible.value = false
+  },
+)
+
+// Both columns opened at their saved fractions can together leave the text too
+// little room. Shrink them proportionally the moment that happens - the drag
+// clamp only covers the column being dragged.
+watch([sideCommentaryOpen, sideLeftCommentaryOpen], ([rightOpen, leftOpen]) => {
+  if (!rightOpen || !leftOpen) return
+  const total = panels.side.fraction.value + panels['side-left'].fraction.value
+  const max = 1 - MIN_LINES_FRACTION
+  if (total <= max) return
+  const scale = max / total
+  panels.side.fraction.value *= scale
+  panels['side-left'].fraction.value *= scale
 })
 
 watch(() => bookViewStore.openSearchSignal, (signal) => { if (signal.paneId === paneId) openContentSearch() })
@@ -237,6 +279,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       v-bind="toolbarProps"
       @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
       @toggle-side-commentary="toggleCommentaryPanel('side')"
+      @toggle-side-left-commentary="toggleCommentaryPanel('side-left')"
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
@@ -252,6 +295,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         :class="toolbarPosition === 'left' ? 'toolbar-order-end' : ''"
         @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
         @toggle-side-commentary="toggleCommentaryPanel('side')"
+        @toggle-side-left-commentary="toggleCommentaryPanel('side-left')"
         @toggle-search="toggleSearch"
         @toggle-toc="toggleTocPanel"
         @export-to-word="onExportToWord"
@@ -307,9 +351,10 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         <!-- content-area: always fills remaining horizontal space -->
         <div class="content-area">
           <!--
-            One nested layout, always: the side commentary is a column beside the text,
-            the bottom commentary a row beneath it. They are independent panels, so
-            both can be open at once and neither branch excludes the other.
+            One nested layout, always: each side commentary is a column beside the
+            text, the bottom commentary a row beneath it. All three are independent
+            panels, so any combination can be open and no branch excludes another.
+            RTL: first child is physically right, last child physically left.
           -->
           <div
             ref="splitContainer"
@@ -332,7 +377,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                   @open-book="openBookInTab"
                 />
               </div>
-              <div class="side-divider" @pointerdown="onSplitDividerPointerDown" />
+              <div class="side-divider" @pointerdown="onSplitDividerPointerDown($event, 'side')" />
             </template>
 
             <div class="side-lines">
@@ -340,7 +385,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 <template #top>
                   <BookViewLinesContent
                     v-if="scrollStateReady"
-                    :key="String(sideCommentaryOpen)"
+                    :key="sideColumnsKey"
                     ref="linesContentRef"
                     :lines="lines"
                     :prioritise="prioritise"
@@ -386,6 +431,31 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                 </template>
               </SplitPane>
             </div>
+
+            <!-- RTL: last child sits physically left, opposite the 'side' column. -->
+            <template v-if="sideLeftCommentaryOpen">
+              <div
+                class="side-divider"
+                @pointerdown="onSplitDividerPointerDown($event, 'side-left')"
+              />
+              <div
+                class="side-commentary"
+                :style="{ width: `${panels['side-left'].fraction.value * 100}%` }"
+              >
+                <CommentaryPanelHost
+                  ref="sideLeftHostRef"
+                  :panel="panels['side-left']"
+                  v-bind="commentarySharedProps"
+                  :filter-visible="isCommentaryTreeOpenFor('side-left')"
+                  :search-active="searchVisible && searchMode === 'commentary-side-left'"
+                  @close="panels['side-left'].visible.value = false"
+                  @navigate-section="(direction, id) => onNavigateSection('side-left', direction, id)"
+                  @toggle-filter-panel="toggleCommentaryTreePanel('side-left')"
+                  @toggle-search="openCommentarySearch('side-left')"
+                  @open-book="openBookInTab"
+                />
+              </div>
+            </template>
           </div>
 
           <!-- Search bar (floats inside content-area) -->
@@ -445,6 +515,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       v-bind="toolbarProps"
       @toggle-bottom-commentary="toggleCommentaryPanel('bottom')"
       @toggle-side-commentary="toggleCommentaryPanel('side')"
+      @toggle-side-left-commentary="toggleCommentaryPanel('side-left')"
       @toggle-search="toggleSearch"
       @toggle-toc="toggleTocPanel"
       @export-to-word="onExportToWord"
