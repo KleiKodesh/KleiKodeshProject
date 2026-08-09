@@ -53,10 +53,18 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
 
     /// <summary>
     /// Rewrites <paramref name="query"/> so each plain Hebrew word gains its
-    /// related forms as OR alternatives. Tokens carrying query syntax (wildcard,
-    /// fuzzy, grammar, quotes-as-syntax) are left untouched; a query that already
-    /// contains an OR pipe is returned unchanged (the user is composing manual
-    /// OR groups — injecting more would change their meaning).
+    /// related forms as OR alternatives. A query that already contains an OR pipe
+    /// is returned unchanged (the user is composing manual OR groups — injecting
+    /// more would change their meaning).
+    ///
+    /// Affix markers compose rather than override: a token carrying grammar ('%')
+    /// or fuzzy ('~', '~N') markers is peeled down to its bare word for lookup,
+    /// and every alternative is re-wrapped in the SAME markers — so "%כי% %יצחק%"
+    /// with expansion on yields "%כי% | %alt% … %יצחק% | %alt% …" and both
+    /// features apply together. Wildcard tokens ('*', '?') are still left
+    /// untouched: the wildcard already denotes an open-ended term set (and
+    /// overrides '%'/'~' in the parser), so grafting stem alternatives onto it
+    /// would widen the query in a direction the user did not ask for.
     /// </summary>
     public string RewriteQuery(string query, int perTerm = PerTermLimit)
     {
@@ -94,10 +102,14 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
         {
             if (sb.Length > 0) sb.Append(' ');
 
-            string bare = BareHebrew(tok);
+            // Peel the affix markers the parser understands so the lookup sees the
+            // bare word, and keep them to re-apply to every alternative below.
+            string core = PeelMarkers(tok, out string lead, out string trail);
+
+            string bare = BareHebrew(core);
             if (bare.Length < 2)
             {
-                // carries syntax characters / non-Hebrew — pass through
+                // wildcard / non-Hebrew / too short — pass through
                 sb.Append(tok);
                 continue;
             }
@@ -130,7 +142,9 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
             sb.Append(tok);
             foreach (string a in alts)
             {
-                sb.Append(" | ").Append(a);
+                // Re-wrap in the source token's markers so the alternatives carry
+                // the same grammar/fuzzy semantics the user asked for.
+                sb.Append(" | ").Append(lead).Append(a).Append(trail);
                 changed = true;
             }
         }
@@ -138,6 +152,45 @@ public sealed class SearchExpansionService(ILogger<SearchExpansionService> logge
         if (changed)
             logger.LogInformation("FTS expansion rewrote query ({Tokens} tokens)", tokens.Length);
         return changed ? sb.ToString() : query;
+    }
+
+    /// <summary>
+    /// Splits <paramref name="tok"/> into the leading markers, the bare word, and
+    /// the trailing markers, mirroring FtsLib's QueryParser.ParseToken so what we
+    /// peel is exactly what the parser will later re-read:
+    ///   1. '%' at either end (grammar prefix/suffix expansion) — Trim('%').
+    ///   2. a trailing fuzzy suffix '~' or '~N', taken at the LAST '~' and only
+    ///      when what follows is empty or a single digit 1-9.
+    /// A token containing a wildcard ('*' or '?') is returned unpeeled: the
+    /// wildcard overrides '%'/'~' in the parser and such tokens are not expanded.
+    /// <paramref name="lead"/> + core + <paramref name="trail"/> always
+    /// reconstructs the marker shape, so alternatives can be re-wrapped verbatim.
+    /// </summary>
+    private static string PeelMarkers(string tok, out string lead, out string trail)
+    {
+        lead = trail = "";
+        if (tok.IndexOf('*') >= 0 || tok.IndexOf('?') >= 0) return tok;
+
+        string core = tok;
+
+        // '%' — grammar markers (each side is independent, as Trim('%') implies)
+        if (core.StartsWith("%")) lead = "%";
+        if (core.Length > 1 && core.EndsWith("%")) trail = "%";
+        if (lead.Length > 0 || trail.Length > 0) core = core.Trim('%');
+
+        // '~' / '~N' — fuzzy suffix, innermost (applies to the bare word)
+        int tilde = core.LastIndexOf('~');
+        if (tilde >= 0)
+        {
+            string suffix = core.Substring(tilde + 1);
+            if (suffix.Length == 0 || (suffix.Length == 1 && suffix[0] >= '1' && suffix[0] <= '9'))
+            {
+                trail = core.Substring(tilde) + trail;
+                core = core.Substring(0, tilde);
+            }
+        }
+
+        return core;
     }
 
     /// <summary>The token stripped to bare Hebrew letters (final forms kept as

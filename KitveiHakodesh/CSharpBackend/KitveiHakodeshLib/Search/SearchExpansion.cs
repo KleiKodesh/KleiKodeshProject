@@ -60,7 +60,12 @@ namespace KitveiHakodeshLib.Search
                     {
                         if (sb.Length > 0) sb.Append(' ');
 
-                        string bare = BareHebrew(tok);
+                        // Peel affix markers so lookup sees the bare word; the
+                        // markers are re-applied to each alternative below.
+                        string lead, trail;
+                        string core = PeelMarkers(tok, out lead, out trail);
+
+                        string bare = BareHebrew(core);
                         if (bare.Length < 2)
                         {
                             sb.Append(tok);
@@ -92,7 +97,9 @@ namespace KitveiHakodeshLib.Search
                         sb.Append(tok);
                         foreach (string a in alts)
                         {
-                            sb.Append(" | ").Append(a);
+                            // re-wrap so alternatives carry the same
+                            // grammar/fuzzy semantics as the source token
+                            sb.Append(" | ").Append(lead).Append(a).Append(trail);
                             changed = true;
                         }
                     }
@@ -100,6 +107,38 @@ namespace KitveiHakodeshLib.Search
             }
 
             return changed ? sb.ToString() : query;
+        }
+
+        /// <summary>
+        /// Splits a token into leading markers + bare word + trailing markers,
+        /// mirroring FtsLib's QueryParser.ParseToken ('%' grammar markers first,
+        /// then a trailing fuzzy '~'/'~N'). Wildcard tokens are returned unpeeled
+        /// and are therefore never expanded. See the service twin for rationale.
+        /// </summary>
+        private static string PeelMarkers(string tok, out string lead, out string trail)
+        {
+            lead = "";
+            trail = "";
+            if (tok.IndexOf('*') >= 0 || tok.IndexOf('?') >= 0) return tok;
+
+            string core = tok;
+
+            if (core.StartsWith("%")) lead = "%";
+            if (core.Length > 1 && core.EndsWith("%")) trail = "%";
+            if (lead.Length > 0 || trail.Length > 0) core = core.Trim('%');
+
+            int tilde = core.LastIndexOf('~');
+            if (tilde >= 0)
+            {
+                string suffix = core.Substring(tilde + 1);
+                if (suffix.Length == 0 || (suffix.Length == 1 && suffix[0] >= '1' && suffix[0] <= '9'))
+                {
+                    trail = core.Substring(tilde) + trail;
+                    core = core.Substring(0, tilde);
+                }
+            }
+
+            return core;
         }
 
         private static string BareHebrew(string tok)
