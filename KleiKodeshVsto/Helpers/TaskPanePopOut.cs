@@ -205,6 +205,7 @@ namespace KleiKodesh.Helpers
             Width = 570,
             Height = 850,
             StartPosition = FormStartPosition.CenterParent,
+            ShowInTaskbar = false,
             Icon = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico"))
         ? new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico"))
         : null
