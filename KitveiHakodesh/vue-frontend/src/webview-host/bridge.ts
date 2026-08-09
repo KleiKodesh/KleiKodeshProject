@@ -39,6 +39,14 @@ export const showPopOutButton = window.__webviewShowPopOut === true
 export const isVstoEnvironment = showPopOutButton
 
 /**
+ * True where a destination page must take over the current tab instead of opening
+ * its own: the VSTO task pane (one tab visible, nowhere for a new one to go) and
+ * the dev browser, which mirrors that behaviour so the task-pane path is what we
+ * exercise day to day.
+ */
+export const navigatesDestinationsInPlace = isVstoEnvironment || !hasHostBridge
+
+/**
  * True only when a native chrome tab strip (FluentChromeTabsForm) is actually
  * present to mirror the tabs — i.e. the standalone/demo WebView2 host, not the
  * VSTO task pane and not the dev browser. This is the exact condition under which

@@ -33,7 +33,7 @@ import {
   canGoForward as historyCanGoForward,
 } from './navHistory'
 import { useBookViewStore } from './bookViewStore'
-import { disposeLocalFileHost, isVstoEnvironment } from '@/webview-host/bridge'
+import { disposeLocalFileHost, navigatesDestinationsInPlace } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 import {
@@ -975,21 +975,15 @@ export const useTabStore = defineStore('tabs', () => {
   // persisted across sessions — always stripped before saving.
   //
   // openInNewTab (default false):
-  //   false — replace the current tab in place (home tiles, nav dropdown)
-  //   true  — open a new tab, unless the current tab is home, in which case replace
-  //           it in place rather than leaving an empty home behind
+  //   false — replace the current tab in place (home tiles)
+  //   true  — open a new tab (nav dropdown, Ctrl+1..9, F1), unless the current tab is
+  //           home, in which case replace it rather than leaving an empty home behind
   //
   // No route is unique across tabs: each tab may hold its own מילון or לוח שנה.
-
-  /**
-   * Routes that always want a tab of their own: they are whole-app surfaces rather
-   * than something you read alongside your work, so replacing the current tab with
-   * one would throw away what the reader had open.
-   *
-   * Except under VSTO, where the task pane shows a single tab and there is nowhere
-   * for a new one to go — there they must navigate in place like everything else.
-   */
-  const OWN_TAB_ROUTES: TabRoute[] = ['/settings', '/workspaces']
+  //
+  // Under VSTO (and dev, which mirrors it) every destination navigates in place instead:
+  // the task pane shows a single tab, so there is nowhere for a new one to go. That
+  // overrides openInNewTab — it is the only way the single-tab pane can honour it.
 
   function navigateToDestination(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
     const patch = { route, title: DESTINATION_TITLES[route] ?? route }
@@ -997,12 +991,11 @@ export const useTabStore = defineStore('tabs', () => {
     // A tab shows one thing at a time, so a destination is inherently unique WITHIN
     // a tab and needs no enforcing. Across tabs it is not unique at all: two tabs may
     // each hold their own מילון, exactly as a browser lets you open Settings twice.
-    const wantsOwnTab = OWN_TAB_ROUTES.includes(route) && !isVstoEnvironment
 
     // Replacing an empty home tab is never worth a new tab — there is nothing to lose.
     const onHome = activeTabForPane(pane).route === '/'
 
-    if ((openInNewTab || wantsOwnTab) && !onHome) {
+    if (openInNewTab && !onHome && !navigatesDestinationsInPlace) {
       if (pane === 1) openTab(patch)
       else openPane2Tab(patch)
       return
