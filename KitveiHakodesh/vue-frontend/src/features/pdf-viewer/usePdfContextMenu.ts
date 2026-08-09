@@ -78,11 +78,19 @@ function selectionToText(win: Window): string {
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return ''
   const range = sel.getRangeAt(0)
 
-  // Word spans only — NOT every descendant span. The find bar's highlighter nests a
-  // <span class="highlight"> INSIDE the word span it matched; that child also
-  // intersects the range, so counting it too would emit the matched word twice.
-  const spans = (Array.from(win.document.querySelectorAll('.textLayer span')) as HTMLElement[])
-    .filter((el) => !el.parentElement?.closest('.textLayer span'))
+  // Word spans only — NOT every descendant span, and NOT structural wrappers. Two
+  // nesting patterns to survive:
+  //  - The find bar's highlighter nests a <span class="highlight"> INSIDE the word span
+  //    it matched; that child also intersects the range, so counting it too would emit
+  //    the matched word twice → exclude spans that sit inside another word span.
+  //  - Tagged PDFs (includeMarkedContent in the bundled viewer) wrap word spans in
+  //    <span class="markedContent"> containers. Those wrappers are NOT word spans: they
+  //    hold many words and their geometry doesn't track visual rows — and treating them
+  //    as ancestors would exclude every real word span. So markedContent spans are
+  //    dropped from the candidates AND skipped when testing for a word-span ancestor.
+  const WORD_SPAN = '.textLayer span:not(.markedContent)'
+  const spans = (Array.from(win.document.querySelectorAll(WORD_SPAN)) as HTMLElement[])
+    .filter((el) => !el.parentElement?.closest(WORD_SPAN))
     .filter((el) => range.intersectsNode(el))
   if (spans.length === 0) return sel.toString()
 
@@ -113,8 +121,10 @@ function selectionToText(win: Window): string {
    * so no fixed threshold on the style values is unit-safe. Real pixels also make the
    * tolerance self-scaling: OCR word boxes wobble vertically by a pixel or two (exact
    * equality would fabricate a newline between every word), while a genuine line step is
-   * at least the line's own height. Spans on different PAGES get distinct viewport tops
-   * too, so a cross-page selection breaks lines correctly as a side effect.
+   * at least the line's own height.
+   * A change of PAGE is always a line break: viewport tops alone would merge the last
+   * row of one page with the same-top first row of its neighbour in the viewer's
+   * side-by-side spread modes.
    * Known limitation: 90°/270°-rotated pages lay words of one visual line at different
    * tops, so rotated selections degrade to one word per line rather than merging words.
    */
@@ -125,12 +135,14 @@ function selectionToText(win: Window): string {
 
   let out = ''
   let prevRect: DOMRect | null = null
+  let prevPage: Element | null = null
   for (const el of spans) {
     const piece = clippedText(el)
     if (!piece) continue
     const rect = el.getBoundingClientRect()
+    const pageEl = el.closest('.page')
     if (out.length > 0 && prevRect !== null) {
-      if (!sameRow(rect, prevRect)) {
+      if (pageEl !== prevPage || !sameRow(rect, prevRect)) {
         out = out.trimEnd() + '\n'
       } else if (!/\s$/.test(out) && !/^\s/.test(piece)) {
         out += ' '
@@ -138,6 +150,7 @@ function selectionToText(win: Window): string {
     }
     out += piece
     prevRect = rect
+    prevPage = pageEl
   }
   return out
 }
