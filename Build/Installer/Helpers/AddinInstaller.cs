@@ -1,9 +1,10 @@
 using KleiKodesh.Helpers;
 using KleiKodeshVstoInstallerWpf.Helpers;
 using Microsoft.Win32;
+using SharpCompress.Compressors;
+using SharpCompress.Compressors.LZMA;
 using System;
 using System.IO;
-using System.IO.Compression;
 using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -19,9 +20,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v8.7.2";
+        public const string Version         = "v9.0.0";
         public const string InstallFolderName = "KleiKodesh";
-        public const string ZipResourceName = "KleiKodesh.zip";
         public const string VstoFileName    = "KleiKodesh.vsto";
 
         /// <summary>
@@ -83,33 +83,33 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             }
 #pragma warning restore CS0162
 
-            var assembly = Assembly.GetExecutingAssembly();
-            using (var stream = assembly.GetManifestResourceStream(ZipResourceName))
+            // The payload is a solid-LZMA archive written next to this exe by the NSIS
+            // wrapper (see PayloadArchive for why it is not a zip). It is strictly
+            // sequential: every entry must be consumed in order, and skipped entries
+            // still have to be drained out of the stream rather than seeked past.
+            using (var stream = OpenPayloadStream())
             {
-                if (stream == null)
-                    throw new FileNotFoundException("Resource not found: " + ZipResourceName);
+                int total = PayloadArchive.ReadHeader(stream);
+                int current = 0;
 
-                using (var archive = new ZipArchive(stream, ZipArchiveMode.Read))
+                using (var body = new LZipStream(stream, CompressionMode.Decompress))
                 {
-                    int total = archive.Entries.Count;
-                    int current = 0;
-
-                    foreach (var entry in archive.Entries)
+                    for (int i = 0; i < total; i++)
                     {
-                        string fullPath = Path.Combine(InstallPath, entry.FullName);
-
-                        if (string.IsNullOrEmpty(entry.Name))
-                        {
-                            Directory.CreateDirectory(fullPath);
-                            continue;
-                        }
+                        var entry = PayloadArchive.ReadEntryHeader(body);
+                        string fullPath = Path.Combine(InstallPath, entry.Path);
 
                         // Skip files that should be preserved across updates:
                         // 1. WebSitesWhitelist.json — user's website list customization
                         // 2. Cache folders — user's cached PDFs, conversions, downloads
                         // 3. BloomFilters — search index (rebuilt on version mismatch)
-                        if (ShouldSkipOnUpdate(entry.FullName) && File.Exists(fullPath))
+                        //
+                        // The bytes still have to come out of the LZMA stream to reach the
+                        // next entry, so a "skip" drains them to Stream.Null instead of
+                        // seeking — the zip version could simply not open the entry.
+                        if (ShouldSkipOnUpdate(entry.Path) && File.Exists(fullPath))
                         {
+                            PayloadArchive.CopyExactly(body, Stream.Null, entry.Length);
                             current++;
                             progress?.Report((double)current / total * 100);
                             continue;
@@ -122,14 +122,15 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                         // start of installation; TryCopyServiceExeAsync() waits for the
                         // remainder of the 1 500 ms exit window, then retries up to 3 times.
                         // On permanent failure the existing file is left in place (silent skip).
-                        if (DocumentLocatorHelper.IsServiceExe(entry.FullName))
+                        if (DocumentLocatorHelper.IsServiceExe(entry.Path))
                         {
-                            // Read the entry into a MemoryStream first so we can seek back
-                            // on retries (ZipArchiveEntry streams are forward-only).
-                            using (var entryStream = entry.Open())
+                            // Buffer this entry in memory: TryCopyServiceExeAsync seeks back
+                            // to the start between retries, and the LZMA body stream cannot
+                            // seek. The buffer must be filled here regardless of whether the
+                            // copy succeeds, so the stream stays aligned for the next entry.
+                            using (var buffer = new MemoryStream())
                             {
-                                var buffer = new System.IO.MemoryStream();
-                                await entryStream.CopyToAsync(buffer).ConfigureAwait(false);
+                                PayloadArchive.CopyExactly(body, buffer, entry.Length);
                                 buffer.Seek(0, SeekOrigin.Begin);
                                 await DocumentLocatorHelper.TryCopyServiceExeAsync(buffer, fullPath)
                                     .ConfigureAwait(false);
@@ -137,9 +138,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                         }
                         else
                         {
-                            using (var entryStream = entry.Open())
                             using (var fileStream = File.Create(fullPath))
-                                await entryStream.CopyToAsync(fileStream);
+                                PayloadArchive.CopyExactly(body, fileStream, entry.Length);
                         }
 
                         current++;
@@ -147,6 +147,30 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Opens the payload archive. It normally sits next to the installer exe
+        /// (the NSIS wrapper writes both into the same %TEMP% folder), but older
+        /// builds embedded it as a managed resource — that path is kept as a
+        /// fallback so a standalone exe still installs.
+        /// </summary>
+        private static Stream OpenPayloadStream()
+        {
+            string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string sideBySide = Path.Combine(exeDir, PayloadArchive.FileName);
+
+            if (File.Exists(sideBySide))
+                return File.OpenRead(sideBySide);
+
+            var embedded = Assembly.GetExecutingAssembly()
+                                   .GetManifestResourceStream(PayloadArchive.FileName);
+            if (embedded != null)
+                return embedded;
+
+            throw new FileNotFoundException(
+                "Payload archive not found. Looked for '" + sideBySide +
+                "' and for an embedded resource named '" + PayloadArchive.FileName + "'.");
         }
 
         /// <summary>

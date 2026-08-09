@@ -1,0 +1,48 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Build-time tool that packs the VSTO output into KleiKodesh.pkg (solid LZMA).
+    Invoked by the prebuild target in Build/Installer/KleiKodeshVstoInstallerWpf.csproj.
+
+    This is a separate project rather than an inline PowerShell step because
+    Windows PowerShell 5.1 cannot bind SharpCompress's System.Memory /
+    System.Runtime.CompilerServices.Unsafe facades without exact-version
+    assembly redirects - loading them by hand fails with FileNotFoundException
+    or StackOverflow depending on the approach. A normal SDK project gets the
+    binding right for free.
+
+    Targets net48 so it uses the SAME SharpCompress build as the installer;
+    if the packer and the extractor ever disagreed on the LZMA framing the
+    failure would land on a user's machine, not in CI.
+
+    NU1902 (GHSA-6c8g-7p36-r338) is suppressed below: the advisory covers path
+    traversal in SharpCompress's ARCHIVE READERS (zip/tar/rar entry extraction).
+    Nothing here touches those - the packer uses LZipStream, a raw compression
+    stream with no entry paths, and the installer side reads its own format
+    (PayloadArchive) rather than a SharpCompress archive. The advisory is
+    unfixed in every published version, so there is no upgrade that clears it.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>PayloadPacker</AssemblyName>
+    <RootNamespace>PayloadPacker</RootNamespace>
+    <!-- Keep the tool out of the installer's own output. -->
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);NU1902</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Version pinned deliberately. The installer embeds this same assembly and
+      loads it via Assembly.Load(byte[]); that path has no binding-redirect
+      support, so the facade versions SharpCompress was compiled against must
+      match exactly. Verified working: 0.30.1 with System.Memory 4.5.4
+      (assembly 4.0.1.1) and System.Runtime.CompilerServices.Unsafe 4.5.3
+      (assembly 4.0.4.1). Do not bump without re-testing that load path.
+    -->
+    <PackageReference Include="SharpCompress" Version="0.30.1" />
+  </ItemGroup>
+
+</Project>
