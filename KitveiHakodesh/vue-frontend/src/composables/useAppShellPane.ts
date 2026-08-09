@@ -1,6 +1,7 @@
 import { computed } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { navigatesDestinationsInPlace } from '@/webview-host/bridge'
 import type { Tab, TabRoute } from '@/stores/tabStore'
 
 /**
@@ -101,6 +102,20 @@ export function useAppShellPane(paneId: 1 | 2) {
     else updateActiveTab(patch)
   }
 
+  /**
+   * Open a book at a line — the word-link / cross-reference path.
+   *
+   * The VSTO task pane shows one tab and has nowhere to put a second, so links
+   * there take over the current tab (with a nonce, since AppPageView keys on
+   * tabId:bookId and a same-book jump would otherwise not remount). The dev
+   * browser mirrors that, so the task-pane path is what we exercise day to day.
+   * Only the standalone demo host, which has a real tab strip, opens its own tab.
+   */
+  function openBookTarget(patch: Omit<Tab, 'id'>) {
+    if (navigatesDestinationsInPlace) updateActiveTab({ ...patch, navNonce: tabStore.nextNavNonce() })
+    else openTab(patch)
+  }
+
   function openNewHomeTab() {
     if (paneId === 1) {
       tabStore.openNewHomeTab()
@@ -171,6 +186,7 @@ export function useAppShellPane(paneId: 1 | 2) {
     openNewHomeTab,
     updateActiveTab,
     openOrUpdateActiveTab,
+    openBookTarget,
     navigateToDestination,
     goHome,
     togglePdfViewerTitleBar,

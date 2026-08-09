@@ -1030,6 +1030,7 @@ export const useTabStore = defineStore('tabs', () => {
     moveTabToPane,
     updatePane2ActiveTab,
     init,
+    nextNavNonce,
     openTab,
     switchTab,
     closeTab,

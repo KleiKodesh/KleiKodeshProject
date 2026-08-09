@@ -17,6 +17,12 @@ export interface PaneNavigation {
    * tab is opened and focused; otherwise the active tab is updated in place.
    */
   openOrUpdateActiveTab: (patch: Partial<Omit<Tab, 'id'>>, openInNewTab?: boolean) => void
+  /**
+   * Follow a cross-reference to a book — the word-link path. Unlike
+   * `openOrUpdateActiveTab` the choice is not the caller's: it depends on whether
+   * the host has room for another tab. See useAppShellPane for the rule.
+   */
+  openBookTarget: (patch: Omit<Tab, 'id'>) => void
   navigateToDestination: (route: import('@/stores/tabStore').TabRoute, openInNewTab?: boolean) => void
   switchTab: (id: string) => void
   readonly activeTabId: string
@@ -40,6 +46,7 @@ export function usePaneNavigation(): PaneNavigation {
     updateActiveTab: pane.updateActiveTab,
     openTab: pane.openTab,
     openOrUpdateActiveTab: pane.openOrUpdateActiveTab,
+    openBookTarget: pane.openBookTarget,
     navigateToDestination: pane.navigateToDestination,
     switchTab: pane.switchTab,
     get activeTabId() { return pane.activeTabId.value },
