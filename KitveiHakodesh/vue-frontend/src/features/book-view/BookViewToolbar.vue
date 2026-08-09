@@ -6,7 +6,7 @@ import {
   IconLayoutRowTwo20Regular,
   IconLayoutColumnTwo20Regular,
   IconLayoutRowTwoFocusBottom20Filled,
-  IconLayoutColumnTwoFocusLeft20Filled,
+  IconLayoutColumnTwoFocusRight20Filled,
   IconZoomIn20Regular,
   IconZoomOut20Regular,
   IconTimeline20Regular,
@@ -133,15 +133,18 @@ const zoomInTitle = computed(
   () => `הגדל (Ctrl+)\nטקסט: ${Math.round(linesZoomPct.value)}% | מפרשים: ${commentaryZoomLabel.value}\nאיפוס: Ctrl+0`,
 )
 
-// Titles reuse the existing phrases: the bottom button keeps the original
-// "commentary panel (Ctrl+J)" wording, and the side button borrows the phrase that
-// used to describe switching to the side view, with its own shortcut hint.
+// The two panels are independent, so each title names its own panel in both
+// states — a shared "close the commentary panel" phrase left them indistinguishable.
 const bottomCommentaryTitle = computed(() =>
-  props.bottomCommentaryVisible ? 'סגור פאנל מפרשים' : 'פאנל מפרשים (Ctrl+J)',
+  props.bottomCommentaryVisible
+    ? 'סגור חלונית מפרשים תחתונה (Ctrl+J)'
+    : 'חלונית מפרשים תחתונה (Ctrl+J)',
 )
 
 const sideCommentaryTitle = computed(() =>
-  props.sideCommentaryVisible ? 'סגור פאנל מפרשים' : 'עבור לתצוגה צדדית (Ctrl+Shift+J)',
+  props.sideCommentaryVisible
+    ? 'סגור חלונית מפרשים בצד (Ctrl+Shift+J)'
+    : 'חלונית מפרשים בצד (Ctrl+Shift+J)',
 )
 
 defineExpose({ tocBtnRef })
@@ -181,6 +184,21 @@ defineExpose({ tocBtnRef })
       :disabled="!hasRelatedBooks"
       :on-open="onRelatedBooksOpen"
     />
+    <!--
+      RTL: first child sits physically right. The side panel opens on the right of
+      the text, so its button comes first — matching the panel it controls. Wide
+      panes only, so the button is absent on a narrow one.
+    -->
+    <button
+      v-if="canUseSidePanel"
+      :class="{ active: sideCommentaryVisible }"
+      :disabled="!hasCommentaries"
+      :title="sideCommentaryTitle"
+      @click="$emit('toggleSideCommentary')"
+    >
+      <IconLayoutColumnTwoFocusRight20Filled v-if="sideCommentaryVisible" />
+      <IconLayoutColumnTwo20Regular v-else />
+    </button>
     <button
       :class="{ active: bottomCommentaryVisible }"
       :disabled="!hasCommentaries"
@@ -189,17 +207,6 @@ defineExpose({ tocBtnRef })
     >
       <IconLayoutRowTwoFocusBottom20Filled v-if="bottomCommentaryVisible" />
       <IconLayoutRowTwo20Regular v-else />
-    </button>
-    <!-- Side panel: wide panes only, so the button is absent on a narrow one. -->
-    <button
-      v-if="canUseSidePanel"
-      :class="{ active: sideCommentaryVisible }"
-      :disabled="!hasCommentaries"
-      :title="sideCommentaryTitle"
-      @click="$emit('toggleSideCommentary')"
-    >
-      <IconLayoutColumnTwoFocusLeft20Filled v-if="sideCommentaryVisible" />
-      <IconLayoutColumnTwo20Regular v-else />
     </button>
     <button
       :class="{ active: autoSelectTopLine }"
