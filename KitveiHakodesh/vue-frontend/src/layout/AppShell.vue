@@ -32,6 +32,7 @@ provide(PANE_NAVIGATION_KEY, {
   updateActiveTab: pane.updateActiveTab,
   openTab: pane.openTab,
   openOrUpdateActiveTab: pane.openOrUpdateActiveTab,
+  openBookTarget: pane.openBookTarget,
   navigateToDestination: pane.navigateToDestination,
   switchTab: pane.switchTab,
   get activeTabId() { return pane.activeTabId.value },

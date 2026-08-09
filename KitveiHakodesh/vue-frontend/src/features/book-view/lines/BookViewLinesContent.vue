@@ -206,7 +206,7 @@ const booksDataStore = useBooksDataStore()
 const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
   onNavigate: (target) => {
-    paneNavigation.openTab({
+    paneNavigation.openBookTarget({
       title: booksDataStore.allBooksMap.get(target.bookId)?.title ?? '',
       route: '/book-view',
       bookId: target.bookId,
