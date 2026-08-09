@@ -61,10 +61,20 @@ export function wrapRtlHtml(innerHtml: string): string {
     `<style>body{direction:rtl}</style></head><body>${trimmed}</body></html>`
 }
 
-/** Trimmed so the text/plain flavor doesn't carry a trailing newline either. */
+/**
+ * Trimmed so the text/plain flavor doesn't carry a trailing newline either.
+ *
+ * Block boundaries become newlines BEFORE parsing: textContent alone concatenates
+ * sibling <div> lines with no separator at all, so a multi-line copy's plain flavor
+ * would run the last word of one line straight into the first word of the next
+ * (observed live with the PDF viewer's per-row divs).
+ */
 export function htmlToPlainText(html: string): string {
+  const withBreaks = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:div|p|h[1-6]|li)>/gi, '\n')
   const tempDiv = document.createElement('div')
-  tempDiv.innerHTML = html
+  tempDiv.innerHTML = withBreaks
   return (tempDiv.textContent ?? '').trim()
 }
 
@@ -156,7 +166,16 @@ export function attachScopedCopy(
   targetDoc: Document,
   buildFormattedHtml: () => string | null,
 ): () => void {
-  const onCopy = (event: Event) => handleScopedCopyEvent(event as ClipboardEvent, buildFormattedHtml)
+  const onCopy = (event: Event) => {
+    handleScopedCopyEvent(event as ClipboardEvent, buildFormattedHtml)
+    // Once we've committed a payload, stop the event from reaching PDF.js's own copy
+    // handler at the target: it re-writes text/plain with its raw sel.toString()
+    // extraction, which merges every word in OCR'd rows (their text layer has no space
+    // characters). Verified live — without this, text/html carried the fixed spacing
+    // while text/plain still pasted merged. Untouched when we didn't handle the event
+    // (no selection), so PDF.js's default copy still works there.
+    if (event.defaultPrevented) event.stopPropagation()
+  }
   targetDoc.addEventListener('copy', onCopy, true)
   return () => targetDoc.removeEventListener('copy', onCopy, true)
 }

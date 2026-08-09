@@ -60,6 +60,59 @@ function escapeHtml(s: string): string {
 }
 
 /**
+ * Extracts the selected text from the PDF.js text layer with word gaps intact.
+ *
+ * sel.toString() is NOT usable here: in OCR'd PDFs the text layer is one span per WORD
+ * with no space characters anywhere — the gaps are purely visual (absolute positioning).
+ * toString() therefore concatenates whole rows into a single merged word (verified live:
+ * a row of 8 word-spans came back with zero spaces). Acrobat copies the same document
+ * fine because it reconstructs spacing from glyph geometry; we do the DOM equivalent —
+ * walk the selected spans, clip the first/last by the range offsets, and join with a
+ * space at span boundaries (and a newline when the row's top offset changes).
+ *
+ * PDFs whose text layer DOES embed real spaces are unaffected: joining adds a space only
+ * when the boundary has none.
+ */
+function selectionToText(win: Window): string {
+  const sel = win.getSelection()
+  if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return ''
+  const range = sel.getRangeAt(0)
+
+  const spans = Array.from(win.document.querySelectorAll('.textLayer span')).filter((el) =>
+    range.intersectsNode(el),
+  ) as HTMLElement[]
+  if (spans.length === 0) return sel.toString()
+
+  /** The part of a span's text actually inside the range (first/last spans may be cut). */
+  function clippedText(el: HTMLElement): string {
+    const full = el.textContent ?? ''
+    let start = 0
+    let end = full.length
+    if (el.contains(range.startContainer)) start = range.startOffset
+    if (el.contains(range.endContainer)) end = range.endOffset
+    return full.slice(start, end)
+  }
+
+  let out = ''
+  let prevTop: string | null = null
+  for (const el of spans) {
+    const piece = clippedText(el)
+    if (!piece) continue
+    const top = el.style.top
+    if (out.length > 0) {
+      if (prevTop !== null && top !== prevTop) {
+        out = out.trimEnd() + '\n'
+      } else if (!/\s$/.test(out) && !/^\s/.test(piece)) {
+        out += ' '
+      }
+    }
+    out += piece
+    prevTop = top
+  }
+  return out
+}
+
+/**
  * Custom right-click menu for the PDF viewer iframe, mirroring the book view's
  * menu: העתק (copy) and העתק לתוך וורד (copy into Word), plus העתק דף כתמונה
  * (copy the current page to the clipboard as an image).
@@ -92,7 +145,7 @@ export function usePdfContextMenu(
       capturedRange = null
       return
     }
-    capturedText = sel.toString()
+    capturedText = selectionToText(win)
     capturedRange = sel.getRangeAt(0).cloneRange()
   }
 
@@ -264,9 +317,10 @@ export function usePdfContextMenu(
     // on the PDF text layer — matching book view, where every copy path funnels through
     // the same event handler.
     detachCopy = attachScopedCopy(win.document, () => {
-      const sel = win.getSelection()
-      const text = sel && !sel.isCollapsed && sel.rangeCount > 0 ? sel.toString() : capturedText
-      return selectionToHtml(text) || null
+      // selectionToText, not sel.toString(): OCR'd text layers carry no space chars, so
+      // toString() merges every word in a row (see selectionToText).
+      const live = selectionToText(win)
+      return selectionToHtml(live || capturedText) || null
     })
   }
 
