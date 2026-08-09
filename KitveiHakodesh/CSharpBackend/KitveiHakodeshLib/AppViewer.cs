@@ -468,7 +468,18 @@ namespace KitveiHakodeshLib
             // Disable SmartScreen reputation checks — all content is served from local
             // virtual hosts or trusted origins (HebrewBooks download). SmartScreen adds
             // network round-trips and is meaningless for a local book reader.
-            settings.IsReputationCheckingRequired = false;
+            //
+            // This property lives on ICoreWebView2Settings8 (Runtime 1.0.1587.40+).
+            // The wrapper QIs the live runtime for that interface on the property
+            // setter, so on an older installed Runtime the assignment throws and takes
+            // the whole startup down. It is a pure optimization — skipping it costs
+            // nothing but a SmartScreen round-trip — so swallow the version mismatch.
+            try
+            {
+                settings.IsReputationCheckingRequired = false;
+            }
+            catch (InvalidCastException) { }      // interface missing from this Runtime
+            catch (NotImplementedException) { }   // some Runtime builds report it this way
 
             // Disable the default right-click context menu — the app provides its own
             // context menus where needed. The browser menu exposes irrelevant items
