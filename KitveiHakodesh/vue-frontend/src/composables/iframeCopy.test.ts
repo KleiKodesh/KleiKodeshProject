@@ -46,18 +46,29 @@ afterEach(() => {
 /** A stand-in for the PDF iframe's document, recording which document ran the command. */
 function makeFakeDoc(succeeds: boolean, fireEvent: boolean) {
   const listeners: Array<(e: Event) => void> = []
+  // The last copy event dispatched, exposed so tests can assert on preventDefault /
+  // stopPropagation. Models the real event contract: preventDefault() flips
+  // defaultPrevented, which is what gates the handler's stopPropagation call.
+  let lastEvent: { defaultPrevented: boolean; stopPropagation: ReturnType<typeof vi.fn> } | null =
+    null
   const doc = {
     execCommand: vi.fn((cmd: string) => {
       if (cmd !== 'copy') return false
       if (fireEvent) {
         const event = {
           clipboardData: { setData: vi.fn() },
-          preventDefault: vi.fn(),
-        } as unknown as Event
-        listeners.forEach((l) => l(event))
+          defaultPrevented: false,
+          preventDefault: vi.fn(function (this: { defaultPrevented: boolean }) {
+            this.defaultPrevented = true
+          }),
+          stopPropagation: vi.fn(),
+        }
+        lastEvent = event
+        listeners.forEach((l) => l(event as unknown as Event))
       }
       return succeeds
     }),
+    getLastEvent: () => lastEvent,
     addEventListener: vi.fn((type: string, fn: (e: Event) => void, _capture?: boolean) => {
       if (type === 'copy') listeners.push(fn)
     }),
@@ -66,7 +77,10 @@ function makeFakeDoc(succeeds: boolean, fireEvent: boolean) {
       if (i >= 0) listeners.splice(i, 1)
     }),
   }
-  return doc as unknown as Document & { execCommand: ReturnType<typeof vi.fn> }
+  return doc as unknown as Document & {
+    execCommand: ReturnType<typeof vi.fn>
+    getLastEvent: () => { defaultPrevented: boolean; stopPropagation: ReturnType<typeof vi.fn> } | null
+  }
 }
 
 describe('triggerCopy — target document', () => {
@@ -164,5 +178,20 @@ describe('attachScopedCopy', () => {
 
     triggerCopy(undefined, doc)
     expect(build).toHaveBeenCalled()
+    // Unhandled event → PDF.js's own copy handler must still run (no stopPropagation).
+    expect(doc.getLastEvent()?.stopPropagation).not.toHaveBeenCalled()
+  })
+
+  it('stops propagation after committing a payload — PDF.js must not overwrite text/plain', () => {
+    // PDF.js's copy handler runs after ours (at the target) and re-writes text/plain
+    // with its raw sel.toString() extraction — the merged-words payload on OCR'd text
+    // layers. Once we've handled the event, it must not see it.
+    const doc = makeFakeDoc(true, true)
+    attachScopedCopy(doc, () => '<div dir="rtl">x y</div>')
+
+    triggerCopy(undefined, doc)
+    const event = doc.getLastEvent()
+    expect(event?.defaultPrevented).toBe(true)
+    expect(event?.stopPropagation).toHaveBeenCalled()
   })
 })

@@ -78,36 +78,66 @@ function selectionToText(win: Window): string {
   if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return ''
   const range = sel.getRangeAt(0)
 
-  const spans = Array.from(win.document.querySelectorAll('.textLayer span')).filter((el) =>
-    range.intersectsNode(el),
-  ) as HTMLElement[]
+  // Word spans only — NOT every descendant span. The find bar's highlighter nests a
+  // <span class="highlight"> INSIDE the word span it matched; that child also
+  // intersects the range, so counting it too would emit the matched word twice.
+  const spans = (Array.from(win.document.querySelectorAll('.textLayer span')) as HTMLElement[])
+    .filter((el) => !el.parentElement?.closest('.textLayer span'))
+    .filter((el) => range.intersectsNode(el))
   if (spans.length === 0) return sel.toString()
 
-  /** The part of a span's text actually inside the range (first/last spans may be cut). */
+  /**
+   * The part of a span's text actually inside the range (first/last spans may be cut).
+   * Clipped via a sub-range clamped to the selection rather than by slicing textContent
+   * with the raw range offsets: an offset is only a CHARACTER offset when its container
+   * is a text node (for an element container it's a child index), and a find-highlighted
+   * span holds several text nodes, making a whole-textContent slice wrong either way.
+   * Range.toString() handles both cases and reads nested markup's text exactly once.
+   */
   function clippedText(el: HTMLElement): string {
-    const full = el.textContent ?? ''
-    let start = 0
-    let end = full.length
-    if (el.contains(range.startContainer)) start = range.startOffset
-    if (el.contains(range.endContainer)) end = range.endOffset
-    return full.slice(start, end)
+    const sub = win.document.createRange()
+    sub.selectNodeContents(el)
+    if (sub.compareBoundaryPoints(Range.START_TO_START, range) < 0) {
+      sub.setStart(range.startContainer, range.startOffset)
+    }
+    if (sub.compareBoundaryPoints(Range.END_TO_END, range) > 0) {
+      sub.setEnd(range.endContainer, range.endOffset)
+    }
+    return sub.toString()
+  }
+
+  /**
+   * Same visual row ⇔ rendered tops within half a line height. Measured from
+   * getBoundingClientRect, NOT style.top: PDF.js writes style.top as a PERCENTAGE of the
+   * page (rows ~1.5% apart in a live probe) and often sets no inline font-size at all,
+   * so no fixed threshold on the style values is unit-safe. Real pixels also make the
+   * tolerance self-scaling: OCR word boxes wobble vertically by a pixel or two (exact
+   * equality would fabricate a newline between every word), while a genuine line step is
+   * at least the line's own height. Spans on different PAGES get distinct viewport tops
+   * too, so a cross-page selection breaks lines correctly as a side effect.
+   * Known limitation: 90°/270°-rotated pages lay words of one visual line at different
+   * tops, so rotated selections degrade to one word per line rather than merging words.
+   */
+  function sameRow(rect: DOMRect, prevRect: DOMRect): boolean {
+    const tolerance = Math.max(2, Math.min(rect.height, prevRect.height) / 2)
+    return Math.abs(rect.top - prevRect.top) <= tolerance
   }
 
   let out = ''
-  let prevTop: string | null = null
+  let prevRect: DOMRect | null = null
   for (const el of spans) {
     const piece = clippedText(el)
     if (!piece) continue
-    const top = el.style.top
-    if (out.length > 0) {
-      if (prevTop !== null && top !== prevTop) {
+    const rect = el.getBoundingClientRect()
+    if (out.length > 0 && prevRect !== null) {
+      if (!sameRow(rect, prevRect)) {
         out = out.trimEnd() + '\n'
       } else if (!/\s$/.test(out) && !/^\s/.test(piece)) {
         out += ' '
       }
     }
     out += piece
-    prevTop = top
+    prevRect = rect
   }
   return out
 }
