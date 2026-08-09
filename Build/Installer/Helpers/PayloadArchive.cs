@@ -48,6 +48,22 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// <summary>File name of the payload archive, as written next to the installer exe.</summary>
         public const string FileName = "KleiKodesh.pkg";
 
+        /// <summary>
+        /// Command-line switch carrying an explicit path to the payload archive:
+        ///   --payload "C:\...\Temp\KleiKodeshInstaller\KleiKodesh.pkg"
+        ///
+        /// Needed because the installer relaunches itself elevated for ניקוי עמוק
+        /// (AdminHelper.RelaunchAsAdmin). "runas" starts the new process as the
+        /// ADMINISTRATOR account, so %LOCALAPPDATA% — and therefore %TEMP%, where the
+        /// NSIS wrapper staged the payload — resolves to a different user profile.
+        /// Only the exe crosses that boundary, not its sibling files, so the elevated
+        /// instance must be told where the payload actually is.
+        ///
+        /// This was invisible while the payload was an embedded resource: it travelled
+        /// inside the exe and survived any relaunch.
+        /// </summary>
+        public const string PathSwitch = "--payload";
+
         private static readonly byte[] Magic = Encoding.ASCII.GetBytes("KKPKG1\n");
 
         /// <summary>One entry's metadata, handed to the extraction callback.</summary>

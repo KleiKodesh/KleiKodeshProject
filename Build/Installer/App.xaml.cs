@@ -59,6 +59,20 @@ namespace KleiKodeshVstoInstallerWpf
                     repairMode = true;
             }
 
+            // --payload <path>: explicit payload-archive location. Passed by
+            // AdminHelper.RelaunchAsAdmin so the elevated instance can still find the
+            // archive the NSIS wrapper staged — an elevated process resolves %TEMP% to
+            // a different profile, and only the exe crosses the UAC boundary, not the
+            // sibling .pkg. Without it, ניקוי עמוק fails with "Payload archive not found".
+            for (int i = 0; i < e.Args.Length - 1; i++)
+            {
+                if (e.Args[i].Equals(Helpers.PayloadArchive.PathSwitch, StringComparison.OrdinalIgnoreCase))
+                {
+                    Helpers.AddinInstaller.PayloadPathOverride = e.Args[i + 1];
+                    break;
+                }
+            }
+
             // --wait-for-pid <PID>: hide until the given process exits, then show normally.
             // Used by the auto-updater: installer is launched from Word's shutdown event
             // while Word is still alive, then waits for Word to fully exit before showing UI.

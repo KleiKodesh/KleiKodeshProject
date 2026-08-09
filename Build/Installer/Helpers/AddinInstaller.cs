@@ -150,18 +150,37 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
-        /// Opens the payload archive. It normally sits next to the installer exe
-        /// (the NSIS wrapper writes both into the same %TEMP% folder), but older
-        /// builds embedded it as a managed resource — that path is kept as a
-        /// fallback so a standalone exe still installs.
+        /// Explicit payload location, set from the <c>--payload</c> switch at startup
+        /// (see App.OnStartup). Survives the elevated relaunch that ניקוי עמוק performs,
+        /// where %TEMP% resolves to a different profile and the sibling file is not
+        /// visible. Null when the switch was not passed.
+        /// </summary>
+        public static string PayloadPathOverride { get; set; }
+
+        /// <summary>
+        /// Resolves the payload archive, in order:
+        ///   1. --payload path, when the process was relaunched with one.
+        ///   2. Next to the exe — where the NSIS wrapper stages it.
+        ///   3. The staging folder under the *invoking* user's TEMP, recovered from
+        ///      the exe's own path, for the elevated-relaunch case.
+        ///   4. An embedded resource, so a self-contained exe still installs.
         /// </summary>
         private static Stream OpenPayloadStream()
         {
+            var tried = new System.Collections.Generic.List<string>();
+
+            if (!string.IsNullOrEmpty(PayloadPathOverride))
+            {
+                if (File.Exists(PayloadPathOverride))
+                    return File.OpenRead(PayloadPathOverride);
+                tried.Add(PayloadPathOverride);
+            }
+
             string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
             string sideBySide = Path.Combine(exeDir, PayloadArchive.FileName);
-
             if (File.Exists(sideBySide))
                 return File.OpenRead(sideBySide);
+            tried.Add(sideBySide);
 
             var embedded = Assembly.GetExecutingAssembly()
                                    .GetManifestResourceStream(PayloadArchive.FileName);
@@ -169,8 +188,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 return embedded;
 
             throw new FileNotFoundException(
-                "Payload archive not found. Looked for '" + sideBySide +
-                "' and for an embedded resource named '" + PayloadArchive.FileName + "'.");
+                "Payload archive not found. Looked for:" + Environment.NewLine +
+                "  " + string.Join(Environment.NewLine + "  ", tried.ToArray()) + Environment.NewLine +
+                "and for an embedded resource named '" + PayloadArchive.FileName + "'.");
         }
 
         /// <summary>
