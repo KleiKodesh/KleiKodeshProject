@@ -31,6 +31,9 @@ function startEditing() {
 }
 
 function commitEdit() {
+  // Enter/Escape end editing and thereby unmount the input, which fires blur —
+  // without this guard the blur handler would commit a second time.
+  if (!editing.value) return
   editing.value = false
   emit('commit', editValue.value)
 }
