@@ -13,6 +13,7 @@ import {
   buildCommentaryGroupsFromCombined,
   buildStaticCommentaryFilterGroups,
   fetchSourceEntriesViaReverseQuery,
+  commentaryDisplayTitle,
 } from './commentaryGroupBuilder'
 
 export interface CommentaryLine {
@@ -453,7 +454,8 @@ export function useGroupsForDisplay(
       return currentGroups
 
     const book = booksDataStore.allBooksMap.get(pinned)
-    const bookTitle = book?.title ?? String(pinned)
+    // Must match how commentaryGroupBuilder titles the real group this placeholder stands in for.
+    const bookTitle = book?.title ? commentaryDisplayTitle(book.title) : String(pinned)
 
     // staticFilterGroups is the canonical ordering of every book that ever links
     // to this one, so it decides where the placeholder slots in.

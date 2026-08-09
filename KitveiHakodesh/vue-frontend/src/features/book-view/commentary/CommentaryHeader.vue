@@ -22,13 +22,9 @@ const emit = defineEmits<{
 
 const headerEl = ref<HTMLElement | null>(null)
 
-/** Titles read "<commentator> על <base book>"; the linking word is noise in the header. */
-const displayTitle = computed(
-  () => props.bookTitle.replace(/\s+על\s+/, ' ').trim() || props.bookTitle,
-)
-
+// bookTitle already arrives cleaned by commentaryGroupBuilder — do not strip again here.
 const displayPath = computed(() => {
-  return props.ownTocPath ? `${displayTitle.value} ${props.ownTocPath}` : displayTitle.value
+  return props.ownTocPath ? `${props.bookTitle} ${props.ownTocPath}` : props.bookTitle
 })
 
 const tooltipText = computed(() => {
