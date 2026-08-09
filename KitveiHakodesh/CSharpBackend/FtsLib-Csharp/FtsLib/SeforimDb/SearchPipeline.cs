@@ -434,6 +434,17 @@ namespace FtsLib.SeforimDb
             var seen = new HashSet<string>(System.StringComparer.Ordinal);
             var list = new List<string>();
 
+            // Alternatives already looked up in this group, keyed by their FULL
+            // shape — the pattern alone is not the identity, since "word~2" and
+            // "word~3" (or "%word" and "word%") are genuinely different lookups.
+            // Query expansion can put the same alternative in a group more than
+            // once (an expanded form colliding with the typed word, or with a form
+            // reached from another channel), and each duplicate would otherwise
+            // re-run a full index scan whose every term the `seen` set below then
+            // discards. Skipping them here makes the work proportional to the
+            // DISTINCT alternatives, and leaves the resulting term list identical.
+            var seenAlts = new HashSet<string>(System.StringComparer.Ordinal);
+
             // True once any alternative was a genuine constraint (everything except
             // a REJECTED wildcard pattern). Literals count even when absent from the
             // index — the intersection layer's missing-term contract yields the
@@ -443,6 +454,11 @@ namespace FtsLib.SeforimDb
             foreach (var alt in group.Alternatives)
             {
                 ct.ThrowIfCancellationRequested();
+
+                // A repeat of an alternative already expanded above contributes
+                // nothing new: its terms are all in `seen`, and its effect on
+                // anyRealConstraint/hardMiss was recorded on the first pass.
+                if (!seenAlts.Add(AltKey(alt))) continue;
 
                 List<string> expanded;
 
@@ -486,6 +502,24 @@ namespace FtsLib.SeforimDb
                 hardMiss = true;
 
             return list;
+        }
+
+        /// <summary>
+        /// A key identifying what an alternative actually LOOKS UP, so two
+        /// alternatives share a key only when expanding them would run the same
+        /// scan and yield the same terms. The kind, the fuzzy distance and the
+        /// two grammar flags all change the result set, so all of them are part
+        /// of the key; the leading tag also keeps a pattern from colliding across
+        /// kinds. Ordinal — patterns are already normalised by the parser.
+        /// </summary>
+        private static string AltKey(SubPattern alt)
+        {
+            if (alt.IsFuzzy)    return "f" + alt.FuzzyDistance + ":" + alt.Pattern;
+            if (alt.IsWildcard) return "w:" + alt.Pattern;
+            if (alt.IsGrammar)
+                return "g" + (alt.GrammarExpandPrefixes ? "p" : "")
+                           + (alt.GrammarExpandSuffixes ? "s" : "") + ":" + alt.Pattern;
+            return "l:" + alt.Pattern;
         }
     }
 }
