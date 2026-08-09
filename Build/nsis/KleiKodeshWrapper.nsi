@@ -83,11 +83,6 @@ LangString MSG_WORD_RUNNING ${LANG_HEBREW} "Microsoft Word פועל כעת.$\r$\
 LangString MSG_WORD_CLOSE_FAILED ${LANG_HEBREW} "לא ניתן לסגור את Word אוטומטית.$\r$\n$\r$\nאנא סגור את Word באופן ידני ונסה שוב."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_HEBREW} "האם אתה בטוח שברצונך להסיר לחלוטין את ${PRODUCT_NAME} ואת כל הרכיבים שלו?"
 
-; Progress text shown while this wrapper stages the payload to %TEMP%.
-LangString MSG_PREPARING  ${LANG_HEBREW} "מכין את ההתקנה..."
-LangString MSG_EXTRACTING ${LANG_HEBREW} "פורק קבצים..."
-LangString MSG_STARTING   ${LANG_HEBREW} "מפעיל את אשף ההתקנה..."
-
 ; Language strings for English (fallback)
 LangString MSG_DOTNET_FRAMEWORK_REQUIRED ${LANG_ENGLISH} ".NET Framework ${DOTNET_FRAMEWORK_VERSION} or higher is required.$\r$\n$\r$\nThis component is needed to run KleiKodesh.$\r$\n$\r$\nWould you like to open the download page now?"
 LangString MSG_VSTO_RUNTIME_REQUIRED ${LANG_ENGLISH} "Microsoft Visual Studio ${VSTO_RUNTIME_VERSION} Tools for Office Runtime is required.$\r$\n$\r$\nThis component is needed to run Office add-ins.$\r$\n$\r$\nWould you like to download and install it now?$\r$\n$\r$\nDownload: https://www.microsoft.com/download/details.aspx?id=48217"
@@ -97,10 +92,6 @@ LangString MSG_INSTALL_VSTO ${LANG_ENGLISH} "Installing VSTO Runtime..."
 LangString MSG_WORD_RUNNING ${LANG_ENGLISH} "Microsoft Word is currently running.$\r$\n$\r$\nWould you like to close Word and continue with uninstallation?"
 LangString MSG_WORD_CLOSE_FAILED ${LANG_ENGLISH} "Could not close Word automatically.$\r$\n$\r$\nPlease close Word manually and try again."
 LangString MSG_UNINSTALL_CONFIRM ${LANG_ENGLISH} "Are you sure you want to completely remove ${PRODUCT_NAME} and all of its components?"
-
-LangString MSG_PREPARING  ${LANG_ENGLISH} "Preparing installation..."
-LangString MSG_EXTRACTING ${LANG_ENGLISH} "Extracting files..."
-LangString MSG_STARTING   ${LANG_ENGLISH} "Starting the setup wizard..."
 
 ; Classic NSIS UI for minimal window
 Icon "..\Installer\KleiKodesh_Main.ico"
@@ -142,15 +133,8 @@ InstallDir "$LOCALAPPDATA\KleiKodesh"
 ; Both exist only because a per-user app registers a machine-wide service. The fix
 ; is removing the service (KitveiHakodeshService indexes in-process), not elevating.
 RequestExecutionLevel user
-
-; NOT `SilentInstall silent` any more. The payload is now a pre-packed solid-LZMA
-; archive that this wrapper writes to %TEMP% before handing over to the WPF
-; installer; on a slow disk that write is long enough to look like a hang with no
-; window at all. Showing the INSTFILES page gives it a progress bar and a Hebrew
-; status line. AutoCloseWindow keeps the old behaviour of not making the user
-; click through anything once the work is done.
+SilentInstall silent
 AutoCloseWindow true
-ShowInstDetails hide
 
 Function .onInit
   ; Detect system language and set appropriate language
@@ -297,10 +281,8 @@ Section "Main"
   ; Extract WPF installer to temp directory
   SetOutPath "$TEMP\KleiKodeshInstaller"
 
-  ; The WPF exe is small (~0.7 MB) because the payload is no longer embedded in it.
+  ; The WPF exe is small (~2 MB) because the payload is no longer embedded in it.
   ; It lands almost instantly, which is the whole point of the split.
-  DetailPrint "$(MSG_PREPARING)"
-  SetDetailsPrint both
   File "${WPF_EXE_PATH}"
   File /nonfatal "${WPF_EXE_PATH}\..\*.config"
 
@@ -309,14 +291,7 @@ Section "Main"
   ;
   ; This is a plain byte copy: the archive is already compressed and NSIS is set to
   ; `SetCompressor zlib`, so nothing is decompressed here beyond a trivial pass.
-  ; It is still ~25 MB of disk write, hence the status line above.
-  DetailPrint "$(MSG_EXTRACTING)"
   File "..\Installer\KleiKodesh.pkg"
-
-  ; Hand the progress bar over: everything past this point belongs to the WPF
-  ; installer, which shows its own progress while it unpacks the payload.
-  DetailPrint "$(MSG_STARTING)"
-  SetDetailsPrint none
 
   ; Pass all command-line arguments through to the WPF installer unchanged
   ${GetParameters} $R0
