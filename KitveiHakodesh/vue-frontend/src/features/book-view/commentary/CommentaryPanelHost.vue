@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
  * Renders one commentary panel: the per-panel state from its CommentaryPanel slot,
- * plus the line-level data both panels share.
+ * plus the line-level data every panel shares.
  *
- * It exists so BookViewPage does not carry two near-identical thirty-prop
- * CommentaryView blocks - the bottom and side panels differ only in which slot they
- * are handed. The inner instance is re-exposed as `view` because useBookView drives
+ * It exists so BookViewPage does not carry one near-identical thirty-prop
+ * CommentaryView block per panel - the panels differ only in which slot they are
+ * handed. The inner instance is re-exposed as `view` because useBookView drives
  * each panel through its CommentaryView methods (scrollToGroup, restore, ...).
  */
 import { computed, ref } from 'vue'
@@ -24,7 +24,7 @@ const props = defineProps<{
   /** True when the search bar is open and targeting THIS panel. */
   searchActive: boolean
 
-  // ── Shared across both panels (see useBookViewCommentaryAnnotations) ───────
+  // ── Shared across every panel (see useBookViewCommentaryAnnotations) ───────
   selectedLineId: number | null
   loading: boolean
   loadError?: boolean

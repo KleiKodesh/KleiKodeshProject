@@ -132,7 +132,10 @@ export const useBookViewStore = defineStore('bookView', () => {
   const txtViewSearchVisible = ref(false)
   const autoSelectTopLine = ref(false)
 
-  /** Toggles ONE commentary panel of a pane. Ctrl+J targets 'bottom', Ctrl+Shift+J 'side'. */
+  /**
+   * Toggles ONE commentary panel of a pane. Ctrl+J targets 'bottom',
+   * Ctrl+Shift+J 'side', Ctrl+Alt+J 'side-left'.
+   */
   function toggleCommentaryPanel(paneId: 1 | 2 = 1, slot: CommentarySlot = 'bottom') {
     toggleCommentaryPanelSignal.value = {
       count: toggleCommentaryPanelSignal.value.count + 1,
@@ -173,8 +176,8 @@ export const useBookViewStore = defineStore('bookView', () => {
     linesZoomMap.value.set(zoomKey(tabId, bookId), value)
   }
 
-  // Keyed by tab AND panel: the two commentary panels zoom independently, so a
-  // reader can enlarge the side panel's commentator without touching the bottom.
+  // Keyed by tab AND panel: the commentary panels zoom independently, so a reader
+  // can enlarge one panel's commentator without touching the others.
   function commentaryZoomKey(tabId: string, bookId: number, slot: CommentarySlot) {
     return `${tabId}:${bookId}:${slot}`
   }

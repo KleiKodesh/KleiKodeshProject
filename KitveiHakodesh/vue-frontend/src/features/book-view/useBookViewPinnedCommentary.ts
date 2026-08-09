@@ -14,11 +14,11 @@ import { getDefaultCommentators } from '@/webview-host/seforimApi'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
 
-// One default-commentators query per book, EVER: both commentary panels create a
+// One default-commentators query per book, EVER: every commentary panel creates a
 // usePinnedCommentary instance, and without this cache each ran the identical
 // query. The PROMISE is cached (same pattern as staticFilterGroupsByBook) so the
-// two instances racing at mount share one in-flight request; a rejection is
-// evicted so a transient service error retries next time.
+// instances racing at mount share one in-flight request; a rejection is evicted
+// so a transient service error retries next time.
 const defaultCommentatorsByBook = new Map<number, Promise<number[]>>()
 
 function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
@@ -35,15 +35,22 @@ function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
  * One instance per commentary panel.
  *
  * `defaultRank` picks which of the book's default commentators this panel opens
- * on: the bottom panel takes the first, the side panel the second, so opening
- * both immediately shows two different commentators rather than the same one
- * twice. Books with only one default fall back to it for both panels.
+ * on: the bottom panel takes the first, the side panel the second, the left side
+ * panel the third, so opening several immediately shows different commentators
+ * rather than the same one repeated.
+ *
+ * `fallBackToFirstDefault` decides what happens when the book has fewer defaults
+ * than the panel's rank. The bottom and side panels fall back to the first
+ * default (one-default books open that commentator in both). The left panel does
+ * not: rather than showing a third copy of the same commentator it stays
+ * unpinned, so the panel renders from the top and never scrolls anywhere.
  */
 export function usePinnedCommentary(
   bookId: number | undefined,
   commentaryLineId: () => number | null,
   groups: () => CommentaryGroup[],
   defaultRank = 0,
+  fallBackToFirstDefault = true,
 ) {
   const pinnedCommentaryGroup = ref<PinnedCommentaryGroup | null>(null)
   let defaultCommentatorBookIds: number[] = []
@@ -61,9 +68,14 @@ export function usePinnedCommentary(
     defaultCommentatorBookIds = await loadDefaultCommentatorIds(bookId).catch(() => [])
   }
 
-  /** This panel's default commentator, falling back to the first one. */
+  /**
+   * This panel's default commentator, or undefined when the book has none at this
+   * rank and the panel does not fall back (see fallBackToFirstDefault).
+   */
   function preferredDefaultId(): number | undefined {
-    return defaultCommentatorBookIds[defaultRank] ?? defaultCommentatorBookIds[0]
+    const own = defaultCommentatorBookIds[defaultRank]
+    if (own !== undefined) return own
+    return fallBackToFirstDefault ? defaultCommentatorBookIds[0] : undefined
   }
 
   // Called by onLineSelected / onNavigateSection synchronously before setting
@@ -82,13 +94,20 @@ export function usePinnedCommentary(
     await ensureDefaultCommentatorsLoaded()
     if (captured) {
       pinnedCommentaryGroup.value = captured
-    } else if (defaultCommentatorBookIds.length > 0) {
-      const defaultId = preferredDefaultId()!
-      const defaultGroup = groups().find((g) => g.bookId === defaultId)
-      pinnedCommentaryGroup.value = defaultGroup
-        ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }
-        : { bookId: defaultId, sectionLabel: '', subSectionLabel: '' }
+      return
     }
+    // No default at this panel's rank (and no fallback): leave the panel unpinned
+    // so it renders the list from the top instead of jumping to a commentator
+    // another panel is already showing.
+    const defaultId = preferredDefaultId()
+    if (defaultId === undefined) {
+      pinnedCommentaryGroup.value = null
+      return
+    }
+    const defaultGroup = groups().find((g) => g.bookId === defaultId)
+    pinnedCommentaryGroup.value = defaultGroup
+      ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }
+      : { bookId: defaultId, sectionLabel: '', subSectionLabel: '' }
   })
 
   // When groups load for a new line:
@@ -111,7 +130,11 @@ export function usePinnedCommentary(
       }
       return
     }
-    const defaultId = preferredDefaultId()!
+    const defaultId = preferredDefaultId()
+    if (defaultId === undefined) {
+      pinnedCommentaryGroup.value = null
+      return
+    }
     const defaultGroup = newGroups.find((g) => g.bookId === defaultId)
     pinnedCommentaryGroup.value = defaultGroup
       ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }

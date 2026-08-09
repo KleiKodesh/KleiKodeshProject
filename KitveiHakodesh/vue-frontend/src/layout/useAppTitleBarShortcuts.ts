@@ -130,9 +130,11 @@ export function useAppTitleBarShortcuts(options: {
         else if (activeTab.value?.route === '/pdf-view') pane.togglePdfViewerTitleBar()
         return true
       case 'KeyJ':
-        // Ctrl+J toggles the bottom commentary panel, Ctrl+Shift+J the side one.
+        // Ctrl+J toggles the bottom commentary panel, Ctrl+Shift+J the right-side
+        // one, Ctrl+Alt+J the left-side one.
         if (isBookViewActive.value) {
-          bookViewStore.toggleCommentaryPanel(paneId, e.shiftKey ? 'side' : 'bottom')
+          const slot = e.altKey ? 'side-left' : e.shiftKey ? 'side' : 'bottom'
+          bookViewStore.toggleCommentaryPanel(paneId, slot)
         }
         return true
       case 'KeyK':

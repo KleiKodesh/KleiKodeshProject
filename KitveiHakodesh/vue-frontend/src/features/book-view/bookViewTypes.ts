@@ -4,29 +4,37 @@
  */
 
 /**
- * The book view hosts two independent commentary panels: one stacked below the
- * text, one beside it. They share the fetched commentary of the current line and
- * nothing else - filter tree, pin, scroll position and search are per slot, so
- * each panel can show a different commentator on the same verse.
+ * The book view hosts three independent commentary panels: one stacked below the
+ * text and one on each side of it. They share the fetched commentary of the
+ * current line and nothing else - filter tree, pin, scroll position and search
+ * are per slot, so each panel can show a different commentator on the same verse.
  *
- * 'side' is only reachable on a wide pane (see isWideScreen in BookViewPage).
+ * 'side' is the column on the RTL start edge (physically right), 'side-left' the
+ * one on the end edge. Both are only reachable on a wide pane (see isWideScreen
+ * in BookViewPage); 'bottom' works at any width.
  */
-export type CommentarySlot = 'bottom' | 'side'
+export type CommentarySlot = 'bottom' | 'side' | 'side-left'
 
-export const COMMENTARY_SLOTS = ['bottom', 'side'] as const
+export const COMMENTARY_SLOTS = ['bottom', 'side', 'side-left'] as const
+
+/** The slots that need a pane wide enough to sit beside the text. */
+export const SIDE_COMMENTARY_SLOTS = ['side', 'side-left'] as const
+
+export function isSideCommentarySlot(slot: CommentarySlot): boolean {
+  return slot === 'side' || slot === 'side-left'
+}
 
 /** Which view the search bar is searching: the book text, or one of the panels. */
-export type SearchMode = 'content' | 'commentary-bottom' | 'commentary-side'
+export type SearchMode = 'content' | `commentary-${CommentarySlot}`
 
 export function searchModeForSlot(slot: CommentarySlot): SearchMode {
-  return slot === 'bottom' ? 'commentary-bottom' : 'commentary-side'
+  return `commentary-${slot}`
 }
 
 /** The panel a search mode targets, or null when it targets the book text. */
 export function slotForSearchMode(mode: SearchMode): CommentarySlot | null {
-  if (mode === 'commentary-bottom') return 'bottom'
-  if (mode === 'commentary-side') return 'side'
-  return null
+  if (mode === 'content') return null
+  return mode.slice('commentary-'.length) as CommentarySlot
 }
 
 export type SidePanelMode = 'toc' | 'commentary-tree'

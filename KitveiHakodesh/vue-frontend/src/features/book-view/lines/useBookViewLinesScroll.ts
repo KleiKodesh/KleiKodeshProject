@@ -356,7 +356,7 @@ export function useBookViewLinesScroll(
     }
   }
 
-  /** Both panels' state for this save, each filter backfilled from its last good one. */
+  /** Every panel's state for this save, each filter backfilled from its last good one. */
   function commentaryPanelsForSave(): CommentaryPanelPersistStates {
     const live = props.commentaryPersistState?.() ?? {}
     const result: CommentaryPanelPersistStates = {}

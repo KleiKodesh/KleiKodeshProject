@@ -60,8 +60,9 @@ export function useBookViewSearchPanel(
   // nearest match rather than advancing past it.
   const searchNavigationState: Record<SearchMode, boolean> = {
     content: false,
-    'commentary-bottom': false,
-    'commentary-side': false,
+    ...(Object.fromEntries(
+      COMMENTARY_SLOTS.map((slot) => [searchModeForSlot(slot), false]),
+    ) as Record<Exclude<SearchMode, 'content'>, boolean>),
   }
 
   function searchForMode(mode: SearchMode): ContentSearch | CommentarySearch {
@@ -100,13 +101,13 @@ export function useBookViewSearchPanel(
 
   /**
    * Which commentary panel the selection/caret is inside, or null for the book text.
-   * Both panels render a CommentaryView, so the slot comes from the data attribute
+   * Every panel renders a CommentaryView, so the slot comes from the data attribute
    * each one stamps on its root rather than from the shared `.commentary-view` class.
    */
   function selectionCommentarySlot(): CommentarySlot | null {
     const host = selectionAnchorElement()?.closest('[data-commentary-slot]')
     const slot = host?.getAttribute('data-commentary-slot')
-    return slot === 'bottom' || slot === 'side' ? slot : null
+    return COMMENTARY_SLOTS.includes(slot as CommentarySlot) ? (slot as CommentarySlot) : null
   }
 
   // Text currently selected in the lines or commentary view, normalized for

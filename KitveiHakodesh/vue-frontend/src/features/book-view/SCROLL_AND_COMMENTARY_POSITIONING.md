@@ -5,11 +5,12 @@ commentary-panel positioning, as specified by the product owner. It exists so th
 behavior never has to be re-explained: **any change to data loading, virtualization,
 or commentary rendering must preserve every rule below.**
 
-Since 2026-08 there are **two** commentary panels ('bottom' and 'side'), and every
-rule below applies to each of them independently: each keeps its own pin, filter,
-saved scroll position and restore lifecycle. Where this document says "the
+Since 2026-08 there are **three** commentary panels ('bottom', 'side', 'side-left'),
+and every rule below applies to each of them independently: each keeps its own pin,
+filter, saved scroll position and restore lifecycle. Where this document says "the
 commentary pane", read "each commentary panel" - the composables named here are
-instantiated once per panel by `commentary/useCommentaryPanelSlot.ts`.
+instantiated once per panel by `commentary/useCommentaryPanelSlot.ts`, which is
+driven by `COMMENTARY_SLOTS`, not by any hardcoded pair.
 
 All of this is delicate because both the lines pane and the commentary pane are
 TanStack virtual lists with **dynamic item measurement** (`measureElement`): item
@@ -42,8 +43,8 @@ plus the pixel offset *within* that item.
   restored by `restoreCommentaryScrollPos(index, offset)` -- on session restore
   (`useBookViewSessionRestore.restore`, which seeds each panel from
   `commentaryPanels[slot]`) and on every panel remount (`onCommentaryPanelMounted`:
-  v-if toggle, tab return). The two panels' positions are stored under separate
-  slots and can never overwrite each other.
+  v-if toggle, tab return). Each panel's position is stored under its own slot, so
+  no panel can overwrite another's.
 
 **How restore must work (the two-stage pattern):**
 
@@ -191,7 +192,7 @@ label includes the TOC path, so the label changes whenever the anchor line moves
 though the commentator has not — compare `data-book-id`, never the text, when asking
 "is this panel still on the same commentator?".
 
-**Debugging two panels:** trace flows are slot-tagged (`scrollToGroup:bottom`,
+**Debugging several panels:** trace flows are slot-tagged (`scrollToGroup:bottom`,
 `restore:side`) and each flow keeps its own relative clock, so filter a dump by
 `flow` to read one panel and order across panels by `seq`, never by `t`. Every
 `scrollToGroup` records a `reason` (`groups-reload`, `panel-mounted`,
@@ -255,23 +256,23 @@ correction must stay active (bounded, cancellable by a newer scroll request via 
 token) until the target's position is stable — a single one-shot correction lands
 wrong if a batch arrives right after it.
 
-## E. Lines pane keeps its position when the side commentary opens or closes
+## E. Lines pane keeps its position when a side commentary opens or closes
 
-Both commentary panels are rendered by one nested layout (a side column beside the
-text, a SplitPane row beneath it), so opening the bottom panel remounts nothing.
-Opening or closing the **side** column does change the text column's width, which
-re-wraps every line, so BookViewLinesContent is re-keyed on `sideCommentaryOpen` and
-restored deliberately.
+All three commentary panels are rendered by one nested layout (a side column on each
+side of the text, a SplitPane row beneath it), so opening the bottom panel remounts
+nothing. Opening or closing **either** side column does change the text column's
+width, which re-wraps every line, so BookViewLinesContent is re-keyed on
+`sideColumnsKey` (both columns' open state) and restored deliberately.
 
 The remounted instance re-runs its initial-scroll restore from
 `initialLineIndex`/`initialScrollTop`/`initialScrollOffset` — refs frozen at
 session-restore time — so without intervention it jumps to the stale position (or
-the top when nothing was saved). A pre-flush `watch(sideCommentaryOpen)` in
+the top when nothing was saved). A pre-flush `watch(sideColumnsKey)` in
 BookViewPage captures the live position (`linesContentRef.captureScrollPos()`, old
 instance still mounted at pre-flush time) and writes it into those same refs,
 clearing `initialLineIndex` so the captured index wins over a TOC-open index.
 The capture is skipped while `idbResolved` is still false: session restore reopens
-the side panel BEFORE the lines instance has applied its restore, and capturing at
+a side panel BEFORE the lines instance has applied its restore, and capturing at
 that moment would read `{0,0}` and overwrite the seeded position (the whole view
 then lands at the top). The seeded values are exactly what the remounted instance
 should restore from, so restore-driven remounts capture nothing.

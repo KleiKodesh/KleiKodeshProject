@@ -4,6 +4,7 @@ import {
   IconLayoutRowTwoFocusTop20Filled,
   IconLayoutRowTwoFocusBottom20Filled,
   IconLayoutColumnTwoFocusLeft20Filled,
+  IconLayoutColumnTwoFocusRight20Filled,
   IconChevronUp20Regular,
   IconChevronDown20Regular,
   IconDismiss20Regular,
@@ -142,7 +143,8 @@ defineExpose({ focus: () => inputRef.value?.focus() })
         :title="searchMode === 'content' ? 'עבור לחיפוש במפרשים' : 'עבור לחיפוש בטקסט'"
         @click="toggleSearchMode"
       >
-        <IconLayoutColumnTwoFocusLeft20Filled v-if="searchMode === 'commentary-side'" />
+        <IconLayoutColumnTwoFocusRight20Filled v-if="searchMode === 'commentary-side'" />
+        <IconLayoutColumnTwoFocusLeft20Filled v-else-if="searchMode === 'commentary-side-left'" />
         <IconLayoutRowTwoFocusBottom20Filled v-else-if="searchMode === 'commentary-bottom'" />
         <IconLayoutRowTwoFocusTop20Filled v-else />
       </button>
