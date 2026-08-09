@@ -57,7 +57,20 @@ namespace KleiKodeshVstoInstallerWpf
         {
             if (_isRunning) return;
 
-            if (!AdminHelper.IsElevated)
+            // Only elevate when HKLM actually holds something to delete.
+            //
+            // deepClean gates HKLM cleanup and nothing else, and those keys only exist on
+            // machines that once ran an HKLM-installing version. Elevating regardless used
+            // to cost a pointless UAC prompt; since the payload became a sibling file of
+            // the exe it costs more than that, because the elevated instance resolves
+            // %LOCALAPPDATA% and HKCU against the elevating account — so the reinstall
+            // started at the end of RunCleanupAsync would install into the wrong profile
+            // whenever the user elevates with different credentials.
+            //
+            // Reading HKLM needs no elevation, so the common case (nothing there) now runs
+            // entirely unelevated as the real user, and the deep clean still does every
+            // HKCU/file-system step it did before.
+            if (!AdminHelper.IsElevated && FullSystemCleaner.HasHklmLeftovers())
             {
                 // Relaunch as admin for deep clean
                 AdminHelper.RelaunchAsAdmin("--repair");
