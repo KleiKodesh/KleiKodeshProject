@@ -341,6 +341,70 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
+        /// Returns true if HKLM actually holds anything a deep clean would delete.
+        ///
+        /// deepClean gates HKLM work and nothing else, and HKLM keys are leftovers from
+        /// old HKLM-installing versions — on a machine that never ran one there is
+        /// nothing to remove, so the UAC prompt and the elevated relaunch buy nothing.
+        /// That matters beyond the prompt: the relaunched process is elevated, so it
+        /// resolves %LOCALAPPDATA% and HKCU against the elevating account, and the
+        /// reinstall RepairPage starts afterwards would land in the wrong profile.
+        /// Skipping elevation when it is pointless avoids the whole class of problem.
+        ///
+        /// Reading HKLM needs no elevation — only deleting does — so this probe is safe
+        /// to run from the non-elevated instance. It mirrors exactly what
+        /// CleanAddinRegistry and CleanCorruptedHklmAddinKeys would touch: the named
+        /// AppNameVariants subkeys, plus any subkey whose Manifest points at our files
+        /// (which is how the corrupted Hebrew ghost key is found).
+        /// </summary>
+        public static bool HasHklmLeftovers()
+        {
+            foreach (RegistryView view in new[] { RegistryView.Registry32, RegistryView.Registry64 })
+            {
+                try
+                {
+                    using (RegistryKey baseKey = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view))
+                    {
+                        foreach (string parent in new[]
+                        {
+                            @"Software\Microsoft\Office\Word\Addins",
+                            @"Software\Microsoft\Office\Word\AddinsData",
+                        })
+                        {
+                            using (RegistryKey addinsKey = baseKey.OpenSubKey(parent))
+                            {
+                                if (addinsKey == null) continue;
+
+                                foreach (string subName in addinsKey.GetSubKeyNames())
+                                {
+                                    // Named variants — what CleanAddinRegistry deletes.
+                                    if (AppNameVariants.Any(v =>
+                                            string.Equals(v, subName, StringComparison.OrdinalIgnoreCase)))
+                                        return true;
+
+                                    // Ghost keys — matched by Manifest content, like
+                                    // CleanCorruptedHklmAddinKeys does.
+                                    try
+                                    {
+                                        using (RegistryKey sub = addinsKey.OpenSubKey(subName))
+                                        {
+                                            if (sub == null) continue;
+                                            if (ContainsKleiKodesh(sub.GetValue("Manifest") as string))
+                                                return true;
+                                        }
+                                    }
+                                    catch { /* unreadable subkey — ignore */ }
+                                }
+                            }
+                        }
+                    }
+                }
+                catch { /* view unavailable — ignore */ }
+            }
+            return false;
+        }
+
+        /// <summary>
         /// Scans HKLM\...\Word\Addins (32-bit and 64-bit) for any subkey whose Manifest
         /// value contains a KleiKodesh path. This catches the corrupted Hebrew ghost key
         /// (bytes: FD FF FD FF FD FF 20 00 FD FF FD FF FD FF FD FF) that reg.exe displays
