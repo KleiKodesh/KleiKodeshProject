@@ -40,6 +40,21 @@ function truncateAtAl(label: string): string {
   return index !== -1 ? label.slice(0, index) : label
 }
 
+/**
+ * Commentary book titles read "<commentator> על <base book>". The linking word carries no
+ * information once the book is shown as a commentary, so it is dropped at the point the
+ * entries are built — every consumer (headers, nav, filter tree, copy, related-books) then
+ * sees the same title. Only the first mid-title occurrence goes, so a base book whose own
+ * name contains the word survives.
+ */
+export function commentaryDisplayTitle(title: string): string {
+  return title.replace(/\s+על\s+/, ' ').trim() || title
+}
+
+function resolveBookTitle(book: BookRow | undefined, bookId: number): string {
+  return book?.title ? commentaryDisplayTitle(book.title) : String(bookId)
+}
+
 export function resolveCategory(book: BookRow | undefined): string {
   if (!book) return OTHER_CATEGORY
   if (book.period && book.period !== OTHER_CATEGORY) return truncateAtAl(book.period)
@@ -182,7 +197,7 @@ export async function buildCommentaryGroupsFromCombined(
       const connectionTypes = [...(allConnectionTypesByBook.get(bookId) ?? new Set())]
       return {
         bookId,
-        bookTitle: book?.title ?? String(bookId),
+        bookTitle: resolveBookTitle(book, bookId),
         connectionTypes,
         lines: [...lineIds]
           .map((id) => ({
@@ -233,7 +248,7 @@ export async function fetchSourceEntriesViaReverseQuery(
     const book = allBooksMap.get(bookId)
     return {
       bookId,
-      bookTitle: book?.title ?? String(bookId),
+      bookTitle: resolveBookTitle(book, bookId),
       connectionTypes: ['SOURCE'],
       lines: [...lineIds]
         .map((id) => ({
@@ -296,7 +311,7 @@ export async function buildStaticCommentaryFilterGroups(
       const connectionTypes = [...typesSet]
       return {
         bookId,
-        bookTitle: book?.title ?? String(bookId),
+        bookTitle: resolveBookTitle(book, bookId),
         connectionTypes,
         lines: [],
         category: resolveCategory(book),
@@ -311,7 +326,7 @@ export async function buildStaticCommentaryFilterGroups(
       const book = allBooksMap.get(bookId)
       return {
         bookId,
-        bookTitle: book?.title ?? String(bookId),
+        bookTitle: resolveBookTitle(book, bookId),
         connectionTypes: ['SOURCE'],
         lines: [],
         category: resolveCategory(book),
