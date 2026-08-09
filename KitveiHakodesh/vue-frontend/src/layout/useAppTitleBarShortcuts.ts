@@ -3,7 +3,7 @@ import { useEventListener } from '@vueuse/core'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useThemeStore } from '@/theme/themeStore'
-import { toggleFullscreen } from '@/webview-host/bridge'
+import { toggleFullscreen, hasNativeChromeTabs } from '@/webview-host/bridge'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -147,8 +147,11 @@ export function useAppTitleBarShortcuts(options: {
       case 'KeyT':
         options.toggleAddressBar()
         return true
+      // Only the demo-app host has somewhere to put a new tab. The VSTO task pane
+      // shows one tab with no strip, and the dev browser has no strip either — in
+      // both, Ctrl+N would open a tab the user can never navigate back to.
       case 'KeyN':
-        pane.openNewTab()
+        if (hasNativeChromeTabs) pane.openNewTab()
         return true
       case 'KeyG':
         pane.goHome()

@@ -30,7 +30,6 @@ const TITLE_BAR_BUTTONS = [
   { id: 'toolbar-toggle', label: 'סרגל כלים' },
   { id: 'pdf-filter',     label: 'ערכת נושא ב-PDF' },
   { id: 'ocr',            label: 'OCR' },
-  { id: 'new-tab',        label: 'לשונית חדשה' },
   { id: 'home',           label: 'בית' },
   { id: 'prev-tab',       label: 'חזור' },
   { id: 'next-tab',       label: 'קדימה' },

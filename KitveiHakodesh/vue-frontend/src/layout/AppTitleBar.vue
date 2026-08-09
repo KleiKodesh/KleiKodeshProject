@@ -5,7 +5,6 @@ import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
   IconLineHorizontal320Regular,
-  IconAdd20Regular,
   IconArrowRight20Regular,
   IconArrowLeft20Regular,
   IconHome20Regular,
@@ -251,9 +250,6 @@ useAppTitleBarShortcuts({
     </span>
 
     <div class="bar-end">
-      <button v-if="isTitleBarButtonVisible('new-tab')" class="bar-btn" tabindex="-1" title="לשונית חדשה (Ctrl+N)" @click.stop="pane.openNewTab()">
-        <IconAdd20Regular />
-      </button>
       <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
            not between tabs (Ctrl+Tab still does that). Greyed out rather than hidden

@@ -2,7 +2,7 @@
   <div class="shortcuts-list">
     <!-- Tab management -->
     <div class="shortcuts-group-label">ניהול לשוניות</div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>N</kbd></div><span class="shortcut-description">לשונית חדשה</span></div>
+    <div class="shortcut-row" v-if="hasNativeChromeTabs"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>N</kbd></div><span class="shortcut-description">לשונית חדשה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>T</kbd></div><span class="shortcut-description">פתח רשימת לשוניות</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd></div><span class="shortcut-description">לשונית הבאה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>Tab</kbd></div><span class="shortcut-description">לשונית הקודמת</span></div>
@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { isVstoEnvironment } from '@/webview-host/bridge'
+import { isVstoEnvironment, hasNativeChromeTabs } from '@/webview-host/bridge'
 </script>
 
 <style scoped>
