@@ -22,7 +22,7 @@ Commentary display, filtering, and navigation for the book view. All commentary-
 
 **useCommentary.ts** - the reactive composable shell. Owns all Vue state (`groups`, `staticFilterGroups`, `loading`, etc.), the `load` watcher, and `ensureStaticFilterGroupsLoaded`. Exports the `CommentaryGroup`, `CommentaryLine`, and `CommentaryBookEntry` interfaces plus the re-exported constants from `commentaryConnectionTypes.ts`. Delegates all data fetching and transformation to `commentaryGroupBuilder.ts`.
 
-**commentaryConnectionTypes.ts** - all connection type knowledge: the DB→canonical mapping, Hebrew section labels, the reverse label→type lookup, the lazy-loaded ID table (`ensureConnectionTypeNamesLoaded`, `getConnectionTypeName`, `getConnectionTypeId`), and derived helpers (`getPrimaryConnectionType`, `getCommentaryConnectionTypeIds`, `getTargumConnectionTypeIds`). Nothing in the commentary feature should re-derive connection type logic outside this file.
+**commentaryConnectionTypes.ts** - all connection type knowledge: the DB→canonical mapping, Hebrew section labels, the reverse label→type lookup, the lazy-loaded ID table (`ensureConnectionTypeNamesLoaded`, `getConnectionTypeName`, `getConnectionTypeId`), and derived helpers (`getPrimaryConnectionType`, `getCommentaryConnectionTypeIds`). Nothing in the commentary feature should re-derive connection type logic outside this file.
 
 The canonical connection types are:
 
@@ -48,9 +48,9 @@ DB names map to canonical types as follows:
 
 `SOURCE`, `TARGUM`, `COMMENTARY`, and `EIN_MISHPAT` are **static filter types** — checked by default in the filter panel. `OTHER` and `REFERENCE` are unchecked by default.
 
-`EIN_MISHPAT` is its own canonical type (not merged into `REFERENCE`) because its links are forward-direction and must be kept in the forward query path. `SOURCE` and `TARGUM` are skipped in the forward query because their forward links are unreliable — they are fetched via reverse lookups instead.
+`EIN_MISHPAT` is its own canonical type (not merged into `REFERENCE`) because its links are forward-direction and must be kept in the forward query path. `SOURCE` is the only type skipped in the forward query — its forward links are unreliable, so it is fetched via a reverse lookup instead. `TARGUM` is an ordinary forward link and travels the same path as `COMMENTARY`.
 
-**commentaryGroupBuilder.ts** - all data fetching and group building. Contains `buildCommentaryGroupsFromEntries`, `buildCommentaryGroupsFromCombined`, `fetchSourceEntriesViaReverseQuery`, `fetchTargumEntriesViaReverseQuery`, `buildStaticCommentaryFilterGroups`, and the category ordering helpers. No Vue reactivity — purely async functions and pure transformations.
+**commentaryGroupBuilder.ts** - all data fetching and group building. Contains `buildCommentaryGroupsFromEntries`, `buildCommentaryGroupsFromCombined`, `fetchSourceEntriesViaReverseQuery`, `buildStaticCommentaryFilterGroups`, and the category ordering helpers. No Vue reactivity — purely async functions and pure transformations.
 
 **useCommentaryRender.ts** - manages content rendering for commentary lines: diacritics filtering, divine name censoring, search highlighting, and render caching to avoid re-running expensive DOM operations on every render cycle.
 
@@ -143,9 +143,9 @@ interface CommentaryBookEntry {
 ## Data Flow
 
 1. `ensureConnectionTypeNamesLoaded()` fetches the `connection_type` table and populates the id↔name maps.
-2. `useCommentary.load()` fires three queries in parallel: the forward commentary query, `fetchSourceEntriesViaReverseQuery` (for `SOURCE`), and `fetchTargumEntriesViaReverseQuery` (for `TARGUM`). `SOURCE` and `TARGUM` use reverse lookups because their forward-direction DB links are unreliable.
-3. `buildCommentaryGroupsFromCombined()` merges all entries, skips any forward-query rows that canonicalize to `SOURCE` or `TARGUM` (already covered by reverse queries), and passes the combined list to `buildCommentaryGroupsFromEntries()`.
+2. `useCommentary.load()` fires two queries in parallel: the forward commentary query — which carries `TARGUM` along with `COMMENTARY` and the rest — and `fetchSourceEntriesViaReverseQuery`. Only `SOURCE` needs a reverse lookup, because its forward-direction DB links are unreliable.
+3. `buildCommentaryGroupsFromCombined()` merges all entries, skips any forward-query rows that canonicalize to `SOURCE` (already covered by the reverse query), and passes the combined list to `buildCommentaryGroupsFromEntries()`.
 4. `buildCommentaryGroupsFromEntries()` groups by canonical connection type and emits ordered `CommentaryGroup[]`: SOURCE → TARGUM → COMMENTARY (by category) → EIN_MISHPAT → OTHER (by category) → REFERENCE.
-5. `ensureStaticFilterGroupsLoaded()` is called lazily when the filter panel first opens. It runs the same forward + reverse queries without line content to build the full book list for the filter tree. The result promise is cached per book at MODULE level (survives tab switches) — the three link-table scans behind it cost seconds on heavily-linked books, and re-running them on every remount was a major part of the slow-tab-return bug.
+5. `ensureStaticFilterGroupsLoaded()` is called lazily when the filter panel first opens. It runs the same forward + reverse queries without line content to build the full book list for the filter tree. The result promise is cached per book at MODULE level (survives tab switches) — the link-table scans behind it cost seconds on heavily-linked books, and re-running them on every remount was a major part of the slow-tab-return bug.
 6. `CommentaryTreePanel.vue` + `useCommentaryTreeSearch.ts` build a hierarchical tree from `visibilityList` and support token-based search (Enter or `@` commits a token; results are a union across all tokens).
 7. `CommentaryView.vue` filters `groups` through `visibilityList` (`isChecked && isInSearchResults`) before rendering.

@@ -127,13 +127,3 @@ export function getCommentaryConnectionTypeIds(): number[] {
     .map((name) => getConnectionTypeId(name))
     .filter((id): id is number => id != null)
 }
-
-/**
- * Returns the IDs of all connection types in the DB that canonicalize to TARGUM.
- * Caller must call ensureConnectionTypeNamesLoaded first.
- */
-export function getTargumConnectionTypeIds(): number[] {
-  return getDbNamesForCanonicalType('TARGUM')
-    .map((name) => getConnectionTypeId(name))
-    .filter((id): id is number => id != null)
-}
