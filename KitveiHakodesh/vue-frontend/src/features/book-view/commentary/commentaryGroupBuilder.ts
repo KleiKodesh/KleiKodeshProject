@@ -13,7 +13,6 @@ import {
   getPrimaryConnectionType,
   normalizeConnectionTypeName,
   getCommentaryConnectionTypeIds,
-  getTargumConnectionTypeIds,
   getDbNamesForCanonicalType,
   CONNECTION_TYPE_SECTION_LABELS,
 } from './commentaryConnectionTypes'
@@ -144,7 +143,6 @@ export async function buildCommentaryGroupsFromCombined(
     content?: string
   }>,
   sourceEntries: CommentaryBookEntry[],
-  targumEntries: CommentaryBookEntry[],
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryGroup[]> {
   // ensureConnectionTypeNamesLoaded is guaranteed by the caller (load() in useCommentary)
@@ -155,9 +153,10 @@ export async function buildCommentaryGroupsFromCombined(
   for (const row of rows) {
     const rawConnectionTypeName = getConnectionTypeName(row.connectionTypeId)
     const canonicalConnectionTypeName = normalizeConnectionTypeName(rawConnectionTypeName)
-    // SOURCE and TARGUM are retrieved via reverse queries — skip any forward rows for
-    // these types so that unreliable forward-direction links in the DB are ignored.
-    if (canonicalConnectionTypeName === 'SOURCE' || canonicalConnectionTypeName === 'TARGUM') continue
+    // SOURCE is the one type retrieved via a reverse query — its forward-direction
+    // links are unreliable, so skip forward SOURCE rows. Every other type, TARGUM
+    // included, is a normal forward link and is handled right here.
+    if (canonicalConnectionTypeName === 'SOURCE') continue
     const key: ByBookConnectionKey = `${row.targetBookId}::${canonicalConnectionTypeName}`
     if (!byBookConnection.has(key))
       byBookConnection.set(key, {
@@ -199,7 +198,7 @@ export async function buildCommentaryGroupsFromCombined(
     },
   )
 
-  return buildCommentaryGroupsFromEntries([...sourceEntries, ...targumEntries, ...forwardEntries])
+  return buildCommentaryGroupsFromEntries([...sourceEntries, ...forwardEntries])
 }
 
 // ── Reverse-lookup fetchers ───────────────────────────────────────────────────
@@ -251,54 +250,9 @@ export async function fetchSourceEntriesViaReverseQuery(
 }
 
 /**
- * Fetches the targum entries for a set of line IDs using a reverse TARGUM lookup.
- * Mirrors fetchSourceEntriesViaReverseQuery — finds lines in targum books that have a
- * TARGUM-type link pointing at the given lines and returns those lines.
- */
-export async function fetchTargumEntriesViaReverseQuery(
-  lineIds: number[],
-  allBooksMap: Map<number, BookRow>,
-): Promise<CommentaryBookEntry[]> {
-  const targumTypeIds = getTargumConnectionTypeIds()
-  if (!targumTypeIds.length) return []
-
-  const rows = await getReverseLineData(lineIds, targumTypeIds)
-
-  if (!rows.length) return []
-
-  const byBook = new Map<number, { lineIds: Set<number> }>()
-  const lineData = new Map<number, { lineIndex: number; content: string }>()
-
-  for (const row of rows) {
-    if (!byBook.has(row.sourceBookId)) byBook.set(row.sourceBookId, { lineIds: new Set() })
-    byBook.get(row.sourceBookId)!.lineIds.add(row.sourceLineId)
-    lineData.set(row.sourceLineId, { lineIndex: row.lineIndex, content: row.content })
-  }
-
-  return [...byBook.entries()].map(([bookId, { lineIds }]) => {
-    const book = allBooksMap.get(bookId)
-    return {
-      bookId,
-      bookTitle: book?.title ?? String(bookId),
-      connectionTypes: ['TARGUM'],
-      lines: [...lineIds]
-        .map((id) => ({
-          lineId: id,
-          lineIndex: lineData.get(id)?.lineIndex ?? 0,
-          content: lineData.get(id)?.content ?? '',
-        }))
-        .sort((a, b) => a.lineIndex - b.lineIndex),
-      category: resolveCategory(book),
-      treeOrder: book?.treeOrder ?? 999999,
-      primaryConnectionType: 'TARGUM',
-    }
-  })
-}
-
-/**
  * Builds the full static filter group list for a given source book.
  * Used to populate the commentary filter tree before any line is selected.
- * Expensive (three link-table scans) — useCommentary caches the returned
+ * Expensive (two link-table scans) — useCommentary caches the returned
  * promise per book at module level; do not call from anywhere else without
  * going through that cache.
  */
@@ -308,9 +262,10 @@ export async function buildStaticCommentaryFilterGroups(
 ): Promise<CommentaryGroup[]> {
   await ensureConnectionTypeNamesLoaded()
 
-  // Forward lookup: COMMENTARY and EIN_MISHPAT (SOURCE and TARGUM are unreliable in the
-  // forward direction — both are discovered via reverse lookups instead).
+  // Forward lookup: TARGUM, COMMENTARY and EIN_MISHPAT. Only SOURCE is unreliable in
+  // the forward direction and needs the reverse lookup below.
   const forwardDbNames = [
+    ...getDbNamesForCanonicalType('TARGUM'),
     ...getDbNamesForCanonicalType('COMMENTARY'),
     ...getDbNamesForCanonicalType('EIN_MISHPAT'),
   ]
@@ -319,15 +274,13 @@ export async function buildStaticCommentaryFilterGroups(
     .filter((id): id is number => id != null)
 
   const commentaryTypeIds = getCommentaryConnectionTypeIds()
-  const targumTypeIds = getTargumConnectionTypeIds()
 
-  const [forwardRows, reverseSourceRows, reverseTargumRows] = await Promise.all([
+  const [forwardRows, reverseSourceRows] = await Promise.all([
     getStaticFilterBooks(sourceBookId, forwardConnectionTypeIds),
     getReverseBooks(sourceBookId, commentaryTypeIds),
-    getReverseBooks(sourceBookId, targumTypeIds),
   ])
 
-  if (!forwardRows.length && !reverseSourceRows.length && !reverseTargumRows.length) return []
+  if (!forwardRows.length && !reverseSourceRows.length) return []
 
   const byBook = new Map<number, Set<string>>()
   for (const row of forwardRows) {
@@ -368,24 +321,8 @@ export async function buildStaticCommentaryFilterGroups(
     },
   )
 
-  const targumEntries: CommentaryBookEntry[] = reverseTargumRows.map(
-    ({ sourceBookId: bookId }) => {
-      const book = allBooksMap.get(bookId)
-      return {
-        bookId,
-        bookTitle: book?.title ?? String(bookId),
-        connectionTypes: ['TARGUM'],
-        lines: [],
-        category: resolveCategory(book),
-        treeOrder: book?.treeOrder ?? 999999,
-        primaryConnectionType: 'TARGUM',
-      }
-    },
-  )
-
   return buildCommentaryGroupsFromEntries([
     ...sourceEntries,
-    ...targumEntries,
     ...commentaryEntries,
   ])
 }

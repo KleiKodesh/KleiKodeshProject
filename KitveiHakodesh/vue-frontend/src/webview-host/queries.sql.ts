@@ -426,46 +426,6 @@ export const SQL = {
       AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
   `,
 
-  /**
-   * Reverse targum lookup (single line): find lines in targum books that link TO the
-   * given target line via a TARGUM-type connection. Mirrors the reverse source lookup —
-   * the targum text is discovered by reversing the TARGUM link rather than relying on
-   * the forward TARGUM connection type.
-   * Bind order: targetLineId, targumTypeId1, targumTypeId2, ...
-   */
-  GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP: (targumTypeCount: number) => `
-    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
-    FROM link l
-    JOIN line ln ON ln.id = l.sourceLineId
-    WHERE l.targetLineId = ?
-      AND l.connectionTypeId IN (${Array(targumTypeCount).fill('?').join(',')})
-  `,
-
-  /**
-   * Reverse targum lookup (range): same as above but for a set of target line IDs.
-   * Bind order: targetLineId1, targetLineId2, ..., targumTypeId1, targumTypeId2, ...
-   */
-  GET_TARGUM_DATA_BY_REVERSE_TARGUM_LOOKUP_RANGE: (targumTypeCount: number, targetLineCount: number) => `
-    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
-    FROM link l
-    JOIN line ln ON ln.id = l.sourceLineId
-    WHERE l.targetLineId IN (${Array(targetLineCount).fill('?').join(',')})
-      AND l.connectionTypeId IN (${Array(targumTypeCount).fill('?').join(',')})
-  `,
-
-  /**
-   * Reverse targum book lookup: find distinct targum books that link to any line in the
-   * given base book via a TARGUM-type connection. Used to populate the תרגומים section
-   * of the static commentary filter panel.
-   * Bind order: targetBookId, targumTypeId1, targumTypeId2, ...
-   */
-  GET_TARGUM_BOOKS_BY_REVERSE_TARGUM_LOOKUP: (targumTypeCount: number) => `
-    SELECT DISTINCT l.sourceBookId
-    FROM link l
-    WHERE l.targetBookId = ?
-      AND l.connectionTypeId IN (${Array(targumTypeCount).fill('?').join(',')})
-  `,
-
   /** All available connection type IDs and names */
   GET_ALL_CONNECTION_TYPES: `
     SELECT id, name

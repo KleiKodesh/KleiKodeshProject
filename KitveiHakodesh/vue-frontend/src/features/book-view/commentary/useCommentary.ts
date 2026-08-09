@@ -13,7 +13,6 @@ import {
   buildCommentaryGroupsFromCombined,
   buildStaticCommentaryFilterGroups,
   fetchSourceEntriesViaReverseQuery,
-  fetchTargumEntriesViaReverseQuery,
 } from './commentaryGroupBuilder'
 
 export interface CommentaryLine {
@@ -281,7 +280,7 @@ export function useCommentary(
 
       const forwardQueryPromise = getCommentaryLinksForSourceLineRange(queryLineIds)
 
-      const [rows, sourceEntries, targumEntries] = await Promise.all([
+      const [rows, sourceEntries] = await Promise.all([
         forwardQueryPromise,
         Promise.all([
           booksDataStore.ensureLoaded(),
@@ -290,21 +289,13 @@ export function useCommentary(
         ]).then(() =>
           fetchSourceEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
         ),
-        Promise.all([
-          booksDataStore.ensureLoaded(),
-          booksDataStore.ensureCommentaryMetadataLoaded(),
-          ensureConnectionTypeNamesLoaded(),
-        ]).then(() =>
-          fetchTargumEntriesViaReverseQuery(lineIdsForReverse, booksDataStore.allBooksMap),
-        ),
       ])
 
-      if (!rows.length && !sourceEntries.length && !targumEntries.length) return
+      if (!rows.length && !sourceEntries.length) return
 
       const built = await buildCommentaryGroupsFromCombined(
         rows,
         sourceEntries,
-        targumEntries,
         booksDataStore.allBooksMap,
       )
 
