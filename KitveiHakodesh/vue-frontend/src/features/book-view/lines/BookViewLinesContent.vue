@@ -203,7 +203,12 @@ useContextMenuLongPress(scrollerEl, (event) => {
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 
 const booksDataStore = useBooksDataStore()
-const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
+const {
+  wordLinkTooltip,
+  keepOpen: keepWordLinkTooltipOpen,
+  releaseOpen: releaseWordLinkTooltip,
+  beginSelection: beginWordLinkTooltipSelection,
+} = useWordLinkTooltip(scrollerEl, {
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
   onNavigate: (target) => {
     paneNavigation.openBookTarget({
@@ -301,6 +306,9 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
       v-if="wordLinkTooltip"
       :key="wordLinkTooltip.id"
       :data="wordLinkTooltip"
+      @pointer-enter="keepWordLinkTooltipOpen"
+      @pointer-leave="releaseWordLinkTooltip"
+      @select-start="beginWordLinkTooltipSelection"
     />
     <div
       ref="scrollerEl"
