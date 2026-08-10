@@ -155,7 +155,7 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     class="app-layout"
     :class="{ 'split-active': bookViewStore.splitViewEnabled }"
     :style="bookViewStore.splitViewEnabled
-      ? { gridTemplateColumns: `1fr 4px ${bookViewStore.splitViewFraction * 100}%` }
+      ? { gridTemplateColumns: `1fr 1px ${bookViewStore.splitViewFraction * 100}%` }
       : undefined"
     @pointermove="onPointerMove"
     @pointerup="onPointerUp"
@@ -166,7 +166,8 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     <!-- Resize divider — only in split view -->
     <div
       v-if="bookViewStore.splitViewEnabled"
-      class="split-divider"
+      class="sash sash-v"
+      data-split-divider
       @pointerdown="onDividerPointerDown"
     />
 
@@ -202,28 +203,4 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
   flex-direction: unset;
 }
 
-.split-divider {
-  width: 4px;
-  cursor: col-resize;
-  background: var(--border-color);
-  touch-action: none;
-  position: relative;
-  flex-shrink: 0;
-  transition: background 120ms;
-}
-
-.split-divider::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-}
-
-.split-divider:hover,
-.split-divider:active {
-  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
-}
 </style>

@@ -33,14 +33,14 @@ import type { WordLinkAnchor } from '@/webview-host/queries.types'
 /**
  * Default divider position per slot: fraction of the pane the panel takes.
  *
- * Both side columns take a third, so opening them together splits the row into
- * three equal zones - commentary | text | commentary - rather than leaving the
- * text a different width from the panels flanking it.
+ * The two side columns are equal to each other but each slightly narrower than the
+ * book column between them, so opening both leaves the text the widest of the three
+ * (0.3 / 0.4 / 0.3). The book is what the reader is reading; the commentaries flank it.
  */
 const DEFAULT_FRACTION: Record<CommentarySlot, number> = {
   bottom: 0.5,
-  side: 1 / 3,
-  'side-left': 1 / 3,
+  side: 0.3,
+  'side-left': 0.3,
 }
 
 /**

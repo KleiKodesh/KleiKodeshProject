@@ -168,7 +168,11 @@ export function initTabMirror(): void {
   // the store fraction.
   let lastDividerDelta = 0
   function measureDividerDevice(storeFraction: number): { left: number; width: number } {
-    const el = document.querySelector('.split-divider')
+    // Keyed on the data attribute, not a class: the divider's classes are the shared
+    // `.sash` styling ones, and this measurement must not break the next time they
+    // change (it did once - a styling rename silently dropped the native strip's
+    // divider alignment to the -1 fallback).
+    const el = document.querySelector('[data-split-divider]')
     if (el) {
       const rect = el.getBoundingClientRect()
       if (rect.width > 0) {

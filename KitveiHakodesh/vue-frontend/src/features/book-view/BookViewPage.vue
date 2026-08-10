@@ -400,7 +400,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
               @alt-select="onAltTocSelect"
             />
           </BookViewSidePanel>
-          <div class="side-panel-divider" @pointerdown="onSidePanelDividerPointerDown" />
+          <div class="sash sash-v" @pointerdown="onSidePanelDividerPointerDown" />
         </template>
 
         <!-- content-area: always fills remaining horizontal space -->
@@ -431,7 +431,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                   @open-book="openBookTarget"
                 />
               </div>
-              <div class="side-divider" @pointerdown="onSplitDividerPointerDown($event, 'side')" />
+              <div class="sash sash-v" @pointerdown="onSplitDividerPointerDown($event, 'side')" />
             </template>
 
             <div class="side-lines">
@@ -488,7 +488,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             <!-- RTL: last child sits physically left, opposite the 'side' column. -->
             <template v-if="sideLeftCommentaryOpen">
               <div
-                class="side-divider"
+                class="sash sash-v"
                 @pointerdown="onSplitDividerPointerDown($event, 'side-left')"
               />
               <div
@@ -631,48 +631,6 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
 }
 
 /* ── Side panel resize divider (inline mode) ───────────────────────────────── */
-.side-panel-divider {
-  width: 2px;
-  flex-shrink: 0;
-  background: var(--border-color);
-  touch-action: none;
-  position: relative;
-  /* Above its neighbours, for the same reason as .side-divider below. */
-  z-index: 1;
-  cursor:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 12 L7 8 L7 10 L11 10 L11 14 L7 14 L7 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M21 12 L17 8 L17 10 L13 10 L13 14 L17 14 L17 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
-      12 12,
-    col-resize;
-}
-
-.side-panel-divider::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-}
-
-.side-panel-divider::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 2px;
-  background: var(--border-color);
-  transition: width 120ms;
-}
-
-.side-panel-divider:hover::after,
-.side-panel-divider:active::after {
-  width: 4px;
-  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
-}
-
 /* ── The bottom panel's filter dropdown ───────────────────────────────────── */
 /* Floats over .content-area (which is position:relative), so it reflows nothing.
    Unlike a side panel's dropdown it is anchored to the body, not to its own panel,
@@ -725,51 +683,8 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
   min-width: 0;
 }
 
-.side-divider {
-  width: 2px;
-  flex-shrink: 0;
-  background: var(--border-color);
-  touch-action: none;
-  position: relative;
-  /* Above the commentary panels either side of it. The grab target is a ::after
-     wider than the divider itself, so it overlaps its neighbours' content; without
-     this it lost the paint order to any opaque background there (the commentary
-     headers), and the handle went dead wherever a header happened to sit. */
-  z-index: 1;
-  cursor:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 12 L7 8 L7 10 L11 10 L11 14 L7 14 L7 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M21 12 L17 8 L17 10 L13 10 L13 14 L17 14 L17 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
-      12 12,
-    col-resize;
-}
-
-.side-divider::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 20px;
-}
-
-.side-divider::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 2px;
-  background: var(--border-color);
-  transition: width 120ms;
-}
-
-/* Same highlight as the other two dividers - SplitPane's bottom-commentary splitter
-   and the TOC panel's. This one had its own colour and width, so identical drag
-   handles lit up differently depending on which one you grabbed. */
-.side-divider:hover::after,
-.side-divider:active::after {
-  width: 4px;
-  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
-}
+/* VS Code's sash model, as in SplitPane: a hairline at rest, a wide invisible grab
+   band (::before), and a visible line (::after) that thickens and takes the accent
+   colour only while hovered or dragged. The element is 1px and transparent so the
+   ::after can grow without shifting the layout. */
 </style>

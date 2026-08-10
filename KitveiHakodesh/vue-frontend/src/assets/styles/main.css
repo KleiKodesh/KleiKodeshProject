@@ -3,7 +3,10 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 * { user-select: none; }
-.lines-content *, .commentary-view *, .word-page *, .txt-content * { user-select: text; }
+/* Text-bearing surfaces opt back in. .word-link-tooltip is Teleported to body, so
+   it sits outside every other selector here and needs its own entry. */
+.lines-content *, .commentary-view *, .word-page *, .txt-content *,
+.word-link-tooltip, .word-link-tooltip * { user-select: text; }
 
 html, body, #app { height: 100%; width: 100%; }
 
@@ -84,6 +87,127 @@ input:focus { background: none !important; }
 .search-inner input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
 .hover-bg { transition: background 120ms, color 120ms; }
 .hover-bg:hover { background: var(--hover-bg); }
+
+/* ── Static separators ───────────────────────────────────────────────────────
+   The app's separator line: always a 1px hairline in --border-color, never
+   thicker. `.rule-v` divides items in a row (toolbar groups, search-bar button
+   clusters), `.rule-h` divides rows in a stack (menu sections, cards).
+
+   Height/width along the line and the surrounding margin stay at the call site,
+   because those are spacing decisions specific to each strip. Only the thickness
+   and the colour are shared - those are what must never drift.
+
+   For a DRAGGABLE separator use `.sash` below instead; it is a different object
+   (hairline at rest, but with a grab band and a hover state). */
+.rule-v,
+.rule-h {
+  flex-shrink: 0;
+  background: var(--border-color);
+}
+.rule-v { width: 1px; }
+.rule-h { height: 1px; }
+
+/* ── Resize separators (VS Code sash model) ──────────────────────────────────
+   The app's ONE separator style. Every draggable divider uses it: add `.sash`
+   plus `.sash-v` (a vertical line between columns) or `.sash-h` (a horizontal
+   line between rows), and set the cursor at the call site.
+
+   Three parts, which is what makes it feel like VS Code's:
+     - the element itself is a 1px TRANSPARENT track, so it takes almost no
+       layout and the visible line can grow without shifting anything;
+     - ::before is a wide invisible grab band, so the hit target is finger-sized
+       even though the line is a hairline;
+     - ::after is the visible line: a hairline at rest, thickening to 3px in the
+       accent colour while hovered or dragged, delayed on the way in so sweeping
+       the pointer across a sash does not flash it, instant on the way out and
+       instant while dragging.
+
+   z-index keeps a sash above neighbouring panel content: the grab band overlaps
+   that content by design, and an opaque background there (a commentary panel's
+   static header, which butts right up against the sash above it) would otherwise
+   win the paint order and kill the handle. Both orientations must clear that
+   content, so both are positive; vertical sits one above horizontal so a vertical
+   sash runs unbroken through a crossing. */
+.sash {
+  position: relative;
+  flex-shrink: 0;
+  background: transparent;
+  touch-action: none;
+}
+/* The cursor lives here too, so every sash of the same orientation shows the same
+   glyph. The custom images are two-headed arrows with an outline, which stay legible
+   over both the light and dark themes where the OS resize cursors wash out; the
+   keyword after the comma is the fallback. */
+.sash-v {
+  width: 1px;
+  z-index: 2;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M3 12 L7 8 L7 10 L11 10 L11 14 L7 14 L7 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M21 12 L17 8 L17 10 L13 10 L13 14 L17 14 L17 16 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
+      12 12,
+    col-resize;
+}
+.sash-h {
+  height: 1px;
+  z-index: 1;
+  cursor:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'%3E%3Cpath d='M12 3 L8 7 L10 7 L10 11 L14 11 L14 7 L16 7 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3Cpath d='M12 21 L8 17 L10 17 L10 13 L14 13 L14 17 L16 17 Z' fill='%23ffffff' stroke='%23000000' stroke-width='0.5'/%3E%3C/svg%3E")
+      12 12,
+    row-resize;
+}
+
+.sash::before {
+  content: '';
+  position: absolute;
+}
+.sash-v::before {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+}
+.sash-h::before {
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 44px;
+}
+
+.sash::after {
+  content: '';
+  position: absolute;
+  background: var(--border-color);
+  transition: width 120ms, height 120ms, background 120ms;
+}
+.sash-v::after {
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+}
+.sash-h::after {
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  height: 1px;
+}
+
+.sash:hover::after { transition-delay: 300ms; }
+.sash:active::after { transition-delay: 0ms; }
+
+.sash-v:hover::after,
+.sash-v:active::after {
+  width: 3px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
+}
+.sash-h:hover::after,
+.sash-h:active::after {
+  height: 3px;
+  background: color-mix(in srgb, var(--accent-color) 50%, transparent);
+}
 
 h1, h2, h3, h4, h5, h6 { opacity: 0.95; }
 
