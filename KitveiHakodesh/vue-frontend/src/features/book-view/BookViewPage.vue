@@ -685,9 +685,18 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
   /* Whatever is left of the pane past the offset, so an inward-pushed button
      cannot make the dropdown overflow the far edge. */
   max-width: calc(100% - var(--bottom-filter-offset, 0px));
+  overflow: hidden;
   background: var(--bg-secondary);
-  border-inline-end: 1px solid var(--border-color);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25);
+  /* The app's floating-panel chrome (FullTextSearchAdvancedPanel, BookViewNoteBubble):
+     1px border, 8px radius, soft shadow. Both corners on the INNER edge are rounded -
+     that edge floats over the text - while the two on the panel's own start edge stay
+     square, since rounding a corner against an edge it is flush to leaves a notch. */
+  border: 1px solid var(--border-color);
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+  border-start-end-radius: 8px;
+  border-end-end-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
   --tree-bg: var(--bg-secondary);
 }
 

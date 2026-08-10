@@ -282,9 +282,10 @@ function toggleItem(item: CommentaryVisibilityItem) {
 
 .row-label { flex: 1; white-space: nowrap; padding-inline-end: 10px; }
 
-/* Closes the whole tree. Styled as the tree's expander buttons (see
-   CommentaryTreeSectionNode): same 26px full-height square cell, same secondary
-   colour and 8% hover wash, so the panel's two chrome buttons read as one family.
+/* Closes the whole tree. Sized and coloured like the tree's expander buttons (see
+   CommentaryTreeSectionNode) so the panel's chrome reads as one family, but with the
+   app's standard 4px control radius rather than their square corners: an expander is
+   a flush column inside a row, while this sits at the panel's rounded outer corner.
    .row-label's flex:1 pushes it to the row's end edge. */
 .close-btn {
   display: flex;
@@ -296,7 +297,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
   color: var(--text-secondary);
   padding: 0;
   margin: 0;
-  border-radius: 0;
+  border-radius: 4px;
 }
 /* 16%, not the expanders' 8%: unlike a tree row, .all-row washes itself at 8% on
    hover, so a matching 8% here would leave the button indistinguishable from it. */
