@@ -181,24 +181,20 @@ defineExpose({ view })
    button that opens it.
 
    Chrome follows the app's floating-panel convention (FullTextSearchAdvancedPanel,
-   BookViewNoteBubble): 1px border, 8px radius, soft shadow. Only the two corners
-   that float are rounded - it is flush to the panel's start edge and foot, and
-   rounding a corner against an edge it is pinned to just leaves a notch. */
+   BookViewNoteBubble): 1px border, 8px radius on all four corners, soft shadow.
+   Inset from the column's edge and foot so every corner is free to round. */
 .filter-popup {
   position: absolute;
   top: 32px;
-  bottom: 0;
-  inset-inline-start: 0;
+  bottom: 6px;
+  inset-inline-start: 6px;
   z-index: 60;
   display: flex;
-  max-width: 100%;
+  max-width: calc(100% - 12px);
   overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-start-start-radius: 0;
-  border-start-end-radius: 8px;
-  border-end-end-radius: 8px;
-  border-end-start-radius: 0;
+  border-radius: 8px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
   --tree-bg: var(--bg-secondary);
 }

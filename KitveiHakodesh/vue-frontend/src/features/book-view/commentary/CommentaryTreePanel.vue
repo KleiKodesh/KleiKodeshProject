@@ -251,8 +251,8 @@ function toggleItem(item: CommentaryVisibilityItem) {
   gap: 4px;
   height: 28px;
   flex-shrink: 0;
-  /* No end padding: the close button stretches to this row's end edge, like an
-     expander does in a tree row. The label carries the inset instead. */
+  /* No end padding: the close button sits flush at the row's edge, the way an
+     expander does in a tree row. The start inset matches the nav's. */
   padding-inline-start: 6px;
   cursor: pointer;
   font-size: 12px;
@@ -280,31 +280,25 @@ function toggleItem(item: CommentaryVisibilityItem) {
 .all-row.checked       .check-mark { display: block; }
 .all-row.indeterminate .dash-mark  { display: block; }
 
-.row-label { flex: 1; white-space: nowrap; padding-inline-end: 10px; }
+.row-label { flex: 1; white-space: nowrap; }
 
-/* Closes the whole tree. Sized and coloured like the tree's expander buttons (see
-   CommentaryTreeSectionNode) so the panel's chrome reads as one family, but with the
-   app's standard 4px control radius rather than their square corners: an expander is
-   a flush column inside a row, while this sits at the panel's rounded outer corner.
-   .row-label's flex:1 pushes it to the row's end edge. */
+/* Closes the whole tree, using the commentary header nav's button metrics
+   (CommentaryHeaderNav .btn): 24x24, 4px radius, primary text colour, 14px icon -
+   and the same icon, so the two closes match. It sits flush at the row's end edge
+   like a tree expander does, pushed there by .row-label's flex:1. */
 .close-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
-  align-self: stretch;
-  color: var(--text-secondary);
-  padding: 0;
-  margin: 0;
   border-radius: 4px;
+  color: var(--text-primary);
 }
-/* 16%, not the expanders' 8%: unlike a tree row, .all-row washes itself at 8% on
+/* 16%, not the nav's 8%: unlike the nav strip, .all-row washes itself at 8% on
    hover, so a matching 8% here would leave the button indistinguishable from it. */
 .close-btn:hover  { background: color-mix(in srgb, var(--text-primary) 16%, transparent); }
-.close-btn:active { transform: none !important; }
-/* 14px, matching the nav's own close button, rather than the expanders' 12px: the
-   minimize glyph is a single thin bar and reads as a hairline at 12. */
 .close-btn :deep(svg) { width: 14px; height: 14px; }
 
 .no-results {

@@ -191,7 +191,9 @@ function measureBottomFilterOffset() {
   const containerRect = container.getBoundingClientRect()
   // RTL: inline-start is the physical RIGHT edge, so the offset is measured from
   // the container's right edge to the panel's right edge.
-  bottomFilterInlineStart.value = Math.max(0, containerRect.right - panelRect.right)
+  // +6px so the dropdown is inset from the panel edge rather than flush to it,
+  // leaving all four corners free to round (see .bottom-filter-dropdown).
+  bottomFilterInlineStart.value = Math.max(0, containerRect.right - panelRect.right) + 6
 }
 
 // Measured when it opens, and again whenever anything moves the button sideways: a
@@ -678,24 +680,20 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
    Width comes from the tree itself (CommentaryTreePanel is width: fit-content). */
 .bottom-filter-dropdown {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  /* Inset from the body's edges so all four corners are free to round. */
+  top: 6px;
+  bottom: 6px;
   z-index: 60;
   display: flex;
   /* Whatever is left of the pane past the offset, so an inward-pushed button
      cannot make the dropdown overflow the far edge. */
-  max-width: calc(100% - var(--bottom-filter-offset, 0px));
+  max-width: calc(100% - var(--bottom-filter-offset, 0px) - 12px);
   overflow: hidden;
   background: var(--bg-secondary);
   /* The app's floating-panel chrome (FullTextSearchAdvancedPanel, BookViewNoteBubble):
-     1px border, 8px radius, soft shadow. Both corners on the INNER edge are rounded -
-     that edge floats over the text - while the two on the panel's own start edge stay
-     square, since rounding a corner against an edge it is flush to leaves a notch. */
+     1px border, 8px radius on all four corners, soft shadow. */
   border: 1px solid var(--border-color);
-  border-start-start-radius: 0;
-  border-end-start-radius: 0;
-  border-start-end-radius: 8px;
-  border-end-end-radius: 8px;
+  border-radius: 8px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
   --tree-bg: var(--bg-secondary);
 }
