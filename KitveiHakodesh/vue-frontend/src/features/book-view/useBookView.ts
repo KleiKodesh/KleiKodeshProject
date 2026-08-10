@@ -477,8 +477,14 @@ export function useBookView(
   }
 
   function openBookTarget(targetBookId: number, lineIndex: number | undefined) {
+    // Resolve the title from the global books map, not the commentary groups:
+    // a word-link citation usually targets a book that is NOT commenting on the
+    // current line, and an empty title here is never rewritten — the tab and
+    // breadcrumb keep a blank title with a stray chevron beside it.
     paneNavigation.openBookTarget({
-      title: groups.value.find((group) => group.bookId === targetBookId)?.bookTitle ?? '',
+      title: booksDataStore.allBooksMap.get(targetBookId)?.title
+        ?? groups.value.find((group) => group.bookId === targetBookId)?.bookTitle
+        ?? '',
       route: '/book-view',
       bookId: targetBookId,
       openTocLineIndex: lineIndex,
