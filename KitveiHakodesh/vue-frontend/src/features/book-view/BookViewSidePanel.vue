@@ -66,14 +66,22 @@ useDropdownClose(
   flex-direction: column;
   width: fit-content;
   background: var(--bg-secondary);
-  border-left: 1px solid var(--border-color);
   overflow: hidden;
   --tree-bg: var(--bg-secondary);
 }
 
 /* ── Inline mode ───────────────────────────────────────────────────────────── */
+/* No edge border: inline mode is followed by a resize sash, which draws the line.
+   Painting one here too stacked a 1px border against the 1px sash - a 2px line that
+   read as the old thick separator, and hovering lit only half of it. */
 .side-panel-inline {
   height: 100%;
   flex-shrink: 0;
+}
+
+/* Overlay mode floats over the content with no sash beside it, so it needs its
+   own edge. */
+.side-panel-overlay {
+  border-left: 1px solid var(--border-color);
 }
 </style>

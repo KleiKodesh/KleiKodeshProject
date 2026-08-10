@@ -237,7 +237,9 @@ function handleKeydown(e: KeyboardEvent) {
   width: 1px;
   height: 14px;
   flex-shrink: 0;
-  background: color-mix(in srgb, var(--text-secondary) 20%, transparent);
+  /* --border-color, like every other static separator in the app. This one used a
+     hand-mixed --text-secondary at 20% and read a shade off from its neighbours. */
+  background: var(--border-color);
   margin-inline: 2px;
 }
 .search-wrapper {
