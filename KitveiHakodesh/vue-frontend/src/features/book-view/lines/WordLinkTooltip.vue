@@ -12,9 +12,10 @@
  *
  * Long content scrolls inside the tooltip, so unlike a pure decoration this one
  * accepts the pointer: it emits `pointer-enter`/`pointer-leave` and the host
- * composable keeps it open while the pointer is inside. A `.word-link-tooltip-gap`
- * pseudo-element spans the MARGIN between anchor and tooltip so travelling there
- * never crosses dead space where a `mouseout` would look like leaving.
+ * composable keeps it open while the pointer is inside. A `::before` on the root
+ * spans the MARGIN between anchor and tooltip so travelling there never crosses
+ * dead space where a `mouseout` would look like leaving — it hangs off whichever
+ * edge faces the anchor, hence the `is-above`/`is-below` class.
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -98,7 +99,7 @@ onMounted(() => {
       dir="rtl"
       @mouseenter="emit('pointer-enter')"
       @mouseleave="emit('pointer-leave')"
-      @mousedown="emit('select-start')"
+      @mousedown.left="emit('select-start')"
     >
       <div v-if="data.bookTitle" class="word-link-tooltip-title">{{ data.bookTitle }}</div>
       <!-- eslint-disable-next-line vue/no-v-html -->
@@ -121,8 +122,10 @@ onMounted(() => {
   font-size: 13px;
   line-height: 1.7;
   color: var(--text-primary);
-  /* Long previews scroll, and the user must be able to reach that scrollbar —
-     so this accepts the pointer instead of the usual tooltip pointer-events: none. */
+  /* Long previews scroll, and the user must be able to reach that scrollbar — so
+     this accepts the pointer, stated outright rather than left to the initial
+     value, because the usual tooltip default here is pointer-events: none. */
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   max-height: 40vh;
