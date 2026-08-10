@@ -24,7 +24,7 @@
  * main.css, since the global `* { user-select: none }` reset opts in by selector
  * and this element is Teleported outside all of them.
  */
-import { ref, type Ref } from 'vue'
+import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { getLineContents } from '@/webview-host/seforimApi'
 import { hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
@@ -111,12 +111,22 @@ export function useWordLinkTooltip(
   /**
    * Close after a grace period, unless the pointer reaches the tooltip (or
    * returns to the link) first. Re-entering either one cancels the pending close.
+   *
+   * `pointerInTooltip` and `selectingInTooltip` each have a release event that
+   * re-arms this, so bailing on them is final. An open context menu has no such
+   * event — it can close by outside click, window blur or running an item, and
+   * only some of those reach us — so that branch re-arms instead of giving up, or
+   * a preview would sit there indefinitely once the menu went away.
    */
   function scheduleClose() {
     cancelScheduledClose()
     closeTimer = setTimeout(() => {
       closeTimer = null
-      if (pointerInTooltip || selectingInTooltip || contextMenuOpen()) return
+      if (pointerInTooltip || selectingInTooltip) return
+      if (contextMenuOpen()) {
+        scheduleClose()
+        return
+      }
       closeWordLinkTooltip()
     }, CLOSE_GRACE_MS)
   }
@@ -138,8 +148,13 @@ export function useWordLinkTooltip(
   }
 
   /**
-   * A mousedown inside the tooltip — the start of a possible selection drag.
-   * Held until mouseup anywhere, then the pointer's real position decides.
+   * A left-button mousedown inside the tooltip — the start of a possible selection
+   * drag. Held until mouseup anywhere, then the pointer's real position decides.
+   *
+   * Only the left button, because only it sweeps a selection: a right-click takes
+   * no pin (its mouseup is the one that opens the context menu and must not be
+   * read as "drag finished"), and a middle-click autoscroll is not a selection.
+   * Pinning on those stranded the preview — nothing then cleared the flag.
    */
   function beginSelection() {
     selectingInTooltip = true
@@ -245,12 +260,13 @@ export function useWordLinkTooltip(
   useEventListener(scrollerEl, 'scroll', closeWordLinkTooltip, { passive: true })
 
   // The drag can be released anywhere, so this has to be on the document. Once
-  // the button is up the guard lifts and the pointer's actual position decides:
+  // the button is up the pin lifts and the pointer's actual position decides:
   // still inside means stay, outside means close on the usual grace period.
-  // A right-click (button 2) opens the context menu instead and must not clear
-  // the pin — the menu's own action still needs the selection.
-  useEventListener(() => document, 'mouseup', (event: MouseEvent) => {
-    if (event.button === 2 || !selectingInTooltip) return
+  // Deliberately unconditional on the button — only a left press takes the pin,
+  // so any release ends that drag, and skipping some buttons here is what left
+  // the flag set forever after a right-click.
+  useEventListener(() => document, 'mouseup', () => {
+    if (!selectingInTooltip) return
     selectingInTooltip = false
     if (!pointerInTooltip) scheduleClose()
   })
@@ -263,6 +279,16 @@ export function useWordLinkTooltip(
   useEventListener(() => document, 'click', () => {
     if (!wordLinkTooltip.value || pointerInTooltip || contextMenuOpen()) return
     scheduleClose()
+  })
+
+  // Unmounting mid-delay would otherwise let the hover timer fire for a dead view
+  // — and its callback issues a getLineContents round-trip nobody will read.
+  onScopeDispose(() => {
+    cancelScheduledClose()
+    if (hoverTimer !== null) {
+      clearTimeout(hoverTimer)
+      hoverTimer = null
+    }
   })
 
   return { wordLinkTooltip, closeWordLinkTooltip, keepOpen, releaseOpen, beginSelection }
