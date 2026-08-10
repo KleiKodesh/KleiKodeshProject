@@ -158,7 +158,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
         <span class="row-label">&#x5D4;&#x5E6;&#x5D2; &#x5D4;&#x5DB;&#x5DC;</span>
         <!-- click.stop: the whole row is a toggle-all target. -->
         <button
-          class="close-btn c-pointer hover-bg"
+          class="close-btn c-pointer"
           :title="closeTitle"
           @click.stop="emit('close')"
         >
@@ -249,7 +249,9 @@ function toggleItem(item: CommentaryVisibilityItem) {
   gap: 4px;
   height: 28px;
   flex-shrink: 0;
-  padding-inline: 6px 10px;
+  /* No end padding: the close button stretches to this row's end edge, like an
+     expander does in a tree row. The label carries the inset instead. */
+  padding-inline-start: 6px;
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
@@ -276,22 +278,29 @@ function toggleItem(item: CommentaryVisibilityItem) {
 .all-row.checked       .check-mark { display: block; }
 .all-row.indeterminate .dash-mark  { display: block; }
 
-.row-label { flex: 1; white-space: nowrap; }
+.row-label { flex: 1; white-space: nowrap; padding-inline-end: 10px; }
 
-/* Closes the whole tree. Sits at the row's end edge - .row-label's flex:1 pushes
-   it there - so it reads as belonging to the panel, not to the toggle-all row. */
+/* Closes the whole tree. Styled as the tree's expander buttons (see
+   CommentaryTreeSectionNode): same 26px full-height square cell, same secondary
+   colour and 8% hover wash, so the panel's two chrome buttons read as one family.
+   .row-label's flex:1 pushes it to the row's end edge. */
 .close-btn {
-  width: 18px;
-  height: 18px;
-  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  width: 26px;
+  flex-shrink: 0;
+  align-self: stretch;
   color: var(--text-secondary);
+  padding: 0;
+  margin: 0;
+  border-radius: 0;
 }
-.close-btn:hover { color: var(--text-primary); }
-.close-btn svg { width: 12px; height: 12px; }
+/* 16%, not the expanders' 8%: unlike a tree row, .all-row washes itself at 8% on
+   hover, so a matching 8% here would leave the button indistinguishable from it. */
+.close-btn:hover  { background: color-mix(in srgb, var(--text-primary) 16%, transparent); }
+.close-btn:active { transform: none !important; }
+.close-btn :deep(svg) { width: 12px; height: 12px; }
 
 .no-results {
   padding: 8px 10px;
