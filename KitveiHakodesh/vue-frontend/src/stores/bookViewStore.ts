@@ -394,7 +394,17 @@ export const useBookViewStore = defineStore('bookView', () => {
     tocBridgeByTabId.set(tabId, bridge)
   }
 
-  function unregisterTocBridge(tabId: string) {
+  /**
+   * Drop a tab's bridge — but only if `bridge` is still the registered one.
+   *
+   * Navigating a tab in place (a cross-book word link) mounts the incoming
+   * BookView before the outgoing one unmounts, and both key on the same tabId.
+   * An unconditional delete would let the old component's teardown remove the
+   * NEW book's bridge, emptying rootTocEntries and un-suppressing the segment-0
+   * chevron — a stray dropdown arrow beside the title.
+   */
+  function unregisterTocBridge(tabId: string, bridge?: TocBridge) {
+    if (bridge && tocBridgeByTabId.get(tabId) !== bridge) return
     tocBridgeByTabId.delete(tabId)
   }
 

@@ -22,6 +22,7 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount, inject } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import type { TocBridge } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -157,7 +158,6 @@ export function useBookView(
   // are replaced once the real owner exists:
   //   line selection needs pin capture <-> pins live on the panels
   //   panels need annotation getters   <-> annotations need the panels' groups
-  //   panels need to close their filter tree <-> the side panel needs the panels
   // Every call site runs after setup (a render, or a user action), so the holders are
   // always populated by the time they are read.
 
@@ -170,7 +170,6 @@ export function useBookView(
     getNotesForLine: (_lineId: number): Note[] => [],
     getWordLinkAnchorsForLine: (_lineId: number): WordLinkAnchor[] => [],
   }
-  const sidePanelFns = { closeCommentaryTreeFor: (_slot: CommentarySlot) => {} }
 
   // ── Line selection ────────────────────────────────────────────────────────
 
@@ -218,9 +217,7 @@ export function useBookView(
   const panels = Object.fromEntries(
     COMMENTARY_SLOTS.map((slot) => [
       slot,
-      useCommentaryPanelSlot(slot, tabId, commentaryViewRefs[slot], sharedCommentaryDeps, () =>
-        sidePanelFns.closeCommentaryTreeFor(slot),
-      ),
+      useCommentaryPanelSlot(slot, tabId, commentaryViewRefs[slot], sharedCommentaryDeps),
     ]),
   ) as Record<CommentarySlot, CommentaryPanel>
 
@@ -394,19 +391,9 @@ export function useBookView(
     watch(search.query, (q) => bookViewStore.setCommentarySearchQuery(tabId, slot, q))
   }
 
-  // ── Side panel ────────────────────────────────────────────────────────────
+  // ── Side panel (the TOC; each panel owns its own filter tree) ─────────────
 
-  const sidePanel = useBookViewSidePanel(
-    toolbarRef,
-    commentaryViewRefs,
-    Object.fromEntries(
-      COMMENTARY_SLOTS.map((slot) => [slot, panels[slot].visible]),
-    ) as Record<CommentarySlot, import('vue').Ref<boolean>>,
-    loadAltTocSections,
-    ensureStaticFilterGroupsLoaded,
-  )
-
-  sidePanelFns.closeCommentaryTreeFor = sidePanel.closeCommentaryTreeFor
+  const sidePanel = useBookViewSidePanel(toolbarRef, loadAltTocSections)
 
   // Make the full-book lines backfill yield to commentary loading — commentary
   // queries must never queue behind ~100 large chunk fetches.
@@ -489,8 +476,8 @@ export function useBookView(
     return commentaryNavigation[slot].onNavigateSection(direction, commentaryBookId)
   }
 
-  function openBookInTab(targetBookId: number, lineIndex: number | undefined) {
-    paneNavigation.openTab({
+  function openBookTarget(targetBookId: number, lineIndex: number | undefined) {
+    paneNavigation.openBookTarget({
       title: groups.value.find((group) => group.bookId === targetBookId)?.bookTitle ?? '',
       route: '/book-view',
       bookId: targetBookId,
@@ -580,14 +567,19 @@ export function useBookView(
   // Register the TOC bridge synchronously at setup so the title bar breadcrumb
   // can read tocEntries immediately when the tab becomes active, without waiting
   // for onMounted (which runs after an async restoreSession await).
-  bookViewStore.registerTocBridge(tabId, {
+  const tocBridge: TocBridge = {
     get tocEntries() { return tocEntries.value },
     navigateToEntry: (entry) => onTocSelect(entry),
-  })
+  }
+  bookViewStore.registerTocBridge(tabId, tocBridge)
 
   onBeforeUnmount(() => {
-    paneNavigation.updateActiveTab({ tocPath: undefined })
-    bookViewStore.unregisterTocBridge(tabId)
+    // Both the bridge and tocPath are keyed by tab, and an in-place navigation
+    // mounts the next book before this one tears down — so only clear what we
+    // still own, or we wipe the incoming book's breadcrumb state.
+    const stillOurs = bookViewStore.getTocBridge(tabId) === tocBridge
+    if (stillOurs) paneNavigation.updateActiveTab({ tocPath: undefined })
+    bookViewStore.unregisterTocBridge(tabId, tocBridge)
   })
 
   // The search query intentionally survives closing the search bar (in-session,
@@ -609,11 +601,7 @@ export function useBookView(
     searchMode: searchPanel.searchMode,
     activeTocEntryId,
     tocVisible: sidePanel.tocVisible,
-    commentaryTreeVisible: sidePanel.commentaryTreeVisible,
-    commentaryTreeSlot: sidePanel.commentaryTreeSlot,
-    isCommentaryTreeOpenFor: sidePanel.isCommentaryTreeOpenFor,
     sidePanelVisible: sidePanel.sidePanelVisible,
-    sidePanelMode: sidePanel.sidePanelMode,
     sidePanelToggleButtonEl: sidePanel.sidePanelToggleButtonEl,
     searchVisible: searchPanel.searchVisible,
     // the two commentary panels
@@ -644,7 +632,7 @@ export function useBookView(
     // handlers
     onLinesScrolled, onTocSelect, onAltTocSelect,
     onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
-    openBookInTab,
+    openBookTarget,
     openContentSearch: searchPanel.openContentSearch,
     openCommentarySearch: searchPanel.openCommentarySearch,
     toggleSearch: searchPanel.toggleSearch,
@@ -653,7 +641,6 @@ export function useBookView(
     onSearchPrev: searchPanel.onSearchPrev,
     onModeChange: searchPanel.onModeChange,
     toggleTocPanel: sidePanel.toggleTocPanel,
-    toggleCommentaryTreePanel: sidePanel.toggleCommentaryTreePanel,
     closeSidePanel: sidePanel.closeSidePanel,
     ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
     getActiveTocEntry, getTocPath,

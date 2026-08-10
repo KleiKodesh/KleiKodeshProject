@@ -2,10 +2,10 @@
  * Lifecycle of ONE commentary panel: visibility, and scroll position save/restore
  * across the panel being closed, reopened, or remounted by a layout change.
  *
- * The book view runs two of these - one per CommentarySlot - so nothing here may
- * reach for shared book-view state. Where the old single-panel version closed the
- * side filter panel directly, it now calls `onHidden` and lets the caller decide
- * whether that filter panel belonged to this slot.
+ * The book view runs one of these per CommentarySlot, so nothing here may reach
+ * for shared book-view state. Consumers that need to react to a panel closing
+ * watch `commentaryVisible` themselves (useCommentaryPanelSlot closes that
+ * panel's filter tree that way).
  *
  * Scroll position is kept as a flat virtualizer index + offset so it survives the
  * panel being unmounted (v-if) and remounted.
@@ -32,8 +32,6 @@ export function useBookViewCommentaryPanel(
   lines: () => { content: string | null }[],
   hasCommentaries: import('vue').Ref<boolean>,
   ensureStaticFilterGroupsLoaded: () => void,
-  /** Called whenever this panel goes from shown to hidden, for any reason. */
-  onHidden: () => void = () => {},
 ) {
   const commentaryVisible = ref(false)
   const commentaryScrollIndex = ref<number | null>(null)
@@ -158,7 +156,6 @@ export function useBookViewCommentaryPanel(
   watch(commentaryVisible, (visible) => {
     if (!visible) {
       lastRestoredCommentaryKey = null
-      onHidden()
       return
     }
     setTimeout(() => onCommentaryPanelMounted(), 0)

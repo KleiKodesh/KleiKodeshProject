@@ -8,14 +8,15 @@
  * heaviest payload - but everything downstream of the fetch is per panel:
  *
  *   - which book is pinned (and which default commentator it opens on)
- *   - the filter tree: search query, tokens, visibility list, check-tree scope
+ *   - the filter tree: whether it is open, its search query, tokens, visibility
+ *     list and check-tree scope
  *   - scroll position, and its save/restore across close and remount
  *   - the in-panel search (Ctrl+F) and its render cache
  *   - the divider position
  *
  * That is what makes the two panels genuinely independent views of one line.
  */
-import { reactive, ref, computed } from 'vue'
+import { reactive, ref, computed, watch } from 'vue'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useCommentarySearch } from './useCommentarySearch'
 import { useCommentaryRender } from './useCommentaryRender'
@@ -96,8 +97,6 @@ export function useCommentaryPanelSlot(
   tabId: string,
   viewRef: () => CommentaryViewInstance | null,
   shared: SharedCommentaryDeps,
-  /** Called whenever this panel goes from shown to hidden, for any reason. */
-  onHidden: () => void = () => {},
 ) {
   // Scopes this panel's virtual check-tree. Both slots of a tab share the prefix
   // so tab teardown clears them together (see uncheckedCommentaryBooks).
@@ -143,8 +142,36 @@ export function useCommentaryPanelSlot(
     shared.lines,
     shared.hasCommentaries,
     shared.ensureStaticFilterGroupsLoaded,
-    onHidden,
   )
+
+  // ── This panel's filter tree ────────────────────────────────────────────────
+  // Every panel owns its own tree, so all of them can be open at once and none
+  // can re-target another's. Where the trees used to share the book view's side
+  // panel (and so also fought the TOC for it), each is now a dropdown belonging to
+  // one panel: clipped to its own column for the side slots, full body height for
+  // 'bottom' (which is why BookViewPage renders that one - see CommentaryPanelHost).
+  const filterOpen = ref(false)
+
+  function toggleFilter() {
+    // A closed panel has no tree to filter. Same guard the shared side panel had.
+    if (!panel.commentaryVisible.value) return
+    filterOpen.value = !filterOpen.value
+    // The full book list is only worth fetching once a tree actually opens.
+    if (filterOpen.value) shared.ensureStaticFilterGroupsLoaded()
+  }
+
+  function closeFilter() {
+    filterOpen.value = false
+  }
+
+  // Closing the panel takes its tree with it, whatever closed it: the header's
+  // close button, a line with no commentary at all (hasCommentaries), or a pane
+  // narrowing past the side columns' minimum width. All three funnel through
+  // commentaryVisible, so watching it covers every path - an orphaned tree with
+  // no panel beside it was the failure mode worth designing out.
+  watch(panel.commentaryVisible, (visible) => {
+    if (!visible) filterOpen.value = false
+  })
 
   // Per panel: the render cache is keyed partly by the active search query, and
   // the two panels search independently - one shared cache would thrash.
@@ -165,6 +192,9 @@ export function useCommentaryPanelSlot(
     slot,
     scopeKey,
     treeState,
+    filterOpen,
+    toggleFilter,
+    closeFilter,
     fraction,
     pinnedCommentaryGroup,
     restorePin,

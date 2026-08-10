@@ -1,6 +1,6 @@
 # book-view
 
-Main book reader: the text, up to three independent commentary panels, a shared side panel for tools, a search bar, and a toolbar.
+Main book reader: the text, up to three independent commentary panels, a side panel for the table of contents, a search bar, and a toolbar.
 
 ## Three commentary panels
 
@@ -11,14 +11,25 @@ Everything downstream of the fetch is **per panel**, assembled by `commentary/us
 | Per panel | Shared |
 | --- | --- |
 | pinned book (and which default commentator it opens on — see below) | the fetched `groups` for the current line |
-| filter tree state + check-tree scope (`commentaryScopeKey(tabId, slot)`) | highlights, notes, word-link anchors, TOC paths |
+| the filter tree: whether it is open, its state, its check-tree scope (`commentaryScopeKey(tabId, slot)`) | highlights, notes, word-link anchors, TOC paths |
 | scroll position and its save/restore | `staticFilterGroups` / `filterGroups` |
 | in-panel search (Ctrl+F) and render cache | the anchor line (`selectedLineId` / `commentaryLineId`) |
 | divider position | |
 
 Each panel opens on a different one of the book's default commentators (bottom takes the first, side the second, side-left the third), so opening several shows several commentators rather than one repeated. Bottom and side fall back to the first default when the book has fewer; **side-left does not** — with no third default it stays unpinned and simply renders the list from the top without scrolling anywhere.
 
-`CommentarySlot` (`'bottom' | 'side' | 'side-left'`) keys all of it, and every panel persists under `BookState.commentaryPanels` / `LastReadState.commentaryPanels`. There is one filter-tree component; the side panel binds it to whichever panel's filter button was pressed (`commentaryTreeSlot`).
+`CommentarySlot` (`'bottom' | 'side' | 'side-left'`) keys all of it, and every panel persists under `BookState.commentaryPanels` / `LastReadState.commentaryPanels`.
+
+### Filter trees are per panel
+
+Each panel renders its own `CommentaryTreePanel` as a dropdown — floating over the content, anchored to that panel's own filter button, closed by clicking outside it, and reflowing nothing. All three can be open at once, each with its own search and its own expanded nodes, and opening one no longer closes the TOC.
+
+The panels differ only in how tall their dropdown is, and therefore in who renders it:
+
+- **Side columns** — `CommentaryPanelHost` renders it, clipped to that column so it stays over its own commentary and never touches the text.
+- **Bottom panel** — `BookViewPage` renders it, anchored to `.content-area` so it runs the full height of the book-view body. It cannot live in the host: `SplitPane` and `.side-lines` both clip, so a dropdown mounted inside the bottom panel could only be as tall as that panel.
+
+The trees used to share `BookViewSidePanel` with the TOC, which is why only one could be open and why opening one closed the TOC. That panel is now the TOC's alone.
 
 Adding a fourth panel means adding a slot to `COMMENTARY_SLOTS` plus its layout and toggle: the composables, the store, persistence and session restore all loop over the constant and need no edit.
 
@@ -28,7 +39,7 @@ Adding a fourth panel means adding a slot to `COMMENTARY_SLOTS` plus its layout 
 
 **BookViewToolbar.vue** - zoom, search, TOC toggle, and one toggle per commentary panel. Add new toolbar actions here.
 
-**BookViewSidePanel.vue** - shared side-panel shell for book-view tools such as TOC and commentary filters.
+**BookViewSidePanel.vue** - the side-panel shell, holding the table of contents. Commentary filters used to share it; they now live in their own panels (see above).
 
 **BookViewSearchBar.vue** - inline search bar. Query input, mode selection, and match navigation.
 
