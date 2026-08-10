@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import CommentaryTreeSectionNode from './CommentaryTreeSectionNode.vue'
-import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
+// Dismiss12 removes a search token; Minimize20 closes the tree - the same icon the
+// commentary panel's own "close panel" button uses, so both closes read alike.
+import { IconDismiss12Regular, IconMinimize20Regular } from '@iconify-prerendered/vue-fluent'
 import { useIntervalFn } from '@vueuse/core'
 import type { CommentaryGroup } from './useCommentary'
 import type { CommentaryTreeState, CommentaryVisibilityItem } from '../bookViewTypes'
@@ -162,7 +164,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
           :title="closeTitle"
           @click.stop="emit('close')"
         >
-          <IconDismiss12Regular />
+          <IconMinimize20Regular />
         </button>
       </div>
 
@@ -300,7 +302,9 @@ function toggleItem(item: CommentaryVisibilityItem) {
    hover, so a matching 8% here would leave the button indistinguishable from it. */
 .close-btn:hover  { background: color-mix(in srgb, var(--text-primary) 16%, transparent); }
 .close-btn:active { transform: none !important; }
-.close-btn :deep(svg) { width: 12px; height: 12px; }
+/* 14px, matching the nav's own close button, rather than the expanders' 12px: the
+   minimize glyph is a single thin bar and reads as a hairline at 12. */
+.close-btn :deep(svg) { width: 14px; height: 14px; }
 
 .no-results {
   padding: 8px 10px;
