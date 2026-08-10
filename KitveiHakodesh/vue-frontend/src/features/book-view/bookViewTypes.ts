@@ -37,8 +37,6 @@ export function slotForSearchMode(mode: SearchMode): CommentarySlot | null {
   return mode.slice('commentary-'.length) as CommentarySlot
 }
 
-export type SidePanelMode = 'toc' | 'commentary-tree'
-
 /**
  * Visibility state for one commentary entry in the tree panel.
  * bookId + sectionLabel + subSectionLabel uniquely identifies an entry

@@ -21,6 +21,11 @@ const props = defineProps<{
   scrollToBook: (bookId: number) => void
 }>()
 
+const emit = defineEmits<{ close: [] }>()
+
+/** "Close the commentator tree" */
+const closeTitle = 'סגור עץ מפרשים'
+
 const searchInputRef = ref<HTMLInputElement | null>(null)
 onMounted(() => nextTick(() => searchInputRef.value?.focus({ preventScroll: true })))
 
@@ -50,8 +55,10 @@ watch(
 )
 
 // ── Search / tree logic ───────────────────────────────────────────────────────
-// Captured at setup: BookViewPage keys this component by slot, so re-targeting
-// the tree at the other commentary panel remounts it with fresh state.
+// One tree instance per commentary panel, so scopeKey is fixed by construction:
+// it is commentaryScopeKey(tabId, slot) and neither part can change under a live
+// instance. Read once rather than reactively - it used to be a shared instance
+// re-pointed between panels, and only a `key` kept that honest.
 const scopeKey = props.scopeKey
 const { syncVisibilityList, applyFilter, isSearching, tree, searchResults } =
   useCommentaryTreeSearch(() => props.groups, props.treeState, scopeKey)
@@ -149,6 +156,14 @@ function toggleItem(item: CommentaryVisibilityItem) {
           <span class="dash-mark">&#8211;</span>
         </span>
         <span class="row-label">&#x5D4;&#x5E6;&#x5D2; &#x5D4;&#x5DB;&#x5DC;</span>
+        <!-- click.stop: the whole row is a toggle-all target. -->
+        <button
+          class="close-btn c-pointer hover-bg"
+          :title="closeTitle"
+          @click.stop="emit('close')"
+        >
+          <IconDismiss12Regular />
+        </button>
       </div>
 
       <!-- Normal tree mode -->
@@ -262,6 +277,21 @@ function toggleItem(item: CommentaryVisibilityItem) {
 .all-row.indeterminate .dash-mark  { display: block; }
 
 .row-label { flex: 1; white-space: nowrap; }
+
+/* Closes the whole tree. Sits at the row's end edge - .row-label's flex:1 pushes
+   it there - so it reads as belonging to the panel, not to the toggle-all row. */
+.close-btn {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+.close-btn:hover { color: var(--text-primary); }
+.close-btn svg { width: 12px; height: 12px; }
 
 .no-results {
   padding: 8px 10px;

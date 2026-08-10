@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, watch, inject } from 'vue'
+import { ref, computed, watch, nextTick, inject } from 'vue'
 import { useResizeObserver } from '@vueuse/core'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { exportToWord as bridgeExportToWord } from '@/webview-host/bridge'
@@ -38,10 +39,10 @@ const sidePanelIsOverlay = computed(() => !isSidePanelWideScreen.value)
 const {
   toolbarPosition, toolbarVisible,
   searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
-  searchVisible, sidePanelMode,
+  searchVisible,
   selectedLineId, searchMode,
   activeTocEntryId,
-  tocVisible, commentaryTreeSlot, isCommentaryTreeOpenFor,
+  tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState,
   tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
@@ -59,10 +60,10 @@ const {
   activeMatchCount, activeMatchIdx, contentSearch,
   onLinesScrolled, onTocSelect, onAltTocSelect,
   onLineSelected, onNavigateSection, navigateToAdjacentTocSection,
-  openBookInTab,
+  openBookTarget,
   openContentSearch, openCommentarySearch, toggleSearch,
   onQueryChange, onSearchNext, onSearchPrev, onModeChange,
-  toggleTocPanel, toggleCommentaryTreePanel, closeSidePanel,
+  toggleTocPanel, closeSidePanel,
   ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
   getActiveTocEntry, getTocPath,
   buildExportHtml,
@@ -78,13 +79,6 @@ const {
   },
 )
 
-/** The host component for a slot, for the code paths that must reach into one. */
-const hostRefs: Record<CommentarySlot, () => InstanceType<typeof CommentaryPanelHost> | null> = {
-  bottom: () => bottomHostRef.value,
-  side: () => sideHostRef.value,
-  'side-left': () => sideLeftHostRef.value,
-}
-
 // The side panels need a pane wide enough to sit beside the text. Rendering is
 // gated on both flags so a pane that narrows never shows a cramped column, and
 // the watcher below closes them so their toggles and the search bar agree.
@@ -96,10 +90,13 @@ const sideLeftCommentaryOpen = computed(() => panels['side-left'].visible.value 
 const sideColumnsKey = computed(() => `${sideCommentaryOpen.value}:${sideLeftCommentaryOpen.value}`)
 
 // Everything a commentary panel needs that is NOT per panel. Bound with v-bind on
-// both hosts so the shared list is written once.
+// every host so the shared list is written once.
 const commentarySharedProps = computed(() => ({
   bookId,
   selectedLineId: selectedLineId.value,
+  // The filter tree's rows. Shared: every panel filters the same book list, and
+  // which of those rows are checked is per panel (treeState + scopeKey).
+  filterGroups: filterGroups.value,
   loading: commentaryLoading.value,
   loadError: commentaryLoadError.value,
   getHighlightsForLine,
@@ -144,13 +141,78 @@ const activeSearchQuery = computed(() => {
   return slot ? panels[slot].search.query.value : contentSearch.query.value
 })
 
-// Clicking a book in the filter tree scrolls the panel that tree is bound to -
-// never another one, which may be showing a different book entirely.
-function scrollTreeSelectionIntoView(targetBookId: number) {
-  const slot = commentaryTreeSlot.value
-  if (!slot) return
-  hostRefs[slot]()?.view?.scrollToGroup(targetBookId)
+// ── The bottom panel's filter tree ──────────────────────────────────────────
+// A dropdown, exactly like the side panels' (see CommentaryPanelHost) - it floats
+// over the content and never reflows the layout. The one difference is its height:
+// it fills the whole book-view body rather than stopping at the bottom panel. That
+// is why it is rendered here and not in the host: SplitPane and .side-lines both
+// clip, so a dropdown mounted inside the bottom panel could only be as tall as
+// that panel.
+const bottomFilterButtonEl = computed(
+  () => bottomHostRef.value?.view?.getFilterButtonEl?.() ?? null,
+)
+
+/** Clicking a book in the bottom tree scrolls the bottom panel to it. */
+function scrollBottomTreeSelectionIntoView(targetBookId: number) {
+  bottomHostRef.value?.view?.scrollToGroup(targetBookId)
 }
+
+const bottomFilterRef = ref<HTMLElement | null>(null)
+const { justClosed: bottomFilterJustClosed } = useDropdownClose(
+  bottomFilterRef,
+  () => panels.bottom.closeFilter(),
+  {
+    toggleButton: bottomFilterButtonEl,
+    // The tree holds a search input, and focus moving into a WebView iframe must
+    // not shut it mid-typing (same reasoning as the side dropdowns).
+    closeOnBlur: false,
+  },
+)
+
+function onToggleBottomFilter() {
+  if (bottomFilterJustClosed.value) return
+  panels.bottom.toggleFilter()
+}
+
+// Horizontal placement: aligned to the start edge of its own PANEL, like every
+// other panel's dropdown. A side panel's needs no measuring - its column is the
+// panel, so `inset-inline-start: 0` already means the panel's edge. This one is
+// positioned against .content-area, which spans the whole body, so it has to
+// measure where the bottom panel's own start edge falls (an open side column
+// pushes it inward).
+const contentAreaRef = ref<HTMLElement | null>(null)
+const bottomFilterInlineStart = ref(0)
+
+function measureBottomFilterOffset() {
+  const panel = bottomHostRef.value?.$el as HTMLElement | undefined
+  const container = contentAreaRef.value
+  if (!panel?.getBoundingClientRect || !container) return
+  const panelRect = panel.getBoundingClientRect()
+  const containerRect = container.getBoundingClientRect()
+  // RTL: inline-start is the physical RIGHT edge, so the offset is measured from
+  // the container's right edge to the panel's right edge.
+  bottomFilterInlineStart.value = Math.max(0, containerRect.right - panelRect.right)
+}
+
+// Measured when it opens, and again whenever anything moves the button sideways: a
+// side column opening or closing, one of their dividers being dragged, or the pane
+// resizing. The bottom panel's own divider only moves it vertically, which no
+// longer matters now that the dropdown spans the full height.
+watch(
+  [
+    () => panels.bottom.filterOpen.value,
+    sideColumnsKey,
+    () => panels.side.fraction.value,
+    () => panels['side-left'].fraction.value,
+    shellWidth,
+  ],
+  async ([open]) => {
+    if (!open) return
+    await nextTick()
+    measureBottomFilterOffset()
+  },
+  { immediate: true },
+)
 
 // ── Divider drag: the side commentary columns ────────────────────────────────
 // One handler pair for both columns; the dragging slot decides which edge the
@@ -326,7 +388,6 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             @close="closeSidePanel"
           >
             <BookViewTocTree
-              v-if="sidePanelMode === 'toc'"
               :active-toc-entry-id="activeTocEntryId"
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
@@ -336,20 +397,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
               @select="onTocSelect"
               @alt-select="onAltTocSelect"
             />
-            <CommentaryTreePanel
-              v-else-if="sidePanelMode === 'commentary-tree' && commentaryTreeSlot"
-              :key="commentaryTreeSlot"
-              :groups="filterGroups"
-              :tree-state="panels[commentaryTreeSlot].treeState"
-              :scope-key="panels[commentaryTreeSlot].scopeKey"
-              :scroll-to-book="scrollTreeSelectionIntoView"
-            />
           </BookViewSidePanel>
           <div class="side-panel-divider" @pointerdown="onSidePanelDividerPointerDown" />
         </template>
 
         <!-- content-area: always fills remaining horizontal space -->
-        <div class="content-area">
+        <div ref="contentAreaRef" class="content-area">
           <!--
             One nested layout, always: each side commentary is a column beside the
             text, the bottom commentary a row beneath it. All three are independent
@@ -368,13 +421,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                   ref="sideHostRef"
                   :panel="panels.side"
                   v-bind="commentarySharedProps"
-                  :filter-visible="isCommentaryTreeOpenFor('side')"
                   :search-active="searchVisible && searchMode === 'commentary-side'"
                   @close="panels.side.visible.value = false"
                   @navigate-section="(direction, id) => onNavigateSection('side', direction, id)"
-                  @toggle-filter-panel="toggleCommentaryTreePanel('side')"
+                  @toggle-filter-panel="panels.side.toggleFilter()"
                   @toggle-search="openCommentarySearch('side')"
-                  @open-book="openBookInTab"
+                  @open-book="openBookTarget"
                 />
               </div>
               <div class="side-divider" @pointerdown="onSplitDividerPointerDown($event, 'side')" />
@@ -420,13 +472,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                     ref="bottomHostRef"
                     :panel="panels.bottom"
                     v-bind="commentarySharedProps"
-                    :filter-visible="isCommentaryTreeOpenFor('bottom')"
                     :search-active="searchVisible && searchMode === 'commentary-bottom'"
                     @close="panels.bottom.visible.value = false"
                     @navigate-section="(direction, id) => onNavigateSection('bottom', direction, id)"
-                    @toggle-filter-panel="toggleCommentaryTreePanel('bottom')"
+                    @toggle-filter-panel="onToggleBottomFilter()"
                     @toggle-search="openCommentarySearch('bottom')"
-                    @open-book="openBookInTab"
+                    @open-book="openBookTarget"
                   />
                 </template>
               </SplitPane>
@@ -446,13 +497,12 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                   ref="sideLeftHostRef"
                   :panel="panels['side-left']"
                   v-bind="commentarySharedProps"
-                  :filter-visible="isCommentaryTreeOpenFor('side-left')"
                   :search-active="searchVisible && searchMode === 'commentary-side-left'"
                   @close="panels['side-left'].visible.value = false"
                   @navigate-section="(direction, id) => onNavigateSection('side-left', direction, id)"
-                  @toggle-filter-panel="toggleCommentaryTreePanel('side-left')"
+                  @toggle-filter-panel="panels['side-left'].toggleFilter()"
                   @toggle-search="openCommentarySearch('side-left')"
-                  @open-book="openBookInTab"
+                  @open-book="openBookTarget"
                 />
               </div>
             </template>
@@ -485,7 +535,6 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             @close="closeSidePanel"
           >
             <BookViewTocTree
-              v-if="sidePanelMode === 'toc'"
               :active-toc-entry-id="activeTocEntryId"
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
@@ -495,15 +544,30 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
               @select="onTocSelect"
               @alt-select="onAltTocSelect"
             />
-            <CommentaryTreePanel
-              v-else-if="sidePanelMode === 'commentary-tree' && commentaryTreeSlot"
-              :key="commentaryTreeSlot"
-              :groups="filterGroups"
-              :tree-state="panels[commentaryTreeSlot].treeState"
-              :scope-key="panels[commentaryTreeSlot].scopeKey"
-              :scroll-to-book="scrollTreeSelectionIntoView"
-            />
           </BookViewSidePanel>
+
+          <!--
+            The bottom panel's filter dropdown. Same behaviour as a side panel's,
+            but anchored here so it can run the full height of the body instead of
+            being clipped to the bottom panel.
+          -->
+          <div
+            v-if="panels.bottom.filterOpen.value"
+            ref="bottomFilterRef"
+            class="bottom-filter-dropdown"
+            :style="{
+              insetInlineStart: `${bottomFilterInlineStart}px`,
+              '--bottom-filter-offset': `${bottomFilterInlineStart}px`,
+            }"
+          >
+            <CommentaryTreePanel
+              :groups="filterGroups"
+              :tree-state="panels.bottom.treeState"
+              :scope-key="panels.bottom.scopeKey"
+              :scroll-to-book="scrollBottomTreeSelectionIntoView"
+              @close="panels.bottom.closeFilter()"
+            />
+          </div>
         </div><!-- end .content-area -->
       </div><!-- end .main-area -->
     </div><!-- end .body-row -->
@@ -603,6 +667,28 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
 .side-panel-divider:active::after {
   width: 4px;
   background: color-mix(in srgb, var(--accent-color) 50%, transparent);
+}
+
+/* ── The bottom panel's filter dropdown ───────────────────────────────────── */
+/* Floats over .content-area (which is position:relative), so it reflows nothing.
+   Unlike a side panel's dropdown it is anchored to the body, not to its own panel,
+   which is the whole point: it runs the full height of the book view instead of
+   being trapped in the bottom panel's height. inset-inline-start is set inline,
+   measured from the filter button.
+   Width comes from the tree itself (CommentaryTreePanel is width: fit-content). */
+.bottom-filter-dropdown {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  /* Whatever is left of the pane past the offset, so an inward-pushed button
+     cannot make the dropdown overflow the far edge. */
+  max-width: calc(100% - var(--bottom-filter-offset, 0px));
+  background: var(--bg-secondary);
+  border-inline-end: 1px solid var(--border-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), 0 1px 3px rgba(0, 0, 0, 0.25);
+  --tree-bg: var(--bg-secondary);
 }
 
 /* ── Side commentary column + text column ─────────────────────────────────── */
