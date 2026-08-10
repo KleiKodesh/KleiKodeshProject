@@ -160,7 +160,7 @@ function toggleItem(item: CommentaryVisibilityItem) {
         <span class="row-label">&#x5D4;&#x5E6;&#x5D2; &#x5D4;&#x5DB;&#x5DC;</span>
         <!-- click.stop: the whole row is a toggle-all target. -->
         <button
-          class="close-btn c-pointer"
+          class="close-btn c-pointer hover-bg"
           :title="closeTitle"
           @click.stop="emit('close')"
         >
@@ -296,9 +296,6 @@ function toggleItem(item: CommentaryVisibilityItem) {
   border-radius: 4px;
   color: var(--text-primary);
 }
-/* 16%, not the nav's 8%: unlike the nav strip, .all-row washes itself at 8% on
-   hover, so a matching 8% here would leave the button indistinguishable from it. */
-.close-btn:hover  { background: color-mix(in srgb, var(--text-primary) 16%, transparent); }
 .close-btn :deep(svg) { width: 14px; height: 14px; }
 
 .no-results {
