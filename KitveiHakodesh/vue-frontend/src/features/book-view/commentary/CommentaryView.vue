@@ -380,7 +380,12 @@ watch(() => props.loading, (loading) => {
 // ── Word-level links (hover preview + click-through) ─────────────────────────
 
 const booksDataStore = useBooksDataStore()
-const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
+const {
+  wordLinkTooltip,
+  keepOpen: keepWordLinkTooltipOpen,
+  releaseOpen: releaseWordLinkTooltip,
+  beginSelection: beginWordLinkTooltipSelection,
+} = useWordLinkTooltip(scrollerEl, {
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
   onNavigate: (target) => emit('open-book', target.bookId, target.lineIndex),
 })
@@ -409,6 +414,9 @@ const { wordLinkTooltip } = useWordLinkTooltip(scrollerEl, {
       v-if="wordLinkTooltip"
       :key="wordLinkTooltip.id"
       :data="wordLinkTooltip"
+      @pointer-enter="keepWordLinkTooltipOpen"
+      @pointer-leave="releaseWordLinkTooltip"
+      @select-start="beginWordLinkTooltipSelection"
     />
     <div class="body">
       <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
