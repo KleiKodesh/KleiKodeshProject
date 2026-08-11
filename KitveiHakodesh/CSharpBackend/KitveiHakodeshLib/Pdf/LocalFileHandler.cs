@@ -33,6 +33,14 @@ namespace KitveiHakodeshLib.LocalFile
         private readonly WebView2 _webView;
         private readonly Dictionary<string, FolderMapping> _hosts =
             new Dictionary<string, FolderMapping>(StringComparer.OrdinalIgnoreCase);
+        // HTML folders are served by us rather than by SetVirtualHostNameToFolderMapping —
+        // see RegisterServedFolder. Separate from _hosts so the same folder can hold both a
+        // natively mapped host (opened .pdf) and a served host (opened .html).
+        private readonly Dictionary<string, FolderMapping> _servedHosts =
+            new Dictionary<string, FolderMapping>(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, string> _servedFolderByHost =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private bool _servedHandlerInstalled;
         private int _hostCounter = 0;
 
         private struct FolderMapping { public string HostName; public int RefCount; }
@@ -82,7 +90,7 @@ namespace KitveiHakodeshLib.LocalFile
 
                 if (ext == ".txt")
                 {
-                    string content = File.ReadAllText(filePath, Encoding.UTF8);
+                    string content = ReadTextDetectEncoding(filePath);
                     _bridge.PushEvent(new
                     {
                         @event = "localFileTxtReady",
@@ -208,7 +216,7 @@ namespace KitveiHakodeshLib.LocalFile
 
                         if (ext == ".txt")
                         {
-                            string content = File.ReadAllText(filePath, Encoding.UTF8);
+                            string content = ReadTextDetectEncoding(filePath);
                             _bridge.PushEvent(new { @event = "localFileTxtReady", textContent = content, fileName = Path.GetFileName(filePath), filePath, openInNewTab = false });
                             _bridge.Reply(id, new { cancelled = false });
                         }
@@ -285,7 +293,7 @@ namespace KitveiHakodeshLib.LocalFile
                 {
                     // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
                     // The branches below stay on the UI thread — RegisterFolder touches CoreWebView2.
-                    string content = await Task.Run(() => File.ReadAllText(filePath, Encoding.UTF8)).ConfigureAwait(false);
+                    string content = await Task.Run(() => ReadTextDetectEncoding(filePath)).ConfigureAwait(false);
                     _bridge.Reply(id, new { textContent = content });
                     return;
                 }
@@ -418,7 +426,25 @@ namespace KitveiHakodeshLib.LocalFile
         {
             string filePath = root.GetProperty("filePath").GetString();
             string folder = File.Exists(filePath) ? Path.GetDirectoryName(filePath) : filePath;
-            if (_hosts.TryGetValue(folder, out var m))
+            string ext = Path.GetExtension(filePath);
+
+            // Route the release to the same table RegisterFolder used, so a folder holding both
+            // a served (.html) and a natively mapped (.pdf) host releases only the right one.
+            if (ext.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_servedHosts.TryGetValue(folder, out var s))
+                {
+                    s.RefCount--;
+                    if (s.RefCount <= 0)
+                    {
+                        _servedHosts.Remove(folder);
+                        _servedFolderByHost.Remove(s.HostName);
+                    }
+                    else _servedHosts[folder] = s;
+                }
+            }
+            else if (_hosts.TryGetValue(folder, out var m))
             {
                 m.RefCount--;
                 if (m.RefCount <= 0)
@@ -442,12 +468,19 @@ namespace KitveiHakodeshLib.LocalFile
                 try { _webView.CoreWebView2?.ClearVirtualHostNameToFolderMapping(kvp.Value.HostName); } catch { }
             }
             _hosts.Clear();
+            _servedHosts.Clear();
+            _servedFolderByHost.Clear();
         }
 
         private string RegisterFolder(string filePath)
         {
+            string ext = Path.GetExtension(filePath);
+            if (ext.Equals(".html", StringComparison.OrdinalIgnoreCase) ||
+                ext.Equals(".htm", StringComparison.OrdinalIgnoreCase))
+                return RegisterServedFolder(filePath);
+
             string folder = Path.GetDirectoryName(filePath);
-            
+
             if (!_hosts.TryGetValue(folder, out var m))
             {
                 string host = "kitvei-localfile-" + (++_hostCounter);
@@ -461,6 +494,124 @@ namespace KitveiHakodeshLib.LocalFile
             
             string filename = Path.GetFileName(filePath);
             return "http://" + m.HostName + "/" + filename;
+        }
+
+        /// <summary>
+        /// Registers an HTML folder on a virtual host that we serve ourselves from
+        /// <see cref="OnServedResourceRequested"/>, instead of handing the folder to
+        /// SetVirtualHostNameToFolderMapping.
+        ///
+        /// Reason: WebView2 serves a mapped folder below the WebResourceRequested layer — the
+        /// event does not fire for those URLs at all (verified against runtime 151), so there is
+        /// no way to attach a Content-Type to a mapped file. With no Content-Type and no
+        /// &lt;meta charset&gt; in the page, Chromium sniffs and falls back to windows-1252, which
+        /// renders UTF-8 Hebrew as mojibake — the Otzaria-addin gibberish bug. Addin pages
+        /// frequently omit the meta tag, which is why only *some* addins were affected.
+        ///
+        /// Serving the folder ourselves lets us declare the encoding we actually detected.
+        /// PDFs stay on the native mapping (RegisterFolder) — they need no charset and benefit
+        /// from WebView2's range-request handling.
+        /// </summary>
+        private string RegisterServedFolder(string filePath)
+        {
+            string folder = Path.GetDirectoryName(filePath);
+
+            if (!_servedHosts.TryGetValue(folder, out var m))
+            {
+                if (!_servedHandlerInstalled)
+                {
+                    _webView.CoreWebView2.WebResourceRequested += OnServedResourceRequested;
+                    _servedHandlerInstalled = true;
+                }
+                string host = "kitvei-localhtml-" + (++_hostCounter);
+                _webView.CoreWebView2.AddWebResourceRequestedFilter(
+                    "http://" + host + "/*", CoreWebView2WebResourceContext.All);
+                m = new FolderMapping { HostName = host, RefCount = 0 };
+                _servedFolderByHost[host] = folder;
+            }
+            m.RefCount++;
+            _servedHosts[folder] = m;
+
+            return "http://" + m.HostName + "/" + Path.GetFileName(filePath);
+        }
+
+        /// <summary>
+        /// Answers every request under a served host from disk. Requests for paths outside the
+        /// registered folder, or for hosts whose last tab has been disposed, are left unhandled
+        /// (WebView2 then fails them) rather than served.
+        /// </summary>
+        private void OnServedResourceRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
+        {
+            try
+            {
+                var uri = new Uri(e.Request.Uri);
+                if (!_servedFolderByHost.TryGetValue(uri.Host, out var folder)) return;
+                if (!_servedHosts.ContainsKey(folder)) return;      // released
+
+                string relative = uri.LocalPath.TrimStart('/', '\\').Replace('/', '\\');
+                string full = Path.GetFullPath(Path.Combine(folder, relative));
+                // Containment check — a page can request "../../secrets.txt".
+                string root = Path.GetFullPath(folder);
+                if (!root.EndsWith("\\")) root += "\\";
+                if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase)) return;
+                if (!File.Exists(full)) return;
+
+                byte[] bytes = File.ReadAllBytes(full);
+                e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
+                    new MemoryStream(bytes), 200, "OK",
+                    "Content-Type: " + ContentTypeFor(full, bytes) + "\r\n" +
+                    "Content-Length: " + bytes.Length);
+            }
+            catch
+            {
+                // Leave e.Response null — WebView2 fails the request, same as a missing file.
+            }
+        }
+
+        /// <summary>
+        /// Content type for a served file. Text types carry the charset we detected from the
+        /// bytes (UTF-8 with or without BOM, else Windows-1255) so the browser never has to
+        /// guess; a declared charset in the response wins over sniffing.
+        /// </summary>
+        private static string ContentTypeFor(string path, byte[] bytes)
+        {
+            switch (Path.GetExtension(path).ToLowerInvariant())
+            {
+                case ".html":
+                case ".htm":  return "text/html; charset=" + DetectCharset(bytes);
+                case ".css":  return "text/css; charset=" + DetectCharset(bytes);
+                case ".js":
+                case ".mjs":  return "text/javascript; charset=" + DetectCharset(bytes);
+                case ".json": return "application/json; charset=" + DetectCharset(bytes);
+                case ".txt":  return "text/plain; charset=" + DetectCharset(bytes);
+                case ".svg":  return "image/svg+xml; charset=" + DetectCharset(bytes);
+                case ".png":  return "image/png";
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".gif":  return "image/gif";
+                case ".webp": return "image/webp";
+                case ".ico":  return "image/x-icon";
+                case ".woff": return "font/woff";
+                case ".woff2":return "font/woff2";
+                case ".ttf":  return "font/ttf";
+                case ".pdf":  return "application/pdf";
+                default:      return "application/octet-stream";
+            }
+        }
+
+        /// <summary>
+        /// Charset label for text bytes, using the same UTF-8-or-Windows-1255 rule as
+        /// <see cref="ReadTextDetectEncoding"/>. UTF-16/32 BOMs are labelled so the browser
+        /// decodes them correctly too.
+        /// </summary>
+        private static string DetectCharset(byte[] b)
+        {
+            if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) return "utf-8";
+            if (b.Length >= 4 && b[0] == 0xFF && b[1] == 0xFE && b[2] == 0x00 && b[3] == 0x00) return "utf-32le";
+            if (b.Length >= 4 && b[0] == 0x00 && b[1] == 0x00 && b[2] == 0xFE && b[3] == 0xFF) return "utf-32be";
+            if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE) return "utf-16le";
+            if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF) return "utf-16be";
+            return IsValidUtf8(b) ? "utf-8" : "windows-1255";
         }
 
         private static async Task<string> ConvertToPdfAsync(string sourceFilePath)
