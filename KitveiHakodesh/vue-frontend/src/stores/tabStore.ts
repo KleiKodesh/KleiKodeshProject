@@ -955,6 +955,17 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab) applyTabPatch(tab, patch)
   }
 
+  /**
+   * Applies a patch WITHOUT recording history or recents. For patches that
+   * COMPLETE a navigation the tab already recorded — a restore result arriving
+   * with the served URL and route — where applyTabPatch would see the route key
+   * and push a second frame at the same location, making Back need two presses.
+   */
+  function updateTabWithoutHistory(tabId: string, patch: Partial<Omit<Tab, 'id'>>) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (tab) Object.assign(tab, patch)
+  }
+
   /** Navigate the active pane-2 tab in place (equivalent of updateActiveTab for pane 2). */
   function updatePane2ActiveTab(patch: Partial<Omit<Tab, 'id'>>) {
     const id = pane2ActiveTabId.value
@@ -1044,6 +1055,7 @@ export const useTabStore = defineStore('tabs', () => {
     captureCurrentPosition,
     updateActiveTab,
     updateTab,
+    updateTabWithoutHistory,
     openNewHomeTab,
     navigateToDestination,
     getLastReadPos,
