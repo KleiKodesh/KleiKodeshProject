@@ -248,7 +248,7 @@ public sealed class HttpHostServer(
 
         await using (fs)
         {
-            string contentType = ContentTypeFor(path);
+            string contentType = await ContentTypeForAsync(path, fs, ct);
             (long start, long end)? range = ParseRange(req.Range, length);
             if (range is (long s, long e))
             {
@@ -311,6 +311,91 @@ public sealed class HttpHostServer(
             if (end < start) return null;
         }
         return (start, end);
+    }
+
+    /// <summary>Content type for a served file. Text types get the charset detected from the
+    /// bytes rather than a hard-coded utf-8: legacy Hebrew files (Otzaria addin pages, .txt)
+    /// are often Windows-1255, and a declared charset in the response header overrides both
+    /// sniffing and the page's own &lt;meta charset&gt;, so labelling those utf-8 renders them as
+    /// mojibake. Leaves <paramref name="fs"/> rewound to the start.</summary>
+    private static async Task<string> ContentTypeForAsync(string path, FileStream fs, CancellationToken ct)
+    {
+        string ext = Path.GetExtension(path).ToLowerInvariant();
+        string? baseType = ext switch
+        {
+            ".htm" or ".html" => "text/html",
+            ".txt"  => "text/plain",
+            ".css"  => "text/css",
+            ".js" or ".mjs" => "text/javascript",
+            ".json" => "application/json",
+            ".svg"  => "image/svg+xml",
+            _       => null,
+        };
+        if (baseType is null) return ContentTypeFor(path);
+
+        // A prefix is enough to classify the encoding, and bounds the work for large files.
+        byte[] head = new byte[Math.Min(64 * 1024, fs.Length)];
+        int read = 0;
+        while (read < head.Length)
+        {
+            int n = await fs.ReadAsync(head.AsMemory(read, head.Length - read), ct);
+            if (n <= 0) break;
+            read += n;
+        }
+        fs.Seek(0, SeekOrigin.Begin);
+        return baseType + "; charset=" + DetectCharset(head.AsSpan(0, read), truncated: read < fs.Length);
+    }
+
+    /// <summary>Charset label for text bytes: an authoritative BOM, else UTF-8 if the bytes are
+    /// well-formed UTF-8, else Windows-1255 (Hebrew ANSI). When <paramref name="truncated"/> the
+    /// span is a prefix, so a multi-byte sequence cut at the end must not count as invalid.</summary>
+    private static string DetectCharset(ReadOnlySpan<byte> b, bool truncated)
+    {
+        if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) return "utf-8";
+        if (b.Length >= 4 && b[0] == 0xFF && b[1] == 0xFE && b[2] == 0x00 && b[3] == 0x00) return "utf-32le";
+        if (b.Length >= 4 && b[0] == 0x00 && b[1] == 0x00 && b[2] == 0xFE && b[3] == 0xFF) return "utf-32be";
+        if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE) return "utf-16le";
+        if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF) return "utf-16be";
+
+        if (truncated)
+        {
+            // Drop a trailing partial sequence: walk back over continuation bytes to the lead.
+            int i = b.Length - 1;
+            while (i >= 0 && (b[i] & 0xC0) == 0x80) i--;
+            if (i >= 0 && b[i] > 0x7F) b = b[..i];
+        }
+        return IsValidUtf8(b) ? "utf-8" : "windows-1255";
+    }
+
+    /// <summary>True if the bytes are well-formed UTF-8 (pure ASCII counts), rejecting overlong
+    /// encodings, surrogates and out-of-range code points — the test that distinguishes UTF-8
+    /// without a BOM from a single-byte codepage such as Windows-1255.</summary>
+    private static bool IsValidUtf8(ReadOnlySpan<byte> bytes)
+    {
+        int i = 0;
+        while (i < bytes.Length)
+        {
+            byte b = bytes[i];
+            int extra, min;
+            if (b <= 0x7F) { i++; continue; }
+            else if ((b & 0xE0) == 0xC0) { extra = 1; min = 0x80; }
+            else if ((b & 0xF0) == 0xE0) { extra = 2; min = 0x800; }
+            else if ((b & 0xF8) == 0xF0) { extra = 3; min = 0x10000; }
+            else return false;
+
+            if (i + extra >= bytes.Length) return false;
+            int cp = b & (0x7F >> (extra + 1));
+            for (int k = 1; k <= extra; k++)
+            {
+                byte c = bytes[i + k];
+                if ((c & 0xC0) != 0x80) return false;
+                cp = (cp << 6) | (c & 0x3F);
+            }
+            if (cp < min) return false;
+            if (cp > 0x10FFFF || cp is >= 0xD800 and <= 0xDFFF) return false;
+            i += extra + 1;
+        }
+        return true;
     }
 
     private static string ContentTypeFor(string path) =>
