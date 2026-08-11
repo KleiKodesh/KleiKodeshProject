@@ -136,6 +136,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
         localFilePath: msg.filePath as string,
         localFileConverting: false,
         isOtzariaAddin: false,
+        // Cleared explicitly (merge semantics) — a leftover HebrewBooks id would
+        // let a stale hbPdfReady stamp its book over this document later.
+        localFileHbBookId: undefined,
+        localFileHbBookTitle: undefined,
       }
       const tabId = resolveOpenInNewTab(msg.openInNewTab)
         ? openInTargetPane(tabFields)
@@ -161,6 +165,10 @@ export const useLocalFileStore = defineStore('localFile', () => {
         // the key in only when true would leave a previous addin's flag on a tab that
         // is now showing an unrelated HTML file — and the bridge would inject into it.
         isOtzariaAddin: isHtmlLike && !!msg.isOtzariaAddin,
+        // Same merge rule for the HebrewBooks identity — a leftover id would let a
+        // stale hbPdfReady stamp its book over this document later.
+        localFileHbBookId: undefined,
+        localFileHbBookTitle: undefined,
       }
       const tabId = resolveOpenInNewTab(msg.openInNewTab)
         ? openInTargetPane(tabFields)
@@ -238,6 +246,11 @@ export const useLocalFileStore = defineStore('localFile', () => {
       localFileConverting: true,
       localFileLoadingType: 'converting' as const,
       localFileVirtualUrl: undefined,
+      // Cleared explicitly (updateTab merges): a leftover HebrewBooks id from a
+      // previous download on this tab would let that download's late hbPdfReady
+      // pass finishHbDownload's identity check and stamp over this conversion.
+      localFileHbBookId: undefined,
+      localFileHbBookTitle: undefined,
     }
     const tabId = openInNewTab
       ? openInTargetPane(tabFields)
