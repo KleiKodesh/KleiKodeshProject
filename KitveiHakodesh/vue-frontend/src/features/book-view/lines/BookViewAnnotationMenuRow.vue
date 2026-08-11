@@ -80,12 +80,22 @@ function argbToCss(signedArgb: number): string {
   direction: rtl;
 }
 
-.note-row {
+/* These rows sit inside ContextMenu.vue, which cannot style them (they belong to this
+   child component) — so they take the menu's published row metrics from its CSS
+   variables rather than restating the numbers. Do not inline literals here: the height
+   and padding are load-bearing for hover-flushness and separator rasterization, and
+   the reasoning lives in one place, on .context-menu-item. */
+.note-row,
+.highlight-row {
   display: flex;
   align-items: center;
+  padding: var(--context-menu-row-padding-block) var(--context-menu-row-padding-inline);
+  box-sizing: border-box;
+  height: var(--context-menu-row-height);
+}
+
+.note-row {
   gap: 6px;
-  padding: 0 12px;
-  height: 26px;
   cursor: pointer;
   font-size: 12px;
 }
@@ -107,18 +117,17 @@ function argbToCss(signedArgb: number): string {
   color: var(--text-primary);
 }
 
+/* Same rule as ContextMenu.vue's .context-menu-separator, which cannot reach into this
+   component. margin MUST stay 0 — margin around a separator is dead space no row's
+   hover can paint, and that is what left a gap between the highlight and the rule. */
 .separator {
   height: 1px;
   background: var(--border-color);
-  margin-block: 2px;
+  margin-block: 0;
 }
 
 .highlight-row {
-  display: flex;
-  align-items: center;
   gap: 5px;
-  padding: 0 12px;
-  height: 26px;
   direction: rtl;
 }
 

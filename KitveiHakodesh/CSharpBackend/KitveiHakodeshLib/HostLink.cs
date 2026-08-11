@@ -4,13 +4,21 @@ using System.Text.RegularExpressions;
 namespace KitveiHakodeshLib
 {
     /// <summary>
-    /// A parsed otzaria:// or zayit:// deep link pointing at a line of a book.
+    /// A parsed otzaria://, zayit:// or seforimapp:// deep link pointing at a line of
+    /// a book.
     ///
     /// Otzaria format:
     ///   otzaria://open/book/&lt;bookId&gt;?index=&lt;lineIndex&gt;
     ///   optionally &amp;mark            → highlight the whole line
     ///   optionally &amp;m=&lt;url-encoded&gt; → highlight a specific span within the line
     ///   The reference is a 0-based POSITIONAL line/segment index (finest granularity).
+    ///
+    /// SeforimApp format (this app's own links — see the frontend's
+    /// useBookViewLineLink.ts, which is the only place they are generated):
+    ///   seforimapp://book/&lt;bookId&gt;?index=&lt;lineIndex&gt;
+    ///   Deliberately the same shape and the same query parameters as Otzaria, minus
+    ///   the "open/" segment, so both are parsed by one code path and `index` means the
+    ///   same thing in both: a 0-based POSITIONAL line index, never a DB row id.
     ///
     /// Zayit format:
     ///   zayit://book/&lt;bookId&gt;/line/&lt;lineId&gt;
@@ -20,9 +28,9 @@ namespace KitveiHakodeshLib
     /// </summary>
     public sealed class HostLink
     {
-        public enum LinkScheme { Otzaria, Zayit }
+        public enum LinkScheme { Otzaria, Zayit, SeforimApp }
 
-        /// <summary>"otzaria" or "zayit".</summary>
+        /// <summary>"otzaria", "zayit" or "seforimapp".</summary>
         public LinkScheme Scheme { get; private set; }
 
         public int BookId { get; private set; }
@@ -44,6 +52,11 @@ namespace KitveiHakodeshLib
             @"^otzaria://open/book/(?<book>\d+)(?:\?(?<query>.*))?$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+        // seforimapp://book/<bookId>?<query> — same query grammar as Otzaria.
+        private static readonly Regex SeforimAppRe = new Regex(
+            @"^seforimapp://book/(?<book>\d+)(?:\?(?<query>.*))?$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         // zayit://book/<bookId>/line/<lineId>
         private static readonly Regex ZayitRe = new Regex(
             @"^zayit://book/(?<book>\d+)/line/(?<line>\d+)$",
@@ -58,14 +71,22 @@ namespace KitveiHakodeshLib
             if (string.IsNullOrWhiteSpace(url)) return null;
             url = url.Trim();
 
-            var oz = OtzariaRe.Match(url);
-            if (oz.Success)
+            // Otzaria and SeforimApp share one body: same path shape, same query
+            // grammar, same meaning for `index`. Only the recorded Scheme differs.
+            var indexed = OtzariaRe.Match(url);
+            var indexedScheme = LinkScheme.Otzaria;
+            if (!indexed.Success)
             {
-                if (!int.TryParse(oz.Groups["book"].Value, out int bookId)) return null;
+                indexed = SeforimAppRe.Match(url);
+                indexedScheme = LinkScheme.SeforimApp;
+            }
+            if (indexed.Success)
+            {
+                if (!int.TryParse(indexed.Groups["book"].Value, out int bookId)) return null;
 
-                var link = new HostLink { Scheme = LinkScheme.Otzaria, BookId = bookId };
-                ParseOtzariaQuery(oz.Groups["query"].Value, link);
-                // An Otzaria link without a resolvable index has no line to open.
+                var link = new HostLink { Scheme = indexedScheme, BookId = bookId };
+                ParseIndexedQuery(indexed.Groups["query"].Value, link);
+                // Such a link without a resolvable index has no line to open.
                 return link.Index.HasValue ? link : null;
             }
 
@@ -80,7 +101,8 @@ namespace KitveiHakodeshLib
             return null;
         }
 
-        private static void ParseOtzariaQuery(string query, HostLink link)
+        // Shared by the Otzaria and SeforimApp schemes — see TryParse.
+        private static void ParseIndexedQuery(string query, HostLink link)
         {
             if (string.IsNullOrEmpty(query)) return;
 

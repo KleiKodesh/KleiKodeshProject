@@ -250,6 +250,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `useBookViewLinesTable.ts` — paginated line fetching in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
 - `useBookViewLineRenderer.ts` — line rendering logic
 - `useBookViewLineCopyMenu.ts` — context menu for line copying
+- `useBookViewLineLink.ts` — "copy link to this section" menu action; builds and copies a `seforimapp://book/<bookId>?index=<lineIndex>` deep link, shaped to match the `otzaria://` links `HostLink.cs` parses (no protocol handler is registered — format is future-proofing)
 - `useBookViewLinesScroll.ts` / `useBookViewLinesNavigation.ts` — scroll and navigation within the lines view
 - `useBookViewHighlights.ts`, `useBookViewNotes.ts`, `useBookViewAnnotations.ts` — user annotations; `bookViewAnnotationColors.ts`, `BookViewAnnotationMenuRow.vue`, `BookViewNoteBubble.vue`
 - `useBookViewAbbrevTooltip.ts` + `BookViewAbbrevTooltip.vue` — abbreviation expansion tooltip

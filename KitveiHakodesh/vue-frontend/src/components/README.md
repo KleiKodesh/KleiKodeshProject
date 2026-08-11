@@ -12,7 +12,7 @@ Shared reusable components used across multiple features. Only add a component h
 
 **FloatingSearchBar.vue** (`common/`) — floating search bar that overlays content. Supports match navigation, mode toggle, and auto-focus.
 
-**ContextMenu.vue** — right-click / long-press context menu.
+**ContextMenu.vue** — right-click / long-press context menu. Item types: text, separator, checkbox (persistent toggle, does not close the menu), component (custom row), and submenu (one level of nesting only — a submenu holds text/separator/checkbox items and opens on hover or tap toward the inline-start side, flipping and shifting to stay inside the viewport). Items carry no icons — labels only.
 
 **ConfirmDialog.vue** — modal confirmation dialog. Use this for any destructive action confirmation.
 

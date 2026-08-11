@@ -233,11 +233,12 @@ namespace KitveiHakodeshLib
 
         /// <summary>
         /// Opens a book at a specific line inside the app from the VSTO host — driven
-        /// by an otzaria:// or zayit:// deep link found in the Word selection's
-        /// hyperlinks (see <see cref="HostLink"/>). Otzaria links carry a positional
-        /// line index that the frontend uses directly; Zayit links carry a DB line
-        /// row-id the frontend converts to an index. Queued and flushed on 'appReady'
-        /// if Vue is not yet mounted, mirroring <see cref="OpenFileFromPath"/>.
+        /// by an otzaria://, seforimapp:// or zayit:// deep link found in the Word
+        /// selection's hyperlinks (see <see cref="HostLink"/>). Otzaria and SeforimApp
+        /// links carry a positional line index that the frontend uses directly; Zayit
+        /// links carry a DB line row-id the frontend converts to an index. Queued and
+        /// flushed on 'appReady' if Vue is not yet mounted, mirroring
+        /// <see cref="OpenFileFromPath"/>.
         /// </summary>
         public void OpenBookFromHost(HostLink link)
         {
@@ -251,10 +252,20 @@ namespace KitveiHakodeshLib
 
         private void PushOpenBook(HostLink link)
         {
+            // Switch, not a ternary: a `x == Zayit ? "zayit" : "otzaria"` shape silently
+            // mislabels every scheme added later as "otzaria".
+            string scheme;
+            switch (link.Scheme)
+            {
+                case HostLink.LinkScheme.Zayit: scheme = "zayit"; break;
+                case HostLink.LinkScheme.SeforimApp: scheme = "seforimapp"; break;
+                default: scheme = "otzaria"; break;
+            }
+
             _bridge.PushEvent(new
             {
                 @event = "hostOpenBook",
-                scheme = link.Scheme == HostLink.LinkScheme.Zayit ? "zayit" : "otzaria",
+                scheme,
                 bookId = link.BookId,
                 index = link.Index,      // Otzaria positional index (null for Zayit)
                 lineId = link.LineId,    // Zayit DB line row-id (null for Otzaria)

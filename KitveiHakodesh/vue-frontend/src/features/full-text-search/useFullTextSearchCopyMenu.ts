@@ -23,7 +23,6 @@ export function useFullTextSearchCopyMenu(): { items: ContextMenuItem[] } {
 
   const items: ContextMenuItem[] = [
     { label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' },
-    { type: 'separator' },
     {
       type: 'checkbox',
       label: 'העתק טקסט נקי',

@@ -17,12 +17,15 @@ import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
  *    catalog → open the book-catalog singleton seeded with the text via
  *              tab.catalogQuery (BookCatalogPage reads it on mount and searches).
  *
- * 2. hostOpenBook — "פתח קישור בכתבי הקודש": an otzaria:// or zayit:// deep link
- *    found in the selection's hyperlinks, parsed C#-side into:
- *      { event: 'hostOpenBook', scheme: 'otzaria' | 'zayit', bookId,
+ * 2. hostOpenBook — "פתח קישור בכתבי הקודש": an otzaria://, seforimapp:// or zayit://
+ *    deep link found in the selection's hyperlinks, parsed C#-side into:
+ *      { event: 'hostOpenBook', scheme: 'otzaria' | 'seforimapp' | 'zayit', bookId,
  *        index, lineId, mark, markText }
- *    Otzaria carries a positional line `index` (used directly); Zayit carries a DB
- *    `lineId` we convert to a positional index via getLineIndexFromLineId.
+ *    Otzaria and seforimapp (this app's own links, from useBookViewLineLink.ts) both
+ *    carry a positional line `index` used directly; Zayit carries a DB `lineId` we
+ *    convert to a positional index via getLineIndexFromLineId. Branch on which of
+ *    `index`/`lineId` is present, NOT on `scheme` — the two indexed schemes are
+ *    handled identically and `scheme` is informational.
  *
  * The listener is global and lives for the app's lifetime, so this store is
  * instantiated once at startup (main.ts) — before 'appReady' is posted, so any
