@@ -418,12 +418,25 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (!tab || (tab.route !== '/pdf-view' && tab.route !== '/html-view')) return
 
     if (tab.localFileHbBookId) {
+      const hbBookId = tab.localFileHbBookId
       const localFolder = useSettingsStore().hebrewBooksLocalFolder || undefined
       tabStore.updateTab(tabId, { localFileConverting: true, localFileLoadingType: 'downloading' })
       _converting.add(tabId)
       // If restore misses and re-downloads, show live progress under the spinner (dev).
-      startHbProgressPoll(tabId, tab.localFileHbBookId)
-      const res = await restoreHbPdf(tab.localFileHbBookId, tab.localFileHbBookTitle ?? '', tabId, localFolder)
+      startHbProgressPoll(tabId, hbBookId)
+      const res = await restoreHbPdf(hbBookId, tab.localFileHbBookTitle ?? '', tabId, localFolder)
+      // The tab may have navigated elsewhere during the await (a second quick pick
+      // targets the same tab) — a late result must not stamp the OLD document onto
+      // it. If it moved to ANOTHER HebrewBooks book, that pick's own flow owns the
+      // poller and converting flag now, so only clean them up when it left HB entirely.
+      const liveTab = tabStore.tabs.find((t) => t.id === tabId)
+      if (liveTab?.localFileHbBookId !== hbBookId) {
+        if (!liveTab?.localFileHbBookId) {
+          stopHbProgressPoll(tabId)
+          _converting.delete(tabId)
+        }
+        return
+      }
       if (!res) {
         stopHbProgressPoll(tabId)
         _converting.delete(tabId)
@@ -448,13 +461,20 @@ export const useLocalFileStore = defineStore('localFile', () => {
         // .txt tabs restore directly — TxtViewPage reads the file itself via bridge
         tabStore.updateTab(tabId, { route: '/txt-view' })
       } else {
-        const res = await restoreLocalFile(tab.localFilePath)
-        if (res) {
+        const filePath = tab.localFilePath
+        const res = await restoreLocalFile(filePath)
+        // A second quick pick can retarget this tab during the await — a late
+        // result for the OLD file must not overwrite the new document's URL.
+        const liveTab = tabStore.tabs.find((t) => t.id === tabId)
+        if (res && liveTab?.localFilePath === filePath) {
           // Route by what is actually served: dev Word docs may come back as HTML
           // (Office-free fallback) — res.kind reports it. Fall back to the extension.
           const isHtmlLike = res.kind === 'html' || (!res.kind && (ext === '.htm' || ext === '.html'))
           const route = isHtmlLike ? '/html-view' : '/pdf-view'
-          tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
+          // Without history: this completes the navigation the tab already
+          // recorded — recording the arriving route again would add a second
+          // frame at the same location and make Back need two presses.
+          tabStore.updateTabWithoutHistory(tabId, { localFileVirtualUrl: res.url, route })
         }
       }
     }
@@ -493,6 +513,17 @@ export const useLocalFileStore = defineStore('localFile', () => {
       _converting.add(tabId)
       startHbProgressPoll(tabId, localFileHbBookId)
       const res = await restoreHbPdf(localFileHbBookId, localFileHbBookTitle ?? '', tabId, localFolder)
+      // Same supersede guard as restoreTab: a second quick pick retargets this tab
+      // during the await, and a late result must not stamp the old book onto it. If
+      // the tab moved to another HB book, that pick's flow owns the poller/flag now.
+      const liveTab = tabStore.tabs.find((t) => t.id === tabId)
+      if (liveTab?.localFileHbBookId !== localFileHbBookId) {
+        if (!liveTab?.localFileHbBookId) {
+          stopHbProgressPoll(tabId)
+          _converting.delete(tabId)
+        }
+        return
+      }
       if (!res) {
         stopHbProgressPoll(tabId)
         _converting.delete(tabId)
@@ -516,10 +547,14 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const fileRoute: import('@/stores/tabStore').TabRoute = isHtmlLike ? '/html-view' : '/pdf-view'
       const tabId = placeTab({ route: fileRoute, title, localFileName: entry.localFileName ?? title, localFilePath, localFileVirtualUrl: undefined, localFileConverting: false })
       const res = await restoreLocalFile(localFilePath)
-      if (res) {
+      // Supersede guard + no history frame — same reasons as in restoreTab: a late
+      // result must not overwrite a newer pick's document, and this patch completes
+      // the navigation placeTab already recorded rather than making a new one.
+      const liveTab = tabStore.tabs.find((t) => t.id === tabId)
+      if (res && liveTab?.localFilePath === localFilePath) {
         // Dev may serve a Word doc as HTML (Office-free fallback) — follow the served kind.
         const route = res.kind === 'html' ? '/html-view' : res.kind === 'pdf' ? '/pdf-view' : fileRoute
-        tabStore.updateTab(tabId, { localFileVirtualUrl: res.url, route })
+        tabStore.updateTabWithoutHistory(tabId, { localFileVirtualUrl: res.url, route })
       }
       return
     }
