@@ -244,6 +244,10 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
 <style scoped>
 .search-input {
   flex: 1;
+  /* Text inputs have an intrinsic minimum width (default size attribute), so in
+     a tight bar the input refuses to shrink and pushes the buttons and the
+     count badge out of the pill. Let it shrink instead. */
+  min-width: 40px;
   background: none;
   border: none;
   outline: none;

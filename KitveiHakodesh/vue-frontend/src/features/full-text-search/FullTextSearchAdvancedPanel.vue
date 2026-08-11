@@ -190,8 +190,13 @@ function onContextWordsInput(event: Event) {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   flex-shrink: 0;
-  max-height: 60%;
+  /* Viewport units, NOT a percentage: the containing block (.search-bar-dock)
+     is sized by its content, so `max-height: 60%` resolves against the panel's
+     own content height — clamping the box mid-list and spilling the remaining
+     rows underneath the search bar. */
+  max-height: 60vh;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* Wide screens: stop stretching to the full page width — which stranded every
@@ -263,7 +268,12 @@ function onContextWordsInput(event: Event) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex-shrink: 0;
+  /* When the panel hits its max-height (short windows), the option list
+     scrolls instead of overflowing past the panel box. */
+  min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .option-row {
   display: flex;
