@@ -17,7 +17,7 @@ type CommentaryGroup = { bookId: number; bookTitle: string; sectionLabel?: strin
 
 type CommentaryViewInstance = {
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
-  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
+  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<boolean>
   claimRestoreIntent?: () => void
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
 }
@@ -120,8 +120,12 @@ export function useBookViewCommentaryPanel(
             // group instead of the saved position.
             viewRef.claimRestoreIntent?.()
             nextTick(async () => {
-              await viewRef.restoreCommentaryScrollPos(savedScrollIndex, savedScrollOffset)
-              lastRestoredCommentaryKey = restoreKey
+              // Only record the restore as done when it actually applied. A restore
+              // that died unapplied (panel closed mid-flight) used to still stamp the
+              // key, so the next reopen deduped against it and skipped restoring -
+              // the reader's place was lost.
+              const applied = await viewRef.restoreCommentaryScrollPos(savedScrollIndex, savedScrollOffset)
+              if (applied) lastRestoredCommentaryKey = restoreKey
             })
           } else {
             stopViewRef = watch(
@@ -131,8 +135,8 @@ export function useBookViewCommentaryPanel(
                 stopViewRef?.()
                 newRef.claimRestoreIntent?.()
                 nextTick(async () => {
-                  await newRef.restoreCommentaryScrollPos(savedScrollIndex, savedScrollOffset)
-                  lastRestoredCommentaryKey = restoreKey
+                  const applied = await newRef.restoreCommentaryScrollPos(savedScrollIndex, savedScrollOffset)
+                  if (applied) lastRestoredCommentaryKey = restoreKey
                 })
               },
             )

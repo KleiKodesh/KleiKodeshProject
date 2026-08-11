@@ -70,12 +70,13 @@ type CommentaryViewInstance = {
   topVisibleFlatIndex: number
   activeBookId: number | null
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
-  activePinnedGroupForCapture?: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
+  activePinnedGroupForCapture?: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null
+  cancelPositioning?: () => void
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
-  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
+  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<boolean>
   claimRestoreIntent?: () => void
   $el?: HTMLElement
 }
@@ -256,7 +257,7 @@ export function useBookView(
       // click landing mid-transit captured that first group as a "preference",
       // silently switching the panel to a commentator the reader never chose.
       snapshot[slot] =
-        commentaryViewRefs[slot]()?.activePinnedGroupForCapture ??
+        commentaryViewRefs[slot]()?.activePinnedGroupForCapture?.() ??
         panels[slot].pinnedCommentaryGroup.value ??
         null
     }
@@ -285,6 +286,10 @@ export function useBookView(
     for (const slot of COMMENTARY_SLOTS) {
       panels[slot].scrollIndex.value = null
       panels[slot].scrollOffset.value = null
+      // The saved position is void, so any goal still chasing it is void too - and
+      // an in-flight restore would otherwise block this load's pin-follow and then
+      // apply the previous line's offset to the new line's list.
+      commentaryViewRefs[slot]()?.cancelPositioning?.()
     }
     // Re-clicking the already-selected line changes no reactive state, so no
     // commentary reload fires and setupGroupReloadScroll never wakes — jump each

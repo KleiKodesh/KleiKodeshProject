@@ -2,6 +2,15 @@
 
 This file records the diagnostic logging that was used to trace and fix the pinned commentary scroll bugs. Keep for future reference if similar issues resurface.
 
+> **2026-08-11 — the mechanics below are superseded.** `useCommentaryScroll` was
+> rebuilt as a per-panel goal POSITIONER (commit `a0e450aa`): one goal slot, one rAF
+> loop, priority rules, condition-based settling. The cancellation token, the
+> `isRestoringScrollPos` flag, the restore-intent latch and the fixed correction
+> windows described in these notes no longer exist — do not re-introduce them. The
+> *root causes* documented here remain true and the trace tooling still works; see
+> `../SCROLL_AND_COMMENTARY_POSITIONING.md` ("The positioner") for the current
+> design and the capture rule ("a derived active group is not a preference").
+
 ## Problems Fixed
 
 ### 1. Line click doesn't stay on same commentary book

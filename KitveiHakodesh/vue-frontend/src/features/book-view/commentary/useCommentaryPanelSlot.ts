@@ -72,7 +72,7 @@ type CommentaryViewInstance = {
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
   captureScrollPos?: () => { scrollIndex: number; scrollOffset: number } | null
-  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<void>
+  restoreCommentaryScrollPos: (index: number, offset: number) => Promise<boolean>
   claimRestoreIntent?: () => void
 }
 
