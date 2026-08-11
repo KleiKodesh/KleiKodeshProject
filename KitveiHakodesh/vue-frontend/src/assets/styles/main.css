@@ -159,19 +159,22 @@ input:focus { background: none !important; }
   content: '';
   position: absolute;
 }
+/* Band width matches VS Code's default sash hover size (8px). Any wider and the
+   invisible overlap starts stealing clicks from what sits against the sash - a
+   commentary panel's static header buttons, a pane's scrollbar. */
 .sash-v::before {
   top: 0;
   bottom: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 20px;
+  width: 8px;
 }
 .sash-h::before {
   left: 0;
   right: 0;
   top: 50%;
   transform: translateY(-50%);
-  height: 44px;
+  height: 8px;
 }
 
 .sash::after {
