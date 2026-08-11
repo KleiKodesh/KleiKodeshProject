@@ -136,7 +136,7 @@ async function onSelectLocation(id: string, openInNewTab = false) {
     (patch.localFilePath || patch.localFileHbBookId) &&
     (patch.route === '/pdf-view' || patch.route === '/html-view')
   ) {
-    await localFileStore.restoreTab(targetTabId)
+    await localFileStore.restoreTab(targetTabId, true)
   }
 }
 

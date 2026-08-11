@@ -403,8 +403,17 @@ export const useLocalFileStore = defineStore('localFile', () => {
     })
   }
 
-  /** Called on app init for every restored /pdf-view or /html-view tab. */
-  async function restoreTab(tabId: string) {
+  /**
+   * Called on app init for every restored /pdf-view or /html-view tab, and by the
+   * address-bar recents path after it navigates a tab to a file location.
+   *
+   * On a HebrewBooks restore failure the two callers want opposite things: an
+   * app-init tab is a leftover from a dead session and should close, but a LIVE tab
+   * the user just navigated must survive — closing it would also discard its
+   * back-history. `keepTabOpenOnFailure` navigates it home instead (same recovery
+   * as openFromHistory).
+   */
+  async function restoreTab(tabId: string, keepTabOpenOnFailure = false) {
     const tab = tabStore.tabs.find((t) => t.id === tabId)
     if (!tab || (tab.route !== '/pdf-view' && tab.route !== '/html-view')) return
 
@@ -418,7 +427,11 @@ export const useLocalFileStore = defineStore('localFile', () => {
       if (!res) {
         stopHbProgressPoll(tabId)
         _converting.delete(tabId)
-        tabStore.closeTab(tabId)
+        if (keepTabOpenOnFailure) {
+          tabStore.updateTab(tabId, { route: '/', title: 'בית', localFileConverting: false, localFileLoadingType: undefined })
+        } else {
+          tabStore.closeTab(tabId)
+        }
       } else if ('url' in res) {
         stopHbProgressPoll(tabId) // local/cache hit — no download happened
         _converting.delete(tabId)
