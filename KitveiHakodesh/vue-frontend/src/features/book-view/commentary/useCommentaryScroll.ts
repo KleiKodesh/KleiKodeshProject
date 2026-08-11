@@ -1,4 +1,4 @@
-import { computed, ref, watch, nextTick } from 'vue'
+import { computed, ref, watch, nextTick, onScopeDispose } from 'vue'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
 import { commentaryScrollTrace as trace } from '@/utils/commentaryScrollTrace'
 import type { Virtualizer } from '@tanstack/vue-virtual'
@@ -40,7 +40,7 @@ const SAFETY_MS = 30000
  */
 type Goal =
   | { kind: 'restore-intent' }
-  | { kind: 'restore'; scrollIndex: number; scrollOffset: number; resolve: () => void; resolved: boolean }
+  | { kind: 'restore'; scrollIndex: number; scrollOffset: number; resolve: (applied: boolean) => void; resolved: boolean; applied: boolean }
   | { kind: 'group'; bookId: number; sectionLabel?: string; subSectionLabel?: string; reason: string; entered?: boolean }
   | { kind: 'flatIndex'; flatIndex: number; occurrence: number; phase: 'position' | 'mark'; entered?: boolean }
 
@@ -122,11 +122,17 @@ export function useCommentaryScroll(
    * permanently switching the panel to a commentator the reader never chose.
    * The doc's rule generalizes: a DERIVED active group is not a preference -
    * only one the reader made. Callers fall back to the held pin on null.
+   *
+   * A FUNCTION, deliberately not a computed. `goal` and `userAdjusted` are plain
+   * variables, so a computed reading them would track no reactive dependency on
+   * the guard path and Vue would cache that first `null` for the life of the
+   * panel - the capture would never work again. It is also the right shape: this
+   * answers "what is true at this instant", asked imperatively at click time.
    */
-  const activePinnedGroupForCapture = computed<any>(() => {
+  function activePinnedGroupForCapture(): any {
     if (goal !== null || !userAdjusted) return null
     return activePinnedGroup.value
-  })
+  }
 
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
     scrollTop.value = scrollerEl()?.scrollTop ?? 0
@@ -151,6 +157,15 @@ export function useCommentaryScroll(
    * restore-intent latch - one mechanism instead of three. */
   let goalSeq = 0
   let userCancelEl: HTMLElement | null = null
+  /** Waiting reasons already traced for the current goal (see runLoop). */
+  let tracedWaits = new Set<string>()
+
+  /** Trace a waiting reason at most once per goal. */
+  function traceWaitOnce(flow: string, event: string, detail: Record<string, unknown>) {
+    if (tracedWaits.has(event)) return
+    tracedWaits.add(event)
+    trace.push(flow, event, detail)
+  }
 
   function flowFor(g: Goal): string {
     return g.kind === 'restore' || g.kind === 'restore-intent' ? FLOW_RESTORE : FLOW_SCROLL
@@ -173,7 +188,7 @@ export function useCommentaryScroll(
   function endGoal(status: string) {
     if (!goal) return
     trace.push(flowFor(goal), `goal_${status}`, { kind: goal.kind })
-    if (goal.kind === 'restore' && !goal.resolved) { goal.resolved = true; goal.resolve() }
+    if (goal.kind === 'restore' && !goal.resolved) { goal.resolved = true; goal.resolve(goal.applied) }
     goal = null
     goalSeq++
     isPositioning.value = false
@@ -215,6 +230,12 @@ export function useCommentaryScroll(
     }
   }
 
+  /** A scroll position the element can actually hold. */
+  function clampScroll(el: HTMLElement, desired: number): number {
+    const max = Math.max(0, el.scrollHeight - el.clientHeight)
+    return Math.min(Math.max(0, desired), max)
+  }
+
   function resolveGroupIndex(bookId: number, sectionLabel?: string, subSectionLabel?: string): number {
     const items = flatItems()
     const exact = items.findIndex(
@@ -247,6 +268,10 @@ export function useCommentaryScroll(
     let lostScrollerFrames = 0
     let intentFrames = 0
     const startedAt = performance.now()
+    // A goal can wait for many seconds; tracing the reason once per frame at 60fps
+    // wraps the trace buffer and evicts the events being captured. Once per reason
+    // per goal is all a reader of the dump needs.
+    tracedWaits = new Set<string>()
 
     function attachUserCancel(el: HTMLElement) {
       if (userCancelEl === el) return
@@ -342,11 +367,10 @@ export function useCommentaryScroll(
         const contentPending =
           g.scrollOffset > 0 && flatItem?.type === 'line' && flatItem.lineId > 0 && flatItem.content === ''
         if (contentPending && !force) {
-          trace.push(FLOW_RESTORE, 'content_pending', { scrollIndex: g.scrollIndex })
+          traceWaitOnce(FLOW_RESTORE, 'content_pending', { scrollIndex: g.scrollIndex })
           return 'waiting'
         }
-        const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
-        const target = Math.min(Math.max(0, m.start + g.scrollOffset), maxScrollTop)
+        const target = clampScroll(el, m.start + g.scrollOffset)
         if (Math.abs(el.scrollTop - target) > 2) {
           const before = el.scrollTop
           el.scrollTop = target
@@ -355,10 +379,12 @@ export function useCommentaryScroll(
           // The reader-facing contract resolves on the FIRST successful apply -
           // the panel is now at (approximately) the right place and callers must
           // not wait out the settle confirmation.
-          if (!g.resolved) { g.resolved = true; g.resolve() }
+          g.applied = true
+          if (!g.resolved) { g.resolved = true; g.resolve(true) }
           return 'position'
         }
-        if (!g.resolved) { g.resolved = true; g.resolve() }
+        g.applied = true
+        if (!g.resolved) { g.resolved = true; g.resolve(true) }
         return 'stable'
       }
 
@@ -371,7 +397,7 @@ export function useCommentaryScroll(
           // (filtered out, or gone from this line): end rather than hold the goal
           // - and the loading overlay - for the whole safety window.
           if (!flatItems().length) {
-            trace.push(FLOW_SCROLL, 'group_waiting_for_index', { bookId: g.bookId })
+            traceWaitOnce(FLOW_SCROLL, 'group_waiting_for_index', { bookId: g.bookId })
             return 'waiting'
           }
           endGoal('index_not_found')
@@ -379,7 +405,12 @@ export function useCommentaryScroll(
         }
         const m = virtualizer().measurementsCache.find((c: any) => c.index === idx)
         if (!m) return 'waiting'
-        const target = Math.max(0, m.start)
+        // Clamped: a target past the end of the scroll range (last group, or a list
+        // shorter than the viewport where maxScrollTop is 0) can never be reached,
+        // the browser clamps every write, and an unclamped compare would report
+        // 'position' on every frame forever - holding the positioning mask over the
+        // panel until the safety valve. Clamp so arrival is achievable.
+        const target = clampScroll(el, m.start)
         if (Math.abs(el.scrollTop - target) > 2) {
           const before = el.scrollTop
           if (!g.entered) {
@@ -401,7 +432,7 @@ export function useCommentaryScroll(
         const m = virtualizer().measurementsCache.find((c: any) => c.index === g.flatIndex)
         if (!m) return 'waiting'
         if (g.phase === 'position') {
-          const target = Math.max(0, m.start - NAV_HEIGHT - 8)
+          const target = clampScroll(el, m.start - NAV_HEIGHT - 8)
           if (Math.abs(el.scrollTop - target) > 2 && !force) {
             if (!g.entered) {
               virtualizer().scrollToIndex(g.flatIndex, { align: 'start' })
@@ -413,6 +444,10 @@ export function useCommentaryScroll(
           }
           setCurrentMark(el, g.flatIndex, g.occurrence)
           g.phase = 'mark'
+          // The line is in place; only the mark fine-adjust is left. Reveal now -
+          // the mark can take many frames to render (or never, if the query was
+          // cleared), and masking the panel through that is a visible stall.
+          isPositioning.value = false
           return 'position'
         }
         // Phase 2: fine-adjust to the current search mark once Vue has re-rendered
@@ -467,9 +502,27 @@ export function useCommentaryScroll(
     setGoal({ kind: 'restore-intent' }, 'user')
   }
 
-  function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const g: Goal = { kind: 'restore', scrollIndex, scrollOffset, resolve, resolved: false }
+  /**
+   * Drop whatever the panel was trying to reach. Called when the anchor line
+   * changes by explicit reader action: the new load installs its own goal, and a
+   * goal held over from the previous line is stale by definition. Without this a
+   * restore still waiting for content would survive the switch, block the new
+   * load's pin-follow (auto goals cannot displace a restore) and then apply the
+   * OLD line's index into the NEW line's list.
+   */
+  function cancelPositioning() {
+    endGoal('cancelled_anchor_changed')
+  }
+
+  /**
+   * Resolves with whether the position was actually APPLIED. A restore that dies
+   * unapplied (panel closed mid-flight, list never produced the index) must not be
+   * recorded as done by the caller, or reopening the panel skips the restore and
+   * the reader loses their place.
+   */
+  function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const g: Goal = { kind: 'restore', scrollIndex, scrollOffset, resolve, resolved: false, applied: false }
       setGoal(g, 'user')
     })
   }
@@ -598,11 +651,16 @@ export function useCommentaryScroll(
     )
   }
 
+  // Stop a goal's rAF loop and detach its listeners when the panel goes away,
+  // rather than letting it tick against a dead instance until it self-expires.
+  onScopeDispose(() => endGoal('disposed'))
+
   return {
     scrollTop,
     activeHeader,
     activePinnedGroup,
     activePinnedGroupForCapture,
+    cancelPositioning,
     markUserAdjusted,
     isPositioning,
     onScroll,
