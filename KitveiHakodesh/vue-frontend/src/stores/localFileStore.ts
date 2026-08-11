@@ -355,6 +355,23 @@ export const useLocalFileStore = defineStore('localFile', () => {
 
   /** Called when hbPdfReady fires — ignored if tab was closed/navigated away. */
   function finishHbDownload(tabId: string, url: string, bookTitle: string, bookId: string) {
+    // The push event carries a tab id from when the download STARTED — the tab may
+    // since have been retargeted (a second quick pick, a Word conversion). Stamp the
+    // result only while the tab still shows this download: either the same book id,
+    // or a book-id-less HB download (some callers start without one) that is still
+    // in the downloading state. A mismatch means a successor flow owns the poller
+    // and the converting flag now, so leave both alone.
+    const liveTab = tabStore.tabs.find((t) => t.id === tabId)
+    if (!liveTab) {
+      // Tab closed mid-download — nothing to stamp, and nobody else owns the state.
+      stopHbProgressPoll(tabId)
+      _converting.delete(tabId)
+      return
+    }
+    const showsThisDownload =
+      liveTab.localFileHbBookId === bookId ||
+      (!liveTab.localFileHbBookId && liveTab.localFileLoadingType === 'downloading')
+    if (!showsThisDownload) return
     stopHbProgressPoll(tabId)
     if (!_converting.has(tabId)) return
     _converting.delete(tabId)
@@ -427,11 +444,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
       const res = await restoreHbPdf(hbBookId, tab.localFileHbBookTitle ?? '', tabId, localFolder)
       // The tab may have navigated elsewhere during the await (a second quick pick
       // targets the same tab) — a late result must not stamp the OLD document onto
-      // it. If it moved to ANOTHER HebrewBooks book, that pick's own flow owns the
-      // poller and converting flag now, so only clean them up when it left HB entirely.
+      // it. Any conversion still running on the tab (another HB book, a book-id-less
+      // HB download, a Word conversion) owns the poller and converting flag now, so
+      // clean them up only when the tab is not converting at all.
       const liveTab = tabStore.tabs.find((t) => t.id === tabId)
       if (liveTab?.localFileHbBookId !== hbBookId) {
-        if (!liveTab?.localFileHbBookId) {
+        if (!liveTab || (!liveTab.localFileHbBookId && !liveTab.localFileConverting)) {
           stopHbProgressPoll(tabId)
           _converting.delete(tabId)
         }
@@ -514,11 +532,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
       startHbProgressPoll(tabId, localFileHbBookId)
       const res = await restoreHbPdf(localFileHbBookId, localFileHbBookTitle ?? '', tabId, localFolder)
       // Same supersede guard as restoreTab: a second quick pick retargets this tab
-      // during the await, and a late result must not stamp the old book onto it. If
-      // the tab moved to another HB book, that pick's flow owns the poller/flag now.
+      // during the await, and a late result must not stamp the old book onto it. Any
+      // conversion still running on the tab owns the poller and converting flag, so
+      // clean them up only when the tab is not converting at all.
       const liveTab = tabStore.tabs.find((t) => t.id === tabId)
       if (liveTab?.localFileHbBookId !== localFileHbBookId) {
-        if (!liveTab?.localFileHbBookId) {
+        if (!liveTab || (!liveTab.localFileHbBookId && !liveTab.localFileConverting)) {
           stopHbProgressPoll(tabId)
           _converting.delete(tabId)
         }
