@@ -70,6 +70,7 @@ type CommentaryViewInstance = {
   topVisibleFlatIndex: number
   activeBookId: number | null
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
+  activePinnedGroupForCapture?: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
   scrollToFlatIndex: (index: number, occurrence?: number) => void
@@ -249,8 +250,13 @@ export function useBookView(
       //      away the commentator the reader had chosen. Under hosted bridge
       //      latency, consecutive section-nav clicks hit this on every click.
       //   3. genuinely nothing - the very first load, where the default is right.
+      // The CAPTURE variant, not the display one: it answers null unless the
+      // reader has personally scrolled the panel since the last programmatic
+      // positioning. The display variant falls back to the first header, and a
+      // click landing mid-transit captured that first group as a "preference",
+      // silently switching the panel to a commentator the reader never chose.
       snapshot[slot] =
-        commentaryViewRefs[slot]()?.activePinnedGroup ??
+        commentaryViewRefs[slot]()?.activePinnedGroupForCapture ??
         panels[slot].pinnedCommentaryGroup.value ??
         null
     }

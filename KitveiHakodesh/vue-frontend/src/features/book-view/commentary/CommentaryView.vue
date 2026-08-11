@@ -226,6 +226,9 @@ watch(
 const {
   activeHeader,
   activePinnedGroup,
+  activePinnedGroupForCapture,
+  markUserAdjusted,
+  isPositioning,
   onScroll: handleScroll,
   scrollToGroup,
   scrollToFlatIndex,
@@ -347,6 +350,7 @@ defineExpose({
   scrollToFlatIndex,
   topVisibleFlatIndex,
   activePinnedGroup,
+  activePinnedGroupForCapture,
   activeBookId,
   captureScrollPos,
   restoreCommentaryScrollPos,
@@ -371,10 +375,10 @@ const spinnerDelay = useTimeoutFn(
   LOADING_SPINNER_DELAY_MS,
   { immediate: false },
 )
-watch(() => props.loading, (loading) => {
+watch(() => props.loading || isPositioning.value, (busy) => {
   spinnerDelay.stop()
   showLoadingSpinner.value = false
-  if (loading) spinnerDelay.start()
+  if (busy) spinnerDelay.start()
 }, { immediate: true })
 
 // ── Word-level links (hover preview + click-through) ─────────────────────────
@@ -460,6 +464,10 @@ const {
           @scroll="onScroll"
           @click="onMarkerClick"
           @contextmenu="contextMenuRef?.show($event)"
+          @wheel.passive="markUserAdjusted"
+          @touchstart.passive="markUserAdjusted"
+          @pointerdown.passive="markUserAdjusted"
+          @keydown="markUserAdjusted"
         >
           <div :style="{ height: `${totalSize}px`, position: 'relative' }">
             <div
@@ -495,6 +503,20 @@ const {
               />
             </div>
           </div>
+        </div>
+        <!--
+          Positioning mask. While the positioner is still driving the panel toward
+          its target (a restore or a pinned-group scroll), the content underneath is
+          mid-flight: the two-phase backfill keeps reshaping the list and the
+          viewport visibly jumps as corrections land. Cover it until the panel first
+          ARRIVES at its target.
+          Deliberately OUTSIDE the v-if chain above, as an absolute overlay: putting
+          it in the chain would unmount the scroller, and then there is nothing left
+          to position - the mask would deadlock the goal it is masking. The spinner
+          keeps its usual delay so fast loads never flash it.
+        -->
+        <div v-if="!props.loading && isPositioning && flatItems.length" class="positioning-mask">
+          <LoadingAnimation v-if="showLoadingSpinner" />
         </div>
       </div>
     </div>
@@ -548,6 +570,25 @@ const {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+/* Covers the scroller (not the nav) while the positioner works. Opaque: its whole
+   job is to hide the content jumping underneath. Absolute against .body, which is
+   position:relative. */
+.positioning-mask {
+  position: absolute;
+  top: 32px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  /* Events pass through to the scroller so the reader can still interrupt: the
+     positioner cancels its goal on wheel/pointer/key, which drops this mask the
+     same frame. With events blocked here, positioning was uninterruptible. */
+  pointer-events: none;
 }
 .hint {
   font-size: 13px;

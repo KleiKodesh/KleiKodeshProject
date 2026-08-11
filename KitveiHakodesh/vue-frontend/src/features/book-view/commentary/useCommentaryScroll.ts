@@ -1,5 +1,4 @@
 import { computed, ref, watch, nextTick } from 'vue'
-import { scrollToIndexWithRetry } from '@/utils/scrollToIndexWithRetry'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
 import { commentaryScrollTrace as trace } from '@/utils/commentaryScrollTrace'
 import type { Virtualizer } from '@tanstack/vue-virtual'
@@ -7,8 +6,57 @@ import type { Virtualizer } from '@tanstack/vue-virtual'
 const NAV_HEIGHT = 32
 
 /**
+ * How many consecutive frames the target has to need no correction before a goal
+ * counts as settled. Frame-based on purpose: frames stretch with machine load, so a
+ * slow machine settles later in wall-clock terms - the opposite failure mode of a
+ * fixed timeout, which assumes how fast loading finishes and gives up early on slow
+ * environments. NOTHING in this file assumes a load duration.
+ */
+const SETTLE_FRAMES = 30
+/** Frames the scroller may be missing mid-goal (v-if flicker) before the goal dies.
+ * A restore gets a far larger budget: it is requested BEFORE the panel's v-if body
+ * has rendered, so its scroller legitimately does not exist yet. */
+const LOST_SCROLLER_FRAMES = 60
+const LOST_SCROLLER_FRAMES_RESTORE = 600
+/** A restore-intent placeholder only has to survive the tick between the claim and
+ * the restore call that follows it. If the restore never comes (component died in
+ * that tick), expire quickly - frame-based, so slow machines get proportionally
+ * more real time. */
+const INTENT_FRAMES = 120
+/**
+ * Last-resort valve so an unachievable goal cannot run forever (e.g. a search mark
+ * whose query was cleared). Deliberately generous: it is NOT a load-time estimate,
+ * and a goal that is still making progress keeps correcting right up to it. On
+ * expiry the goal applies its best-effort position once and ends.
+ */
+const SAFETY_MS = 30000
+
+/**
+ * What the panel is currently trying to show. Exactly ONE goal exists at a time -
+ * this is the whole point. Six independent code paths used to scroll the panel
+ * directly, coordinated through shared boolean flags, and every new panel or new
+ * load-timing multiplied their races. Now every path REQUESTS a goal and one loop
+ * executes whatever the current goal is.
+ */
+type Goal =
+  | { kind: 'restore-intent' }
+  | { kind: 'restore'; scrollIndex: number; scrollOffset: number; resolve: () => void; resolved: boolean }
+  | { kind: 'group'; bookId: number; sectionLabel?: string; subSectionLabel?: string; reason: string; entered?: boolean }
+  | { kind: 'flatIndex'; flatIndex: number; occurrence: number; phase: 'position' | 'mark'; entered?: boolean }
+
+/** Requests from these scrollToGroup reasons follow state around (pin-follow); all
+ * other reasons are direct user actions and take priority. */
+const AUTO_REASONS = new Set(['groups-reload', 'pin-arrived-late', 'panel-mounted', 'already-restored'])
+
+/**
  * Manages scroll behavior for commentary: sticky header tracking, scroll position
  * capture/restore, and scroll-to-group navigation.
+ *
+ * All programmatic positioning goes through the single-goal positioner below.
+ * Completion is CONDITION-based (target measured, content present, position stable
+ * for SETTLE_FRAMES), never a wall-clock window - fixed windows are exactly what
+ * kept breaking on slow environments and heavy chapters, because they encode an
+ * assumption about how long loading takes.
  */
 export function useCommentaryScroll(
   flatItems: () => any[],
@@ -17,9 +65,8 @@ export function useCommentaryScroll(
   scrollerEl: () => HTMLElement | null,
   /**
    * Which commentary panel this instance drives (see CommentarySlot). Only used to
-   * tag trace flows: two panels scroll concurrently, and with a shared flow name
-   * their BEGIN calls reset each other's relative clock, making a dump unreadable
-   * and impossible to attribute. See utils/commentaryScrollTrace.ts.
+   * tag trace flows: panels scroll concurrently, and with a shared flow name their
+   * BEGIN calls reset each other's relative clock, making a dump unreadable.
    */
   traceSlot = 'panel',
 ) {
@@ -56,20 +103,30 @@ export function useCommentaryScroll(
     }
   })
 
-  // Set to true while restoreCommentaryScrollPos is running — suppresses
-  // setupGroupReloadScroll so it doesn't overwrite the in-flight restore scroll.
-  let isRestoringScrollPos = false
+  /**
+   * True once the reader has manually moved this panel (wheel/touch/pointer/key)
+   * since the last programmatic positioning. Reset whenever a goal is installed:
+   * a goal repositions the panel, so whatever the sticky header says afterwards is
+   * the POSITIONER's doing, not the reader's.
+   */
+  let userAdjusted = false
+  function markUserAdjusted() { userAdjusted = true }
 
-  // Restore INTENT latch. Set synchronously by the panel the instant it commits to
-  // restoring a saved position (before the nextTick + await inside
-  // restoreCommentaryScrollPos actually flips isRestoringScrollPos). Without this,
-  // setupGroupReloadScroll and the panel-mount restore both wake on the same
-  // "groups reloaded" tick and race: whichever watcher callback runs first wins,
-  // so the panel non-deterministically lands on the pinned group (scrollToGroup)
-  // instead of the saved position. The latch lets the reload-scroll watcher stand
-  // down deterministically. Cleared when the restore promise settles.
-  let restoreIntentClaimed = false
-  function claimRestoreIntent() { restoreIntentClaimed = true }
+  /**
+   * The active group AS A PIN-CAPTURE SOURCE, which is stricter than the display
+   * version above: it answers null unless the reader has actually curated the
+   * view. activeHeader falls back to the FIRST header when nothing has scrolled
+   * under the nav yet - which is exactly a panel's state mid-transit (list
+   * swapped, goal not applied). A click landing in that window used to capture
+   * the first group as "what the reader was looking at" and staged it as the pin,
+   * permanently switching the panel to a commentator the reader never chose.
+   * The doc's rule generalizes: a DERIVED active group is not a preference -
+   * only one the reader made. Callers fall back to the held pin on null.
+   */
+  const activePinnedGroupForCapture = computed<any>(() => {
+    if (goal !== null || !userAdjusted) return null
+    return activePinnedGroup.value
+  })
 
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
     scrollTop.value = scrollerEl()?.scrollTop ?? 0
@@ -77,262 +134,343 @@ export function useCommentaryScroll(
     if (pos) emitScroll(pos.scrollIndex, pos.scrollOffset)
   }
 
-  // Cancellation token for in-flight scrollToGroup calls. Each new call
-  // increments this so any previous rAF callbacks know to bail out.
-  let scrollToGroupToken = 0
+  // ── The positioner ──────────────────────────────────────────────────────────
+
+  let goal: Goal | null = null
+  /**
+   * True from the moment a goal is installed until it FIRST reaches its target
+   * (not until fully settled - corrections continue silently). The panel shows its
+   * loading overlay while this is true, so the reader never watches the content
+   * sitting at the wrong offset while the two-phase backfill shifts it around.
+   * Turned off at first arrival rather than at settle so the fast path (local dev,
+   * small chapters) never pays a visible delay.
+   */
+  const isPositioning = ref(false)
+  /** Bumped on every goal change; the running loop checks it each frame and stops
+   * the moment it is stale. Replaces the old cancellation token, restore flag AND
+   * restore-intent latch - one mechanism instead of three. */
+  let goalSeq = 0
+  let userCancelEl: HTMLElement | null = null
+
+  function flowFor(g: Goal): string {
+    return g.kind === 'restore' || g.kind === 'restore-intent' ? FLOW_RESTORE : FLOW_SCROLL
+  }
+
+  function detachUserCancel() {
+    if (!userCancelEl) return
+    userCancelEl.removeEventListener('wheel', cancelByUser)
+    userCancelEl.removeEventListener('touchstart', cancelByUser)
+    userCancelEl.removeEventListener('pointerdown', cancelByUser)
+    userCancelEl.removeEventListener('keydown', cancelByUser)
+    userCancelEl = null
+  }
+
+  function cancelByUser() {
+    if (!goal) return
+    endGoal('cancelled_by_user')
+  }
+
+  function endGoal(status: string) {
+    if (!goal) return
+    trace.push(flowFor(goal), `goal_${status}`, { kind: goal.kind })
+    if (goal.kind === 'restore' && !goal.resolved) { goal.resolved = true; goal.resolve() }
+    goal = null
+    goalSeq++
+    isPositioning.value = false
+    detachUserCancel()
+  }
 
   /**
-   * @param reason which code path asked. Several independent paths scroll a panel
-   *   to its pinned group (groups reload, panel mount, header nav, re-click) and a
-   *   trace that does not say which one is unreadable when they overlap.
+   * Install `g` as the panel's goal, replacing the current one under these rules:
+   *  - a USER request always wins (the reader acted; follow them);
+   *  - a restore always wins (it re-establishes the reader's own saved place);
+   *  - an AUTO request (pin-follow after a reload, panel-mount) must NOT displace a
+   *    restore or a claimed restore intent - that displacement was the old
+   *    nondeterministic "lands on the pinned group instead of my place" race.
+   * Returns whether the goal was accepted, so auto callers can keep their debt.
+   */
+  function setGoal(g: Goal, source: 'user' | 'auto'): boolean {
+    if (goal && source === 'auto' && (goal.kind === 'restore' || goal.kind === 'restore-intent')) {
+      trace.push(flowFor(g), 'goal_blocked_by_restore', { kind: g.kind })
+      return false
+    }
+    if (goal) endGoal('superseded')
+    goal = g
+    isPositioning.value = true
+    // The positioner owns the viewport again; the sticky header stops being the
+    // reader's own arrangement until they next touch the panel.
+    userAdjusted = false
+    const seq = ++goalSeq
+    trace.begin(flowFor(g), { kind: g.kind, ...describe(g), flatItems: flatItems().length, hasEl: !!scrollerEl() })
+    runLoop(seq)
+    return true
+  }
+
+  function describe(g: Goal): Record<string, unknown> {
+    switch (g.kind) {
+      case 'restore': return { scrollIndex: g.scrollIndex, scrollOffset: g.scrollOffset }
+      case 'group': return { bookId: g.bookId, sectionLabel: g.sectionLabel, subSectionLabel: g.subSectionLabel, reason: g.reason }
+      case 'flatIndex': return { flatIndex: g.flatIndex, occurrence: g.occurrence }
+      default: return {}
+    }
+  }
+
+  function resolveGroupIndex(bookId: number, sectionLabel?: string, subSectionLabel?: string): number {
+    const items = flatItems()
+    const exact = items.findIndex(
+      (item) =>
+        item.type === 'header' &&
+        item.bookId === bookId &&
+        (sectionLabel == null || item.sectionLabel === sectionLabel) &&
+        (subSectionLabel == null || item.subSectionLabel === subSectionLabel),
+    )
+    if (exact !== -1 || (sectionLabel == null && subSectionLabel == null)) return exact
+    // The labels only disambiguate a book that appears in several sections; the
+    // reader asked for a COMMENTATOR. A pin carries the labels captured on the
+    // PREVIOUS line, and the same book can sit under a different section there,
+    // so an exact-only match refused to scroll and read as "the panel lost its
+    // place". Fall back to book identity.
+    return items.findIndex((item) => item.type === 'header' && item.bookId === bookId)
+  }
+
+  /**
+   * The one loop. Runs one evaluation per animation frame while a goal is active:
+   * derive the goal's target from LIVE measurements, correct if off, count stable
+   * frames, finish when settled. Re-deriving every frame is what makes it immune to
+   * the two-phase backfill - items above the target keep growing as content lands,
+   * and each growth just moves the target for the next frame's correction. The old
+   * design did the same correction but stopped after a fixed window, which silently
+   * assumed the backfill would be done by then.
+   */
+  function runLoop(seq: number) {
+    let stableFrames = 0
+    let lostScrollerFrames = 0
+    let intentFrames = 0
+    const startedAt = performance.now()
+
+    function attachUserCancel(el: HTMLElement) {
+      if (userCancelEl === el) return
+      detachUserCancel()
+      userCancelEl = el
+      el.addEventListener('wheel', cancelByUser, { passive: true })
+      el.addEventListener('touchstart', cancelByUser, { passive: true })
+      el.addEventListener('pointerdown', cancelByUser, { passive: true })
+      // The scroller is focusable and arrow keys scroll it; without this the
+      // correction would fight keyboard navigation.
+      el.addEventListener('keydown', cancelByUser, { passive: true })
+    }
+
+    function frame() {
+      if (seq !== goalSeq || !goal) return
+      const g = goal
+      const el = scrollerEl()
+
+      if (g.kind === 'restore-intent' && ++intentFrames > INTENT_FRAMES) {
+        endGoal('intent_expired')
+        return
+      }
+
+      if (!el) {
+        // The panel may be mid-mount (restore is requested before the v-if body
+        // renders). Tolerate a bounded number of missing-scroller frames.
+        const budget = g.kind === 'restore' ? LOST_SCROLLER_FRAMES_RESTORE : LOST_SCROLLER_FRAMES
+        if (++lostScrollerFrames > budget) {
+          endGoal('lost_scroller')
+          return
+        }
+        requestAnimationFrame(frame)
+        return
+      }
+      lostScrollerFrames = 0
+      attachUserCancel(el)
+
+      if (performance.now() - startedAt > SAFETY_MS) {
+        applyOnce(g, el, /* force */ true)
+        endGoal('safety_valve')
+        return
+      }
+
+      const status = applyOnce(g, el, false)
+      if (status === 'stable') {
+        // First arrival: the panel is at (or within 2px of) its target. Reveal it -
+        // later corrections are small nudges, and hiding content through the whole
+        // settle window would cost every fast load a visible delay.
+        isPositioning.value = false
+        if (++stableFrames >= SETTLE_FRAMES) {
+          endGoal('done')
+          return
+        }
+      } else {
+        stableFrames = 0
+      }
+      requestAnimationFrame(frame)
+    }
+
+    requestAnimationFrame(frame)
+  }
+
+  /**
+   * One evaluation of the current goal against live state.
+   * Returns 'stable' when no correction was needed, 'position' when it corrected,
+   * 'waiting' when the goal cannot be evaluated yet (unmeasured / content pending /
+   * mark not rendered) - waiting resets nothing and the loop simply tries again
+   * next frame.
+   */
+  function applyOnce(g: Goal, el: HTMLElement, force: boolean): 'stable' | 'position' | 'waiting' {
+    switch (g.kind) {
+      case 'restore-intent':
+        // A placeholder that only exists to keep auto goals out until the real
+        // restore arrives (it is created synchronously; the restore follows after
+        // an await). It has no position of its own.
+        return 'waiting'
+
+      case 'restore': {
+        const len = flatItems().length
+        if (!len) return 'waiting'
+        // A saved index can exceed the current list (position saved against a longer
+        // line's commentary). Clamp to the last item - best effort - instead of
+        // waiting for an index that will never exist.
+        const idx = Math.min(g.scrollIndex, len - 1)
+        if (idx !== g.scrollIndex) { g.scrollIndex = idx; g.scrollOffset = 0 }
+        const m = virtualizer().measurementsCache.find((c: any) => c.index === g.scrollIndex)
+        if (!m) return 'waiting'
+        // Two-phase loader: applying a pixel offset into a not-yet-filled line lands
+        // in the wrong group (a 300px offset inside a 20px stub). Wait for the
+        // viewport-priority fetch to fill it - condition-based, no attempt cap. The
+        // safety valve force-applies if the content genuinely never comes.
+        const flatItem = flatItems()[g.scrollIndex]
+        const contentPending =
+          g.scrollOffset > 0 && flatItem?.type === 'line' && flatItem.lineId > 0 && flatItem.content === ''
+        if (contentPending && !force) {
+          trace.push(FLOW_RESTORE, 'content_pending', { scrollIndex: g.scrollIndex })
+          return 'waiting'
+        }
+        const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
+        const target = Math.min(Math.max(0, m.start + g.scrollOffset), maxScrollTop)
+        if (Math.abs(el.scrollTop - target) > 2) {
+          const before = el.scrollTop
+          el.scrollTop = target
+          scrollTop.value = target
+          trace.push(FLOW_RESTORE, 'apply', { before, target, itemStart: m.start })
+          // The reader-facing contract resolves on the FIRST successful apply -
+          // the panel is now at (approximately) the right place and callers must
+          // not wait out the settle confirmation.
+          if (!g.resolved) { g.resolved = true; g.resolve() }
+          return 'position'
+        }
+        if (!g.resolved) { g.resolved = true; g.resolve() }
+        return 'stable'
+      }
+
+      case 'group': {
+        const idx = resolveGroupIndex(g.bookId, g.sectionLabel, g.subSectionLabel)
+        if (idx < 0) {
+          // Mid-swap (empty list): wait - the old code aborted here, which is how
+          // "never scrolled at all" happened when a list swap raced the request.
+          // But a NON-empty list without the book means it is genuinely absent
+          // (filtered out, or gone from this line): end rather than hold the goal
+          // - and the loading overlay - for the whole safety window.
+          if (!flatItems().length) {
+            trace.push(FLOW_SCROLL, 'group_waiting_for_index', { bookId: g.bookId })
+            return 'waiting'
+          }
+          endGoal('index_not_found')
+          return 'waiting'
+        }
+        const m = virtualizer().measurementsCache.find((c: any) => c.index === idx)
+        if (!m) return 'waiting'
+        const target = Math.max(0, m.start)
+        if (Math.abs(el.scrollTop - target) > 2) {
+          const before = el.scrollTop
+          if (!g.entered) {
+            // Once per goal: brings a far-away target into the render window so its
+            // measurements become real rather than pure estimates. Re-issuing it on
+            // every correction frame would fight the direct scrollTop writes below.
+            virtualizer().scrollToIndex(idx, { align: 'start' })
+            g.entered = true
+          }
+          el.scrollTop = target
+          scrollTop.value = target
+          trace.push(FLOW_SCROLL, 'correct_applied', { before, target, mStart: m.start, idx })
+          return 'position'
+        }
+        return 'stable'
+      }
+
+      case 'flatIndex': {
+        const m = virtualizer().measurementsCache.find((c: any) => c.index === g.flatIndex)
+        if (!m) return 'waiting'
+        if (g.phase === 'position') {
+          const target = Math.max(0, m.start - NAV_HEIGHT - 8)
+          if (Math.abs(el.scrollTop - target) > 2 && !force) {
+            if (!g.entered) {
+              virtualizer().scrollToIndex(g.flatIndex, { align: 'start' })
+              g.entered = true
+            }
+            el.scrollTop = target
+            scrollTop.value = target
+            return 'position'
+          }
+          setCurrentMark(el, g.flatIndex, g.occurrence)
+          g.phase = 'mark'
+          return 'position'
+        }
+        // Phase 2: fine-adjust to the current search mark once Vue has re-rendered
+        // the line with it. The mark may take several frames to appear (render
+        // cache invalidation + re-render); waiting is condition-based.
+        const mark = el.querySelector('mark.search-match.current') as HTMLElement | null
+        if (!mark) return force ? 'stable' : 'waiting'
+        const markRect = mark.getBoundingClientRect()
+        const scrollerRect = el.getBoundingClientRect()
+        const relativeTop = markRect.top - scrollerRect.top
+        const relativeBottom = markRect.bottom - scrollerRect.top
+        const visible = relativeTop >= NAV_HEIGHT + 4 && relativeBottom <= scrollerRect.height - 4
+        if (!visible) {
+          el.scrollTop += relativeTop - NAV_HEIGHT - 8
+          scrollTop.value = el.scrollTop
+          return 'position'
+        }
+        return 'stable'
+      }
+    }
+  }
+
+  // ── Public API (same shape the rest of the app already uses) ────────────────
+
+  /**
+   * @param reason which code path asked. AUTO_REASONS follow state (pin-follow);
+   *   everything else is a user action and takes priority over any running goal.
    */
   function scrollToGroup(
     bookId: number,
     sectionLabel?: string,
     subSectionLabel?: string,
     reason = 'unknown',
-  ) {
-    const el = scrollerEl()
-    trace.begin(FLOW_SCROLL, {
-      reason,
-      bookId,
-      sectionLabel,
-      subSectionLabel,
-      hasEl: !!el,
-      flatItems: flatItems().length,
-      groups: visibleGroups().length,
-    })
-    if (!el) { trace.push(FLOW_SCROLL, 'ABORT_no_scroller', {}); return }
-    const token = ++scrollToGroupToken
-
-    function resolveIndex(): number {
-      const items = flatItems()
-      const exact = items.findIndex(
-        (item) =>
-          item.type === 'header' &&
-          item.bookId === bookId &&
-          (sectionLabel == null || item.sectionLabel === sectionLabel) &&
-          (subSectionLabel == null || item.subSectionLabel === subSectionLabel),
-      )
-      if (exact !== -1 || (sectionLabel == null && subSectionLabel == null)) return exact
-      // The labels only disambiguate a book that appears in several sections; the
-      // reader asked for a COMMENTATOR. A pin carries the labels captured on the
-      // PREVIOUS line, and the same book can sit under a different section there
-      // (e.g. COMMENTARY on one line, REFERENCE on the next), so an exact-only
-      // match refused to scroll and left the panel on a stale offset - read as
-      // "the panel lost its place". Fall back to book identity.
-      const byBook = items.findIndex((item) => item.type === 'header' && item.bookId === bookId)
-      if (byBook !== -1) trace.push(FLOW_SCROLL, 'resolveIndex_label_fallback', { bookId, idx: byBook })
-      return byBook
-    }
-
-    const idx = resolveIndex()
-    trace.push(FLOW_SCROLL, 'resolveIndex', { idx, flatItems: flatItems().length })
-    if (idx < 0) { trace.push(FLOW_SCROLL, 'ABORT_index_not_found', {}); return }
-
-    // Step 1 — bring the target into the rendered range.
-    virtualizer().scrollToIndex(idx, { align: 'start' })
-    trace.push(FLOW_SCROLL, 'scrollToIndex', { idx, scrollTop: el.scrollTop })
-
-    // Step 2 — correct to the header's measured position, and KEEP correcting for a
-    // bounded window: the two-phase commentary loader backfills line content into
-    // already-rendered items, so measurements above the header keep changing for a
-    // short while after groups render. A one-shot correction lands wrong if a
-    // content batch arrives right after it. MutationObserver fires after each DOM
-    // mutation so corrections land as soon as measurements do. Cancelled by a newer
-    // scrollToGroup/restore (token) or by the user scrolling (wheel/touch/pointer).
-    const elCaptured = el
-    // Long enough to outlive a cold, section-mode load. Items ABOVE the target
-    // render as near-empty stubs and grow as their text, TOC-path labels, notes and
-    // highlights arrive; every one of those pushes the target down. At 800ms the
-    // window closed while a first load was still filling in, so the panel visibly
-    // landed on the pinned commentator and then drifted off it - and nothing
-    // re-anchored afterwards. Cancelled the instant the reader takes over (wheel /
-    // touch / pointer / key) and by any newer scrollToGroup or restore, so a long
-    // window costs nothing when it is not needed.
-    const CORRECTION_WINDOW_MS = 6000
-    const startedAt = performance.now()
-    let done = false
-    let observer: MutationObserver | null = null
-
-    function finish() {
-      if (done) return
-      done = true
-      observer?.disconnect()
-      elCaptured.removeEventListener('wheel', finish)
-      elCaptured.removeEventListener('touchstart', finish)
-      elCaptured.removeEventListener('pointerdown', finish)
-      elCaptured.removeEventListener('keydown', finish)
-    }
-
-    function correct(): void {
-      if (done) return
-      if (token !== scrollToGroupToken) { trace.push(FLOW_SCROLL, 'correct_cancelled_token', { token, current: scrollToGroupToken }); finish(); return }
-      if (performance.now() - startedAt > CORRECTION_WINDOW_MS) { trace.push(FLOW_SCROLL, 'correct_window_expired', {}); finish(); return }
-      const currentIdx = resolveIndex()
-      if (currentIdx < 0) { trace.push(FLOW_SCROLL, 'correct_no_index', {}); return }
-      const m = virtualizer().measurementsCache.find((c: any) => c.index === currentIdx)
-      if (!m) { trace.push(FLOW_SCROLL, 'correct_no_measurement', { currentIdx }); return }
-      const targetScrollTop = Math.max(0, m.start)
-      const before = elCaptured.scrollTop
-      if (Math.abs(elCaptured.scrollTop - targetScrollTop) > 2) {
-        elCaptured.scrollTop = targetScrollTop
-        scrollTop.value = targetScrollTop
-        trace.push(FLOW_SCROLL, 'correct_applied', { before, target: targetScrollTop, mStart: m.start, currentIdx })
-      } else {
-        trace.push(FLOW_SCROLL, 'correct_noop', { scrollTop: before, target: targetScrollTop, currentIdx })
-      }
-    }
-
-    elCaptured.addEventListener('wheel', finish, { passive: true })
-    elCaptured.addEventListener('touchstart', finish, { passive: true })
-    elCaptured.addEventListener('pointerdown', finish, { passive: true })
-    // The scroller is focusable and arrow keys scroll it; without this the
-    // correction would fight keyboard navigation for the whole window.
-    elCaptured.addEventListener('keydown', finish, { passive: true })
-
-    requestAnimationFrame(() => {
-      if (done) return
-      correct()
-      if (done) return
-      observer = new MutationObserver(() => correct())
-      observer.observe(elCaptured, { childList: true, subtree: true, attributes: false })
-      setTimeout(finish, CORRECTION_WINDOW_MS + 50)
-    })
+  ): boolean {
+    return setGoal(
+      { kind: 'group', bookId, sectionLabel, subSectionLabel, reason },
+      AUTO_REASONS.has(reason) ? 'auto' : 'user',
+    )
   }
 
   function scrollToFlatIndex(flatIndex: number, occurrence = 0) {
-    const el = scrollerEl()
-    if (!el) return
-    // Cancel any in-flight pin correction: jumping to a search match is a newer,
-    // competing programmatic scroll, and with the correction window now measured in
-    // seconds an un-cancelled one would drag the panel back off the match.
-    scrollToGroupToken++
+    setGoal({ kind: 'flatIndex', flatIndex, occurrence, phase: 'position' }, 'user')
+  }
 
-    const reserved = NAV_HEIGHT
-    const virt = virtualizer() as any
+  /**
+   * Claim, synchronously, that a restore is about to be requested. Blocks auto
+   * pin-follow goals from grabbing the panel during the awaits between "the panel
+   * decided to restore" and the actual restore call - the race that used to land
+   * the panel on the pinned group instead of the saved position.
+   */
+  function claimRestoreIntent() {
+    setGoal({ kind: 'restore-intent' }, 'user')
+  }
 
-    // Check if the item is already in the measurements cache
-    const m = virt.measurementsCache.find((c: any) => c.index === flatIndex)
-
-    if (m) {
-      // Line is already measured by the virtualizer. Scroll to the line top first,
-      // then wait for Vue to render the new currentMatchOccurrence (which invalidates
-      // the render cache and re-renders the line HTML). Use MutationObserver to detect
-      // when the <mark class="current"> actually appears in the DOM, then adjust.
-
-      // Step 1: scroll to line top immediately so the line is visible.
-      const targetScrollTop = m.start - reserved - 8
-      if (Math.abs(el.scrollTop - targetScrollTop) > 2) {
-        el.scrollTop = targetScrollTop
-      }
-      setCurrentMark(el, flatIndex, occurrence)
-
-      // Step 2: wait for the current mark to appear/move in the DOM, then fine-adjust.
-      let settled = false
-
-      function adjustToMark() {
-        if (settled || !el) return
-        const mark = el.querySelector('mark.search-match.current') as HTMLElement | null
-        if (!mark) return false
-        const markRect = mark.getBoundingClientRect()
-        const scrollerRect = el.getBoundingClientRect()
-        const relativeTop = markRect.top - scrollerRect.top
-        const relativeBottom = markRect.bottom - scrollerRect.top
-        const alreadyVisible =
-          relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-        if (!alreadyVisible) {
-          el.scrollTop += relativeTop - reserved - 8
-        }
-        return true
-      }
-
-      // Try immediately after two rAFs (covers same-line occurrence changes where
-      // the mark is already in the DOM and just needs its class updated).
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (adjustToMark()) {
-            settled = true
-            return
-          }
-
-          // Mark not found yet — the render cache was just invalidated and Vue hasn't
-          // re-rendered the line HTML yet. Watch for DOM mutations on the scroller.
-          const observer = new MutationObserver(() => {
-            if (adjustToMark()) {
-              settled = true
-              observer.disconnect()
-            }
-          })
-          observer.observe(el, {
-            childList: true,
-            subtree: true,
-            characterData: false,
-            attributes: true,
-            attributeFilter: ['class'],
-          })
-          // Safety timeout — disconnect after 500ms regardless.
-          setTimeout(() => {
-            if (!settled) {
-              observer.disconnect()
-            }
-          }, 500)
-        }),
-      )
-      return
-    }
-
-    // Line not yet rendered — use scrollToIndexWithRetry to bring it into range,
-    // then scroll to the mark once it's in the DOM.
-    scrollToIndexWithRetry(virt, el, flatIndex, reserved, 5, () => {
-      // After scrollToIndexWithRetry positions the line, wait for the mark using
-      // the same MutationObserver approach.
-      const scroller = scrollerEl()
-      if (!scroller) return
-      setCurrentMark(scroller, flatIndex, occurrence)
-      let settled = false
-
-      function adjustToMark() {
-        if (!scroller) return false
-        const mark = scroller.querySelector('mark.search-match.current') as HTMLElement | null
-        if (!mark) return false
-        const markRect = mark.getBoundingClientRect()
-        const scrollerRect = scroller.getBoundingClientRect()
-        const relativeTop = markRect.top - scrollerRect.top
-        const relativeBottom = markRect.bottom - scrollerRect.top
-        const alreadyVisible =
-          relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
-        if (!alreadyVisible) {
-          scroller.scrollTop += relativeTop - reserved - 8
-        }
-        return true
-      }
-
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (adjustToMark()) {
-            settled = true
-            return
-          }
-          const observer = new MutationObserver(() => {
-            if (adjustToMark()) {
-              settled = true
-              observer.disconnect()
-            }
-          })
-          observer.observe(scroller, {
-            childList: true,
-            subtree: true,
-            attributes: true,
-            attributeFilter: ['class'],
-          })
-          setTimeout(() => {
-            if (!settled) {
-              observer.disconnect()
-            }
-          }, 500)
-        }),
-      )
+  function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const g: Goal = { kind: 'restore', scrollIndex, scrollOffset, resolve, resolved: false }
+      setGoal(g, 'user')
     })
   }
 
@@ -360,188 +498,6 @@ export function useCommentaryScroll(
     }
   }
 
-  /**
-   * Keeps the restored position anchored while the two-phase loader backfills text.
-   * The one-shot apply in restoreCommentaryScrollPos computes item.start from
-   * measurements that are still settling — lines above the target are near-empty
-   * stubs whose heights change as their content arrives, shifting the content under
-   * the viewport by tens/hundreds of px ("near but not exact" restores). Mirrors
-   * scrollToGroup's MutationObserver correction: on every DOM mutation, re-derive
-   * the target from the CURRENT measurement of scrollIndex and re-apply. Cancelled
-   * by user interaction, by a newer scrollToGroup/restore (token), or when the
-   * window elapses.
-   */
-  const RESTORE_CORRECTION_WINDOW_MS = 2500
-  function startRestoreCorrection(scrollIndex: number, scrollOffset: number) {
-    const el = scrollerEl()
-    if (!el) return
-    const token = scrollToGroupToken
-    const startedAt = performance.now()
-    let done = false
-    let observer: MutationObserver | null = null
-
-    function finish() {
-      if (done) return
-      done = true
-      observer?.disconnect()
-      el!.removeEventListener('wheel', finish)
-      el!.removeEventListener('touchstart', finish)
-      el!.removeEventListener('pointerdown', finish)
-      el!.removeEventListener('keydown', finish)
-    }
-
-    function correct(): void {
-      if (done) return
-      if (token !== scrollToGroupToken) { finish(); return }
-      if (performance.now() - startedAt > RESTORE_CORRECTION_WINDOW_MS) { finish(); return }
-      const m = virtualizer().measurementsCache.find((c) => c.index === scrollIndex)
-      if (!m) return
-      const maxScrollTop = Math.max(0, el!.scrollHeight - el!.clientHeight)
-      const target = Math.min(Math.max(0, m.start + scrollOffset), maxScrollTop)
-      if (Math.abs(el!.scrollTop - target) > 2) {
-        const before = el!.scrollTop
-        el!.scrollTop = target
-        scrollTop.value = target
-        trace.push(FLOW_RESTORE, 'correction_applied', { before, target, itemStart: m.start })
-      }
-    }
-
-    el.addEventListener('wheel', finish, { passive: true })
-    el.addEventListener('touchstart', finish, { passive: true })
-    el.addEventListener('pointerdown', finish, { passive: true })
-    el.addEventListener('keydown', finish, { passive: true })
-
-    requestAnimationFrame(() => {
-      if (done) return
-      correct()
-      if (done) return
-      observer = new MutationObserver(() => correct())
-      observer.observe(el, { childList: true, subtree: true, attributes: false })
-      setTimeout(finish, RESTORE_CORRECTION_WINDOW_MS + 50)
-    })
-  }
-
-  function restoreCommentaryScrollPos(scrollIndex: number, scrollOffset: number): Promise<void> {
-    isRestoringScrollPos = true
-    restoreIntentClaimed = true
-    trace.begin(FLOW_RESTORE, { scrollIndex, scrollOffset, flatItems: flatItems().length, hasEl: !!scrollerEl() })
-    // Cancel any in-flight or queued scrollToGroup call — restore takes priority.
-    scrollToGroupToken++
-    // Set true when the position is actually applied — gates the post-restore
-    // correction loop (no point correcting a restore that gave up).
-    let applied = false
-    return new Promise<void>((resolve) => {
-      let attempts = 0
-      const MAX_ATTEMPTS = 40
-
-      function startRestore() {
-        const el = scrollerEl()
-        const itemsLength = flatItems().length
-
-        if (!el || itemsLength === 0) {
-          trace.push(FLOW_RESTORE, 'wait_for_items', { attempts, hasEl: !!el, itemsLength })
-          if (attempts < MAX_ATTEMPTS) {
-            attempts++
-            nextTick(() => requestAnimationFrame(startRestore))
-            return
-          }
-
-          trace.push(FLOW_RESTORE, 'GIVE_UP_no_items', { attempts })
-          resolve()
-          return
-        }
-
-        // Scroll to the target index — this is synchronous for already-measured items
-        virtualizer().scrollToIndex(scrollIndex, { align: 'start' })
-        trace.push(FLOW_RESTORE, 'scrollToIndex', { scrollIndex, scrollTop: el.scrollTop })
-
-        function tryApplyScroll() {
-          const el2 = scrollerEl()
-          const item = virtualizer().measurementsCache.find((m) => m.index === scrollIndex)
-
-          if (!el2) {
-            if (attempts < MAX_ATTEMPTS) {
-              attempts++
-              nextTick(() => requestAnimationFrame(tryApplyScroll))
-              return
-            }
-
-            resolve()
-            return
-          }
-
-          // Two-phase loader: the target item may be rendered but still awaiting its
-          // text (content === ''). Its measured height is a near-empty stub, so
-          // applying a pixel offset within it would land in the wrong group. Wait
-          // (bounded by MAX_ATTEMPTS) for the viewport-priority fetch to fill it.
-          const flatItem = flatItems()[scrollIndex]
-          const contentPending =
-            scrollOffset > 0 &&
-            flatItem?.type === 'line' &&
-            flatItem.lineId > 0 &&
-            flatItem.content === ''
-          if (contentPending && attempts < MAX_ATTEMPTS) {
-            trace.push(FLOW_RESTORE, 'content_pending', { attempts, scrollIndex, lineId: flatItem?.lineId })
-            attempts++
-            nextTick(() => requestAnimationFrame(tryApplyScroll))
-            return
-          }
-          if (contentPending) trace.push(FLOW_RESTORE, 'content_still_pending_at_max', { attempts, scrollIndex })
-
-          const measuredHeight = item && item.start !== undefined && item.end !== undefined ? item.end - item.start : 0
-          if (item && measuredHeight > 0) {
-            const targetScrollTop = item.start + scrollOffset
-            const maxScrollTop = Math.max(0, el2.scrollHeight - el2.clientHeight)
-            const desiredScrollTop = Math.min(targetScrollTop, maxScrollTop)
-            el2.scrollTop = desiredScrollTop
-            trace.push(FLOW_RESTORE, 'apply', {
-              attempts, itemStart: item.start, measuredHeight, scrollOffset,
-              targetScrollTop, maxScrollTop, desiredScrollTop, clamped: desiredScrollTop < targetScrollTop,
-            })
-
-            requestAnimationFrame(() => {
-              if (Math.abs(el2.scrollTop - desiredScrollTop) > 1 && attempts < MAX_ATTEMPTS) {
-                trace.push(FLOW_RESTORE, 'apply_drifted_retry', { attempts, got: el2.scrollTop, wanted: desiredScrollTop })
-                attempts++
-
-                nextTick(() => requestAnimationFrame(tryApplyScroll))
-                return
-              }
-
-              trace.push(FLOW_RESTORE, 'DONE', { attempts, finalScrollTop: el2.scrollTop, desiredScrollTop })
-              applied = true
-              resolve()
-            })
-          } else if (attempts < MAX_ATTEMPTS) {
-            // Item not yet measured — retry
-            trace.push(FLOW_RESTORE, 'not_measured_retry', { attempts, scrollIndex, hasItem: !!item, measuredHeight })
-            attempts++
-            nextTick(() => requestAnimationFrame(tryApplyScroll))
-          } else {
-            // Give up after max attempts
-            trace.push(FLOW_RESTORE, 'GIVE_UP_not_measured', { attempts, scrollIndex })
-            resolve()
-          }
-        }
-
-        attempts = 0
-        requestAnimationFrame(tryApplyScroll)
-      }
-
-      startRestore()
-    }).finally(() => {
-      // Bump the token to cancel any scrollToGroup that started concurrently with
-      // restore and is now in its rAF chain — restore takes priority.
-      scrollToGroupToken++
-      restoreIntentClaimed = false
-      requestAnimationFrame(() => { isRestoringScrollPos = false })
-      // Keep the position anchored while backfill re-measures items above it.
-      // Started AFTER the token bump so the correction's captured token stays valid
-      // until the next scrollToGroup/restore cancels it.
-      if (applied) startRestoreCorrection(scrollIndex, scrollOffset)
-    })
-  }
-
   const topVisibleFlatIndex = computed(() => {
     const st = scrollTop.value + NAV_HEIGHT
     for (const m of virtualizer().measurementsCache) {
@@ -550,7 +506,10 @@ export function useCommentaryScroll(
     return 0
   })
 
-  // When groups reload, scroll back to the pinned group (captured in parent before selectedLineId changes)
+  // When groups reload, scroll back to the pinned group (captured in parent before
+  // selectedLineId changes). These watchers only decide WHETHER to request a pin
+  // scroll; whether it MAY run (e.g. not while a restore owns the panel) is the
+  // positioner's call, reported through setGoal's return value.
   function setupGroupReloadScroll(
     groups: () => any[],
     pinnedGroup: () => any,
@@ -567,16 +526,7 @@ export function useCommentaryScroll(
       async (newGroups) => {
         // Bump FIRST, before any early return. Every groups change must invalidate a
         // callback that is already mid-flight, INCLUDING a change this callback then
-        // ignores (empty list, still loading).
-        //
-        // A line tap can run useCommentary.load() twice in quick succession (the
-        // selectedLineId and selectedLineIds watchers both fire), so the sequence is
-        // groups -> [] -> groups. With the bump after the guards, the first callback
-        // resumed from its await while the list was empty, still saw its own captured
-        // non-empty `newGroups`, and called scrollToGroup on a panel whose scroller
-        // had been unmounted by the empty-state branch — ABORT_no_scroller, and the
-        // panel silently kept whatever position the virtualizer left it at. That is
-        // the "commentary panel loses its place on line switch" report.
+        // ignores (empty list, still loading). See the doc's async-watcher rule.
         const generation = ++scrollGeneration
 
         // A new load is starting; any scroll owed by the previous one is void.
@@ -586,10 +536,6 @@ export function useCommentaryScroll(
         }
         // Skip partial loads — only scroll when loading is fully complete.
         if (isLoading()) return
-        // A restore is running OR the panel has synchronously claimed intent to
-        // restore this same reload — stand down so we don't fight it (would land
-        // on the pinned group instead of the saved position). See restoreIntentClaimed.
-        if (isRestoringScrollPos || restoreIntentClaimed) return
         // Consume the first-load flag only once we are genuinely ready to position
         // the panel. It used to be consumed by the FIRST fire of this watcher, which
         // is the `groups = []` that load() starts with, so the "a restore owns first
@@ -604,9 +550,6 @@ export function useCommentaryScroll(
             return
           }
         }
-        // Single nextTick with flush:'post' is sufficient — the virtualizer has
-        // the new items after Vue flushes. The previous double-nextTick + rAF added
-        // ~50ms of unnecessary scheduling overhead on every line tap.
         await nextTick()
         if (generation !== scrollGeneration) return
         const pinned = pinnedGroup()
@@ -617,15 +560,12 @@ export function useCommentaryScroll(
           return
         }
         // Re-read LIVE rather than trusting the captured array: `newGroups` is a
-        // snapshot from before the await, and scrollToGroup resolves its index
-        // against the live list, so only the live list can decide whether the
-        // pinned group is actually there to scroll to.
+        // snapshot from before the await.
         const live = groups()
         if (!live.length) return
         if (!live.some((g: any) => g.bookId === pinned.bookId)) return
-        // Re-check after the awaited nextTick — a restore may have started/claimed
-        // intent while we were yielded.
-        if (isRestoringScrollPos || restoreIntentClaimed) return
+        // If a restore owns the panel, the positioner declines and the debt stays
+        // paid-off (restore IS the positioning for this load).
         pinScrollOwed = false
         scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel, 'groups-reload')
       },
@@ -636,22 +576,23 @@ export function useCommentaryScroll(
      * A pin that arrives AFTER its groups.
      *
      * usePinnedCommentary awaits a DB query for the book's default commentators, and
-     * on the FIRST commentary load of a book that query is still in flight when the
-     * groups land: the watcher above finds no pin, returns, and nothing re-triggered
-     * it milliseconds later when the pin appeared — so the panel never scrolled to
-     * the default commentator at all. Only the first load pays for it (the list is
-     * cached from then on), which is exactly why it read as "the FIRST time I open a
+     * on the FIRST commentary load of a book that query can still be in flight when
+     * the groups land: the watcher above finds no pin and records the debt; this one
+     * settles it when the pin appears. Only the first load of a book pays for this
+     * (the query result is cached), which is why it read as "the FIRST time I open a
      * chapter it doesn't scroll to the default commentary".
      */
     watch(
       pinnedGroup,
       (pinned) => {
         if (!pinScrollOwed || !pinned) return
-        if (isLoading() || isRestoringScrollPos || restoreIntentClaimed) return
+        if (isLoading()) return
         const live = groups()
         if (!live.length || !live.some((g: any) => g.bookId === pinned.bookId)) return
-        pinScrollOwed = false
-        scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel, 'pin-arrived-late')
+        const accepted = scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel, 'pin-arrived-late')
+        // A restore in progress declines the request; keep the debt so a later
+        // pin change can still settle it (matches the old guard's behavior).
+        if (accepted) pinScrollOwed = false
       },
       { flush: 'post' },
     )
@@ -661,6 +602,9 @@ export function useCommentaryScroll(
     scrollTop,
     activeHeader,
     activePinnedGroup,
+    activePinnedGroupForCapture,
+    markUserAdjusted,
+    isPositioning,
     onScroll,
     scrollToGroup,
     scrollToFlatIndex,

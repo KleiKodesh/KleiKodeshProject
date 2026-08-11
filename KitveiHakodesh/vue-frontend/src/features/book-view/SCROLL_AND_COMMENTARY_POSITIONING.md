@@ -12,6 +12,52 @@ commentary pane", read "each commentary panel" - the composables named here are
 instantiated once per panel by `commentary/useCommentaryPanelSlot.ts`, which is
 driven by `COMMENTARY_SLOTS`, not by any hardcoded pair.
 
+## The positioner (2026-08-11): one owner per panel
+
+All programmatic commentary positioning goes through a single per-panel GOAL slot in
+`useCommentaryScroll`. Six code paths used to write to the scroller directly
+(restore, groups-reload pin-follow, pin-arrived-late, panel-mount, header nav,
+search jump), coordinated through shared flags (`scrollToGroupToken`,
+`isRestoringScrollPos`, `restoreIntentClaimed`) - and every new panel or new load
+timing multiplied their races; the git history is four generations of "finally
+fixed". Now every path REQUESTS a goal (`group` / `restore` / `flatIndex` /
+`restore-intent`), and one rAF loop executes whichever goal is current:
+
+- **Priority**: a user request always replaces the current goal; a restore always
+  wins over auto pin-follow; an AUTO request (reload/mount) can never displace a
+  restore or a claimed restore intent. `setGoal` returns acceptance so auto callers
+  can keep their pin-scroll debt.
+- **Completion is condition-based, never wall-clock**: a goal holds until its target
+  is measured, its content present (restore with offset), and its position stable
+  for SETTLE_FRAMES consecutive frames. The old fixed windows (800ms → 2.5s → 6s)
+  each encoded an assumption about how long loading takes and each broke on the
+  next slower environment; frame-based settling stretches with machine load
+  instead. A generous SAFETY_MS valve force-applies and ends a genuinely
+  unachievable goal.
+- **`isPositioning`** is true from goal start to FIRST arrival; CommentaryView
+  shows an opaque positioning mask (spinner after the usual delay) over the
+  scroller while it is true, so the reader never watches content sitting at the
+  wrong offset while backfill reshapes the list. The mask is `pointer-events:none`
+  and any wheel/pointer/key cancels the goal, so it is always interruptible - and
+  it must stay an OVERLAY: putting it in the v-if chain would unmount the scroller
+  and deadlock the goal it masks.
+- **A derived active group is not a preference.** `activePinnedGroup` falls back to
+  the FIRST header when nothing has scrolled under the nav - which is exactly a
+  panel's state mid-transit. A click landing in that window used to capture the
+  first group as "what the reader was looking at" and permanently switch the pin
+  (the T4 flip: reliable at 0ms, intermittent under host latency). Pin capture now
+  uses `activePinnedGroupForCapture`, which answers null unless the reader has
+  personally moved the panel (wheel/touch/pointer/key) since the last programmatic
+  positioning - `captureActivePins` then falls back to the held pin, which is
+  authoritative. Note this also means a PROBE's `el.scrollTop =` is deliberately
+  not a preference: no user gesture, no pin-follow.
+
+Verified with a latency-injected Playwright matrix (0 / 700 / 1500 ms on the
+service port): default-commentator scroll, keep-place across line switches,
+close/reopen restore at shallow and ~80% depth, section-mode loads, repeated
+same-line determinism, and rapid unthrottled click bursts - all green at every
+latency, where the pre-rewrite code failed restore beyond ~8k px drift at 700ms.
+
 All of this is delicate because both the lines pane and the commentary pane are
 TanStack virtual lists with **dynamic item measurement** (`measureElement`): item
 heights start as estimates and change when items render — and, since the two-phase
@@ -110,7 +156,7 @@ navigation's own change found nothing staged and reset the panel to its default.
 `useCommentaryNavigation` therefore takes an `onBeforeNavigate` hook and calls it
 inside `afterNavigate`, immediately before mutating the refs.
 
-**The correction window must outlive the load, not the animation.** A pin scroll is
+**(Superseded by the positioner - kept for history.) The correction window must outlive the load, not the animation.** A pin scroll is
 not done when it lands: items ABOVE the target render as near-empty stubs and grow as
 their text, TOC-path labels, notes and highlights arrive, and each one pushes the
 target down. `scrollToGroup` re-anchors on every DOM mutation, but only for
