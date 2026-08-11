@@ -319,7 +319,8 @@ Data="M19 19H5V5h7V3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7h-2v7zM
         <!-- ══════════════════════════════════════════════════════════
              ROW 2 — BROWSER CONTENT
         ══════════════════════════════════════════════════════════ -->
-        <local:BrowserTabControl x:Name="BrowserTabs" Grid.Row="2"/>
+        <local:BrowserTabControl x:Name="BrowserTabs" Grid.Row="2"
+                                 TabIndex="0"/>
 
     </Grid>
 </UserControl>
