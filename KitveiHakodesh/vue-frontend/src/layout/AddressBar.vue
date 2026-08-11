@@ -118,11 +118,26 @@ const hasDropdownContent = computed(
 // The address bar belongs to the current tab, so its rows navigate IN PLACE —
 // the same rule every other row here follows, and the same one a browser applies
 // to a link. Ctrl/⌘/middle-click is the single exception and opens a new tab.
-function onSelectLocation(id: string, openInNewTab = false) {
+async function onSelectLocation(id: string, openInNewTab = false) {
   const patch = tabStore.locationPatch(id)
   if (!patch) return
-  pane.openOrUpdateActiveTab(patch as Omit<Tab, 'id'>, openInNewTab)
+  // A file location carries only its path — the virtual host registration that
+  // served it lives and dies with the tab that opened it, so any URL the target
+  // tab still holds belongs to a different document. Clear it, apply the patch,
+  // and re-register the file (restoreTab → restoreLocalFile/restoreHbPdf writes
+  // the fresh localFileVirtualUrl onto the tab), same as the home-page recents
+  // and native dropdown paths.
+  const targetTabId = openInNewTab
+    ? pane.openTab({ ...patch, localFileVirtualUrl: undefined } as Omit<Tab, 'id'>).id
+    : pane.activeTabId.value
+  if (!openInNewTab) pane.updateActiveTab({ ...patch, localFileVirtualUrl: undefined })
   close()
+  if (
+    (patch.localFilePath || patch.localFileHbBookId) &&
+    (patch.route === '/pdf-view' || patch.route === '/html-view')
+  ) {
+    await localFileStore.restoreTab(targetTabId)
+  }
 }
 
 function onForgetLocation(id: string) {
