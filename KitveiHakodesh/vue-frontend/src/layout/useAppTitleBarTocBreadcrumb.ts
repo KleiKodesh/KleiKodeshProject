@@ -39,6 +39,18 @@ export function isTocBreadcrumbSegment(s: BreadcrumbSegment): s is TocBreadcrumb
 }
 
 /**
+ * Split a tab's tocPath into segment labels, dropping empty ones.
+ *
+ * An empty label can never match a TOC entry, so it would resolve to a segment
+ * with no entry — rendering as a chevron with a blank label next to the book
+ * title. Guard here rather than at the writers: the path is a plain string on the
+ * tab and any in-place navigation can leave a malformed one behind.
+ */
+function splitTocPath(tocPath: string): string[] {
+  return tocPath.split(' · ').filter((label) => label !== '')
+}
+
+/**
  * Given a flat TocEntry list and a segment label path, resolve each segment
  * to its TocEntry by walking the tree from root to leaf, matching by text at
  * each depth level.
@@ -148,14 +160,14 @@ export function useAppTitleBarTocBreadcrumb(
     if (route === '/book-view') {
       const bridge = getTocBridge(currentTabId)
       if (!bridge) return []
-      const labels = tocPath.split(' · ')
+      const labels = splitTocPath(tocPath)
       return resolveTocSegments(bridge.tocEntries, labels)
     }
 
     if (route === '/pdf-view') {
       const bridge = getPdfBridge(currentTabId)
       if (!bridge) return []
-      const labels = tocPath.split(' · ')
+      const labels = splitTocPath(tocPath)
       return resolvePdfSegments(bridge.outlineEntries, labels)
     }
 
