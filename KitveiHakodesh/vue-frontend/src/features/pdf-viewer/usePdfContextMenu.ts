@@ -316,7 +316,6 @@ export function usePdfContextMenu(
     if (hasSelection) {
       list.push({ label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' })
       list.push({ label: 'העתק לתוך וורד', action: onCopyIntoWord })
-      list.push({ type: 'separator' })
     }
     list.push({ label: 'העתק דף כתמונה', action: () => void copyPageAsImage() })
     return list

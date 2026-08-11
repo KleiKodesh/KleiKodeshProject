@@ -117,7 +117,6 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
   const items: ContextMenuItem[] = [
     { label: 'העתק', action: onCopy },
     { label: 'בחר הכל', action: onSelectAll },
-    { type: 'separator' },
     {
       type: 'checkbox',
       label: 'העתק כרצף (ללא מעברי שורה)',

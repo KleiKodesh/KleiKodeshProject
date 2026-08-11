@@ -17,6 +17,7 @@ import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useZoomHandler } from '@/composables/useZoom'
 import { useBookViewLineRenderer, setCurrentMark } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
+import { useBookViewLineLink } from './useBookViewLineLink'
 import { useBookViewAnnotations } from './useBookViewAnnotations'
 import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
@@ -165,6 +166,7 @@ watch(
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
+const { copyLineLink } = useBookViewLineLink({ scrollerEl, lines: () => props.lines, bookId })
 const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord, onSearchInRepository } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
@@ -180,6 +182,7 @@ const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord, onSearchIn
   onHighlight,
   onClearHighlight,
   onAddNote,
+  onCopyLineLink: copyLineLink,
 })
 useScopedCopy(
   scrollerEl,

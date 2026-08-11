@@ -75,8 +75,9 @@ namespace KleiKodesh.Ribbon
             }
         }
 
-        // Right-click "פתח קישור בכתבי הקודש": open the otzaria:// / zayit:// link found
-        // in the current Word selection's hyperlinks inside the Kitvei Hakodesh app.
+        // Right-click "פתח קישור בכתבי הקודש": open the otzaria:// / seforimapp:// /
+        // zayit:// link found in the current Word selection's hyperlinks inside the
+        // Kitvei Hakodesh app.
         public void openLink_Click(Office.IRibbonControl control)
         {
             try
@@ -84,7 +85,7 @@ namespace KleiKodesh.Ribbon
                 var link = FindSelectionHostLink();
                 if (link == null)
                 {
-                    MessageBox.Show("לא נמצא קישור של אוצריא או זית בבחירה");
+                    MessageBox.Show("לא נמצא קישור נתמך בבחירה");
                     return;
                 }
 
@@ -97,8 +98,8 @@ namespace KleiKodesh.Ribbon
             }
         }
 
-        // Only show the "open link" item when the selection actually contains an
-        // otzaria/zayit link. Office re-evaluates context-menu getVisible on each
+        // Only show the "open link" item when the selection actually contains a
+        // supported link. Office re-evaluates context-menu getVisible on each
         // right-click, so this reflects the current selection every time.
         public bool getContextVisible(Office.IRibbonControl control)
         {
@@ -107,8 +108,9 @@ namespace KleiKodesh.Ribbon
         }
 
         /// <summary>
-        /// Returns the first parseable otzaria:// / zayit:// link among the hyperlinks
-        /// overlapping the current selection, or null if there is none. Reads
+        /// Returns the first link among the hyperlinks overlapping the current selection
+        /// that HostLink can parse (otzaria:// / seforimapp:// / zayit://), or null if
+        /// there is none. Reads
         /// Selection.Hyperlinks (hyperlinks the selection touches, including one the
         /// caret merely sits inside).
         /// </summary>

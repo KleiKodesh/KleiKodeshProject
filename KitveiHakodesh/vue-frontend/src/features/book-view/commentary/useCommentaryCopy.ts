@@ -412,50 +412,56 @@ export function useCommentaryCopy(
   }
 
   const contextMenuItems: ContextMenuItem[] = [
+    { label: 'בחר הכל', action: selectAllInContainer, shortcut: 'Ctrl+A' },
     { label: 'העתק', action: onCopy, shortcut: 'Ctrl+C' },
     { label: 'העתק לתוך וורד', action: onPasteIntoWord, shortcut: 'Ctrl+V' },
     { label: 'העתק לחיפוש במאגר', action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
-    { label: 'בחר הכל', action: selectAllInContainer },
     { type: 'separator' },
-    // Independent checkboxes — all can be active simultaneously
     {
-      type: 'checkbox',
-      label: 'העתק כרצף (ללא מעברי שורה)',
-      get checked() { return settingsStore.copyJoinLines },
-      onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
-    },
-    // start/end are a mutually-exclusive pair rendered as two checkboxes (ticking
-    // one clears the other). All exclusivity is enforced by toggleCopyFlag →
-    // copyFlagExclusivity.ts; do not add ad-hoc clears here.
-    {
-      type: 'checkbox',
-      label: 'העתק עם מקור בהתחלה',
-      get checked() { return settingsStore.copySourcePosition === 'start' },
-      onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
-    },
-    {
-      type: 'checkbox',
-      label: 'העתק עם מקור בסוף',
-      get checked() { return settingsStore.copySourcePosition === 'end' },
-      onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
-    },
-    {
-      type: 'checkbox',
-      label: 'העתק מקור עם ציטוט',
-      get checked() { return settingsStore.copyAsSourceWithQuotation },
-      onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
-    },
-    {
-      type: 'checkbox',
-      label: 'העתק עם הערות',
-      get checked() { return settingsStore.copyWithNotes },
-      onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
-    },
-    {
-      type: 'checkbox',
-      label: 'העתק טקסט נקי',
-      get checked() { return settingsStore.copyCleanText },
-      onChange: (value: boolean) => { settingsStore.copyCleanText = value },
+      type: 'submenu',
+      label: 'אפשרויות העתקה',
+      items: [
+        // Independent checkboxes — all can be active simultaneously
+        {
+          type: 'checkbox',
+          label: 'העתק כרצף (ללא מעברי שורה)',
+          get checked() { return settingsStore.copyJoinLines },
+          onChange: (value: boolean) => { settingsStore.copyJoinLines = value },
+        },
+        // start/end are a mutually-exclusive pair rendered as two checkboxes (ticking
+        // one clears the other). All exclusivity is enforced by toggleCopyFlag →
+        // copyFlagExclusivity.ts; do not add ad-hoc clears here.
+        {
+          type: 'checkbox',
+          label: 'העתק עם מקור בהתחלה',
+          get checked() { return settingsStore.copySourcePosition === 'start' },
+          onChange: (value: boolean) => toggleCopyFlag('sourceStart', value),
+        },
+        {
+          type: 'checkbox',
+          label: 'העתק עם מקור בסוף',
+          get checked() { return settingsStore.copySourcePosition === 'end' },
+          onChange: (value: boolean) => toggleCopyFlag('sourceEnd', value),
+        },
+        {
+          type: 'checkbox',
+          label: 'העתק מקור עם ציטוט',
+          get checked() { return settingsStore.copyAsSourceWithQuotation },
+          onChange: (value: boolean) => toggleCopyFlag('sourceWithQuotation', value),
+        },
+        {
+          type: 'checkbox',
+          label: 'העתק עם הערות',
+          get checked() { return settingsStore.copyWithNotes },
+          onChange: (value: boolean) => toggleCopyFlag('withNotes', value),
+        },
+        {
+          type: 'checkbox',
+          label: 'העתק טקסט נקי',
+          get checked() { return settingsStore.copyCleanText },
+          onChange: (value: boolean) => { settingsStore.copyCleanText = value },
+        },
+      ],
     },
     { type: 'separator' },
     annotationRow,
