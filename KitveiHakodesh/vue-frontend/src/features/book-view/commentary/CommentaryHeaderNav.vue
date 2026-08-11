@@ -209,9 +209,16 @@ function handleKeydown(e: KeyboardEvent) {
   width: 100%;
   height: 32px;
   overflow: hidden;
-  background: var(--bg-primary);
+  /* --bg-toolbar plus the same bottom rule the book view's top toolbar carries: this strip
+     is a row of controls, not reading surface, so it should read as chrome like the
+     toolbar does rather than blending into the commentary text below it. The fill also has
+     to be opaque either way - the virtual rows scroll underneath it, and the rule is what
+     gives them a clean edge to disappear behind. */
+  background: var(--bg-toolbar);
+  border-bottom: 1px solid var(--border-color);
   padding-inline: 6px;
 }
+
 .btn {
   display: flex;
   align-items: center;
