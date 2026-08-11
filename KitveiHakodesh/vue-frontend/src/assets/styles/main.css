@@ -180,18 +180,22 @@ input:focus { background: none !important; }
   background: var(--border-color);
   transition: width 120ms, height 120ms, background 120ms;
 }
+/* Pinned to an edge rather than centred - see .sash-h::after for the reason. */
 .sash-v::after {
   top: 0;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 0;
   width: 1px;
 }
+/* Pinned to an edge rather than centred. A 1px line inside a 1px track centred with
+   `top: 50%; translateY(-50%)` lands on a half-pixel boundary, so the browser
+   antialiases it across two device rows and it renders as a soft ~2px line - visibly
+   thicker than the 1px borders it sits next to. Anchoring it removes the fractional
+   offset; the hover/drag rules grow it from that edge, which is imperceptible at 3px. */
 .sash-h::after {
   left: 0;
   right: 0;
-  top: 50%;
-  transform: translateY(-50%);
+  top: 0;
   height: 1px;
 }
 
