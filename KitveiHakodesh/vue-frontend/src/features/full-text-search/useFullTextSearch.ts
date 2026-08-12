@@ -346,6 +346,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       _devStreamAbort.abort()
       _devStreamAbort = null
       isSearching.value = false
+      _cleanup() // drop the pending flush timer / buffer too
     }
     if (!currentSearchId) return
     const id = currentSearchId
