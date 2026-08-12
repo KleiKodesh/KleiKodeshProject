@@ -49,7 +49,7 @@ const {
   resume: resumeSearch,
 } = useHomeSearch(homeSearchQuery)
 
-// The search bar reports user intent (onSubmit / onRequestDropdownFocus) and this
+// The search bar reports user intent (onSubmit / onDropdownKeydown) and this
 // shell decides what it means, so the bar itself never imports navigation. Both
 // cross-references are passed as arrow functions, which defers resolution to call
 // time — neither declaration depends on the other's position.
@@ -60,8 +60,21 @@ const searchBar = useHomeSearchBar({
   isLoadingAny,
   clearResults,
   onSubmit: (query) => navigation.openFullTextSearch(query),
-  onRequestDropdownFocus: () => searchDropdownRef.value?.focus(),
+  // Combobox model: focus stays in the input; keydowns are forwarded to the
+  // dropdown, which moves its highlight. Once the user is arrowing through
+  // results, pause the async sources so late arrivals don't reshuffle the list
+  // under the highlight — the next keystroke (onSearchInput) resumes them.
+  onDropdownKeydown: (event) => {
+    const handled = searchDropdownRef.value?.onSearchInputKeydown(event) ?? false
+    if (handled) pauseSearch()
+    return handled
+  },
 })
+
+function onSearchInput() {
+  resumeSearch()
+  searchBar.onInput()
+}
 
 const navigation = useHomeSearchNavigation(() => searchBar.reset())
 
@@ -111,7 +124,7 @@ async function onTap(label: string) {
             :placeholder="searchBar.placeholder.value"
             autocomplete="off"
             @focus="searchBar.onFocus"
-            @input="searchBar.onInput"
+            @input="onSearchInput"
             @keydown="searchBar.onKeydown"
           />
           <button
@@ -142,8 +155,6 @@ async function onTap(label: string) {
           @select-catalog-toc="navigation.onSelectCatalogToc"
           @select-hebrew-book="navigation.onSelectHebrewBook"
           @select-file="navigation.onSelectFile"
-          @dropdown-focused="pauseSearch"
-          @dropdown-blurred="resumeSearch"
         />
       </div>
       <div class="home-grid">

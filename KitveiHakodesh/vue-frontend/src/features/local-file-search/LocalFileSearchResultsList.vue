@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import {
   IconDocument20Filled,
@@ -9,7 +9,7 @@ import {
   IconWindowArrowUp20Regular,
   IconPuzzlePiece20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import { openFileInDefaultApp } from '@/webview-host/bridge'
 import type { LocalFileSearchResult } from './useLocalFileSearch'
@@ -33,11 +33,22 @@ const virtualizer = useVirtualizer(
   })),
 )
 
-const { focusedIndex, containerFocused } = useVirtualListKeys(
-  scrollElement,
-  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => props.items.length,
-  (index, openInNewTab) => onSelect(props.items[index]!, openInNewTab),
+// Combobox model: focus stays in the page's search input; the page forwards its
+// keydown events here (onSearchInputKeydown) and the highlight moves through
+// the results.
+const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
+  getCount: () => props.items.length,
+  onActivate: (index, openInNewTab) => onSelect(props.items[index]!, openInNewTab),
+  getVirtualizer: () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+})
+
+// New results make the old highlight point at a different item — drop it.
+watch(
+  () => props.items,
+  () => {
+    activeIndex.value = -1
+  },
 )
 
 function onSelect(item: LocalFileSearchResult, openInNewTab = false) {
@@ -45,7 +56,7 @@ function onSelect(item: LocalFileSearchResult, openInNewTab = false) {
 }
 
 function selectItem(index: number, event?: MouseEvent) {
-  focusedIndex.value = index
+  activeIndex.value = index
   onSelect(props.items[index]!, wantsNewTab(event))
 }
 
@@ -89,12 +100,12 @@ function getTooltip(item: LocalFileSearchResult): string {
 }
 
 defineExpose({
-  focusContainer: () => scrollElement.value?.focus(),
+  onSearchInputKeydown,
 })
 </script>
 
 <template>
-  <div ref="scrollElement" class="scroller" tabindex="0">
+  <div ref="scrollElement" class="scroller">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
         v-for="virtualRow in virtualizer.getVirtualItems()"
@@ -112,7 +123,7 @@ defineExpose({
         <div
           class="file-item"
           data-nav-item
-          :class="{ 'is-focused': containerFocused && focusedIndex === virtualRow.index }"
+          :class="{ 'is-focused': activeIndex === virtualRow.index }"
           :title="getTooltip(items[virtualRow.index]!)"
           @click="selectItem(virtualRow.index, $event)"
           @auxclick.middle="selectItem(virtualRow.index, $event)"

@@ -36,7 +36,9 @@ The search bar wrapper (`searchBarRef`, in `HomePage.vue`) is the `useDropdownCl
 
 `close()` and `reset()` are deliberately different: `close()` only hides the dropdown and preserves what the user typed (used when clicking away), while `reset()` also clears the query and the fetched results (used on Escape, on submit, and after any navigation).
 
-Dependencies point one way: `useHomeSearchBar` knows nothing about navigation. It reports intent via `onSubmit` and `onRequestDropdownFocus`, and `HomePage.vue` decides what those mean. Keep it that way — having the bar call into `useHomeSearchNavigation` directly would create a cycle, since navigation needs `reset` from the bar.
+Dependencies point one way: `useHomeSearchBar` knows nothing about navigation. It reports intent via `onSubmit` and `onDropdownKeydown`, and `HomePage.vue` decides what those mean. Keep it that way — having the bar call into `useHomeSearchNavigation` directly would create a cycle, since navigation needs `reset` from the bar.
+
+Keyboard navigation follows the combobox model (`useInputListNavigation`): focus never leaves the input. The input's keydowns are forwarded to `HomeSearchDropdown.onSearchInputKeydown`, which moves a highlight through the flattened item list; Enter with a highlight activates the row, Enter without one submits the full-text search. While the user is arrowing, the page pauses `useHomeSearch` so async results don't reshuffle the list under the highlight; typing resumes it.
 
 ## Tile visibility rules
 

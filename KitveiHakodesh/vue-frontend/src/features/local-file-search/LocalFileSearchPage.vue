@@ -121,8 +121,10 @@ onBeforeUnmount(() => {
   })
 })
 
-function focusResults() {
-  resultsListElement.value?.focusContainer()
+// Combobox model: focus stays in the input; arrows/paging move the results
+// highlight, Enter opens the highlighted file.
+function onSearchKeydown(event: KeyboardEvent) {
+  resultsListElement.value?.onSearchInputKeydown(event)
 }
 
 // No isHosted guard: it is TRUE in dev so it never gated anything, and opening a local file
@@ -275,9 +277,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
         :placeholder="placeholder"
         spellcheck="false"
         autocomplete="off"
-        @keydown.up.prevent="focusResults"
-        @keydown.down.prevent="focusResults"
-        @keydown.tab.prevent="focusResults"
+        @keydown="onSearchKeydown"
       />
       <template #right>
         <IconSearch20Regular class="search-icon" />

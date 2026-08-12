@@ -64,7 +64,7 @@ button:active { transform: scale(0.92); transition: transform 0.1s; }
 
 .c-pointer { cursor: pointer; }
 
-/* Keyboard nav focus indicator — used by useVirtualListKeys / useListKeys / useTilesKeys */
+/* Keyboard nav highlight — used by useInputListNavigation / useListKeys / useTilesKeys */
 [data-nav-item].is-focused { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
 .tiles-grid [data-nav-item].is-focused { border-radius: 6px; }
 

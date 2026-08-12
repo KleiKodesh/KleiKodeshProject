@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -47,20 +46,19 @@ const virtualizer = useVirtualizer(
   })),
 )
 
-const { focusedIndex, containerFocused } = useVirtualListKeys(
-  scrollEl,
-  () =>
+// Combobox model: focus stays in the search input; its keydown moves the list
+// highlight, Enter opens the highlighted book (Ctrl+Enter in a new tab).
+const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
+  getCount: () => displayedBooks.value.length,
+  onActivate: (i, openInNewTab) => openBook(displayedBooks.value[i]!, openInNewTab),
+  getVirtualizer: () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => displayedBooks.value.length,
-  (i, openInNewTab) => openBook(displayedBooks.value[i]!, openInNewTab),
-)
+})
 
-useVirtualScrollerKeys(
-  scrollEl,
-  () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => displayedBooks.value.length,
-)
+// New results make the old highlight point at a different book — drop it.
+watch(displayedBooks, () => {
+  activeIndex.value = -1
+})
 
 // Restore the query saved on the tab so switching away and back keeps the input.
 // A non-empty saved query runs the catalog search; otherwise load() shows history.
@@ -89,7 +87,7 @@ function onBookClicked(
   book: (typeof displayedBooks.value)[number],
   openInNewTab = false,
 ) {
-  focusedIndex.value = i
+  activeIndex.value = i
   openBook(book, openInNewTab)
 }
 </script>
@@ -102,7 +100,7 @@ function onBookClicked(
         <IconDismiss20Regular />
       </button>
     </div>
-    <div ref="scrollEl" class="hb-list" tabindex="0">
+    <div ref="scrollEl" class="hb-list">
       <LoadingAnimation v-if="isLoading" />
 
       <div v-else-if="error" class="state">{{ error }}</div>
@@ -124,7 +122,7 @@ function onBookClicked(
           >
             <HebrewBooksListItem
               :book="displayedBooks[vRow.index]!"
-              :focused="containerFocused && focusedIndex === vRow.index"
+              :focused="activeIndex === vRow.index"
               :has-local-file="localFileBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @book-clicked="(book, openInNewTab) => onBookClicked(vRow.index, book, openInNewTab)"
               @download-clicked="downloadBook"
@@ -152,9 +150,7 @@ function onBookClicked(
         class="search-input"
         dir="rtl"
         @input="search(($event.target as HTMLInputElement).value)"
-        @keydown.up.prevent="scrollEl?.focus()"
-        @keydown.down.prevent="scrollEl?.focus()"
-        @keydown.tab.prevent="scrollEl?.focus()"
+        @keydown="onSearchInputKeydown"
       />
     </BottomSearchBar>
   </div>

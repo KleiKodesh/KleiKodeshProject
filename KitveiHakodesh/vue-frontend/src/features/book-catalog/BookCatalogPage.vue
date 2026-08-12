@@ -127,12 +127,21 @@ const activeViewRef = ref<ActiveViewInstance | null>(null)
 const searchResultsRef = ref<InstanceType<typeof BookCatalogSearch> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 
-function focusList() {
+function onSearchKeydown(event: KeyboardEvent) {
   if (isSearching.value) {
-    searchResultsRef.value?.focusContainer()
+    // Combobox model: focus stays in the input; arrows/paging move the search
+    // results highlight, Enter WITH a highlight opens it. An unconsumed Enter
+    // falls through to the single-result shortcut.
+    if (searchResultsRef.value?.onSearchInputKeydown(event)) return
+    if (event.code === 'Enter') onSearchEnter()
     return
   }
-  activeViewRef.value?.focusContainer?.()
+  // Browsing (no query): arrows/Tab hand focus to the browse view, which owns
+  // its own roving-focus keyboard navigation.
+  if (event.code === 'ArrowUp' || event.code === 'ArrowDown' || event.code === 'Tab') {
+    event.preventDefault()
+    activeViewRef.value?.focusContainer?.()
+  }
 }
 
 const PLACEHOLDERS = ['בראשית פרק ד', 'בבלי ברכות דף יד', 'רמב"ם משנה תורה']
@@ -277,10 +286,7 @@ function onSearchEnter() {
         :placeholder="placeholder"
         spellcheck="true"
         autocomplete="off"
-        @keydown.enter="onSearchEnter"
-        @keydown.up.prevent="focusList"
-        @keydown.down.prevent="focusList"
-        @keydown.tab.prevent="focusList"
+        @keydown="onSearchKeydown"
       />
     </BottomSearchBar>
   </div>
