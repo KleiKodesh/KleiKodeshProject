@@ -60,6 +60,14 @@ const props = defineProps<{
    * show-only-when-no-results rule.
    */
   recentEntries?: RecentlyOpenedEntry[]
+  /**
+   * Merge the panel into its anchor instead of floating below it (address-bar
+   * mode, like a browser omnibox): the top corners square off and the top border
+   * is dropped, so the field and the panel read as one surface. The parent has to
+   * cooperate by anchoring at the field's bottom edge with no gap and squaring
+   * its own bottom corners — see AddressBar's `is-merged`.
+   */
+  mergeWithAnchor?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -183,7 +191,13 @@ function getTabIcon(route: string): FileIconInfo {
 
 <template>
   <Teleport to="body">
-    <div ref="dropdownRef" class="home-search-dropdown" :style="dropdownStyle" @click.stop>
+    <div
+      ref="dropdownRef"
+      class="home-search-dropdown"
+      :class="{ 'is-merged': mergeWithAnchor }"
+      :style="dropdownStyle"
+      @click.stop
+    >
       <!-- ── Recents (address-bar mode: empty query / no results) ──
            Locations the reader has been, most recent first. Selecting one navigates
            the CURRENT tab (Ctrl/middle-click opens a new one), like any address-bar
@@ -363,6 +377,22 @@ function getTabIcon(route: string): FileIconInfo {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
   z-index: 1000;
+}
+
+/* ── Merged (address-bar) mode ────────────────────────────────────────────────
+   Continues the field rather than floating under it: square top corners, no top
+   border, and no seam of any kind across the join.
+
+   The shadow must not touch the top edge. A normal `0 Ypx Bpx` shadow blurs
+   outward in ALL directions, so any blur larger than the offset spills back up
+   over the field as a dark band. Clipping it: a large downward offset with the
+   spread pulled in by an equal negative amount keeps the visible shadow below
+   the panel while the top stays perfectly clean. */
+.home-search-dropdown.is-merged {
+  border-top: none;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  box-shadow: 0 24px 20px -20px rgba(0, 0, 0, 0.35);
 }
 
 .home-search-dropdown__section-header {

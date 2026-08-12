@@ -115,6 +115,11 @@ const hasDropdownContent = computed(
   () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny(),
 )
 
+// The one condition the panel renders on. The field's merged styling reads the
+// same value, so it can never square its bottom corners with no panel attached
+// to them.
+const isPanelVisible = computed(() => isDropdownOpen.value && hasDropdownContent.value)
+
 // The address bar belongs to the current tab, so its rows navigate IN PLACE —
 // the same rule every other row here follows, and the same one a browser applies
 // to a link. Ctrl/⌘/middle-click is the single exception and opens a new tab.
@@ -166,7 +171,13 @@ function computeAnchor() {
   const rect = wrapperRef.value.getBoundingClientRect()
   const shellRect = wrapperRef.value.closest('.app-shell')?.getBoundingClientRect()
   const anchor = shellRect && shellRect.width <= NARROW_SHELL_WIDTH ? shellRect : rect
-  anchorTop.value = rect.bottom + 6
+  // Flush against the field's bottom edge, no gap and no overlap: in merged mode
+  // the field drops its bottom border entirely, so there is no seam line left to
+  // cover and the two backgrounds simply continue into each other. Floored
+  // because getBoundingClientRect returns fractional values at non-integral zoom
+  // or DPI, and a fractional top would leave a hairline of the page showing
+  // through the join — rounding down overlaps by a subpixel instead.
+  anchorTop.value = Math.floor(rect.bottom)
   anchorLeft.value = anchor.left
   anchorRight.value = window.innerWidth - anchor.right
   maxHeight.value = Math.min(MAX_DROPDOWN_HEIGHT, Math.max(120, window.innerHeight - rect.bottom - 12))
@@ -324,7 +335,12 @@ nextTick(() => {
 </script>
 
 <template>
-  <div ref="wrapperRef" class="address-bar" @click.stop="inputRef?.focus()">
+  <div
+    ref="wrapperRef"
+    class="address-bar"
+    :class="{ 'is-merged': isPanelVisible }"
+    @click.stop="inputRef?.focus()"
+  >
     <input
       ref="inputRef"
       v-model="searchQuery"
@@ -346,8 +362,9 @@ nextTick(() => {
       <IconSearch20Regular />
     </button>
     <HomeSearchDropdown
-      v-if="isDropdownOpen && hasDropdownContent"
+      v-if="isPanelVisible"
       ref="dropdownRef"
+      merge-with-anchor
       :catalog-results="catalogResults"
       :catalog-toc-results="catalogTocResults"
       :hebrew-books-results="hebrewBooksResults"
@@ -397,6 +414,30 @@ nextTick(() => {
      frame — a bottom-accent input, not a fully-outlined box. */
   border-bottom-color: var(--accent-color);
   box-shadow: inset 0 -1px 0 0 var(--accent-color);
+}
+
+/* ── Merged with the dropdown (browser-omnibox seam) ──────────────────────────
+   While the panel is attached below, the field stops being a self-contained box
+   and becomes the top of one continuous slab.
+
+   Everything here removes a seam:
+   - The bottom border AND the accent underline from :focus-within go. That
+     underline is the single most visible seam — it would draw a bright accent
+     line straight through the middle of the merged surface.
+   - The bottom corners square off to meet the panel's square top ones.
+   - The background becomes flat --bg-secondary, the panel's exact surface
+     colour. The resting/focused states wash --text-primary over the title bar
+     to lift the field off the chrome, which is right for a standalone field but
+     is precisely what made the field read LIGHTER than the panel below it.
+
+   Placed after :focus-within so it wins on equal specificity — the panel is only
+   ever visible while the field holds focus, so that rule is always in play. */
+.address-bar.is-merged {
+  background: var(--bg-secondary);
+  border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  box-shadow: none;
 }
 .address-bar__field {
   flex: 1;
