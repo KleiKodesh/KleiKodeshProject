@@ -54,7 +54,7 @@ function useAnimatedPlaceholder(query: Ref<string>) {
  * `useHomeSearch`; navigation on select lives in `useHomeSearchNavigation`.
  *
  * This composable deliberately knows nothing about navigation — it reports what
- * the user did (`onSubmit`, `onRequestDropdownFocus`) and lets the page decide.
+ * the user did (`onSubmit`, `onDropdownKeydown`) and lets the page decide.
  * Depending on `useHomeSearchNavigation` here would create a cycle, since that
  * composable needs `reset` from this one.
  *
@@ -69,8 +69,13 @@ export function useHomeSearchBar(options: {
   clearResults: () => void
   /** Called with the trimmed query when the user presses Enter or clicks search. */
   onSubmit: (query: string) => void
-  /** Called when Arrow Up/Down should move focus into the open dropdown. */
-  onRequestDropdownFocus: () => void
+  /**
+   * Forwards a keydown to the open dropdown's highlight navigation (combobox
+   * model — focus never leaves the input). Returns true when the dropdown
+   * consumed the key, in which case the bar's own Enter/Escape handling is
+   * skipped.
+   */
+  onDropdownKeydown: (event: KeyboardEvent) => boolean
 }) {
   const { query, searchBarRef, hasAnyResults, isLoadingAny, clearResults } = options
 
@@ -129,6 +134,10 @@ export function useHomeSearchBar(options: {
   }
 
   function onKeydown(event: KeyboardEvent) {
+    // Dropdown navigation first: arrows/paging move its highlight, and Enter
+    // WITH a highlight activates the highlighted row. Enter with no highlight
+    // is not consumed there and falls through to submit below.
+    if (isDropdownOpen.value && options.onDropdownKeydown(event)) return
     if (event.code === 'Enter') {
       event.preventDefault()
       submit()
@@ -137,12 +146,6 @@ export function useHomeSearchBar(options: {
     if (event.code === 'Escape') {
       event.preventDefault()
       reset()
-      return
-    }
-    if (!isDropdownOpen.value) return
-    if (event.code === 'ArrowDown' || event.code === 'ArrowUp') {
-      event.preventDefault()
-      options.onRequestDropdownFocus()
     }
   }
 

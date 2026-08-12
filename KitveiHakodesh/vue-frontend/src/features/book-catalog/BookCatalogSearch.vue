@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
-import { useTilesKeys } from './useTileGridKeys'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
@@ -31,18 +30,42 @@ const virtualizer = useVirtualizer(
   })),
 )
 
-const { focusedIndex: listFocused, containerFocused: listContainerFocused } = useVirtualListKeys(
-  scrollEl,
-  () =>
+// Combobox model: focus stays in the page's search input; the page forwards its
+// keydown events here (onSearchInputKeydown) and the highlight moves through
+// whichever view is active.
+const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListNavigation({
+  getCount: () => (props.view !== 'tiles' ? props.items.length : 0),
+  onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
+  getVirtualizer: () =>
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => (props.view !== 'tiles' ? props.items.length : 0),
-  (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-)
+})
 
-const { focusedIndex: tilesFocused, containerFocused: tilesContainerFocused } = useTilesKeys(
-  tilesEl,
-  () => (props.view === 'tiles' ? props.items.length : 0),
-  (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
+// Tiles wrap into rows, so one ArrowDown step is one visual row. Count the
+// rendered tiles sharing the first tile's offsetTop — exact for any width, no
+// magic tile-size constants.
+function getTileColumnsPerRow(): number {
+  const tiles = tilesEl.value?.querySelectorAll<HTMLElement>('[data-nav-item]')
+  if (!tiles?.length) return 1
+  const firstRowTop = tiles[0]!.offsetTop
+  let columns = 0
+  while (columns < tiles.length && tiles[columns]!.offsetTop === firstRowTop) columns++
+  return Math.max(1, columns)
+}
+
+const { activeIndex: tilesActiveIndex, onKeydown: onTilesKeydown } = useInputListNavigation({
+  getCount: () => (props.view === 'tiles' ? props.items.length : 0),
+  onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
+  containerElement: tilesEl,
+  getColumnsPerRow: getTileColumnsPerRow,
+})
+
+// New results make the old highlight point at a different item — drop it.
+watch(
+  () => props.items,
+  () => {
+    listActiveIndex.value = -1
+    tilesActiveIndex.value = -1
+  },
 )
 
 const itemTitle = (item: SearchFsItem) =>
@@ -63,26 +86,24 @@ function onSelect(item: SearchFsItem, openInNewTab = false) {
 }
 
 defineExpose({
-  focusContainer: () => {
-    const el = props.view === 'tiles' ? tilesEl.value : scrollEl.value
-    el?.focus()
-  },
+  onSearchInputKeydown: (event: KeyboardEvent) =>
+    props.view === 'tiles' ? onTilesKeydown(event) : onListKeydown(event),
 })
 
 function selectListItem(i: number, event?: MouseEvent) {
-  listFocused.value = i
+  listActiveIndex.value = i
   onSelect(props.items[i]!, wantsNewTab(event))
 }
 
 function selectTileItem(i: number, event?: MouseEvent) {
-  tilesFocused.value = i
+  tilesActiveIndex.value = i
   onSelect(props.items[i]!, wantsNewTab(event))
 }
 </script>
 
 <template>
   <p v-if="!items.length && !searching" class="empty">לא נמצאו תוצאות</p>
-  <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller" tabindex="0">
+  <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
         v-for="vRow in virtualizer.getVirtualItems()"
@@ -102,7 +123,7 @@ function selectTileItem(i: number, event?: MouseEvent) {
           data-nav-item
           :class="{
             'no-icon': view === 'tree',
-            'is-focused': listContainerFocused && listFocused === vRow.index,
+            'is-focused': listActiveIndex === vRow.index,
           }"
           :title="itemTooltip(items[vRow.index]!)"
           @click="selectListItem(vRow.index, $event)"
@@ -124,13 +145,13 @@ function selectTileItem(i: number, event?: MouseEvent) {
       </div>
     </div>
   </div>
-  <div v-else ref="tilesEl" class="tiles-grid" tabindex="0">
+  <div v-else ref="tilesEl" class="tiles-grid">
     <div
       v-for="(item, i) in items"
       :key="item.uid"
       class="tile"
       data-nav-item
-      :class="{ 'is-focused': tilesContainerFocused && tilesFocused === i }"
+      :class="{ 'is-focused': tilesActiveIndex === i }"
       :title="itemTooltip(item)"
       @click="selectTileItem(i, $event)"
       @auxclick.middle="selectTileItem(i, $event)"

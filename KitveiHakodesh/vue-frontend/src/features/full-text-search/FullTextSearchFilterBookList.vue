@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
-import { useVirtualListKeys } from '@/composables/useVirtualListKeyNav'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import type { BookRow } from '@/webview-host/queries.types'
 const props = defineProps<{
   books: BookRow[]
@@ -25,41 +25,40 @@ const virtualizer = useVirtualizer(
   })),
 )
 
-const { focusedIndex, containerFocused } = useVirtualListKeys(
-  scrollEl,
-  () => virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
-  () => props.books.length,
-  (i) => {
+// Combobox model: focus stays in the panel's filter input; the panel forwards
+// its keydown events here (onSearchInputKeydown). Enter with a highlight
+// toggles the book's inclusion, same as clicking its checkbox.
+const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
+  getCount: () => props.books.length,
+  onActivate: (i) => {
     const book = props.books[i]
     if (book) emit('toggleBook', book.id)
   },
-)
+  getVirtualizer: () =>
+    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+})
 
-// Reset focus when the book list changes (new search query)
-watch(() => props.books, () => { focusedIndex.value = -1 })
+// Reset the highlight when the book list changes (new search query)
+watch(() => props.books, () => { activeIndex.value = -1 })
 
 function onBookRowCheckClick(index: number) {
-  focusedIndex.value = index
+  activeIndex.value = index
   const book = props.books[index]
   if (book) emit('toggleBook', book.id)
 }
 
 function onBookRowTitleClick(index: number) {
-  focusedIndex.value = index
+  activeIndex.value = index
   const book = props.books[index]
   if (book) emit('navigateToBook', book.id)
 }
 
-function focusList() {
-  scrollEl.value?.focus()
-}
-
-defineExpose({ focusList })
+defineExpose({ onSearchInputKeydown })
 </script>
 
 <template>
   <div v-if="!books.length" class="empty">לא נמצאו ספרים</div>
-  <div v-else ref="scrollEl" class="scroller" tabindex="0">
+  <div v-else ref="scrollEl" class="scroller">
     <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
       <div
         v-for="vRow in virtualizer.getVirtualItems()"
@@ -78,7 +77,7 @@ defineExpose({ focusList })
           class="book-row"
           :class="{
             checked: checkedBookIds.has(books[vRow.index]!.id),
-            focused: containerFocused && focusedIndex === vRow.index,
+            focused: activeIndex === vRow.index,
           }"
         >
           <button class="checkbox-col" @click.stop="onBookRowCheckClick(vRow.index)">

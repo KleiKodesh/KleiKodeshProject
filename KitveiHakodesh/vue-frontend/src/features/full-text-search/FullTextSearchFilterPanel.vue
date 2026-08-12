@@ -200,6 +200,10 @@ function removeToken(index: number) {
 }
 
 function onInputKeydown(e: KeyboardEvent) {
+  // Combobox model: focus stays here; arrows/paging move the book list's
+  // highlight and Enter WITH a highlight toggles that book. An unconsumed
+  // Enter falls through to committing the typed text as an @-token.
+  if (bookListRef.value?.onSearchInputKeydown(e)) return
   if (e.key === 'Enter' || e.key === '@') {
     e.preventDefault()
     commitInput()
@@ -208,16 +212,6 @@ function onInputKeydown(e: KeyboardEvent) {
   if (e.key === 'Backspace' && inputText.value === '' && props.atFilters.length > 0) {
     e.preventDefault()
     removeToken(props.atFilters.length - 1)
-    return
-  }
-  if (e.key === 'ArrowDown' || e.key === 'Tab') {
-    e.preventDefault()
-    bookListRef.value?.focusList()
-    return
-  }
-  if (e.key === 'ArrowUp') {
-    e.preventDefault()
-    bookListRef.value?.focusList()
     return
   }
   if (e.key === 'Escape') {

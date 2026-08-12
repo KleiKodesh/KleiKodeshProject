@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
@@ -12,7 +12,7 @@ import {
   iconKeyForFileName,
   type DocumentIconKey,
 } from '@/utils/documentIcons'
-import { useListKeys } from '@/composables/useListKeyNav'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type {
   CatalogSearchResult,
@@ -70,8 +70,6 @@ const emit = defineEmits<{
   selectTab: [id: string, openInNewTab: boolean]
   forgetTab: [id: string]
   selectRecent: [entry: RecentlyOpenedEntry, openInNewTab: boolean]
-  dropdownFocused: []
-  dropdownBlurred: []
 }>()
 
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -141,27 +139,24 @@ function activateItem(index: number, openInNewTab = false) {
   else emit('selectFile', item.item, openInNewTab)
 }
 
-const { focusedIndex, containerFocused } = useListKeys(
-  dropdownRef,
-  () => allItems.value.length,
-  activateItem,
-)
-
-defineExpose({
-  focus: () => dropdownRef.value?.focus(),
-  element: dropdownRef,
+// Combobox model: focus stays in the parent's input; the parent forwards its
+// keydown events here and this component moves the highlight through allItems.
+const { activeIndex, onKeydown: onSearchInputKeydown } = useInputListNavigation({
+  getCount: () => allItems.value.length,
+  onActivate: activateItem,
+  containerElement: dropdownRef,
 })
 
-function onDropdownFocus() {
-  if (focusedIndex.value < 0) focusedIndex.value = 0
-  emit('dropdownFocused')
-}
+// Any change to the flattened item list (typing, async sources landing) makes
+// the old index point at a different row — drop the highlight.
+watch(allItems, () => {
+  activeIndex.value = -1
+})
 
-function onDropdownBlur(e: FocusEvent) {
-  if (e.relatedTarget !== null && !dropdownRef.value?.contains(e.relatedTarget as Node)) {
-    emit('dropdownBlurred')
-  }
-}
+defineExpose({
+  onSearchInputKeydown,
+  element: dropdownRef,
+})
 
 // All three of these read the ONE shared mapping in utils/documentIcons — the
 // same table the home tiles use, so a document looks identical wherever it is
@@ -188,15 +183,7 @@ function getTabIcon(route: string): FileIconInfo {
 
 <template>
   <Teleport to="body">
-    <div
-      ref="dropdownRef"
-      class="home-search-dropdown"
-      tabindex="0"
-      :style="dropdownStyle"
-      @click.stop
-      @focus="onDropdownFocus"
-      @blur="onDropdownBlur"
-    >
+    <div ref="dropdownRef" class="home-search-dropdown" :style="dropdownStyle" @click.stop>
       <!-- ── Recents (address-bar mode: empty query / no results) ──
            Locations the reader has been, most recent first. Selecting one navigates
            the CURRENT tab (Ctrl/middle-click opens a new one), like any address-bar
@@ -208,7 +195,7 @@ function getTabIcon(route: string): FileIconInfo {
           role="option"
           class="home-search-dropdown__item"
           :class="{
-            'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
+            'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
           }"
           data-nav-item
           :title="withNewTabHint(tab.tocPath ? `${tab.title} · ${tab.tocPath}` : tab.title)"
@@ -243,7 +230,7 @@ function getTabIcon(route: string): FileIconInfo {
           :key="entry.key"
           role="option"
           class="home-search-dropdown__item"
-          :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
+          :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
           data-nav-item
           :title="withNewTabHint(entry.title)"
           @click="emit('selectRecent', entry, wantsNewTab($event))"
@@ -271,7 +258,7 @@ function getTabIcon(route: string): FileIconInfo {
             :key="item.book.id"
             role="option"
             class="home-search-dropdown__item"
-            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalog' && i.bookId === item.book.id) }"
+            :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'catalog' && i.bookId === item.book.id) }"
             data-nav-item
             :title="withNewTabHint(item.book.parentPath ? `${item.book.title}\n${item.book.parentPath}` : item.book.title)"
             @click="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
@@ -289,7 +276,7 @@ function getTabIcon(route: string): FileIconInfo {
             :key="item.uid"
             role="option"
             class="home-search-dropdown__item"
-            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
+            :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
             data-nav-item
             :title="withNewTabHint(`${item.book.title} ${item.tocPath}`)"
             @click="emit('selectCatalogToc', item, wantsNewTab($event))"
@@ -314,7 +301,7 @@ function getTabIcon(route: string): FileIconInfo {
             :key="item.book.id"
             role="option"
             class="home-search-dropdown__item"
-            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.book.id === item.book.id) }"
+            :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.book.id === item.book.id) }"
             data-nav-item
             :title="withNewTabHint(item.book.author ? `${item.book.title}\n${item.book.author}` : item.book.title)"
             @click="emit('selectHebrewBook', item.book, wantsNewTab($event))"
@@ -339,7 +326,7 @@ function getTabIcon(route: string): FileIconInfo {
             :key="item.fullPath"
             role="option"
             class="home-search-dropdown__item"
-            :class="{ 'is-focused': containerFocused && focusedIndex === allItems.findIndex((i) => i.kind === 'file' && i.item.fullPath === item.fullPath) }"
+            :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'file' && i.item.fullPath === item.fullPath) }"
             data-nav-item
             :title="withNewTabHint(`${item.addinName || item.fileName}\n${item.fullPath}`)"
             @click="emit('selectFile', item, wantsNewTab($event))"
@@ -371,7 +358,6 @@ function getTabIcon(route: string): FileIconInfo {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
   z-index: 1000;
-  outline: none;
 }
 
 .home-search-dropdown__section-header {

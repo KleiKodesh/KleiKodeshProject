@@ -173,6 +173,8 @@ function computeAnchor() {
 }
 
 function onInput() {
+  // Typing releases the arrow-key pause below — fresh results may reshuffle now.
+  resumeSearch()
   computeAnchor()
   isDropdownOpen.value = true
 }
@@ -183,6 +185,14 @@ function onFocus() {
 }
 
 function onKeydown(e: KeyboardEvent) {
+  // Combobox model: focus stays here; arrows/paging move the dropdown's
+  // highlight, and Enter WITH a highlight activates it. While the user is
+  // arrowing, pause the async sources so late results don't reshuffle the list
+  // under the highlight (typing resumes them in onInput).
+  if (isDropdownOpen.value && dropdownRef.value?.onSearchInputKeydown(e)) {
+    pauseSearch()
+    return
+  }
   if (e.code === 'Enter') {
     e.preventDefault()
     launchFullTextSearch()
@@ -191,12 +201,6 @@ function onKeydown(e: KeyboardEvent) {
   if (e.code === 'Escape') {
     e.preventDefault()
     close()
-    return
-  }
-  if (!isDropdownOpen.value) return
-  if (e.code === 'ArrowDown' || e.code === 'ArrowUp') {
-    e.preventDefault()
-    dropdownRef.value?.focus()
   }
 }
 
@@ -364,8 +368,6 @@ nextTick(() => {
       @select-file="onSelectFile"
       @select-tab="onSelectLocation"
       @forget-tab="onForgetLocation"
-      @dropdown-focused="pauseSearch"
-      @dropdown-blurred="resumeSearch"
     />
   </div>
 </template>
