@@ -349,6 +349,11 @@ function getTabIcon(route: string): FileIconInfo {
 
 <style scoped>
 .home-search-dropdown {
+  /* Height of one sticky section header. Both the header itself and the rows'
+     scroll-margin read this, so the keyboard highlight can never land under a
+     header that changed height. */
+  --section-header-height: 24px;
+
   position: fixed;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -361,15 +366,22 @@ function getTabIcon(route: string): FileIconInfo {
 }
 
 .home-search-dropdown__section-header {
+  /* Sticks to the top of the dropdown's own scroll box while its rows pass
+     under it, so the reader always knows which source they are looking at.
+     The tint is composited over --bg-secondary rather than left transparent:
+     a sticky header sits above scrolling rows, so it needs to be opaque. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 6px;
-  height: 24px;
+  height: var(--section-header-height);
   padding: 0 12px;
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-primary) 4%, transparent);
+  background: color-mix(in srgb, var(--text-primary) 4%, var(--bg-secondary));
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -384,6 +396,13 @@ function getTabIcon(route: string): FileIconInfo {
 }
 
 .home-search-dropdown__item {
+  /* Keyboard nav scrolls rows with scrollIntoView({block:'nearest'}), which
+     aligns to the padding edge and would tuck a row under the sticky header
+     when arrowing UPWARDS. Reserving the header's height here pushes that
+     alignment down, so the highlighted row always clears it. Costs nothing
+     when arrowing down, where 'nearest' uses the bottom edge. */
+  scroll-margin-top: var(--section-header-height);
+
   display: flex;
   align-items: center;
   gap: 8px;
