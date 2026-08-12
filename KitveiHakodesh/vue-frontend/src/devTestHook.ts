@@ -14,7 +14,7 @@ export function installDevTestHook() {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
 
-  async function openLocalFile(fullPath: string): Promise<string | null> {
+  async function openLocalFile(fullPath: string, asOtzariaAddin = false): Promise<string | null> {
     const fileName = fullPath.split(/[\\/]/).pop() ?? fullPath
     const restored = await restoreLocalFile(fullPath)
     if (!restored?.url) return null
@@ -24,7 +24,7 @@ export function installDevTestHook() {
       localFileName: fileName,
       localFilePath: fullPath,
       localFileVirtualUrl: restored.url,
-      isOtzariaAddin: false,
+      isOtzariaAddin: asOtzariaAddin && route === '/html-view',
     })
     return tab.id
   }
