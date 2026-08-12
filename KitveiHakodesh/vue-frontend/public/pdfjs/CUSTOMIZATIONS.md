@@ -55,6 +55,11 @@ CSS `round()` only shipped in Chromium 111. On older builds `useRound` is false 
 })();
 ```
 
+### `web/images/toolbarButton-rowMenu.svg`
+
+A 16×16 three-dot (`⋯`) glyph for the outline row-actions button, drawn in PDF.js's own
+icon idiom (solid `fill`, 16×16 viewBox) — **not** Fluent. See "Outline EDITING" below.
+
 ### `web/viewer-custom.css`
 
 Theme variable hooks and PDF page filter support. The Vue app's `syncPdfViewerTheme()` injects `--*-custom` CSS variables into the iframe; this file maps them onto PDF.js's own CSS variables so the viewer adopts the app's theme automatically.
@@ -1342,6 +1347,26 @@ BookView's `.toc-search`, which renders after its tree). Two things about the pa
   specific argument, so `#viewsManager:has(#outlineSearchBar…)` is 2 IDs and beats
   PDF.js's 1-ID `#viewsManager` rule regardless of load order.)
 
+**The bar must round its own bottom corners.** `#viewsManager` is `class="menuContainer
+sidebar"`. `.sidebar` gives the panel `border-radius: var(--sidebar-border-radius)` (8px)
+on all four corners — but `.menuContainer` sets **`overflow-y: auto`**, and a scroll
+container clips its content to the **padding box, ignoring `border-radius`**. So the
+panel's curve is painted and then the last child's square background is clipped straight
+over it. Being the last child *and* flush (the `padding-bottom: 0` above), the search bar
+made the panel's bottom corners read as square while the top stayed round. Matching the
+radius on the bar is the fix — read from the same token so it tracks an upgrade that
+changes the panel's radius:
+
+```css
+border-end-start-radius: var(--sidebar-border-radius, 8px);
+border-end-end-radius: var(--sidebar-border-radius, 8px);
+```
+
+**Do not** try `overflow: hidden` on `#viewsManager` instead: `.menuContainer`'s
+`overflow-y: auto` is already the clip, and a second overflow value does not make a
+scroller honor the radius. It would also risk clipping `.sidebarResizer`, which PDF.js
+positions *outside* the panel at `inset-inline-start: calc(100% + 4px)`.
+
 ```css
 #outlinesView.outlineSearchActive { display: none; }
 
@@ -1355,6 +1380,9 @@ BookView's `.toc-search`, which renders after its tree). Two things about the pa
   padding: 5px 6px 6px;
   border-top: 1px solid var(--separator-color);
   background: var(--toolbar-bg-color);
+  /* match the panel's own 8px — see the scroll-clipping note above */
+  border-end-start-radius: var(--sidebar-border-radius, 8px);
+  border-end-end-radius: var(--sidebar-border-radius, 8px);
 }
 #outlineSearchBar.hidden { display: none; }
 #outlineSearchInner { display: flex; align-items: center; padding: 1px 6px; }
@@ -1573,6 +1601,32 @@ navigate on click; editing happens on the rows themselves:
 There are deliberately NO visual unsaved-changes cues in the panel (no dirty dot, no
 markers on added/retargeted rows) — the dirty STATE still drives the save flow, the
 beforeunload alert and the host-side close guards; it just is not painted.
+
+**Button icons.** The `+` and `⋯` buttons draw their glyph as a **masked SVG at
+`--icon-size`** (16px) rather than as a text character, so they carry the viewer's own
+icon metrics instead of the font's. Their **background and color behavior is
+deliberately stock** — `background: none` / `--doorhanger-bg-color` →
+`--button-hover-color` on hover, and `opacity` 0.6/0.75 → 1 — so the icons are painted
+with `currentColor` and inherit that opacity, brightening on hover exactly as the text
+glyphs did. The `--toolbar-icon-*` tokens are **not** used, precisely to keep that
+behavior unchanged.
+
+- `#outlineAddButton` reuses PDF.js's own **`images/toolbarButton-zoomIn.svg`** — that
+  file is precisely the `+` glyph this button wants, already in the viewer's icon idiom,
+  so no extra asset is needed. It carries `margin-block: -1px` so the 16px icon does not
+  stretch the pill past the 24px height matched to BookView's `.toc-search` (the 2px
+  spill lands inside the pill's own 4px padding).
+- `#outlineRowMenuButton` uses the added **`web/images/toolbarButton-rowMenu.svg`** and
+  is 24px wide. `outline-search.js` must set **no `textContent`** on it — leaving the
+  old `'⋯'` in place renders the text glyph behind the icon.
+
+  Its **`height` is written from JS**, from the hovered row's measured rect, alongside
+  `top`/`left` — so the button spans the row's full height and its hover fill covers the
+  whole row. This cannot live in CSS: rows are `min-height: 28px` but grow when a title
+  wraps, and `position: fixed` on `document.body` leaves no row to inherit from. The CSS
+  `height: 16px` is a pre-first-hover fallback only. The glyph is centred with flex
+  (`align-items`/`justify-content`) rather than a `line-height`, which would strand it at
+  the top once the box grows.
 
 Edits are written into the **PDF itself** on save via the standard save pipeline — NOT
 stored app-side. Verified live end-to-end: edit → save → reload the saved bytes →

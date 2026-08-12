@@ -1773,7 +1773,8 @@
     var hoverMenuButton = document.createElement('button');
     hoverMenuButton.id = 'outlineRowMenuButton';
     hoverMenuButton.type = 'button';
-    hoverMenuButton.textContent = '⋯';
+    // The ⋯ glyph is a masked SVG icon in viewer-custom.css, matching PDF.js's
+    // own toolbar buttons — no text content.
     hoverMenuButton.title = 'פעולות';
     hoverMenuButton.setAttribute('aria-label', 'פעולות פריט');
     var hoverRow = null;
@@ -1790,6 +1791,12 @@
       hoverRow = anchor.parentNode;
       var rect = anchor.getBoundingClientRect();
       hoverMenuButton.style.top = rect.top + 'px';
+      // Span the row's full height. It has to be set here rather than in CSS:
+      // the button is position:fixed on document.body (so the PDF.js-owned tree
+      // DOM stays untouched), so it has no layout relationship to the row and
+      // cannot inherit its height. Rows are min-height:28px but grow when a long
+      // title wraps, so read it off the rect every time rather than hardcoding.
+      hoverMenuButton.style.height = rect.height + 'px';
       // RTL: rows start at the right; park the button at the row's LEFT edge
       // (the visual end) so it never covers the title's first words.
       hoverMenuButton.style.left = Math.max(0, rect.left) + 'px';
