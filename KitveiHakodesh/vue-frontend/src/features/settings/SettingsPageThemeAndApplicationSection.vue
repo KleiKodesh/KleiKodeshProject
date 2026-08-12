@@ -28,7 +28,7 @@ const TITLE_BAR_BUTTONS = [
   { id: 'hamburger',      label: 'תפריט' },
   { id: 'theme-toggle',   label: 'ערכת נושא' },
   { id: 'toolbar-toggle', label: 'סרגל כלים' },
-  { id: 'pdf-filter',     label: 'ערכת נושא ב-PDF' },
+  { id: 'split-view',     label: 'תצוגה מפוצלת' },
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: 'בית' },
   { id: 'prev-tab',       label: 'חזור' },
