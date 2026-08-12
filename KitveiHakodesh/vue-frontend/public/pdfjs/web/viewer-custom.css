@@ -511,6 +511,16 @@
   padding: 5px 6px 6px; /* BookView's .toc-search */
   border-top: 1px solid var(--separator-color);
   background: var(--bg-primary-custom, var(--toolbar-bg-color));
+  /* Round the bottom corners to match the panel's own 8px.
+     `.sidebar` sets `border-radius: var(--sidebar-border-radius)` (8px) on all four
+     corners, but `#viewsManager` is also `.menuContainer`, which sets
+     `overflow-y: auto` — and a scroll container clips its content to the PADDING
+     BOX, ignoring border-radius. So this bar (the last child, made flush by the
+     `padding-bottom: 0` above) paints square corners straight over the panel's
+     curve. Matching the radius here is the fix; `overflow: hidden` on the panel is
+     not, since the existing `overflow-y: auto` is already the clip. */
+  border-end-start-radius: var(--sidebar-border-radius, 8px);
+  border-end-end-radius: var(--sidebar-border-radius, 8px);
 }
 
 #outlineSearchBar.hidden {
@@ -629,23 +639,50 @@
    The + button shares the search row (Acrobat's "new bookmark" header button);
    row actions live in a right-click / hover-⋯ context menu; drag moves rows.
    See outline-search.js — "Editing". */
+/* The glyph is a masked SVG at PDF.js's `--icon-size`, matching the metrics of
+   the viewer's own toolbar buttons, rather than a `+` text character whose size
+   and weight came from the font. The background and the on-hover color change are
+   deliberately unchanged: `background: none` → `--button-hover-color` on hover,
+   and `opacity` 0.6 → 1. The icon inherits that opacity from the button, so it
+   brightens on hover exactly as the text glyph did. */
 #outlineAddButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
-  width: 20px;
-  height: 18px;
+  box-sizing: border-box;
+  width: var(--icon-size);
+  height: var(--icon-size);
   padding: 0;
   margin-inline-start: 4px;
+  /* The pill's height is content-driven (14px input + 4px padding = 24px), a
+     measurement matched to BookView's `.toc-search`. A 16px-tall button would
+     stretch it by 2px, so keep the full-size icon but let it overflow the flex
+     line instead of growing it: the 2px spill lands in the pill's 4px padding. */
+  margin-block: -1px;
   border: none;
   border-radius: 2px;
   background: none;
   color: var(--main-color);
   opacity: 0.6;
-  font-size: 15px;
-  line-height: 18px;
   cursor: pointer;
 }
+/* Reuses PDF.js's own zoom-in glyph — it is precisely the `+` this button wants,
+   already in the viewer's icon idiom, so no extra asset is needed. Painted with
+   `currentColor` so it keeps following the button's `color`. */
 #outlineAddButton::before {
-  content: '+';
+  content: '';
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  background-color: currentColor;
+  -webkit-mask-image: url(images/toolbarButton-zoomIn.svg);
+          mask-image: url(images/toolbarButton-zoomIn.svg);
+  -webkit-mask-size: cover;
+          mask-size: cover;
+  -webkit-mask-position: center;
+          mask-position: center;
 }
 #outlineAddButton:hover {
   opacity: 1;
@@ -690,7 +727,14 @@
 #outlineRowMenuButton {
   position: fixed;
   z-index: 39999;
-  width: 18px;
+  /* Height comes from JS (the hovered row's measured rect) so the button spans
+     the full row; 16px here is only a pre-first-hover fallback. The glyph is
+     centred with flex rather than a line-height, which would strand it at the
+     top of a 28px row. */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
   height: 16px;
   padding: 0;
   border: none;
@@ -698,9 +742,24 @@
   background: var(--doorhanger-bg-color);
   color: var(--main-color);
   opacity: 0.75;
-  font-size: 12px;
-  line-height: 14px;
   cursor: pointer;
+}
+/* Masked SVG at `--icon-size` instead of the `⋯` text character, so the dots get
+   the viewer's own icon metrics rather than the font's. `currentColor` +
+   inherited `opacity` keep the hover color change identical to before. */
+#outlineRowMenuButton::before {
+  content: '';
+  display: inline-block;
+  flex: 0 0 auto;
+  width: var(--icon-size);
+  height: var(--icon-size);
+  background-color: currentColor;
+  -webkit-mask-image: url(images/toolbarButton-rowMenu.svg);
+          mask-image: url(images/toolbarButton-rowMenu.svg);
+  -webkit-mask-size: cover;
+          mask-size: cover;
+  -webkit-mask-position: center;
+          mask-position: center;
 }
 #outlineRowMenuButton:hover {
   opacity: 1;
