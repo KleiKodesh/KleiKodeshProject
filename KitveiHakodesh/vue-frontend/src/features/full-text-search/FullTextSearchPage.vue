@@ -347,6 +347,14 @@ useEventListener(document, 'visibilitychange', () => {
 // visibilitychange ordering varies. Idempotent with the handler above.
 useEventListener(window, 'beforeunload', () => { saveFilterState() })
 onBeforeUnmount(() => {
+  // Stop the backend search. This page is NOT kept alive — it unmounts on a tab switch,
+  // on a same-tab navigation to another route, and on tab close. Without this, the C#
+  // search thread (or the dev service stream) keeps grinding through a full-corpus query
+  // for a page nobody is looking at, and its batch events land on a dead component.
+  // Fire-and-forget: cancelSearch tears down the local listeners synchronously and only
+  // the FtsSearchCancel bridge round-trip is async, which unmount need not await.
+  if (isSearching.value) void cancelSearch()
+
   // If the tab no longer exists in the store, it was closed — clear its cache entry
   // since the results are no longer needed for session restore or tab switching.
   // If the tab still exists, the user just switched away — keep the cache for restore.
