@@ -16,7 +16,7 @@ import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
-import { chronologicalKey } from './ftsChronology'
+import { chronologicalKey } from './chronology'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 
@@ -259,20 +259,28 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           a.lineId - b.lineId
       })
     } else if (sortOrder.value === 'chronological') {
-      // Era rank (from the book's period) → author death-year within the era (Infinity
-      // when unknown or era-implausible, so an era's dated works lead and undated ones
-      // trail) → catalog tree order → book name → line ID. Tree order keeps same-key books
-      // in their curated catalog sequence — תנ"ך in canonical book order, the שס in seder
-      // order — instead of alphabetical. Keys are cached per bookId because the comparator
-      // runs O(n log n) times and the author-year lookup normalizes name strings.
+      // Author death-year (primary) → precision tier (an exact author year leads an era
+      // estimate landing on the same year) → catalog tree order → book name → line ID.
+      // Books with neither an author year nor one of the three trusted era categories carry
+      // year = Infinity and sort LAST — an honest "unknown" at the end rather than a
+      // fabricated position mid-list. Tree order keeps same-key books in their curated
+      // catalog sequence — תנ"ך in canonical book order, the שס in seder order — instead of
+      // alphabetical. Keys are cached per bookId because the comparator runs O(n log n)
+      // times and the author-year lookup normalizes name strings.
       const bookMap = booksStore.allBooksMap
-      const keyCache = new Map<number, { rank: number; year: number; treeOrder: number }>()
+      const keyCache = new Map<number, { year: number; precision: number; treeOrder: number }>()
       const keyOf = (r: FullTextSearchResult) => {
         let key = keyCache.get(r.bookId)
         if (!key) {
           const book = bookMap.get(r.bookId)
-          const { rank, year } = chronologicalKey(book)
-          key = { rank, year, treeOrder: book?.treeOrder ?? Number.POSITIVE_INFINITY }
+          // r.bookTitle backs up book.title so the canonical-work lookup still resolves for
+          // a hit whose book is missing from allBooksMap.
+          const { year, precision } = chronologicalKey(
+            book ? { ...book, title: book.title ?? r.bookTitle } : { title: r.bookTitle },
+          )
+          // Finite fallback, not Infinity — the comparator subtracts these and
+          // Infinity-Infinity is NaN (see YEAR_UNKNOWN in chronology/index.ts).
+          key = { year, precision, treeOrder: book?.treeOrder ?? Number.MAX_SAFE_INTEGER }
           keyCache.set(r.bookId, key)
         }
         return key
@@ -281,8 +289,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         const keyA = keyOf(a)
         const keyB = keyOf(b)
         return (
-          keyA.rank - keyB.rank ||
           keyA.year - keyB.year ||
+          keyA.precision - keyB.precision ||
           keyA.treeOrder - keyB.treeOrder ||
           (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
           a.lineId - b.lineId

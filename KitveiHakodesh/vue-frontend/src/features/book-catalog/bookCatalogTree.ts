@@ -97,6 +97,10 @@ export function assignFullPaths(
 const PERIOD_KEYWORDS: [string, string][] = [
   ['ראשונים', 'ראשונים'],
   ['אחרונים', 'אחרונים'],
+  // Checked before the topical keywords below so a contemporary-authors subcategory wins
+  // over an ancestor topic. The FTS chronological sort treats this as one of the only three
+  // era labels it trusts (see ftsChronology.ts); without it that era is unreachable.
+  ['מחברי זמננו', 'מחברי זמננו'],
   ['מדרש', 'מדרש'],
   ['תלמוד', 'תלמוד'],
   ['תוספתא', 'תוספתא'],
