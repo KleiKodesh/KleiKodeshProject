@@ -38,27 +38,42 @@ namespace KitveiHakodeshService.Tests
             return false;
         }
 
-        /// <summary>True when the edit distance between a and b is ≤ maxEdits. Short-circuits
-        /// on length difference alone (an edit can change length by at most 1 per edit).</summary>
+        /// <summary>True when the DAMERAU-Levenshtein distance between a and b is ≤ maxEdits.
+        ///
+        /// Damerau, not plain Levenshtein, because that is what Lucene's FuzzyQuery uses:
+        /// it counts a transposition of two adjacent characters as ONE edit. Plain
+        /// Levenshtein scores such a pair as 2 and would reject a hit the engine accepts —
+        /// e.g. דעות / עדות (first two letters swapped) matches at maxEdits=1 in Lucene, so
+        /// a plain-Levenshtein checker reported it as a contains-all violation when the
+        /// search was in fact behaving as designed.
+        ///
+        /// Uses the full matrix (not two rolling rows) since the transposition term needs
+        /// row i-2.</summary>
         private static bool LevenshteinWithin(string a, string b, int maxEdits)
         {
             if (System.Math.Abs(a.Length - b.Length) > maxEdits) return false;
 
-            var prev = new int[b.Length + 1];
-            var cur = new int[b.Length + 1];
-            for (int j = 0; j <= b.Length; j++) prev[j] = j;
+            var d = new int[a.Length + 1, b.Length + 1];
+            for (int i = 0; i <= a.Length; i++) d[i, 0] = i;
+            for (int j = 0; j <= b.Length; j++) d[0, j] = j;
 
             for (int i = 1; i <= a.Length; i++)
             {
-                cur[0] = i;
                 for (int j = 1; j <= b.Length; j++)
                 {
                     int cost = a[i - 1] == b[j - 1] ? 0 : 1;
-                    cur[j] = System.Math.Min(System.Math.Min(cur[j - 1] + 1, prev[j] + 1), prev[j - 1] + cost);
+                    int best = System.Math.Min(
+                        System.Math.Min(d[i, j - 1] + 1, d[i - 1, j] + 1),
+                        d[i - 1, j - 1] + cost);
+
+                    // Transposition of two adjacent characters counts as a single edit.
+                    if (i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1])
+                        best = System.Math.Min(best, d[i - 2, j - 2] + 1);
+
+                    d[i, j] = best;
                 }
-                (prev, cur) = (cur, prev);
             }
-            return prev[b.Length] <= maxEdits;
+            return d[a.Length, b.Length] <= maxEdits;
         }
     }
 }

@@ -28,16 +28,47 @@ public static class CatalogTocTextRules
     };
 
     /// <summary>The abbreviation map (generated from Catalog/catalog_abbreviations.json).
-    /// Key = a typed abbreviation in one quote flavour (single word like שו"ע, or a
-    /// multi-word phrase like משנה תורה / שו"ע הגר"ז); value = alternatives, each an
-    /// ordered word list that is AND-matched. More than one alternative = an ambiguous
-    /// abbreviation that OR-expands (only used on the QUERY side — see
-    /// <see cref="TokenizeQuery"/>).</summary>
+    /// Key = an abbreviation with EVERY QUOTE GLYPH STRIPPED (ט"ז is keyed as טז); value =
+    /// alternatives, each an ordered word list that is AND-matched. More than one
+    /// alternative = an ambiguous abbreviation that OR-expands (only used on the QUERY
+    /// side — see <see cref="TokenizeQuery"/>).
+    ///
+    /// Lookups strip the same glyphs off the candidate before probing (see
+    /// <see cref="StripQuoteGlyphs"/>), so ט"ז, ט״ז, ט''ז and the bare טז all resolve
+    /// through the one entry — the map never has to enumerate quote flavours.</summary>
     private static readonly Dictionary<string, string[][]> Abbrev = CatalogAbbreviations.Map;
+
+    /// <summary>Every quote-ish glyph an abbreviation may be written with: ASCII quote and
+    /// apostrophe, Hebrew gershayim/geresh, and the curly forms. Stripped from both the
+    /// map keys (at generation time) and every lookup candidate, so a token matches
+    /// regardless of which mark — if any — was typed.</summary>
+    private static bool IsQuoteGlyph(char c) =>
+        c is '"' or '\'' or '״' or '׳' or '“' or '”' or '‘' or '’';
+
+    /// <summary>Remove every quote glyph from a token. Returns the input unchanged (same
+    /// reference) when it carries none, so the common case allocates nothing.</summary>
+    public static string StripQuoteGlyphs(string s)
+    {
+        int i = 0;
+        while (i < s.Length && !IsQuoteGlyph(s[i])) i++;
+        if (i == s.Length) return s;
+
+        var sb = new System.Text.StringBuilder(s.Length);
+        sb.Append(s, 0, i);
+        for (; i < s.Length; i++)
+            if (!IsQuoteGlyph(s[i])) sb.Append(s[i]);
+        return sb.ToString();
+    }
 
     /// <summary>Largest key word-count in <see cref="Abbrev"/> — the lookahead window
     /// for greedy multi-word matching. Computed once from the generated map.</summary>
     private static readonly int MaxKeyWords = ComputeMaxKeyWords();
+
+    /// <summary>The abbreviation map as (key, alternatives) pairs — exposed for
+    /// verification and diagnostics (see the Tests project's --abbrev mode), which needs to
+    /// enumerate every entry to prove each one resolves and points at text the DB actually
+    /// contains. Read-only view; the map itself stays private.</summary>
+    public static IEnumerable<KeyValuePair<string, string[][]>> AbbreviationEntries => Abbrev;
 
     private static int ComputeMaxKeyWords()
     {
@@ -132,13 +163,13 @@ public static class CatalogTocTextRules
         for (int w = maxWindow; w >= 1; w--)
         {
             string candidate = w == 1 ? raws[start] : string.Join(' ', raws, start, w);
-            if (Abbrev.TryGetValue(candidate, out alts!))
+            if (TryLookup(candidate, out alts!))
             {
                 consumed = w;
                 return true;
             }
             string trimmed = TrimEdgeNonWord(candidate);
-            if (trimmed.Length > 0 && trimmed.Length != candidate.Length && Abbrev.TryGetValue(trimmed, out alts!))
+            if (trimmed.Length > 0 && trimmed.Length != candidate.Length && TryLookup(trimmed, out alts!))
             {
                 consumed = w;
                 return true;
@@ -148,13 +179,13 @@ public static class CatalogTocTextRules
             if (heStripped is not null)
             {
                 string heCandidate = w == 1 ? heStripped : heStripped + " " + string.Join(' ', raws, start + 1, w - 1);
-                if (Abbrev.TryGetValue(heCandidate, out alts!))
+                if (TryLookup(heCandidate, out alts!))
                 {
                     consumed = w;
                     return true;
                 }
                 string heTrimmed = TrimEdgeNonWord(heCandidate);
-                if (heTrimmed.Length > 0 && heTrimmed.Length != heCandidate.Length && Abbrev.TryGetValue(heTrimmed, out alts!))
+                if (heTrimmed.Length > 0 && heTrimmed.Length != heCandidate.Length && TryLookup(heTrimmed, out alts!))
                 {
                     consumed = w;
                     return true;
@@ -165,6 +196,12 @@ public static class CatalogTocTextRules
         consumed = 0;
         return false;
     }
+
+    /// <summary>Probe the abbreviation map with quote glyphs stripped off the candidate —
+    /// the map's keys are stored stripped, so this is what lets ט"ז / ט״ז / ט''ז / טז all
+    /// hit the same entry. A candidate that carries no glyph is probed as-is.</summary>
+    private static bool TryLookup(string candidate, out string[][] alts)
+        => Abbrev.TryGetValue(StripQuoteGlyphs(candidate), out alts!);
 
     /// <summary>The amud + strip + spelling-fold steps for a single non-abbreviation
     /// token, appending the resulting token(s) to <paramref name="tokens"/>.</summary>

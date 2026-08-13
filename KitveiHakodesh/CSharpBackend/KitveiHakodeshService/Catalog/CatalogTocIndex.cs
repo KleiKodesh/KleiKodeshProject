@@ -107,8 +107,47 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// longer its own abbreviation row (dropped — was colliding with "יד החזקה" via a
     /// shared רמבם target and breaking title word-order independence); "יד החזקה" now
     /// expands to "משנה תורה" instead of "רמבם". No index-side tokenization changed,
-    /// but the format bump forces a rebuild so results reflect the corrected mapping.</summary>
-    public const string IndexFormatVersion = "v16";
+    /// but the format bump forces a rebuild so results reflect the corrected mapping.
+    /// v17: abbreviation keys are QUOTE-STRIPPED and lookups strip quote glyphs off the
+    /// candidate first (CatalogTocTextRules.StripQuoteGlyphs), so ט"ז / ט״ז / ט''ז and the
+    /// bare טז all resolve through one entry — previously the generator enumerated quote
+    /// flavours and the bare form matched nothing. The map also grew from 153 to 286 keys
+    /// with hand-authored AUTHOR acronyms mapping to the full names the seforim DB actually
+    /// stores (חידא → חיים דוד אזולאי, יעבץ → יעקב עמדין, תפאי → ישראל ליפשיץ) plus book-title
+    /// acronyms; every added alternative was validated against the DB's author/title text.
+    /// Index-side tokenization DOES change here (unlike v15/v16): real titles carry
+    /// abbreviations — הגהות יעב"ץ, חידושי רידב"ז — which now normalize, so a full rebuild
+    /// is required, not merely forced.
+    /// v18: dropped two keys that HIJACKED ordinary title words — מת (collided with
+    /// הלכות טומאת מת, 16 titles, forcing משנה תורה into any corpse-tumah query) and אדרת
+    /// (the first word of the real title אדרת אליהו, so the key rewrote the token before it
+    /// could match and the book became unfindable). Acronyms that appear verbatim in titles
+    /// (רש"ש על בבא בתרא, הגהות יעב"ץ) also carry themselves as an extra alternative, so both
+    /// the acronym and the expanded author name match.
+    ///
+    /// NOTE for future edits: the change stamp covers the seforim DB + this version string
+    /// only — it does NOT fingerprint catalog_abbreviations.json. Editing the map therefore
+    /// does NOT invalidate an existing index; bump this version or the stale index keeps
+    /// serving tokens normalized under the OLD map.
+    /// v19: audited every entry against the DB's raw vocabulary and fixed what the audit
+    /// found, rather than tolerating entries that only worked by accident:
+    ///   - Removed expansions whose target text appears in NO title/author/category, so they
+    ///     could never match: ספרא → תורת כהנים (0 titles; ספרא is itself the title of six
+    ///     books, so the key rewrote an existing word into a non-existent one and "worked"
+    ///     only because the index side normalized identically), הגהות מיימוניות, משבצות זהב,
+    ///     רעיא מהימנא. תוכ now resolves to ספרא (the title this library actually uses).
+    ///   - Removed keys that are not abbreviations of their target at all: דבר → דברים רבה
+    ///     (דבר is an ordinary word in 20 unrelated titles — דבר אברהם, העמק דבר, משיב דבר —
+    ///     and only resolved because כתיב variant matching masked the wrong expansion), and
+    ///     משנת → משנה תורה (construct form of משנה; first word of משנת דרבי אליעזר and six
+    ///     other titles unrelated to the Rambam).
+    ///   - Split כרתי ופלתי into (כרתי | פלתי): they are two separate books here, and the
+    ///     joint form demanded "ופלתי", which exists nowhere.
+    ///   - Keys that also appear verbatim in real titles (יוד, יוט, שע, מוהרן, מוהרנת) now
+    ///     carry the literal form as an extra alternative, so those titles stay reachable.
+    /// All 309 alternatives now resolve against the raw vocabulary; the --abbrev mode fails
+    /// the build on any future entry that does not.</summary>
+    public const string IndexFormatVersion = "v19";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// content-free <see cref="Common.DbChangeStamp"/>, prefixed with this index's

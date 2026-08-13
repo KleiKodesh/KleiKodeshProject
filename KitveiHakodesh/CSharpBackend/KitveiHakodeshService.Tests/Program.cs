@@ -29,6 +29,7 @@ bool forceRebuild = false;
 bool benchMode = false;
 bool watcherMode = false;
 bool variantMode = false;
+bool abbrevMode = false;
 var ktivSimQueries = new List<string>();
 for (int i = 0; i < args.Length; i++)
 {
@@ -43,6 +44,7 @@ for (int i = 0; i < args.Length; i++)
         case "--bench": benchMode = true; break;
         case "--watcher": watcherMode = true; break;
         case "--variant": variantMode = true; break;
+        case "--abbrev": abbrevMode = true; break;
         case "--ktivsim": while (i + 1 < args.Length && !args[i + 1].StartsWith("--")) ktivSimQueries.Add(args[++i]); break;
     }
 }
@@ -70,6 +72,9 @@ indexPath ??= Path.Combine(AppContext.BaseDirectory, "CatalogTocIndex.test");
 if (ktivSimQueries.Count > 0)
     return KtivTiebreakSim.Run(dbPath, indexPath, ktivSimQueries.ToArray());
 
+if (abbrevMode)
+    return AbbrevVerify.Run(dbPath, indexPath);
+
 Console.WriteLine($"db:    {dbPath}");
 Console.WriteLine($"index: {indexPath}");
 
@@ -79,6 +84,13 @@ void Fail(string message)
     failures++;
     Console.Error.WriteLine("  FAIL: " + message);
 }
+
+/// <summary>Readable form of a query token for failure messages: a plain word as-is, an
+/// abbreviation as "(alt1 words | alt2 words)".</summary>
+static string Describe(CatalogTocTextRules.QueryToken t) =>
+    t.IsPlain
+        ? t.Word
+        : "(" + string.Join(" | ", t.Alternatives.Select(a => string.Join(" ", a))) + ")";
 
 // ── 1. Analyzer spec table ──────────────────────────────────────────────────────
 
@@ -867,11 +879,17 @@ for (int qi = 0; qi < corpus.Count; qi++)
         }
     }
 
-    // 4. Contains-all — sampled hits must contain every query token in
+    // 4. Contains-all — sampled hits must satisfy every query token in
     //    catalog-path + path + authors, OR a variant of it that CatalogTocIndex.Search
     //    itself accepts as a match (חסר/מלא skeleton, ה-prefix, or the fuzzy-fallback
     //    edit-distance threshold) — see ContainsAllMatcher, which mirrors WordClause.
-    var qTokens = CatalogTocTextRules.Tokenize(query);
+    //
+    // Uses TokenizeQuery (not Tokenize) so an ABBREVIATION keeps all its alternatives:
+    // BuildQuery emits MUST( OR over alternatives ), so a hit is legitimate when ONE
+    // alternative is fully present. Flattening to alternative[0] would demand words from a
+    // reading the hit never matched — e.g. רש"ש → (שמואל שטראשון | רשש): a title literally
+    // containing רש"ש matches via the second alternative and has no "שמואל" to find.
+    var qTokens = CatalogTocTextRules.TokenizeQuery(query);
     int checkCount = Math.Min(hits.Count, 10);
     for (int i = 0; i < checkCount; i++)
     {
@@ -880,14 +898,21 @@ for (int qi = 0; qi < corpus.Count; qi++)
         var docTokens = CatalogTocTextRules.Tokenize(
                 catalogPath + " " + h.FullTocPath + " " + authorsByBook.GetValueOrDefault(h.BookId, ""))
             .ToHashSet();
-        foreach (var t in qTokens)
-            if (!ContainsAllMatcher.TokenMatches(t, docTokens))
+        foreach (var qt in qTokens)
+        {
+            // Satisfied when ANY alternative has ALL its words matched — mirroring
+            // MUST( OR over alternatives ) where each alternative is an AND of words.
+            bool satisfied = qt.Alternatives.Any(
+                alt => alt.All(w => ContainsAllMatcher.TokenMatches(w, docTokens)));
+            if (!satisfied)
             {
                 containsAllViolations++;
                 if (containsAllViolations <= 10)
-                    Fail($"contains-all q=\"{query}\" token \"{t}\" not in \"{h.FullTocPath}\" (book={h.BookId})");
+                    Fail($"contains-all q=\"{query}\" token \"{Describe(qt)}\" "
+                        + $"not in \"{h.FullTocPath}\" (book={h.BookId})");
                 break;
             }
+        }
     }
 
     if ((qi + 1) % 300 == 0)
