@@ -347,12 +347,30 @@ export function usePdfContextMenu(
     menuRef.value?.showAtPosition(rect.left + event.clientX, rect.top + event.clientY)
   }
 
+  /**
+   * Closes the menu when the user clicks back into the PDF.
+   *
+   * The menu is teleported to the PARENT body, so its click-outside listener lives on the
+   * parent document and never sees a press inside the iframe — and the blur fallback
+   * doesn't fire either, because focus was already in the iframe when the menu opened.
+   * The menu therefore stayed up over the page until something in the parent was clicked.
+   *
+   * pointerdown, not click: a press that begins a drag-selection never produces a click,
+   * and it covers touch. Capture phase so PDF.js's own handlers can't swallow it first.
+   * Right-click still reopens correctly — pointerdown precedes contextmenu, so this hide
+   * and onContextMenu's show collapse into one re-render at the new position.
+   */
+  function onIframePointerDown(): void {
+    menuRef.value?.hide()
+  }
+
   let detachCopy: (() => void) | null = null
 
   function attach(win: Window): void {
     // Capture phase so we intercept the right-click before PDF.js's own handlers
     // and reliably suppress the browser's native context menu.
     win.document.addEventListener('contextmenu', onContextMenu, true)
+    win.document.addEventListener('pointerdown', onIframePointerDown, true)
 
     // Intercept copies inside the iframe and rewrite the payload into the RTL
     // Word-friendly shape. This serves BOTH our menu's העתק and the user's own Ctrl+C
@@ -368,6 +386,7 @@ export function usePdfContextMenu(
 
   function detach(win: Window | null): void {
     win?.document.removeEventListener('contextmenu', onContextMenu, true)
+    win?.document.removeEventListener('pointerdown', onIframePointerDown, true)
     detachCopy?.()
     detachCopy = null
     capturedRange = null
