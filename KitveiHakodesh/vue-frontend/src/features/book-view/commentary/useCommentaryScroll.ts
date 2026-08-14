@@ -46,7 +46,17 @@ type Goal =
 
 /** Requests from these scrollToGroup reasons follow state around (pin-follow); all
  * other reasons are direct user actions and take priority. */
-const AUTO_REASONS = new Set(['groups-reload', 'pin-arrived-late', 'panel-mounted', 'already-restored'])
+const AUTO_REASONS = new Set([
+  'groups-reload',
+  'pin-arrived-late',
+  // The same owed pin scroll as 'pin-arrived-late', settled by a different
+  // precondition landing last (see settlePinDebt). All of them are pin-follow and
+  // must never displace a restore.
+  'pin-owed-load-done',
+  'pin-owed-groups-arrived',
+  'panel-mounted',
+  'already-restored',
+])
 
 /**
  * Manages scroll behavior for commentary: sticky header tracking, scroll position
@@ -568,12 +578,39 @@ export function useCommentaryScroll(
     pinnedGroup: () => any,
     isLoading: () => boolean,
     hasSavedScrollPos: () => boolean = () => false,
+    /**
+     * The line the panel's commentary currently belongs to. Used only to tell "the
+     * same load blinking its list empty" apart from "a new line's load starting" -
+     * the two are indistinguishable from the groups array alone, and conflating
+     * them is what kept dropping the first-load pin scroll.
+     */
+    anchorId: () => number | null = () => null,
   ) {
     let isFirstLoad = true
     let scrollGeneration = 0
-    // Set when a load produced groups but no pin was available yet, so the scroll
-    // to the pinned group is still owed. Settled by the pinnedGroup watcher below.
+    /**
+     * Set when a load produced groups but no pin was available yet, so the scroll to
+     * the pinned group is still owed. Settled by `settlePinDebt` below, which is
+     * driven by BOTH the pin arriving and the loading flag clearing - either can be
+     * the last precondition to fall into place, and whichever is last has to be the
+     * one that fires. A single watch on the pin could not do that: when the pin
+     * resolved mid-load the guard rejected it and the pin ref never changed again,
+     * so nothing re-asked and the panel sat on the first group.
+     */
     let pinScrollOwed = false
+    /**
+     * The anchor the debt belongs to. A debt is only void when a DIFFERENT line's
+     * load starts - not merely because the list blinked empty.
+     *
+     * One line tap runs load() twice (the selectedLineId and selectedLineIds
+     * watchers both fire), so the list goes groups -> [] -> groups for the SAME
+     * anchor. Voiding on every empty list wiped the first-load debt inside that
+     * blink; if the default-commentator query then resolved in that window, the pin
+     * watcher found no debt and the panel never scrolled to the default commentator
+     * at all - the "first time I open a chapter it ignores the default commentary"
+     * report that survived the positioner rewrite.
+     */
+    let owedForAnchor: number | null = null
     watch(
       groups,
       async (newGroups) => {
@@ -582,9 +619,10 @@ export function useCommentaryScroll(
         // ignores (empty list, still loading). See the doc's async-watcher rule.
         const generation = ++scrollGeneration
 
-        // A new load is starting; any scroll owed by the previous one is void.
         if (!newGroups.length) {
-          pinScrollOwed = false
+          // Only a genuinely different anchor voids the debt. The same anchor's
+          // second load() pass is the same positioning job, still owed.
+          if (anchorId() !== owedForAnchor) pinScrollOwed = false
           return
         }
         // Skip partial loads — only scroll when loading is fully complete.
@@ -608,15 +646,26 @@ export function useCommentaryScroll(
         const pinned = pinnedGroup()
         if (!pinned) {
           // The pin has not been decided yet — the default-commentator query is
-          // still in flight. Record the debt; the watcher below settles it.
+          // still in flight. Record the debt against THIS anchor; settlePinDebt
+          // pays it when the pin lands (or when loading finally clears).
           pinScrollOwed = true
+          owedForAnchor = anchorId()
           return
         }
         // Re-read LIVE rather than trusting the captured array: `newGroups` is a
         // snapshot from before the await.
         const live = groups()
         if (!live.length) return
-        if (!live.some((g: any) => g.bookId === pinned.bookId)) return
+        if (!live.some((g: any) => g.bookId === pinned.bookId)) {
+          // The pin is decided but its book is not in this list yet. usePinnedCommentary
+          // fills a default's real labels from the groups it can see, and on a cold
+          // load it can publish the pin before this panel's filtered list carries that
+          // book. Treat it as owed rather than as "nothing to do": dropping it here
+          // left the panel on the first group with no later event to correct it.
+          pinScrollOwed = true
+          owedForAnchor = anchorId()
+          return
+        }
         // If a restore owns the panel, the positioner declines and the debt stays
         // paid-off (restore IS the positioning for this load).
         pinScrollOwed = false
@@ -626,29 +675,44 @@ export function useCommentaryScroll(
     )
 
     /**
-     * A pin that arrives AFTER its groups.
+     * Pay an owed pin scroll as soon as ALL its preconditions hold: a debt exists, a
+     * pin is decided, the load is complete, and the pinned book is actually in this
+     * panel's list.
      *
      * usePinnedCommentary awaits a DB query for the book's default commentators, and
      * on the FIRST commentary load of a book that query can still be in flight when
-     * the groups land: the watcher above finds no pin and records the debt; this one
-     * settles it when the pin appears. Only the first load of a book pays for this
-     * (the query result is cached), which is why it read as "the FIRST time I open a
-     * chapter it doesn't scroll to the default commentary".
+     * the groups land - the watcher above then finds no pin and records the debt.
+     * Only the first load of a book pays for this (the query result is cached),
+     * which is why it reads as "the FIRST time I open a chapter it doesn't scroll to
+     * the default commentary".
+     *
+     * Called from watchers on EVERY precondition, not just the pin, because the pin
+     * is not reliably the last one to arrive. When it resolved while a partial load
+     * was still running, the old single pin-watcher hit its `isLoading()` guard,
+     * returned, and was never asked again - the pin ref does not change a second
+     * time, so the debt stayed unpaid for the whole load and the panel sat on the
+     * first group. Re-asking on each precondition means whichever lands last does
+     * the work; the guards make every other call a cheap no-op.
      */
-    watch(
-      pinnedGroup,
-      (pinned) => {
-        if (!pinScrollOwed || !pinned) return
-        if (isLoading()) return
-        const live = groups()
-        if (!live.length || !live.some((g: any) => g.bookId === pinned.bookId)) return
-        const accepted = scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel, 'pin-arrived-late')
-        // A restore in progress declines the request; keep the debt so a later
-        // pin change can still settle it (matches the old guard's behavior).
-        if (accepted) pinScrollOwed = false
-      },
-      { flush: 'post' },
-    )
+    function settlePinDebt(reason: string) {
+      if (!pinScrollOwed) return
+      if (isLoading()) return
+      const pinned = pinnedGroup()
+      if (!pinned) return
+      const live = groups()
+      if (!live.length || !live.some((g: any) => g.bookId === pinned.bookId)) return
+      const accepted = scrollToGroup(pinned.bookId, pinned.sectionLabel, pinned.subSectionLabel, reason)
+      // A restore in progress declines the request; keep the debt so a later change
+      // can still settle it (restore is the better positioning either way).
+      if (accepted) pinScrollOwed = false
+    }
+
+    watch(pinnedGroup, () => settlePinDebt('pin-arrived-late'), { flush: 'post' })
+    // The pin was ready before the load finished: settle on the loading edge.
+    watch(isLoading, (loading) => { if (!loading) settlePinDebt('pin-owed-load-done') }, { flush: 'post' })
+    // The pinned book appeared in a later slice of this load, or a filter change
+    // brought it back - the last precondition in the remaining case.
+    watch(groups, () => settlePinDebt('pin-owed-groups-arrived'), { flush: 'post' })
   }
 
   // Stop a goal's rAF loop and detach its listeners when the panel goes away,
