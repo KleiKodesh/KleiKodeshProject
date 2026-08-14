@@ -5,7 +5,8 @@ import { useSettings } from './useSettingsPage'
 import { resetting, resetEverything } from './appResetState'
 import { showToast } from '@/composables/useToast'
 
-const { resetSettings, resetSearchIndex, resetDocumentLocatorIndex } = useSettings()
+const { resetSettings, resetSearchIndex, resetDocumentLocatorIndex, resetCatalogTocIndex } =
+  useSettings()
 
 type ConfirmAction = {
   label: string
@@ -54,6 +55,15 @@ function confirmResetSearchIndex() {
   })
 }
 
+function confirmResetCatalogTocIndex() {
+  confirmAction({
+    label: 'בנייה מחדש של אינדקס החיפוש בקטלוג',
+    desc: 'פעולה זו תמחק את אינדקס החיפוש בשמות הספרים ובתוכן העניינים ותבנה אותו מחדש מהמאגר. שאר נתוני האפליקציה לא יושפעו.',
+    action: resetCatalogTocIndex,
+    successMessage: 'איפוס אינדקס החיפוש בקטלוג הושלם. הבנייה מחדש רצה כעת ברקע.',
+  })
+}
+
 function confirmResetDocumentLocatorIndex() {
   confirmAction({
     label: 'בנייה מחדש של אינדקס חיפוש קבצים',
@@ -66,7 +76,7 @@ function confirmResetDocumentLocatorIndex() {
 function confirmResetAll() {
   confirmAction({
     label: 'איפוס האפליקציה',
-    desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואינדקס החיפוש ותטען אותה מחדש. לא ניתן לבטל פעולה זו.',
+    desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואת כל אינדקסי החיפוש ותטען אותה מחדש. בניית האינדקסים מחדש עשויה להימשך מספר דקות. לא ניתן לבטל פעולה זו.',
     // resetEverything sets the `resetting` flag itself before it starts.
     action: resetEverything,
   })
@@ -90,6 +100,12 @@ function confirmResetAll() {
       </p>
     </div>
     <div class="reset-group">
+      <button class="reset-btn" @click="confirmResetCatalogTocIndex">בנייה מחדש של אינדקס החיפוש בקטלוג</button>
+      <p class="reset-description" data-search-ignore>
+        מוחק את אינדקס החיפוש בשמות הספרים ובתוכן העניינים ובונה אותו מחדש מהמאגר. שאר נתוני האפליקציה לא יושפעו.
+      </p>
+    </div>
+    <div class="reset-group">
       <button class="reset-btn" @click="confirmResetDocumentLocatorIndex">בנייה מחדש של אינדקס חיפוש קבצים</button>
       <p class="reset-description" data-search-ignore>
         מוחק את אינדקס חיפוש הקבצים ובונה אותו מחדש מאפס. תהליך הבנייה עשוי להימשך מספר דקות.
@@ -98,7 +114,7 @@ function confirmResetAll() {
     <div class="reset-group">
       <button class="reset-btn" @click="confirmResetAll">איפוס האפליקציה</button>
       <p class="reset-description" data-search-ignore>
-        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואינדקס החיפוש. לא ניתן לבטל פעולה זו.
+        מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואת אינדקסי החיפוש בתוכן המאגר, בקטלוג, ובקבצים. לא ניתן לבטל פעולה זו.
       </p>
     </div>
   </div>

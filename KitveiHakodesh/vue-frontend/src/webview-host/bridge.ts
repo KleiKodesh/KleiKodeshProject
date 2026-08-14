@@ -374,8 +374,12 @@ export function togglePopOut(): void {
  * the local databases first — do not call this directly.
  */
 export async function resetHostApp(): Promise<void> {
+  // The catalog TOC index lives only in the KitveiHakodesh service — there is no hosted
+  // equivalent, and serviceCall reaches the service in both modes — so it is reset the
+  // same way either side of the branch below.
+  await resetCatalogTocIndex()
   if (typeof window.__webviewAction !== 'function') {
-    // Dev: the C# host doesn't exist, so reset both indexes through the service, then
+    // Dev: the C# host doesn't exist, so reset the indexes through the service, then
     // reload. Browser storage is NOT touched here — resetEverything() has already wiped
     // every database and the whole kitvei-hakodesh.* localStorage namespace before
     // calling this. A raw localStorage.clear() used to sit here, which both duplicated
@@ -386,8 +390,24 @@ export async function resetHostApp(): Promise<void> {
     return
   }
   await action('DeleteFtsIndex').catch(() => {})
+  // Hosted mode used to skip the file-search index that dev resets, so the same button
+  // wiped a different set of indexes depending on which mode the app ran in.
+  await action('ResetDocumentLocatorIndex').catch(() => {})
   await action('resetSettings').catch(() => {})
   action('reload').catch(() => window.location.reload())
+}
+
+/**
+ * Wipe the catalog TOC (Lucene) index so the service rebuilds it from the seforim DB.
+ * Service-only in both modes: KitveiHakodeshLib has no catalog-index handler, and the
+ * catalog search itself already goes straight to the service via serviceCall.
+ *
+ * Normally self-healing — the index carries a DbChangeStamp and rebuilds whenever the
+ * seforim DB or the index format version changes — so this exists for the case a stamp
+ * cannot catch: an index corrupted in place.
+ */
+export async function resetCatalogTocIndex(): Promise<void> {
+  await serviceCall('catalogTocResetIndex').catch(() => {})
 }
 
 /**
