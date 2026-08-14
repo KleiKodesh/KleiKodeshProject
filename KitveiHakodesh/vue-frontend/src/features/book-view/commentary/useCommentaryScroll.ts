@@ -11,6 +11,12 @@ const NAV_HEIGHT = 32
  * slow machine settles later in wall-clock terms - the opposite failure mode of a
  * fixed timeout, which assumes how fast loading finishes and gives up early on slow
  * environments. NOTHING in this file assumes a load duration.
+ *
+ * This is a quiet-period check, NOT the completion test, and on its own it is still
+ * a fixed window (~500ms at 60fps) - which is exactly how it once let goals finish
+ * mid-backfill and drift. Completion is `stableFrames >= SETTLE_FRAMES &&
+ * !contentPendingAbove(goal)`. If a goal drifts, raising this number is the wrong
+ * lever every time; read contentPendingAbove.
  */
 const SETTLE_FRAMES = 30
 /** Frames the scroller may be missing mid-goal (v-if flicker) before the goal dies.
@@ -259,9 +265,38 @@ export function useCommentaryScroll(
   /**
    * Is any line ABOVE this goal's target still waiting for its content?
    *
+   * ── The general rule this encodes ───────────────────────────────────────────
+   * A position in a virtualized list is only final once everything ABOVE it has
+   * its final height. Until then the target is still moving, and any "we have
+   * arrived" answer is a guess about the future.
+   *
+   * This is THE test to reach for whenever positioning lands correctly and then
+   * drifts. It replaces a whole family of failed approaches, all of which were
+   * really the same mistake - guessing at a duration instead of asking whether
+   * the thing being waited on had happened:
+   *
+   *   - a correction window (800ms -> 2.5s -> 6s, each "fixed" by enlarging it);
+   *   - a retry/attempt cap;
+   *   - N stable frames, which is just a fixed window denominated in frames
+   *     (SETTLE_FRAMES=30 is ~500ms at 60fps) and broke the same way;
+   *   - waiting on `loading`, which only covers the STRUCTURE query - content
+   *     backfills in batches long after it clears.
+   *
+   * Every one of those encodes "loading should be done by now". This asks
+   * instead, so it is correct at any speed: a fast local load settles the frame
+   * the content lands, a slow host or a heavy chapter simply holds longer, and
+   * nothing has to be re-tuned per environment. SAFETY_MS stays as the backstop
+   * for content that genuinely never arrives.
+   *
+   * Prefer widening THIS predicate over lengthening any timeout. If a goal drifts
+   * again, the question is "what else above the target is still growing that I am
+   * not looking at?" - not "how much longer should we wait?".
+   * ────────────────────────────────────────────────────────────────────────────
+   *
    * Only lines above the target can move it: the two-phase loader renders them as
    * near-empty stubs and they grow when their text arrives, pushing everything
-   * below down. Lines at or after the target grow harmlessly off-screen.
+   * below down. Lines at or after the target grow harmlessly off-screen, which is
+   * also what keeps this cheap - it never waits for the whole list to fill.
    *
    * Scans the flat list rather than asking the loader, so it needs no new plumbing
    * and stays true for content fetched by ANY path (display-order backfill or the
@@ -366,17 +401,11 @@ export function useCommentaryScroll(
         // later corrections are small nudges, and hiding content through the whole
         // settle window would cost every fast load a visible delay.
         isPositioning.value = false
-        // Stable frames alone are NOT proof the goal is finished. The two-phase
-        // loader marks `loading` false as soon as the group STRUCTURE lands, then
-        // backfills line content in batches for as long as it takes; every line
-        // above the target that is still empty will grow later and push the target
-        // down. Settling on frames alone made SETTLE_FRAMES a fixed window in
-        // disguise (~500ms at 60fps): the goal declared itself done while the
-        // backfill was still in flight, tore down its loop, and the content then
-        // landed with nothing left to re-anchor - "it scrolls to the right place
-        // and then jumps away once the content loads".
-        // So hold the goal open, correcting, until nothing above the target is
-        // still pending. Condition-based, no assumption about load duration.
+        // Stable frames alone are NOT proof the goal is finished - they only say
+        // nothing has moved YET. The content that will move it may still be in
+        // flight, so the goal also has to wait on the condition itself: nothing
+        // above the target still pending. See contentPendingAbove for why that is
+        // the right question and which family of timing hacks it replaces.
         if (++stableFrames >= SETTLE_FRAMES && !contentPendingAbove(g)) {
           endGoal('done')
           return
