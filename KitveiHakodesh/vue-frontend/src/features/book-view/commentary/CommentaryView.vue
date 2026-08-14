@@ -251,6 +251,9 @@ setupGroupReloadScroll(
   () => props.pinnedGroup,
   () => props.loading,
   () => props.hasSavedScrollPos ?? false,
+  // The anchor an owed pin scroll belongs to: one line tap reloads the list twice,
+  // and only a genuinely different line makes an owed scroll stale.
+  () => props.selectedLineId,
 )
 
 useVirtualScrollerKeys(

@@ -191,14 +191,35 @@ it milliseconds later when the pin appears — the panel never scrolls to the de
 commentator at all. Every later load has the list cached and works, which is why it
 reads as "the FIRST time I open a chapter it doesn't scroll to Rashi".
 
-The `!pinned` branch therefore records `pinScrollOwed`, and a watcher on
-`pinnedGroup` settles the debt (traced as `pin-arrived-late`). The debt is voided
-when the next load starts (the `groups = []` fire) so it can never leak into a later
-load. Reproduce by delaying ONLY the `getDefaultCommentators` service call, in a
-fresh page, and arm the delay BEFORE opening a panel — opening one syncs
-`commentaryLineId` from the selected line, which already asks for the pin. Without
-the fix: `begins=0`, `scrollTop=0`, panel on the first group. With it:
-`begins=1 reason=pin-arrived-late`, panel on its pin.
+The `!pinned` branch therefore records `pinScrollOwed`, and `settlePinDebt` pays it
+once every precondition holds. Reproduce by delaying ONLY the
+`getDefaultCommentators` service call, in a fresh page, and arm the delay BEFORE
+opening a panel — opening one syncs `commentaryLineId` from the selected line, which
+already asks for the pin. Without the fix: `begins=0`, `scrollTop=0`, panel on the
+first group. With it: `begins=1`, panel on its pin.
+
+**The debt must be re-armable, and must outlive the list blinking empty (2026-08-14).**
+The one-shot version above still lost the first-load scroll in three ways, which is
+why "it doesn't scroll to the default commentary on first load" survived the
+positioner rewrite:
+
+- **A `watch(pinnedGroup)` fires once.** When the pin resolved while a partial load
+  was still running, the callback hit its `isLoading()` guard and returned — and the
+  pin ref never changed again, so nothing re-asked and the debt stayed unpaid for the
+  whole load. The pin is NOT reliably the last precondition to arrive. `settlePinDebt`
+  is therefore called from watchers on *every* precondition — the pin
+  (`pin-arrived-late`), the loading edge (`pin-owed-load-done`) and the groups
+  (`pin-owed-groups-arrived`) — so whichever lands last does the work. All three are
+  AUTO reasons; the guards make every redundant call a no-op.
+- **`groups = []` does not mean a new load.** One line tap runs `load()` twice, so the
+  list goes `groups → [] → groups` for the SAME anchor. Voiding the debt on every
+  empty list wiped it inside that blink; if the pin query resolved in that window the
+  debt was already gone. The debt now carries the anchor it belongs to
+  (`owedForAnchor`, from `selectedLineId`) and only a genuinely different anchor
+  voids it.
+- **"Pin decided but its book isn't in the list" is owed, not done.** That branch used
+  to return without recording anything, leaving the panel on the first group with no
+  later event to correct it. It now records the debt like the `!pinned` branch.
 
 **Consume `isFirstLoad` only when ready to position.** It used to be consumed by the
 watcher's FIRST fire, which is the `groups = []` that `load()` starts with — so the
