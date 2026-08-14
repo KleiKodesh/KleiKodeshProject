@@ -28,12 +28,26 @@ fixed". Now every path REQUESTS a goal (`group` / `restore` / `flatIndex` /
   restore or a claimed restore intent. `setGoal` returns acceptance so auto callers
   can keep their pin-scroll debt.
 - **Completion is condition-based, never wall-clock**: a goal holds until its target
-  is measured, its content present (restore with offset), and its position stable
-  for SETTLE_FRAMES consecutive frames. The old fixed windows (800ms → 2.5s → 6s)
-  each encoded an assumption about how long loading takes and each broke on the
-  next slower environment; frame-based settling stretches with machine load
-  instead. A generous SAFETY_MS valve force-applies and ends a genuinely
-  unachievable goal.
+  is measured, its content present (restore with offset), its position stable for
+  SETTLE_FRAMES consecutive frames, **and nothing above the target is still waiting
+  for content**. The old fixed windows (800ms → 2.5s → 6s) each encoded an
+  assumption about how long loading takes and each broke on the next slower
+  environment; frame-based settling stretches with machine load instead. A generous
+  SAFETY_MS valve force-applies and ends a genuinely unachievable goal.
+- **Stable frames are not proof a goal is finished (2026-08-14).** `loading` goes
+  false when the group STRUCTURE lands; `useCommentary` then backfills line content
+  in batches for as long as it takes, and every still-empty line above the target
+  grows later and pushes the target down. Settling on frames alone made
+  SETTLE_FRAMES a fixed window in disguise (~500ms at 60fps): the goal declared
+  itself done mid-backfill, tore down its rAF loop, and the content then landed with
+  nothing left to re-anchor — "it scrolls to the right place and then jumps away
+  once the content loads", the symptom that outlived the positioner rewrite. The
+  loop now also requires `contentPendingAbove(goal)` to be false, which scans the
+  flat list for `type === 'line' && lineId > 0 && content === ''` before the target
+  index. Only lines ABOVE it matter (those are the ones that move it); `lineId > 0`
+  skips the injected placeholder rows, which are never backfilled and would
+  otherwise hold every goal open until the safety valve. The mask is still released
+  at first arrival, so the extra hold is invisible and stays interruptible.
 - **`isPositioning`** is true from goal start to FIRST arrival; CommentaryView
   shows an opaque positioning mask (spinner after the usual delay) over the
   scroller while it is true, so the reader never watches content sitting at the

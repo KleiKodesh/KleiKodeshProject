@@ -246,6 +246,41 @@ export function useCommentaryScroll(
     return Math.min(Math.max(0, desired), max)
   }
 
+  /** The flat index a goal is aiming at, or -1 when it has none / cannot resolve one. */
+  function targetIndexOf(g: Goal): number {
+    switch (g.kind) {
+      case 'restore': return g.scrollIndex
+      case 'flatIndex': return g.flatIndex
+      case 'group': return resolveGroupIndex(g.bookId, g.sectionLabel, g.subSectionLabel)
+      default: return -1
+    }
+  }
+
+  /**
+   * Is any line ABOVE this goal's target still waiting for its content?
+   *
+   * Only lines above the target can move it: the two-phase loader renders them as
+   * near-empty stubs and they grow when their text arrives, pushing everything
+   * below down. Lines at or after the target grow harmlessly off-screen.
+   *
+   * Scans the flat list rather than asking the loader, so it needs no new plumbing
+   * and stays true for content fetched by ANY path (display-order backfill or the
+   * viewport-priority fetch). `lineId > 0` skips the injected placeholder rows
+   * (lineId -1), which are never backfilled and would otherwise hold every goal
+   * open until the safety valve.
+   */
+  function contentPendingAbove(g: Goal): boolean {
+    const idx = targetIndexOf(g)
+    if (idx <= 0) return false
+    const items = flatItems()
+    const upTo = Math.min(idx, items.length)
+    for (let i = 0; i < upTo; i++) {
+      const item = items[i]
+      if (item?.type === 'line' && item.lineId > 0 && item.content === '') return true
+    }
+    return false
+  }
+
   function resolveGroupIndex(bookId: number, sectionLabel?: string, subSectionLabel?: string): number {
     const items = flatItems()
     const exact = items.findIndex(
@@ -331,7 +366,18 @@ export function useCommentaryScroll(
         // later corrections are small nudges, and hiding content through the whole
         // settle window would cost every fast load a visible delay.
         isPositioning.value = false
-        if (++stableFrames >= SETTLE_FRAMES) {
+        // Stable frames alone are NOT proof the goal is finished. The two-phase
+        // loader marks `loading` false as soon as the group STRUCTURE lands, then
+        // backfills line content in batches for as long as it takes; every line
+        // above the target that is still empty will grow later and push the target
+        // down. Settling on frames alone made SETTLE_FRAMES a fixed window in
+        // disguise (~500ms at 60fps): the goal declared itself done while the
+        // backfill was still in flight, tore down its loop, and the content then
+        // landed with nothing left to re-anchor - "it scrolls to the right place
+        // and then jumps away once the content loads".
+        // So hold the goal open, correcting, until nothing above the target is
+        // still pending. Condition-based, no assumption about load duration.
+        if (++stableFrames >= SETTLE_FRAMES && !contentPendingAbove(g)) {
           endGoal('done')
           return
         }
