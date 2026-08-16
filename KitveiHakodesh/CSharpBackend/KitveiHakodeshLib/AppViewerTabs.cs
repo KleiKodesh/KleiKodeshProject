@@ -10,10 +10,8 @@ namespace KitveiHakodeshLib
     {
         public string Id { get; set; }
         public string Title { get; set; }
-        /// <summary>Full breadcrumb ("prefix: title · toc path") for the tab-list dropdown; falls back to Title when empty.</summary>
+        /// <summary>Full breadcrumb ("title · toc path") for the tab-list dropdown; falls back to Title when empty.</summary>
         public string ListTitle { get; set; }
-        /// <summary>"prefix: title" strip caption, drawn only when the tab is wide enough to fit it.</summary>
-        public string StripTitle { get; set; }
         /// <summary>
         /// Which favicon this tab shows ("book", "pdf", …). Looked up in the icon set Vue
         /// sends separately via 'tabIcons'; empty or unknown means draw no icon.
@@ -136,7 +134,6 @@ namespace KitveiHakodeshLib
                         Id = tabId,
                         Title = t.TryGetProperty("title", out var ti) ? (ti.GetString() ?? "") : "",
                         ListTitle = t.TryGetProperty("listTitle", out var lt) ? (lt.GetString() ?? "") : "",
-                        StripTitle = t.TryGetProperty("stripTitle", out var st) ? (st.GetString() ?? "") : "",
                         IconKey = t.TryGetProperty("iconKey", out var ik) ? (ik.GetString() ?? "") : "",
                         Pane = t.TryGetProperty("pane", out var p) && p.TryGetInt32(out int pane) ? pane : 1,
                     });
