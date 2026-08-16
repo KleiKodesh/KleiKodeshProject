@@ -89,7 +89,7 @@ const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
 // A click always enters search mode; the address-bar dropdown doubles as the
 // tab list (shown while the field is empty / has no results).
-const barTitleHint = 'לחץ לניווט מהיר ולרשימת הלשוניות (Ctrl+T)'
+const barTitleHint = 'לחץ לניווט מהיר ולרשימת הלשוניות (Ctrl+E)'
 
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
@@ -132,7 +132,10 @@ function toggleNavDropdown() {
   navDropdownOpen.value = !navDropdownOpen.value
 }
 
-/** Ctrl+T: the address bar's dropdown doubles as the tab list (empty field = tab list). */
+/**
+ * Ctrl+E. Also Ctrl+T where there is no native tab strip (VSTO task pane, dev browser):
+ * the address bar's dropdown doubles as the tab list there (empty field = tab list).
+ */
 function toggleAddressBar() {
   if (searchMode.value) searchMode.value = false
   else enterSearchMode()

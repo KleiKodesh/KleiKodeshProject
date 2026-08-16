@@ -3,7 +3,7 @@ import { useEventListener } from '@vueuse/core'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useThemeStore } from '@/theme/themeStore'
-import { toggleFullscreen, hasNativeChromeTabs } from '@/webview-host/bridge'
+import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -39,7 +39,8 @@ export function useAppTitleBarShortcuts(options: {
   titleBarVisible: Ref<boolean>
   /** Ctrl+\ is ignored unless split view actually fits on screen. */
   isSplitViewAvailable: ComputedRef<boolean>
-  /** Ctrl+T. Owned by the component because the address bar's visibility drives its template. */
+  /** Ctrl+E (and Ctrl+T where no native strip exists). Owned by the component because the
+   *  address bar's visibility drives its template. */
   toggleAddressBar: () => void
   /** Ctrl+M. Owned by the component for the same reason. */
   toggleNavDropdown: () => void
@@ -147,6 +148,14 @@ export function useAppTitleBarShortcuts(options: {
         else if (isTxtViewActive.value) bookViewStore.txtViewToggleSearch(paneId)
         return true
       case 'KeyT':
+        // The native strip owns the tab list wherever it exists — Ctrl+T opens THAT
+        // dropdown, not the address bar's (which is Ctrl+E). Where there is no strip
+        // (VSTO task pane, dev browser) the address-bar dropdown is the only tab list
+        // there is, so it stands in.
+        if (hasNativeChromeTabs) toggleChromeTabList()
+        else options.toggleAddressBar()
+        return true
+      case 'KeyE':
         options.toggleAddressBar()
         return true
       // Only the demo-app host has somewhere to put a new tab. The VSTO task pane
