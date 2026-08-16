@@ -41,7 +41,7 @@ const {
   searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
   searchVisible,
   selectedLineId, searchMode,
-  activeTocEntryId,
+  activeTocEntryId, activeAltTocEntryId,
   tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState,
@@ -391,6 +391,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
           >
             <BookViewTocTree
               :active-toc-entry-id="activeTocEntryId"
+              :active-alt-toc-entry-id="activeAltTocEntryId"
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
               :selected-alt-toc-section="selectedAltTocSection"
@@ -538,6 +539,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
           >
             <BookViewTocTree
               :active-toc-entry-id="activeTocEntryId"
+              :active-alt-toc-entry-id="activeAltTocEntryId"
               :toc-entries="tocEntries"
               :toc-search-tree="tocSearchTree"
               :selected-alt-toc-section="selectedAltTocSection"

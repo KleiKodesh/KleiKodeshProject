@@ -24,8 +24,10 @@ const SECTION_NAVIGATION_LAG_WINDOW_MS = 500
 export function useBookViewTocNavigation(
   tocEntries: () => TocEntry[],
   activeTocEntryId: import('vue').Ref<number | undefined>,
+  activeAltTocEntryId: import('vue').Ref<number | undefined>,
   linesContentRef: () => LinesContentInstance | null,
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
+  getActiveAltTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
   beginTocScroll: (entry: TocEntry) => void,
   selectedAltTocSection: import('vue').Ref<AltTocSection | null>,
@@ -55,7 +57,12 @@ export function useBookViewTocNavigation(
     if (!section) return map
     for (const entry of section.entries) {
       if (entry.lineIndex == null) continue
-      map.set(entry.lineIndex, entry.text)
+      // A parent and its first child start on the same line (a parasha and its
+      // first aliya, say), so labels accumulate outer-first — overwriting would
+      // drop the parasha and leave only the aliya.
+      const existing = map.get(entry.lineIndex)
+      if (existing == null) map.set(entry.lineIndex, entry.text)
+      else if (existing !== entry.text) map.set(entry.lineIndex, `${existing} · ${entry.text}`)
     }
     return map
   })
@@ -69,10 +76,18 @@ export function useBookViewTocNavigation(
     paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
     beginTocScroll(entry)
     linesContentRef()?.scrollToLineId(entry.lineId, entry.lineIndex ?? undefined)
+    // Both trees show the same position, so a main click moves the alt highlight too.
+    if (entry.lineIndex != null) {
+      activeAltTocEntryId.value = getActiveAltTocEntry(entry.lineIndex)?.id
+    }
   }
 
   function onAltTocSelect(entry: TocEntry) {
     if (entry.lineId == null) return
+    activeAltTocEntryId.value = entry.id
+    // Latch the programmatic scroll as the main path does, so the scroll events on
+    // the way to the target don't drag the highlight back to the previous entry.
+    beginTocScroll(entry)
     linesContentRef()?.scrollToLineId(entry.lineId)
     if (entry.lineIndex != null) {
       const mainEntry = getActiveTocEntry(entry.lineIndex)

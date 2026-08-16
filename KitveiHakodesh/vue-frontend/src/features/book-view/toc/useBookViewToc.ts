@@ -22,10 +22,35 @@ function altTocStructurePriority(key: string): number {
   }
 }
 
-function pickPreferredAltTocStructure(structures: AltTocStructure[]): AltTocStructure {
-  return structures.reduce((best, current) =>
-    altTocStructurePriority(current.key) < altTocStructurePriority(best.key) ? current : best,
+function pickPreferredAltTocStructure(structures: AltTocStructure[]): AltTocStructure | undefined {
+  return structures.reduce<AltTocStructure | undefined>((best, current) =>
+    best == null || altTocStructurePriority(current.key) < altTocStructurePriority(best.key)
+      ? current
+      : best,
+    undefined,
   )
+}
+
+/**
+ * The last entry at or before `lineIndex`. `sorted` must be ascending by
+ * lineIndex with no nulls. Where a parent and its first child share a line the
+ * child wins, which is what the tree should highlight — TreeView expands the
+ * ancestors anyway.
+ */
+function findEntryAtLine(sorted: TocEntry[], lineIndex: number): TocEntry | null {
+  let lo = 0
+  let hi = sorted.length - 1
+  let result: TocEntry | null = null
+  while (lo <= hi) {
+    const mid = (lo + hi) >>> 1
+    if (sorted[mid]!.lineIndex! <= lineIndex) {
+      result = sorted[mid]!
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  return result
 }
 
 function stripBookTitleRoot(
@@ -75,16 +100,12 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     }
   }
 
-  let _altTocBookId: number | undefined
-  let _altTocLoading = false
+  let altTocGeneration = 0
 
-  // Lazy — called by useBookView the first time the TOC panel opens.
-  // Safe to call multiple times; re-fetches only if the book changed.
-  async function loadAltTocSections() {
-    const id = bookId()
-    if (id == null || (id === _altTocBookId && altTocSections.value.length > 0) || _altTocLoading) return
-    _altTocBookId = id
-    _altTocLoading = true
+  // Loaded with the book, not on demand: the alt TOC labels are rendered inline
+  // in the lines view, so they can't wait for the TOC panel to be opened.
+  async function loadAltTocSections(id: number) {
+    const generation = ++altTocGeneration
     try {
       const structures = await getAltTocStructures(id)
       const sections = await Promise.all(
@@ -93,12 +114,12 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
           return { structure: s, entries, searchTree: null }
         }),
       )
+      if (generation !== altTocGeneration) return // the book changed mid-flight
       altTocSections.value = sections
-      selectedAltTocStructureId.value = pickPreferredAltTocStructure(sections.map((s) => s.structure)).id
+      selectedAltTocStructureId.value =
+        pickPreferredAltTocStructure(sections.map((s) => s.structure))?.id ?? null
     } catch {
       // alt TOC is non-critical — silently ignore errors
-    } finally {
-      _altTocLoading = false
     }
   }
 
@@ -109,8 +130,8 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         tocLoaded.value = false
         altTocSections.value = []
         selectedAltTocStructureId.value = null
-        _altTocBookId = undefined
         load(id)
+        loadAltTocSections(id)
       }
     },
     { immediate: true },
@@ -150,6 +171,19 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     return result
   }
 
+  // Alt entries arrive ordered by id, which is document order for most structures
+  // but not all — a handful interleave their levels. Sorting once per section
+  // keeps the lookup a plain binary search.
+  const altTocLineOrder = computed(() =>
+    (selectedAltTocSection.value?.entries ?? [])
+      .filter((e) => e.lineIndex != null)
+      .sort((a, b) => a.lineIndex! - b.lineIndex!),
+  )
+
+  function getActiveAltTocEntry(lineIndex: number): TocEntry | null {
+    return findEntryAtLine(altTocLineOrder.value, lineIndex)
+  }
+
   function getTocPath(entry: TocEntry): string {
     return tocSearchTree.value.displayPaths.get(entry.id) ?? entry.text
   }
@@ -164,7 +198,7 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     error,
     tocSearchTree,
     getActiveTocEntry,
+    getActiveAltTocEntry,
     getTocPath,
-    loadAltTocSections,
   }
 }

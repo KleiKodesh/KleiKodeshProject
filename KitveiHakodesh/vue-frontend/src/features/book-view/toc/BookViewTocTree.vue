@@ -8,6 +8,7 @@ import SplitPane from '@/components/SplitPane.vue'
 
 const props = defineProps<{
   activeTocEntryId?: number
+  activeAltTocEntryId?: number
   tocEntries: TocEntry[]
   selectedAltTocSection: AltTocSection | null
   loading: boolean
@@ -75,6 +76,7 @@ watch(searchQuery, (q) => {
             :key="selectedAltTocSection.structure.id"
             :title="null"
             :entries="selectedAltTocSection.entries"
+            :active-entry-id="activeAltTocEntryId"
             :filter="searchQuery"
             :search-tree="selectedAltTocSection.searchTree ?? undefined"
             @select="$emit('altSelect', $event)"

@@ -126,11 +126,10 @@ export function useBookView(
   // ── Data loading ─────────────────────────────────────────────────────────
 
   const {
-    getActiveTocEntry, getTocPath,
+    getActiveTocEntry, getActiveAltTocEntry, getTocPath,
     altTocSections, selectedAltTocSection,
     tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
-    loadAltTocSections,
   } = useToc(() => bookId, () => bookTitle)
 
   const { lines, prioritise, prefetch, holdBackfill, releaseBackfill, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
@@ -152,6 +151,7 @@ export function useBookView(
   // ── Core reactive state ───────────────────────────────────────────────────
 
   const activeTocEntryId = ref<number | undefined>(undefined)
+  const activeAltTocEntryId = ref<number | undefined>(undefined)
   const selectedLineId = ref<number | null>(null)
   const commentaryLineId = ref<number | null>(null)
 
@@ -314,14 +314,23 @@ export function useBookView(
   const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled, syncTocPathForLineIndex } = useBookViewScrollSync(
     () => lines.value,
     activeTocEntryId,
+    activeAltTocEntryId,
     selectedLineId,
     commentaryLineId,
     checkTocScrollProgress,
     getActiveTocEntry,
+    getActiveAltTocEntry,
     getTocPath,
     captureActivePins,
     applyPendingPins,
   )
+
+  // The alt sections finish loading after the reader is already scrolled, and a
+  // structure switch swaps the entries wholesale. Either way no scroll event
+  // follows, so resolve the active alt entry against the current position here.
+  watch(selectedAltTocSection, () => {
+    activeAltTocEntryId.value = getActiveAltTocEntry(currentScrollLineIndex.value)?.id
+  })
 
   // ── Commentary annotations (shared — hoisted above the panels' v-if) ─────
 
@@ -404,7 +413,7 @@ export function useBookView(
 
   // ── Side panel (the TOC; each panel owns its own filter tree) ─────────────
 
-  const sidePanel = useBookViewSidePanel(toolbarRef, loadAltTocSections)
+  const sidePanel = useBookViewSidePanel(toolbarRef)
 
   // Make the full-book lines backfill yield to commentary loading — commentary
   // queries must never queue behind ~100 large chunk fetches.
@@ -420,8 +429,10 @@ export function useBookView(
   } = useBookViewTocNavigation(
     () => tocEntries.value,
     activeTocEntryId,
+    activeAltTocEntryId,
     linesContentRef,
     getActiveTocEntry,
+    getActiveAltTocEntry,
     getTocPath,
     beginTocScroll,
     selectedAltTocSection,
@@ -617,6 +628,7 @@ export function useBookView(
     selectedLineId,
     searchMode: searchPanel.searchMode,
     activeTocEntryId,
+    activeAltTocEntryId,
     tocVisible: sidePanel.tocVisible,
     sidePanelVisible: sidePanel.sidePanelVisible,
     sidePanelToggleButtonEl: sidePanel.sidePanelToggleButtonEl,
