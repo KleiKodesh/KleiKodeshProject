@@ -17,10 +17,12 @@ import type { CommentaryPinSnapshot } from './bookViewTypes'
 export function useBookViewScrollSync(
   lines: () => LineItem[],
   activeTocEntryId: Ref<number | undefined>,
+  activeAltTocEntryId: Ref<number | undefined>,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
   checkTocScrollProgress: (lineIndex: number) => boolean,
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
+  getActiveAltTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
   captureActivePins: () => CommentaryPinSnapshot,
   applyPendingPins: (snapshot: CommentaryPinSnapshot) => void,
@@ -43,6 +45,13 @@ export function useBookViewScrollSync(
     if (entry && entry.id !== activeTocEntryId.value) {
       activeTocEntryId.value = entry.id
       paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
+    }
+
+    // The alt tree tracks the reader independently — it has its own entries, so
+    // the main entry's id means nothing to it. The breadcrumb stays on the main TOC.
+    const altEntry = getActiveAltTocEntry(lineIndex)
+    if (altEntry && altEntry.id !== activeAltTocEntryId.value) {
+      activeAltTocEntryId.value = altEntry.id
     }
 
     if (!autoSelectTopLine.value) return
@@ -72,6 +81,7 @@ export function useBookViewScrollSync(
       activeTocEntryId.value = entry.id
       paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
     }
+    activeAltTocEntryId.value = getActiveAltTocEntry(lineIndex)?.id
   }
 
   watch(autoSelectTopLine, (enabled) => {

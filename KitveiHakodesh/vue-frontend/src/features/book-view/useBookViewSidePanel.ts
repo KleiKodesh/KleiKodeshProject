@@ -10,10 +10,7 @@ import { ref, computed } from 'vue'
 
 type ToolbarInstance = { tocBtnRef: HTMLElement | null }
 
-export function useBookViewSidePanel(
-  toolbarRef: () => ToolbarInstance | null,
-  loadAltTocSections: () => void,
-) {
+export function useBookViewSidePanel(toolbarRef: () => ToolbarInstance | null) {
   const tocVisible = ref(false)
 
   // The element useDropdownClose must ignore, so that clicking the button which
@@ -22,7 +19,6 @@ export function useBookViewSidePanel(
 
   function toggleTocPanel() {
     tocVisible.value = !tocVisible.value
-    if (tocVisible.value) loadAltTocSections()
   }
 
   function closeSidePanel() {

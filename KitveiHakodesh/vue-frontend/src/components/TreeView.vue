@@ -50,7 +50,13 @@ function scrollIntoView(id: number) {
   const el = rowRefs.value.get(id)
   const container = containerRef.value
   if (!el || !container) return
-  container.scrollTop = el.offsetTop - container.clientHeight / 2 + el.offsetHeight / 2
+  // offsetTop is measured from the nearest positioned ancestor, and the scroll
+  // container isn't one — so subtract the container's own offset to get the row's
+  // position within it. Without this the second tree of a SplitPane scrolls too
+  // far by the height of the pane above it. Rects would be simpler but report a
+  // stuck sticky header at its pinned position rather than its layout position.
+  const top = el.offsetTop - container.offsetTop
+  container.scrollTop = top - container.clientHeight / 2 + el.offsetHeight / 2
 }
 
 watch(
