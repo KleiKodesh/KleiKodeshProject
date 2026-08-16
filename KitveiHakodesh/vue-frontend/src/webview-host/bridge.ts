@@ -717,6 +717,19 @@ export function notifyTabsChanged(snapshot: TabsSnapshot): void {
 }
 
 /**
+ * Ask the C# host to toggle the native tab strip's tab-list dropdown (Ctrl+T).
+ * The strip owns that popup, so this is the only way to open it from the page.
+ *
+ * Works even when the strip is hidden (fullscreen, Ctrl+H): the mirror anchors the
+ * popup to the tab-list button's position, which the strip keeps computing whether
+ * or not it is painted. Fire-and-forget; a no-op wherever there is no native strip.
+ */
+export function toggleChromeTabList(): void {
+  if (typeof window.__webviewAction !== 'function') return
+  action('toggleChromeTabList').catch(() => {})
+}
+
+/**
  * Push the rasterized favicon set to the C# host, keyed by icon name. Sent once at
  * startup and again whenever the device pixel ratio changes, so the bitmaps match
  * the size the strip draws them at. Tab snapshots reference these by `iconKey`,
