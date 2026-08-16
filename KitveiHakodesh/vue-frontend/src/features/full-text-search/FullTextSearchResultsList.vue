@@ -11,6 +11,8 @@ import ContextMenu from '@/components/ContextMenu.vue'
 import { useFullTextSearchCopyMenu, useFullTextSearchScopedCopy } from './useFullTextSearchCopyMenu'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
+import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
+import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const props = defineProps<{
@@ -38,6 +40,12 @@ const SEARCH_ERROR_MESSAGES: Record<string, string> = {
 }
 const settingsStore = useSettingsStore()
 const scrollEl = ref<HTMLElement | null>(null)
+
+// The preview pane is nested inside this scroller and mounts its own instance,
+// so selections in there are left to it.
+const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollEl, {
+  ignoreWithin: '.preview-box',
+})
 
 // Right-click copy menu (העתק / העתק טקסט נקי) — matches the book & txt views.
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -344,6 +352,11 @@ defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
       <span v-else-if="hasSearched && !results.length" class="empty-msg">לא נמצאו תוצאות</span>
     </div>
     <template v-else>
+      <BookViewAbbrevTooltip
+        v-if="abbrevTooltip"
+        :key="abbrevTooltip.id"
+        :data="abbrevTooltip"
+      />
       <div
         ref="scrollEl"
         class="scroller"
