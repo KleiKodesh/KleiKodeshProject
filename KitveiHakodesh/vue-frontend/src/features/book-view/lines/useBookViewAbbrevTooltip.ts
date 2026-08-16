@@ -35,6 +35,9 @@ export interface AbbrevTooltipData {
 
 // U+0591–U+05C7 — nikud + cantillation marks
 const HEBREW_MARKS = /[\u0591-\u05C7]/g
+// Zero-width and bidi formatting characters. They survive trim() and are not
+// matched by \s, so they would otherwise fail the pattern test silently.
+const INVISIBLE_CHARS = /[\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g
 const WORD_CHAR = /[א-ת\u0591-\u05C7]/
 // Gershayim in the middle (רשב"א) or geresh at the end (מת').
 const ABBREV_PATTERN = /^(?:[א-ת]+"[א-ת]+|[א-ת]+')$/
@@ -46,6 +49,7 @@ const ABBREV_PATTERN = /^(?:[א-ת]+"[א-ת]+|[א-ת]+')$/
 export function extractAbbrevTerm(raw: string): string | null {
   let text = raw
     .replace(HEBREW_MARKS, '')
+    .replace(INVISIBLE_CHARS, '')
     .replace(/[״”“]/g, '"')
     .replace(/[׳’‘]/g, "'")
     .trim()
@@ -90,6 +94,31 @@ function isFullWordSelection(range: Range): boolean {
   return isBoundaryChar(before) && isBoundaryChar(after)
 }
 
+/**
+ * A copy of the range with leading/trailing whitespace excluded, so a selection
+ * that swept up surrounding spaces still anchors the tooltip to the word itself.
+ * Falls back to the original range when the edges are not plain text nodes.
+ */
+function trimmedRange(range: Range): Range {
+  const trimmed = range.cloneRange()
+  const { startContainer, endContainer } = trimmed
+  if (startContainer.nodeType === Node.TEXT_NODE) {
+    const text = startContainer.textContent ?? ''
+    let start = trimmed.startOffset
+    while (start < text.length && /\s/.test(text[start]!)) start++
+    if (start !== trimmed.startOffset) trimmed.setStart(startContainer, start)
+  }
+  if (endContainer.nodeType === Node.TEXT_NODE) {
+    let end = trimmed.endOffset
+    const text = endContainer.textContent ?? ''
+    while (end > 0 && /\s/.test(text[end - 1]!)) end--
+    if (end !== trimmed.endOffset && end >= trimmed.startOffset) {
+      trimmed.setEnd(endContainer, end)
+    }
+  }
+  return trimmed.collapsed ? range : trimmed
+}
+
 export function useBookViewAbbrevTooltip(scrollerEl: Ref<HTMLElement | null>) {
   const abbrevTooltip = ref<AbbrevTooltipData | null>(null)
   let lookupToken = 0
@@ -106,8 +135,14 @@ export function useBookViewAbbrevTooltip(scrollerEl: Ref<HTMLElement | null>) {
     const root = scrollerEl.value
     if (!root || !root.contains(range.commonAncestorContainer)) { closeAbbrevTooltip(); return }
 
+    // Cheapest test first: a pure string check rejects ordinary selections
+    // before we allocate a Range for the whitespace-trimmed word.
     const term = extractAbbrevTerm(sel.toString())
-    if (!term || !isFullWordSelection(range)) { closeAbbrevTooltip(); return }
+    if (!term) { closeAbbrevTooltip(); return }
+    // The user may have swept up the spaces around the word; the boundary
+    // check and the anchor both need the range narrowed to the word itself.
+    const wordRange = trimmedRange(range)
+    if (!isFullWordSelection(wordRange)) { closeAbbrevTooltip(); return }
 
     const token = ++lookupToken
     let result
@@ -130,7 +165,7 @@ export function useBookViewAbbrevTooltip(scrollerEl: Ref<HTMLElement | null>) {
     }
     if (!senses.length) { abbrevTooltip.value = null; return }
 
-    abbrevTooltip.value = { id: token, senses, anchorRect: range.getBoundingClientRect() }
+    abbrevTooltip.value = { id: token, senses, anchorRect: wordRange.getBoundingClientRect() }
   }
 
   function onMouseUp(event: MouseEvent) {
