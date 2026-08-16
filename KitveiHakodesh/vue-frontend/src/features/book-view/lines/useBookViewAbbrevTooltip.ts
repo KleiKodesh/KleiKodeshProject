@@ -119,7 +119,15 @@ function trimmedRange(range: Range): Range {
   return trimmed.collapsed ? range : trimmed
 }
 
-export function useBookViewAbbrevTooltip(scrollerEl: Ref<HTMLElement | null>) {
+/**
+ * @param ignoreWithin CSS selector for nested regions that mount their own
+ *   instance. Without it a selection inside a nested scroller satisfies the
+ *   outer contains() check too and both instances would look the term up.
+ */
+export function useBookViewAbbrevTooltip(
+  scrollerEl: Ref<HTMLElement | null>,
+  options?: { ignoreWithin?: string },
+) {
   const abbrevTooltip = ref<AbbrevTooltipData | null>(null)
   let lookupToken = 0
 
@@ -128,12 +136,24 @@ export function useBookViewAbbrevTooltip(scrollerEl: Ref<HTMLElement | null>) {
     abbrevTooltip.value = null
   }
 
+  function isInsideIgnored(node: Node): boolean {
+    // commonAncestorContainer is usually a text node; closest() needs an Element.
+    const el = node.nodeType === Node.ELEMENT_NODE
+      ? (node as Element)
+      : node.parentElement
+    return !!el?.closest(options!.ignoreWithin!)
+  }
+
   async function onSelectionSettled() {
     const sel = window.getSelection()
     if (!sel || sel.isCollapsed || sel.rangeCount === 0) { closeAbbrevTooltip(); return }
     const range = sel.getRangeAt(0)
     const root = scrollerEl.value
     if (!root || !root.contains(range.commonAncestorContainer)) { closeAbbrevTooltip(); return }
+    if (options?.ignoreWithin && isInsideIgnored(range.commonAncestorContainer)) {
+      closeAbbrevTooltip()
+      return
+    }
 
     // Cheapest test first: a pure string check rejects ordinary selections
     // before we allocate a Range for the whitespace-trimmed word.
