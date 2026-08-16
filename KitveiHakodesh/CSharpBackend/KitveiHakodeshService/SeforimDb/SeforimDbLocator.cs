@@ -14,7 +14,7 @@ namespace KitveiHakodeshService.SeforimDb;
 /// Resolution order:
 ///   1. the registry value, when set and non-empty (the user's explicit choice)
 ///   2. the DB_PATH environment variable (dev override forwarded by the Vite plugin)
-///   3. the default probe — Zayit then Otzaria (same order as AppSettings.ResolveDefaultDbPath)
+///   3. the default probe — Otzaria then Zayit (same order as AppSettings.ResolveDefaultDbPath)
 /// </summary>
 public static class SeforimDbLocator
 {
@@ -42,15 +42,15 @@ public static class SeforimDbLocator
     public static bool IsCustom() => !string.IsNullOrWhiteSpace(LoadRegistryPath());
 
     /// <summary>Default probe — identical to KitveiHakodeshLib AppSettings.ResolveDefaultDbPath:
-    /// Zayit first, then Otzaria; Zayit path as the fallback even if neither exists.</summary>
+    /// Otzaria first, then Zayit; Otzaria path as the fallback even if neither exists.</summary>
     public static string ResolveDefaultDbPath()
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        string zayit = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
         string otzaria = Path.Combine(appData, "otzaria", "books", "seforim.db");
-        if (File.Exists(zayit)) return zayit;
+        string zayit = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
         if (File.Exists(otzaria)) return otzaria;
-        return zayit;
+        if (File.Exists(zayit)) return zayit;
+        return otzaria;
     }
 
     public static string? LoadRegistryPath()

@@ -58,9 +58,9 @@ dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))
 {
     string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-    string zayit = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
     string otzaria = Path.Combine(appData, "otzaria", "books", "seforim.db");
-    dbPath = File.Exists(zayit) ? zayit : otzaria;
+    string zayit = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
+    dbPath = File.Exists(otzaria) ? otzaria : zayit;
 }
 if (!File.Exists(dbPath))
 {
