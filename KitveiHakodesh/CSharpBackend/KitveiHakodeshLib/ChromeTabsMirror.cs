@@ -318,10 +318,6 @@ namespace KitveiHakodeshLib
                     // Dropdown-only breadcrumb text — no strip repaint involved.
                     tab.ListTitle = info.ListTitle;
 
-                    // "prefix: title" caption, drawn only when the tab has room for it
-                    // (the setter no-ops when unchanged, so no repaint churn).
-                    tab.WideTitle = info.StripTitle;
-
                     // Favicon. The set may not have arrived yet on a cold start, or may
                     // not know this key — either way the tab simply draws without one,
                     // and ApplyTabIcons stamps it as soon as the set lands.

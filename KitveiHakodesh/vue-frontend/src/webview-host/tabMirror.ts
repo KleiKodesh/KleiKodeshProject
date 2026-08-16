@@ -40,31 +40,9 @@ import type { MirroredTab, MirroredRecentItem } from './bridge'
 
 const RECENT_MAX = 8
 
-// Page-type prefix for the native tab-list dropdown / tab tooltip, in the style of
-// the full-text-search page's own "חיפוש: <query>" titles. Only content routes get
-// one — singleton pages (מילון, לוח שנה, חיפוש…) already carry their type as the
-// title, and the home tab is just "בית".
-const LIST_TITLE_PREFIXES: Record<string, string> = {
-  '/book-view': 'ספר',
-  '/pdf-view': 'מסמך',
-  '/txt-view': 'טקסט',
-  '/html-view': 'מסמך',
-}
-
-/** "prefix: title · tocPath" — the string shown in the dropdown row and tab tooltip. */
+/** "title · tocPath" — the string shown in the dropdown row and tab tooltip. */
 function listTitleFor(t: Tab): string {
-  const prefix = LIST_TITLE_PREFIXES[t.route]
-  const body = t.tocPath ? `${t.title} · ${t.tocPath}` : t.title
-  return prefix ? `${prefix}: ${body}` : body
-}
-
-/**
- * "prefix: title" (no breadcrumb) — drawn on the strip tab itself, but only when the
- * tab is wide enough to fit it whole; narrow tabs fall back to the clean title.
- */
-function stripTitleFor(t: Tab): string {
-  const prefix = LIST_TITLE_PREFIXES[t.route]
-  return prefix ? `${prefix}: ${t.title}` : t.title
+  return t.tocPath ? `${t.title} · ${t.tocPath}` : t.title
 }
 
 /** Same identity rules as recentlyOpenedStore.deriveKey, applied to an open tab. */
@@ -140,10 +118,9 @@ export function initTabMirror(): void {
         .map((t): MirroredTab => ({
           id: t.id,
           title: t.title,
-          // Page-type prefix + full breadcrumb for the native tab-list dropdown and
-          // tab tooltip; prefix-only variant for the strip caption when it fits.
+          // Full breadcrumb for the native tab-list dropdown and tab tooltip; the
+          // strip caption itself is always the plain title.
           listTitle: listTitleFor(t),
-          stripTitle: stripTitleFor(t),
           pane: t.pane === 2 ? 2 : 1,
           // Favicon key into the set pushed by sendTabIcons — same shared mapping
           // the in-page lists use, so the strip shows the identical glyph.
