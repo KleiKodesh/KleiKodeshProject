@@ -10,6 +10,8 @@ import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import WordLinkTooltip from '@/features/book-view/lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '@/features/book-view/lines/useWordLinkTooltip'
+import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
+import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import type { PreviewState } from './useFullTextSearchPreview'
 
 const props = defineProps<{
@@ -97,7 +99,12 @@ defineExpose({ recenter })
 
 const paneNavigation = usePaneNavigation()
 const booksDataStore = useBooksDataStore()
-const { wordLinkTooltip } = useWordLinkTooltip(boxEl, {
+const {
+  wordLinkTooltip,
+  keepOpen: keepWordLinkTooltipOpen,
+  releaseOpen: releaseWordLinkTooltip,
+  beginSelection: beginWordLinkTooltipSelection,
+} = useWordLinkTooltip(boxEl, {
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
   onNavigate: (target) => {
     paneNavigation.openBookTarget({
@@ -108,6 +115,8 @@ const { wordLinkTooltip } = useWordLinkTooltip(boxEl, {
     })
   },
 })
+
+const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
 </script>
 
 <template>
@@ -116,6 +125,14 @@ const { wordLinkTooltip } = useWordLinkTooltip(boxEl, {
       v-if="wordLinkTooltip"
       :key="wordLinkTooltip.id"
       :data="wordLinkTooltip"
+      @pointer-enter="keepWordLinkTooltipOpen"
+      @pointer-leave="releaseWordLinkTooltip"
+      @select-start="beginWordLinkTooltipSelection"
+    />
+    <BookViewAbbrevTooltip
+      v-if="abbrevTooltip"
+      :key="abbrevTooltip.id"
+      :data="abbrevTooltip"
     />
     <div v-if="state.loading && !state.lines.length" class="preview-empty">טוען…</div>
     <!-- eslint-disable-next-line vue/no-v-html -->

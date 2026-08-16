@@ -212,13 +212,24 @@ export function useWordLinkTooltip(
     if (!hoverEl) return
     const related = event.relatedTarget as HTMLElement | null
     if (related && hoverEl.contains(related)) return
-    if (related?.closest?.('[data-wl]') === hoverEl) return
+    // A range anchor crossing tag boundaries is emitted as several fragments
+    // sharing one data-wl, so compare the value, not element identity — moving
+    // between fragments of the same link never leaves it.
+    const relatedLink = related?.closest?.('[data-wl]')
+    if (relatedLink && relatedLink.getAttribute('data-wl') === hoverEl.getAttribute('data-wl')) {
+      hoverEl = relatedLink
+      return
+    }
     // Moving straight into the tooltip must not dismiss it — it is teleported to
     // body, so it is never a descendant of the scroller and would otherwise read
     // as "left the link". Defer instead of closing, and let the tooltip's own
     // mouseenter cancel it.
+    // Only defer here — do NOT pin. The tooltip's own mouseenter sets the pin and
+    // its mouseleave releases it; pinning from this side predicts a mouseenter
+    // that may never arrive, and nothing would then ever clear the flag.
     if (related?.closest?.('.word-link-tooltip')) {
-      keepOpen()
+      cancelScheduledClose()
+      scheduleClose()
       return
     }
     // Heading into the context menu opened from this preview — same reasoning as
