@@ -63,20 +63,20 @@ function downloadOtzaria() {
     <div class="step-header">
       <h2 class="step-title">בחירת מסד נתונים</h2>
       <p class="step-desc">
-        כתבי הקודש צריכה את מסד הנתונים של זית או של אוצריא. אם אחת מהתוכנות כבר מותקנת, הפעל
+        כתבי הקודש צריכה את מסד הנתונים של אוצריא או של זית. אם אחת מהתוכנות כבר מותקנת, הפעל
         אותה פעם אחת לסיום ההתקנה ואז בחר את הנתיב למסד הנתונים. ניתן לשנות את הנתיב בכל עת דרך
         הגדרות האפליקציה.
       </p>
     </div>
     <div class="step-scroll">
       <div class="step-card">
-        <button class="db-pick-card" @click="downloadZayit">
-          <IconArrowDownload20Regular class="db-card-icon" />
-          <span class="db-card-path placeholder">הורד את זית</span>
-        </button>
         <button class="db-pick-card" @click="downloadOtzaria">
           <IconArrowDownload20Regular class="db-card-icon" />
           <span class="db-card-path placeholder">הורד את אוצריא</span>
+        </button>
+        <button class="db-pick-card" @click="downloadZayit">
+          <IconArrowDownload20Regular class="db-card-icon" />
+          <span class="db-card-path placeholder">הורד את זית</span>
         </button>
         <button v-if="!isDev" class="db-pick-card" @click="pickDbPath">
           <IconFolderOpen20Regular class="db-card-icon" />

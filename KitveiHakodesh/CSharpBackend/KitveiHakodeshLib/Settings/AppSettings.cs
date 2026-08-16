@@ -14,22 +14,22 @@ namespace KitveiHakodeshLib.Settings
         /// <summary>
         /// Resolves the default seforim database path by probing known app locations
         /// in priority order:
-        ///   1. ZayitApp  — %AppData%\io.github.kdroidfilter.seforimapp\databases\seforim.db
-        ///   2. Otzaria   — %AppData%\otzaria\books\seforim.db
-        /// Returns the first path that exists on disk, or the ZayitApp path as the
+        ///   1. Otzaria   — %AppData%\otzaria\books\seforim.db
+        ///   2. ZayitApp  — %AppData%\io.github.kdroidfilter.seforimapp\databases\seforim.db
+        /// Returns the first path that exists on disk, or the Otzaria path as the
         /// ultimate fallback (so the UI shows a meaningful default even if neither is installed).
         /// </summary>
         public static string ResolveDefaultDbPath()
         {
             string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
-            string zayit  = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
             string otzaria = Path.Combine(appData, "otzaria", "books", "seforim.db");
+            string zayit  = Path.Combine(appData, "io.github.kdroidfilter.seforimapp", "databases", "seforim.db");
 
-            if (File.Exists(zayit))   return zayit;
             if (File.Exists(otzaria)) return otzaria;
+            if (File.Exists(zayit))   return zayit;
 
-            return zayit; // fallback — ZayitApp is the primary supported source
+            return otzaria; // fallback — Otzaria is the primary supported source
         }
 
         // ── Persisted settings ────────────────────────────────────────────────────
