@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue'
-import { onLongPress, useTimeoutFn } from '@vueuse/core'
+import { useTimeoutFn } from '@vueuse/core'
+import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '../useTextSelectionKeys'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualizer } from '@tanstack/vue-virtual'
@@ -23,6 +24,8 @@ import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
 import WordLinkTooltip from '../lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '../lines/useWordLinkTooltip'
+import BookViewAbbrevTooltip from '../lines/BookViewAbbrevTooltip.vue'
+import { useBookViewAbbrevTooltip } from '../lines/useBookViewAbbrevTooltip'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
@@ -157,7 +160,7 @@ const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 
-onLongPress(scrollerEl, (event) => {
+useContextMenuLongPress(scrollerEl, (event) => {
   if (!scrollerEl.value) return
   // In RTL layout the scrollbar is on the physical LEFT side of the container.
   // clientWidth excludes the scrollbar track, so the scrollbar occupies the gap
@@ -398,6 +401,8 @@ const {
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
   onNavigate: (target) => emit('open-book', target.bookId, target.lineIndex),
 })
+
+const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 </script>
 
 <template>
@@ -426,6 +431,11 @@ const {
       @pointer-enter="keepWordLinkTooltipOpen"
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
+    />
+    <BookViewAbbrevTooltip
+      v-if="abbrevTooltip"
+      :key="abbrevTooltip.id"
+      :data="abbrevTooltip"
     />
     <div class="body">
       <div class="content-col" :style="{ fontSize: `${commentaryFontPx}px` }">
