@@ -1398,11 +1398,8 @@ positions *outside* the panel at `inset-inline-start: calc(100% + 4px)`.
   background: none; border: none; outline: none;
   font-size: 12px; font-family: inherit; color: var(--main-color);
 }
-.outlineSearchPath {
-  display: block;
-  direction: rtl; unicode-bidi: isolate;
-  font-size: 11px; line-height: 13px; opacity: 0.6;
-}
+/* result rows carry the full ancestor path as their label — see the bidi note */
+#outlineSearchResults.treeView .treeItem > a { unicode-bidi: isolate; }
 
 /* keyboard focus ring — both containers */
 #outlineSearchResults .treeItem > a.is-focused,
@@ -1418,7 +1415,6 @@ positions *outside* the panel at `inset-inline-start: calc(100% + 4px)`.
 }
 #outlineSearchInput::placeholder { color: var(--main-color); opacity: 0.6; }
 #outlineSearchInput::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
-.outlineSearchPath { display: block; font-size: 11px; line-height: 13px; opacity: 0.6; }
 ```
 
 Colors use PDF.js's own themed variables (which `viewer-custom.css` already maps onto the
@@ -1434,9 +1430,12 @@ the same `div.treeItem > a` shape — that is a reason to keep that shape. But t
 
 - `#outlineSearchInput` — without it a typed query like `ד:` shows the colon on the left.
   `text-align: right` keeps the caret on the Hebrew side.
-- `.outlineSearchPath` — uses `unicode-bidi: isolate` (not `embed`) because the path joins
-  ancestor titles with `" · "`, and an ancestor ending in `:` would otherwise reorder
-  against that separator.
+- `#outlineSearchResults.treeView .treeItem > a` — result rows label themselves with the
+  FULL ancestor path, so they need `unicode-bidi: isolate` (not the base rule's `embed`):
+  the path joins ancestor titles with `" · "`, and an ancestor ending in `:` would
+  otherwise reorder against that separator. `direction: rtl` is inherited from the base
+  `.treeItem > a` rule, so only `unicode-bidi` is overridden. The id-bearing selector
+  (1,2,1) beats the base rule (0,1,1) regardless of source order.
 
 If you add another text element here, set `direction: rtl` on it too.
 
@@ -1575,12 +1574,23 @@ Three things are deliberately **not** "outside":
 
 An in-progress **rename commits first, then the panel closes** — clicking away is a
 deliberate "I'm done here", so it does what clicking away from the anchor alone does
-(commit) and then dismisses. The commit is triggered explicitly (`renamingAnchor.blur()`)
-rather than left to the anchor's own blur handler, because **this listener is on
-`pointerdown` (capture), which runs before the blur**, and `finish()` ends by calling
-`input.focus()` — which would pull focus back INTO the panel being closed. Forcing the blur
-first makes the order deterministic: text saved, focus settled, then close. The window-blur
-path commits the same way, so losing the window mid-rename cannot discard the text.
+(commit) and then dismisses. Both are handled inside `closeSidebar()`, which owns the whole
+sequence; the window-blur path goes through it too, so losing the window mid-rename cannot
+discard the text.
+
+Two things make that sequence non-obvious:
+
+- The commit is triggered **explicitly** (`renamingAnchor.blur()`) rather than left to the
+  anchor's own blur handler, because this listener is on `pointerdown` (capture), which runs
+  *before* the browser's blur would fire.
+- `finish()` normally ends by calling `input.focus()` to return the caret to the query box —
+  correct for every in-panel way a rename ends (Enter, Escape, clicking another row), but
+  wrong here: **the input lives inside the panel**, so it would move focus into a subtree
+  about to be hidden and steal the caret from whatever the user clicked to dismiss. A
+  `closingPanel` flag suppresses that reclaim for the duration of the close, cleared in a
+  `finally` so an exception cannot leave renames permanently unable to restore focus.
+  Reordering alone does not fix this — committing *after* `close()` would still call
+  `input.focus()` on a now-hidden element.
 
 `pointerdown` (capture) is used rather than `click`, matching `onClickOutside` underneath
 `useDropdownClose` and firing before a click can act on whatever was hit. The `blur` close
