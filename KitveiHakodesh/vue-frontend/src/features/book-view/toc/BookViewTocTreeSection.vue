@@ -14,7 +14,11 @@ defineProps<{
 defineEmits<{ select: [TocEntry] }>()
 
 const treeViewRef = ref<InstanceType<typeof TreeView> | null>(null)
-defineExpose({ containerRef: () => treeViewRef.value?.containerRef ?? null })
+defineExpose({
+  containerRef: () => treeViewRef.value?.containerRef ?? null,
+  getExpanded: () => treeViewRef.value?.getExpanded() ?? [],
+  setExpanded: (ids: readonly number[]) => treeViewRef.value?.setExpanded(ids),
+})
 </script>
 
 <template>

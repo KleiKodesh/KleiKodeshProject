@@ -22,6 +22,10 @@ const searchBarRef = ref<InstanceType<typeof BookViewSearchBar> | null>(null)
 const bottomHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const sideHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
 const sideLeftHostRef = ref<InstanceType<typeof CommentaryPanelHost> | null>(null)
+// The TOC renders docked beside the text on a wide pane and as an overlay
+// otherwise — never both, so persistence reads whichever is live.
+const tocTreeDockedRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
+const tocTreeOverlayRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
 const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
 const paneId = inject<1 | 2>('paneId', 1)
@@ -44,7 +48,7 @@ const {
   activeTocEntryId, activeAltTocEntryId,
   tocVisible,
   sidePanelVisible, sidePanelToggleButtonEl,
-  panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState,
+  panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
   tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
   filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
@@ -77,6 +81,8 @@ const {
     side: () => sideHostRef.value?.view ?? null,
     'side-left': () => sideLeftHostRef.value?.view ?? null,
   },
+  // Only one of the two ever renders (docked on a wide pane, overlay otherwise).
+  () => tocTreeDockedRef.value ?? tocTreeOverlayRef.value ?? null,
 )
 
 // The side panels need a pane wide enough to sit beside the text. Rendering is
@@ -390,6 +396,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             @close="closeSidePanel"
           >
             <BookViewTocTree
+              ref="tocTreeDockedRef"
               :active-toc-entry-id="activeTocEntryId"
               :active-alt-toc-entry-id="activeAltTocEntryId"
               :toc-entries="tocEntries"
@@ -448,6 +455,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                     :selected-line-id="selectedLineId"
                     :commentary-visible="anyCommentaryVisible"
                     :commentary-persist-state="commentaryPersistState"
+                    :toc-persist-state="tocPersistState"
                     :initial-line-index="initialLineIndex"
                     :initial-scroll-index="initialScrollTop"
                     :initial-scroll-offset="initialScrollOffset"
@@ -538,6 +546,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
             @close="closeSidePanel"
           >
             <BookViewTocTree
+              ref="tocTreeOverlayRef"
               :active-toc-entry-id="activeTocEntryId"
               :active-alt-toc-entry-id="activeAltTocEntryId"
               :toc-entries="tocEntries"

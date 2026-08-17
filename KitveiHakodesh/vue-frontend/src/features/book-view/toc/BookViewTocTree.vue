@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import type { AltTocSection } from './useBookViewToc'
+import type { TocPersistState } from '../bookViewTypes'
 import type { TocEntry } from '@/webview-host/queries.types'
 import { SearchableTree } from './tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
@@ -20,6 +21,7 @@ const emit = defineEmits<{ select: [TocEntry]; altSelect: [TocEntry] }>()
 
 const searchRef = ref<HTMLInputElement | null>(null)
 const tocSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(null)
+const altSectionRef = ref<InstanceType<typeof BookViewTocTreeSection> | null>(null)
 const searchQuery = ref('')
 
 // Component mounts fresh each time the panel opens (v-if), so onMounted handles the
@@ -50,6 +52,56 @@ watch(searchQuery, (q) => {
     section.searchTree = new SearchableTree(section.entries)
   }
 })
+
+// ── Persistence ─────────────────────────────────────────────────────────────
+// This whole subtree is v-if'd away when the panel closes and rebuilt on every
+// tab switch, so none of the state below survives on its own. The book view
+// snapshots it on save and hands it back through restoreState on mount.
+
+function snapshotState(): Omit<TocPersistState, 'visible' | 'altStructureId'> {
+  return {
+    searchQuery: searchQuery.value,
+    expanded: tocSectionRef.value?.getExpanded() ?? [],
+    altExpanded: altSectionRef.value?.getExpanded() ?? [],
+    scrollTop: tocSectionRef.value?.containerRef()?.scrollTop ?? 0,
+    altScrollTop: altSectionRef.value?.containerRef()?.scrollTop ?? 0,
+  }
+}
+
+function applyState(saved: TocPersistState) {
+  if (saved.searchQuery) searchQuery.value = saved.searchQuery
+  // Expanded state must land before the scroll: expanding rows changes the
+  // scroll height, so restoring the offset first would clamp it to the
+  // collapsed tree's height and land the reader in the wrong place.
+  if (saved.expanded?.length) tocSectionRef.value?.setExpanded(saved.expanded)
+  if (saved.altExpanded?.length) altSectionRef.value?.setExpanded(saved.altExpanded)
+  nextTick(() => {
+    const toc = tocSectionRef.value?.containerRef()
+    if (toc && saved.scrollTop != null) toc.scrollTop = saved.scrollTop
+    const alt = altSectionRef.value?.containerRef()
+    if (alt && saved.altScrollTop != null) alt.scrollTop = saved.altScrollTop
+  })
+}
+
+function restoreState(saved: TocPersistState | undefined) {
+  if (!saved) return
+  // The sections only exist once the TOC has loaded — restoring into nothing
+  // would silently drop the state, so wait for the load when one is in flight.
+  if (props.loading) {
+    const stop = watch(
+      () => props.loading,
+      (busy) => {
+        if (busy) return
+        stop()
+        nextTick(() => applyState(saved))
+      },
+    )
+    return
+  }
+  applyState(saved)
+}
+
+defineExpose({ snapshotState, restoreState })
 </script>
 
 <template>
@@ -72,6 +124,7 @@ watch(searchQuery, (q) => {
         </template>
         <template #bottom>
           <BookViewTocTreeSection
+            ref="altSectionRef"
             v-if="selectedAltTocSection"
             :key="selectedAltTocSection.structure.id"
             :title="null"

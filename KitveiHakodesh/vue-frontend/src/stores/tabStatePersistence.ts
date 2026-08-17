@@ -36,6 +36,8 @@ export interface BookState {
   autoSelectTopLine?: boolean
   /** Both commentary panels' saved place, keyed by slot. */
   commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
+  /** The TOC side panel, which survives tab switches the same way the panels do. */
+  toc?: import('@/features/book-view/bookViewTypes').TocPersistState
 }
 
 /**

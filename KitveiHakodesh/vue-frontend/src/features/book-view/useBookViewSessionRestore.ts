@@ -13,7 +13,7 @@
  * Also exposes the initial scroll refs that BookViewLinesContent needs before the
  * IDB read completes.
  */
-import { ref } from 'vue'
+import { nextTick, ref } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -25,6 +25,7 @@ import type {
   CommentarySlot,
   CommentaryTreeState,
   CommentaryTreeStatePersist,
+  TocPersistState,
   PinnedCommentaryGroup,
 } from './bookViewTypes'
 import {
@@ -44,6 +45,14 @@ export interface RestorableCommentaryPanel {
   restorePin: (group: PinnedCommentaryGroup) => void
 }
 
+/** What session restore needs in order to bring the TOC panel back. */
+export interface RestorableToc {
+  visible: Ref<boolean>
+  /** Applies the saved inner state to the tree component, once it exists. */
+  apply: (saved: TocPersistState) => void
+  restoreAltStructure: (id: number | null | undefined) => void
+}
+
 export function useBookViewSessionRestore(
   tabId: string,
   bookId: number | undefined,
@@ -51,6 +60,7 @@ export function useBookViewSessionRestore(
   panels: Record<CommentarySlot, RestorableCommentaryPanel>,
   selectedLineId: Ref<number | null>,
   commentaryLineId: Ref<number | null>,
+  toc?: RestorableToc,
 ) {
   const tabStore = useTabStore()
   const bookViewStore = useBookViewStore()
@@ -89,7 +99,11 @@ export function useBookViewSessionRestore(
     const useLastRead = settingsStore.resumeLastRead || bookSaved != null
     const restoredLineId = bookSaved?.selectedLineId ?? (useLastRead ? lastRead?.selectedLineId : undefined)
 
-    if (bookSaved?.zoom != null) bookViewStore.setLinesZoom(tabId, bookId!, bookSaved.zoom)
+    // Text zoom falls back to last-read like everything else — the commentary
+    // panels' zoom already travels inside commentaryPanels, so without the
+    // fallback reopening a book restored their zoom but reset the text's.
+    const restoredZoom = bookSaved?.zoom ?? (useLastRead ? lastRead?.zoom : undefined)
+    if (restoredZoom != null) bookViewStore.setLinesZoom(tabId, bookId!, restoredZoom)
     if (bookSaved?.autoSelectTopLine != null) {
       bookViewStore.autoSelectTopLine = bookSaved.autoSelectTopLine
     }
@@ -120,9 +134,27 @@ export function useBookViewSessionRestore(
 
       if (saved.filterState) _applyFilterState(panel, saved.filterState)
 
-      // Only reopen a panel that was actually open, and only when we also know
-      // which line to open it on.
-      if (restoredLineId != null && saved.visible) panel.visible.value = true
+      // Reopen a panel that was open, whether or not a line came back with it.
+      // It used to require a restored line, which silently dropped every panel
+      // for a reader who had opened one while scrolling without ever clicking a
+      // line. A panel with no line simply shows its empty state, and the
+      // hasCommentaries watcher in useBookViewCommentaryPanel closes it outright
+      // when the book has no commentary at all.
+      if (saved.visible) panel.visible.value = true
+    }
+
+    // The TOC panel. Unlike the commentary panels this does NOT wait on a restored
+    // line — the TOC is how a reader finds a line in the first place, so a book
+    // opened without one should still come back with the panel they left open.
+    const savedToc = bookSaved?.toc ?? (useLastRead ? lastRead?.toc : undefined)
+    if (savedToc && toc) {
+      toc.restoreAltStructure(savedToc.altStructureId)
+      if (savedToc.visible) {
+        toc.visible.value = true
+        // The tree only mounts once the panel is visible, so its inner state has
+        // to wait for that render.
+        nextTick(() => toc.apply(savedToc))
+      }
     }
 
     if (restoredLineId != null) {
