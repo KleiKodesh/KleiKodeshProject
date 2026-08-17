@@ -75,10 +75,6 @@ export function useAppTitleBarShortcuts(options: {
     'סביבות עבודה',
   ]
 
-  // Ctrl+Tab steps through the tab list; the title bar's prev/next buttons use the
-  // same pane.cycleTab, so keyboard and buttons can never disagree on the order.
-  const cycleTab = pane.cycleTab
-
   // Forward Ctrl+key shortcuts from child iframes (HTML/txt viewer) back into the
   // top-level keydown pipeline. Only pane 1 needs this — iframes only appear there.
   if (paneId === 1) {
@@ -108,10 +104,24 @@ export function useAppTitleBarShortcuts(options: {
       return false
     }
 
-    // Ctrl+Tab / Ctrl+Shift+Tab — one switch per physical press. Holding the combo
-    // must not machine-gun through tabs via auto-repeat: each hop cold-remounts a page.
+    // Ctrl+Tab / Ctrl+Shift+Tab.
+    //
+    // With a native strip, this opens the strip's tab-list dropdown as an Alt+Tab-style
+    // switcher: it stays up while Ctrl is held, each further Tab steps the highlight, and
+    // releasing Ctrl activates the highlighted tab. Nothing loads until release, so
+    // stepping past five tabs costs one remount instead of five.
+    //
+    // The page cannot drive that hold — the native popup takes OS focus as it opens, so no
+    // keyup ever arrives here. We hand the direction to C# and it owns the rest, including
+    // the repeat presses (which reach the focused popup, not this handler).
+    //
+    // Everywhere else there is exactly one tab by construction, so the same keys walk the
+    // tab's own history instead — the same thing the title bar's back/forward arrows do.
     if (e.code === 'Tab') {
-      if (!e.repeat) cycleTab(e.shiftKey ? -1 : 1)
+      if (e.repeat) return true
+      if (hasNativeChromeTabs) toggleChromeTabList(e.shiftKey ? -1 : 1)
+      else if (e.shiftKey) pane.goForward()
+      else pane.goBack()
       return true
     }
 
@@ -125,11 +135,13 @@ export function useAppTitleBarShortcuts(options: {
     }
 
     switch (e.code) {
+      // Closing is meaningless where there is only ever one tab — the store would just
+      // replace it with a fresh home tab, which reads as "my document vanished".
       case 'KeyW':
-        pane.closeTab(pane.activeTabId.value)
+        if (hasNativeChromeTabs) pane.closeTab(pane.activeTabId.value)
         return true
       case 'KeyX':
-        pane.closeAllTabs()
+        if (hasNativeChromeTabs) pane.closeAllTabs()
         return true
       case 'KeyB':
         if (isBookViewActive.value) bookViewStore.toggleToolbar(paneId)
@@ -153,12 +165,11 @@ export function useAppTitleBarShortcuts(options: {
         else if (isTxtViewActive.value) bookViewStore.txtViewToggleSearch(paneId)
         return true
       case 'KeyT':
-        // The native strip owns the tab list wherever it exists — Ctrl+T opens THAT
-        // dropdown, not the address bar's (which is Ctrl+E). Where there is no strip
-        // (VSTO task pane, dev browser) the address-bar dropdown is the only tab list
-        // there is, so it stands in.
+        // Ctrl+T is the tab list, and the native strip is the only thing that has one.
+        // It used to fall back to the address bar where no strip exists, from when that
+        // dropdown listed open tabs — it lists recent locations now, and Ctrl+E already
+        // opens it, so the fallback was just a second key for the same thing.
         if (hasNativeChromeTabs) toggleChromeTabList()
-        else options.toggleAddressBar()
         return true
       case 'KeyE':
         options.toggleAddressBar()

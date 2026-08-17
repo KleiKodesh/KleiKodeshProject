@@ -34,7 +34,11 @@ import {
   canGoForward as historyCanGoForward,
 } from './navHistory'
 import { useBookViewStore } from './bookViewStore'
-import { disposeLocalFileHost, navigatesDestinationsInPlace } from '@/webview-host/bridge'
+import {
+  disposeLocalFileHost,
+  navigatesDestinationsInPlace,
+  hasNativeChromeTabs,
+} from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 import {
@@ -175,8 +179,21 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = wsStore.activeId
     const saved = lsGet<PersistedTabList>(tabsListKey(wsId))
     if (saved && saved.tabs.length > 0) {
-      tabs.value = saved.tabs
-      activeTabId.value = saved.activeTabId
+      // Single-tab hosts (VSTO task pane, dev browser) paint no tab list, so restoring
+      // a multi-tab session there would bring back tabs the reader cannot see or reach.
+      // Keep the one they left off in. A session saved on the desktop app and later
+      // opened in the task pane hits exactly this.
+      const restored =
+        hasNativeChromeTabs
+          ? saved.tabs
+          : saved.tabs.filter((t) => t.id === saved.activeTabId).slice(0, 1)
+
+      tabs.value = restored.length > 0 ? restored : saved.tabs.slice(0, 1)
+      // Normally the saved active tab; only when it was dropped above (or was already
+      // missing from the list) does the survivor take over.
+      activeTabId.value = tabs.value.some((t) => t.id === saved.activeTabId)
+        ? saved.activeTabId
+        : tabs.value[0]!.id
       nextId = saved.nextId
       if (saved.accessOrder) {
         // Drop stamps for tabs that no longer exist (singletons were stripped on
@@ -585,8 +602,25 @@ export const useTabStore = defineStore('tabs', () => {
     )
   }
 
-  /** Open a new tab in pane 2, making it the active pane-2 tab. */
+  /**
+   * Open a new tab in pane 2, making it the active pane-2 tab.
+   *
+   * Mirrors openTab's single-tab rule: where there is no native strip (the dev browser
+   * still offers split view) pane 2 navigates its one tab in place rather than stacking
+   * up tabs it paints no list for. Pane 2's FIRST tab is still created here — that is
+   * ensurePane2HasTab opening the pane, not the reader opening a second document.
+   */
   function openPane2Tab(partial: Omit<Tab, 'id' | 'pane'>): Tab {
+    if (!hasNativeChromeTabs && pane2Tabs.value.length > 0) {
+      updatePane2ActiveTab({
+        tocPath: undefined,
+        openTocEntryId: undefined,
+        ...partial,
+        navNonce: nextNavNonce(),
+      })
+      return activeTabForPane(2)
+    }
+
     const tab: Tab = { id: String(++nextId), pane: 2, ...partial }
     tabs.value.push(tab)
     pane2ActiveTabId.value = tab.id
@@ -746,7 +780,30 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Tab lifecycle ─────────────────────────────────────────────────────────
 
+  /**
+   * Opens a tab and focuses it.
+   *
+   * Hosts without a native tab strip (VSTO task pane, dev browser) are single-tab by
+   * construction: they paint no tab list, so a second tab would be a document with no
+   * way back to it. There, this navigates the current tab instead of adding one. The
+   * nonce mirrors openBookTarget's in-place path — AppPageView keys on tabId:bookId,
+   * so re-opening the same book would otherwise not remount.
+   *
+   * This is the single funnel for new tabs, so gating here also covers the paths that
+   * do not go through a click: host push events (local files, host search) and session
+   * restore both land in one tab as a result.
+   */
   function openTab(partial: Omit<Tab, 'id'>) {
+    if (!hasNativeChromeTabs) {
+      updateActiveTab({
+        tocPath: undefined,
+        openTocEntryId: undefined,
+        ...partial,
+        navNonce: nextNavNonce(),
+      })
+      return activeTab.value
+    }
+
     const tab: Tab = { id: String(++nextId), ...partial }
     tabs.value.push(tab)
     activeTabId.value = tab.id

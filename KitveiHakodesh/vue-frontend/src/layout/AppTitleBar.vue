@@ -87,9 +87,9 @@ const navBtnRef = ref<HTMLElement | null>(null)
 const isBookViewActive = computed(() => activeTab.value?.route === '/book-view')
 const isTxtViewActive = computed(() => activeTab.value?.route === '/txt-view')
 
-// A click always enters search mode; the address-bar dropdown doubles as the
-// tab list (shown while the field is empty / has no results).
-const barTitleHint = 'לחץ לניווט מהיר ולרשימת הלשוניות (Ctrl+E)'
+// A click always enters search mode; the address-bar dropdown lists recent
+// locations (shown while the field is empty / has no results) — not open tabs.
+const barTitleHint = 'לחץ לניווט מהיר ולמקומות אחרונים (Ctrl+E)'
 
 const barTitle = computed(() => {
   const full = activeTab.value?.tocPath
@@ -112,8 +112,8 @@ const toolbarTitle = computed(() => {
 // ── Title-bar search (Explorer-style address bar) ─────────────────────────────
 // The title becomes an editable search field, reusing the home-page search.
 // A single click always enters search mode — the address bar's dropdown shows
-// the pane's tab list while the field is empty (or has no results), so it
-// replaces the old dedicated tab-list dropdown in every environment.
+// recent locations while the field is empty (or has no results). The open-tab
+// list is a separate thing entirely, and native-only (see the layout README).
 const searchMode = ref(false)
 
 function enterSearchMode() {
