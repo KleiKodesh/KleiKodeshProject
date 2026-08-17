@@ -118,7 +118,7 @@ interface CommentaryVisibilityItem {
 // isVisible = isChecked && isInSearchResults
 ```
 
-**`CommentaryTreeState`** — persisted filter panel state:
+**`CommentaryTreeState`** — live filter panel state:
 ```typescript
 interface CommentaryTreeState {
   searchQuery: string
@@ -126,6 +126,11 @@ interface CommentaryTreeState {
   visibilityList: CommentaryVisibilityItem[]
 }
 ```
+
+`CommentaryTreeStatePersist` is the saved form, identical but without `isChecked`
+on each item. That flag is a cache derived from the check-tree, which is saved
+separately as `checkState` (see `uncheckedCommentaryBooks.ts`); restore hydrates
+the tree and recomputes every flag from it.
 
 **`CommentaryBookEntry`** — intermediate build structure used inside `commentaryGroupBuilder.ts`:
 ```typescript

@@ -49,7 +49,7 @@ import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { CommentaryPanel } from './commentary/useCommentaryPanelSlot'
 import type {
-  CommentaryPanelPersistStates,
+  CommentaryPanelLiveStates,
   CommentaryPinSnapshot,
   CommentarySlot,
 } from './bookViewTypes'
@@ -521,8 +521,8 @@ export function useBookView(
    * owns the scroll-position save this rides along with). Plain objects only — the
    * values end up in IndexedDB, which cannot clone a reactive proxy.
    */
-  function commentaryPersistState(): CommentaryPanelPersistStates {
-    const result: CommentaryPanelPersistStates = {}
+  function commentaryPersistState(): CommentaryPanelLiveStates {
+    const result: CommentaryPanelLiveStates = {}
     for (const slot of COMMENTARY_SLOTS) {
       const panel = panels[slot]
       const pinned = panel.pinnedCommentaryGroup.value

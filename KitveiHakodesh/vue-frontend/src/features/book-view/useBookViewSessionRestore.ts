@@ -24,6 +24,7 @@ import type {
   CommentaryPanelPersistStates,
   CommentarySlot,
   CommentaryTreeState,
+  CommentaryTreeStatePersist,
   PinnedCommentaryGroup,
 } from './bookViewTypes'
 import {
@@ -143,7 +144,7 @@ export function useBookViewSessionRestore(
     return resolved
   }
 
-  function _applyFilterState(panel: RestorableCommentaryPanel, saved: CommentaryTreeState) {
+  function _applyFilterState(panel: RestorableCommentaryPanel, saved: CommentaryTreeStatePersist) {
     panel.treeState.searchQuery = saved.searchQuery
     panel.treeState.tokens = saved.tokens ?? []
     // isChecked is a cache derived from the check-tree, not a source of truth, so

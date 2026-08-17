@@ -124,6 +124,8 @@ Ctrl+Click (or Cmd+Click on Mac) a line to start a consecutive range selection, 
 
 Shared types for the book-view feature: `CommentarySlot`, `SearchMode` (`'content' | 'commentary-bottom' | 'commentary-side'`), `SidePanelMode`, `CommentaryVisibilityItem`, `CommentaryTreeState`, `CommentaryPinSnapshot`, and the persisted `CommentaryPanelPersistState(s)`.
 
+Live and stored forms are deliberately distinct: panels hand over `CommentaryPanelLiveState(s)` (whose `filterState` is the live reactive `CommentaryTreeState`), and the save path converts that to `CommentaryPanelPersistState(s)` with a `CommentaryTreeStatePersist` — the same thing minus the derived `isChecked`, which is recomputed on restore from the separately-stored `CommentaryCheckStateSnapshot`.
+
 ### Highlights
 
 Highlights are text ranges with a color applied to specific lines.
