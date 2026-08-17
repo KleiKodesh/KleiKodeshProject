@@ -91,7 +91,7 @@ namespace KitveiHakodeshLib
                         case "setTheme": HandleSetTheme(root, id); break;
                         case "tabsChanged": HandleTabsChanged(root, id); break;
                         case "tabIcons": HandleTabIcons(root, id); break;
-                        case "toggleChromeTabList": HandleToggleChromeTabList(id); break;
+                        case "toggleChromeTabList": HandleToggleChromeTabList(root, id); break;
                         default: _bridge.Reply(id, new { error = "Unknown action: " + action }); break;
                     }
                 }

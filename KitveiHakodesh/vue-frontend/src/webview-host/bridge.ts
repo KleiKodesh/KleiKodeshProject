@@ -723,10 +723,16 @@ export function notifyTabsChanged(snapshot: TabsSnapshot): void {
  * Works even when the strip is hidden (fullscreen, Ctrl+H): the mirror anchors the
  * popup to the tab-list button's position, which the strip keeps computing whether
  * or not it is painted. Fire-and-forget; a no-op wherever there is no native strip.
+ *
+ * `quickSwitchStep` turns it into the Ctrl+Tab switcher: pass +1 (next) or -1
+ * (previous) and the popup opens in hold-to-scroll mode, staying up until Ctrl is
+ * released and only then activating the highlighted tab. The native popup takes OS
+ * focus the moment it shows, so the page never sees the matching keyup — the whole
+ * hold-and-release gesture is owned by the C# side, and this call is one-way.
  */
-export function toggleChromeTabList(): void {
+export function toggleChromeTabList(quickSwitchStep = 0): void {
   if (typeof window.__webviewAction !== 'function') return
-  action('toggleChromeTabList').catch(() => {})
+  action('toggleChromeTabList', { quickSwitchStep }).catch(() => {})
 }
 
 /**

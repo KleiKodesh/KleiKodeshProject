@@ -29,6 +29,23 @@ namespace KitveiHakodeshLib
         public string Title { get; set; }
     }
 
+    /// <summary>
+    /// A Vue request to open the native tab-list dropdown, via the 'toggleChromeTabList' action.
+    /// </summary>
+    public class ChromeTabListToggleEventArgs : EventArgs
+    {
+        public ChromeTabListToggleEventArgs(int quickSwitchStep)
+        {
+            QuickSwitchStep = quickSwitchStep;
+        }
+
+        /// <summary>
+        /// 0 for a plain Ctrl+T toggle. +1 / -1 when Ctrl+Tab (or Ctrl+Shift+Tab) asked for the
+        /// hold-to-scroll switcher, giving the direction to step in.
+        /// </summary>
+        public int QuickSwitchStep { get; }
+    }
+
     /// <summary>The rasterized favicon set from Vue, keyed by icon name.</summary>
     public class TabIconsChangedEventArgs : EventArgs
     {
@@ -115,8 +132,12 @@ namespace KitveiHakodeshLib
         /// Raised when Vue asks to toggle the native chrome tab-strip's tab-list dropdown
         /// (Ctrl+T in the standalone/demo app). ChromeTabsMirror handles it by calling
         /// <c>ShowTabListMenu</c> on the strip form; it must work even in fullscreen.
+        ///
+        /// A non-zero <see cref="ChromeTabListToggleEventArgs.QuickSwitchStep" /> means the
+        /// request came from Ctrl+Tab rather than Ctrl+T, and the dropdown should open as a
+        /// hold-to-scroll switcher stepping in that direction.
         /// </summary>
-        public event EventHandler ChromeTabListToggleRequested;
+        public event EventHandler<ChromeTabListToggleEventArgs> ChromeTabListToggleRequested;
 
         private void HandleTabsChanged(JsonElement root, string id)
         {
@@ -219,13 +240,20 @@ namespace KitveiHakodeshLib
                 TabIconsChanged?.Invoke(this, new TabIconsChangedEventArgs(icons));
         }
 
-        private void HandleToggleChromeTabList(string id)
+        private void HandleToggleChromeTabList(JsonElement root, string id)
         {
             _bridge.Reply(id, new { });
+
+            // Absent (plain Ctrl+T) means a plain toggle; ±1 opens the quick switcher.
+            int step = root.TryGetProperty("quickSwitchStep", out var s) && s.TryGetInt32(out int parsed)
+                ? parsed
+                : 0;
+
+            var args = new ChromeTabListToggleEventArgs(step);
             if (InvokeRequired)
-                Invoke(new Action(() => ChromeTabListToggleRequested?.Invoke(this, EventArgs.Empty)));
+                Invoke(new Action(() => ChromeTabListToggleRequested?.Invoke(this, args)));
             else
-                ChromeTabListToggleRequested?.Invoke(this, EventArgs.Empty);
+                ChromeTabListToggleRequested?.Invoke(this, args);
         }
 
         /// <summary>Forwards a native tab-strip selection to Vue.</summary>

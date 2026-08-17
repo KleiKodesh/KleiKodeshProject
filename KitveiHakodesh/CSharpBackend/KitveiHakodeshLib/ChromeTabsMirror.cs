@@ -142,32 +142,33 @@ namespace KitveiHakodeshLib
             e.Sections.Add(recent);
         }
 
-        // ── Vue Ctrl+T → open the strip's tab-list dropdown ─────────────────────────
+        // ── Vue Ctrl+T / Ctrl+Tab → open the strip's tab-list dropdown ──────────────
 
-        private void OnChromeTabListToggleRequested(object sender, EventArgs e)
+        private void OnChromeTabListToggleRequested(object sender, ChromeTabListToggleEventArgs e)
         {
             if (_form.IsDisposed) return;
+            int step = e?.QuickSwitchStep ?? 0;
             if (_form.InvokeRequired)
             {
-                _form.BeginInvoke(new Action(ToggleTabListMenu));
+                _form.BeginInvoke(new Action(() => ToggleTabListMenu(step)));
                 return;
             }
-            ToggleTabListMenu();
+            ToggleTabListMenu(step);
         }
 
-        private void ToggleTabListMenu()
+        private void ToggleTabListMenu(int quickSwitchStep)
         {
             if (_form.IsDisposed) return;
 
             // Group 0 is the normal (non-split) region; when split, the focused pane's
             // region owns the visible active tab, so target the region of the selected tab.
-            int group = _form.SplitStrip && _form.SelectedTab != null ? _form.SelectedTab.Group : 0;
+            int group = _form.SelectedTabGroup;
 
             // Works whether or not the strip is painted: ShowTabListMenu anchors to the
             // tab-list button's rect, which the strip keeps computing from StripHeight
             // regardless of StripVisible. So a hidden strip (fullscreen, Ctrl+H) still
             // drops the popup exactly where a visible one would — no reveal, no flash.
-            _form.ShowTabListMenu(group);
+            _form.ShowTabListMenu(group, quickSwitchStep);
         }
 
         // ── Vue snapshots → strip ───────────────────────────────────────────────────
