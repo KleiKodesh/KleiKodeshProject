@@ -177,22 +177,13 @@ export function useBookViewSessionRestore(
   }
 
   function _applyFilterState(panel: RestorableCommentaryPanel, saved: CommentaryTreeStatePersist) {
+    // Only the reader's own input is restored. The visibility list itself is NOT:
+    // syncVisibilityList rebuilds it from the live commentary groups as soon as they
+    // load, and which entries are ticked comes from the check-tree hydrated from
+    // `checkState` above — so seeding the list here buys nothing and costs a flash of
+    // rows the restored data cannot fully describe (it has no book titles).
     panel.treeState.searchQuery = saved.searchQuery
     panel.treeState.tokens = saved.tokens ?? []
-    // isChecked is a cache derived from the check-tree, not a source of truth, so
-    // it is re-derived rather than read back from the saved list. The tree itself
-    // was just hydrated from `checkState` above, so this now reproduces the ticks
-    // the reader left — and it also covers books this line has that the saved list
-    // never did.
-    panel.treeState.visibilityList = saved.visibilityList.map((item) => ({
-      ...item,
-      isChecked: !isCommentaryBookUnchecked(
-        panel.scopeKey,
-        item.sectionLabel,
-        item.subSectionLabel,
-        item.bookId,
-      ),
-    }))
   }
 
   function _seedPanel(slot: CommentarySlot, saved: CommentaryPanelPersistState) {
