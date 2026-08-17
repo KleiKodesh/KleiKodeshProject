@@ -97,10 +97,24 @@ const submenuFlipped = ref(false)
 // padding (see .context-menu-item) negated.
 const SUBMENU_TOP_OFFSET = -2
 const submenuTopPx = ref(SUBMENU_TOP_OFFSET)
-const submenuStyle = computed(() => ({ top: `${submenuTopPx.value}px` }))
+// Last-resort horizontal nudge, applied only when NEITHER side fits (a window
+// narrower than parent menu + submenu). Left as null the panel stays purely
+// side-anchored, which is what keeps it glued to the parent row while resizing.
+const submenuShiftPx = ref<number | null>(null)
+const VIEWPORT_MARGIN = 4
+const submenuStyle = computed(() => {
+  const style: Record<string, string> = { top: `${submenuTopPx.value}px` }
+  if (submenuShiftPx.value !== null) style.transform = `translateX(${submenuShiftPx.value}px)`
+  return style
+})
 
 function closeSubmenu(): void {
   openSubmenuIndex.value = null
+}
+
+// Does this rect sit fully inside the viewport's horizontal safe area?
+function fitsHorizontally(rect: DOMRect): boolean {
+  return rect.left >= VIEWPORT_MARGIN && rect.right <= window.innerWidth - VIEWPORT_MARGIN
 }
 
 async function openSubmenu(index: number): Promise<void> {
@@ -108,17 +122,54 @@ async function openSubmenu(index: number): Promise<void> {
   openSubmenuIndex.value = index
   submenuFlipped.value = false
   submenuTopPx.value = SUBMENU_TOP_OFFSET
+  submenuShiftPx.value = null
   await nextTick()
   if (!submenuElement.value) return
+
+  // Horizontal: try the natural side, then the flipped side, and only if NEITHER
+  // fits keep whichever overflows less and clamp it into the viewport. Without the
+  // second measurement a flip that also overflows was kept blindly, pushing the
+  // panel off the opposite edge in a narrow window.
   let rect = submenuElement.value.getBoundingClientRect()
-  if (rect.left < 4 || rect.right > window.innerWidth - 4) {
+  if (!fitsHorizontally(rect)) {
+    const naturalRect = rect
     submenuFlipped.value = true
     await nextTick()
     rect = submenuElement.value.getBoundingClientRect()
+    if (!fitsHorizontally(rect)) {
+      if (overflowOf(naturalRect) <= overflowOf(rect)) {
+        submenuFlipped.value = false
+        await nextTick()
+        rect = submenuElement.value.getBoundingClientRect()
+      }
+      submenuShiftPx.value = clampShiftFor(rect)
+      await nextTick()
+      rect = submenuElement.value.getBoundingClientRect()
+    }
   }
-  if (rect.bottom > window.innerHeight - 4) {
-    submenuTopPx.value = SUBMENU_TOP_OFFSET - (rect.bottom - (window.innerHeight - 4))
+
+  // Vertical: lift the panel so its bottom clears the viewport, then guard the top
+  // edge too — a submenu taller than the viewport would otherwise be lifted off it.
+  if (rect.bottom > window.innerHeight - VIEWPORT_MARGIN) {
+    submenuTopPx.value -= rect.bottom - (window.innerHeight - VIEWPORT_MARGIN)
+    await nextTick()
+    rect = submenuElement.value.getBoundingClientRect()
   }
+  if (rect.top < VIEWPORT_MARGIN) submenuTopPx.value += VIEWPORT_MARGIN - rect.top
+}
+
+// How far this rect spills past the viewport's horizontal safe area, in px.
+function overflowOf(rect: DOMRect): number {
+  return Math.max(0, VIEWPORT_MARGIN - rect.left) + Math.max(0, rect.right - (window.innerWidth - VIEWPORT_MARGIN))
+}
+
+// Horizontal translation that pulls `rect` back inside the viewport. The right-edge
+// correction is applied first and the left-edge one second, so when the panel is
+// wider than the viewport the left edge wins and its first column stays readable.
+function clampShiftFor(rect: DOMRect): number {
+  let shift = Math.min(0, window.innerWidth - VIEWPORT_MARGIN - rect.right)
+  shift += Math.max(0, VIEWPORT_MARGIN - (rect.left + shift))
+  return shift
 }
 
 async function show(event: MouseEvent) {
