@@ -74,13 +74,43 @@ function applyState(saved: TocPersistState) {
   // scroll height, so restoring the offset first would clamp it to the
   // collapsed tree's height and land the reader in the wrong place.
   if (saved.expanded?.length) tocSectionRef.value?.setExpanded(saved.expanded)
-  if (saved.altExpanded?.length) altSectionRef.value?.setExpanded(saved.altExpanded)
+  applyAltState(saved)
   nextTick(() => {
     const toc = tocSectionRef.value?.containerRef()
     if (toc && saved.scrollTop != null) toc.scrollTop = saved.scrollTop
-    const alt = altSectionRef.value?.containerRef()
-    if (alt && saved.altScrollTop != null) alt.scrollTop = saved.altScrollTop
   })
+}
+
+/**
+ * The alternate-structure tree restores on its own schedule.
+ *
+ * Its section is keyed by `structure.id` and fed by a load separate from the main
+ * TOC's — with no `loading` flag of its own — so it can mount, or REMOUNT, well
+ * after applyState has run. Setting its expanded ids too early is silently thrown
+ * away with the old component instance, which is exactly what happened: the ids
+ * persisted correctly and the tree still came back collapsed.
+ */
+function applyAltState(saved: TocPersistState) {
+  const apply = () => {
+    if (saved.altExpanded?.length) altSectionRef.value?.setExpanded(saved.altExpanded)
+    nextTick(() => {
+      const alt = altSectionRef.value?.containerRef()
+      if (alt && saved.altScrollTop != null) alt.scrollTop = saved.altScrollTop
+    })
+  }
+  if (altSectionRef.value) apply()
+  // Re-apply on every (re)mount of the alt section until one sticks, then stop.
+  const stop = watch(
+    () => props.selectedAltTocSection?.structure.id,
+    (id) => {
+      if (id == null) return
+      nextTick(() => {
+        apply()
+        stop()
+      })
+    },
+    { flush: 'post' },
+  )
 }
 
 function restoreState(saved: TocPersistState | undefined) {
