@@ -659,6 +659,29 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
   color: var(--text-primary);
   text-align: justify;
 }
+/* Exact line spacing — see the long note in BookViewLinesContent.vue, including
+   why the attribute is matched via `html[...]` and never `:global()`. Same opt-in
+   attribute drives the commentary column, so the two panes stay in step. */
+html[data-fixed-line-height='true'] .line {
+  line-height: calc(var(--commentary-line-height, 1.7) * 1em);
+}
+html[data-fixed-line-height='true'] .line :deep(b),
+html[data-fixed-line-height='true'] .line :deep(strong),
+html[data-fixed-line-height='true'] .line :deep(i),
+html[data-fixed-line-height='true'] .line :deep(em),
+html[data-fixed-line-height='true'] .line :deep(big),
+html[data-fixed-line-height='true'] .line :deep(span),
+html[data-fixed-line-height='true'] .line :deep(a),
+html[data-fixed-line-height='true'] .line :deep(mark),
+html[data-fixed-line-height='true'] .line :deep(font) {
+  line-height: inherit;
+}
+/* The commentary column renders the same superscript markers as the lines view,
+   so they need the same zero-height box here. */
+html[data-fixed-line-height='true'] .line :deep(.user-note-marker),
+html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
+  line-height: 1;
+}
 .line :deep(h1),
 .line :deep(h2),
 .line :deep(h3),
