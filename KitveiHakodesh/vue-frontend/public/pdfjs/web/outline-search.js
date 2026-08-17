@@ -1111,6 +1111,11 @@
     var outlineDirty = false;
     var renaming = false;
     var renamingAnchor = null; // the contentEditable anchor while renaming
+    // Set while the panel is being dismissed, so a rename committed on the way
+    // out does not call input.focus() — the input lives INSIDE the panel, and
+    // focusing it would move focus into a subtree that is about to be hidden
+    // (and would steal the caret from whatever the user just clicked).
+    var closingPanel = false;
     // True when PDF.js's own _finishRendering bound the container's toggler
     // click listener (it only does so when the outline rendered WITH nesting).
     // When it did not — flat or empty original outline — togglers created by
@@ -1512,7 +1517,14 @@
         if (committed !== original) {
           afterEdit();
         }
-        input.focus({ preventScroll: true });
+        // Returning the caret to the query box is right for every in-panel way a
+        // rename ends (Enter, Escape, clicking another row) — but NOT when the
+        // panel itself is closing: the input is inside it, so this would move
+        // focus into a subtree about to be hidden and steal the caret from
+        // whatever the user clicked to dismiss it.
+        if (!closingPanel) {
+          input.focus({ preventScroll: true });
+        }
       }
       function onKey(e) {
         if (e.key === 'Enter') {
@@ -2430,9 +2442,32 @@
         return overlayModeQuery.matches;
       }
 
+      /**
+       * Dismiss the panel, committing an in-progress rename on the way out.
+       *
+       * `closingPanel` suppresses finish()'s focus-reclaim for the duration —
+       * that reclaim targets the query input, which lives INSIDE the panel, so
+       * without this the rename would pull focus into a subtree being hidden and
+       * steal the caret from whatever the user just clicked. The flag is cleared
+       * in a finally so an exception cannot leave renames permanently unable to
+       * restore focus.
+       */
       function closeSidebar() {
-        if (sidebarIsOpen()) {
+        if (!sidebarIsOpen()) {
+          return;
+        }
+        closingPanel = true;
+        try {
+          // Commit first: clicking away is a deliberate "I'm done here", so it
+          // should do what clicking away from the anchor alone does. Forced
+          // explicitly because this runs on pointerdown (capture), BEFORE the
+          // browser's own blur would fire.
+          if (renaming && renamingAnchor) {
+            renamingAnchor.blur(); // fires onBlur -> finish(true)
+          }
           app.viewsManager.close();
+        } finally {
+          closingPanel = false;
         }
       }
 
@@ -2460,18 +2495,7 @@
           if (target.closest && target.closest('#outlineContextMenu, #outlineRowMenuButton')) {
             return;
           }
-          // An in-progress rename commits FIRST, then the panel closes — clicking
-          // away is a deliberate "I'm done here", so it should do what clicking
-          // away from the anchor alone does (commit) and then dismiss.
-          //
-          // It has to be committed explicitly rather than left to the anchor's own
-          // blur handler. This listener is on `pointerdown` (capture), which runs
-          // BEFORE the blur, and `finish()` ends by calling `input.focus()` — which
-          // pulls focus back INTO the panel we are about to close. Committing here
-          // makes the order deterministic: text saved, focus settled, then close.
-          if (renaming && renamingAnchor) {
-            renamingAnchor.blur(); // fires onBlur → finish(true)
-          }
+          // An in-progress rename is committed by closeSidebar() on the way out.
           closeSidebar();
         },
         true,
@@ -2489,11 +2513,8 @@
           var movedIntoFrame =
             active instanceof HTMLIFrameElement || active instanceof HTMLObjectElement;
           if (!document.hasFocus() || movedIntoFrame) {
-            // As with the outside click: commit an in-progress rename before
-            // dismissing. Losing the window mid-rename must not discard the text.
-            if (renaming && renamingAnchor) {
-              renamingAnchor.blur();
-            }
+            // closeSidebar() commits an in-progress rename, so losing the window
+            // mid-rename cannot discard the text.
             closeSidebar();
           }
         }, 0);
