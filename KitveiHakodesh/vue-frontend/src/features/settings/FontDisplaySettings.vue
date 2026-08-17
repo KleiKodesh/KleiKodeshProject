@@ -65,7 +65,7 @@ function onTextToggle() {
     />
     <FontSelectorCmp
       ref="textFontRef"
-      label="גופן טקסט"
+      label="גופן גוף הטקסט"
       hint="הגופן שישמש לגוף הטקסט של הספר"
       :model-value="textFont"
       font-type="serif"
@@ -93,8 +93,8 @@ function onTextToggle() {
     />
     <SettingRow
       v-if="showFixedLineHeight"
-      label="מרווח בין שורות"
-      hint="מרווח מדוייק שומר על ריווח זהה בין כל השורות, גם כשיש מילה גדולה באמצע השורה. שים לב: מילה גדולה במיוחד עלולה לחפוף לשורה שמעליה"
+      label="אופן חישוב הריווח"
+      hint="'מדוייק' שומר על ריווח זהה בין כל השורות, גם כשיש מילה גדולה באמצע השורה. שים לב: מילה גדולה במיוחד עלולה לחפוף לשורה שמעליה"
     >
       <ToggleGroup
         :model-value="fixedLineHeight"

@@ -260,22 +260,17 @@ async function navigateToSection(sectionId: string) {
   scroll-margin-top: 64px;
 }
 
+/* One heading level, one rule: the card header underline. A group of settings
+   that needs its own heading gets its own card instead of a heading nested
+   inside one — so no two rules can ever meet. */
 .section-label {
   font-size: 15px;
   font-weight: 600;
   color: var(--text-primary);
-  padding: 14px 0;
-  scroll-margin-top: 56px;
-}
-
-.subsection-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 4px 0;
-  margin-top: 16px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid color-mix(in srgb, var(--border-color) 60%, transparent);
+  padding-top: 14px;
+  padding-bottom: 10px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
   scroll-margin-top: 56px;
 }
 
@@ -283,20 +278,18 @@ async function navigateToSection(sectionId: string) {
   display: none !important;
 }
 
-/* ── Row-style settings (Edge-like): hairline divider between rows instead
-   of separate boxes. Control keeps its original full-width line below the
-   label — untouched button-group layout — so ToggleGroup's grid always gets
-   the same available width it always had. ── */
+/* ── Row-style settings: rows are separated by spacing alone. The label sits
+   above its control on its own line, and the gap between rows is wider than
+   the gap inside one — that pairing is what groups them, so no borders. ── */
 [data-section] .setting-row-item {
-  margin-bottom: 0;
-  padding: 12px 0;
-  border-top: 1px solid var(--border-color);
+  margin-bottom: 28px;
+  padding: 0;
 }
 
-[data-section] .setting-row-item:first-of-type {
-  border-top: none;
-}
-
+/* Each row component ships its own default label type (see SettingRow.vue et
+   al) so it renders correctly outside this page — e.g. in the setup wizard,
+   which mounts from App.vue with no [data-section] ancestor. Here we override
+   it for the settings page's larger row style. */
 [data-section] .setting-row-item .setting-label {
   font-size: 13.5px;
   color: var(--text-primary);
