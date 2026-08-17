@@ -40,7 +40,7 @@ Build/Installer/
 ├── App.xaml / .cs                — Entry point; assembly resolver; CLI arg handling
 ├── MainWindow.xaml / .cs         — Shell window; page navigation methods
 ├── KleiKodesh.zip                — Embedded VSTO package (built by pre-build target)
-├── UpdateVersion.ps1             — Bumps Version constant + csproj <Version>
+├── UpdateVersion.ps1             — Bumps Version constant + csproj <Version> + DemoApp AssemblyInfo.cs
 ├── Helpers/
 │   ├── AddinInstaller.cs              — Extract, register, whitelist, version; holds Version const
 │   ├── AdminHelper.cs                 — UAC elevation & re-launch

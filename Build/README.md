@@ -59,7 +59,7 @@ build-menu.bat  ──┐
                   ├─→ build-menu.ps1 (prompts user: version, notes source, confirm)
                   │
                   └─→ build-installer.ps1 -VersionIncrement patch -ReleaseNotesSource commits
-                      ├─ UpdateVersion.ps1 (bumps AddinInstaller.cs + csproj)
+                      ├─ UpdateVersion.ps1 (bumps AddinInstaller.cs + csproj + DemoApp AssemblyInfo.cs)
                       ├─ dotnet build WPF installer -p:InstallerVariant=AnyCPU -p:VstoPlatform=AnyCPU
                       │  └─ Pre-build target: MSBuild KleiKodeshVsto (AnyCPU), zip → KleiKodesh.zip → embed as resource
                       ├─ makensis /DPRODUCT_VERSION=vX.Y.Z /DWPF_EXE_PATH=...

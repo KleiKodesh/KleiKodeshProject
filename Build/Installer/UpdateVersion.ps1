@@ -9,6 +9,16 @@ param(
 # Derive sibling paths from $FilePath (which points to AddinInstaller.cs)
 $projectDir   = Split-Path -Parent (Split-Path -Parent $FilePath)   # Build/Installer/
 $csprojPath   = Join-Path $projectDir "KleiKodeshVstoInstallerWpf.csproj"
+$repoRoot     = Split-Path -Parent (Split-Path -Parent $projectDir) # repo root
+# The KitveiHakodesh app exe. Old-style csproj, so its version lives in
+# AssemblyInfo.cs, not the csproj — which is why it was missed and read 1.0.0.0 on
+# every release until this was added.
+# It MUST be stamped: the install points the Start Menu shortcut and the HKCU shell
+# "open with" command at this exe (AddinInstaller.CreateKitveiHakodeshShortcut,
+# ShellRegistrationHelper), so it is the exe a third-party updater finds and reads a
+# PE version from to decide whether an update is needed. A frozen 1.0.0.0 wedges
+# those updaters permanently.
+$demoAppAssemblyInfo = Join-Path $repoRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\Properties\AssemblyInfo.cs"
 
 function Update-AllVersionTargets($newVersion) {
     # Strip leading 'v' for numeric-only contexts (csproj <Version>)
@@ -43,6 +53,29 @@ function Update-AllVersionTargets($newVersion) {
         Write-Host "  [OK] KleiKodeshVstoInstallerWpf.csproj -> $numericVersion"
     } else {
         Write-Host "  [SKIP] csproj not found at $csprojPath"
+    }
+
+    # 3. KitveiHakodeshDemoApp AssemblyInfo.cs — Assembly[File]Version("X.Y.Z.0")
+    # AssemblyVersion is the strong-name identity; keeping it in lockstep is safe here
+    # because nothing binds to this exe by version (it is an application, not a library).
+    if (Test-Path $demoAppAssemblyInfo) {
+        # This file is UTF-8 WITH BOM, unlike the two above. The BOM must survive the
+        # rewrite: it is an old-style csproj, so without a BOM the C# compiler reads the
+        # Hebrew AssemblyTitle/AssemblyProduct literals as ANSI and mangles them.
+        $encUtf8Bom = New-Object System.Text.UTF8Encoding($true)
+        $peVersion = "$numericVersion.0"   # AssemblyVersion requires four numeric parts
+        $info = [System.IO.File]::ReadAllText($demoAppAssemblyInfo, $encUtf8Bom)
+        $updated = $info `
+            -replace '(\[assembly:\s*AssemblyVersion\(")[^"]*("\)\])',     "`${1}$peVersion`${2}" `
+            -replace '(\[assembly:\s*AssemblyFileVersion\(")[^"]*("\)\])', "`${1}$peVersion`${2}"
+        if ($updated -ne $info) {
+            [System.IO.File]::WriteAllText($demoAppAssemblyInfo, $updated, $encUtf8Bom)
+            Write-Host "  [OK] KitveiHakodeshDemoApp AssemblyInfo.cs -> $peVersion"
+        } else {
+            Write-Host "  [OK] KitveiHakodeshDemoApp AssemblyInfo.cs -> $peVersion (already current)"
+        }
+    } else {
+        Write-Host "  [WARN] DemoApp AssemblyInfo.cs not found at $demoAppAssemblyInfo"
     }
 }
 
