@@ -2390,6 +2390,115 @@
         updateVisibility(); // handles autofocus on the hidden→visible transition
       });
 
+      // ── Dismiss on outside click / window blur ──────────────────────────────
+      // Port of the Vue app's `useDropdownClose` (src/composables/useDropdownClose.ts),
+      // which closes BookView's TOC side panel. Stock PDF.js never dismisses this
+      // panel — `Sidebar` binds the toggle button's click and nothing else — so it
+      // stays open until explicitly toggled, unlike every other panel in the app.
+      //
+      // Like BookView, this applies ONLY when the panel FLOATS OVER the page, never
+      // when it sits side by side with it. Both apps have the two modes:
+      //
+      //   BookView  — `sidePanelIsOverlay` (shell width < 520px) picks the overlay
+      //               component; BookViewSidePanel.vue guards the close with it.
+      //   PDF.js    — viewer.css: above 840px `#viewerContainer` is pushed by
+      //               `--viewsManager-width` (side by side); at ≤840px the
+      //               `inset-inline-start: 0 !important` override stops the push,
+      //               so the panel overlaps the page.
+      //
+      // Side by side, the panel takes no space from the content and dismissing it
+      // on any stray click in the page would be hostile — that is a docked column,
+      // not a popover. The media query is the single source of truth for which mode
+      // is live, so it is queried rather than duplicated as a JS constant.
+      //
+      // `pointerdown` (not `click`) matches useDropdownClose's underlying
+      // onClickOutside, and fires before a click can act on whatever was hit.
+      var sidebarEl = document.getElementById('viewsManager');
+      var toggleButtonEl = document.getElementById('viewsManagerToggleButton');
+      var overlayModeQuery = window.matchMedia('(max-width: 840px)');
+
+      // `app.viewsManager` — the ViewsManager instance (viewer.mjs assigns it in
+      // `_initializeViewerComponents`). NOT `app.pdfSidebar`: that was the name in
+      // older PDF.js, and it does not exist in this build, so calls on it would
+      // silently no-op.
+      function sidebarIsOpen() {
+        return !!(app.viewsManager && app.viewsManager.isOpen);
+      }
+
+      /** True only while the panel floats OVER the page (see the note above). */
+      function sidebarIsOverlay() {
+        return overlayModeQuery.matches;
+      }
+
+      function closeSidebar() {
+        if (sidebarIsOpen()) {
+          app.viewsManager.close();
+        }
+      }
+
+      document.addEventListener(
+        'pointerdown',
+        function (e) {
+          if (!sidebarIsOpen() || !sidebarIsOverlay() || !sidebarEl) {
+            return;
+          }
+          var target = e.target;
+          if (!target || !target.nodeType) {
+            return;
+          }
+          if (sidebarEl.contains(target)) {
+            return;
+          }
+          // The toggle button closes the panel through its own click handler.
+          // Closing here too would let that click immediately REOPEN it — the
+          // toggle-button race useDropdownClose guards with `justClosed`.
+          if (toggleButtonEl && toggleButtonEl.contains(target)) {
+            return;
+          }
+          // Editor UI this panel owns is rendered on document.body, outside the
+          // sidebar subtree — a click there is not "outside".
+          if (target.closest && target.closest('#outlineContextMenu, #outlineRowMenuButton')) {
+            return;
+          }
+          // An in-progress rename commits FIRST, then the panel closes — clicking
+          // away is a deliberate "I'm done here", so it should do what clicking
+          // away from the anchor alone does (commit) and then dismiss.
+          //
+          // It has to be committed explicitly rather than left to the anchor's own
+          // blur handler. This listener is on `pointerdown` (capture), which runs
+          // BEFORE the blur, and `finish()` ends by calling `input.focus()` — which
+          // pulls focus back INTO the panel we are about to close. Committing here
+          // makes the order deterministic: text saved, focus settled, then close.
+          if (renaming && renamingAnchor) {
+            renamingAnchor.blur(); // fires onBlur → finish(true)
+          }
+          closeSidebar();
+        },
+        true,
+      );
+
+      // Focus leaving the window (switching apps, or into another WebView frame)
+      // dismisses too, matching useDropdownClose's closeOnBlur. The timeout lets
+      // document.activeElement settle first, exactly as the Vue version does.
+      window.addEventListener('blur', function () {
+        setTimeout(function () {
+          if (!sidebarIsOpen() || !sidebarIsOverlay()) {
+            return;
+          }
+          var active = document.activeElement;
+          var movedIntoFrame =
+            active instanceof HTMLIFrameElement || active instanceof HTMLObjectElement;
+          if (!document.hasFocus() || movedIntoFrame) {
+            // As with the outside click: commit an in-progress rename before
+            // dismissing. Losing the window mid-rename must not discard the text.
+            if (renaming && renamingAnchor) {
+              renamingAnchor.blur();
+            }
+            closeSidebar();
+          }
+        }, 0);
+      });
+
       // The outline tree is rebuilt on every document load; drop the stale
       // index and reset the editor. Bound to 'documentinit' — NOT
       // 'documentloaded', which only fires after getDownloadInfo() resolves,
