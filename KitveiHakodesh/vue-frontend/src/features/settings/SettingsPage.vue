@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, nextTick, onMounted } from 'vue'
+import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { getSettingsScrollTop, setSettingsScrollTop } from './settingsScrollMemory'
 import { useSettingsSearch } from './useSettingsSearch'
 import SettingsPageSideNav from './SettingsPageSideNav.vue'
 import SettingsPageThemeAndApplicationSection from './SettingsPageThemeAndApplicationSection.vue'
@@ -30,10 +32,27 @@ const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value 
   toggleButton: navToggleRef,
 })
 
+// ── Scroll position (this session only) ──────────────────────────────────────
+// The settings VALUES live in the settings store, so a tab switch loses nothing but
+// the scroll position — this puts that back. Storing to a module variable needs no
+// debounce the way an IndexedDB write would.
+
+useEventListener(scrollContainerRef, 'scroll', () => {
+  const el = scrollContainerRef.value
+  if (el) setSettingsScrollTop(el.scrollTop)
+})
+
 onMounted(() => {
   nextTick(() => {
     navEntries.value = getSectionNavEntries()
     sideNavEntries.value = getSectionNavEntries()
+
+    // After the nav entries render, so the sections have their final height and the
+    // target offset is reachable — restoring before layout settles would clamp a
+    // deep position to whatever the page measured at the time.
+    const saved = getSettingsScrollTop()
+    const el = scrollContainerRef.value
+    if (saved > 0 && el) el.scrollTop = saved
   })
 })
 
