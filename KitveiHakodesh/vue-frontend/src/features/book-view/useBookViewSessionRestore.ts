@@ -26,7 +26,11 @@ import type {
   CommentaryTreeState,
   PinnedCommentaryGroup,
 } from './bookViewTypes'
-import { isCommentaryBookUnchecked } from './commentary/uncheckedCommentaryBooks'
+import {
+  hasCommentaryCheckState,
+  hydrateCommentaryCheckState,
+  isCommentaryBookUnchecked,
+} from './commentary/uncheckedCommentaryBooks'
 
 /** The slice of a commentary panel that session restore writes into. */
 export interface RestorableCommentaryPanel {
@@ -105,6 +109,14 @@ export function useBookViewSessionRestore(
       if (!saved) continue
       const panel = panels[slot]
 
+      // Check-tree first: _applyFilterState derives every isChecked from it.
+      // Skipped when the scope already has live state — the reader has been in
+      // this panel during this session (a tab switch remounts the view), and
+      // their current ticks outrank the last save.
+      if (!hasCommentaryCheckState(panel.scopeKey)) {
+        hydrateCommentaryCheckState(panel.scopeKey, saved.checkState)
+      }
+
       if (saved.filterState) _applyFilterState(panel, saved.filterState)
 
       // Only reopen a panel that was actually open, and only when we also know
@@ -134,9 +146,11 @@ export function useBookViewSessionRestore(
   function _applyFilterState(panel: RestorableCommentaryPanel, saved: CommentaryTreeState) {
     panel.treeState.searchQuery = saved.searchQuery
     panel.treeState.tokens = saved.tokens ?? []
-    // isChecked is per panel and session-scoped (uncheckedCommentaryBooks.ts):
-    // re-derive it instead of trusting the persisted value, so unchecked books
-    // survive tab switches but reset on a fresh app start.
+    // isChecked is a cache derived from the check-tree, not a source of truth, so
+    // it is re-derived rather than read back from the saved list. The tree itself
+    // was just hydrated from `checkState` above, so this now reproduces the ticks
+    // the reader left — and it also covers books this line has that the saved list
+    // never did.
     panel.treeState.visibilityList = saved.visibilityList.map((item) => ({
       ...item,
       isChecked: !isCommentaryBookUnchecked(

@@ -20,11 +20,14 @@
  * Expanded/collapsed state of tree nodes is kept here too, so it survives line
  * changes and tab switches.
  *
- * Scope: per tab, in-memory only — never persisted, resets on app start. The
- * tab store drops a tab's entry when the tab closes.
+ * Scope: per tab AND per panel. The live map is memory, but each panel's state is
+ * serialized into its persisted record (see `serializeCommentaryCheckState` at the
+ * bottom), so the filter survives tab switches, session restore and reopening a
+ * book via "remember my last place". The tab store drops a tab's entry when the
+ * tab closes.
  */
 import { reactive } from 'vue'
-import type { CommentarySlot } from '../bookViewTypes'
+import type { CommentaryCheckStateSnapshot, CommentarySlot } from '../bookViewTypes'
 
 /**
  * Scope key for one panel's check-tree. The two commentary panels of a tab keep
@@ -183,6 +186,61 @@ export function setCommentaryNodeExpanded(scopeKey: string, nodeKey: string, exp
     state.expanded.delete(nodeKey)
     dropIfEmpty(scopeKey)
   }
+}
+
+// ── Persistence ───────────────────────────────────────────────────────────────
+
+/**
+ * Snapshot one panel's check-tree as a plain object. Maps and Sets are not
+ * structured-cloneable into IndexedDB, and the live state is a reactive proxy,
+ * so everything is copied out into arrays.
+ *
+ * Returns undefined for the default state (nothing unchecked, nothing expanded) —
+ * the common case, which then costs nothing in the saved record.
+ *
+ * This is deliberately the SOURCE state rather than the derived `isChecked` flags
+ * on `visibilityList`: that list only ever holds the current line's books, so it
+ * cannot express "this whole section is off" for books that appear on other lines.
+ */
+export function serializeCommentaryCheckState(scopeKey: string): CommentaryCheckStateSnapshot | undefined {
+  const state = stateByScope.get(scopeKey)
+  if (!state) return undefined
+  return {
+    root: state.root,
+    sections: [...state.sections],
+    subsections: [...state.subsections],
+    books: [...state.books].map(([bookId, entry]) => [bookId, entry.path, entry.checked]),
+    expanded: [...state.expanded],
+  }
+}
+
+/**
+ * Restore a snapshot into the live map, replacing whatever that scope holds.
+ *
+ * A missing snapshot clears the scope: an older saved record with no check state,
+ * or one saved while everything was checked, must not leave a stale tree behind.
+ */
+export function hydrateCommentaryCheckState(
+  scopeKey: string,
+  snapshot: CommentaryCheckStateSnapshot | undefined,
+): void {
+  if (!snapshot) {
+    stateByScope.delete(scopeKey)
+    return
+  }
+  stateByScope.set(scopeKey, {
+    root: snapshot.root,
+    sections: new Map(snapshot.sections),
+    subsections: new Map(snapshot.subsections),
+    books: new Map(snapshot.books.map(([bookId, path, checked]) => [bookId, { path, checked }])),
+    expanded: new Set(snapshot.expanded),
+  })
+  dropIfEmpty(scopeKey)
+}
+
+/** True once this scope has live state — used to skip a redundant hydrate. */
+export function hasCommentaryCheckState(scopeKey: string): boolean {
+  return stateByScope.has(scopeKey)
 }
 
 // ── Lifecycle (called by the tab store) ───────────────────────────────────────

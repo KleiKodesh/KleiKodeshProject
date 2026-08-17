@@ -78,6 +78,22 @@ export interface PinnedCommentaryGroup {
 }
 
 /**
+ * One panel's filter check-tree, flattened for storage. Mirrors the live state in
+ * uncheckedCommentaryBooks.ts, which uses Maps and a Set — neither survives the
+ * structured clone into IndexedDB.
+ *
+ * A book entry is [bookId, path, checked], where path is `${section}::${subSection}`.
+ */
+export interface CommentaryCheckStateSnapshot {
+  /** Root ("show all") default; undefined = checked. */
+  root?: boolean
+  sections: [string, boolean][]
+  subsections: [string, boolean][]
+  books: [number, string, boolean][]
+  expanded: string[]
+}
+
+/**
  * Everything one commentary panel persists per (tab, book). Both panels store one
  * of these under `BookState.commentaryPanels` / `LastReadState.commentaryPanels`,
  * keyed by slot, so neither panel can clobber the other's saved place.
@@ -87,6 +103,12 @@ export interface CommentaryPanelPersistState {
   scrollIndex?: number | null
   scrollOffset?: number | null
   filterState?: CommentaryTreeState
+  /**
+   * Which commentaries are ticked in the filter tree. Separate from `filterState`
+   * because that only describes the current line's books, while this is the whole
+   * virtual tree — see CommentaryCheckStateSnapshot.
+   */
+  checkState?: CommentaryCheckStateSnapshot
   pinnedGroup?: PinnedCommentaryGroup | null
   /** Divider position, 0.1-0.9: pane width for 'side', pane height for 'bottom'. */
   fraction?: number
