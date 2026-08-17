@@ -26,6 +26,7 @@ const {
   textFont,
   fontSize,
   linePadding,
+  fixedLineHeight,
   commentaryHeaderFont,
   commentaryTextFont,
   commentaryFontSize,
@@ -179,6 +180,8 @@ function toggleOtherName(key: OtherNameKey) {
       v-model:text-font="textFont"
       v-model:font-size="fontSize"
       v-model:line-padding="linePadding"
+      v-model:fixed-line-height="fixedLineHeight"
+      show-fixed-line-height
       @close-other="commentaryDisplayRef?.closeDropdowns()"
     />
 

@@ -4,12 +4,22 @@ import { ref } from 'vue'
 defineOptions({ inheritAttrs: false })
 import FontSelectorCmp from './FontSelector.vue'
 import SliderSetting from './SliderSetting.vue'
+import SettingRow from './SettingRow.vue'
+import ToggleGroup from './ToggleGroup.vue'
 
 const props = defineProps<{
   headerFont: string
   textFont: string
   fontSize: number
   linePadding: number
+  /**
+   * Exact line spacing. This setting is global (one attribute on <html>) while this
+   * component renders once per pane, so only the book instance shows the control —
+   * gated on the explicit flag below rather than on `fixedLineHeight === undefined`,
+   * because Vue casts an absent Boolean prop to `false`, never `undefined`.
+   */
+  fixedLineHeight?: boolean
+  showFixedLineHeight?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -17,6 +27,7 @@ const emit = defineEmits<{
   'update:textFont': [string]
   'update:fontSize': [number]
   'update:linePadding': [number]
+  'update:fixedLineHeight': [boolean]
   closeOther: []
 }>()
 
@@ -80,5 +91,19 @@ function onTextToggle() {
       :step="0.1"
       @update:model-value="emit('update:linePadding', $event)"
     />
+    <SettingRow
+      v-if="showFixedLineHeight"
+      label="מרווח בין שורות"
+      hint="מרווח מדוייק שומר על ריווח זהה בין כל השורות, גם כשיש מילה גדולה באמצע השורה. שים לב: מילה גדולה במיוחד עלולה לחפוף לשורה שמעליה"
+    >
+      <ToggleGroup
+        :model-value="fixedLineHeight"
+        :options="[
+          { label: 'רגיל', value: false },
+          { label: 'מדוייק', value: true },
+        ]"
+        @update:model-value="emit('update:fixedLineHeight', $event)"
+      />
+    </SettingRow>
   </div>
 </template>

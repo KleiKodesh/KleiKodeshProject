@@ -377,6 +377,42 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
   text-align: justify;
   position: relative;
 }
+/* Exact line spacing (רווח מדוייק), opt-in from settings.
+   `line-height` is normally a unitless multiplier, so every inline element
+   recomputes its own line box from its own font-size — one enlarged word mid-line
+   makes THAT row taller than its neighbours. Multiplying by 1em resolves the
+   leading once, against .line's font-size, and it then inherits as a fixed length;
+   the explicit inherit on inline children stops those with their own font-size
+   (bold runs, note markers, wrapper spans) from contributing a taller box.
+   Trade-off: a genuinely oversized word now overlaps the row above instead of
+   pushing it away — which is why this is off by default.
+
+   The attribute is matched on a bare `html[...]` ancestor, NOT via `:global()`:
+   Vue's scoped-CSS compiler replaces the whole selector with the `:global()`
+   argument and discards the rest, so `:global([attr]) .line` would collapse to a
+   bare `[attr]` — matching <html> itself and leaking line-height app-wide. */
+html[data-fixed-line-height='true'] .line {
+  line-height: calc(var(--line-height, 1.7) * 1em);
+}
+/* Inline text elements only. Deliberately NOT `*`: the superscript markers below
+   set `line-height: 1` so they contribute no box at all, and nested blocks keep
+   their own leading. */
+html[data-fixed-line-height='true'] .line :deep(b),
+html[data-fixed-line-height='true'] .line :deep(strong),
+html[data-fixed-line-height='true'] .line :deep(i),
+html[data-fixed-line-height='true'] .line :deep(em),
+html[data-fixed-line-height='true'] .line :deep(big),
+html[data-fixed-line-height='true'] .line :deep(span),
+html[data-fixed-line-height='true'] .line :deep(a),
+html[data-fixed-line-height='true'] .line :deep(mark),
+html[data-fixed-line-height='true'] .line :deep(font) {
+  line-height: inherit;
+}
+/* …but the markers keep their zero-height box even in exact mode. */
+html[data-fixed-line-height='true'] .line :deep(.user-note-marker),
+html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
+  line-height: 1;
+}
 /* On a wide pane give the reading column a bit more breathing room from the
    edges (רווח נוסף מהצדדים במסך רחב). Container query on the app-shell pane, so
    it reacts to THIS pane's width, not the viewport (split-shell aware). */

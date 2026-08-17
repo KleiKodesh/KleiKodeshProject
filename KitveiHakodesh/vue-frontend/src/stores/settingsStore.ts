@@ -16,6 +16,7 @@ const KEYS = {
   SETTINGS_TEXT_FONT: 'text.textFont',
   SETTINGS_FONT_SIZE: 'text.fontSize',
   SETTINGS_LINE_PADDING: 'text.linePadding',
+  SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
   SETTINGS_DIACRITICS: 'text.diacritics',
 
@@ -103,6 +104,10 @@ const DEFAULTS = {
   textFont: "'Times New Roman', Times, serif",
   fontSize: 100,
   linePadding: 1.6,
+  // Off by default: with an absolute line box, a word larger than the body text
+  // overlaps the neighbouring row instead of pushing it apart. That trade — even
+  // spacing at the cost of a possible overlap — is the user's to opt into.
+  fixedLineHeight: false,
   commentaryHeaderFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   commentaryTextFont: "'Times New Roman', Times, serif",
   commentaryFontSize: 100,
@@ -174,6 +179,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const textFont = ref(DEFAULTS.textFont)
   const fontSize = ref(DEFAULTS.fontSize)
   const linePadding = ref(DEFAULTS.linePadding)
+  const fixedLineHeight = ref(DEFAULTS.fixedLineHeight)
   const commentaryHeaderFont = ref(DEFAULTS.commentaryHeaderFont)
   const commentaryTextFont = ref(DEFAULTS.commentaryTextFont)
   const commentaryFontSize = ref(DEFAULTS.commentaryFontSize)
@@ -235,6 +241,10 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--text-font', textFont.value)
     style.setProperty('--font-size', `${fontSize.value}%`)
     style.setProperty('--line-height', linePadding.value.toString())
+    // Exact line spacing: the reading views resolve --line-height against their own
+    // font-size once (an absolute length) instead of letting every inline element
+    // recompute it, so an oversized word no longer stretches its row.
+    document.documentElement.setAttribute('data-fixed-line-height', fixedLineHeight.value ? 'true' : 'false')
     // When not using separate commentary settings, mirror the book settings.
     const effectiveCommentaryHeaderFont = useSeparateCommentarySettings.value ? commentaryHeaderFont.value : headerFont.value
     const effectiveCommentaryTextFont = useSeparateCommentarySettings.value ? commentaryTextFont.value : textFont.value
@@ -275,6 +285,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
     loadSetting(KEYS.SETTINGS_FONT_SIZE, fontSize)
     loadSetting(KEYS.SETTINGS_LINE_PADDING, linePadding)
+    loadSetting(KEYS.SETTINGS_FIXED_LINE_HEIGHT, fixedLineHeight)
     loadSetting(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, commentaryHeaderFont)
     loadSetting(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, commentaryTextFont)
     loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, commentaryFontSize)
@@ -354,6 +365,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
   persistSetting(fontSize, KEYS.SETTINGS_FONT_SIZE, applyCSSVariables)
   persistSetting(linePadding, KEYS.SETTINGS_LINE_PADDING, applyCSSVariables)
+  persistSetting(fixedLineHeight, KEYS.SETTINGS_FIXED_LINE_HEIGHT, applyCSSVariables)
   persistSetting(commentaryHeaderFont, KEYS.SETTINGS_COMMENTARY_HEADER_FONT, applyCSSVariables)
   persistSetting(commentaryTextFont, KEYS.SETTINGS_COMMENTARY_TEXT_FONT, applyCSSVariables)
   persistSetting(commentaryFontSize, KEYS.SETTINGS_COMMENTARY_FONT_SIZE, applyCSSVariables)
@@ -454,6 +466,7 @@ export const useSettingsStore = defineStore('settings', () => {
     textFont.value = DEFAULTS.textFont
     fontSize.value = DEFAULTS.fontSize
     linePadding.value = DEFAULTS.linePadding
+    fixedLineHeight.value = DEFAULTS.fixedLineHeight
     commentaryHeaderFont.value = DEFAULTS.commentaryHeaderFont
     commentaryTextFont.value = DEFAULTS.commentaryTextFont
     commentaryFontSize.value = DEFAULTS.commentaryFontSize
@@ -491,7 +504,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
-    diacriticsState, headerFont, textFont, fontSize, linePadding,
+    diacriticsState, headerFont, textFont, fontSize, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
