@@ -25,6 +25,11 @@ type Pane = ReturnType<typeof useAppShellPane>
  * destination labels, so they stay in sync with the home tiles and the nav
  * dropdown — see `useAppNavigation`.
  *
+ * F1 differs from `Ctrl+1`..`Ctrl+9` in where it lands, not in how it is wired:
+ * settings is the one destination unique per pane, so a second F1 switches to the
+ * open settings tab rather than opening another. That rule lives with the tab
+ * store's `SINGLE_TAB_ROUTES`, not here.
+ *
  * All matching is on `e.code`, never `e.key`: `e.key` returns the character the
  * key produces, which changes with the active keyboard language and would break
  * every shortcut the moment the user types Hebrew.

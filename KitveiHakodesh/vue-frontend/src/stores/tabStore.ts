@@ -210,11 +210,13 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   // ── Destination routes — tool pages, never persisted across sessions ─────
-  // These used to be "singletons", enforced as one-tab-per-route. They no longer
-  // are: a tab shows one thing at a time, so a destination is unique within a tab
-  // for free, and across tabs it should not be unique at all — two tabs may each
-  // hold their own מילון. What survives is this list, which still decides what is
-  // stripped from the persisted tab list and what stays out of recents.
+  // These used to be "singletons", enforced as one-tab-per-route. Almost none are
+  // now: a tab shows one thing at a time, so a destination is unique within a tab
+  // for free, and across tabs most should not be unique at all — two tabs may each
+  // hold their own מילון. The exception is SINGLE_TAB_ROUTES (settings), which is
+  // app-wide state rather than a view. What survives here is this list, which
+  // decides what is stripped from the persisted tab list and what stays out of
+  // recents — membership here says nothing about one-tab-per-route.
 
   const DESTINATION_ROUTES: TabRoute[] = [
     '/settings',
@@ -1003,18 +1005,40 @@ export const useTabStore = defineStore('tabs', () => {
   //   true  — open a new tab (nav dropdown, Ctrl+1..9, F1), unless the current tab is
   //           home, in which case replace it rather than leaving an empty home behind
   //
-  // No route is unique across tabs: each tab may hold its own מילון or לוח שנה.
+  // Settings is the ONE route unique across tabs — see SINGLE_TAB_ROUTES below.
+  // Every other destination may be opened any number of times: each tab may hold
+  // its own מילון or לוח שנה.
   //
   // Under VSTO (and dev, which mirrors it) every destination navigates in place instead:
   // the task pane shows a single tab, so there is nowhere for a new one to go. That
   // overrides openInNewTab — it is the only way the single-tab pane can honour it.
 
+  // Routes that may exist in at most one tab per pane. Opening one while it is
+  // already open switches to that tab instead of making a second copy.
+  //
+  // Settings is here because it is app-wide state, not a document: two settings tabs
+  // show the same values and edits in one silently make the other stale. Every other
+  // destination is a view you may legitimately want two of, so keep this list at
+  // exactly the routes that are app-wide state — do not grow it for tidiness.
+  const SINGLE_TAB_ROUTES: TabRoute[] = ['/settings']
+
   function navigateToDestination(route: TabRoute, pane: 1 | 2 = 1, openInNewTab = false) {
     const patch = { route, title: DESTINATION_TITLES[route] ?? route }
 
     // A tab shows one thing at a time, so a destination is inherently unique WITHIN
-    // a tab and needs no enforcing. Across tabs it is not unique at all: two tabs may
-    // each hold their own מילון, exactly as a browser lets you open Settings twice.
+    // a tab and needs no enforcing. Across tabs only SINGLE_TAB_ROUTES are unique:
+    // two tabs may each hold their own מילון, exactly as a browser lets you open
+    // two dictionary tabs.
+    if (SINGLE_TAB_ROUTES.includes(route)) {
+      const paneTabs = pane === 1 ? pane1Tabs.value : pane2Tabs.value
+      const existing = paneTabs.find((t) => t.route === route)
+      // Already the active tab: switching would be a no-op, but falling through
+      // would open a second copy, so stop here either way.
+      if (existing) {
+        switchPaneTab(existing.id, pane)
+        return
+      }
+    }
 
     // Replacing an empty home tab is never worth a new tab — there is nothing to lose.
     const onHome = activeTabForPane(pane).route === '/'
