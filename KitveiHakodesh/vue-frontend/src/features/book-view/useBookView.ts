@@ -35,6 +35,7 @@ import { useBookViewSearch } from './useBookViewSearch'
 import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
 import { useCommentaryNavigation } from './commentary/useCommentaryNavigation'
 import { useCommentaryPanelSlot } from './commentary/useCommentaryPanelSlot'
+import { serializeCommentaryCheckState } from './commentary/uncheckedCommentaryBooks'
 import { useBookViewScrollSync } from './useBookViewScrollSync'
 import { useBookViewSessionRestore } from './useBookViewSessionRestore'
 import { useBookViewKeyboardShortcuts } from './useBookViewKeyboardShortcuts'
@@ -530,6 +531,7 @@ export function useBookView(
         scrollIndex: panel.scrollIndex.value,
         scrollOffset: panel.scrollOffset.value,
         filterState: panel.treeState,
+        checkState: serializeCommentaryCheckState(panel.scopeKey),
         pinnedGroup: pinned ? { ...pinned } : null,
         fraction: panel.fraction.value,
         zoom: bookId != null ? bookViewStore.getCommentaryZoom(tabId, bookId, slot) : undefined,
