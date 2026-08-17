@@ -1534,6 +1534,60 @@ No custom CSS is involved — the current row is styled by PDF.js's existing
 separate and can sit on a different row, which is correct: one means "where the page is",
 the other "where the keyboard is".
 
+### Panel dismisses on outside click / window blur (overlay mode only)
+
+Stock PDF.js never dismisses the views-manager panel: `class Sidebar` binds the toggle
+button's `click` and nothing else, so once opened it stays open until explicitly toggled —
+unlike every other panel in the app. `outline-search.js` adds the dismiss behaviour, ported
+from the Vue app's `useDropdownClose` (`src/composables/useDropdownClose.ts`), which closes
+BookView's TOC side panel.
+
+**It applies only when the panel FLOATS OVER the page, never when it sits side by side.**
+Both apps have the two modes, and both guard the close the same way:
+
+| | side by side (no dismiss) | floats over page (dismiss) |
+|---|---|---|
+| BookView | `sidePanelIsOverlay === false` (shell ≥ 520px) — inline column beside the content; `BookViewSidePanel.vue` guards `emit('close')` with it | overlay component, backdrop + floating panel |
+| PDF.js | `> 840px` — `#viewerContainer` is pushed by `--viewsManager-width`, content reflows beside the panel | `≤ 840px` — `viewer.css`'s `inset-inline-start: 0 !important` stops the push, so the panel overlaps the page |
+
+Side by side the panel takes no space from the content, so dismissing it on a stray click in
+the page would be hostile — that is a docked column, not a popover. The `≤840px` media query
+in `viewer.css` is the single source of truth for which mode is live, so it is read via
+`window.matchMedia('(max-width: 840px)')` rather than duplicated as a JS constant. **If that
+breakpoint changes on upgrade, update the `matchMedia` string to match.**
+
+Closing goes through **`app.viewsManager.close()`**, not by toggling `hidden` — `close()`
+also updates `aria-expanded`, removes the `viewsManagerOpen` class, and dispatches
+`sidebarviewchanged`. Open state is read from the public `app.viewsManager.isOpen` field.
+
+Note the property is **`app.viewsManager`**, not `app.pdfSidebar` — that was the name in
+older PDF.js and does not exist in this build, so calls on it would silently no-op. If a
+future upgrade renames the instance again, these two call sites are where it shows.
+
+Three things are deliberately **not** "outside":
+
+- the sidebar subtree itself (`#viewsManager`);
+- **the toggle button** — it closes the panel through its own click handler, so closing here
+  too would let that click immediately reopen it. This is the toggle-button race
+  `useDropdownClose` guards with `justClosed`;
+- `#outlineContextMenu` and `#outlineRowMenuButton` — editor UI this panel owns, rendered on
+  `document.body` and therefore outside the sidebar subtree.
+
+An in-progress **rename commits first, then the panel closes** — clicking away is a
+deliberate "I'm done here", so it does what clicking away from the anchor alone does
+(commit) and then dismisses. The commit is triggered explicitly (`renamingAnchor.blur()`)
+rather than left to the anchor's own blur handler, because **this listener is on
+`pointerdown` (capture), which runs before the blur**, and `finish()` ends by calling
+`input.focus()` — which would pull focus back INTO the panel being closed. Forcing the blur
+first makes the order deterministic: text saved, focus settled, then close. The window-blur
+path commits the same way, so losing the window mid-rename cannot discard the text.
+
+`pointerdown` (capture) is used rather than `click`, matching `onClickOutside` underneath
+`useDropdownClose` and firing before a click can act on whatever was hit. The `blur` close
+mirrors the Vue version's `closeOnBlur`, including the `setTimeout(…, 0)` that lets
+`document.activeElement` settle and the iframe/object check — `document.hasFocus()` stays
+true when focus moves into a child frame.
+
 ### Outline tree restyled to match BookView's TOC
 
 The panel is a copy of BookView's TOC system, matched against **measurements of the
