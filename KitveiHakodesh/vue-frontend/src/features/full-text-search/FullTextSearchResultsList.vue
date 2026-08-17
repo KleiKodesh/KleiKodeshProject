@@ -384,7 +384,7 @@ defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
                 class="result-header"
                 :title="resultTitle(results[vRow.index]!)"
                 @click="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
-                @auxclick.middle="emit('resultClick', results[vRow.index]!, true)"
+                @auxclick.middle="emit('resultClick', results[vRow.index]!, wantsNewTab($event))"
               >
                 <span class="book-title">{{ results[vRow.index]!.bookTitle }}</span>
                 <span v-if="results[vRow.index]!.tocText" class="sep">›</span>

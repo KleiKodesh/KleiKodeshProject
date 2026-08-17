@@ -5,6 +5,7 @@ import {
   IconChevronRight20Regular,
   IconChevronLeft20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { hasNativeChromeTabs } from '@/webview-host/bridge'
 
 const props = defineProps<{
   bookId: number
@@ -27,8 +28,12 @@ const displayPath = computed(() => {
   return props.ownTocPath ? `${props.bookTitle} ${props.ownTocPath}` : props.bookTitle
 })
 
+// The gesture opens the commented book either way; only where tabs exist does it get
+// its own tab, so the hint must not promise one in the single-tab hosts.
 const tooltipText = computed(() => {
-  const hint = 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
+  const hint = hasNativeChromeTabs
+    ? 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
+    : 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר'
   return `${displayPath.value}\n${hint}`
 })
 
