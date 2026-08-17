@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
 import { lsGet, lsSet } from '@/utils/persistence'
@@ -232,9 +232,16 @@ export const useBookViewStore = defineStore('bookView', () => {
   }
 
   // Prune per-tab entries for tabs that no longer exist (zoom + in-session search)
+  //
+  // Deferred to the next tick: closing a tab removes it from the list BEFORE its
+  // book view unmounts, and that unmount runs a final savePos() which reads the
+  // zoom back out of these maps. Pruning inline made that read miss and persist
+  // the 100% default over the reader's actual zoom. Same ordering hazard as the
+  // commentary check-trees in tabStore.disposeClosedTab.
   watch(
     () => tabStore.tabs.map((t) => t.id),
-    (currentIds) => {
+    async (currentIds) => {
+      await nextTick()
       const idSet = new Set(currentIds)
       for (const key of linesZoomMap.value.keys()) {
         const tabId = key.split(':')[0]!
