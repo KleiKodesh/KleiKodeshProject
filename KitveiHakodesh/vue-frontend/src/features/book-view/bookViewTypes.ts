@@ -58,11 +58,23 @@ export function isCommentaryItemVisible(item: CommentaryVisibilityItem): boolean
   return item.isChecked && item.isInSearchResults
 }
 
-/** Persisted state for the commentary tree panel. */
+/** Live state for the commentary tree panel. */
 export interface CommentaryTreeState {
   searchQuery: string
   tokens: string[]
   visibilityList: CommentaryVisibilityItem[]
+}
+
+/**
+ * The saved form of the above. `isChecked` is dropped: it is a cache derived from
+ * the check-tree, which is persisted separately and in full (`checkState`), and
+ * restore recomputes every flag from there. Persisting it too would write a value
+ * that is always ignored on the way back in.
+ */
+export interface CommentaryTreeStatePersist {
+  searchQuery: string
+  tokens: string[]
+  visibilityList: Omit<CommentaryVisibilityItem, 'isChecked'>[]
 }
 
 /**
@@ -102,7 +114,7 @@ export interface CommentaryPanelPersistState {
   visible?: boolean
   scrollIndex?: number | null
   scrollOffset?: number | null
-  filterState?: CommentaryTreeState
+  filterState?: CommentaryTreeStatePersist
   /**
    * Which commentaries are ticked in the filter tree. Separate from `filterState`
    * because that only describes the current line's books, while this is the whole
@@ -119,6 +131,19 @@ export interface CommentaryPanelPersistState {
 /** Both panels' persisted state. A missing slot means "never opened". */
 export type CommentaryPanelPersistStates = Partial<
   Record<CommentarySlot, CommentaryPanelPersistState>
+>
+
+/**
+ * What the panels hand over at save time: the same fields, but `filterState` is
+ * still the panel's LIVE reactive tree state. The save path clones it into the
+ * persisted form (dropping `isChecked`) before it reaches IndexedDB.
+ */
+export interface CommentaryPanelLiveState extends Omit<CommentaryPanelPersistState, 'filterState'> {
+  filterState?: CommentaryTreeState
+}
+
+export type CommentaryPanelLiveStates = Partial<
+  Record<CommentarySlot, CommentaryPanelLiveState>
 >
 
 /**

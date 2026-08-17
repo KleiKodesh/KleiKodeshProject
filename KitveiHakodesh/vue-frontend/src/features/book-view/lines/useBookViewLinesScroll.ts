@@ -26,9 +26,11 @@ import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
 import type { LineItem } from './useBookViewLinesTable'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
+  CommentaryPanelLiveStates,
   CommentaryPanelPersistStates,
   CommentarySlot,
   CommentaryTreeState,
+  CommentaryTreeStatePersist,
 } from '../bookViewTypes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { useBookViewStore } from '@/stores/bookViewStore'
@@ -51,7 +53,7 @@ export interface BookViewLinesScrollProps {
    * and only ferries it to IDB alongside the scroll position it does own. The
    * panels themselves own it - see useCommentaryPanelSlot.
    */
-  commentaryPersistState?: () => CommentaryPanelPersistStates
+  commentaryPersistState?: () => CommentaryPanelLiveStates
   selectedLineId?: number | null
   searchBarVisible?: boolean
 }
@@ -346,13 +348,14 @@ export function useBookViewLinesScroll(
   // Last known good filter snapshot PER PANEL. A panel's visibilityList is empty
   // until its filter tree has been opened (and again once it closes), so saving the
   // live value blindly would overwrite a good saved filter with an empty one.
-  const lastValidFilterState: Partial<Record<CommentarySlot, CommentaryTreeState>> = {}
+  const lastValidFilterState: Partial<Record<CommentarySlot, CommentaryTreeStatePersist>> = {}
 
-  function cloneFilterState(state: CommentaryTreeState): CommentaryTreeState {
+  /** Copy for storage, minus the derived isChecked — see CommentaryTreeStatePersist. */
+  function cloneFilterState(state: CommentaryTreeState): CommentaryTreeStatePersist {
     return {
       searchQuery: state.searchQuery,
       tokens: [...state.tokens],
-      visibilityList: state.visibilityList.map((item) => ({ ...item })),
+      visibilityList: state.visibilityList.map(({ isChecked: _isChecked, ...item }) => item),
     }
   }
 

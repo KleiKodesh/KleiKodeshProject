@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
 import { tabsListKey } from './workspaceStore'
 import { useWorkspaceStore } from './workspaceStore'
@@ -430,8 +430,16 @@ export const useTabStore = defineStore('tabs', () => {
   function disposeClosedTab(id: string) {
     captureCurrentPosition(id)
     deleteAllStateForTab(id)
-    dropUncheckedCommentaryForTab(id)
     dropHistory(id)
+    // Deferred: closing a tab unmounts its book view, and that unmount runs one
+    // last savePos() which reads the commentary check-trees. Dropping them inline
+    // would make that final save write an empty filter over the last-read record,
+    // so the reader's ticks would vanish on reopening the book.
+    // nextTick, not queueMicrotask: the unmount happens in Vue's flush job, and a
+    // bare microtask can be scheduled ahead of it when nothing has dirtied a
+    // render dep yet. nextTick chains off the flush promise, so it always lands
+    // after. The trees are keyed by tab id, and ids are never reused.
+    nextTick(() => dropUncheckedCommentaryForTab(id))
   }
 
   /** Strips the in-memory-only fields, matching what persistTabs drops. */
@@ -815,7 +823,12 @@ export const useTabStore = defineStore('tabs', () => {
     // In split view, keep pane-2 tabs intact — only replace pane-1 tabs
     tabs.value = [home, ...(splitOn ? tabs.value.filter((t) => t.pane === 2) : [])]
     activeTabId.value = home.id
-    pruneUncheckedCommentary(tabs.value.map((t) => t.id))
+    // Deferred for the same reason as the drop in disposeClosedTab: the closing
+    // views have not unmounted yet, and their final savePos() still needs to read
+    // the check-trees. Snapshot the live ids now — by the time this runs the tab
+    // list may have moved on.
+    const liveIds = tabs.value.map((t) => t.id)
+    nextTick(() => pruneUncheckedCommentary(liveIds))
   }
 
   // ── PDF unsaved-edits close guard ──────────────────────────────────────────
