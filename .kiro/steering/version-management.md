@@ -27,6 +27,22 @@ All other version stamps are derived from this value by `UpdateVersion.ps1` duri
 | -------------------------------------------------------------- | ---------------------- | ----------------------- |
 | `Build/Installer/Helpers/AddinInstaller.cs`         | `const string Version` | `"vX.Y.Z"`              |
 | `Build/Installer/KleiKodeshVstoInstallerWpf.csproj` | `<Version>`            | `X.Y.Z` (no `v` prefix) |
+| `KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/Properties/AssemblyInfo.cs` | `AssemblyVersion`, `AssemblyFileVersion` | `X.Y.Z.0` (four parts)  |
+
+The third row is the KitveiHakodesh app exe. Its project is an old-style (non-SDK)
+csproj, so the version lives in `AssemblyInfo.cs` rather than the csproj — which is why
+it was missed and read `1.0.0.0` on every release until this was added.
+
+It **must** stay stamped. The install points the Start Menu shortcut and the HKCU shell
+"open with" command at this exe (`AddinInstaller.CreateKitveiHakodeshShortcut`,
+`ShellRegistrationHelper`), so it is the exe a third-party updater discovers and reads a
+PE version from to decide whether an update is needed. A frozen `1.0.0.0` wedges those
+updaters permanently. (The installer itself never launches this exe — it waits for it to
+close. Only the shortcut and shell registration reference it.)
+
+That file is UTF-8 **with BOM**, unlike the two above, and the BOM must be preserved —
+without it the compiler reads the file's Hebrew `AssemblyTitle`/`AssemblyProduct`
+literals as ANSI and mangles them.
 
 The NSIS script (`Build/nsis/KleiKodeshWrapper.nsi`) receives `${PRODUCT_VERSION}` as a command-line define from `build-installer.ps1` — it does **not** need to be edited manually.
 

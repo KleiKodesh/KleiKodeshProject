@@ -14,7 +14,7 @@ PowerShell scripts that orchestrate the build, packaging, and deployment pipelin
 - Quick build (VSTO only, no installer)
 
 **`build-installer.ps1`** — Main orchestrator (headless, no interactivity). Called by `build-menu.ps1`. Flow:
-1. Calls `UpdateVersion.ps1` to bump version in `AddinInstaller.cs` + `.csproj`
+1. Calls `UpdateVersion.ps1` to bump version in `AddinInstaller.cs` + `.csproj` + the KitveiHakodesh DemoApp's `AssemblyInfo.cs`
 2. Wipes VSTO release folders + `KitveiHakodeshDemoApp\bin\Release\` for a clean build
 3. Builds VSTO add-in (AnyCPU) → creates embedded zip
 4. Builds WPF installer via `dotnet build` → wraps in NSIS → `KleiKodeshSetup-vX.Y.Z.exe`
