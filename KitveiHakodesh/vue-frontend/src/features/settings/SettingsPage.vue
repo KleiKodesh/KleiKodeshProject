@@ -1,9 +1,14 @@
 <script setup lang="ts">
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { getSettingsScrollTop, setSettingsScrollTop } from './settingsScrollMemory'
+import {
+  getSettingsScrollTop,
+  setSettingsScrollTop,
+  getSettingsSearchQuery,
+  setSettingsSearchQuery,
+} from './settingsViewMemory'
 import { useSettingsSearch } from './useSettingsSearch'
 import SettingsPageSideNav from './SettingsPageSideNav.vue'
 import SettingsPageThemeAndApplicationSection from './SettingsPageThemeAndApplicationSection.vue'
@@ -16,6 +21,10 @@ import SettingsPageKeyboardShortcutsSection from './SettingsPageKeyboardShortcut
 // scrollContainerRef is the full-width body — scrollbar lives at the page edge
 const scrollContainerRef = ref<HTMLElement | null>(null)
 const { searchQuery, getSectionNavEntries } = useSettingsSearch(scrollContainerRef)
+
+// Restored here rather than in onMounted so the input renders with the query on the
+// first paint — assigning it later shows an empty box that then fills in.
+searchQuery.value = getSettingsSearchQuery()
 
 // ── Side nav (wide screen) ────────────────────────────────────────────────────
 
@@ -32,14 +41,33 @@ const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value 
   toggleButton: navToggleRef,
 })
 
-// ── Scroll position (this session only) ──────────────────────────────────────
-// The settings VALUES live in the settings store, so a tab switch loses nothing but
-// the scroll position — this puts that back. Storing to a module variable needs no
-// debounce the way an IndexedDB write would.
+// ── View state (this session only) ───────────────────────────────────────────
+// The settings VALUES live in the settings store, so a tab switch loses only the
+// view: the search query and the scroll position. Both are saved here, and the
+// restore below applies them in that order — the query decides which sections are
+// visible, so the offset is only meaningful once the filter is in place.
+// Storing to a module variable needs no debounce the way an IndexedDB write would.
+
+// True only while the restore below assigns scrollTop. Assigning it fires a scroll
+// event, and the browser CLAMPS the assignment when the page is currently shorter
+// than the target (hidden sections use `display: none`, so a filtered page is much
+// shorter). Without this guard the listener would write that clamped value back and
+// the deeper position would be lost for good — the saved value must survive a target
+// that is briefly out of reach.
+let restoringScroll = false
 
 useEventListener(scrollContainerRef, 'scroll', () => {
+  if (restoringScroll) return
   const el = scrollContainerRef.value
   if (el) setSettingsScrollTop(el.scrollTop)
+})
+
+watch(searchQuery, (query) => {
+  setSettingsSearchQuery(query)
+  // A new query re-flows the page, so the offset saved under the old one no longer
+  // points anywhere meaningful. Drop it and let the scroll listener refill it —
+  // filtering jumps you to the top, which is where the user now is.
+  setSettingsScrollTop(0)
 })
 
 onMounted(() => {
@@ -47,12 +75,21 @@ onMounted(() => {
     navEntries.value = getSectionNavEntries()
     sideNavEntries.value = getSectionNavEntries()
 
-    // After the nav entries render, so the sections have their final height and the
-    // target offset is reachable — restoring before layout settles would clamp a
-    // deep position to whatever the page measured at the time.
+    // The filter is already applied by this point: assigning searchQuery at setup IS
+    // a change, and useSettingsSearch registered its watcher before that assignment,
+    // so it fired and its own nextTick ran ahead of this one. Nothing to re-apply.
+
+    // Restored last, because hidden sections shorten the page and the offset only
+    // means anything once the filter is in place.
     const saved = getSettingsScrollTop()
     const el = scrollContainerRef.value
-    if (saved > 0 && el) el.scrollTop = saved
+    if (saved > 0 && el) {
+      restoringScroll = true
+      el.scrollTop = saved
+      // Released after the scroll event this assignment queued has been dispatched,
+      // so a clamped result cannot overwrite the saved offset.
+      requestAnimationFrame(() => { restoringScroll = false })
+    }
   })
 })
 

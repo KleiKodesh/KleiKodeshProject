@@ -14,7 +14,7 @@ import {
   deleteAllStateForTab,
 } from './tabStatePersistence'
 import { getLastReadPos, setLastReadPos } from './bookLastRead'
-import { clearSettingsScrollTop } from '@/features/settings/settingsScrollMemory'
+import { clearSettingsViewState } from '@/features/settings/settingsViewMemory'
 import { loadRecentLocations, saveRecentLocations, recordVisit } from './recentLocations'
 import {
   isHistoryWorthy,
@@ -434,10 +434,11 @@ export const useTabStore = defineStore('tabs', () => {
     captureCurrentPosition(id)
     deleteAllStateForTab(id)
     dropHistory(id)
-    // Settings keeps its scroll position in a module variable rather than per-tab
-    // state (it is unique per pane, so there is only ever one), which means
-    // deleteAllStateForTab cannot reach it. Read the route BEFORE the tab is gone.
-    if (tabs.value.find((t) => t.id === id)?.route === '/settings') clearSettingsScrollTop()
+    // Settings keeps its view state (search query, scroll position) in module
+    // variables rather than per-tab state (it is unique per pane, so there is only
+    // ever one), which means deleteAllStateForTab cannot reach it. Read the route
+    // BEFORE the tab is gone.
+    if (tabs.value.find((t) => t.id === id)?.route === '/settings') clearSettingsViewState()
     // Deferred: closing a tab unmounts its book view, and that unmount runs one
     // last savePos() which reads the commentary check-trees. Dropping them inline
     // would make that final save write an empty filter over the last-read record,

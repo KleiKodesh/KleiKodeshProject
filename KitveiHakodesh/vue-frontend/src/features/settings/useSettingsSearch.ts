@@ -74,6 +74,9 @@ export function useSettingsSearch(scrollContainerRef: Ref<HTMLElement | null>) {
     })
   }
 
+  // Not `immediate`, and it does not need to be: SettingsPage restores a saved query
+  // by assigning searchQuery during setup — after this watcher is registered — so the
+  // assignment counts as a change and the filter is applied for a restore too.
   watch(searchQuery, async (query) => {
     await nextTick()
     applyFilter(query.trim())
