@@ -101,7 +101,7 @@ function toggleOtherName(key: OtherNameKey) {
     <SettingRow
       id="nav-auto-sync-commentary"
       data-nav-label="סנכרן מפרשים"
-      label="סנכרן מפרשים כברירת מחדל"
+      label="סנכרן מפרשים כברירת מחדל בפתיחת ספר"
       hint="ניתן לשנות לכל ספר בנפרד דרך כפתור סנכרן מפרשים בסרגל הכלים"
     >
       <ToggleGroup
@@ -155,11 +155,11 @@ function toggleOtherName(key: OtherNameKey) {
     </SettingRow>
   </div>
 
-  <!-- ── תצוגת ספר + תצוגת פירושים ── -->
+  <!-- ── תצוגת ספר ── -->
   <div data-section="section-book-display" data-section-label="תצוגת ספר">
     <div id="section-book-display" class="section-label">תצוגת ספר</div>
 
-    <SettingRow id="nav-toolbar-position" data-nav-label="מיקום סרגל הכלים" label="מיקום סרגל הכלים בתצוגת ספר" wrap>
+    <SettingRow id="nav-toolbar-position" data-nav-label="מיקום סרגל הכלים" label="מיקום סרגל הכלים" wrap>
       <ToggleGroup
         v-model="toolbarPosition"
         :options="[
@@ -188,8 +188,8 @@ function toggleOtherName(key: OtherNameKey) {
     <SliderSetting
       id="nav-lines-max-width"
       data-nav-label="רוחב מקסימלי"
-      label="רוחב מקסימלי עבור עמודת הטקסט"
-      hint="הגבל את רוחב שורת הקריאה לנוחות מרבית"
+      label="רוחב מקסימלי לעמודת הטקסט"
+      hint="רוחב שורה קצר יותר נוח יותר לקריאה"
       v-model="linesContentMaxWidthSlider"
       :min="500"
       :max="950"
@@ -197,9 +197,13 @@ function toggleOtherName(key: OtherNameKey) {
       :format-value="formatMaxWidth"
     />
 
-    <div id="section-commentary-display" class="subsection-label">תצוגת פירושים</div>
+  </div>
 
-    <SettingRow id="nav-commentary-settings-mode" data-nav-label="הגדרות נפרדות לפירושים" hint="האם להשתמש בהגדרות גופן נפרדות לפירושים, או לרשת את הגדרות הספר">
+  <!-- ── תצוגת פירושים ── -->
+  <div data-section="section-commentary-display" data-section-label="תצוגת פירושים">
+    <div id="section-commentary-display" class="section-label">תצוגת פירושים</div>
+
+    <SettingRow id="nav-commentary-settings-mode" data-nav-label="הגדרות נפרדות לפירושים" hint="'זהה לתצוגת ספר' מחיל על הפירושים את הגדרות הספר">
       <ToggleGroup
         v-model="useSeparateCommentarySettings"
         :options="[
@@ -225,8 +229,8 @@ function toggleOtherName(key: OtherNameKey) {
       v-if="useSeparateCommentarySettings"
       id="nav-commentary-max-width"
       data-nav-label="רוחב מקסימלי פירושים"
-      label="רוחב מקסימלי עבור עמודת הפירושים"
-      hint="הגבל את רוחב שורת הקריאה בפירושים לנוחות מרבית"
+      label="רוחב מקסימלי לעמודת הפירושים"
+      hint="רוחב שורה קצר יותר נוח יותר לקריאה"
       v-model="commentaryMaxWidthSlider"
       :min="500"
       :max="950"

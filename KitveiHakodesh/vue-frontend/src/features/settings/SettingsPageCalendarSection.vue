@@ -59,7 +59,7 @@ function pickCity(name: string) {
   <div data-section="section-calendar" data-section-label="לוח שנה ושעון">
     <div id="section-calendar" class="section-label">לוח שנה ושעון</div>
 
-    <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
+    <SettingRow label="עיר לזמני היום" hint="זמני היום בלוח השנה יחושבו לפי מיקום העיר">
       <div ref="cityBoxRef" class="city-select-box" tabindex="0" @click="toggleCityDropdown">
         <span class="city-select-display">{{ activeCity.name }}</span>
         <component
@@ -88,7 +88,7 @@ function pickCity(name: string) {
       </Teleport>
     </SettingRow>
 
-    <SettingRow label="הצג שעון במצב מסך מלא" hint="הצג שעון שקוף בפינה השמאלית התחתונה בעת שימוש במצב מסך מלא">
+    <SettingRow label="הצג שעון במצב מסך מלא" hint="שעון שקוף בפינה השמאלית התחתונה, בעת שימוש במצב מסך מלא">
       <ToggleGroup
         v-model="showClock"
         :options="[

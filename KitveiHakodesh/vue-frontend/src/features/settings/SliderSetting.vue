@@ -21,7 +21,7 @@ const display = computed(() => {
 </script>
 
 <template>
-  <div class="setting-row">
+  <div class="setting-row setting-row-item">
     <div class="setting-header">
       <label class="setting-label">{{ label }}<HintIcon v-if="hint" :hint="hint" /></label>
       <span class="value">{{ display }}</span>
@@ -50,9 +50,13 @@ const display = computed(() => {
   justify-content: space-between;
   align-items: baseline;
 }
-.setting-label {
+/* Zero-specificity default so the row is self-sufficient outside the settings
+   page (setup wizard); SettingsPage.vue's [data-section] rule overrides it. */
+:where(.setting-label) {
   font-size: 11px;
   color: var(--text-secondary);
+}
+.setting-label {
   display: flex;
   align-items: center;
   gap: 4px;

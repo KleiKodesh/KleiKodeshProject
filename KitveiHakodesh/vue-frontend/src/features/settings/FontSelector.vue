@@ -71,7 +71,7 @@ defineExpose({ isOpen })
 </script>
 
 <template>
-  <div class="setting-row">
+  <div class="setting-row setting-row-item">
     <label class="setting-label">{{ label }}<HintIcon v-if="hint" :hint="hint" /></label>
     <div ref="boxRef" class="select-box" @click="toggle" tabindex="0">
       <span class="select-display">{{ displayName }}</span>
@@ -111,9 +111,13 @@ defineExpose({ isOpen })
   gap: 4px;
   margin-bottom: 10px;
 }
-.setting-label {
+/* Zero-specificity default so the row is self-sufficient outside the settings
+   page (setup wizard); SettingsPage.vue's [data-section] rule overrides it. */
+:where(.setting-label) {
   font-size: 11px;
   color: var(--text-secondary);
+}
+.setting-label {
   display: flex;
   align-items: center;
   gap: 4px;

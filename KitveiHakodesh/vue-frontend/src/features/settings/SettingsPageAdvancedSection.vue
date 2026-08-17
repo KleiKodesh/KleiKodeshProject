@@ -148,10 +148,8 @@ async function applyTurnOffUpdates(value: boolean) {
   <div data-section="section-advanced" data-section-label="מתקדם">
     <div id="section-advanced" class="section-label">מתקדם</div>
 
-    <!-- היברו בוקס -->
-    <div class="subsection-label">היברו בוקס</div>
     <SettingRow
-      label="תיקיית ספרים מקומית"
+      label="הגדר תיקיית ספרים מקומית של היברו בוקס"
       hint="אם ברשותך אוסף מקומי של ספרים מהיברו בוקס, ציין את נתיב התיקייה. הספרים יטענו מהתיקייה במקום להוריד מהאינטרנט. אם ספר אינו נמצא בתיקייה, תתבצע הורדה רגילה."
     >
       <SettingsPagePathField
@@ -165,10 +163,10 @@ async function applyTurnOffUpdates(value: boolean) {
       />
     </SettingRow>
 
-    <!-- מסד נתונים -->
-    <div class="subsection-label">מסד נתונים</div>
-    <div class="db-path-row">
-      <span class="db-path-label">נתיב מסד הנתונים</span>
+    <SettingRow
+      label="הגדר נתיב למסד הנתונים"
+      :hint="isDev ? 'שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך.' : undefined"
+    >
       <SettingsPagePathField
         :value="dbPath"
         placeholder="לא נבחר נתיב"
@@ -178,27 +176,20 @@ async function applyTurnOffUpdates(value: boolean) {
         @clear="resetDbPath"
         @commit="commitDbPath"
       />
-    </div>
-    <p v-if="isDev" class="hint-text">
-      שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך.
-    </p>
+    </SettingRow>
 
-    <!-- חיפוש קבצים -->
-    <div class="subsection-label">חיפוש קבצים</div>
     <SettingRow
-      label="תיקיות מוחרגות"
+      label="החרג תיקיות מחיפוש הקבצים"
       hint="תיקיות שיוחרגו מתוצאות חיפוש הקבצים. השינויים נכנסים לתוקף מיד — אין צורך לבנות מחדש את האינדקס."
     >
       <button class="manage-btn" @click="openExcludedFolders">ניהול תיקיות מוחרגות</button>
     </SettingRow>
 
-    <!-- עדכונים -->
-    <div class="subsection-label">עדכונים</div>
     <SettingRow
       id="nav-turn-off-updates"
       data-nav-label="כבה בדיקת עדכונים"
       label="כבה בדיקת עדכונים אוטומטית"
-      hint="כאשר מופעל, האפליקציה לא תבדוק אוטומטית אם קיים עדכון בעת הפתיחה. הגדרה זו משותפת עם התוסף של וורד. עדכון שכבר הורד עדיין יותקן עם סגירת האפליקציה."
+      hint="בבחירת 'כן' האפליקציה לא תבדוק אם קיים עדכון בעת הפתיחה. ההגדרה משותפת עם התוסף לוורד. עדכון שכבר הורד יותקן עם סגירת האפליקציה."
     >
       <ToggleGroup
         :model-value="turnOffUpdates"
@@ -218,26 +209,6 @@ async function applyTurnOffUpdates(value: boolean) {
 </template>
 
 <style scoped>
-.hint-text {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin: -4px 0 10px;
-}
-
-.db-path-row {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  margin-bottom: 10px;
-  box-sizing: border-box;
-}
-
-.db-path-label {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
 .manage-btn {
   width: 100%;
   height: 28px;

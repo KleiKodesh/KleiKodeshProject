@@ -79,7 +79,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-compact-mode" data-nav-label="מצב קומפקטי" label="מצב קומפקטי" hint="מקטין את גובה סרגלי הכלים והכפתורים">
+    <SettingRow id="nav-compact-mode" data-nav-label="מצב קומפקטי" label="הפעל מצב קומפקטי" hint="מקטין את גובה סרגלי הכלים והכפתורים">
       <ToggleGroup
         v-model="compactMode"
         :options="[
@@ -89,7 +89,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-content-border" data-nav-label="מסגרת סביב התוכן" label="מסגרת סביב התוכן" hint="מציג מסגרת מעוגלת עדינה סביב אזור התצוגה">
+    <SettingRow id="nav-content-border" data-nav-label="מסגרת סביב התוכן" label="הצג מסגרת סביב התוכן" hint="מציג מסגרת מעוגלת עדינה סביב אזור התצוגה">
       <ToggleGroup
         v-model="contentBorder"
         :options="[
@@ -137,7 +137,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-title-bar-buttons" data-nav-label="הצג / הסתר כפתורים בסרגל הכלים" label="הצג / הסתר כפתורים בסרגל הכלים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
+    <SettingRow id="nav-title-bar-buttons" data-nav-label="כפתורים בסרגל הכלים" label="כפתורים בסרגל הכלים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
       <div class="title-bar-chips">
         <button
           v-for="button in TITLE_BAR_BUTTONS"

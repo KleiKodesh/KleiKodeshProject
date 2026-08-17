@@ -58,4 +58,6 @@ Wrap the section content in `<div data-section="section-xxx" data-section-label=
 
 ## Global CSS
 
-`[data-section]`, `.section-label`, `.subsection-label`, and `[data-section-hidden]` are all defined as unscoped global styles in `SettingsPage.vue`. Section components rely on these classes being globally available — do not move them to scoped styles.
+`[data-section]`, `.section-label`, and `[data-section-hidden]` are all defined as unscoped global styles in `SettingsPage.vue`. Section components rely on these classes being globally available — do not move them to scoped styles.
+
+There is one heading level. A group of settings that needs its own heading gets its own card, not a heading nested inside one — that's what keeps a card to a single horizontal rule. Row labels carry their own context (`תיקיית ספרים מקומית של היברו בוקס`, not a `היברו בוקס` heading over `תיקיית ספרים מקומית`), so a heading is never doing a label's job.

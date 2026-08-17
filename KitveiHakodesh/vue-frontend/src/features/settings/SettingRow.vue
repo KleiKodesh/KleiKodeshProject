@@ -10,6 +10,9 @@ defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
     </span>
     <div class="setting-control">
       <slot />
+      <!-- A row whose control speaks for itself needs no label, but may still
+           carry a hint — keep it reachable next to the control. -->
+      <HintIcon v-if="hint && !label" :hint="hint" />
     </div>
   </div>
 </template>
@@ -21,9 +24,13 @@ defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
   gap: 4px;
   margin-bottom: 16px;
 }
-.setting-label {
+/* Zero-specificity default so the row is self-sufficient outside the settings
+   page (setup wizard); SettingsPage.vue's [data-section] rule overrides it. */
+:where(.setting-label) {
   font-size: 11px;
   color: var(--text-secondary);
+}
+.setting-label {
   display: flex;
   align-items: center;
   gap: 4px;
