@@ -49,7 +49,7 @@ export interface CommentaryVisibilityItem {
   bookId: number
   sectionLabel: string    // e.g. "מפרשים"
   subSectionLabel: string // e.g. "ראשונים", or "" if none
-  bookTitle: string       // display name — also persisted for convenience
+  bookTitle: string       // display name — taken from the live group, never stored
   isChecked: boolean
   isInSearchResults: boolean
 }
@@ -66,15 +66,19 @@ export interface CommentaryTreeState {
 }
 
 /**
- * The saved form of the above. `isChecked` is dropped: it is a cache derived from
- * the check-tree, which is persisted separately and in full (`checkState`), and
- * restore recomputes every flag from there. Persisting it too would write a value
- * that is always ignored on the way back in.
+ * The saved form of the above: the reader's search input, and nothing else.
+ *
+ * `visibilityList` is deliberately NOT persisted. Every field of it is derived —
+ * `bookId`/`sectionLabel`/`bookTitle` are book data already in the seforim DB,
+ * `isChecked` is a cache over the check-tree (persisted separately as `checkState`),
+ * and `isInSearchResults` follows from `searchQuery`. `syncVisibilityList` rebuilds
+ * the whole list from the live commentary groups as soon as they load, so a stored
+ * copy is overwritten unread — it was ~115 duplicated book titles per panel in every
+ * saved record, and restoring it flashed a screen of untitled rows.
  */
 export interface CommentaryTreeStatePersist {
   searchQuery: string
   tokens: string[]
-  visibilityList: Omit<CommentaryVisibilityItem, 'isChecked'>[]
 }
 
 /**

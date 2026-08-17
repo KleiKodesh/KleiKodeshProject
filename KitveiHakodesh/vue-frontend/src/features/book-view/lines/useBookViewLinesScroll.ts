@@ -348,31 +348,32 @@ export function useBookViewLinesScroll(
 
   let lastKnownPos: { scrollIndex: number; scrollOffset: number } | null = null
 
-  // Last known good filter snapshot PER PANEL. A panel's visibilityList is empty
-  // until its filter tree has been opened (and again once it closes), so saving the
-  // live value blindly would overwrite a good saved filter with an empty one.
-  const lastValidFilterState: Partial<Record<CommentarySlot, CommentaryTreeStatePersist>> = {}
-
-  /** Copy for storage, minus the derived isChecked — see CommentaryTreeStatePersist. */
+  /**
+   * Copy for storage: the reader's search input only — see CommentaryTreeStatePersist.
+   *
+   * There used to be a `lastValidFilterState` backfill here, because a panel's
+   * visibilityList empties whenever its tree closes and saving the live value blindly
+   * would overwrite a good filter with an empty one. That list is no longer persisted
+   * at all, and searchQuery has no such empty phase, so the backfill is gone with it.
+   */
   function cloneFilterState(state: CommentaryTreeState): CommentaryTreeStatePersist {
     return {
       searchQuery: state.searchQuery,
       tokens: [...state.tokens],
-      visibilityList: state.visibilityList.map(({ isChecked: _isChecked, ...item }) => item),
     }
   }
 
-  /** Every panel's state for this save, each filter backfilled from its last good one. */
+  /** Every panel's state for this save. */
   function commentaryPanelsForSave(): CommentaryPanelPersistStates {
     const live = props.commentaryPersistState?.() ?? {}
     const result: CommentaryPanelPersistStates = {}
     for (const slot of COMMENTARY_SLOTS) {
       const panel = live[slot]
       if (!panel) continue
-      const filterState = panel.filterState?.visibilityList.length
-        ? cloneFilterState(panel.filterState)
-        : lastValidFilterState[slot]
-      result[slot] = { ...panel, filterState }
+      result[slot] = {
+        ...panel,
+        filterState: panel.filterState ? cloneFilterState(panel.filterState) : undefined,
+      }
     }
     return result
   }
@@ -403,24 +404,6 @@ export function useBookViewLinesScroll(
       toc,
     })
   }
-
-  // Snapshot each panel's filter as soon as it has content, so a later close (which
-  // empties the live list) still persists the filter the reader had set.
-  watch(
-    () => {
-      const live = props.commentaryPersistState?.() ?? {}
-      return COMMENTARY_SLOTS.map((slot) => live[slot]?.filterState?.visibilityList.length ?? 0)
-    },
-    () => {
-      const live = props.commentaryPersistState?.() ?? {}
-      for (const slot of COMMENTARY_SLOTS) {
-        const filterState = live[slot]?.filterState
-        if (filterState?.visibilityList.length) {
-          lastValidFilterState[slot] = cloneFilterState(filterState)
-        }
-      }
-    },
-  )
 
   watch(
     () => props.commentaryVisible,
