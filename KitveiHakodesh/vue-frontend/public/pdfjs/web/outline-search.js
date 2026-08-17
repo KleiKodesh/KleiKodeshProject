@@ -133,7 +133,7 @@
     this.segments = new Map();
     /** parentId per node — for ancestry dedup in Pass 3. */
     this.parentIds = new Map();
-    /** "root · parent · node" per node, for rendering the path subtitle. */
+    /** "root · parent · node" per node — the label of a search result row. */
     this.displayPaths = new Map();
     this._build(nodes);
   }
@@ -1053,24 +1053,18 @@
         // source of truth for navigation.
         var anchor = document.createElement('a');
         anchor.href = node.anchor.href;
-        anchor.textContent = node.text;
+        // The FULL ancestor path is the row's label — "root · parent · node" on
+        // one line, exactly what BookView's TreeView renders while filtering
+        // (`filter ? displayPaths.get(node.id) : node.text`). A result is only
+        // meaningful in context: "פרק ד" alone is ambiguous across a book, and
+        // the search itself matches across the whole ancestor chain, so the row
+        // must show the same chain it matched against.
+        anchor.textContent = tree.displayPaths.get(node.id) || node.text;
         anchor.style.fontWeight = node.anchor.style.fontWeight;
         anchor.style.fontStyle = node.anchor.style.fontStyle;
         anchor.dataset.outlineNodeId = String(node.id);
         anchor.dataset.navItem = ''; // keyboard-nav target (see moveTo/activate)
         row.append(anchor);
-
-        // Ancestor path subtitle, mirroring the Vue panel's result rows.
-        var path = tree.displayPaths.get(node.id);
-        if (path && path !== node.text) {
-          var parentPath = path.slice(0, path.length - node.text.length).replace(/\s*·\s*$/, '');
-          if (parentPath) {
-            var sub = document.createElement('span');
-            sub.className = 'outlineSearchPath';
-            sub.textContent = parentPath;
-            anchor.append(sub);
-          }
-        }
         fragment.append(row);
       }
       resultsView.replaceChildren(fragment);
