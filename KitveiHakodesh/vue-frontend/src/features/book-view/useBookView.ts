@@ -52,6 +52,7 @@ import type {
   CommentaryPanelLiveStates,
   CommentaryPinSnapshot,
   CommentarySlot,
+  TocPersistState,
 } from './bookViewTypes'
 import type { Highlight } from './lines/useBookViewHighlights'
 import type { Note } from './lines/useBookViewNotes'
@@ -82,12 +83,20 @@ type CommentaryViewInstance = {
   $el?: HTMLElement
 }
 
+/** The TOC tree component, for the state it owns and the book view persists. */
+type TocTreeInstance = {
+  snapshotState: () => Omit<TocPersistState, 'visible' | 'altStructureId'>
+  restoreState: (saved: TocPersistState | undefined) => void
+}
+
 export function useBookView(
   toolbarRef: () => ToolbarInstance | null,
   linesContentRef: () => LinesContentInstance | null,
   searchBarRef: () => SearchBarInstance | null,
   /** One CommentaryView ref per panel, set by BookViewPage. */
   commentaryViewRefs: Record<CommentarySlot, () => CommentaryViewInstance | null>,
+  /** Whichever TOC tree is rendered (docked or overlay), or null while closed. */
+  tocTreeRef: () => TocTreeInstance | null = () => null,
 ) {
   const bookViewStore = useBookViewStore()
   const tabStore = useTabStore()
@@ -129,6 +138,7 @@ export function useBookView(
   const {
     getActiveTocEntry, getActiveAltTocEntry, getTocPath,
     altTocSections, selectedAltTocSection,
+    selectedAltTocStructureId, restoreAltTocStructure,
     tocEntries, tocSearchTree,
     loading: tocLoading, error: tocError, tocLoaded,
   } = useToc(() => bookId, () => bookTitle)
@@ -540,6 +550,35 @@ export function useBookView(
     return result
   }
 
+  /**
+   * The TOC panel's persistable state.
+   *
+   * The tree component only exists while the panel is open, so its inner state is
+   * re-snapshotted whenever it is reachable and remembered after it closes —
+   * otherwise closing the panel (or saving while it is shut) would persist an
+   * empty tree over a good one. `visible` always comes from the live flag.
+   */
+  let lastTocInnerState: Omit<TocPersistState, 'visible' | 'altStructureId'> | undefined
+
+  function tocPersistState(): TocPersistState {
+    const tree = tocTreeRef()
+    if (tree) lastTocInnerState = tree.snapshotState()
+    return {
+      ...lastTocInnerState,
+      visible: sidePanel.tocVisible.value,
+      altStructureId: selectedAltTocStructureId.value,
+    }
+  }
+
+  // Snapshot on close: the panel's subtree is destroyed by then, so the state has
+  // to be taken while the component is still mounted.
+  watch(sidePanel.tocVisible, (visible, wasVisible) => {
+    if (wasVisible && !visible) {
+      const tree = tocTreeRef()
+      if (tree) lastTocInnerState = tree.snapshotState()
+    }
+  }, { flush: 'sync' })
+
   // ── Session restore ───────────────────────────────────────────────────────
 
   const {
@@ -549,6 +588,11 @@ export function useBookView(
     tabId, bookId, openTocLineIndex,
     panels,
     selectedLineId, commentaryLineId,
+    {
+      visible: sidePanel.tocVisible,
+      apply: (saved) => tocTreeRef()?.restoreState(saved),
+      restoreAltStructure: restoreAltTocStructure,
+    },
   )
 
   watch(() => bookId, () => {
@@ -640,6 +684,7 @@ export function useBookView(
     anyCommentaryVisible,
     openCommentarySlots,
     commentaryPersistState,
+    tocPersistState,
     // data
     tabId, bookId,
     lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,

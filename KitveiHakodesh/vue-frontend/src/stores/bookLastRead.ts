@@ -17,8 +17,16 @@ export interface LastReadState {
   scrollIndex: number
   scrollOffset: number
   selectedLineId?: number | null
+  /**
+   * Main text zoom. Carried here as well as on `BookState` because the commentary
+   * panels' zoom already rides along inside `commentaryPanels` — without this,
+   * reopening a book restored the commentary zoom but reset the text to default.
+   */
+  zoom?: number
   /** Both commentary panels' saved place, keyed by slot. */
   commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
+  /** The TOC side panel, so reopening a book restores the panel too. */
+  toc?: import('@/features/book-view/bookViewTypes').TocPersistState
 }
 
 // ── On-disk store (LRU-capped) ────────────────────────────────────────────────

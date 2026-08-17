@@ -79,6 +79,22 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
 
   function selectAltTocStructure(structure: AltTocStructure) {
     selectedAltTocStructureId.value = structure.id
+    altStructureChosen = true
+  }
+
+  /**
+   * True once the choice is the reader's — either they picked a structure, or one
+   * was restored from a saved record. The alt-TOC load falls back to the priority
+   * default only while this is false, so an async load that lands after restore
+   * cannot overwrite what the reader had.
+   */
+  let altStructureChosen = false
+
+  /** Called by session restore before/while the alt sections load. */
+  function restoreAltTocStructure(id: number | null | undefined) {
+    if (id == null) return
+    selectedAltTocStructureId.value = id
+    altStructureChosen = true
   }
 
   async function load(id: number) {
@@ -116,6 +132,9 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
       )
       if (generation !== altTocGeneration) return // the book changed mid-flight
       altTocSections.value = sections
+      // Only fall back to the priority default when the reader has no choice of
+      // their own — a restored structure must survive this late-landing load.
+      if (altStructureChosen && sections.some((s) => s.structure.id === selectedAltTocStructureId.value)) return
       selectedAltTocStructureId.value =
         pickPreferredAltTocStructure(sections.map((s) => s.structure))?.id ?? null
     } catch {
@@ -130,6 +149,9 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
         tocLoaded.value = false
         altTocSections.value = []
         selectedAltTocStructureId.value = null
+        // A new book means the old choice no longer applies — back to the default
+        // until this book's own saved structure (if any) is restored.
+        altStructureChosen = false
         load(id)
         loadAltTocSections(id)
       }
@@ -192,7 +214,9 @@ export function useToc(bookId: () => number | undefined, bookTitle?: () => strin
     tocEntries,
     altTocSections,
     selectedAltTocSection,
+    selectedAltTocStructureId,
     selectAltTocStructure,
+    restoreAltTocStructure,
     loading,
     tocLoaded,
     error,

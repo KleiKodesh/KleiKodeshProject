@@ -147,6 +147,26 @@ export type CommentaryPanelLiveStates = Partial<
 >
 
 /**
+ * The TOC side panel's saved state, per (tab, book).
+ *
+ * The panel is `v-if`'d, so its whole subtree is destroyed when it closes and again
+ * on every tab switch — none of this survives in component state. Expanded nodes are
+ * stored as ids rather than a tree so the shape does not depend on the TOC's own.
+ */
+export interface TocPersistState {
+  visible?: boolean
+  searchQuery?: string
+  /** Expanded node ids for the main TOC tree. */
+  expanded?: number[]
+  /** Expanded node ids for the alternate structure tree (daf, parasha, …). */
+  altExpanded?: number[]
+  scrollTop?: number
+  altScrollTop?: number
+  /** Which alternate structure the reader picked, when the book has several. */
+  altStructureId?: number | null
+}
+
+/**
  * Each panel's currently-shown commentary group, captured at the instant of a user
  * action (line click, auto-select scroll) while `activePinnedGroup` is still valid.
  * A snapshot rather than a single value because the panels sit on different books.

@@ -85,7 +85,21 @@ function reset() {
   expanded.value = new Set()
 }
 
-defineExpose({ toggleNode: toggle, reset, containerRef })
+/**
+ * Expanded-node access for callers that persist their tree's shape (the book
+ * view's TOC). Kept as plain ids so the caller never has to know the tree's
+ * structure, and exposed rather than a prop so nothing changes for the callers
+ * that are happy with the default expand-the-active-ancestors behaviour.
+ */
+function getExpanded(): number[] {
+  return [...expanded.value]
+}
+
+function setExpanded(ids: readonly number[]): void {
+  expanded.value = new Set(ids)
+}
+
+defineExpose({ toggleNode: toggle, reset, containerRef, getExpanded, setExpanded })
 
 const { focusedIndex, containerFocused } = useListKeys(
   containerRef,

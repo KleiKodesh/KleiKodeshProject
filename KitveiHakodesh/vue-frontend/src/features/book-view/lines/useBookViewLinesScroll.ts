@@ -31,6 +31,7 @@ import type {
   CommentarySlot,
   CommentaryTreeState,
   CommentaryTreeStatePersist,
+  TocPersistState,
 } from '../bookViewTypes'
 import type { useTabStore } from '@/stores/tabStore'
 import type { useBookViewStore } from '@/stores/bookViewStore'
@@ -54,6 +55,8 @@ export interface BookViewLinesScrollProps {
    * panels themselves own it - see useCommentaryPanelSlot.
    */
   commentaryPersistState?: () => CommentaryPanelLiveStates
+  /** The TOC panel's state, read at save time like the commentary panels'. */
+  tocPersistState?: () => TocPersistState
   selectedLineId?: number | null
   searchBarVisible?: boolean
 }
@@ -380,6 +383,7 @@ export function useBookViewLinesScroll(
     if (!position) return
 
     const commentaryPanels = commentaryPanelsForSave()
+    const toc = props.tocPersistState?.()
 
     tabStore.setBookViewState(tabId, bookId, {
       ...position,
@@ -387,11 +391,16 @@ export function useBookViewLinesScroll(
       zoom: zoom.value,
       autoSelectTopLine: autoSelectTopLine.value,
       commentaryPanels,
+      toc,
     })
     tabStore.setLastReadPos(bookId, {
       ...position,
       selectedLineId: props.selectedLineId,
+      // Zoom rides along here too, so reopening a book in a new tab restores the
+      // text zoom and not just the commentary panels'.
+      zoom: zoom.value,
       commentaryPanels,
+      toc,
     })
   }
 
