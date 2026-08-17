@@ -1214,8 +1214,12 @@ IIFE's last statement.
   stays the single source of truth for navigation and selected-item tracking. Nothing in
   `viewer.mjs` needed changing.
 - Results are capped at **100**, matching the Vue `TreeView`'s filtered-list limit.
-- Each row shows its ancestor path as a `.outlineSearchPath` subtitle, mirroring the Vue
-  panel's result rows.
+- Each row's label is the **full ancestor path** — `root · parent · node` on one line,
+  from `displayPaths` — exactly what the Vue `TreeView` renders while filtering
+  (`filter ? displayPaths.get(node.id) : node.text`). The search matches across the whole
+  ancestor chain, so the row shows the same chain it matched against; a bare leaf title is
+  ambiguous on its own. The anchor is `unicode-bidi: isolate` so a title ending in `.` or
+  `:` cannot reorder against the ` · ` separators.
 
 The input is shown only when the outline view is active **and** `outlineCount > 0`.
 `Escape` clears the query (and stops propagating so it does not close the sidebar instead).

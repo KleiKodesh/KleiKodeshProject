@@ -358,7 +358,11 @@
   background: var(--bg-primary-custom, transparent);
 }
 
-/* Flat search results: BookView's filtered-row look (is-filtered). */
+/* Flat search results: BookView's filtered-row look (is-filtered).
+   Each row's label is the FULL ancestor path ("root · parent · node"), so
+   `isolate` keeps it in its own bidi run — the path joins ancestor titles with
+   " · ", and without isolation a title ending in ":" or "." would let that weak
+   punctuation reorder against the separator. */
 #outlineSearchResults.treeView .treeItem > a {
   display: block;
   min-height: 0;
@@ -367,6 +371,7 @@
   color: var(--text-primary-custom, var(--treeitem-color));
   font-size: 0.8rem;
   line-height: 1.4;
+  unicode-bidi: isolate;
 }
 #outlineSearchResults.treeView .treeItem > a:hover {
   background-color: color-mix(in srgb, var(--text-primary-custom, var(--main-color)) 6%, transparent);
@@ -798,15 +803,3 @@
   outline: none;
 }
 
-/* Ancestor path subtitle under each result, mirroring the Vue panel's rows.
-   `isolate` keeps its own bidi run: the path is built by joining ancestor titles
-   with " · ", and without isolation a title ending in ":" or "." would let that
-   weak punctuation reorder against the separator. */
-.outlineSearchPath {
-  display: block;
-  direction: rtl;
-  unicode-bidi: isolate;
-  font-size: 11px;
-  line-height: 13px;
-  opacity: 0.6;
-}
