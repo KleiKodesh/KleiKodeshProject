@@ -111,20 +111,13 @@ export function useAppShellPane(paneId: 1 | 2) {
    * browser mirrors that, so the task-pane path is what we exercise day to day.
    * Only the standalone demo host, which has a real tab strip, opens its own tab.
    *
-   * The in-place patch merges into the existing tab (Object.assign), so it must
-   * clear the outgoing book's TOC state explicitly. `tocPath` in particular is not
-   * a navigation key, and a leftover path resolves to nothing against the incoming
-   * book's TOC bridge — the breadcrumb then renders a chevron with a blank label
-   * beside the title until the view mounts and rewrites it.
+   * The outgoing book's TOC state does not need clearing here: the patch changes
+   * identity, and applyTabPatch drops position state on an identity change (see
+   * POSITION_FIELDS in tabStore).
    */
   function openBookTarget(patch: Omit<Tab, 'id'>) {
     if (navigatesDestinationsInPlace)
-      updateActiveTab({
-        tocPath: undefined,
-        openTocEntryId: undefined,
-        ...patch,
-        navNonce: tabStore.nextNavNonce(),
-      })
+      updateActiveTab({ ...patch, navNonce: tabStore.nextNavNonce() })
     else openTab(patch)
   }
 

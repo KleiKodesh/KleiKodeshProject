@@ -81,7 +81,6 @@ export interface Tab {
   // Kiwix ZIM state — removed; feature deferred to a later stage
   // Book reader state
   bookId?: number
-  openToc?: boolean
   openTocEntryId?: number
   openTocLineIndex?: number
   // Bumped to force a book-view remount when navigating within the SAME book.
@@ -128,8 +127,74 @@ export interface Tab {
   isOtzariaAddin?: boolean
 }
 
+/**
+ * The fields above split into two groups with OPPOSITE lifetimes, and the split is
+ * what the three constants below make enforceable instead of conventional.
+ *
+ * IDENTITY says WHICH document the tab shows. POSITION says WHERE INSIDE it the
+ * reader is — a breadcrumb, a line to open at, a highlight to paint. Position is
+ * only ever meaningful relative to one identity: the moment a tab points at a
+ * different document, every position field describes a document that is no longer
+ * on screen.
+ *
+ * Tabs are written by merging (`Object.assign` in applyTabPatch), and a merge keeps
+ * whatever the patch omits. So that rule cannot be left to the ~15 call sites that
+ * navigate — each would have to remember to null out fields it never mentions, and
+ * a site that forgets leaks the previous document's state into the next one. It was
+ * exactly that leak that kept a book's breadcrumb in the title bar after the address
+ * bar navigated the tab to search results. applyTabPatch enforces it centrally now,
+ * so a call site cannot get this wrong by omission.
+ */
+const IDENTITY_FIELDS = [
+  'route',
+  'bookId',
+  'localFilePath',
+  'localFileHbBookId',
+  'localFileName',
+  'searchQuery',
+] as const satisfies readonly (keyof Tab)[]
+
+/**
+ * Cleared automatically whenever a patch changes identity. A patch that sets one of
+ * these itself still wins — navigating to a specific line means supplying the line.
+ */
+const POSITION_FIELDS = [
+  'tocPath',
+  'openTocEntryId',
+  'openTocLineIndex',
+  'flashOpenLine',
+  'searchHighlightLineIndex',
+  'searchHighlightQuery',
+  'searchHighlightSnippet',
+  'searchHighlightTerms',
+  'searchRestore',
+] as const satisfies readonly (keyof Tab)[]
+
+/**
+ * Never written to storage. Position state describes one navigation and is consumed
+ * on arrival, so persisting it would replay a stale jump on the next session; the
+ * rest are live handles (a virtual URL, an in-flight conversion) that mean nothing
+ * outside the process that made them. `tocPath` is the one exception — it is the
+ * tab's caption, not a pending jump, so it persists and is listed as such below.
+ */
+const TRANSIENT_FIELDS = [
+  ...POSITION_FIELDS.filter((f) => f !== 'tocPath'),
+  'navNonce',
+  'localFileVirtualUrl',
+  'localFileConverting',
+  'localFileLoadingType',
+  'localFileDownloadProgress',
+] as const satisfies readonly (keyof Tab)[]
+
+/** Drops every field that must not outlive the process. */
+function withoutTransientFields(tab: Tab): Tab {
+  const copy = { ...tab }
+  for (const field of TRANSIENT_FIELDS) delete copy[field]
+  return copy
+}
+
 interface PersistedTabList {
-  tabs: Omit<Tab, 'localFileVirtualUrl' | 'openToc'>[]
+  tabs: Omit<Tab, 'localFileVirtualUrl'>[]
   activeTabId: string
   nextId: number
   /**
@@ -263,23 +328,7 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = useWorkspaceStore().activeId
     const persistable = tabs.value.filter((t) => !DESTINATION_ROUTES.includes(t.route))
     lsSet<PersistedTabList>(tabsListKey(wsId), {
-      tabs: persistable.map(
-        ({
-          localFileVirtualUrl,
-          localFileConverting,
-          localFileLoadingType,
-          openToc,
-          openTocEntryId,
-          openTocLineIndex,
-          navNonce,
-          searchHighlightLineIndex,
-          searchHighlightQuery,
-          searchHighlightSnippet,
-          searchHighlightTerms,
-          searchRestore,
-          ...t
-        }) => t,
-      ),
+      tabs: persistable.map(withoutTransientFields),
       activeTabId: persistable.some((t) => t.id === activeTabId.value)
         ? activeTabId.value
         // Fallback must prefer a pane-1 tab: restoring a pane-2 id as pane 1's
@@ -467,27 +516,6 @@ export const useTabStore = defineStore('tabs', () => {
     nextTick(() => dropUncheckedCommentaryForTab(id))
   }
 
-  /** Strips the in-memory-only fields, matching what persistTabs drops. */
-  function stripTransient(tab: Tab): Tab {
-    const {
-      localFileVirtualUrl: _a,
-      localFileConverting: _b,
-      localFileLoadingType: _c,
-      localFileDownloadProgress: _d,
-      openToc: _e,
-      openTocEntryId: _f,
-      openTocLineIndex: _g,
-      flashOpenLine: _h,
-      searchHighlightLineIndex: _i,
-      searchHighlightQuery: _j,
-      searchHighlightSnippet: _k,
-      searchHighlightTerms: _l,
-      searchRestore: _m,
-      ...rest
-    } = tab
-    return rest as Tab
-  }
-
   // Only watch the fields that are actually persisted — avoids IDB writes on every
   // in-memory-only mutation (pdfVirtualUrl, pdfConverting, etc.)
   const _persistedSnapshot = computed(() =>
@@ -612,12 +640,7 @@ export const useTabStore = defineStore('tabs', () => {
    */
   function openPane2Tab(partial: Omit<Tab, 'id' | 'pane'>): Tab {
     if (!hasNativeChromeTabs && pane2Tabs.value.length > 0) {
-      updatePane2ActiveTab({
-        tocPath: undefined,
-        openTocEntryId: undefined,
-        ...partial,
-        navNonce: nextNavNonce(),
-      })
+      updatePane2ActiveTab({ ...partial, navNonce: nextNavNonce() })
       return activeTabForPane(2)
     }
 
@@ -795,12 +818,7 @@ export const useTabStore = defineStore('tabs', () => {
    */
   function openTab(partial: Omit<Tab, 'id'>) {
     if (!hasNativeChromeTabs) {
-      updateActiveTab({
-        tocPath: undefined,
-        openTocEntryId: undefined,
-        ...partial,
-        navNonce: nextNavNonce(),
-      })
+      updateActiveTab({ ...partial, navNonce: nextNavNonce() })
       return activeTab.value
     }
 
@@ -980,20 +998,34 @@ export const useTabStore = defineStore('tabs', () => {
   }
 
   /**
-   * True when a patch changes WHICH DOCUMENT a tab shows, as opposed to updating
+   * True when a patch mentions WHICH DOCUMENT the tab shows, as opposed to updating
    * the tab in place. This is the line between a navigation and a state sync, and
    * everything hangs off it: `tocPath` arrives on every scroll event and `title` on
    * every rename, so treating those as navigations would push a history frame per
-   * scroll and make Back useless.
+   * scroll and make Back useless. Empty strings and undefined are "not mentioned" —
+   * a blank path or query names no document.
    */
   function isNavigationPatch(patch: Partial<Omit<Tab, 'id'>>): boolean {
-    return !!(
-      patch.route ||
-      patch.bookId !== undefined ||
-      patch.localFilePath ||
-      patch.localFileHbBookId ||
-      patch.localFileName ||
-      patch.searchQuery
+    return IDENTITY_FIELDS.some((field) => statesIdentity(patch, field))
+  }
+
+  function statesIdentity(patch: Partial<Omit<Tab, 'id'>>, field: (typeof IDENTITY_FIELDS)[number]) {
+    const value = patch[field]
+    return value !== undefined && value !== ''
+  }
+
+  /**
+   * True when the patch moves the tab to a DIFFERENT document — the test that decides
+   * whether position state carries over.
+   *
+   * Distinct from isNavigationPatch, which asks only whether identity was mentioned.
+   * Re-stating the same book id (a title refresh, a re-open of the tab's current book)
+   * is a navigation worth recording but not a change of document, and clearing position
+   * there would throw away the reader's place for no reason.
+   */
+  function changesIdentity(tab: Tab, patch: Partial<Omit<Tab, 'id'>>): boolean {
+    return IDENTITY_FIELDS.some(
+      (field) => statesIdentity(patch, field) && patch[field] !== tab[field],
     )
   }
 
@@ -1006,6 +1038,15 @@ export const useTabStore = defineStore('tabs', () => {
   function applyTabPatch(tab: Tab, patch: Partial<Omit<Tab, 'id'>>) {
     const navigating = isNavigationPatch(patch)
     if (navigating) captureCurrentPosition(tab.id)
+
+    // Identity changed, so the outgoing document's position state is stale by
+    // definition (see IDENTITY_FIELDS / POSITION_FIELDS). Clear it before the merge
+    // rather than asking every caller to — a merge preserves what a patch omits, and
+    // a caller that omits a field is saying nothing about it, not asking to keep it.
+    // Fields the patch DOES set survive: they are written by the Object.assign below.
+    if (changesIdentity(tab, patch)) {
+      for (const field of POSITION_FIELDS) delete tab[field]
+    }
 
     Object.assign(tab, patch)
 
@@ -1038,6 +1079,11 @@ export const useTabStore = defineStore('tabs', () => {
    * COMPLETE a navigation the tab already recorded — a restore result arriving
    * with the served URL and route — where applyTabPatch would see the route key
    * and push a second frame at the same location, making Back need two presses.
+   *
+   * Bypassing applyTabPatch also bypasses its position-clearing: right, for the
+   * same reason. The document is not changing — the patch finishes opening the one
+   * the tab already points at — so its position state (a session-restored tocPath,
+   * a pending open-at line) must survive.
    */
   function updateTabWithoutHistory(tabId: string, patch: Partial<Omit<Tab, 'id'>>) {
     const tab = tabs.value.find((t) => t.id === tabId)

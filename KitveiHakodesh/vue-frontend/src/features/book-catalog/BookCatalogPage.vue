@@ -183,7 +183,6 @@ function onSelectBook(book: BookRow, openInNewTab = false) {
       title: book.title,
       route: '/book-view',
       bookId: book.id,
-      openToc: true,
     },
     openInNewTab,
   )
