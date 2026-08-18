@@ -1,9 +1,9 @@
 <script setup lang="ts">
 /**
  * AddressBar — the editable search field hosted inside AppTitleBar (an
- * Explorer-style address bar). It reuses the exact home-page search engine
- * (useHomeSearch) and the
- * home-page results dropdown (HomeSearchDropdown), so typing here behaves like
+ * Explorer-style address bar). It reuses the global search engine
+ * (useGlobalSearch) and its results dropdown (GlobalSearchDropdown), the same
+ * pair behind the home page's hero search bar, so typing here behaves like
  * typing on the home page: instant catalog matches, debounced HebrewBooks/file
  * results, and Enter → full-text search in the active tab.
  *
@@ -24,8 +24,8 @@
 import { ref, computed, nextTick, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
-import HomeSearchDropdown from '@/features/home/HomeSearchDropdown.vue'
-import { useHomeSearch, type FileSearchResult } from '@/features/home/useHomeSearch'
+import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
+import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppShellPane } from '@/composables/useAppShellPane'
@@ -51,7 +51,7 @@ const searchQuery = ref('')
 const wrapperRef = ref<HTMLElement | null>(null)
 const inputRef = ref<HTMLInputElement | null>(null)
 const isDropdownOpen = ref(false)
-const dropdownRef = ref<InstanceType<typeof HomeSearchDropdown> | null>(null)
+const dropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const dropdownEl = computed(() => dropdownRef.value?.element ?? null)
 
 // ── Animated placeholder (same phrases as the home search bar) ────────────────
@@ -92,7 +92,7 @@ const {
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
-} = useHomeSearch(searchQuery)
+} = useGlobalSearch(searchQuery)
 
 useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
 
@@ -361,7 +361,7 @@ nextTick(() => {
     >
       <IconSearch20Regular />
     </button>
-    <HomeSearchDropdown
+    <GlobalSearchDropdown
       v-if="isPanelVisible"
       ref="dropdownRef"
       merge-with-anchor

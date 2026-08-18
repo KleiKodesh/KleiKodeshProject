@@ -1,5 +1,6 @@
 /**
- * Unified home-page search across three sources:
+ * Unified quick search across three sources, shared by the home page's hero
+ * search bar and the title bar's AddressBar:
  *   1. Book catalog — title-only, instant (in-memory inverted index).
  *      When the title search finds nothing, falls back to the TOC heuristics
  *      (debounced) exactly like the catalog page: "בראשית פרק ד" splits into
@@ -72,7 +73,7 @@ export interface FileSearchResult {
   addinName: string
 }
 
-export type HomeSearchResult = CatalogSearchResult | HebrewBooksSearchResult | FileSearchResult
+export type GlobalSearchResult = CatalogSearchResult | HebrewBooksSearchResult | FileSearchResult
 
 export type SearchSourcePriority = 'catalog' | 'hebrewbooks' | 'files'
 
@@ -153,7 +154,7 @@ function toQueryWords(rawQuery: string): string[] {
 
 // ─── Composable ───────────────────────────────────────────────────────────────
 
-export function useHomeSearch(searchQuery: ReturnType<typeof ref<string>>) {
+export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
   const booksDataStore = useBooksDataStore()
   const settingsStore = useSettingsStore()
 

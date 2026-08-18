@@ -19,7 +19,7 @@ import type {
   HebrewBooksSearchResult,
   FileSearchResult,
   SearchSourcePriority,
-} from './useHomeSearch'
+} from './useGlobalSearch'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { NavLocation } from '@/stores/navLocation'
@@ -193,7 +193,7 @@ function getTabIcon(route: string): FileIconInfo {
   <Teleport to="body">
     <div
       ref="dropdownRef"
-      class="home-search-dropdown"
+      class="global-search-dropdown"
       :class="{ 'is-merged': mergeWithAnchor }"
       :style="dropdownStyle"
       @click.stop
@@ -207,7 +207,7 @@ function getTabIcon(route: string): FileIconInfo {
           v-for="tab in tabs"
           :key="tab.id"
           role="option"
-          class="home-search-dropdown__item"
+          class="global-search-dropdown__item"
           :class="{
             'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'tab' && i.id === tab.id),
           }"
@@ -218,16 +218,16 @@ function getTabIcon(route: string): FileIconInfo {
         >
           <component
             :is="getTabIcon(tab.route).component"
-            class="home-search-dropdown__item-icon"
+            class="global-search-dropdown__item-icon"
             :style="getTabIcon(tab.route).color ? { color: getTabIcon(tab.route).color } : undefined"
           />
-          <span class="home-search-dropdown__item-title">
-            {{ tab.title }}<span v-if="tab.tocPath" class="home-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
+          <span class="global-search-dropdown__item-title">
+            {{ tab.title }}<span v-if="tab.tocPath" class="global-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
           </span>
           <!-- Forgets the location. Closes nothing: locations and tabs are
                independent, so this is "remove from history", hence a trash icon. -->
           <button
-            class="home-search-dropdown__tab-close"
+            class="global-search-dropdown__tab-close"
             title="הסר מהרשימה"
             @click.stop="emit('forgetTab', tab.id)"
           >
@@ -238,12 +238,12 @@ function getTabIcon(route: string): FileIconInfo {
 
       <!-- ── Recently-opened section (address-bar mode, below the tabs) ── -->
       <template v-if="recentEntries && recentEntries.length > 0">
-        <div class="home-search-dropdown__section-header">נפתחו לאחרונה</div>
+        <div class="global-search-dropdown__section-header">נפתחו לאחרונה</div>
         <div
           v-for="entry in recentEntries"
           :key="entry.key"
           role="option"
-          class="home-search-dropdown__item"
+          class="global-search-dropdown__item"
           :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
           data-nav-item
           :title="withNewTabHint(entry.title)"
@@ -252,10 +252,10 @@ function getTabIcon(route: string): FileIconInfo {
         >
           <component
             :is="getRecentIcon(entry).component"
-            class="home-search-dropdown__item-icon"
+            class="global-search-dropdown__item-icon"
             :style="{ color: getRecentIcon(entry).color }"
           />
-          <span class="home-search-dropdown__item-title">{{ entry.title }}</span>
+          <span class="global-search-dropdown__item-title">{{ entry.title }}</span>
         </div>
       </template>
 
@@ -263,24 +263,24 @@ function getTabIcon(route: string): FileIconInfo {
 
         <!-- ── Book catalog section ── -->
         <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc)">
-          <div class="home-search-dropdown__section-header">
+          <div class="global-search-dropdown__section-header">
             קטלוג הספרים
-            <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="home-search-dropdown__spinner" />
+            <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="global-search-dropdown__spinner" />
           </div>
           <div
             v-for="item in catalogResults"
             :key="item.book.id"
             role="option"
-            class="home-search-dropdown__item"
+            class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'catalog' && i.bookId === item.book.id) }"
             data-nav-item
             :title="withNewTabHint(item.book.parentPath ? `${item.book.title}\n${item.book.parentPath}` : item.book.title)"
             @click="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
             @auxclick.middle="emit('selectCatalogBook', item.book.id, item.book.title, wantsNewTab($event))"
           >
-            <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
-            <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
-            <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
+            <IconLibrary20Filled class="global-search-dropdown__item-icon global-search-dropdown__item-icon--catalog" />
+            <span class="global-search-dropdown__item-title">{{ item.book.title }}</span>
+            <span v-if="item.book.parentPath" class="global-search-dropdown__item-path">
               {{ item.book.parentPath }}
             </span>
           </div>
@@ -289,16 +289,16 @@ function getTabIcon(route: string): FileIconInfo {
             v-for="item in catalogTocResults"
             :key="item.uid"
             role="option"
-            class="home-search-dropdown__item"
+            class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'catalogToc' && i.item.uid === item.uid) }"
             data-nav-item
             :title="withNewTabHint(`${item.book.title} ${item.tocPath}`)"
             @click="emit('selectCatalogToc', item, wantsNewTab($event))"
             @auxclick.middle="emit('selectCatalogToc', item, wantsNewTab($event))"
           >
-            <IconLibrary20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--catalog" />
-            <span class="home-search-dropdown__item-title">{{ item.book.title }} {{ item.tocPath }}</span>
-            <span v-if="item.book.parentPath" class="home-search-dropdown__item-path">
+            <IconLibrary20Filled class="global-search-dropdown__item-icon global-search-dropdown__item-icon--catalog" />
+            <span class="global-search-dropdown__item-title">{{ item.book.title }} {{ item.tocPath }}</span>
+            <span v-if="item.book.parentPath" class="global-search-dropdown__item-path">
               {{ item.book.parentPath }}
             </span>
           </div>
@@ -306,24 +306,24 @@ function getTabIcon(route: string): FileIconInfo {
 
         <!-- ── HebrewBooks section ── -->
         <template v-if="source === 'hebrewbooks' && (hebrewBooksResults.length > 0 || isLoadingHebrewBooks)">
-          <div class="home-search-dropdown__section-header">
+          <div class="global-search-dropdown__section-header">
             היברו-בוקס
-            <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="home-search-dropdown__spinner" />
+            <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="global-search-dropdown__spinner" />
           </div>
           <div
             v-for="item in hebrewBooksResults"
             :key="item.book.id"
             role="option"
-            class="home-search-dropdown__item"
+            class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'hebrewBooks' && i.book.id === item.book.id) }"
             data-nav-item
             :title="withNewTabHint(item.book.author ? `${item.book.title}\n${item.book.author}` : item.book.title)"
             @click="emit('selectHebrewBook', item.book, wantsNewTab($event))"
             @auxclick.middle="emit('selectHebrewBook', item.book, wantsNewTab($event))"
           >
-            <IconBookOpen20Filled class="home-search-dropdown__item-icon home-search-dropdown__item-icon--hebrewbooks" />
-            <span class="home-search-dropdown__item-title">{{ item.book.title }}</span>
-            <span v-if="item.book.author" class="home-search-dropdown__item-path">
+            <IconBookOpen20Filled class="global-search-dropdown__item-icon global-search-dropdown__item-icon--hebrewbooks" />
+            <span class="global-search-dropdown__item-title">{{ item.book.title }}</span>
+            <span v-if="item.book.author" class="global-search-dropdown__item-path">
               {{ item.book.author }}
             </span>
           </div>
@@ -331,15 +331,15 @@ function getTabIcon(route: string): FileIconInfo {
 
         <!-- ── File search section ── -->
         <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles)">
-          <div class="home-search-dropdown__section-header">
+          <div class="global-search-dropdown__section-header">
             קבצים
-            <IconArrowSync20Regular v-if="isLoadingFiles" class="home-search-dropdown__spinner" />
+            <IconArrowSync20Regular v-if="isLoadingFiles" class="global-search-dropdown__spinner" />
           </div>
           <div
             v-for="item in fileResults"
             :key="item.fullPath"
             role="option"
-            class="home-search-dropdown__item"
+            class="global-search-dropdown__item"
             :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'file' && i.item.fullPath === item.fullPath) }"
             data-nav-item
             :title="withNewTabHint(`${item.addinName || item.fileName}\n${item.fullPath}`)"
@@ -348,11 +348,11 @@ function getTabIcon(route: string): FileIconInfo {
           >
             <component
               :is="getFileIcon(item).component"
-              class="home-search-dropdown__item-icon"
+              class="global-search-dropdown__item-icon"
               :style="{ color: getFileIcon(item).color }"
             />
-            <span class="home-search-dropdown__item-title">{{ item.addinName || item.fileName }}</span>
-            <span class="home-search-dropdown__item-path">{{ item.fullPath }}</span>
+            <span class="global-search-dropdown__item-title">{{ item.addinName || item.fileName }}</span>
+            <span class="global-search-dropdown__item-path">{{ item.fullPath }}</span>
           </div>
         </template>
 
@@ -362,7 +362,7 @@ function getTabIcon(route: string): FileIconInfo {
 </template>
 
 <style scoped>
-.home-search-dropdown {
+.global-search-dropdown {
   /* Height of one sticky section header. Both the header itself and the rows'
      scroll-margin read this, so the keyboard highlight can never land under a
      header that changed height. */
@@ -388,14 +388,14 @@ function getTabIcon(route: string): FileIconInfo {
    over the field as a dark band. Clipping it: a large downward offset with the
    spread pulled in by an equal negative amount keeps the visible shadow below
    the panel while the top stays perfectly clean. */
-.home-search-dropdown.is-merged {
+.global-search-dropdown.is-merged {
   border-top: none;
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   box-shadow: 0 24px 20px -20px rgba(0, 0, 0, 0.35);
 }
 
-.home-search-dropdown__section-header {
+.global-search-dropdown__section-header {
   /* Sticks to the top of the dropdown's own scroll box while its rows pass
      under it, so the reader always knows which source they are looking at.
      The tint is composited over --bg-secondary rather than left transparent:
@@ -415,7 +415,7 @@ function getTabIcon(route: string): FileIconInfo {
   border-bottom: 1px solid var(--border-color);
 }
 
-.home-search-dropdown__spinner {
+.global-search-dropdown__spinner {
   animation: spin 1s linear infinite;
   opacity: 0.6;
 }
@@ -425,7 +425,7 @@ function getTabIcon(route: string): FileIconInfo {
   to { transform: rotate(360deg); }
 }
 
-.home-search-dropdown__item {
+.global-search-dropdown__item {
   /* Keyboard nav scrolls rows with scrollIntoView({block:'nearest'}), which
      aligns to the padding edge and would tuck a row under the sticky header
      when arrowing UPWARDS. Reserving the header's height here pushes that
@@ -448,32 +448,32 @@ function getTabIcon(route: string): FileIconInfo {
   box-sizing: border-box;
 }
 
-.home-search-dropdown__item:last-child {
+.global-search-dropdown__item:last-child {
   border-bottom: none;
 }
 
-.home-search-dropdown__item:hover,
-.home-search-dropdown__item.is-focused {
+.global-search-dropdown__item:hover,
+.global-search-dropdown__item.is-focused {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 
-.home-search-dropdown__item:active {
+.global-search-dropdown__item:active {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
-.home-search-dropdown__item-icon {
+.global-search-dropdown__item-icon {
   flex-shrink: 0;
 }
 
-.home-search-dropdown__item-icon--catalog {
+.global-search-dropdown__item-icon--catalog {
   color: #b5451b;
 }
 
-.home-search-dropdown__item-icon--hebrewbooks {
+.global-search-dropdown__item-icon--hebrewbooks {
   color: #d94f1e;
 }
 
-.home-search-dropdown__item-title {
+.global-search-dropdown__item-title {
   flex: 1;
   min-width: 0;
   font-size: 13px;
@@ -483,7 +483,7 @@ function getTabIcon(route: string): FileIconInfo {
   text-overflow: ellipsis;
 }
 
-.home-search-dropdown__item-path {
+.global-search-dropdown__item-path {
   flex-shrink: 0;
   max-width: 40%;
   font-size: 11px;
@@ -494,23 +494,23 @@ function getTabIcon(route: string): FileIconInfo {
 }
 
 /* ── Open-tab rows (address-bar mode) ── */
-.home-search-dropdown__item.is-active-tab {
+.global-search-dropdown__item.is-active-tab {
   background: color-mix(in srgb, var(--accent-color) 10%, transparent);
 }
 
 /* A closed tab is still a tab — same row, just quieter, so the open ones read
    first. Only the icon fades; the title keeps full contrast to stay legible. */
-.home-search-dropdown__item.is-closed-tab .home-search-dropdown__item-icon {
+.global-search-dropdown__item.is-closed-tab .global-search-dropdown__item-icon {
   opacity: 0.45;
 }
 
 /* TOC path after the tab title: greyed but the SAME size as the title. */
-.home-search-dropdown__item-toc {
+.global-search-dropdown__item-toc {
   color: var(--text-secondary);
   opacity: 0.8;
 }
 
-.home-search-dropdown__tab-close {
+.global-search-dropdown__tab-close {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -520,11 +520,11 @@ function getTabIcon(route: string): FileIconInfo {
   border-radius: 4px;
   color: var(--text-secondary);
 }
-.home-search-dropdown__tab-close svg {
+.global-search-dropdown__tab-close svg {
   width: 16px;
   height: 16px;
 }
-.home-search-dropdown__tab-close:hover {
+.global-search-dropdown__tab-close:hover {
   color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }

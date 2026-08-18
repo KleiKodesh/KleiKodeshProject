@@ -3,9 +3,9 @@ import { ref, computed, onMounted } from 'vue'
 import { useElementSize, useEventListener } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeTile from './HomePageTile.vue'
-import HomeSearchDropdown from './HomeSearchDropdown.vue'
+import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import HomePageDateBar from './HomePageDateBar.vue'
-import { useHomeSearch } from './useHomeSearch'
+import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
 import { useHomeTiles } from './useHomeTiles'
@@ -17,7 +17,7 @@ const { navigate } = useAppNavigation()
 const innerRef = ref<HTMLElement | null>(null)
 const searchBarRef = ref<HTMLElement | null>(null)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
-const searchDropdownRef = ref<InstanceType<typeof HomeSearchDropdown> | null>(null)
+const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
 
 const { width: containerWidth } = useElementSize(innerRef)
@@ -47,7 +47,7 @@ const {
   clearResults,
   pause: pauseSearch,
   resume: resumeSearch,
-} = useHomeSearch(homeSearchQuery)
+} = useGlobalSearch(homeSearchQuery)
 
 // The search bar reports user intent (onSubmit / onDropdownKeydown) and this
 // shell decides what it means, so the bar itself never imports navigation. Both
@@ -136,7 +136,7 @@ async function onTap(label: string) {
             <IconSearch20Regular />
           </button>
         </div>
-        <HomeSearchDropdown
+        <GlobalSearchDropdown
           v-if="searchBar.isDropdownOpen.value"
           ref="searchDropdownRef"
           :catalog-results="catalogResults"

@@ -51,7 +51,7 @@ function useAnimatedPlaceholder(query: Ref<string>) {
 /**
  * Owns the hero search bar's dropdown: when it is open, where it is anchored,
  * and the keyboard handling on the input. Result fetching lives in
- * `useHomeSearch`; navigation on select lives in `useHomeSearchNavigation`.
+ * `useGlobalSearch`; navigation on select lives in `useHomeSearchNavigation`.
  *
  * This composable deliberately knows nothing about navigation — it reports what
  * the user did (`onSubmit`, `onDropdownKeydown`) and lets the page decide.
