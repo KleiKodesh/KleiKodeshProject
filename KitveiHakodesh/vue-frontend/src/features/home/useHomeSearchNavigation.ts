@@ -6,7 +6,7 @@ import { useHebrewBooksHistoryStore } from '@/stores/hebrewBooksHistoryStore'
 import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
 import { getHbPdfUrl, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
-import type { FileSearchResult } from './useHomeSearch'
+import type { FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 

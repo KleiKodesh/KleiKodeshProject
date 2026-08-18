@@ -3,7 +3,7 @@ import { useEventListener } from '@vueuse/core'
 import { wantsNewTab } from '@/composables/useOpenInNewTab'
 import type { Ref } from 'vue'
 
-// SCROLL DEBUGGING NOTE (HomeSearchDropdown, 2026):
+// SCROLL DEBUGGING NOTE (GlobalSearchDropdown, 2026):
 // If scrollIntoView stops working past a certain item in a scrollable list,
 // the cause is likely the container sitting inside a scrollable page ancestor.
 // scrollIntoView({ block: 'nearest' }) walks up the DOM and may scroll the
