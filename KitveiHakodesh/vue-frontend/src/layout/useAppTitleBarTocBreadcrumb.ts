@@ -139,6 +139,13 @@ export interface TocRootEntry {
   text: string
 }
 
+/**
+ * Routes whose documents have a table of contents, and so whose tabs can carry a
+ * meaningful `tocPath`. On every other route a tocPath means nothing — there is no
+ * TOC for it to be a path into.
+ */
+const TOC_BEARING_ROUTES = ['/book-view', '/pdf-view']
+
 export function useAppTitleBarTocBreadcrumb(
   activeTabRoute: () => string | undefined,
   activeTabTocPath: () => string | undefined,
@@ -149,6 +156,7 @@ export function useAppTitleBarTocBreadcrumb(
   segments: ComputedRef<BreadcrumbSegment[]>
   rootTocEntries: ComputedRef<TocEntry[]>
   rootPdfEntries: ComputedRef<PdfOutlineEntry[]>
+  plainSegmentLabels: ComputedRef<string[]>
 } {
   const segments = computed<BreadcrumbSegment[]>(() => {
     const route = activeTabRoute()
@@ -198,5 +206,19 @@ export function useAppTitleBarTocBreadcrumb(
     return bridge.outlineEntries.filter((entry) => entry.parentPath === '')
   })
 
-  return { segments, rootTocEntries, rootPdfEntries }
+  /**
+   * Labels for the non-interactive fallback the title bar renders while a TOC-bearing
+   * tab has no bridge registered yet — the window between navigating to a book and its
+   * view mounting, where the tab already knows its breadcrumb but nothing can resolve
+   * it to entries. Empty on every other route, which is what keeps a tocPath from
+   * outliving the document it describes.
+   */
+  const plainSegmentLabels = computed<string[]>(() => {
+    const route = activeTabRoute()
+    if (route === undefined || !TOC_BEARING_ROUTES.includes(route)) return []
+    const tocPath = activeTabTocPath()
+    return tocPath ? splitTocPath(tocPath) : []
+  })
+
+  return { segments, rootTocEntries, rootPdfEntries, plainSegmentLabels }
 }

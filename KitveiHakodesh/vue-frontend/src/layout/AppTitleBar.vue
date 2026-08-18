@@ -51,6 +51,7 @@ const {
   segments: tocBreadcrumbSegments,
   rootTocEntries: tocBreadcrumbRootTocEntries,
   rootPdfEntries: tocBreadcrumbRootPdfEntries,
+  plainSegmentLabels: tocBreadcrumbPlainLabels,
 } = useAppTitleBarTocBreadcrumb(
   () => activeTab.value?.route,
   () => activeTab.value?.tocPath,
@@ -240,14 +241,14 @@ useAppTitleBarShortcuts({
         @navigate-to-toc-entry="onNavigateToBreadcrumbEntry"
         @navigate-to-pdf-entry="onNavigateToPdfBreadcrumbEntry"
       />
-      <!-- Plain title + toc path for all other routes -->
+      <!-- Plain title, plus the tab's breadcrumb caption while a TOC-bearing tab's
+           bridge has not registered yet. plainSegmentLabels is route-gated by the
+           composable, so a non-TOC route never renders one. -->
       <template v-else>
         <span class="bar-title-name">{{ activeTab?.title }}</span>
-        <template v-if="activeTab?.tocPath">
-          <template v-for="segment in activeTab.tocPath.split(' · ')" :key="segment">
-            <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
-            <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
-          </template>
+        <template v-for="segment in tocBreadcrumbPlainLabels" :key="segment">
+          <AppTitleBarBreadcrumbChevronDropdown :siblings="[]" :active-sibling-id="null" />
+          <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
         </template>
       </template>
     </span>
