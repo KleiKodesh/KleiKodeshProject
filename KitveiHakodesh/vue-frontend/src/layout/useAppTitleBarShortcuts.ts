@@ -212,7 +212,10 @@ export function useAppTitleBarShortcuts(options: {
       toggleFullscreen()
       return true
     }
-    // Swallow the browser print dialog.
+    // Swallow the browser print dialog. This is preventDefault-only (no
+    // stopPropagation), and `usePdfPrintShortcut` relies on that: on the PDF
+    // page it still sees this keydown and forwards the print into the PDF.js
+    // iframe.
     if (e.code === 'KeyP') return true
     return false
   }
