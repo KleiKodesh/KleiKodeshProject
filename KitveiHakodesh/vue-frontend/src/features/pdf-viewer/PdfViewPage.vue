@@ -10,6 +10,7 @@ import ContextMenu from '@/components/ContextMenu.vue'
 import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrSelection } from './usePdfOcrSelection'
 import { usePdfContextMenu } from './usePdfContextMenu'
+import { usePdfPrintShortcut } from './usePdfPrintShortcut'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { usePdfViewPageTracking } from './usePdfViewPageTracking'
@@ -22,6 +23,7 @@ const pageTracking = usePdfViewPageTracking()
 
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
+usePdfPrintShortcut(() => iframeRef.value)
 
 // ── Custom right-click menu (copy / copy into Word / copy page as image) ──────
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
