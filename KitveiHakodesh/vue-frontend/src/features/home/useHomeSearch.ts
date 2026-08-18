@@ -20,6 +20,7 @@
  * Source-priority prefixes (stripped before searching):
  *   HebrewBooks first: היברו, היברובוקס, היברו בוקס, \ (single backslash)
  *   Files first:       מחשב, קובץ, \\ (double backslash)
+ *   The backslash shorthands also work as a suffix: "query\" and "query\\".
  *   Default (no prefix): catalog first
  *
  * "תוספים" also puts files first, but it is a term rather than a prefix — see
@@ -83,8 +84,9 @@ const MAX_RESULTS_PER_SOURCE = 50
 
 // Prefixes that shift which source appears first in the dropdown.
 // Matched against the beginning of the normalized query (after stripping spaces).
-// The backslash shorthands (\\ for files, \ for HebrewBooks) are checked before
-// the Hebrew word prefixes so the longer one (\\) is matched first.
+// The backslash shorthands (\\ for files, \ for HebrewBooks) also match at the
+// end of the query, and are checked before the Hebrew word prefixes so the
+// longer one (\\) is matched first.
 const HEBREWBOOKS_PREFIXES = ['היברו בוקס', 'היברובוקס', 'היברו']
 const FILES_PREFIXES = ['מחשב', 'קובץ']
 const HEBREWBOOKS_SHORTHAND = '\\'
@@ -104,16 +106,23 @@ function stripPrefixFromQuery(trimmed: string, prefix: string): string {
   return afterPrefix.replace(/^\s*:\s*/, '').trim()
 }
 
+function stripShorthandFromQuery(trimmed: string): string {
+  // A shorthand may appear at both ends; strip both so no stray backslash
+  // leaks into the search terms. Colon handling matches stripPrefixFromQuery.
+  return trimmed.replace(/^\\+|\\+$/g, '').replace(/^\s*:\s*/, '').trim()
+}
+
 function parseQueryPrefix(rawQuery: string): ParsedQuery {
   const trimmed = rawQuery.trim()
 
-  // Check shorthand prefixes first — \\ (files) before \ (HebrewBooks) so the
-  // longer match wins when the user types two backslashes.
-  if (trimmed.startsWith(FILES_SHORTHAND)) {
-    return { priority: 'files', effectiveQuery: stripPrefixFromQuery(trimmed, FILES_SHORTHAND) }
+  // Check the backslash shorthands first, as prefix or suffix — \\ (files)
+  // before \ (HebrewBooks) so the longer match wins when the user types two
+  // backslashes at either end.
+  if (trimmed.startsWith(FILES_SHORTHAND) || trimmed.endsWith(FILES_SHORTHAND)) {
+    return { priority: 'files', effectiveQuery: stripShorthandFromQuery(trimmed) }
   }
-  if (trimmed.startsWith(HEBREWBOOKS_SHORTHAND)) {
-    return { priority: 'hebrewbooks', effectiveQuery: stripPrefixFromQuery(trimmed, HEBREWBOOKS_SHORTHAND) }
+  if (trimmed.startsWith(HEBREWBOOKS_SHORTHAND) || trimmed.endsWith(HEBREWBOOKS_SHORTHAND)) {
+    return { priority: 'hebrewbooks', effectiveQuery: stripShorthandFromQuery(trimmed) }
   }
 
   for (const prefix of HEBREWBOOKS_PREFIXES) {
