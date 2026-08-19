@@ -1,7 +1,7 @@
 <Solution>
   <Project Path="Build/Installer/KleiKodeshVstoInstallerWpf.csproj" Id="2444948f-973d-4cdd-a5be-3596a400b7ba" />
   <Project Path="Build/scripts/SvgToPng/SvgToPng.csproj" Id="a1b2c3d4-e5f6-7890-abcd-ef1234567891" />
-  <Project Path="EasyTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
+  <Project Path="ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
   <Project Path="KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Client/DocumentLocator.Client.csproj" Id="e7b8c9d0-e1f2-43ab-b5c6-d7e8f9a0b1c2" />
   <Project Path="KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Service/DocumentLocator.Service.csproj" Id="d4e5f6a7-b8c9-40da-e2f3-a4b5c6d7e8f9" />
   <Project Path="KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator/DocumentLocator.csproj" Id="a1b2c3d4-e5f6-47a8-b9c0-d1e2f3a4b5c6" />

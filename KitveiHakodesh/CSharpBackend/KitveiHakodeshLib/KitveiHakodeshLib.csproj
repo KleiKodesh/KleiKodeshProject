@@ -208,7 +208,7 @@
       <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
       <Name>DocumentLocator.Client</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\EasyTabs\FluentChromeTabs\FluentChromeTabs.csproj">
+    <ProjectReference Include="..\..\..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
       <Name>FluentChromeTabs</Name>
     </ProjectReference>
   </ItemGroup>
