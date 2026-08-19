@@ -104,7 +104,7 @@ function renderSnippet(snippet: string): string {
 }
 
 // "הצג עוד" — per-result windowed live preview (replaces the clamped snippet).
-const { previewOf, togglePreview, loadAbove, loadBelow, clearPreviews } = useFullTextSearchPreview()
+const { previewOf, togglePreview, loadAbove, loadBelow, reseedPreview, clearPreviews } = useFullTextSearchPreview()
 watch(
   () => props.searchQuery,
   () => {
@@ -415,6 +415,7 @@ defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
                 :render-html="renderSnippet"
                 :load-above="() => loadAbove(results[vRow.index]!)"
                 :load-below="() => loadBelow(results[vRow.index]!)"
+                :reseed="() => reseedPreview(results[vRow.index]!)"
               />
               <!-- eslint-disable-next-line vue/no-v-html -->
               <div v-else class="snippet" v-html="renderSnippet(results[vRow.index]!.snippet)" />
