@@ -145,21 +145,11 @@ watch(
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+  /* Standard properties only — ::-webkit-scrollbar-* rules are dead since
+     Chrome 121 when these are set, and would break native-overlay scrollbar
+     mode (see main.css) if they ever came back to life. */
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
-}
-.autofill-list::-webkit-scrollbar {
-  width: 4px;
-}
-.autofill-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.autofill-list::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
-  border-radius: 4px;
-}
-.autofill-list::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-secondary) 50%, transparent);
 }
 .autofill-item {
   display: block;

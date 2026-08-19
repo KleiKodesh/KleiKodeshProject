@@ -522,7 +522,7 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 
 **useFloatingPanel.ts** — draggable/positioned floating panel behaviour.
 
-**useUiChromeVisibility.ts** — app chrome visibility: per-pane title bar, the app-wide scrollbars mode (static / auto-hide, persisted in settingsStore with the DOM effect owned here), and the F9 reading-mode check-all over both plus the book toolbars.
+**useUiChromeVisibility.ts** — app chrome visibility: per-pane title bar, the app-wide scrollbars mode (static / auto-hide, persisted in settingsStore with the DOM effect owned here — native Windows 11 fluent overlay bars in the WebView2 host, a CSS emulation in the dev browser), and the F9 reading-mode check-all over both plus the book toolbars. Rule: never add `::-webkit-scrollbar-*` rules anywhere in the app — they break the native overlay mode for their element.
 
 **useIframeScrollbarsAutoHide.ts** — propagates the app-wide scrollbars mode into an iframe (same-origin style injection plus scroll-activity listener, or postMessage to the C#-injected IframeScrollScript for cross-origin frames). Used by the PDF viewer and html-view pages.
 

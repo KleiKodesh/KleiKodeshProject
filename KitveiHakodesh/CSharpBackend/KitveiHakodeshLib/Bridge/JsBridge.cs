@@ -63,12 +63,13 @@ namespace KitveiHakodeshLib.Bridge
         ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
         ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
         ///     and calls window.scrollTo() to restore the saved position.
-        ///   - Listens for { type: 'htmlViewScrollbars', autoHide } commands from the parent
-        ///     (useIframeScrollbarsAutoHide.ts) and injects/removes a style that makes
-        ///     scrollbars auto-hide (transparent when idle, visible while scrolling), so
-        ///     the app-wide Ctrl+Shift+H / reading-mode / settings toggle reaches
-        ///     cross-origin frames too. A capture scroll listener flags scroll activity
-        ///     on the root element for that style.
+        ///   - Listens for { type: 'htmlViewScrollbars', autoHide, native } commands from
+        ///     the parent (useIframeScrollbarsAutoHide.ts), so the app-wide Ctrl+Shift+H /
+        ///     reading-mode / settings toggle reaches cross-origin frames too. native
+        ///     clears all author scrollbar styling so the environment's fluent overlay
+        ///     bars show (ScrollBarStyle in AppViewer.cs); autoHide without native is the
+        ///     non-host CSS emulation (transparent when idle, visible while scrolling,
+        ///     driven by a capture scroll listener flagging activity on the root).
         ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
         ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
         ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
@@ -141,23 +142,37 @@ namespace KitveiHakodeshLib.Bridge
             window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
         }
         if (e.data.type === 'htmlViewScrollbars') {
-            // App-wide auto-hide scrollbars (Ctrl+Shift+H / reading mode / settings):
-            // transparent when idle, visible while the scroll-activity class is on the
-            // root (set by the listener registered above). !important so it wins over
-            // the thin-scrollbar style htmlViewTheme re-injects below. The bare html
-            // selector matters: the viewport scrollbar styles come from the root
-            // element itself, which 'html *' alone would miss — and local files
-            // scroll at the viewport.
+            // App-wide auto-hide scrollbars (Ctrl+Shift+H / reading mode / settings).
+            // native: the WebView2 environment renders fluent overlay bars, which only
+            // show where NO author scrollbar styling applies — reset everything,
+            // including the thin-scrollbar style htmlViewTheme re-injects below.
+            var nativeId = '__kitvei-native-scrollbars';
+            var nativeExisting = document.getElementById(nativeId);
+            if (e.data.native && !nativeExisting) {
+                var nativeStyle = document.createElement('style');
+                nativeStyle.id = nativeId;
+                nativeStyle.textContent =
+                    'html, html * { scrollbar-color: auto !important; scrollbar-width: auto !important; }';
+                (document.head || document.documentElement).appendChild(nativeStyle);
+            } else if (!e.data.native && nativeExisting) {
+                nativeExisting.remove();
+            }
+            // Emulation (non-host fallback; unused when native is on): transparent when
+            // idle, visible while the scroll-activity class is on the root (set by the
+            // listener registered above). !important so it wins over the thin-scrollbar
+            // style htmlViewTheme re-injects below. The bare html selector matters: the
+            // viewport scrollbar styles come from the root element itself, which
+            // 'html *' alone would miss — and local files scroll at the viewport.
+            var wantEmulation = e.data.autoHide && !e.data.native;
             var autoHideId = '__kitvei-auto-hide-scrollbars';
             var autoHideExisting = document.getElementById(autoHideId);
-            if (e.data.autoHide && !autoHideExisting) {
+            if (wantEmulation && !autoHideExisting) {
                 var autoHideStyle = document.createElement('style');
                 autoHideStyle.id = autoHideId;
                 autoHideStyle.textContent =
-                    'html:not(.__kitvei-scrollbars-scrolling), html:not(.__kitvei-scrollbars-scrolling) * { scrollbar-color: transparent transparent !important; }' +
-                    'html:not(.__kitvei-scrollbars-scrolling)::-webkit-scrollbar-thumb, html:not(.__kitvei-scrollbars-scrolling) *::-webkit-scrollbar-thumb { background: transparent !important; }';
+                    'html:not(.__kitvei-scrollbars-scrolling), html:not(.__kitvei-scrollbars-scrolling) * { scrollbar-color: transparent transparent !important; }';
                 (document.head || document.documentElement).appendChild(autoHideStyle);
-            } else if (!e.data.autoHide && autoHideExisting) {
+            } else if (!wantEmulation && autoHideExisting) {
                 autoHideExisting.remove();
                 document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
             }
@@ -186,15 +201,11 @@ namespace KitveiHakodeshLib.Bridge
             var thumbColor = c.textSecondary
                 ? 'color-mix(in srgb, ' + c.textSecondary + ' 30%, transparent)'
                 : 'rgba(128,128,128,0.3)';
-            var thumbHoverColor = c.textSecondary
-                ? 'color-mix(in srgb, ' + c.textSecondary + ' 50%, transparent)'
-                : 'rgba(128,128,128,0.5)';
+            // Standard properties only. ::-webkit-scrollbar-* rules are dead while these
+            // are set (Chrome 121+), and the native-scrollbars reset style would revive
+            // them and break the fluent overlay bars — never add them back.
             scrollbarStyle.textContent =
-                '* { scrollbar-color: ' + thumbColor + ' transparent; scrollbar-width: thin; }' +
-                '*::-webkit-scrollbar { width: 6px; height: 6px; }' +
-                '*::-webkit-scrollbar-track { background: transparent; }' +
-                '*::-webkit-scrollbar-thumb { background: ' + thumbColor + '; border-radius: 0; }' +
-                '*::-webkit-scrollbar-thumb:hover { background: ' + thumbHoverColor + '; }';
+                '* { scrollbar-color: ' + thumbColor + ' transparent; scrollbar-width: thin; }';
             (document.head || document.documentElement).appendChild(scrollbarStyle);
         }
     });
