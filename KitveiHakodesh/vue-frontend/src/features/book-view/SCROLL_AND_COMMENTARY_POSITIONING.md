@@ -277,7 +277,7 @@ though the commentator has not — compare `data-book-id`, never the text, when 
 `restore:side`) and each flow keeps its own relative clock, so filter a dump by
 `flow` to read one panel and order across panels by `seq`, never by `t`. Every
 `scrollToGroup` records a `reason` (`groups-reload`, `panel-mounted`,
-`same-line-reclick`, `header-nav-picker`, `already-restored`) — one `BEGIN` per
+`header-nav-picker`, `already-restored`) — one `BEGIN` per
 panel per line switch is correct; two means a stale callback is firing.
 
 ## B. Blank slate → default commentary

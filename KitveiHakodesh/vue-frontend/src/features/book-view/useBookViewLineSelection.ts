@@ -51,7 +51,22 @@ export function useBookViewLineSelection(
     return ids.length > 0 ? ids : null
   })
 
-  function onLineSelected(lineId: number, isShiftClick: boolean) {
+  /** Returns false when the click changed nothing (plain re-click on the selected line). */
+  function onLineSelected(lineId: number, isShiftClick: boolean): boolean {
+    // Plain click on the already-selected line is a no-op — but still set the
+    // anchor, because selection can arrive here without a prior click (scroll
+    // sync, session restore, commentary navigation) and a later shift-click
+    // must range from this line.
+    if (
+      !isShiftClick &&
+      manualSelectionLineIds.value == null &&
+      selectedLineId.value === lineId &&
+      commentaryLineId.value === lineId
+    ) {
+      manualSelectionAnchorLineId.value = lineId
+      return false
+    }
+
     // Capture synchronously before any reactive state changes: every panel's
     // activePinnedGroup is still valid here (groups haven't been cleared yet).
     applyPendingPins(captureActivePins())
@@ -72,7 +87,7 @@ export function useBookViewLineSelection(
           // so the first load always comes from the anchor end of the range.
           commentaryLineId.value = anchorId
           selectedLineId.value = lineId
-          return
+          return true
         }
       }
     }
@@ -82,6 +97,7 @@ export function useBookViewLineSelection(
     manualSelectionAnchorLineId.value = lineId
     selectedLineId.value = lineId
     commentaryLineId.value = lineId
+    return true
   }
 
   return {

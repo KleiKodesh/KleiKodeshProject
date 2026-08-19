@@ -294,6 +294,11 @@ export function useBookView(
    * scroll fires a scroll event that re-captures them.
    */
   function onLineSelected(lineId: number, isShiftClick: boolean) {
+    // Re-clicking the already-selected line is a no-op: the panels keep their
+    // scroll positions instead of being reset to their pinned group.
+    if (!onLineSelectedRaw(lineId, isShiftClick)) return
+    // The invalidation runs after the raw handler but in the same tick, before
+    // the commentary reload watcher flushes.
     for (const slot of COMMENTARY_SLOTS) {
       panels[slot].scrollIndex.value = null
       panels[slot].scrollOffset.value = null
@@ -302,20 +307,6 @@ export function useBookView(
       // apply the previous line's offset to the new line's list.
       commentaryViewRefs[slot]()?.cancelPositioning?.()
     }
-    // Re-clicking the already-selected line changes no reactive state, so no
-    // commentary reload fires and setupGroupReloadScroll never wakes — jump each
-    // panel to its own pinned group explicitly (e.g. the session-restored line:
-    // restore put the panels at their saved positions; a deliberate click should
-    // still show each panel's default commentator).
-    const isSameLineReclick = !isShiftClick && commentaryLineId.value === lineId
-    onLineSelectedRaw(lineId, isShiftClick)
-    if (!isSameLineReclick) return
-    void nextTick(() => {
-      for (const slot of COMMENTARY_SLOTS) {
-        const pinned = panels[slot].pinnedCommentaryGroup.value
-        if (pinned) commentaryViewRefs[slot]()?.scrollToGroup(pinned.bookId, undefined, undefined, 'same-line-reclick')
-      }
-    })
   }
 
   // ── TOC ───────────────────────────────────────────────────────────────────
