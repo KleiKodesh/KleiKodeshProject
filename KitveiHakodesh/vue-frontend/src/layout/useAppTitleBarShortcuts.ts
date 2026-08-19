@@ -4,6 +4,7 @@ import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
+import { toggleScrollbarsHidden, toggleReadingMode } from '@/composables/useUiChromeVisibility'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -195,6 +196,9 @@ export function useAppTitleBarShortcuts(options: {
         pane.goHome()
         return true
       case 'KeyH':
+        // Ctrl+Shift+H is the app-wide scrollbars toggle — let it fall through
+        // to handleAppWide instead of also flipping this pane's title bar.
+        if (e.shiftKey) return false
         titleBarVisible.value = !titleBarVisible.value
         return true
       case 'KeyL':
@@ -214,6 +218,14 @@ export function useAppTitleBarShortcuts(options: {
       toggleFullscreen()
       return true
     }
+    // F9 — reading mode: hide/show all chrome at once (title bars, book
+    // toolbars, scrollbars). Check-all semantics live in `toggleReadingMode`.
+    // F9 is Firefox's Reader View key — the closest convention for this — and
+    // has no default in Chromium/WebView2, so there is nothing to suppress.
+    if (e.code === 'F9') {
+      toggleReadingMode()
+      return true
+    }
     if (!e.ctrlKey) return false
     if (e.code === 'Backslash') {
       if (isSplitViewAvailable.value) bookViewStore.toggleSplitView()
@@ -221,6 +233,13 @@ export function useAppTitleBarShortcuts(options: {
     }
     if (e.shiftKey && e.code === 'KeyF') {
       toggleFullscreen()
+      return true
+    }
+    // Ctrl+Shift+H — hide/show every scrollbar. App-wide because the class sits
+    // on the one shared root element. Sits in the Ctrl+H "hide chrome" family;
+    // the pane-scoped KeyH case explicitly lets the Shift variant through.
+    if (e.shiftKey && e.code === 'KeyH') {
+      toggleScrollbarsHidden()
       return true
     }
     // Swallow the browser print dialog. This is preventDefault-only (no
