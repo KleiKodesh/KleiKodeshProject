@@ -28,4 +28,6 @@ That rule is enforced, not aspirational. `useTileGridKeys` (book-catalog only), 
 
 **useTabSwipeNavigation.ts** — swipe-to-navigate between tabs on touch devices and trackpads. Supports horizontal swipe gestures and two-finger trackpad swipes with configurable thresholds.
 
+**useIframeScrollbarsHidden.ts** — keeps one iframe's scrollbars in sync with the app-wide scrollbar-hidden state from `useUiChromeVisibility`. Same-origin frames (PDF.js viewer) get a style element injected directly; cross-origin frames (local files in the WebView2 host) get an `htmlViewScrollbars` postMessage handled by the C#-injected IframeScrollScript in `JsBridge.cs`. The owning page must call the returned `apply` from its iframe load handler.
+
 **useUiChromeVisibility.ts** — session-only UI chrome visibility state: per-pane title bar (toggle via `Ctrl+H`) and app-wide scrollbar hiding (toggle via `Ctrl+Shift+H`, applied as a `hide-scrollbars` class on the root element with its CSS in `main.css`). Also owns `toggleReadingMode` (F9) — a check-all/uncheck-all over title bars, book-view toolbars, and scrollbars; reading mode is derived from the individual states, never stored, so the individual toggles keep working. The window listener is registered once at module load time so calling from multiple components never duplicates the handler.

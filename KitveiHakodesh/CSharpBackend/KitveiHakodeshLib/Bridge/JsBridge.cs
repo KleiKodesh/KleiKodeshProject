@@ -63,6 +63,10 @@ namespace KitveiHakodeshLib.Bridge
         ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
         ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
         ///     and calls window.scrollTo() to restore the saved position.
+        ///   - Listens for { type: 'htmlViewScrollbars', hidden } commands from the parent
+        ///     (useIframeScrollbarsHidden.ts) and injects/removes a style that hides all
+        ///     scrollbars, so the app-wide Ctrl+Shift+H / reading-mode toggle reaches
+        ///     cross-origin frames too.
         ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
         ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
         ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
@@ -118,6 +122,21 @@ namespace KitveiHakodeshLib.Bridge
         if (!e.data) return;
         if (e.data.type === 'htmlViewScrollTo') {
             window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
+        }
+        if (e.data.type === 'htmlViewScrollbars') {
+            // App-wide scrollbar hiding (Ctrl+Shift+H / reading mode). !important so it
+            // wins over the thin-scrollbar style htmlViewTheme re-injects below.
+            var hideId = '__kitvei-hide-scrollbars';
+            var hideExisting = document.getElementById(hideId);
+            if (e.data.hidden && !hideExisting) {
+                var hideStyle = document.createElement('style');
+                hideStyle.id = hideId;
+                hideStyle.textContent =
+                    '* { scrollbar-width: none !important; } *::-webkit-scrollbar { display: none !important; }';
+                (document.head || document.documentElement).appendChild(hideStyle);
+            } else if (!e.data.hidden && hideExisting) {
+                hideExisting.remove();
+            }
         }
         if (e.data.type === 'htmlViewTheme') {
             var c = e.data.colors;
