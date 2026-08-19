@@ -146,7 +146,7 @@
       <Project>{B8F3E2A1-4C5D-4E6F-8A9B-1C2D3E4F5A6B}</Project>
       <Name>UpdateCheckerLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\EasyTabs\FluentChromeTabs\FluentChromeTabs.csproj">
+    <ProjectReference Include="..\..\..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
       <Name>FluentChromeTabs</Name>
     </ProjectReference>
   </ItemGroup>

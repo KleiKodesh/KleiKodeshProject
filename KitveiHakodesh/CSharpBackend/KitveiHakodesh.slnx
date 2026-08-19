@@ -1,5 +1,5 @@
 <Solution>
-  <Project Path="../../EasyTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
+  <Project Path="../../ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
   <Project Path="../../UpdateCheckerLib/UpdateCheckerLib.csproj" Id="b8f3e2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b" />
   <Project Path="DocumentLocator/DocumentLocator.Client/DocumentLocator.Client.csproj" Id="e7b8c9d0-e1f2-43ab-b5c6-d7e8f9a0b1c2" />
   <Project Path="DocumentLocator/DocumentLocator.Service/DocumentLocator.Service.csproj" Id="d4e5f6a7-b8c9-40da-e2f3-a4b5c6d7e8f9" />
