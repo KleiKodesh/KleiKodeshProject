@@ -239,7 +239,7 @@ export function useBookView(
     COMMENTARY_SLOTS.some((slot) => panels[slot].visible.value),
   )
 
-  /** The open panels in display order, for the search bar's mode cycle. */
+  /** The open panels in display order, for the search bar's mode menu. */
   const openCommentarySlots = computed(() =>
     COMMENTARY_SLOTS.filter((slot) => panels[slot].visible.value),
   )
