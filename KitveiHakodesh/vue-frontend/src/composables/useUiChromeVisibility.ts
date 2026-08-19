@@ -2,6 +2,7 @@ import { effectScope, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { hasNativeFluentScrollbars } from '@/webview-host/bridge'
 
 /**
  * UI chrome visibility, in two halves:
@@ -23,39 +24,67 @@ const pane1TitleBarVisible = ref(true)
 const pane2TitleBarVisible = ref(true)
 
 /**
- * The auto-hide DOM effect: `auto-hide-scrollbars` on the root element is the
- * mode, `scrollbars-scrolling` is live scroll activity (any scroll anywhere,
- * caught by a capture listener, lingering for a moment after the last event).
- * The CSS lives in `main.css` — bars fade by color only, so the gutter stays
- * put and toggling never causes layout shift. The classes cannot reach into
- * iframe documents (HTML/txt viewer, PDF.js) — pages owning an iframe
- * propagate the mode into it with `useIframeScrollbarsAutoHide`.
+ * The auto-hide DOM effect, two implementations picked by environment:
+ *
+ * In the WebView2 host, `native-overlay-scrollbars` on the root element clears
+ * every author scrollbar style (one !important override in `main.css`), letting
+ * the environment's native Windows 11 fluent overlay bars show — true overlay:
+ * no gutter, fade when idle, reveal on hover.
+ *
+ * In the dev browser, which has no such environment setting, the CSS emulation:
+ * `auto-hide-scrollbars` on the root is the mode; `scrollbars-scrolling` sits
+ * on the one element that actually scrolled (caught by a capture listener,
+ * lingering for a moment after the last event), so only its bar is revealed.
+ * Bars fade by color only, so the gutter stays put and toggling never causes
+ * layout shift.
+ *
+ * The classes cannot reach into iframe documents (HTML/txt viewer, PDF.js) —
+ * pages owning an iframe propagate the mode into it with
+ * `useIframeScrollbarsAutoHide`.
  */
 const SCROLLBARS_SCROLLING_LINGER_MS = 1000
 let scrollbarsScrollingTimer: number | null = null
+// The class sits on the element that actually scrolled, so only ITS bar is
+// revealed — one element at a time, matching how native overlay bars behave.
+let scrollingElement: Element | null = null
 
-function onAnyScroll() {
-  document.documentElement.classList.add('scrollbars-scrolling')
+function clearScrollingFlag() {
+  scrollingElement?.classList.remove('scrollbars-scrolling')
+  scrollingElement = null
+  if (scrollbarsScrollingTimer !== null) {
+    clearTimeout(scrollbarsScrollingTimer)
+    scrollbarsScrollingTimer = null
+  }
+}
+
+function onAnyScroll(event: Event) {
+  const target =
+    event.target instanceof Element ? event.target : document.documentElement
+  if (scrollingElement !== target) {
+    scrollingElement?.classList.remove('scrollbars-scrolling')
+    scrollingElement = target
+  }
+  // Unconditionally: a Vue :class re-patch overwrites the whole class attribute
+  // mid-scroll, and re-adding on every event (idempotent, cheap) self-heals.
+  target.classList.add('scrollbars-scrolling')
   if (scrollbarsScrollingTimer !== null) clearTimeout(scrollbarsScrollingTimer)
   scrollbarsScrollingTimer = window.setTimeout(() => {
     scrollbarsScrollingTimer = null
-    document.documentElement.classList.remove('scrollbars-scrolling')
+    clearScrollingFlag()
   }, SCROLLBARS_SCROLLING_LINGER_MS)
 }
 
 function applyScrollbarsAutoHide(autoHide: boolean) {
   const root = document.documentElement
-  root.classList.toggle('auto-hide-scrollbars', autoHide)
-  if (autoHide) {
+  const useNative = autoHide && hasNativeFluentScrollbars
+  root.classList.toggle('native-overlay-scrollbars', useNative)
+  root.classList.toggle('auto-hide-scrollbars', autoHide && !useNative)
+  if (autoHide && !useNative) {
     // Re-adding an identical listener is a no-op, so this is idempotent.
     window.addEventListener('scroll', onAnyScroll, { capture: true, passive: true })
   } else {
     window.removeEventListener('scroll', onAnyScroll, { capture: true })
-    root.classList.remove('scrollbars-scrolling')
-    if (scrollbarsScrollingTimer !== null) {
-      clearTimeout(scrollbarsScrollingTimer)
-      scrollbarsScrollingTimer = null
-    }
+    clearScrollingFlag()
   }
 }
 

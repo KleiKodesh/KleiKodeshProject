@@ -58,6 +58,14 @@ export const navigatesDestinationsInPlace = isVstoEnvironment || !hasHostBridge
  */
 export const hasNativeChromeTabs = hasHostBridge && !isVstoEnvironment
 
+/**
+ * True when the WebView2 host is present, whose environment enables native
+ * Windows 11 fluent overlay scrollbars (ScrollBarStyle in AppViewer.cs). The
+ * scrollbars auto-hide mode uses them where available; the dev browser has no
+ * such environment setting, so it falls back to the CSS emulation instead.
+ */
+export const hasNativeFluentScrollbars = hasHostBridge
+
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
     return Promise.reject(new Error('bridge not available'))

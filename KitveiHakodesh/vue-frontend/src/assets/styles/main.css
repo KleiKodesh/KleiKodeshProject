@@ -234,33 +234,35 @@ h1::after {
 }
 
 /* Ctrl+Shift+H (or the settings-page control) switches scrollbars from static to
-   Windows-11-style auto-hide: thumbs go transparent when idle and reappear while
-   scrolling, with a short linger. `useUiChromeVisibility` toggles the classes on
-   <html> — `auto-hide-scrollbars` is the mode, `scrollbars-scrolling` is live
-   scroll activity. Only colors change, never the gutter, so fading in and out
-   causes zero layout shift. Both rules are needed: `scrollbar-color` covers
-   default bars, the `::-webkit-scrollbar-thumb` rule covers custom-styled bars
-   like .toc-thin-scroll (whose rules it also outranks by specificity). */
+   auto-hide. This block is the DEV-BROWSER EMULATION of it: thumbs go transparent
+   when idle and reappear while scrolling, with a short linger.
+   `useUiChromeVisibility` owns the classes — `auto-hide-scrollbars` is the mode
+   (on <html>), `scrollbars-scrolling` sits on the one element that actually
+   scrolled, so only its bar is revealed. Only colors change, never the gutter,
+   so fading in and out causes zero layout shift. */
 :root.auto-hide-scrollbars:not(.scrollbars-scrolling),
-:root.auto-hide-scrollbars:not(.scrollbars-scrolling) * {
+:root.auto-hide-scrollbars :not(.scrollbars-scrolling) {
   scrollbar-color: transparent transparent;
 }
-:root.auto-hide-scrollbars:not(.scrollbars-scrolling)::-webkit-scrollbar-thumb,
-:root.auto-hide-scrollbars:not(.scrollbars-scrolling) *::-webkit-scrollbar-thumb {
-  background: transparent;
+
+/* In the WebView2 host, auto-hide uses the environment's native Windows 11
+   fluent overlay scrollbars instead of the emulation above (see
+   useUiChromeVisibility). Native bars only render where NO author scrollbar
+   styling applies, so this one override resets every scrollbar-color/width in
+   the app — theme.css's global rule and all component-scoped ones — back to
+   their initial values. Never add ::-webkit-scrollbar-* rules anywhere: with
+   the standard properties reset to auto they would come back to life and
+   silently break this mode for their element. */
+:root.native-overlay-scrollbars,
+:root.native-overlay-scrollbars * {
+  scrollbar-color: auto !important;
+  scrollbar-width: auto !important;
 }
 
-/* Thin scrollbars — TOC only (via .toc-thin-scroll class) */
+/* Thin scrollbars — TOC only (via .toc-thin-scroll class). Standard properties
+   only: since Chrome 121 they override ::-webkit-scrollbar-* per element, and
+   the native-overlay mode above depends on no webkit rules existing. */
 .toc-thin-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
-}
-.toc-thin-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
-.toc-thin-scroll::-webkit-scrollbar-track { background: transparent; }
-.toc-thin-scroll::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--text-secondary) 30%, transparent);
-  border-radius: 0;
-}
-.toc-thin-scroll::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in srgb, var(--text-secondary) 50%, transparent);
 }
