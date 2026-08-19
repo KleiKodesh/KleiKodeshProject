@@ -233,15 +233,21 @@ h1::after {
   background: var(--border-color);
 }
 
-/* Ctrl+Shift+H hides every scrollbar in the app — the class is toggled on <html> by
-   `useUiChromeVisibility`. Scrolling itself still works; only the bars vanish.
-   Both properties are needed: `scrollbar-width` is the standard, the
-   `::-webkit-scrollbar` rule covers custom-styled bars like .toc-thin-scroll. */
-:root.hide-scrollbars * {
-  scrollbar-width: none;
+/* Ctrl+Shift+H (or the settings-page control) switches scrollbars from static to
+   Windows-11-style auto-hide: thumbs go transparent when idle and reappear while
+   scrolling, with a short linger. `useUiChromeVisibility` toggles the classes on
+   <html> — `auto-hide-scrollbars` is the mode, `scrollbars-scrolling` is live
+   scroll activity. Only colors change, never the gutter, so fading in and out
+   causes zero layout shift. Both rules are needed: `scrollbar-color` covers
+   default bars, the `::-webkit-scrollbar-thumb` rule covers custom-styled bars
+   like .toc-thin-scroll (whose rules it also outranks by specificity). */
+:root.auto-hide-scrollbars:not(.scrollbars-scrolling),
+:root.auto-hide-scrollbars:not(.scrollbars-scrolling) * {
+  scrollbar-color: transparent transparent;
 }
-:root.hide-scrollbars *::-webkit-scrollbar {
-  display: none;
+:root.auto-hide-scrollbars:not(.scrollbars-scrolling)::-webkit-scrollbar-thumb,
+:root.auto-hide-scrollbars:not(.scrollbars-scrolling) *::-webkit-scrollbar-thumb {
+  background: transparent;
 }
 
 /* Thin scrollbars — TOC only (via .toc-thin-scroll class) */

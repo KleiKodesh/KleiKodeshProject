@@ -63,10 +63,12 @@ namespace KitveiHakodeshLib.Bridge
         ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
         ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
         ///     and calls window.scrollTo() to restore the saved position.
-        ///   - Listens for { type: 'htmlViewScrollbars', hidden } commands from the parent
-        ///     (useIframeScrollbarsHidden.ts) and injects/removes a style that hides all
-        ///     scrollbars, so the app-wide Ctrl+Shift+H / reading-mode toggle reaches
-        ///     cross-origin frames too.
+        ///   - Listens for { type: 'htmlViewScrollbars', autoHide } commands from the parent
+        ///     (useIframeScrollbarsAutoHide.ts) and injects/removes a style that makes
+        ///     scrollbars auto-hide (transparent when idle, visible while scrolling), so
+        ///     the app-wide Ctrl+Shift+H / reading-mode / settings toggle reaches
+        ///     cross-origin frames too. A capture scroll listener flags scroll activity
+        ///     on the root element for that style.
         ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
         ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
         ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
@@ -89,6 +91,21 @@ namespace KitveiHakodeshLib.Bridge
         if (scrollTimer) return;
         scrollTimer = setTimeout(reportScroll, 200);
     }, { passive: true });
+
+    // Scroll-activity flag for the auto-hide scrollbars style (htmlViewScrollbars
+    // handler below): while any element in the frame scrolls (capture phase catches
+    // inner containers too), the root carries the class and the bars show; it drops
+    // off after a one-second linger. Runs unconditionally — without the injected
+    // style the class has no effect and the cost is negligible.
+    var scrollbarsActivityTimer = null;
+    window.addEventListener('scroll', function () {
+        document.documentElement.classList.add('__kitvei-scrollbars-scrolling');
+        if (scrollbarsActivityTimer) clearTimeout(scrollbarsActivityTimer);
+        scrollbarsActivityTimer = setTimeout(function () {
+            scrollbarsActivityTimer = null;
+            document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
+        }, 1000);
+    }, true);
 
     // Forward keyboard shortcuts to the parent frame so app-level shortcuts
     // (Ctrl+W, Ctrl+F, Ctrl+N, F1, F11, etc.) continue to work when focus
@@ -124,18 +141,25 @@ namespace KitveiHakodeshLib.Bridge
             window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
         }
         if (e.data.type === 'htmlViewScrollbars') {
-            // App-wide scrollbar hiding (Ctrl+Shift+H / reading mode). !important so it
-            // wins over the thin-scrollbar style htmlViewTheme re-injects below.
-            var hideId = '__kitvei-hide-scrollbars';
-            var hideExisting = document.getElementById(hideId);
-            if (e.data.hidden && !hideExisting) {
-                var hideStyle = document.createElement('style');
-                hideStyle.id = hideId;
-                hideStyle.textContent =
-                    '* { scrollbar-width: none !important; } *::-webkit-scrollbar { display: none !important; }';
-                (document.head || document.documentElement).appendChild(hideStyle);
-            } else if (!e.data.hidden && hideExisting) {
-                hideExisting.remove();
+            // App-wide auto-hide scrollbars (Ctrl+Shift+H / reading mode / settings):
+            // transparent when idle, visible while the scroll-activity class is on the
+            // root (set by the listener registered above). !important so it wins over
+            // the thin-scrollbar style htmlViewTheme re-injects below. The bare html
+            // selector matters: the viewport scrollbar styles come from the root
+            // element itself, which 'html *' alone would miss — and local files
+            // scroll at the viewport.
+            var autoHideId = '__kitvei-auto-hide-scrollbars';
+            var autoHideExisting = document.getElementById(autoHideId);
+            if (e.data.autoHide && !autoHideExisting) {
+                var autoHideStyle = document.createElement('style');
+                autoHideStyle.id = autoHideId;
+                autoHideStyle.textContent =
+                    'html:not(.__kitvei-scrollbars-scrolling), html:not(.__kitvei-scrollbars-scrolling) * { scrollbar-color: transparent transparent !important; }' +
+                    'html:not(.__kitvei-scrollbars-scrolling)::-webkit-scrollbar-thumb, html:not(.__kitvei-scrollbars-scrolling) *::-webkit-scrollbar-thumb { background: transparent !important; }';
+                (document.head || document.documentElement).appendChild(autoHideStyle);
+            } else if (!e.data.autoHide && autoHideExisting) {
+                autoHideExisting.remove();
+                document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
             }
         }
         if (e.data.type === 'htmlViewTheme') {

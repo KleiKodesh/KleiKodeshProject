@@ -4,7 +4,7 @@ import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
-import { toggleScrollbarsHidden, toggleReadingMode } from '@/composables/useUiChromeVisibility'
+import { toggleScrollbarsAutoHide, toggleReadingMode } from '@/composables/useUiChromeVisibility'
 import type { useAppShellPane } from '@/composables/useAppShellPane'
 
 type Pane = ReturnType<typeof useAppShellPane>
@@ -235,11 +235,12 @@ export function useAppTitleBarShortcuts(options: {
       toggleFullscreen()
       return true
     }
-    // Ctrl+Shift+H — hide/show every scrollbar. App-wide because the class sits
-    // on the one shared root element. Sits in the Ctrl+H "hide chrome" family;
-    // the pane-scoped KeyH case explicitly lets the Shift variant through.
+    // Ctrl+Shift+H — static vs auto-hide scrollbars (persisted setting). App-wide
+    // because the mode sits on the one shared root element. Sits in the Ctrl+H
+    // "hide chrome" family; the pane-scoped KeyH case explicitly lets the Shift
+    // variant through.
     if (e.shiftKey && e.code === 'KeyH') {
-      toggleScrollbarsHidden()
+      toggleScrollbarsAutoHide()
       return true
     }
     // Swallow the browser print dialog. This is preventDefault-only (no
