@@ -307,7 +307,7 @@ watch(sideColumnsKey, () => {
 })
 
 // A pane too narrow for the side columns closes them rather than leaving one open
-// but unrendered, so their toggle buttons and the search bar's mode cycle stay
+// but unrendered, so their toggle buttons and the search bar's mode menu stay
 // truthful. Watching visible TOO (not just width changes) matters for session
 // restore on an already-narrow shell: isWideScreen never changes there, but restore
 // flips visible true - without the clamp that panel stays logically open while never

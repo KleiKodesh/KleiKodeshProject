@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, inject } from 'vue'
+import { ref, watch, computed, nextTick, inject, type Component } from 'vue'
 import {
   IconLayoutRowTwoFocusTop20Filled,
   IconLayoutRowTwoFocusBottom20Filled,
@@ -9,6 +9,7 @@ import {
   IconChevronDown20Regular,
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { searchModeForSlot, slotForSearchMode } from './bookViewTypes'
 import type { CommentarySlot, SearchMode } from './bookViewTypes'
@@ -102,17 +103,51 @@ function onKeydown(event: KeyboardEvent) {
   else if (event.key === 'Escape') onClose()
 }
 
-// Cycles content -> each open commentary panel -> back to content, so the button
-// only ever offers a panel the user can actually see.
-const searchModeCycle = computed<SearchMode[]>(() => [
+const MODE_ICONS: Record<SearchMode, Component> = {
+  content: IconLayoutRowTwoFocusTop20Filled,
+  'commentary-bottom': IconLayoutRowTwoFocusBottom20Filled,
+  'commentary-side': IconLayoutColumnTwoFocusRight20Filled,
+  'commentary-side-left': IconLayoutColumnTwoFocusLeft20Filled,
+}
+
+// Labels reuse the toolbar's wording for the text zoom and the panel toggles.
+const MODE_LABELS: Record<SearchMode, string> = {
+  content: 'טקסט',
+  'commentary-bottom': 'מפרשים למטה',
+  'commentary-side': 'מפרשים מימין',
+  'commentary-side-left': 'מפרשים משמאל',
+}
+
+// Offers the book text plus each open commentary panel, so the menu only ever
+// lists a target the user can actually see.
+const searchModeOptions = computed<SearchMode[]>(() => [
   'content',
   ...props.openCommentarySlots.map(searchModeForSlot),
 ])
 
-function toggleSearchMode() {
-  const cycle = searchModeCycle.value
-  const index = cycle.indexOf(searchMode.value)
-  searchMode.value = cycle[(index + 1) % cycle.length]!
+const modeMenuOpen = ref(false)
+const modeMenuRef = ref<HTMLElement | null>(null)
+const modeBtnRef = ref<HTMLElement | null>(null)
+const { justClosed } = useDropdownClose(modeMenuRef, () => (modeMenuOpen.value = false), {
+  toggleButton: modeBtnRef,
+})
+
+// Closing the bar or the last panel unmounts the open menu via v-if, which
+// useDropdownClose can't see; reset so it doesn't come back already open.
+watch([() => props.visible, () => props.commentaryVisible], ([barVisible, hasPanels]) => {
+  if (!barVisible || !hasPanels) modeMenuOpen.value = false
+})
+
+function toggleModeMenu() {
+  if (justClosed.value) return
+  modeMenuOpen.value = !modeMenuOpen.value
+}
+
+function selectSearchMode(mode: SearchMode) {
+  searchMode.value = mode
+  modeMenuOpen.value = false
+  // The searchMode watch refocuses on change; cover re-picking the current mode too.
+  nextTick(() => inputRef.value?.focus())
 }
 
 defineExpose({ focus: () => inputRef.value?.focus() })
@@ -136,18 +171,29 @@ defineExpose({ focus: () => inputRef.value?.focus() })
         <span class="match-count" :class="{ 'no-match': props.matchCount === 0 }">{{ matchLabel }}</span>
       </div>
 
-      <button
-        v-if="props.commentaryVisible"
-        class="mode-btn"
-        :class="{ active: searchMode !== 'content' }"
-        :title="searchMode === 'content' ? 'עבור לחיפוש במפרשים' : 'עבור לחיפוש בטקסט'"
-        @click="toggleSearchMode"
-      >
-        <IconLayoutColumnTwoFocusRight20Filled v-if="searchMode === 'commentary-side'" />
-        <IconLayoutColumnTwoFocusLeft20Filled v-else-if="searchMode === 'commentary-side-left'" />
-        <IconLayoutRowTwoFocusBottom20Filled v-else-if="searchMode === 'commentary-bottom'" />
-        <IconLayoutRowTwoFocusTop20Filled v-else />
-      </button>
+      <div v-if="props.commentaryVisible" class="mode-dropdown">
+        <button
+          ref="modeBtnRef"
+          class="mode-btn"
+          :class="{ active: searchMode !== 'content' }"
+          :title="MODE_LABELS[searchMode]"
+          @click="toggleModeMenu"
+        >
+          <component :is="MODE_ICONS[searchMode]" />
+        </button>
+        <div v-if="modeMenuOpen" ref="modeMenuRef" class="mode-menu" :class="{ 'open-up': isBottomAnchored }">
+          <button
+            v-for="mode in searchModeOptions"
+            :key="mode"
+            class="mode-option"
+            :class="{ selected: mode === searchMode }"
+            @click="selectSearchMode(mode)"
+          >
+            <component :is="MODE_ICONS[mode]" />
+            <span>{{ MODE_LABELS[mode] }}</span>
+          </button>
+        </div>
+      </div>
       <span v-if="props.commentaryVisible" class="sep" />
 
       <button class="nav-btn" :disabled="props.matchCount === 0" @click="emit('prev')">
@@ -263,4 +309,39 @@ defineExpose({ focus: () => inputRef.value?.focus() })
 }
 .mode-btn svg { width: 16px; height: 16px; }
 .mode-btn.active { color: var(--accent-color); }
+
+.mode-dropdown { position: relative; }
+
+.mode-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  inset-inline-end: 0;
+  min-width: 140px;
+  padding: 2px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  z-index: 100;
+}
+.mode-menu.open-up {
+  top: auto;
+  bottom: calc(100% + 6px);
+}
+
+.mode-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.mode-option svg { width: 16px; height: 16px; flex-shrink: 0; }
+.mode-option:hover { background: color-mix(in srgb, var(--text-primary) 6%, transparent); }
+.mode-option.selected { color: var(--accent-color); }
 </style>
