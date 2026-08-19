@@ -292,7 +292,6 @@ Full-text search backed by FtsLib with a custom LSM-style segment index. Support
 - `useFullTextSearch.ts` — search execution and IDB caching; streams results from the host in batches; enriches each batch with TOC paths; resumes interrupted searches from the cache skip offset
 - `useFullTextSearchIndexingStatus.ts` — subscribes to `ftsIndexProgress`; handles `ftsIndexInvalidated` (automatic rebuild when the DB changes or the index is corrupt)
 - `useFullTextSearchFilters.ts` — filter state (checked books/categories), result filtering, result click handler
-- `useFullTextSearchCopyMenu.ts` — copy context menu for results
 - `ftsChronology.ts` — chronological ordering/period metadata for results
 - `scrollRestore.ts` — scroll position restore (has unit tests). Scroll saves fire only on `visibilitychange` / `beforeunload` / unmount — never on `scroll`; see the rule in `preferences.md`.
 - `fullTextSearchTypes.ts` — TypeScript types

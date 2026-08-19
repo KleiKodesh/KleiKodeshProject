@@ -7,8 +7,6 @@ import { useEventListener } from '@vueuse/core'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
-import ContextMenu from '@/components/ContextMenu.vue'
-import { useFullTextSearchCopyMenu, useFullTextSearchScopedCopy } from './useFullTextSearchCopyMenu'
 import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
@@ -47,10 +45,9 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollEl, {
   ignoreWithin: '.preview-box',
 })
 
-// Right-click copy menu (העתק / העתק טקסט נקי) — matches the book & txt views.
-const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const { items: copyMenuItems } = useFullTextSearchCopyMenu()
-useFullTextSearchScopedCopy(scrollEl)
+// Right-click copy and the clean-text toggle are served by the app-wide fallback
+// menu (GlobalContextMenu), which also honors the toggle on Ctrl+C — no
+// FTS-specific menu or scoped copy interceptor is needed here.
 
 const fontPx = computed(() => {
   const zoomFactor = (props.zoom ?? 100) / 100
@@ -363,7 +360,6 @@ defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
         tabindex="0"
         :style="{ fontSize: `${fontPx}px` }"
         @scroll="onScroll"
-        @contextmenu="contextMenuRef?.show($event)"
       >
         <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
           <div
@@ -424,8 +420,6 @@ defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
         </div>
       </div>
     </template>
-
-    <ContextMenu ref="contextMenuRef" :items="copyMenuItems" />
   </div>
 </template>
 
