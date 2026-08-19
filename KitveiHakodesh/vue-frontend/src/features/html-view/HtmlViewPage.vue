@@ -4,7 +4,7 @@ import { useLocalFileStore } from '@/stores/localFileStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useTabStore } from '@/stores/tabStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
-import { getTheme } from '@/theme/themes'
+import { getTheme, isDarkTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
 import { TAB_SWIPE_EVENT, createWheelSwipeHandler, type TabSwipeGestureEventDetail } from '@/composables/useTabSwipeNavigation'
 import { useSwipe } from '@vueuse/core'
@@ -246,8 +246,10 @@ function getThemeColors(): Record<string, string> {
 
 function sendThemeToIframe() {
   if (!iframeRef.value?.contentWindow) return
+  // isDark drives the frame document's color-scheme, so natively drawn UI
+  // inside it (scrollbars, form-control popups) matches the app theme.
   iframeRef.value.contentWindow.postMessage(
-    { type: 'htmlViewTheme', colors: getThemeColors() },
+    { type: 'htmlViewTheme', colors: getThemeColors(), isDark: isDarkTheme() },
     '*',
   )
 }

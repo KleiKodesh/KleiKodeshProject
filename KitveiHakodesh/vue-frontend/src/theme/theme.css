@@ -1,4 +1,10 @@
 :root {
+  /* Tells the browser which scheme the app renders, so everything IT draws —
+     native scrollbars, datalist/select popups, date pickers, autofill, the
+     pre-paint canvas — comes in the matching variant instead of always light.
+     The PDF viewer iframe gets its own copy in syncPdfViewerTheme; local-file
+     iframes get it via the htmlViewTheme message. */
+  color-scheme: light;
   --bg-primary: var(--bg-primary-custom, #ffffff);
   --bg-primary-rgb: var(--bg-primary-rgb-custom, 255, 255, 255);
   --bg-secondary: var(--bg-secondary-custom, #f8f8f8);
@@ -29,6 +35,7 @@
 }
 
 :root.dark {
+  color-scheme: dark;
   --bg-primary: var(--bg-primary-custom, #1e1e1e);
   --bg-primary-rgb: var(--bg-primary-rgb-custom, 30, 30, 30);
   --bg-secondary: var(--bg-secondary-custom, #2d2d2d);

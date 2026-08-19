@@ -165,6 +165,9 @@ namespace KitveiHakodeshLib.Bridge
         if (e.data.type === 'htmlViewTheme') {
             var c = e.data.colors;
             if (!c) return;
+            // color-scheme makes the browser's own UI in this frame (native
+            // scrollbars, form-control popups) match the app's light/dark theme.
+            document.documentElement.style.colorScheme = e.data.isDark ? 'dark' : 'light';
             document.documentElement.style.setProperty('--iframe-bg', c.bgPrimary || '');
             document.documentElement.style.setProperty('--iframe-text', c.textPrimary || '');
             document.documentElement.style.setProperty('--iframe-text-secondary', c.textSecondary || '');
