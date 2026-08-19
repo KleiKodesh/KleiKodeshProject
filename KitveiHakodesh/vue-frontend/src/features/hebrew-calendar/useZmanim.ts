@@ -40,6 +40,7 @@ export function calcDayZmanim(city: City, date: Date) {
   try {
     const z = new Zmanim(makeGloc(city), date, false)
     return {
+      chatzotNight: fmtTime(z.chatzotNight()),
       alot: fmtTime(z.alotHaShachar()),
       misheyakir: fmtTime(z.misheyakir()),
       sunrise: fmtTime(z.sunrise()),
@@ -56,6 +57,7 @@ export function calcDayZmanim(city: City, date: Date) {
     }
   } catch {
     return {
+      chatzotNight: null,
       alot: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
       sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null,
       minchaKetana: null, plag: null, sunset: null, tzeit: null,
