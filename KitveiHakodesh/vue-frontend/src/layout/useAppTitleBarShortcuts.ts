@@ -101,6 +101,17 @@ export function useAppTitleBarShortcuts(options: {
         navigateInNewTab('הגדרות')
         return true
       }
+      // Alt+Arrow — the tab's own Back/Forward, like a browser. RTL: back is the
+      // RIGHT arrow, matching the title-bar button icons. Ctrl+Arrow stays with
+      // the book view's section navigation, which is why the modifier is Alt.
+      // stopPropagation too: plain-arrow handlers (tile grids, list navigation)
+      // don't check modifiers, and this must not also move their focus.
+      if (e.altKey && (e.code === 'ArrowRight' || e.code === 'ArrowLeft')) {
+        e.stopPropagation()
+        if (e.code === 'ArrowRight') pane.goBack()
+        else pane.goForward()
+        return true
+      }
       return false
     }
 

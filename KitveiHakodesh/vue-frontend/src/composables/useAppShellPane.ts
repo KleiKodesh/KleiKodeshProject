@@ -1,6 +1,10 @@
 import { computed } from 'vue'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import {
+  historyEntries as tabHistoryEntries,
+  historyCursor as tabHistoryCursor,
+} from '@/stores/navHistory'
 import { navigatesDestinationsInPlace } from '@/webview-host/bridge'
 import type { Tab, TabRoute } from '@/stores/tabStore'
 
@@ -50,6 +54,16 @@ export function useAppShellPane(paneId: 1 | 2) {
 
   function goForward() {
     tabStore.goHistory(activeTabId.value, 1)
+  }
+
+  // The active tab's full history plus its cursor — read straight from the
+  // navHistory module (tabStore only wraps the guards). Feeds the back/forward
+  // buttons' hold-to-show dropdown.
+  const historyEntries = computed(() => tabHistoryEntries(activeTabId.value))
+  const historyCursor = computed(() => tabHistoryCursor(activeTabId.value))
+
+  function goToHistoryIndex(index: number) {
+    tabStore.goHistoryToIndex(activeTabId.value, index)
   }
 
   /**
@@ -184,6 +198,9 @@ export function useAppShellPane(paneId: 1 | 2) {
     canGoForward,
     goBack,
     goForward,
+    historyEntries,
+    historyCursor,
+    goToHistoryIndex,
     closeTab,
     closeAllTabs,
     openTab,

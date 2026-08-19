@@ -14,6 +14,8 @@
     <!-- Navigation -->
     <div class="shortcuts-group-label">ניווט</div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>E</kbd></div><span class="shortcut-description">מיקוד שורת החיפוש</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>חץ ימני</kbd></div><span class="shortcut-description">חזור אחורה בהיסטוריה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Alt</kbd><span class="kbd-plus">+</span><kbd>חץ שמאלי</kbd></div><span class="shortcut-description">התקדם קדימה בהיסטוריה</span></div>
     <!-- Single-tab hosts: Ctrl+Tab walks the open document's own history instead of
          switching tabs, so it belongs with navigation rather than tab management. -->
     <template v-if="!hasNativeChromeTabs">

@@ -5,8 +5,6 @@ import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
   IconLineHorizontal320Regular,
-  IconArrowRight20Regular,
-  IconArrowLeft20Regular,
   IconHome20Regular,
   IconOptions24Regular,
   IconOptions24Filled,
@@ -23,6 +21,7 @@ import ThemeToggle from '@/theme/ThemeToggle.vue'
 const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarNavDropdown.vue'))
 const AddressBar = defineAsyncComponent(() => import('./AddressBar.vue'))
 import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
+import AppTitleBarHistoryButton from './AppTitleBarHistoryButton.vue'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
@@ -256,30 +255,20 @@ useAppTitleBarShortcuts({
     <div class="bar-end">
       <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
-           not between tabs (Ctrl+Tab still does that). Greyed out rather than hidden
-           at the ends of the stack: hiding them would shift every button beside them
-           as history comes and goes. RTL: back points right, forward left, following
-           the direction of reading not the array index. -->
-      <button
+           not between tabs (Ctrl+Tab still does that). Click steps once
+           (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.
+           The 'prev-tab'/'next-tab' visibility ids are legacy — they key the
+           persisted hidden-buttons setting, so renaming them is a migration. -->
+      <AppTitleBarHistoryButton
         v-if="isTitleBarButtonVisible('prev-tab')"
-        class="bar-btn"
-        tabindex="-1"
-        :disabled="!pane.canGoBack.value"
-        title="חזור"
-        @click.stop="pane.goBack()"
-      >
-        <IconArrowRight20Regular />
-      </button>
-      <button
+        :pane-id="props.paneId"
+        direction="back"
+      />
+      <AppTitleBarHistoryButton
         v-if="isTitleBarButtonVisible('next-tab')"
-        class="bar-btn"
-        tabindex="-1"
-        :disabled="!pane.canGoForward.value"
-        title="קדימה"
-        @click.stop="pane.goForward()"
-      >
-        <IconArrowLeft20Regular />
-      </button>
+        :pane-id="props.paneId"
+        direction="forward"
+      />
     </div>
 
   </header>
@@ -435,11 +424,4 @@ useAppTitleBarShortcuts({
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
 }
 
-/* Unavailable rather than absent — the Back/Forward pair greys out at the ends of a
-   tab's history instead of unmounting, so the buttons beside them never shift.
-   Matches the disabled treatment already used in FullTextSearchBar. */
-.bar-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
 </style>

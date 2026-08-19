@@ -85,6 +85,29 @@ export function stepHistory(tabId: string, direction: -1 | 1): NavLocation | nul
   return history.entries[target] ?? null
 }
 
+/**
+ * Moves the cursor straight to an entry — the hold-to-show list path, where the
+ * reader picks a frame several steps away instead of stepping one at a time.
+ */
+export function jumpHistory(tabId: string, index: number): NavLocation | null {
+  const history = get(tabId)
+  if (!history) return null
+  if (index < 0 || index >= history.entries.length || index === history.cursor) return null
+  history.cursor = index
+  bump()
+  return history.entries[index] ?? null
+}
+
+/** A tab's full history, oldest → newest — for the hold-to-show dropdown. */
+export function historyEntries(tabId: string): NavLocation[] {
+  return get(tabId)?.entries ?? []
+}
+
+/** The index into `historyEntries` of the frame the tab is currently on. */
+export function historyCursor(tabId: string): number {
+  return get(tabId)?.cursor ?? -1
+}
+
 /** The frame the tab is currently on, for capturing position before leaving it. */
 export function currentLocation(tabId: string): NavLocation | null {
   const history = get(tabId)
