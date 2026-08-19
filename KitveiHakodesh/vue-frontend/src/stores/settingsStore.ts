@@ -57,6 +57,7 @@ const KEYS = {
   SETTINGS_SETUP_DONE: 'app.setupDone',
   SETTINGS_COMPACT_MODE: 'app.compactMode',
   SETTINGS_CONTENT_BORDER: 'app.contentBorder',
+  SETTINGS_SCROLLBARS_AUTO_HIDE: 'app.scrollbarsAutoHide',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
@@ -143,6 +144,9 @@ const DEFAULTS = {
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   compactMode: true,
   contentBorder: false,
+  // Windows-11-style auto-hide scrollbars. The DOM effect (root classes + scroll
+  // activity tracking) is owned by useUiChromeVisibility, not this store.
+  scrollbarsAutoHide: false,
   showRecentlyOpened: true,
 }
 
@@ -212,6 +216,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const compactMode = ref(DEFAULTS.compactMode)
   const contentBorder = ref(DEFAULTS.contentBorder)
+  const scrollbarsAutoHide = ref(DEFAULTS.scrollbarsAutoHide)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const fileSearchSortOrder = ref<import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder>('relevance')
   /** Which layout the book catalog page renders in. */
@@ -349,6 +354,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
     loadSetting(KEYS.SETTINGS_CONTENT_BORDER, contentBorder)
+    loadSetting(KEYS.SETTINGS_SCROLLBARS_AUTO_HIDE, scrollbarsAutoHide)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     loadSetting(KEYS.SETTINGS_BOOKS_VIEW, booksView)
@@ -400,6 +406,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
   persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
+  persistSetting(scrollbarsAutoHide, KEYS.SETTINGS_SCROLLBARS_AUTO_HIDE)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
@@ -497,6 +504,7 @@ export const useSettingsStore = defineStore('settings', () => {
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     compactMode.value = DEFAULTS.compactMode
     contentBorder.value = DEFAULTS.contentBorder
+    scrollbarsAutoHide.value = DEFAULTS.scrollbarsAutoHide
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     clearPersistedSettings()
     applyCSSVariables()
@@ -521,6 +529,7 @@ export const useSettingsStore = defineStore('settings', () => {
     titleBarHiddenButtons,
     compactMode,
     contentBorder,
+    scrollbarsAutoHide,
     showRecentlyOpened,
     fileSearchSortOrder,
     booksView,

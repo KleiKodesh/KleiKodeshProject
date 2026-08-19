@@ -11,7 +11,7 @@ import { useSwipe } from '@vueuse/core'
 import { shallowRef } from 'vue'
 import { useOtzariaAddinBridge } from './useOtzariaAddinBridge'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
-import { useIframeScrollbarsHidden } from '@/composables/useIframeScrollbarsHidden'
+import { useIframeScrollbarsAutoHide } from '@/composables/useIframeScrollbarsAutoHide'
 
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
@@ -44,7 +44,7 @@ const addinIdRef = computed(() => {
 })
 
 const bridge = useOtzariaAddinBridge(iframeRef, addinIdRef)
-const iframeScrollbars = useIframeScrollbarsHidden(() => iframeRef.value)
+const iframeScrollbars = useIframeScrollbarsAutoHide(() => iframeRef.value)
 
 // ── Load handling ─────────────────────────────────────────────────────────────
 
