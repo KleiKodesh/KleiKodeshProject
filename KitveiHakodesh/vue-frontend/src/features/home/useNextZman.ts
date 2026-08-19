@@ -12,6 +12,11 @@ const KEYS = { SETTINGS_ZMANIM_CITY: ZMANIM_CITY_KEY } as const
  * Also drives the "all times" popup, so this is the full day list.
  */
 export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
+  // chatzotNight of date D is the midpoint of the night ending at D's sunrise —
+  // always before alot(D) and after tzeit(D-1), so it opens the civil day and
+  // the ordered scan below keeps its ascending-times invariant. (In winter that
+  // midpoint can fall before civil midnight, on date D-1.)
+  { key: 'chatzotNight', label: 'חצות הלילה' },
   { key: 'alot', label: 'עלות השחר' },
   { key: 'misheyakir', label: 'משיכיר' },
   { key: 'sunrise', label: 'הנץ החמה' },
@@ -19,7 +24,7 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
   { key: 'sofShmaMga', label: 'סו״ז ק״ש (מג״א)' },
   { key: 'sofTfillaGra', label: 'סו״ז תפילה (גר״א)' },
   { key: 'sofTfillaMga', label: 'סו״ז תפילה (מג״א)' },
-  { key: 'chatzot', label: 'חצות' },
+  { key: 'chatzot', label: 'חצות היום' },
   { key: 'minchaGedola', label: 'מנחה גדולה' },
   { key: 'minchaKetana', label: 'מנחה קטנה' },
   { key: 'plag', label: 'פלג המנחה' },
@@ -29,12 +34,13 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
 
 /** The subset used to pick "the next zman" — short labels for the compact bar. */
 const NEXT_LABELS: Partial<Record<keyof CalendarZmanim, string>> = {
+  chatzotNight: 'חצות הלילה',
   alot: 'עלות השחר',
   misheyakir: 'משיכיר',
   sunrise: 'הנץ החמה',
   sofShmaGra: 'סו״ז ק״ש',
   sofTfillaGra: 'סו״ז תפילה',
-  chatzot: 'חצות',
+  chatzot: 'חצות היום',
   minchaGedola: 'מנחה גדולה',
   minchaKetana: 'מנחה קטנה',
   plag: 'פלג המנחה',
@@ -200,6 +206,7 @@ export function useNextZman() {
     ])
     calc = (c, date): ZmanDates => {
       const empty = {
+        chatzotNight: null,
         alot: null, misheyakir: null, sunrise: null, sofShmaGra: null, sofShmaMga: null,
         sofTfillaGra: null, sofTfillaMga: null, chatzot: null, minchaGedola: null,
         minchaKetana: null, plag: null, sunset: null, tzeit: null,
@@ -209,6 +216,7 @@ export function useNextZman() {
         const z = new Zmanim(gloc, date, false)
         const norm = (d: Date | null) => (d && !isNaN(d.getTime()) ? d : null)
         return {
+          chatzotNight: norm(z.chatzotNight()),
           alot: norm(z.alotHaShachar()),
           misheyakir: norm(z.misheyakir()),
           sunrise: norm(z.sunrise()),

@@ -16,6 +16,9 @@ defineEmits<{
 const DAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
 const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = [
+  // chatzotNight of date D is the midpoint of the night ending at D's sunrise;
+  // in winter it can fall before civil midnight, on date D-1.
+  { key: 'chatzotNight', label: 'חצות הלילה' },
   { key: 'alot', label: 'עלות השחר' },
   { key: 'misheyakir', label: 'משיכיר' },
   { key: 'sunrise', label: 'הנץ החמה' },
@@ -23,7 +26,7 @@ const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = 
   { key: 'sofShmaMga', label: 'סו״ז ק״ש מג״א' },
   { key: 'sofTfillaGra', label: 'סו״ז תפילה גר״א' },
   { key: 'sofTfillaMga', label: 'סו״ז תפילה מג״א' },
-  { key: 'chatzot', label: 'חצות' },
+  { key: 'chatzot', label: 'חצות היום' },
   { key: 'minchaGedola', label: 'מנחה גדולה' },
   { key: 'minchaKetana', label: 'מנחה קטנה' },
   { key: 'plag', label: 'פלג המנחה' },

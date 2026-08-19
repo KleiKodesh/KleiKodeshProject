@@ -1,6 +1,7 @@
 import type { DailyLearning } from './hebrewCalendarLearning'
 
 export interface CalendarZmanim {
+  chatzotNight: string | null
   alot: string | null
   misheyakir: string | null
   sunrise: string | null
