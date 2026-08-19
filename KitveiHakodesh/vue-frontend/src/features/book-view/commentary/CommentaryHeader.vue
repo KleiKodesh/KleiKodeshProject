@@ -32,8 +32,8 @@ const displayPath = computed(() => {
 // its own tab, so the hint must not promise one in the single-tab hosts.
 const tooltipText = computed(() => {
   const hint = hasNativeChromeTabs
-    ? 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
-    : 'Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר'
+    ? 'לחיצה כפולה או Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר בלשונית חדשה'
+    : 'לחיצה כפולה או Ctrl+לחיצה (או לחיצה ממושכת במסך מגע) לפתיחת הספר'
   return `${displayPath.value}\n${hint}`
 })
 
@@ -46,6 +46,10 @@ onLongPress(headerEl, openBook, { delay: 500 })
 function onHeaderClick(e: MouseEvent) {
   if (e.ctrlKey) openBook()
 }
+
+function onHeaderDblClick() {
+  openBook()
+}
 </script>
 
 <template>
@@ -55,11 +59,14 @@ function onHeaderClick(e: MouseEvent) {
     :data-book-id="props.bookId"
     :title="tooltipText"
     @click="onHeaderClick"
+    @dblclick="onHeaderDblClick"
   >
     <div class="title-block">
       <span class="book-title">{{ displayPath }}</span>
     </div>
-    <div class="header-actions" @click.stop>
+    <!-- .stop on click does not cover dblclick — without @dblclick.stop a fast
+         next/next click would leak to the header and navigate the tab away. -->
+    <div class="header-actions" @click.stop @dblclick.stop>
       <button
         class="action-btn c-pointer hover-bg"
         title="קטע קודם"
