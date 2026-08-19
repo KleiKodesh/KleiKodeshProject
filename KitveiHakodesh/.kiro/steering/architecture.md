@@ -139,6 +139,7 @@ Pane-scoped — these fire only when `isThisPaneFocused` (i.e. always when split
 | `Ctrl+H` | toggle title bar visibility |
 | `Ctrl+L` / `Ctrl+M` | toggle dark mode / open nav dropdown |
 | `F1` | settings in a new tab |
+| `Alt+ArrowRight` / `Alt+ArrowLeft` | back / forward through the active tab's own history (RTL: back is the RIGHT arrow, matching the title-bar button icons; `Ctrl`+arrows belong to the book view's section navigation) |
 | `Ctrl+1`…`Ctrl+9` | open a nav destination in a new tab (ספרים, חיפוש, היברו-בוקס, פתח קובץ, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, סביבות עבודה) |
 
 App-wide — handled by pane 1 only, so they do not fire twice in split view:
@@ -436,6 +437,7 @@ Hebrew calendar page. Monthly grid and weekly detail views with zmanim. Singleto
 - `AddressBar.vue` — Explorer-style address bar in the title bar; hosts the tab dropdown and reuses the home search. There is no `AppTitleBarTabDropdown.vue`.
 - `AppTitleBarTocBreadcrumb.vue` — interactive breadcrumb rendered in the title bar center for `/book-view` and `/pdf-view` tabs. Each segment has a chevron before it listing siblings; the active segment gets a trailing chevron if it has children. Emits `navigateToTocEntry` and `navigateToPdfEntry`.
 - `AppTitleBarBreadcrumbChevronDropdown.vue` — teleported chevron dropdown listing `BreadcrumbItem[]` entries. Used by `AppTitleBarTocBreadcrumb` for both TOC and PDF siblings. Scrolls to the active item on open.
+- `AppTitleBarHistoryButton.vue` — one Back or Forward button (`direction` prop); click steps the active tab's history, press-and-hold opens a teleported dropdown of all frames in that direction for a direct jump (`useAppShellPane.goToHistoryIndex`).
 - `useAppTitleBarShortcuts.ts` — every keyboard shortcut the title bar owns, for one pane; splits them into pane-scoped and pane-1-only app-wide, and forwards iframe `Ctrl`+key events into the top-level pipeline
 - `useAppTitleBarTocBreadcrumb.ts` — parses `tab.tocPath` into `BreadcrumbSegment[]` for both `/book-view` (splits on ` / `, reads `TocBridge`) and `/pdf-view` (splits on ` · `, reads `PdfBridge`). Each segment includes `siblings` and `children` for the chevron dropdowns.
 

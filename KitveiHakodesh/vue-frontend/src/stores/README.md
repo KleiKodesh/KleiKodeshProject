@@ -37,7 +37,7 @@ Initialization order matters: `workspaceStore` must init before `tabStore`. See 
 
 **recentLocations.ts** — the `app-recent-tabs` slice: locations visited, persisted per workspace, LRU-capped at `RECENT_LOCATIONS_MAX` (50) and deduped per document so revisiting a book bumps its row rather than stacking duplicates. Selecting one navigates the current tab; removing one closes nothing.
 
-**navHistory.ts** — per-tab Back/Forward, in memory. A list plus a cursor rather than two stacks, because navigating from anywhere other than the end must TRUNCATE the forward branch — the rule that makes back-then-navigate behave as people expect.
+**navHistory.ts** — per-tab Back/Forward, in memory. A list plus a cursor rather than two stacks, because navigating from anywhere other than the end must TRUNCATE the forward branch — the rule that makes back-then-navigate behave as people expect. Besides `stepHistory` (±1), it exposes `jumpHistory` (cursor straight to an index), and `historyEntries` / `historyCursor` for the title bar's hold-to-show history dropdown; jumps go through `tabStore.goHistoryToIndex`, which shares the move logic with `goHistory` so neither records a new frame.
 
 Recording happens in `tabStore.applyTabPatch`, and only when a patch changes which DOCUMENT a tab shows (`isNavigationPatch`). `tocPath` arrives on every scroll event, so treating it as a navigation would push a history frame per scroll. The native chrome tab strip mirrors `tabs`, never these lists. Patches that merely COMPLETE an already-recorded navigation — a file restore arriving with the served URL and route — go through `tabStore.updateTabWithoutHistory`, so Back never needs two presses to leave a restored file.
 

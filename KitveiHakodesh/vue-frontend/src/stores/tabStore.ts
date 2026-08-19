@@ -29,6 +29,7 @@ import {
   pushLocation,
   updateCurrentLocation,
   stepHistory,
+  jumpHistory,
   dropHistory,
   canGoBack as historyCanGoBack,
   canGoForward as historyCanGoForward,
@@ -448,11 +449,20 @@ export const useTabStore = defineStore('tabs', () => {
    * Back from being its own forward journey.
    */
   function goHistory(tabId: string, direction: -1 | 1) {
+    moveThroughHistory(tabId, () => stepHistory(tabId, direction))
+  }
+
+  /** Jumps straight to a history entry — the back/forward hold-to-show list path. */
+  function goHistoryToIndex(tabId: string, index: number) {
+    moveThroughHistory(tabId, () => jumpHistory(tabId, index))
+  }
+
+  function moveThroughHistory(tabId: string, move: () => NavLocation | null) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
     captureCurrentPosition(tabId)
 
-    const target = stepHistory(tabId, direction)
+    const target = move()
     if (!target) return
 
     const patch = tabPatchForLocation(target)
@@ -1198,6 +1208,7 @@ export const useTabStore = defineStore('tabs', () => {
     canGoBack,
     canGoForward,
     goHistory,
+    goHistoryToIndex,
     captureCurrentPosition,
     updateActiveTab,
     updateTab,
