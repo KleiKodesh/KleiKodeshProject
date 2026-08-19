@@ -4,6 +4,7 @@ import {
   IconLibrary20Filled,
   IconBookOpen20Filled,
   IconArrowSync20Regular,
+  IconChevronDown20Regular,
   IconDelete20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import {
@@ -23,7 +24,6 @@ import type {
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import type { NavLocation } from '@/stores/navLocation'
-import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
 
 const props = defineProps<{
   catalogResults: CatalogSearchResult[]
@@ -55,12 +55,6 @@ const props = defineProps<{
   tabs?: NavLocation[]
   activeTabId?: string
   /**
-   * Optional recently-opened documents (address-bar mode, same collection as
-   * the home-page tiles). Rendered below the tab section under the same
-   * show-only-when-no-results rule.
-   */
-  recentEntries?: RecentlyOpenedEntry[]
-  /**
    * Merge the panel into its anchor instead of floating below it (address-bar
    * mode, like a browser omnibox): the top corners square off and the top border
    * is dropped, so the field and the panel read as one surface. The parent has to
@@ -77,7 +71,6 @@ const emit = defineEmits<{
   selectFile: [item: FileSearchResult, openInNewTab: boolean]
   selectTab: [id: string, openInNewTab: boolean]
   forgetTab: [id: string]
-  selectRecent: [entry: RecentlyOpenedEntry, openInNewTab: boolean]
 }>()
 
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -100,10 +93,31 @@ const sectionOrder = computed<SearchSourcePriority[]>(() => {
   return [priority, ...all.filter((source) => source !== priority)]
 })
 
+// Every headered section can be folded from its header, to make a long mixed
+// list scannable. Folding hides only the rows — the header stays visible as the
+// handle to reopen. The visible* lists below are what both the template and
+// allItems iterate, so keyboard navigation skips folded rows automatically.
+const collapsedSections = ref(new Set<SearchSourcePriority>())
+
+function isCollapsed(section: SearchSourcePriority) {
+  return collapsedSections.value.has(section)
+}
+
+function toggleSection(section: SearchSourcePriority) {
+  const next = new Set(collapsedSections.value)
+  if (next.has(section)) next.delete(section)
+  else next.add(section)
+  collapsedSections.value = next
+}
+
+const visibleCatalogResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogResults))
+const visibleCatalogTocResults = computed(() => (isCollapsed('catalog') ? [] : props.catalogTocResults))
+const visibleHebrewBooksResults = computed(() => (isCollapsed('hebrewbooks') ? [] : props.hebrewBooksResults))
+const visibleFileResults = computed(() => (isCollapsed('files') ? [] : props.fileResults))
+
 const allItems = computed(() => {
   const items: Array<
     | { kind: 'tab'; id: string }
-    | { kind: 'recent'; entry: RecentlyOpenedEntry }
     | { kind: 'catalog'; bookId: number; title: string }
     | { kind: 'catalogToc'; item: TocFsItem }
     | { kind: 'hebrewBooks'; book: HebrewBook }
@@ -112,23 +126,20 @@ const allItems = computed(() => {
   for (const tab of props.tabs ?? []) {
     items.push({ kind: 'tab', id: tab.id })
   }
-  for (const entry of props.recentEntries ?? []) {
-    items.push({ kind: 'recent', entry })
-  }
   for (const source of sectionOrder.value) {
     if (source === 'catalog') {
-      for (const item of props.catalogResults) {
+      for (const item of visibleCatalogResults.value) {
         items.push({ kind: 'catalog', bookId: item.book.id, title: item.book.title })
       }
-      for (const item of props.catalogTocResults) {
+      for (const item of visibleCatalogTocResults.value) {
         items.push({ kind: 'catalogToc', item })
       }
     } else if (source === 'hebrewbooks') {
-      for (const item of props.hebrewBooksResults) {
+      for (const item of visibleHebrewBooksResults.value) {
         items.push({ kind: 'hebrewBooks', book: item.book })
       }
     } else {
-      for (const item of props.fileResults) {
+      for (const item of visibleFileResults.value) {
         items.push({ kind: 'file', item })
       }
     }
@@ -140,7 +151,6 @@ function activateItem(index: number, openInNewTab = false) {
   const item = allItems.value[index]
   if (!item) return
   if (item.kind === 'tab') emit('selectTab', item.id, openInNewTab)
-  else if (item.kind === 'recent') emit('selectRecent', item.entry, openInNewTab)
   else if (item.kind === 'catalog') emit('selectCatalogBook', item.bookId, item.title, openInNewTab)
   else if (item.kind === 'catalogToc') emit('selectCatalogToc', item.item, openInNewTab)
   else if (item.kind === 'hebrewBooks') emit('selectHebrewBook', item.book, openInNewTab)
@@ -166,7 +176,7 @@ defineExpose({
   element: dropdownRef,
 })
 
-// All three of these read the ONE shared mapping in utils/documentIcons — the
+// Both of these read the ONE shared mapping in utils/documentIcons — the
 // same table the home tiles use, so a document looks identical wherever it is
 // listed. They used to be separate local copies that had drifted apart.
 type FileIconInfo = { component: unknown; color: string }
@@ -178,10 +188,6 @@ function iconInfo(key: DocumentIconKey): FileIconInfo {
 
 function getFileIcon(item: FileSearchResult): FileIconInfo {
   return iconInfo(iconKeyForFileName(item.fileName, !!item.addinName))
-}
-
-function getRecentIcon(entry: RecentlyOpenedEntry): FileIconInfo {
-  return iconInfo(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
 }
 
 function getTabIcon(route: string): FileIconInfo {
@@ -236,39 +242,26 @@ function getTabIcon(route: string): FileIconInfo {
         </div>
       </template>
 
-      <!-- ── Recently-opened section (address-bar mode, below the tabs) ── -->
-      <template v-if="recentEntries && recentEntries.length > 0">
-        <div class="global-search-dropdown__section-header">נפתחו לאחרונה</div>
-        <div
-          v-for="entry in recentEntries"
-          :key="entry.key"
-          role="option"
-          class="global-search-dropdown__item"
-          :class="{ 'is-focused': activeIndex === allItems.findIndex((i) => i.kind === 'recent' && i.entry.key === entry.key) }"
-          data-nav-item
-          :title="withNewTabHint(entry.title)"
-          @click="emit('selectRecent', entry, wantsNewTab($event))"
-          @auxclick.middle="emit('selectRecent', entry, wantsNewTab($event))"
-        >
-          <component
-            :is="getRecentIcon(entry).component"
-            class="global-search-dropdown__item-icon"
-            :style="{ color: getRecentIcon(entry).color }"
-          />
-          <span class="global-search-dropdown__item-title">{{ entry.title }}</span>
-        </div>
-      </template>
-
       <template v-for="source in sectionOrder" :key="source">
 
         <!-- ── Book catalog section ── -->
         <template v-if="source === 'catalog' && (catalogResults.length > 0 || catalogTocResults.length > 0 || isLoadingCatalogToc)">
-          <div class="global-search-dropdown__section-header">
+          <div
+            class="global-search-dropdown__section-header"
+            role="button"
+            :aria-expanded="!isCollapsed('catalog')"
+            @mousedown.prevent
+            @click="toggleSection('catalog')"
+          >
+            <IconChevronDown20Regular
+              class="global-search-dropdown__section-chevron"
+              :class="{ 'is-expanded': !isCollapsed('catalog') }"
+            />
             קטלוג הספרים
             <IconArrowSync20Regular v-if="isLoadingCatalogToc" class="global-search-dropdown__spinner" />
           </div>
           <div
-            v-for="item in catalogResults"
+            v-for="item in visibleCatalogResults"
             :key="item.book.id"
             role="option"
             class="global-search-dropdown__item"
@@ -286,7 +279,7 @@ function getTabIcon(route: string): FileIconInfo {
           </div>
           <!-- TOC heuristics fallback results (only present when no title matched) -->
           <div
-            v-for="item in catalogTocResults"
+            v-for="item in visibleCatalogTocResults"
             :key="item.uid"
             role="option"
             class="global-search-dropdown__item"
@@ -306,12 +299,22 @@ function getTabIcon(route: string): FileIconInfo {
 
         <!-- ── HebrewBooks section ── -->
         <template v-if="source === 'hebrewbooks' && (hebrewBooksResults.length > 0 || isLoadingHebrewBooks)">
-          <div class="global-search-dropdown__section-header">
+          <div
+            class="global-search-dropdown__section-header"
+            role="button"
+            :aria-expanded="!isCollapsed('hebrewbooks')"
+            @mousedown.prevent
+            @click="toggleSection('hebrewbooks')"
+          >
+            <IconChevronDown20Regular
+              class="global-search-dropdown__section-chevron"
+              :class="{ 'is-expanded': !isCollapsed('hebrewbooks') }"
+            />
             היברו-בוקס
             <IconArrowSync20Regular v-if="isLoadingHebrewBooks" class="global-search-dropdown__spinner" />
           </div>
           <div
-            v-for="item in hebrewBooksResults"
+            v-for="item in visibleHebrewBooksResults"
             :key="item.book.id"
             role="option"
             class="global-search-dropdown__item"
@@ -331,12 +334,22 @@ function getTabIcon(route: string): FileIconInfo {
 
         <!-- ── File search section ── -->
         <template v-if="source === 'files' && (fileResults.length > 0 || isLoadingFiles)">
-          <div class="global-search-dropdown__section-header">
+          <div
+            class="global-search-dropdown__section-header"
+            role="button"
+            :aria-expanded="!isCollapsed('files')"
+            @mousedown.prevent
+            @click="toggleSection('files')"
+          >
+            <IconChevronDown20Regular
+              class="global-search-dropdown__section-chevron"
+              :class="{ 'is-expanded': !isCollapsed('files') }"
+            />
             קבצים
             <IconArrowSync20Regular v-if="isLoadingFiles" class="global-search-dropdown__spinner" />
           </div>
           <div
-            v-for="item in fileResults"
+            v-for="item in visibleFileResults"
             :key="item.fullPath"
             role="option"
             class="global-search-dropdown__item"
@@ -413,6 +426,25 @@ function getTabIcon(route: string): FileIconInfo {
   color: var(--text-secondary);
   background: color-mix(in srgb, var(--text-primary) 4%, var(--bg-secondary));
   border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  user-select: none;
+}
+
+.global-search-dropdown__section-header:hover {
+  background: color-mix(in srgb, var(--text-primary) 8%, var(--bg-secondary));
+}
+
+/* Same disclosure grammar as the TOC/filter trees' expanders: down while
+   folded, and the 180° turn points it up while the section is open. */
+.global-search-dropdown__section-chevron {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  transition: transform 0.15s ease;
+}
+
+.global-search-dropdown__section-chevron.is-expanded {
+  transform: rotate(180deg);
 }
 
 .global-search-dropdown__spinner {
