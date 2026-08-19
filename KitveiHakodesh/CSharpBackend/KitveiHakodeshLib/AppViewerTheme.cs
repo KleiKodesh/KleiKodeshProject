@@ -1,5 +1,6 @@
 using Dark.Net;
 using KitveiHakodeshLib.Settings;
+using Microsoft.Web.WebView2.Core;
 using System;
 using System.Windows.Forms;
 
@@ -78,6 +79,25 @@ namespace KitveiHakodeshLib
             catch { /* best-effort — VSTO or other hosts may not support this */ }
         }
 
+        /// <summary>
+        /// Points the browser-drawn UI (context menus, permission dialogs, and the
+        /// autofill/datalist popups) at the app theme. Those surfaces follow the
+        /// WebView2 PROFILE color scheme, never the page's CSS color-scheme, and the
+        /// profile default is the Windows app-mode setting — so without this a light
+        /// app on a dark Windows shows dark datalist popups. Must run on the UI
+        /// thread (CoreWebView2 objects are thread-affine).
+        /// </summary>
+        private void ApplyBrowserUiColorScheme(bool isDark)
+        {
+            try
+            {
+                if (_webView?.CoreWebView2 == null) return;
+                _webView.CoreWebView2.Profile.PreferredColorScheme =
+                    isDark ? CoreWebView2PreferredColorScheme.Dark : CoreWebView2PreferredColorScheme.Light;
+            }
+            catch { /* best-effort — older runtimes may lack the profile API */ }
+        }
+
         private void ApplyTitleBarTheme(bool isDark)
         {
             try
@@ -137,9 +157,16 @@ namespace KitveiHakodeshLib
             if (borderColor != null) AppSettings.SaveBorderColor(borderColor);
 
             if (InvokeRequired)
-                Invoke(new Action(() => ApplyTitleBarTheme(isDark)));
+                Invoke(new Action(() =>
+                {
+                    ApplyTitleBarTheme(isDark);
+                    ApplyBrowserUiColorScheme(isDark);
+                }));
             else
+            {
                 ApplyTitleBarTheme(isDark);
+                ApplyBrowserUiColorScheme(isDark);
+            }
 
             // Also update the VSTO popout window if one is active.
             // That form hosts the WebView2 directly and is not reachable via FindForm().

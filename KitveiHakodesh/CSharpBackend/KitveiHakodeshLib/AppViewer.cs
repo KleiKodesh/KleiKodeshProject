@@ -471,6 +471,13 @@ namespace KitveiHakodeshLib
             // navigation so they take effect for the entire session.
             var settings = _webView.CoreWebView2.Settings;
 
+            // Browser-DRAWN UI (context menus, autofill/datalist popups) follows the
+            // profile color scheme, not the page's CSS color-scheme; its default is
+            // the Windows app-mode setting, which can contradict the app theme
+            // (light app, dark datalist popups). Seed from the persisted preference;
+            // live theme toggles update it in HandleSetTheme (AppViewerTheme.cs).
+            ApplyBrowserUiColorScheme(AppSettings.LoadDarkMode());
+
             // The app has its own zoom controls (Ctrl+±, pinch) — block the browser's
             // built-in zoom so the two systems don't fight each other.
             settings.IsZoomControlEnabled = false;
