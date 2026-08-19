@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick, inject } from 'vue'
-import { useResizeObserver } from '@vueuse/core'
+import { useResizeObserver, watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -312,12 +312,17 @@ watch(sideColumnsKey, () => {
 // restore on an already-narrow shell: isWideScreen never changes there, but restore
 // flips visible true - without the clamp that panel stays logically open while never
 // rendering (phantom search mode, held backfill gate, no way to close it).
-watch(
+// Debounced, and re-checks the live width: the host's fullscreen toggle passes
+// through WindowState.Normal for a moment, and that transient narrow dip must
+// not destroy panel state. Rendering is gated on isWideScreen directly, so a
+// genuinely narrow pane still hides the columns instantly.
+watchDebounced(
   [() => SIDE_COMMENTARY_SLOTS.map((slot) => panels[slot].visible.value), isWideScreen],
-  ([, wide]) => {
-    if (wide) return
+  () => {
+    if (isWideScreen.value) return
     for (const slot of SIDE_COMMENTARY_SLOTS) panels[slot].visible.value = false
   },
+  { debounce: 300 },
 )
 
 // Both columns opened at their saved fractions can together leave the text too
