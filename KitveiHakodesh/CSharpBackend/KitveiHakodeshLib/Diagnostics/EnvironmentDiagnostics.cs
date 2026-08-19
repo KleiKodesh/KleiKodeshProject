@@ -35,6 +35,7 @@ namespace KitveiHakodeshLib.Diagnostics
             CollectDotNet(d);
             CollectOffice(d);
             CollectSqliteInterop(d);
+            CollectLoadedSqliteModules(d);
             CollectAssemblyPaths(d);
 
             return d;
@@ -266,6 +267,74 @@ namespace KitveiHakodeshLib.Diagnostics
                             .GetVersionInfo(managedDll).FileVersion) ?? "?";
                 }
             }
+        }
+
+        // ── loaded SQLite modules (ground truth) ──────────────────────────────────
+
+        /// <summary>
+        /// Reports which SQLite native module is ACTUALLY loaded in this process.
+        /// The on-disk checks above say where SQLite *could* load from; this says
+        /// what won. Native modules are process-wide, so inside WINWORD.EXE another
+        /// add-in's SQLite.Interop.dll can be the one our P/Invokes bind to — an
+        /// EntryPointNotFoundException on a version-mangled export (e.g. SI…) means
+        /// the loaded module below is a different System.Data.SQLite release than
+        /// the managed assembly reported in sqlite.loaded.managed.*.
+        /// </summary>
+        private static void CollectLoadedSqliteModules(Dictionary<string, string> d)
+        {
+            // Native modules whose file name mentions sqlite: SQLite.Interop.dll,
+            // e_sqlite3.dll, winsqlite3.dll, sqlite3.dll — whoever loaded them.
+            int found = 0;
+            try
+            {
+                foreach (System.Diagnostics.ProcessModule m in
+                         System.Diagnostics.Process.GetCurrentProcess().Modules)
+                {
+                    string name;
+                    try { name = m.ModuleName; } catch { continue; }
+                    if (name == null ||
+                        name.IndexOf("sqlite", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+
+                    string prefix = $"sqlite.loaded.native.{found}";
+                    d[prefix + ".name"]    = name;
+                    d[prefix + ".path"]    = SafeGet(() => m.FileName) ?? "?";
+                    d[prefix + ".version"] = SafeGet(() => m.FileVersionInfo.FileVersion) ?? "?";
+                    d[prefix + ".size"]    = SafeGet(() => m.ModuleMemorySize.ToString()) ?? "?";
+                    found++;
+                }
+            }
+            catch (Exception ex)
+            {
+                d["sqlite.loaded.native.error"] = ex.Message;
+            }
+            d["sqlite.loaded.native.count"] = found.ToString();
+
+            // The managed System.Data.SQLite assembly this AppDomain resolved —
+            // its version must match the loaded interop's version exactly.
+            try
+            {
+                foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    string asmName;
+                    try { asmName = a.GetName().Name; } catch { continue; }
+                    if (!string.Equals(asmName, "System.Data.SQLite", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    d["sqlite.loaded.managed.location"] = SafeGet(() => a.Location) ?? "?";
+                    d["sqlite.loaded.managed.version"]  = SafeGet(() => a.GetName().Version.ToString()) ?? "?";
+                    d["sqlite.loaded.managed.fileVersion"] = SafeGet(() =>
+                        System.Diagnostics.FileVersionInfo.GetVersionInfo(a.Location).FileVersion) ?? "?";
+                    break;
+                }
+            }
+            catch (Exception ex)
+            {
+                d["sqlite.loaded.managed.error"] = ex.Message;
+            }
+            if (!d.ContainsKey("sqlite.loaded.managed.location") &&
+                !d.ContainsKey("sqlite.loaded.managed.error"))
+                d["sqlite.loaded.managed.location"] = "(not loaded in this AppDomain)";
         }
 
         /// <summary>Returns true if the file exists; false on any exception.</summary>

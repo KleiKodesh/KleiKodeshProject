@@ -20,7 +20,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v9.0.2";
+        public const string Version         = "v9.0.3";
         public const string InstallFolderName = "KleiKodesh";
         public const string VstoFileName    = "KleiKodesh.vsto";
 
@@ -83,6 +83,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             }
 #pragma warning restore CS0162
 
+            // Every path delivered by this payload (extracted OR skip-preserved),
+            // collected so the post-extract purge can tell current files from stale
+            // leftovers of previous versions.
+            var payloadPaths = new System.Collections.Generic.HashSet<string>(
+                StringComparer.OrdinalIgnoreCase);
+
             // The payload is a solid-LZMA archive written next to this exe by the NSIS
             // wrapper (see PayloadArchive for why it is not a zip). It is strictly
             // sequential: every entry must be consumed in order, and skipped entries
@@ -97,6 +103,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     for (int i = 0; i < total; i++)
                     {
                         var entry = PayloadArchive.ReadEntryHeader(body);
+                        payloadPaths.Add(entry.Path.Replace('/', '\\'));
                         string fullPath = Path.Combine(InstallPath, entry.Path);
 
                         // Skip files that should be preserved across updates:
@@ -147,6 +154,97 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     }
                 }
             }
+
+            // Updates historically never removed files that dropped out of the
+            // payload, so machines upgraded across versions accumulated stale
+            // binaries (e.g. old SQLite-era DLLs) that Word could still load.
+            PurgeStaleFiles(payloadPaths);
+        }
+
+        // ── Stale-file purge ─────────────────────────────────────────────────────
+
+        /// <summary>
+        /// File extensions the installer owns outright. The purge only ever touches
+        /// these; data files (.db, .json, indexes, caches) are never deleted even
+        /// when absent from the payload, because several features generate files
+        /// under the install folder at runtime (FtsIndex, filesystemindex,
+        /// webcache…) and the seforim DB — plus its Settings\user_settings.db —
+        /// may be user-placed anywhere, including inside the install folder.
+        /// </summary>
+        private static readonly string[] PurgeableExtensions =
+            { ".dll", ".exe", ".pdb", ".xml", ".config", ".manifest", ".vsto" };
+
+        /// <summary>
+        /// Relative paths never purged even when the extension is purgeable.
+        /// Matched as loose case-insensitive prefixes — deliberately loose, since
+        /// over-preserving is harmless while over-deleting is not (e.g.
+        /// "KitveiHakodesh\webcache" also covers webcache-standalone).
+        /// </summary>
+        private static readonly string[] PreservedPrefixes =
+        {
+            "uninstall.exe",                    // created by the NSIS wrapper, never in the payload
+            "WebSitesWhitelist.json",
+            "KitveiHakodesh\\cache",
+            "KitveiHakodesh\\webcache",
+            "KitveiHakodesh\\word-cache",
+            "KitveiHakodesh\\hebrewbooks-cache",
+            "BloomFilters",
+            "FtsIndex",
+            "filesystemindex",
+            "SearchExpansion",
+            "Settings",                          // user_settings.db when the seforim DB sits in the install root
+        };
+
+        /// <summary>
+        /// Deletes installer-owned binaries under InstallPath that this payload did
+        /// not deliver — leftovers from previous versions. Runs after a successful
+        /// extraction only; every failure is non-fatal (a locked stale file simply
+        /// survives until the next update).
+        /// </summary>
+        private static void PurgeStaleFiles(System.Collections.Generic.HashSet<string> payloadPaths)
+        {
+            try
+            {
+                foreach (string fullPath in Directory.GetFiles(InstallPath, "*", SearchOption.AllDirectories))
+                {
+                    string relative = fullPath.Substring(InstallPath.Length).TrimStart('\\');
+
+                    if (payloadPaths.Contains(relative)) continue;
+                    if (!HasPurgeableExtension(relative)) continue;
+                    if (IsPreserved(relative)) continue;
+
+                    try
+                    {
+                        File.Delete(fullPath);
+                        Console.WriteLine("[AddinInstaller] Purged stale file: " + relative);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[AddinInstaller] Could not purge " + relative + ": " + ex.Message);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[AddinInstaller] Stale-file purge skipped: " + ex.Message);
+            }
+        }
+
+        private static bool HasPurgeableExtension(string relativePath)
+        {
+            string ext = Path.GetExtension(relativePath);
+            foreach (string purgeable in PurgeableExtensions)
+                if (string.Equals(ext, purgeable, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        private static bool IsPreserved(string relativePath)
+        {
+            foreach (string prefix in PreservedPrefixes)
+                if (relativePath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
         }
 
         /// <summary>

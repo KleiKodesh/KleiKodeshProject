@@ -41,8 +41,7 @@ KitveiHakodeshLib/
 │   ├── HebrewBooksHandler.cs       — Download, cache, and serve HebrewBooks PDFs
 │   └── HebrewBooksDb.cs            — HebrewBooks catalogue database access
 ├── Helpers/
-│   ├── FontsProvider.cs            — Hebrew font provisioning
-│   └── SqliteNativeLoader.cs       — SQLite native binary loader
+│   └── FontsProvider.cs            — Hebrew font provisioning
 ├── Pdf/
 │   ├── LocalFileHandler.cs         — File picker for local files; virtual host mapping; Word→PDF conversion
 │   └── WordToPdfConverter.cs       — Converts Word documents to PDF
