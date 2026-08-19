@@ -16,8 +16,9 @@ const pane2TitleBarVisible = ref(true)
  * App-wide (not per-pane): scrollbars are hidden by a class on the root element,
  * and there is only one root. Keyboard shortcut: Ctrl+Shift+H — handled in the
  * app-wide block of `useAppTitleBarShortcuts`. The CSS lives in `main.css` under
- * `:root.hide-scrollbars`. Iframe content (HTML/txt viewer, PDF.js) keeps its own
- * scrollbars — the class cannot reach into another document.
+ * `:root.hide-scrollbars`. The class cannot reach into iframe documents
+ * (HTML/txt viewer, PDF.js) — pages owning an iframe propagate this state into
+ * it with `useIframeScrollbarsHidden`.
  */
 const scrollbarsHidden = ref(false)
 
