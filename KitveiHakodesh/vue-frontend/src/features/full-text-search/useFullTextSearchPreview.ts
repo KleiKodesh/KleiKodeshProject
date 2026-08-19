@@ -3,8 +3,9 @@
  *
  * Toggling a result swaps its clamped snippet for a fixed-height scrollable
  * window over the book, seeded around the matched line. Scrolling toward
- * either edge lazily loads a chunk of lines in that direction — the whole
- * book is reachable but only the visited window is ever in memory.
+ * either edge lazily loads a chunk of lines in that direction and trims the
+ * opposite edge past MAX_LINES — the whole book is reachable but the loaded
+ * window stays capped no matter how far the user scrolls.
  *
  * Highlighting reuses the book view's highlightFromSnippet — the same
  * diacritic/entity-aware walk that marks the snippet's matched terms anywhere
@@ -44,6 +45,10 @@ export interface PreviewState {
 const SEED_ABOVE = 12
 const SEED_BELOW = 28
 const CHUNK = 10
+// Cap on loaded lines: each edge-load past it trims the opposite edge, so a preview
+// can never accumulate a whole book. Far enough above the seed that trimming only
+// kicks in after sustained scrolling, small enough to bound the un-virtualized DOM.
+const MAX_LINES = 120
 
 export function useFullTextSearchPreview() {
   // Keyed by lineId — stable across streaming flushes and re-sorts of the results array.
@@ -85,6 +90,18 @@ export function useFullTextSearchPreview() {
     return anchors?.length ? applyWordLinkAnchors(content, anchors) : content
   }
 
+  /** Load the seed window around the matched line, replacing whatever is loaded. */
+  async function seedWindow(st: PreviewState, result: FullTextSearchResult) {
+    const lo = Math.max(0, st.lineIndex - SEED_ABOVE)
+    const count = st.lineIndex + SEED_BELOW - lo + 1
+    const lines = await fetchLines(result, lo, count)
+    st.lines = lines
+    st.lo = lo
+    st.hi = lines.length ? lines[lines.length - 1]!.lineIndex : lo - 1
+    st.atStart = lo === 0
+    st.atEnd = lines.length < count
+  }
+
   async function togglePreview(result: FullTextSearchResult) {
     if (previews.has(result.lineId)) {
       // Close = dispose. The window is cheap to rebuild, so nothing is kept —
@@ -107,16 +124,7 @@ export function useFullTextSearchPreview() {
     try {
       const idxRows = await getLineIndexFromLineId(result.lineId)
       st.lineIndex = idxRows[0]?.lineIndex ?? -1
-      if (st.lineIndex >= 0) {
-        const lo = Math.max(0, st.lineIndex - SEED_ABOVE)
-        const count = st.lineIndex + SEED_BELOW - lo + 1
-        const lines = await fetchLines(result, lo, count)
-        st.lines = lines
-        st.lo = lo
-        st.hi = lines.length ? lines[lines.length - 1]!.lineIndex : lo - 1
-        st.atStart = lo === 0
-        st.atEnd = lines.length < count
-      }
+      if (st.lineIndex >= 0) await seedWindow(st, result)
       if (!st.lines.length) {
         // Line not reachable through the line table (e.g. custom books) — fall
         // back to a fixed single-line window over the full matched line.
@@ -154,7 +162,13 @@ export function useFullTextSearchPreview() {
         return 0
       }
       const lines = await fetchLines(result, lo, count)
-      st.lines = [...lines, ...st.lines]
+      let next = [...lines, ...st.lines]
+      if (next.length > MAX_LINES) {
+        next = next.slice(0, MAX_LINES)
+        st.hi = next[next.length - 1]!.lineIndex
+        st.atEnd = false
+      }
+      st.lines = next
       st.lo = lo
       st.atStart = lo === 0
       return lines.length
@@ -174,7 +188,13 @@ export function useFullTextSearchPreview() {
     try {
       const lines = await fetchLines(result, st.hi + 1, CHUNK)
       if (lines.length) {
-        st.lines = [...st.lines, ...lines]
+        let next = [...st.lines, ...lines]
+        if (next.length > MAX_LINES) {
+          next = next.slice(next.length - MAX_LINES)
+          st.lo = next[0]!.lineIndex
+          st.atStart = false
+        }
+        st.lines = next
         st.hi = lines[lines.length - 1]!.lineIndex
       }
       if (lines.length < CHUNK) st.atEnd = true
@@ -187,5 +207,20 @@ export function useFullTextSearchPreview() {
     }
   }
 
-  return { previews, previewOf, togglePreview, loadAbove, loadBelow, clearPreviews }
+  /** Reload the seed window around the matched line — recentering after the
+   *  capped window has trimmed the matched line out. */
+  async function reseedPreview(result: FullTextSearchResult) {
+    const st = previews.get(result.lineId)
+    if (!st || st.loading || st.lineIndex < 0) return
+    st.loading = true
+    try {
+      await seedWindow(st, result)
+    } catch (err) {
+      console.error('[useFullTextSearchPreview] reseed failed:', err)
+    } finally {
+      st.loading = false
+    }
+  }
+
+  return { previews, previewOf, togglePreview, loadAbove, loadBelow, reseedPreview, clearPreviews }
 }
