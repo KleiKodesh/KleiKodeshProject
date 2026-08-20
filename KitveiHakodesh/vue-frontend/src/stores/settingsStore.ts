@@ -72,6 +72,7 @@ const KEYS = {
   SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
 } as const
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
+import { getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
   DEFAULT_DIVINE_NAME_MODE,
@@ -464,6 +465,36 @@ export const useSettingsStore = defineStore('settings', () => {
     diacriticsState.value = diacriticsState.value === 2 ? 0 : 2
   }
 
+  /**
+   * Flip a set of word-link marker commentaries at once: all currently visible →
+   * hide them all, otherwise show them all. The dropdown's select-all row and the
+   * Ctrl+U shortcut share this, so the semantics can never drift apart.
+   */
+  function toggleWordLinkMarkers(bookIds: number[]) {
+    if (!bookIds.length) return
+    const hidden = new Set(hiddenWordLinkMarkerBookIds.value)
+    const allVisible = bookIds.every((id) => !hidden.has(id))
+    for (const id of bookIds) {
+      if (allVisible) hidden.add(id)
+      else hidden.delete(id)
+    }
+    hiddenWordLinkMarkerBookIds.value = [...hidden]
+  }
+
+  /** Ctrl+U: toggle all point markers of one book. No-op on books without markers,
+   *  on schema-v1 DBs (empty target list), and on transient failures — including a
+   *  dev service transport error, which rejects rather than resolving null. */
+  async function toggleWordLinkMarkersForBook(bookId: number) {
+    let targets: Awaited<ReturnType<typeof getWordLinkTargetsForBook>>
+    try {
+      targets = await getWordLinkTargetsForBook(bookId)
+    } catch {
+      return
+    }
+    if (!targets?.length) return
+    toggleWordLinkMarkers([...new Set(targets.map((t) => t.targetBookId))])
+  }
+
   function togglePdfPageFilters() {
     pdfPageFilters.value = !pdfPageFilters.value
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
@@ -554,7 +585,8 @@ export const useSettingsStore = defineStore('settings', () => {
     showRecentlyOpened,
     fileSearchSortOrder,
     booksView,
-    init, cycleDiacritics, cycleDiacriticsNoTeamim, togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
+    init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
+    togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }
 })
   function normalizeNewTabPage(value: LegacyNewTabPage | null): NewTabPage | null {

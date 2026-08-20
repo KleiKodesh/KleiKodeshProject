@@ -2,6 +2,7 @@ import { computed, type ComputedRef, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useThemeStore } from '@/theme/themeStore'
 import { toggleFullscreen, hasNativeChromeTabs, toggleChromeTabList } from '@/webview-host/bridge'
 import { toggleReadingMode, toggleScrollbarsHidden } from '@/composables/useUiChromeVisibility'
@@ -53,6 +54,7 @@ export function useAppTitleBarShortcuts(options: {
 }) {
   const { paneId, pane, titleBarVisible, isSplitViewAvailable } = options
   const bookViewStore = useBookViewStore()
+  const settingsStore = useSettingsStore()
   const themeStore = useThemeStore()
   const { navigateInNewTab } = useAppNavigation()
 
@@ -169,6 +171,13 @@ export function useAppTitleBarShortcuts(options: {
         return true
       case 'KeyK':
         if (isBookViewActive.value) bookViewStore.toggleTocPanel(paneId)
+        return true
+      case 'KeyU':
+        // Ctrl+U — toggle the current book's word-link marker signs (all visible →
+        // hide all; otherwise show all). No-op on books without markers and on
+        // schema-v1 DBs; consumed anyway to suppress the browser's view-source.
+        if (isBookViewActive.value && activeTab.value?.bookId != null)
+          void settingsStore.toggleWordLinkMarkersForBook(activeTab.value.bookId)
         return true
       case 'KeyF':
         // Let a focused search input keep its own Ctrl+F.
