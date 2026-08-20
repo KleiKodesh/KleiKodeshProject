@@ -36,7 +36,7 @@ The section components are independent — each imports the stores it needs dire
 
 **FontDisplaySettings.vue** — font and size controls for main text or commentary.
 
-**FontSelector.vue** — font family dropdown. Detects installed fonts via `detectFonts.ts` from `src/utils/`.
+**FontSelector.vue** — font family dropdown. Loads installed Hebrew-capable fonts live on every open via `detectAvailableFonts()` from `src/webview-host/fontsApi.ts` (no cache; a loading row shows while the enumeration runs).
 
 ## Composables
 
