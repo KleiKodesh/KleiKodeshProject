@@ -12,7 +12,8 @@
  * array and the renderers skip the splice entirely).
  */
 import { ref, watch } from 'vue'
-import { getWordLinkAnchorsForLines } from '@/webview-host/seforimApi'
+import { getWordLinkAnchorsForLines, getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
+import { buildWordLinkTreatments, type WordLinkTreatment } from './wordLinkAnchors'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 
 const EMPTY: WordLinkAnchor[] = []
@@ -28,6 +29,32 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
   // lineIds already sent to (or in flight toward) the DB — each is queried once.
   const requested = new Set<number>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  // Per-source-book fallback treatments (rank by ascending target book id, plus the
+  // sign-vocabulary guard — see buildWordLinkTreatments). Promise-cached so each book's
+  // targets are queried once and every batch shares the same, stable assignment.
+  const treatmentsByBook = new Map<number, Promise<Map<number, WordLinkTreatment>>>()
+
+  function treatmentsFor(sourceBookId: number): Promise<Map<number, WordLinkTreatment>> {
+    const cached = treatmentsByBook.get(sourceBookId)
+    if (cached) return cached
+    const p = getWordLinkTargetsForBook(sourceBookId)
+      .then((targets) => {
+        // Empty here can only mean a swallowed failure (seforimApi resolves [] on
+        // "DB not ready"): this is only called for books that just produced anchor
+        // rows, and targets come from the same table. Drop the cache entry so a
+        // later batch retries; this batch falls back to the splicer's modulo bucket.
+        if (!targets.length) treatmentsByBook.delete(sourceBookId)
+        return buildWordLinkTreatments(targets)
+      })
+      .catch(() => {
+        // Transport error (dev service call) — same retry contract as above.
+        treatmentsByBook.delete(sourceBookId)
+        return new Map<number, WordLinkTreatment>()
+      })
+    treatmentsByBook.set(sourceBookId, p)
+    return p
+  }
 
   function scheduleLoad(lineIds: number[]) {
     const pending = lineIds.filter((id) => id > 0 && !requested.has(id))
@@ -46,6 +73,21 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
     try {
       const rows = await getWordLinkAnchorsForLines(lineIds)
       if (!rows.length) return
+      // Annotate every anchor with its book's treatment BEFORE exposing it — the
+      // splicer renders whatever is on the row, so assignment happens exactly once
+      // and never shifts as more lines load.
+      const books = [...new Set(rows.map((r) => r.sourceBookId))]
+      const maps = new Map(await Promise.all(books.map(async (b) => [b, await treatmentsFor(b)] as const)))
+      for (const row of rows) {
+        const t = maps.get(row.sourceBookId)?.get(row.targetBookId)
+        if (t) {
+          row.colorBucket = t.bucket
+          if (t.open != null) {
+            row.encOpen = t.open
+            row.encClose = t.close
+          }
+        }
+      }
       const byLine = new Map<number, WordLinkAnchor[]>()
       for (const row of rows) {
         let list = byLine.get(row.lineId)

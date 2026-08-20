@@ -153,19 +153,31 @@ internal static class SeforimSql
     public static string GetWordLinkAnchorsForLines(int count, bool hasTargetLineIndex) => hasTargetLineIndex
         ? $@"
         SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
-               l.targetBookId, l.targetLineId, l.targetLineIndex
+               l.targetBookId, l.targetLineId, l.targetLineIndex, l.sourceBookId
         FROM link l
         JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
         WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
         ORDER BY l.sourceLineId, la.charStart"
         : $@"
         SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
-               l.targetBookId, l.targetLineId, ln.lineIndex AS targetLineIndex
+               l.targetBookId, l.targetLineId, ln.lineIndex AS targetLineIndex, l.sourceBookId
         FROM link l
         JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
         JOIN line ln ON ln.id = l.targetLineId
         WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
         ORDER BY l.sourceLineId, la.charStart";
+
+    /// <summary>Distinct word-link targets (commentary book id + anchor label) of one source
+    /// book's side-0 anchors, ascending by book id. Feeds the frontend's per-book fallback
+    /// treatment ranking (smaller book id = simpler decoration) and its sign-vocabulary guard
+    /// (the labels reveal which glyphs the book's printed signs already use, so app-assigned
+    /// wrappers never imitate them). Guard behind the link_anchor probe like the query above.</summary>
+    public const string GetWordLinkAnchorTargetsForBook = @"
+        SELECT DISTINCT l.targetBookId, la.label
+        FROM link l
+        JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+        WHERE l.sourceBookId = @bookId
+        ORDER BY l.targetBookId";
 
     /// <summary>All connection type ids and names.</summary>
     public const string GetAllConnectionTypes = "SELECT id, name FROM connection_type";

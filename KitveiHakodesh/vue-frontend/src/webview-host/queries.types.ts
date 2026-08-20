@@ -120,4 +120,17 @@ export interface WordLinkAnchor {
   targetBookId: number
   targetLineId: number
   targetLineIndex: number
+  sourceBookId: number
+  // Client-assigned by useWordLinkAnchors (NOT from the wire): per-book fallback
+  // treatment slot and runtime-chosen enclosure glyphs. Absent → the splicer's
+  // modulo fallback applies. See buildWordLinkTreatments in wordLinkAnchors.ts.
+  colorBucket?: number
+  encOpen?: string
+  encClose?: string
+}
+
+/** One distinct (commentary book, anchor label) pair of a source book's word-link anchors. */
+export interface WordLinkTargetRow {
+  targetBookId: number
+  label: string | null
 }

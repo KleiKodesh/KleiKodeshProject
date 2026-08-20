@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { applyWordLinkAnchors, parseWordLinkData } from './wordLinkAnchors'
+import { applyWordLinkAnchors, buildWordLinkTreatments, parseWordLinkData } from './wordLinkAnchors'
 import { stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { realAnchorFixtures } from './wordLinkAnchors.fixtures'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
@@ -11,6 +11,7 @@ const anchor = (over: Partial<WordLinkAnchor>): WordLinkAnchor => ({
   targetBookId: 7,
   targetLineId: 99,
   targetLineIndex: 42,
+  sourceBookId: 5,
   ...over,
 })
 
@@ -94,11 +95,27 @@ describe('applyWordLinkAnchors — walker mechanics', () => {
     expect(result).toBe('אב<sup class="word-link-marker" data-wl="7:42:99" data-wl-c="7" data-wl-label="א"></sup>גד')
   })
 
-  it('defaults a missing label to ° and escapes attribute chars', () => {
+  it('defaults a missing label to § and escapes attribute chars', () => {
     const noLabel = applyWordLinkAnchors('אב', [anchor({ charStart: 1 })])
-    expect(noLabel).toContain('data-wl-label="°"')
+    expect(noLabel).toContain('data-wl-label="§"')
     const escaped = applyWordLinkAnchors('אב', [anchor({ charStart: 1, label: 'a"<b>&' })])
     expect(escaped).toContain('data-wl-label="a&quot;&lt;b&gt;&amp;"')
+  })
+
+  it('skips the color/shape bucket when the label already carries its own sign', () => {
+    const decorated = applyWordLinkAnchors('אב', [anchor({ charStart: 1, label: '(א)' })])
+    expect(decorated).not.toContain('data-wl-c')
+    expect(decorated).toContain('data-wl-label="(א)"')
+    const numeric = applyWordLinkAnchors('אב', [anchor({ charStart: 1, label: '12' })])
+    expect(numeric).toContain('data-wl-c="7"')
+  })
+
+  it('renders a loader-assigned slot and inline enclosure glyphs', () => {
+    const treated = applyWordLinkAnchors('אב', [
+      anchor({ charStart: 1, label: 'א', colorBucket: 4, encOpen: '[', encClose: ']' }),
+    ])
+    expect(treated).toContain('data-wl-c="4"')
+    expect(treated).toContain(`style="--wl-marker-open:'[';--wl-marker-close:']'"`)
   })
 
   it('emits a point marker at end-of-line', () => {
@@ -149,5 +166,31 @@ describe('parseWordLinkData', () => {
     expect(parseWordLinkData('')).toBeNull()
     expect(parseWordLinkData('1:2')).toBeNull()
     expect(parseWordLinkData('a:b:c')).toBeNull()
+  })
+})
+
+describe('buildWordLinkTreatments', () => {
+  const t = (targetBookId: number, label: string | null) => ({ targetBookId, label })
+
+  it('ranks commentaries by ascending book id, simplest treatment first', () => {
+    const map = buildWordLinkTreatments([t(30, 'א'), t(10, 'ב'), t(20, null)])
+    expect(map.get(10)!.bucket).toBe(0)
+    expect(map.get(20)!.bucket).toBe(1)
+    expect(map.get(30)!.bucket).toBe(2)
+  })
+
+  it('assigns runtime enclosure glyphs to slots 4+, skipping glyphs the book already uses', () => {
+    const six = [t(1, 'א'), t(2, 'א'), t(3, 'א'), t(4, 'א'), t(5, 'א'), t(6, 'א')]
+    expect(buildWordLinkTreatments(six).get(5)).toEqual({ bucket: 4, open: '[', close: ']' })
+    // One commentary's own labels use brackets → the bracket pair is banned book-wide.
+    const banned = buildWordLinkTreatments([...six, t(99, '[א]')])
+    expect(banned.get(5)!.open).toBe('‹')
+    expect(banned.has(99)).toBe(false)
+  })
+
+  it('excludes commentaries whose labels all carry their own sign from the ranking', () => {
+    const map = buildWordLinkTreatments([t(5, '(א)'), t(9, 'א')])
+    expect(map.has(5)).toBe(false)
+    expect(map.get(9)!.bucket).toBe(0)
   })
 })

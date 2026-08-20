@@ -15,21 +15,25 @@
    shift annotation offsets. */
 html[data-word-link-markers='false'] .word-link-marker { display: none; }
 
-/* Per-commentary marker classes. The splicer buckets each marker by its target
-   book (data-wl-c = targetBookId % 8, see wordLinkAnchors.ts), so all markers of
-   one commentary share a treatment. Hue alone is indistinguishable at superscript
-   size, so each bucket pairs a color with a SHAPE — the printed-page approach:
-   plain / (x) / [x] / underlined, in normal and bold weights. Only custom properties
-   live here; the render sites apply them via color / font-weight / text-decoration /
-   ::before content. */
+/* Per-commentary marker slots. Each marker's data-wl-c is its commentary's rank
+   within the source book, ascending by book id (buildWordLinkTreatments in
+   wordLinkAnchors.ts) — the smaller the book id, the SIMPLER the treatment. Hue
+   alone is indistinguishable at superscript size, so the ladder climbs through
+   typography first (unforgeable by any text label) and reaches enclosures last:
+   plain → underline → bold → bold underline → enclosure 1 → enclosure 2 → their
+   bold variants. Enclosure glyphs are deliberately NOT defined here: they are
+   chosen at runtime per book — never a glyph the book's own printed signs use —
+   and travel as inline custom properties from the splicer. Without them, slots
+   4-7 degrade to color/weight only. Labels that carry their own sign render
+   verbatim and get no slot at all (labelCarriesOwnSign). */
 .word-link-marker[data-wl-c='0'] { --wl-marker-color: #b8605c; }
-.word-link-marker[data-wl-c='1'] { --wl-marker-color: #5a82b8; --wl-marker-open: '('; --wl-marker-close: ')'; }
-.word-link-marker[data-wl-c='2'] { --wl-marker-color: #5d9061; --wl-marker-open: '['; --wl-marker-close: ']'; }
-.word-link-marker[data-wl-c='3'] { --wl-marker-color: #b0813f; --wl-marker-decoration: underline; }
-.word-link-marker[data-wl-c='4'] { --wl-marker-color: #8a6fb0; --wl-marker-weight: 700; }
-.word-link-marker[data-wl-c='5'] { --wl-marker-color: #4a9494; --wl-marker-weight: 700; --wl-marker-open: '('; --wl-marker-close: ')'; }
-.word-link-marker[data-wl-c='6'] { --wl-marker-color: #b06a92; --wl-marker-weight: 700; --wl-marker-open: '['; --wl-marker-close: ']'; }
-.word-link-marker[data-wl-c='7'] { --wl-marker-color: #8a8a4d; --wl-marker-weight: 700; --wl-marker-decoration: underline; }
+.word-link-marker[data-wl-c='1'] { --wl-marker-color: #5a82b8; --wl-marker-decoration: underline; }
+.word-link-marker[data-wl-c='2'] { --wl-marker-color: #5d9061; --wl-marker-weight: 700; }
+.word-link-marker[data-wl-c='3'] { --wl-marker-color: #b0813f; --wl-marker-weight: 700; --wl-marker-decoration: underline; }
+.word-link-marker[data-wl-c='4'] { --wl-marker-color: #8a6fb0; }
+.word-link-marker[data-wl-c='5'] { --wl-marker-color: #4a9494; }
+.word-link-marker[data-wl-c='6'] { --wl-marker-color: #b06a92; --wl-marker-weight: 700; }
+.word-link-marker[data-wl-c='7'] { --wl-marker-color: #8a8a4d; --wl-marker-weight: 700; }
 
 /* Adjacent markers (different commentaries anchored at the same words) get a gap
    so they never fuse into one blob. */
