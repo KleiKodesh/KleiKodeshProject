@@ -106,7 +106,7 @@ const DEFAULTS = {
   hiddenWordLinkMarkerBookIds: [] as number[],
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
-  fontSize: 100,
+  fontSize: 105,
   linePadding: 1.6,
   // Off by default: with an absolute line box, a word larger than the body text
   // overlaps the neighbouring row instead of pushing it apart. That trade — even
