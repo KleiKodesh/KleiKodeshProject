@@ -3,7 +3,7 @@
  *
  * Range anchors (charEnd != null) wrap the anchored citation text in a clickable
  * `<span class="word-link" data-wl="…">`; point anchors insert an empty
- * `<sup class="word-link-marker" data-wl="…" data-wl-label="…"></sup>` whose label
+ * `<sup class="word-link-marker" data-wl="…" data-wl-c="…" data-wl-label="…"></sup>` whose label
  * renders via CSS `content: attr(data-wl-label)` — deliberately NO text content, so
  * the spliced markup adds zero visible characters and none of the downstream
  * offset-based walkers (user highlights, note markers, search marks — all of which
@@ -54,8 +54,11 @@ const wlData = (a: WordLinkAnchor) => `${a.targetBookId}:${a.targetLineIndex}:${
 
 const openTag = (a: WordLinkAnchor) => `<span class="word-link" data-wl="${wlData(a)}">`
 
+/** Color buckets for point markers — must match the data-wl-c palette in main.css. */
+const MARKER_COLOR_BUCKETS = 8
+
 const pointTag = (a: WordLinkAnchor) =>
-  `<sup class="word-link-marker" data-wl="${wlData(a)}" data-wl-label="${escapeAttr(a.label ?? '°')}"></sup>`
+  `<sup class="word-link-marker" data-wl="${wlData(a)}" data-wl-c="${a.targetBookId % MARKER_COLOR_BUCKETS}" data-wl-label="${escapeAttr(a.label ?? '°')}"></sup>`
 
 interface AnchorEvent {
   pos: number
