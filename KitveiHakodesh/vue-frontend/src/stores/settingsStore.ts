@@ -71,7 +71,7 @@ const KEYS = {
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
   SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
 } as const
-import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry, setScrollbarsHiddenInHost } from '@/webview-host/bridge'
+import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
   DEFAULT_DIVINE_NAME_MODE,
@@ -146,11 +146,9 @@ const DEFAULTS = {
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   compactMode: true,
   contentBorder: false,
-  // Auto-hiding scrollbars: a pure passthrough to the WebView2 environment's
-  // ScrollBarStyle (fluent overlay bars vs classic ones), mirrored to the C#
-  // registry settings on change and read by the host at environment creation —
-  // takes effect on the next app launch. No CSS or DOM logic anywhere, and no
-  // effect in the dev browser.
+  // Scrollbars completely hidden except while scrolling. The DOM effect (root
+  // class + per-element scroll activity tracking) is owned by
+  // useUiChromeVisibility, not this store.
   scrollbarsHidden: false,
   showRecentlyOpened: true,
 }
@@ -417,10 +415,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
   persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
-  persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN, () => {
-    // Mirror into the host so the next launch's WebView2 environment picks it up.
-    setScrollbarsHiddenInHost(scrollbarsHidden.value)
-  })
+  persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)

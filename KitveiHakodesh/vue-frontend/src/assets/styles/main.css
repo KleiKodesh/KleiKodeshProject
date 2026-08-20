@@ -260,16 +260,25 @@ h1::after {
   background: var(--border-color);
 }
 
-/* Scrollbar behavior is owned by the WebView2 environment, not CSS: the
-   hidden-scrollbars setting is a pure passthrough to ScrollBarStyle (fluent
-   overlay auto-hide bars vs classic ones — see AppViewer.cs and
-   settingsStore.scrollbarsHidden). CSS scrollbar-color is applied on top as a
-   tint in both styles. Never add ::-webkit-scrollbar-* rules anywhere in the
-   app: they force a classic painted bar for their element, breaking the
-   overlay style. */
+/* Hidden scrollbars — Ctrl+Shift+H or the settings-page control: bars are
+   COMPLETELY invisible except while actually scrolling.
+   `useUiChromeVisibility` owns the classes — `scrollbars-hidden` is the mode
+   (on <html>), `scrollbars-scrolling` sits on the ONE element that actually
+   scrolled, so only its bar is revealed, never every scrollbar in the app at
+   once. Only colors change, never the gutter, so toggling causes zero layout
+   shift. !important so no component-scoped scrollbar-color rule can outweigh
+   the transparency, whatever its specificity or injection order; the reveal is
+   unaffected because the scrolling element is excluded by :not() and falls
+   back to the theme tint. Same approach as the styles injected into iframes
+   by useIframeScrollbarsHidden / the C# IframeScrollScript. */
+:root.scrollbars-hidden:not(.scrollbars-scrolling),
+:root.scrollbars-hidden :not(.scrollbars-scrolling) {
+  scrollbar-color: transparent transparent !important;
+}
 
 /* Thin scrollbars — TOC only (via .toc-thin-scroll class). Standard properties
-   only — see the webkit warning above. */
+   only — ::-webkit-scrollbar-* rules are dead since Chrome 121 when these are
+   set, and would defeat the hidden-scrollbars tinting above for their element. */
 .toc-thin-scroll {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;

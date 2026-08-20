@@ -5,7 +5,7 @@ PDF viewing with OCR-based text extraction and script recognition.
 ## Files
 
 **Page & UI:**
-- `PdfViewPage.vue` — main PDF viewer page; manages iframe lifecycle, toolbar visibility, and OCR mode toggle
+- `PdfViewPage.vue` — main PDF viewer page; manages iframe lifecycle, toolbar visibility, and OCR mode toggle; propagates the app-wide hidden-scrollbars setting into the viewer iframe via `useIframeScrollbarsHidden`
 - `PdfOcrResultPopup.vue` — modal popup showing extracted/recognized text with copy functionality
 - `usePdfPrintShortcut.ts` — composable; forwards Ctrl+P into the PDF.js iframe when the parent document has focus. PDF.js only handles Ctrl+P itself while focus is inside the iframe; outside it, the app-wide handler in `useAppTitleBarShortcuts` swallows the key (preventDefault only) to block the browser print dialog, and this listener calls `contentWindow.print()` so the PDF prints either way. In split view only the focused pane's instance responds, and Ctrl+Alt+P is excluded (PDF.js presentation mode)
 

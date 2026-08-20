@@ -63,6 +63,12 @@ namespace KitveiHakodeshLib.Bridge
         ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
         ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
         ///     and calls window.scrollTo() to restore the saved position.
+        ///   - Listens for { type: 'htmlViewScrollbars', hidden } commands from the parent
+        ///     (useIframeScrollbarsHidden in useUiChromeVisibility.ts), so the app-wide
+        ///     hidden-scrollbars setting
+        ///     reaches cross-origin frames too: bars go completely transparent except
+        ///     while scrolling, driven by a capture scroll listener flagging activity on
+        ///     the root element.
         ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
         ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
         ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
@@ -85,6 +91,21 @@ namespace KitveiHakodeshLib.Bridge
         if (scrollTimer) return;
         scrollTimer = setTimeout(reportScroll, 200);
     }, { passive: true });
+
+    // Scroll-activity flag for the hidden-scrollbars style (htmlViewScrollbars
+    // handler below): while any element in the frame scrolls (capture phase catches
+    // inner containers too), the root carries the class and the bars show; it drops
+    // off after a one-second linger. Runs unconditionally — without the injected
+    // style the class has no effect and the cost is negligible.
+    var scrollbarsActivityTimer = null;
+    window.addEventListener('scroll', function () {
+        document.documentElement.classList.add('__kitvei-scrollbars-scrolling');
+        if (scrollbarsActivityTimer) clearTimeout(scrollbarsActivityTimer);
+        scrollbarsActivityTimer = setTimeout(function () {
+            scrollbarsActivityTimer = null;
+            document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
+        }, 1000);
+    }, true);
 
     // Forward keyboard shortcuts to the parent frame so app-level shortcuts
     // (Ctrl+W, Ctrl+F, Ctrl+N, F1, F11, etc.) continue to work when focus
@@ -119,6 +140,27 @@ namespace KitveiHakodeshLib.Bridge
         if (e.data.type === 'htmlViewScrollTo') {
             window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
         }
+        if (e.data.type === 'htmlViewScrollbars') {
+            // Hidden scrollbars (Ctrl+Shift+H / reading mode / settings): completely
+            // transparent except while the scroll-activity class is on the root (set by
+            // the listener registered above). !important so it wins over the
+            // thin-scrollbar style htmlViewTheme re-injects below. The bare html
+            // selector matters: the viewport scrollbar styles come from the root
+            // element itself, which 'html *' alone would miss — and local files
+            // scroll at the viewport.
+            var hiddenId = '__kitvei-hidden-scrollbars';
+            var hiddenExisting = document.getElementById(hiddenId);
+            if (e.data.hidden && !hiddenExisting) {
+                var hiddenStyle = document.createElement('style');
+                hiddenStyle.id = hiddenId;
+                hiddenStyle.textContent =
+                    'html:not(.__kitvei-scrollbars-scrolling), html:not(.__kitvei-scrollbars-scrolling) * { scrollbar-color: transparent transparent !important; }';
+                (document.head || document.documentElement).appendChild(hiddenStyle);
+            } else if (!e.data.hidden && hiddenExisting) {
+                hiddenExisting.remove();
+                document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
+            }
+        }
         if (e.data.type === 'htmlViewTheme') {
             var c = e.data.colors;
             if (!c) return;
@@ -144,8 +186,8 @@ namespace KitveiHakodeshLib.Bridge
                 ? 'color-mix(in srgb, ' + c.textSecondary + ' 30%, transparent)'
                 : 'rgba(128,128,128,0.3)';
             // Standard properties only. ::-webkit-scrollbar-* rules are dead while these
-            // are set (Chrome 121+), and would force a classic painted bar that breaks
-            // the environment's fluent overlay rendering — never add them back.
+            // are set (Chrome 121+), and would defeat the hidden-scrollbars style
+            // injected by the htmlViewScrollbars handler above — never add them back.
             scrollbarStyle.textContent =
                 '* { scrollbar-color: ' + thumbColor + ' transparent; scrollbar-width: thin; }';
             (document.head || document.documentElement).appendChild(scrollbarStyle);
