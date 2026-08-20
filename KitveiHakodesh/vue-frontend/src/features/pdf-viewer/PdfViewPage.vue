@@ -11,7 +11,6 @@ import PdfOcrResultPopup from './PdfOcrResultPopup.vue'
 import { usePdfOcrSelection } from './usePdfOcrSelection'
 import { usePdfContextMenu } from './usePdfContextMenu'
 import { usePdfPrintShortcut } from './usePdfPrintShortcut'
-import { useIframeScrollbarsAutoHide } from '@/composables/useIframeScrollbarsAutoHide'
 
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { usePdfViewPageTracking } from './usePdfViewPageTracking'
@@ -25,7 +24,6 @@ const pageTracking = usePdfViewPageTracking()
 const iframeRef = ref<HTMLIFrameElement | null>(null)
 const ocr = usePdfOcrSelection(() => iframeRef.value)
 usePdfPrintShortcut(() => iframeRef.value)
-const iframeScrollbars = useIframeScrollbarsAutoHide(() => iframeRef.value)
 
 // ── Custom right-click menu (copy / copy into Word / copy page as image) ──────
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
@@ -163,7 +161,6 @@ function onIframeLoad() {
     pageTracking.attach(contentWindow)
     pdfContextMenu.attach(contentWindow)
   }
-  iframeScrollbars.apply()
   setTimeout(() => {
     syncPdfViewerTheme()
     // Apply toolbar visibility based on current setting

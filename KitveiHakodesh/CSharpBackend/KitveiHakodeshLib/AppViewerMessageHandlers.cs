@@ -89,6 +89,7 @@ namespace KitveiHakodeshLib
                         case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
                         case "setTheme": HandleSetTheme(root, id); break;
+                        case "setScrollbarsHidden": HandleSetScrollbarsHidden(root, id); break;
                         case "tabsChanged": HandleTabsChanged(root, id); break;
                         case "tabIcons": HandleTabIcons(root, id); break;
                         case "toggleChromeTabList": HandleToggleChromeTabList(root, id); break;
@@ -104,6 +105,15 @@ namespace KitveiHakodeshLib
                 // the truncated form made those failures undiagnosable from the field.
                 if (id != null) _bridge.Reply(id, new { error = ex.ToString() });
             }
+        }
+
+        private void HandleSetScrollbarsHidden(JsonElement root, string id)
+        {
+            _bridge.Reply(id, new { });
+            bool hidden = root.TryGetProperty("hidden", out var v) && v.GetBoolean();
+            // Read at WebView2 environment creation (AppViewer.GetSharedEnv), which
+            // happens once per process — takes effect on the next app launch.
+            Settings.AppSettings.SaveScrollbarsHidden(hidden);
         }
 
         private void HandleGetWordSynonyms(JsonElement root, string id)

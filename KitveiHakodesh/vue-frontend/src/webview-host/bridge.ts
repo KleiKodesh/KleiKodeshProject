@@ -58,14 +58,6 @@ export const navigatesDestinationsInPlace = isVstoEnvironment || !hasHostBridge
  */
 export const hasNativeChromeTabs = hasHostBridge && !isVstoEnvironment
 
-/**
- * True when the WebView2 host is present, whose environment enables native
- * Windows 11 fluent overlay scrollbars (ScrollBarStyle in AppViewer.cs). The
- * scrollbars auto-hide mode uses them where available; the dev browser has no
- * such environment setting, so it falls back to the CSS emulation instead.
- */
-export const hasNativeFluentScrollbars = hasHostBridge
-
 function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
     return Promise.reject(new Error('bridge not available'))
@@ -673,6 +665,18 @@ export function setTheme(
     ...(accentColor ? { accentColor } : {}),
     ...(borderColor ? { borderColor } : {}),
   }).catch(() => {})
+}
+
+/**
+ * Persist the hidden-scrollbars preference in the C# host. The host reads it at
+ * WebView2 environment creation and sets ScrollBarStyle accordingly (fluent
+ * overlay auto-hide bars vs classic ones); the environment is created once per
+ * process, so the value takes effect on the NEXT app launch — there is no live
+ * effect. Fire-and-forget; no-op in the dev browser.
+ */
+export function setScrollbarsHiddenInHost(hidden: boolean): void {
+  if (typeof window.__webviewAction !== 'function') return
+  action('setScrollbarsHidden', { hidden }).catch(() => {})
 }
 
 // ── Native chrome tabs mirror ────────────────────────────────────────────────

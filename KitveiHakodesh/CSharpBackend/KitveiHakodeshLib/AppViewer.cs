@@ -92,14 +92,18 @@ namespace KitveiHakodeshLib
                     // trusted domain; the feature adds overhead with no benefit here.
                     EnableTrackingPrevention = false,
 
-                    // Native Windows 11 fluent overlay scrollbars, environment-wide (all
-                    // frames included). Harmless while scrollbars are author-styled via
-                    // CSS (scrollbar-color/width win per element — the app's default
-                    // "static" mode), and the real thing when the frontend's auto-hide
-                    // setting clears that styling (the native-overlay-scrollbars class,
-                    // see useUiChromeVisibility.ts). Light/dark variant follows the
-                    // document's color-scheme.
-                    ScrollBarStyle = CoreWebView2ScrollbarStyle.FluentOverlay,
+                    // The hidden-scrollbars setting, environment-wide (all frames
+                    // included): FluentOverlay = native Windows 11 overlay bars that
+                    // fade when idle and reveal on scroll/hover, with zero gutter;
+                    // Default = classic always-visible bars. CSS scrollbar-color is
+                    // applied ON TOP as a tint in both styles, which is how the theme
+                    // colors the bars. The value is a pure passthrough from the Vue
+                    // settings page (setScrollbarsHidden bridge action); since the
+                    // environment is created once per process, a change takes effect
+                    // on the next app launch.
+                    ScrollBarStyle = AppSettings.LoadScrollbarsHidden()
+                        ? CoreWebView2ScrollbarStyle.FluentOverlay
+                        : CoreWebView2ScrollbarStyle.Default,
                 };
 
                 // Keep the webcache alongside the other cache folders under the app's
