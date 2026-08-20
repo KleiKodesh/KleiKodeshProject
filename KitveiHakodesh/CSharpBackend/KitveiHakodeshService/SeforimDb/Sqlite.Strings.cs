@@ -168,8 +168,9 @@ internal static class SeforimSql
         ORDER BY l.sourceLineId, la.charStart";
 
     /// <summary>Distinct word-link targets (commentary book id + anchor label) of one source
-    /// book's side-0 anchors, ascending by book id. Feeds the frontend's per-book fallback
-    /// treatment ranking (smaller book id = simpler decoration) and its sign-vocabulary guard
+    /// book's side-0 POINT anchors (range citations never render markers), ascending by book
+    /// id. Feeds the frontend's per-book fallback treatment ranking (smaller book id =
+    /// simpler decoration), its marker visibility dropdown, and its sign-vocabulary guard
     /// (the labels reveal which glyphs the book's printed signs already use, so app-assigned
     /// wrappers never imitate them). Guard behind the link_anchor probe like the query above.</summary>
     public const string GetWordLinkAnchorTargetsForBook = @"
@@ -177,6 +178,7 @@ internal static class SeforimSql
         FROM link l
         JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
         WHERE l.sourceBookId = @bookId
+          AND (la.charEnd IS NULL OR la.charEnd <= la.charStart)
         ORDER BY l.targetBookId";
 
     /// <summary>All connection type ids and names.</summary>

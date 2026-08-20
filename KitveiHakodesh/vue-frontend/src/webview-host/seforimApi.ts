@@ -8,6 +8,7 @@
 // hosted → query(SQL.X)) and point the composable at it instead of query(SQL.X).
 
 import { query, categoryHasOrderIndex } from './seforimDb'
+import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import { SQL } from './queries.sql'
 import type {
@@ -118,6 +119,18 @@ export async function getCommentaryLinksForSourceLineRange(lineIds: number[]): P
 // the DB is static per page load (same lifecycle as _linkHasTargetLineIndex above).
 let _hasLinkAnchors: boolean | null = null
 
+/**
+ * The same support state, reactive, for UI that should not exist at all on schema-v1
+ * DBs (the toolbar's marker-visibility dropdown). Settles from the probes the lazy
+ * anchor loads already run — reading it never queries anything.
+ */
+export const wordLinkAnchorsSupported = ref<boolean | null>(null)
+
+function setWordLinkSupport(value: boolean | null) {
+  _hasLinkAnchors = value
+  wordLinkAnchorsSupported.value = value
+}
+
 /** Word-level link anchors for a batch of source lines. [] on schema-v1 DBs — always safe to call. */
 export async function getWordLinkAnchorsForLines(lineIds: number[]): Promise<WordLinkAnchor[]> {
   if (_hasLinkAnchors === false || lineIds.length === 0) return []
@@ -125,13 +138,13 @@ export async function getWordLinkAnchorsForLines(lineIds: number[]): Promise<Wor
     const res = await serviceCall<{ supported: boolean; rows: WordLinkAnchor[] }>(
       'getWordLinkAnchorsForLines', { lineIds },
     )
-    if (!res.supported) _hasLinkAnchors = false
+    setWordLinkSupport(res.supported)
     return res.rows
   }
   if (_hasLinkAnchors == null) {
     try {
       const rows = await query<{ n: number }>(SQL.HAS_LINK_ANCHOR_TABLE)
-      _hasLinkAnchors = (rows[0]?.n ?? 0) > 0
+      setWordLinkSupport((rows[0]?.n ?? 0) > 0)
     } catch {
       return [] // DB not ready — leave unknown so the next call re-probes
     }
@@ -140,40 +153,46 @@ export async function getWordLinkAnchorsForLines(lineIds: number[]): Promise<Wor
   try {
     return await query<WordLinkAnchor>(SQL.GET_WORD_LINK_ANCHORS_FOR_LINES(lineIds.length), lineIds)
   } catch {
-    // DB swapped under us (user picked a different seforim DB without a reload) — re-probe next call.
+    // DB swapped under us (user picked a different seforim DB without a reload) — re-probe
+    // next call. Internal state only: the reactive UI flag keeps its last known value so
+    // support-gated UI doesn't blink out on a transient error.
     _hasLinkAnchors = null
     return []
   }
 }
 
 /**
- * Distinct word-link targets (commentary book id + anchor label) for one source book,
- * ascending by book id. [] on schema-v1 DBs — always safe to call. Feeds the per-book
- * fallback-treatment ranking in useWordLinkAnchors.
+ * Distinct word-link POINT-anchor targets (commentary book id + anchor label) for one
+ * source book, ascending by book id. Feeds the per-book fallback-treatment ranking and
+ * the toolbar's marker dropdown. [] means "legitimately none" (including schema-v1 DBs);
+ * null means "transient failure — DB not ready or swapped" and callers must NOT cache it.
  */
-export async function getWordLinkTargetsForBook(bookId: number): Promise<WordLinkTargetRow[]> {
+export async function getWordLinkTargetsForBook(bookId: number): Promise<WordLinkTargetRow[] | null> {
   if (_hasLinkAnchors === false || bookId <= 0) return []
   if (!isDbHosted()) {
     const res = await serviceCall<{ supported: boolean; rows: WordLinkTargetRow[] }>(
       'getWordLinkAnchorTargetsForBook', { bookId },
     )
-    if (!res.supported) _hasLinkAnchors = false
+    setWordLinkSupport(res.supported)
     return res.rows
   }
   if (_hasLinkAnchors == null) {
     try {
       const rows = await query<{ n: number }>(SQL.HAS_LINK_ANCHOR_TABLE)
-      _hasLinkAnchors = (rows[0]?.n ?? 0) > 0
+      setWordLinkSupport((rows[0]?.n ?? 0) > 0)
     } catch {
-      return [] // DB not ready — leave unknown so the next call re-probes
+      return null // DB not ready — leave unknown so the next call re-probes
     }
     if (!_hasLinkAnchors) return []
   }
   try {
     return await query<WordLinkTargetRow>(SQL.GET_WORD_LINK_ANCHOR_TARGETS_FOR_BOOK, [bookId])
   } catch {
+    // DB swapped under us — re-probe next call. Only the internal state resets: the
+    // reactive UI flag keeps its last known value, so the toolbar control doesn't
+    // blink out of existence on a transient error.
     _hasLinkAnchors = null
-    return []
+    return null
   }
 }
 

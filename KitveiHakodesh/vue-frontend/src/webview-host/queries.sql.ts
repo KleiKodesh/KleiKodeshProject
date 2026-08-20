@@ -383,8 +383,9 @@ export const SQL = {
 
   /**
    * Distinct word-link targets (commentary book id + anchor label) of one source book's
-   * side-0 anchors, ascending by book id. Feeds the per-book fallback-treatment ranking
-   * (smaller book id = simpler decoration) and the sign-vocabulary guard (labels reveal
+   * side-0 POINT anchors (range citations never render markers), ascending by book id.
+   * Feeds the per-book fallback-treatment ranking (smaller book id = simpler decoration),
+   * the toolbar's marker visibility dropdown, and the sign-vocabulary guard (labels reveal
    * which glyphs the book's printed signs already use) — see buildWordLinkTreatments in
    * wordLinkAnchors.ts. Guard behind HAS_LINK_ANCHOR_TABLE like the anchors query.
    */
@@ -393,6 +394,7 @@ export const SQL = {
     FROM link l
     JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
     WHERE l.sourceBookId = ?
+      AND (la.charEnd IS NULL OR la.charEnd <= la.charStart)
     ORDER BY l.targetBookId
   `,
 
