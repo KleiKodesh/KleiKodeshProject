@@ -77,7 +77,7 @@ namespace KitveiHakodeshLib
                         case "TogglePopOut": HandleTogglePopOut(id); break;
                         case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
-                        case "getFonts": HandleGetFonts(id); break;
+                        case "getFonts": await HandleGetFonts(id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
@@ -216,9 +216,13 @@ namespace KitveiHakodeshLib
             }
         }
 
-        private void HandleGetFonts(string id)
+        private async Task HandleGetFonts(string id)
         {
-            _bridge.Reply(id, new { fonts = FontsProvider.GetHebrewFonts() });
+            // WebMessageReceived fires on the UI thread, and a cold enumeration walks the
+            // cmap of every system typeface — around a second on a font-heavy machine.
+            // Task.Run keeps the window responsive; Reply marshals itself back.
+            var fonts = await Task.Run(() => FontsProvider.GetHebrewFonts());
+            _bridge.Reply(id, new { fonts });
         }
 
         private void HandleAppReady(string id)

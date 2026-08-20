@@ -3,13 +3,16 @@ using System.Runtime.InteropServices;
 namespace KitveiHakodeshService.LocalFiles;
 
 /// <summary>
-/// Enumerates system font families that can render Hebrew — dev's replacement for the hosted app's
-/// <c>getFonts</c> bridge action (KitveiHakodeshLib Helpers/FontsProvider).
+/// Enumerates system font families that can render Hebrew, via DirectWrite — raw vtable calls,
+/// the approach NativeFolderPicker and DocConvertLib's AotWordConverter already use (this service
+/// is native-AOT and has no WPF).
 ///
-/// The hosted provider uses WPF (<c>System.Windows.Media.Fonts.SystemFontFamilies</c> +
-/// <c>GlyphTypeface.CharacterToGlyphMap</c>), which this service cannot: it is native-AOT and has
-/// no WPF. So it goes one layer down to DirectWrite — the same API WPF itself wraps — through raw
-/// vtable calls, the approach NativeFolderPicker and DocConvertLib's AotWordConverter already use.
+/// TWIN FILE — the hosted app's KitveiHakodeshLib Helpers/FontsProvider.cs is the net48 leg of
+/// this implementation and must stay in sync; the two merge into KitveiHakodesh.Core Common/Fonts
+/// per MIGRATION-PLAN.md. The only intended difference is the factory import: LibraryImport here,
+/// DllImport there. It replaced the hosted WPF enumeration because WPF's SystemFontFamilies is a
+/// process-lifetime snapshot that never sees fonts installed while the app runs (verified
+/// 2026-08-20), while DirectWrite's checkForUpdates re-scan refreshes in-process.
 ///
 /// Parity with the hosted list is the goal, and the test is the same one: does the family map
 /// א (U+05D0)? Measured on a dev box this returns all 79 families WPF reports, plus 2 (Cascadia
@@ -80,6 +83,10 @@ public static partial class HebrewFontsProvider
         ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(obj, SlotRelease))(obj);
     }
 
+    // Deliberately stateless: the service is long-running and fonts can be installed or
+    // removed under it, so every call enumerates fresh (checkForUpdates below re-scans) —
+    // no cache to hold memory or go stale. The picker shows a loading row for the ~1s an
+    // enumeration takes, and it only runs when someone opens the font dropdown.
     /// <summary>Names of every system font family that has a glyph for א, sorted alphabetically.
     /// Returns an empty array if DirectWrite is unavailable — the caller falls back to the
     /// frontend's canvas probe. Never throws.</summary>
@@ -100,8 +107,9 @@ public static partial class HebrewFontsProvider
         {
             var getCollection =
                 (delegate* unmanaged[Stdcall]<nint, nint*, int, int>)Vtbl(factory, SlotGetSystemFontCollection);
-            // checkForUpdates: 0 — the cached collection is what every other app sees too.
-            if (getCollection(factory, &collection, 0) < 0 || collection == 0) return [];
+            // checkForUpdates: 1 — re-scan installed fonts NOW rather than trusting a
+            // collection cached before the user's font install/remove.
+            if (getCollection(factory, &collection, 1) < 0 || collection == 0) return [];
 
             uint familyCount =
                 ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(collection, SlotGetFontFamilyCount))(collection);
@@ -201,33 +209,38 @@ public static partial class HebrewFontsProvider
             {
                 int rec = 4 + 8 * i;
                 if (rec + 8 > size) break;
+                // All offsets come from the font file, so bounds math is done in long —
+                // uint/int arithmetic could wrap on a corrupt font, pass the check, and
+                // read outside the memory-mapped table (an uncatchable access violation).
                 uint subOffset = ReadU32(p, rec + 4);
-                if (subOffset + 4 > size) continue;
+                if (subOffset > int.MaxValue || subOffset + 2L > size) continue;
 
                 ushort format = ReadU16(p, (int)subOffset);
                 if (format == 4)
                 {
+                    if (subOffset + 8L > size) continue;
                     ushort segX2 = ReadU16(p, (int)subOffset + 6);
                     int seg = segX2 / 2;
-                    int endBase = (int)subOffset + 14;
-                    int startBase = endBase + segX2 + 2; // +2 skips reservedPad
+                    long endBase = subOffset + 14L;
+                    long startBase = endBase + segX2 + 2; // +2 skips reservedPad
                     if (startBase + segX2 > size) continue;
                     for (int s = 0; s < seg; s++)
                     {
-                        ushort end = ReadU16(p, endBase + 2 * s);
-                        ushort start = ReadU16(p, startBase + 2 * s);
+                        ushort end = ReadU16(p, (int)(endBase + 2 * s));
+                        ushort start = ReadU16(p, (int)(startBase + 2 * s));
                         if (start <= HebrewAlef && HebrewAlef <= end) return true;
                     }
                 }
                 else if (format == 12)
                 {
+                    if (subOffset + 16L > size) continue;
                     uint nGroups = ReadU32(p, (int)subOffset + 12);
                     for (uint g = 0; g < nGroups; g++)
                     {
-                        int gr = (int)subOffset + 16 + 12 * (int)g;
+                        long gr = subOffset + 16L + 12L * g;
                         if (gr + 12 > size) break;
-                        uint start = ReadU32(p, gr);
-                        uint end = ReadU32(p, gr + 4);
+                        uint start = ReadU32(p, (int)gr);
+                        uint end = ReadU32(p, (int)gr + 4);
                         if (start <= HebrewAlef && HebrewAlef <= end) return true;
                     }
                 }

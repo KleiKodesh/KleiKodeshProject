@@ -18,9 +18,12 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
 const dropdownStyle = ref<Record<string, string>>({})
 
-// Detected once per session — installed fonts don't change at runtime
-let cachedFonts: string[] | null = null
+// Loaded live on every open — nothing is cached, so the list always reflects the
+// machine's current fonts. isLoading shows the loading row until the answer lands;
+// the generation counter keeps a stale in-flight load from finishing a newer open.
 const availableFonts = ref<string[]>([])
+const isLoading = ref(false)
+let loadGeneration = 0
 
 useDropdownClose(
   dropdownRef,
@@ -36,9 +39,6 @@ async function toggle() {
     isOpen.value = false
     return
   }
-  // Detect fonts once per session and cache the result
-  if (!cachedFonts) cachedFonts = await detectAvailableFonts()
-  availableFonts.value = cachedFonts
   isOpen.value = true
   emit('toggle')
   await nextTick()
@@ -57,6 +57,15 @@ async function toggle() {
     ...(goUp
       ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
       : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
+  }
+  const generation = ++loadGeneration
+  isLoading.value = true
+  availableFonts.value = []
+  try {
+    const fonts = await detectAvailableFonts()
+    if (generation === loadGeneration) availableFonts.value = fonts
+  } finally {
+    if (generation === loadGeneration) isLoading.value = false
   }
 }
 
@@ -89,6 +98,7 @@ defineExpose({ isOpen })
         :style="dropdownStyle"
         @click.stop
       >
+        <div v-if="isLoading" class="select-loading">…</div>
         <div
           v-for="font in availableFonts"
           :key="font"
@@ -170,6 +180,13 @@ defineExpose({ isOpen })
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+}
+.select-loading {
+  padding: 0 10px;
+  height: 32px;
+  line-height: 32px;
+  text-align: center;
+  color: var(--text-secondary);
 }
 .select-option {
   display: flex;
