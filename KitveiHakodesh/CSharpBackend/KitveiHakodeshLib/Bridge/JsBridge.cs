@@ -63,13 +63,6 @@ namespace KitveiHakodeshLib.Bridge
         ///   - Posts throttled scroll position to window.top as { type: 'htmlViewScroll', scrollTop }
         ///   - Listens for { type: 'htmlViewScrollTo', scrollTop } commands from the parent
         ///     and calls window.scrollTo() to restore the saved position.
-        ///   - Listens for { type: 'htmlViewScrollbars', autoHide, native } commands from
-        ///     the parent (useIframeScrollbarsAutoHide.ts), so the app-wide Ctrl+Shift+H /
-        ///     reading-mode / settings toggle reaches cross-origin frames too. native
-        ///     clears all author scrollbar styling so the environment's fluent overlay
-        ///     bars show (ScrollBarStyle in AppViewer.cs); autoHide without native is the
-        ///     non-host CSS emulation (transparent when idle, visible while scrolling,
-        ///     driven by a capture scroll listener flagging activity on the root).
         ///   - Forwards Ctrl+key and Ctrl+Shift+key keydown events to window.top as
         ///     { type: 'iframeKeydown', code, ctrlKey, shiftKey, metaKey } so that app-level
         ///     shortcuts (Ctrl+W, Ctrl+N, Ctrl+F, etc.) work when focus is inside the iframe.
@@ -92,21 +85,6 @@ namespace KitveiHakodeshLib.Bridge
         if (scrollTimer) return;
         scrollTimer = setTimeout(reportScroll, 200);
     }, { passive: true });
-
-    // Scroll-activity flag for the auto-hide scrollbars style (htmlViewScrollbars
-    // handler below): while any element in the frame scrolls (capture phase catches
-    // inner containers too), the root carries the class and the bars show; it drops
-    // off after a one-second linger. Runs unconditionally — without the injected
-    // style the class has no effect and the cost is negligible.
-    var scrollbarsActivityTimer = null;
-    window.addEventListener('scroll', function () {
-        document.documentElement.classList.add('__kitvei-scrollbars-scrolling');
-        if (scrollbarsActivityTimer) clearTimeout(scrollbarsActivityTimer);
-        scrollbarsActivityTimer = setTimeout(function () {
-            scrollbarsActivityTimer = null;
-            document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
-        }, 1000);
-    }, true);
 
     // Forward keyboard shortcuts to the parent frame so app-level shortcuts
     // (Ctrl+W, Ctrl+F, Ctrl+N, F1, F11, etc.) continue to work when focus
@@ -141,42 +119,6 @@ namespace KitveiHakodeshLib.Bridge
         if (e.data.type === 'htmlViewScrollTo') {
             window.scrollTo({ top: e.data.scrollTop, behavior: 'instant' });
         }
-        if (e.data.type === 'htmlViewScrollbars') {
-            // App-wide auto-hide scrollbars (Ctrl+Shift+H / reading mode / settings).
-            // native: the WebView2 environment renders fluent overlay bars, which only
-            // show where NO author scrollbar styling applies — reset everything,
-            // including the thin-scrollbar style htmlViewTheme re-injects below.
-            var nativeId = '__kitvei-native-scrollbars';
-            var nativeExisting = document.getElementById(nativeId);
-            if (e.data.native && !nativeExisting) {
-                var nativeStyle = document.createElement('style');
-                nativeStyle.id = nativeId;
-                nativeStyle.textContent =
-                    'html, html * { scrollbar-color: auto !important; scrollbar-width: auto !important; }';
-                (document.head || document.documentElement).appendChild(nativeStyle);
-            } else if (!e.data.native && nativeExisting) {
-                nativeExisting.remove();
-            }
-            // Emulation (non-host fallback; unused when native is on): transparent when
-            // idle, visible while the scroll-activity class is on the root (set by the
-            // listener registered above). !important so it wins over the thin-scrollbar
-            // style htmlViewTheme re-injects below. The bare html selector matters: the
-            // viewport scrollbar styles come from the root element itself, which
-            // 'html *' alone would miss — and local files scroll at the viewport.
-            var wantEmulation = e.data.autoHide && !e.data.native;
-            var autoHideId = '__kitvei-auto-hide-scrollbars';
-            var autoHideExisting = document.getElementById(autoHideId);
-            if (wantEmulation && !autoHideExisting) {
-                var autoHideStyle = document.createElement('style');
-                autoHideStyle.id = autoHideId;
-                autoHideStyle.textContent =
-                    'html:not(.__kitvei-scrollbars-scrolling), html:not(.__kitvei-scrollbars-scrolling) * { scrollbar-color: transparent transparent !important; }';
-                (document.head || document.documentElement).appendChild(autoHideStyle);
-            } else if (!wantEmulation && autoHideExisting) {
-                autoHideExisting.remove();
-                document.documentElement.classList.remove('__kitvei-scrollbars-scrolling');
-            }
-        }
         if (e.data.type === 'htmlViewTheme') {
             var c = e.data.colors;
             if (!c) return;
@@ -202,8 +144,8 @@ namespace KitveiHakodeshLib.Bridge
                 ? 'color-mix(in srgb, ' + c.textSecondary + ' 30%, transparent)'
                 : 'rgba(128,128,128,0.3)';
             // Standard properties only. ::-webkit-scrollbar-* rules are dead while these
-            // are set (Chrome 121+), and the native-scrollbars reset style would revive
-            // them and break the fluent overlay bars — never add them back.
+            // are set (Chrome 121+), and would force a classic painted bar that breaks
+            // the environment's fluent overlay rendering — never add them back.
             scrollbarStyle.textContent =
                 '* { scrollbar-color: ' + thumbColor + ' transparent; scrollbar-width: thin; }';
             (document.head || document.documentElement).appendChild(scrollbarStyle);

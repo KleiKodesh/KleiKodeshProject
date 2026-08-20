@@ -146,8 +146,9 @@ watch(
   overflow-x: hidden;
   overscroll-behavior: contain;
   /* Standard properties only — ::-webkit-scrollbar-* rules are dead since
-     Chrome 121 when these are set, and would break native-overlay scrollbar
-     mode (see main.css) if they ever came back to life. */
+     Chrome 121 when these are set, and would force a classic painted bar that
+     breaks the fluent overlay baseline and the hidden-scrollbars tinting
+     (see main.css). */
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
 }

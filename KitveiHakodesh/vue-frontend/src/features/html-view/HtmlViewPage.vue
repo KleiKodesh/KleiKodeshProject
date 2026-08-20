@@ -11,7 +11,6 @@ import { useSwipe } from '@vueuse/core'
 import { shallowRef } from 'vue'
 import { useOtzariaAddinBridge } from './useOtzariaAddinBridge'
 import { useRecentlyOpenedStore } from '@/stores/recentlyOpenedStore'
-import { useIframeScrollbarsAutoHide } from '@/composables/useIframeScrollbarsAutoHide'
 
 const localFileStore = useLocalFileStore()
 const settingsStore = useSettingsStore()
@@ -44,7 +43,6 @@ const addinIdRef = computed(() => {
 })
 
 const bridge = useOtzariaAddinBridge(iframeRef, addinIdRef)
-const iframeScrollbars = useIframeScrollbarsAutoHide(() => iframeRef.value)
 
 // ── Load handling ─────────────────────────────────────────────────────────────
 
@@ -81,7 +79,6 @@ function onIframeLoad() {
   iframeContentWindow.value = iframeRef.value?.contentWindow ?? null
   attachIframeWheelRelay()
   sendThemeToIframe()
-  iframeScrollbars.apply()
   restoreScrollPosition()
   if (isOtzariaAddin.value) bridge.onIframeLoaded()
 

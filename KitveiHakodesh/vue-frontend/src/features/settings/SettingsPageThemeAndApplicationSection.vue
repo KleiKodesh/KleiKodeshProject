@@ -9,7 +9,7 @@ import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
 
 const settings = useSettingsStore()
-const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode, contentBorder, scrollbarsAutoHide, showRecentlyOpened } = storeToRefs(settings)
+const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode, contentBorder, scrollbarsHidden, showRecentlyOpened } = storeToRefs(settings)
 
 const themeStore = useThemeStore()
 const { themePreset } = storeToRefs(themeStore)
@@ -99,12 +99,12 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-scrollbars-auto-hide" data-nav-label="פסי גלילה" label="פסי גלילה" hint="במצב הסתרה אוטומטית פסי הגלילה שקופים בזמן מנוחה ומופיעים בזמן גלילה (Ctrl+Shift+H)">
+    <SettingRow id="nav-scrollbars-hidden" data-nav-label="הסתר פסי גלילה" label="הסתר פסי גלילה" hint="פסי הגלילה יוסתרו ויופיעו רק בזמן גלילה או ריחוף — נכנס לתוקף בהפעלה הבאה של האפליקציה">
       <ToggleGroup
-        v-model="scrollbarsAutoHide"
+        v-model="scrollbarsHidden"
         :options="[
-          { label: 'קבועים', value: false },
-          { label: 'הסתרה אוטומטית', value: true },
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
         ]"
       />
     </SettingRow>

@@ -521,9 +521,7 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 
 **useFloatingPanel.ts** — draggable/positioned floating panel behaviour.
 
-**useUiChromeVisibility.ts** — app chrome visibility: per-pane title bar, the app-wide scrollbars mode (static / auto-hide, persisted in settingsStore with the DOM effect owned here — native Windows 11 fluent overlay bars in the WebView2 host, a CSS emulation in the dev browser), and the F9 reading-mode check-all over both plus the book toolbars. Rule: never add `::-webkit-scrollbar-*` rules anywhere in the app — they break the native overlay mode for their element.
-
-**useIframeScrollbarsAutoHide.ts** — propagates the app-wide scrollbars mode into an iframe (same-origin style injection plus scroll-activity listener, or postMessage to the C#-injected IframeScrollScript for cross-origin frames). Used by the PDF viewer and html-view pages.
+**useUiChromeVisibility.ts** — per-pane title-bar visibility (session-only, Ctrl+H) and the F9 reading-mode check-all over title bars plus the book toolbars. Scrollbar behavior lives elsewhere: the hidden-scrollbars setting (`scrollbarsHidden` in settingsStore) is a pure passthrough to the WebView2 environment's ScrollBarStyle (fluent overlay auto-hide bars vs classic ones, AppViewer.cs), read at environment creation — a change takes effect on the next app launch, and CSS `scrollbar-color` merely tints the bars in both styles. Rule: never add `::-webkit-scrollbar-*` rules anywhere in the app — they force a classic painted bar for their element, breaking the overlay style.
 
 **useSelectAllInContainer.ts** — `Ctrl+A` scoped to a container.
 
