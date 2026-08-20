@@ -24,15 +24,49 @@
                 int w = int.Parse(Interaction.GetSetting(appName, formName + "FormSettings", $"{form.Name}_Width", form.Width.ToString()));
                 int h = int.Parse(Interaction.GetSetting(appName, formName + "FormSettings", $"{form.Name}_Height", form.Height.ToString()));
 
-                // Switch to Manual so CenterScreen does not override the saved position.
+                // The saved position may be on a monitor that is no longer connected
+                // (or the resolution shrank) — restoring it blindly opens the window
+                // entirely off-screen. Only restore the position when the title-bar
+                // area is still visible on some screen; otherwise keep the saved size
+                // and center on the primary screen (CenterScreen already ran for the
+                // default size before Load, so re-center manually for the new size).
                 form.StartPosition = FormStartPosition.Manual;
-                form.SetDesktopLocation(x, y);
                 form.Size = new Size(w, h);
+                if (IsOnScreen(new Rectangle(x, y, w, h)))
+                {
+                    // Saved coords are raw screen coords (Form.Bounds) — assign Location
+                    // directly. SetDesktopLocation would add the primary working-area
+                    // origin, drifting the window when the taskbar is docked left/top.
+                    form.Location = new Point(x, y);
+                }
+                else
+                {
+                    var area = Screen.PrimaryScreen.WorkingArea;
+                    form.Location = new Point(
+                        area.X + Math.Max(0, (area.Width - w) / 2),
+                        area.Y + Math.Max(0, (area.Height - h) / 2));
+                }
             }
             catch
             {
                 // Fail silently — app opens with default designer settings.
             }
+        }
+
+        /// <summary>
+        /// True when enough of the window's title-bar strip intersects a working
+        /// area for the user to see and grab it.
+        /// </summary>
+        private static bool IsOnScreen(Rectangle bounds)
+        {
+            var titleStrip = new Rectangle(bounds.X, bounds.Y, bounds.Width, 32);
+            foreach (var screen in Screen.AllScreens)
+            {
+                var visible = Rectangle.Intersect(screen.WorkingArea, titleStrip);
+                if (visible.Width >= 60 && visible.Height >= 16)
+                    return true;
+            }
+            return false;
         }
 
         /// <summary>

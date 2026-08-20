@@ -141,8 +141,17 @@ namespace KitveiHakodeshDemoApp
 
         private static Icon CreateWindowIcon()
         {
-            using (var executableIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath))
-                return executableIcon == null ? null : (Icon)executableIcon.Clone();
+            try
+            {
+                using (var executableIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath))
+                    return executableIcon == null ? null : (Icon)executableIcon.Clone();
+            }
+            catch
+            {
+                // ExtractAssociatedIcon throws on UNC paths (documented limitation) —
+                // running from a network share must not crash startup. Default icon.
+                return null;
+            }
         }
 
         private void Toggle(bool goFullScreen = false)
