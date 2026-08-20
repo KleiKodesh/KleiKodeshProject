@@ -25,6 +25,10 @@ const EMPTY: WordLinkAnchor[] = []
  *     virtualizer watcher (commentary view, like useCommentaryNotes.scheduleNotesLoad)
  */
 export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
+  // Retains anchors for every line scrolled past, deliberately un-evicted: the rows
+  // are a handful of small ints per anchor, so the footprint is negligible next to the
+  // line content itself. If the lines are ever evicted from their own store, evict
+  // these (and `requested`) alongside them — not before.
   const anchorsByLine = ref<Map<number, WordLinkAnchor[]>>(new Map())
   // lineIds already sent to (or in flight toward) the DB — each is queried once.
   const requested = new Set<number>()
