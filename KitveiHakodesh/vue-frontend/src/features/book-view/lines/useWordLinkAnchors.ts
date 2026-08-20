@@ -40,15 +40,17 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
     if (cached) return cached
     const p = getWordLinkTargetsForBook(sourceBookId)
       .then((targets) => {
-        // Empty here can only mean a swallowed failure (seforimApi resolves [] on
-        // "DB not ready"): this is only called for books that just produced anchor
-        // rows, and targets come from the same table. Drop the cache entry so a
+        // null = transient failure (DB not ready/swapped): drop the cache entry so a
         // later batch retries; this batch falls back to the splicer's modulo bucket.
-        if (!targets.length) treatmentsByBook.delete(sourceBookId)
+        // [] is a real answer (a book whose anchors are all range links) and caches.
+        if (targets == null) {
+          treatmentsByBook.delete(sourceBookId)
+          return new Map<number, WordLinkTreatment>()
+        }
         return buildWordLinkTreatments(targets)
       })
       .catch(() => {
-        // Transport error (dev service call) — same retry contract as above.
+        // Transport error (dev service call) — same retry contract as a null result.
         treatmentsByBook.delete(sourceBookId)
         return new Map<number, WordLinkTreatment>()
       })

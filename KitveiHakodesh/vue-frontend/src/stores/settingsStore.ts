@@ -19,7 +19,7 @@ const KEYS = {
   SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
   SETTINGS_DIACRITICS: 'text.diacritics',
-  SETTINGS_WORD_LINK_MARKERS: 'text.wordLinkMarkers',
+  SETTINGS_HIDDEN_WORD_LINK_MARKERS: 'text.hiddenWordLinkMarkers',
 
   // Commentary display
   SETTINGS_COMMENTARY_HEADER_FONT: 'commentary.headerFont',
@@ -102,7 +102,7 @@ const DEFAULTS = {
   elokimMode: DEFAULT_ELOKIM_MODE,
   otherNamesSelected: DEFAULT_OTHER_NAMES_SELECTED,
   diacriticsState: 0,
-  showWordLinkMarkers: true,
+  hiddenWordLinkMarkerBookIds: [] as number[],
   headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   textFont: "'Times New Roman', Times, serif",
   fontSize: 100,
@@ -182,7 +182,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const elokimMode = ref<ElokimMode>(DEFAULTS.elokimMode)
   const otherNamesSelected = ref<OtherNameKey[]>([...DEFAULTS.otherNamesSelected])
   const diacriticsState = ref(DEFAULTS.diacriticsState)
-  const showWordLinkMarkers = ref(DEFAULTS.showWordLinkMarkers)
+  const hiddenWordLinkMarkerBookIds = ref<number[]>([...DEFAULTS.hiddenWordLinkMarkerBookIds])
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
   const fontSize = ref(DEFAULTS.fontSize)
@@ -254,9 +254,20 @@ export const useSettingsStore = defineStore('settings', () => {
     // font-size once (an absolute length) instead of letting every inline element
     // recompute it, so an oversized word no longer stretches its row.
     document.documentElement.setAttribute('data-fixed-line-height', fixedLineHeight.value ? 'true' : 'false')
-    // Word-link point markers (superscript letter marks) — main.css hides them
-    // app-wide when 'false'; toggled from the book-view toolbar.
-    document.documentElement.setAttribute('data-word-link-markers', showWordLinkMarkers.value ? 'true' : 'false')
+    // Word-link point markers hidden per commentary book: one display:none rule per
+    // hidden id, keyed on the marker's data-wl prefix ("bookId:index:line"). An
+    // injected stylesheet instead of re-splicing, so toggling from the toolbar
+    // dropdown never invalidates the render caches of already-spliced lines.
+    let wlStyle = document.getElementById('word-link-marker-visibility')
+    if (!wlStyle) {
+      wlStyle = document.createElement('style')
+      wlStyle.id = 'word-link-marker-visibility'
+      document.head.appendChild(wlStyle)
+    }
+    wlStyle.textContent = hiddenWordLinkMarkerBookIds.value
+      .filter((id) => Number.isFinite(id))
+      .map((id) => `.word-link-marker[data-wl^="${id}:"] { display: none; }`)
+      .join('\n')
     // When not using separate commentary settings, mirror the book settings.
     const effectiveCommentaryHeaderFont = useSeparateCommentarySettings.value ? commentaryHeaderFont.value : headerFont.value
     const effectiveCommentaryTextFont = useSeparateCommentarySettings.value ? commentaryTextFont.value : textFont.value
@@ -293,7 +304,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const storedOtherNamesSelected = normalizeOtherNamesSelected(lsGet(KEYS.SETTINGS_CENSOR_OTHER_NAMES))
     if (storedOtherNamesSelected != null) otherNamesSelected.value = storedOtherNamesSelected
     loadSetting(KEYS.SETTINGS_DIACRITICS, diacriticsState)
-    loadSetting(KEYS.SETTINGS_WORD_LINK_MARKERS, showWordLinkMarkers)
+    loadSetting(KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, hiddenWordLinkMarkerBookIds)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
     loadSetting(KEYS.SETTINGS_FONT_SIZE, fontSize)
@@ -375,7 +386,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(elokimMode, KEYS.SETTINGS_CENSOR_ELOKIM)
   persistSetting(otherNamesSelected, KEYS.SETTINGS_CENSOR_OTHER_NAMES)
   persistSetting(diacriticsState, KEYS.SETTINGS_DIACRITICS)
-  persistSetting(showWordLinkMarkers, KEYS.SETTINGS_WORD_LINK_MARKERS, applyCSSVariables)
+  persistSetting(hiddenWordLinkMarkerBookIds, KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, applyCSSVariables)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
   persistSetting(fontSize, KEYS.SETTINGS_FONT_SIZE, applyCSSVariables)
@@ -478,7 +489,7 @@ export const useSettingsStore = defineStore('settings', () => {
     elokimMode.value = DEFAULTS.elokimMode
     otherNamesSelected.value = [...DEFAULTS.otherNamesSelected]
     diacriticsState.value = DEFAULTS.diacriticsState
-    showWordLinkMarkers.value = DEFAULTS.showWordLinkMarkers
+    hiddenWordLinkMarkerBookIds.value = [...DEFAULTS.hiddenWordLinkMarkerBookIds]
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
     fontSize.value = DEFAULTS.fontSize
@@ -522,7 +533,7 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
-    diacriticsState, showWordLinkMarkers, headerFont, textFont, fontSize, linePadding, fixedLineHeight,
+    diacriticsState, hiddenWordLinkMarkerBookIds, headerFont, textFont, fontSize, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,

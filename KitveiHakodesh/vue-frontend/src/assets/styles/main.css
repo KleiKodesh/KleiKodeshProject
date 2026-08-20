@@ -9,13 +9,12 @@
 .word-link-tooltip, .word-link-tooltip * { user-select: text; }
 
 /* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).
-   Global because they render in lines, commentary, FTS previews and the link
-   tooltip alike; settingsStore mirrors the toolbar toggle onto this attribute.
-   The markers hold no text content (label is a ::before), so hiding them cannot
-   shift annotation offsets. */
-html[data-word-link-markers='false'] .word-link-marker { display: none; }
+   Per-commentary visibility is a stylesheet injected by settingsStore — one
+   display:none rule per hidden commentary book, keyed on the marker's data-wl
+   prefix — driven by the toolbar's marker dropdown. The markers hold no text
+   content (label is a ::before), so hiding them cannot shift annotation offsets.
 
-/* Per-commentary marker slots. Each marker's data-wl-c is its commentary's rank
+   Per-commentary marker slots. Each marker's data-wl-c is its commentary's rank
    within the source book, ascending by book id (buildWordLinkTreatments in
    wordLinkAnchors.ts) — the smaller the book id, the SIMPLER the treatment. Hue
    alone is indistinguishable at superscript size, so the ladder climbs through

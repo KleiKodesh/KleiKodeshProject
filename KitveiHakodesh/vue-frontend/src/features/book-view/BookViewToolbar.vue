@@ -14,11 +14,10 @@ import {
   IconTimeline20Filled,
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
-  IconLink20Regular,
-  IconLinkDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
+import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { ZOOM_CONFIG } from '@/composables/useZoom'
@@ -158,12 +157,6 @@ const sideLeftCommentaryTitle = computed(() =>
   props.sideLeftCommentaryVisible
     ? 'סגור חלונית מפרשים משמאל (Ctrl+Alt+J)'
     : 'חלונית מפרשים משמאל (Ctrl+Alt+J)',
-)
-
-const wordLinkMarkersTitle = computed(() =>
-  settingsStore.showWordLinkMarkers
-    ? 'הסתר סימני מפרשים'
-    : 'הצג סימני מפרשים',
 )
 
 defineExpose({ tocBtnRef })
@@ -337,14 +330,7 @@ defineExpose({ tocBtnRef })
         </g>
       </svg>
     </button>
-    <button
-      :class="{ active: !settingsStore.showWordLinkMarkers }"
-      :title="wordLinkMarkersTitle"
-      @click="settingsStore.showWordLinkMarkers = !settingsStore.showWordLinkMarkers"
-    >
-      <IconLinkDismiss20Regular v-if="!settingsStore.showWordLinkMarkers" />
-      <IconLink20Regular v-else />
-    </button>
+    <BookViewWordLinkMarkersDropdown :book-id="bookId" />
     <button title="ייצא ל-Word" @click="$emit('exportToWord')">
       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 28 28">
         <path fill="none" d="M0 0h28v28H0z" />
