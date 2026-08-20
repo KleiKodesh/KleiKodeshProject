@@ -33,6 +33,16 @@ const emit = defineEmits<{
 const settingsStore = useSettingsStore()
 const html = computed(() => censorDivineNames(props.data.html, settingsStore.censorOptions))
 
+/**
+ * Book title followed by the target line's full TOC path. Either part may be
+ * absent — a line with no line_toc row yields no path — so both are filtered
+ * before joining, and the header is hidden entirely when nothing is left.
+ */
+const heading = computed(() => {
+  const parts = [props.data.bookTitle, props.data.tocPath].filter(Boolean)
+  return parts.join(' — ')
+})
+
 const tooltipRef = ref<HTMLElement | null>(null)
 const resolvedTop = ref<number | null>(null)
 const resolvedLeft = ref<number | null>(null)
@@ -40,7 +50,7 @@ const resolvedLeft = ref<number | null>(null)
 const placement = ref<'above' | 'below'>('above')
 
 const MARGIN = 8
-const MAX_WIDTH = 460
+const MAX_WIDTH = 360
 
 function computePosition() {
   const rect = props.data.anchorRect
@@ -101,7 +111,7 @@ onMounted(() => {
       @mouseleave="emit('pointer-leave')"
       @mousedown.left="emit('select-start')"
     >
-      <div v-if="data.bookTitle" class="word-link-tooltip-title">{{ data.bookTitle }}</div>
+      <div v-if="heading" class="word-link-tooltip-title">{{ heading }}</div>
       <!-- eslint-disable-next-line vue/no-v-html -->
       <div class="word-link-tooltip-body" v-html="html" />
     </div>
@@ -112,14 +122,12 @@ onMounted(() => {
 .word-link-tooltip {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.15),
-    0 8px 24px rgba(0, 0, 0, 0.1);
-  padding: 6px 10px;
+  border-radius: 3px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
+  padding: 6px 0;
   direction: rtl;
-  font-family: var(--text-font);
-  font-size: 13px;
+  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
+  font-size: 12.5px;
   line-height: 1.7;
   color: var(--text-primary);
   /* Long previews scroll, and the user must be able to reach that scrollbar — so
@@ -130,6 +138,16 @@ onMounted(() => {
   flex-direction: column;
   max-height: 40vh;
   min-height: 0;
+}
+
+.word-link-tooltip-title {
+  padding-inline: 10px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--accent-color);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
 }
 
 /* Bridges the MARGIN gap between anchor and tooltip so the pointer never crosses
@@ -152,19 +170,17 @@ onMounted(() => {
 }
 
 .word-link-tooltip-body {
-  /* The scroll container: keeping overflow off the root lets ::before escape it. */
+  /* The scroll container: keeping overflow off the root lets ::before escape it.
+     Horizontal padding lives here rather than on the root so the scrollbar
+     itself renders flush with the tooltip edge, with the gap on its inner side. */
   overflow-y: auto;
   min-height: 0;
+  padding-inline: 10px;
   text-align: justify;
   /* Selectable — the global `* { user-select: none }` reset is opted out of in
      main.css, which this teleported element needs by name. */
   cursor: text;
-}
-
-.word-link-tooltip-title {
-  font-weight: 600;
-  font-size: 12px;
-  color: var(--accent-color);
-  margin-bottom: 2px;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
 }
 </style>

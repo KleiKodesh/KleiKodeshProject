@@ -3,9 +3,9 @@
  * and markers spliced by wordLinkAnchors.ts).
  *
  * Delegated listeners on the scroller (one set per view, not per line):
- *   hover  — 250ms intent delay, then the target line's content is fetched
- *            (module-level cache, one getLineContents round-trip per unique target)
- *            and shown in a WordLinkTooltip anchored to the link element.
+ *   hover  — 250ms intent delay, then the target line's content and full TOC path
+ *            are fetched for that one hover and shown in a WordLinkTooltip
+ *            anchored to the link element. Nothing is cached or prefetched.
  *   click  — navigates to the target via the caller's onNavigate (opens the book
  *            at the target line). Runs in the CAPTURE phase with stopPropagation
  *            so the line's own click handler (commentary line selection) doesn't
@@ -26,7 +26,7 @@
  */
 import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { getLineContents } from '@/webview-host/seforimApi'
+import { getLineContents, getTocPathsForLines } from '@/webview-host/seforimApi'
 import { hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { parseWordLinkData, type WordLinkTarget } from './wordLinkAnchors'
 
@@ -34,6 +34,8 @@ export interface WordLinkTooltipData {
   /** Unique per hover — used as component key so a new target remounts/re-measures. */
   id: number
   bookTitle: string
+  /** Full TOC path of the target line, appended to the title once it resolves. */
+  tocPath: string
   html: string
   anchorRect: DOMRect
 }
@@ -46,11 +48,6 @@ const HOVER_DELAY_MS = 250
  * short enough that a pointer moving away feels like an immediate dismissal.
  */
 const CLOSE_GRACE_MS = 220
-
-// Target line content, keyed by lineId. Module-level so every view shares it and
-// re-hovering a link is instant. Bounded — cleared wholesale when it grows large.
-const contentCache = new Map<number, string>()
-const CONTENT_CACHE_MAX = 300
 
 export function useWordLinkTooltip(
   scrollerEl: Ref<HTMLElement | null>,
@@ -170,21 +167,26 @@ export function useWordLinkTooltip(
   async function show(el: Element, token: number) {
     const target = parseWordLinkData(el.getAttribute('data-wl'))
     if (!target) return
-    let content = contentCache.get(target.lineId)
-    if (content == null) {
-      try {
-        const rows = await getLineContents([target.lineId])
-        content = rows[0]?.content ?? ''
-      } catch {
-        return
-      }
-      if (contentCache.size >= CONTENT_CACHE_MAX) contentCache.clear()
-      contentCache.set(target.lineId, content)
+    // Nothing is cached or prefetched: the links are painted in the lines view
+    // from their own markup, and the preview's content and TOC path are fetched
+    // here, for this one hover, and live only as long as the tooltip does.
+    let content: string
+    let tocPath: string
+    try {
+      const [contentRows, tocRows] = await Promise.all([
+        getLineContents([target.lineId]),
+        getTocPathsForLines([target.lineId]),
+      ])
+      content = contentRows[0]?.content ?? ''
+      tocPath = tocRows[0]?.tocPath ?? ''
+    } catch {
+      return
     }
     if (token !== hoverToken || !content) return
     wordLinkTooltip.value = {
       id: token,
       bookTitle: opts.getBookTitle(target.bookId),
+      tocPath,
       html: content,
       anchorRect: el.getBoundingClientRect(),
     }
@@ -293,7 +295,7 @@ export function useWordLinkTooltip(
   })
 
   // Unmounting mid-delay would otherwise let the hover timer fire for a dead view
-  // — and its callback issues a getLineContents round-trip nobody will read.
+  // — and its callback issues two round-trips nobody will read.
   onScopeDispose(() => {
     cancelScheduledClose()
     if (hoverTimer !== null) {
