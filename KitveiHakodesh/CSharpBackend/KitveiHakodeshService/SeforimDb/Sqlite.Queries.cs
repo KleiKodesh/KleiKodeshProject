@@ -338,9 +338,37 @@ public sealed partial class SeforimDbService
                     TargetBookId = r.IsDBNull(4) ? 0 : r.GetInt32(4),
                     TargetLineId = r.IsDBNull(5) ? 0 : r.GetInt32(5),
                     TargetLineIndex = r.IsDBNull(6) ? 0 : r.GetInt32(6),
+                    SourceBookId = r.IsDBNull(7) ? 0 : r.GetInt32(7),
                 });
             }
         }, "getWordLinkAnchorsForLines");
+        return result;
+    }
+
+    /// <summary>Distinct word-link targets (commentary book id + anchor label) for one source
+    /// book. Returns Supported=false (and no rows) on DBs whose schema predates link_anchor.</summary>
+    public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId)
+    {
+        var result = new WordLinkTargetsResult();
+        Run(() =>
+        {
+            using var conn = Open();
+            _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
+            result.Supported = _hasLinkAnchorTable.Value;
+            if (!result.Supported) return;
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimSql.GetWordLinkAnchorTargetsForBook;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                result.Rows.Add(new WordLinkTargetRow
+                {
+                    TargetBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
+                    Label = r.IsDBNull(1) ? null : r.GetString(1),
+                });
+            }
+        }, "getWordLinkAnchorTargetsForBook");
         return result;
     }
 

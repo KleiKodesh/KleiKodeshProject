@@ -182,6 +182,7 @@ public sealed class WordLinkAnchorRow
     public int TargetBookId { get; set; }
     public int TargetLineId { get; set; }
     public int TargetLineIndex { get; set; }
+    public int SourceBookId { get; set; }
 }
 
 /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
@@ -190,6 +191,24 @@ public sealed class WordLinkAnchorsResult
 {
     public bool Supported { get; set; }
     public List<WordLinkAnchorRow> Rows { get; set; } = new();
+}
+
+/// <summary>One distinct (commentary book, anchor label) pair of a source book's word-link
+/// anchors. Feeds the frontend's per-book fallback-treatment ranking and its sign-vocabulary
+/// guard — see SeforimSql.GetWordLinkAnchorTargetsForBook.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class WordLinkTargetRow
+{
+    public int TargetBookId { get; set; }
+    public string? Label { get; set; }
+}
+
+/// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class WordLinkTargetsResult
+{
+    public bool Supported { get; set; }
+    public List<WordLinkTargetRow> Rows { get; set; } = new();
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

@@ -571,6 +571,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(seforim.GetWordLinkAnchorsForLines(a.LineIds)));
                 }
 
+                case "getWordLinkAnchorTargetsForBook":
+                {
+                    var a = MsgPack.De<BookIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(seforim.GetWordLinkAnchorTargetsForBook(a.BookId)));
+                }
+
                 case "getAllConnectionTypes":
                     return RpcResponse.Ok(MsgPack.Ser(new ConnectionTypesResult { Rows = seforim.GetAllConnectionTypes() }));
 

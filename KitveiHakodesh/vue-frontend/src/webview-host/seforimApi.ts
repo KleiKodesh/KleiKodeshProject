@@ -12,7 +12,7 @@ import { serviceCall } from './serviceClient'
 import { SQL } from './queries.sql'
 import type {
   BookRow, CategoryRow, BookInfo, TocEntry, AltTocStructure,
-  LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor,
+  LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** True when the C# seforim bridge is present (hosted). Dev falls to the service. */
@@ -141,6 +141,37 @@ export async function getWordLinkAnchorsForLines(lineIds: number[]): Promise<Wor
     return await query<WordLinkAnchor>(SQL.GET_WORD_LINK_ANCHORS_FOR_LINES(lineIds.length), lineIds)
   } catch {
     // DB swapped under us (user picked a different seforim DB without a reload) — re-probe next call.
+    _hasLinkAnchors = null
+    return []
+  }
+}
+
+/**
+ * Distinct word-link targets (commentary book id + anchor label) for one source book,
+ * ascending by book id. [] on schema-v1 DBs — always safe to call. Feeds the per-book
+ * fallback-treatment ranking in useWordLinkAnchors.
+ */
+export async function getWordLinkTargetsForBook(bookId: number): Promise<WordLinkTargetRow[]> {
+  if (_hasLinkAnchors === false || bookId <= 0) return []
+  if (!isDbHosted()) {
+    const res = await serviceCall<{ supported: boolean; rows: WordLinkTargetRow[] }>(
+      'getWordLinkAnchorTargetsForBook', { bookId },
+    )
+    if (!res.supported) _hasLinkAnchors = false
+    return res.rows
+  }
+  if (_hasLinkAnchors == null) {
+    try {
+      const rows = await query<{ n: number }>(SQL.HAS_LINK_ANCHOR_TABLE)
+      _hasLinkAnchors = (rows[0]?.n ?? 0) > 0
+    } catch {
+      return [] // DB not ready — leave unknown so the next call re-probes
+    }
+    if (!_hasLinkAnchors) return []
+  }
+  try {
+    return await query<WordLinkTargetRow>(SQL.GET_WORD_LINK_ANCHOR_TARGETS_FOR_BOOK, [bookId])
+  } catch {
     _hasLinkAnchors = null
     return []
   }

@@ -374,11 +374,26 @@ export const SQL = {
    */
   GET_WORD_LINK_ANCHORS_FOR_LINES: (count: number) => `
     SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
-           l.targetBookId, l.targetLineId, l.targetLineIndex
+           l.targetBookId, l.targetLineId, l.targetLineIndex, l.sourceBookId
     FROM link l
     JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
     WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
     ORDER BY l.sourceLineId, la.charStart
+  `,
+
+  /**
+   * Distinct word-link targets (commentary book id + anchor label) of one source book's
+   * side-0 anchors, ascending by book id. Feeds the per-book fallback-treatment ranking
+   * (smaller book id = simpler decoration) and the sign-vocabulary guard (labels reveal
+   * which glyphs the book's printed signs already use) — see buildWordLinkTreatments in
+   * wordLinkAnchors.ts. Guard behind HAS_LINK_ANCHOR_TABLE like the anchors query.
+   */
+  GET_WORD_LINK_ANCHOR_TARGETS_FOR_BOOK: `
+    SELECT DISTINCT l.targetBookId, la.label
+    FROM link l
+    JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+    WHERE l.sourceBookId = ?
+    ORDER BY l.targetBookId
   `,
 
   /** Content backfill for a batch of line ids (commentary lazy-content second phase). */
