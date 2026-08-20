@@ -106,11 +106,8 @@ function toggleOne(c: MarkerCommentary) {
 }
 
 function toggleAll() {
-  // All visible → hide all listed; any hidden → show all listed.
-  setHidden(
-    commentaries.value.map((c) => c.bookId),
-    allChecked.value,
-  )
+  // Shared with the Ctrl+U shortcut — all visible → hide all listed; else show all.
+  settingsStore.toggleWordLinkMarkers(commentaries.value.map((c) => c.bookId))
 }
 </script>
 
@@ -121,7 +118,7 @@ function toggleAll() {
     <button
       ref="toggleButtonRef"
       :class="{ active: isOpen || anyHiddenGlobally }"
-      title="סימני מפרשים"
+      title="ציוני מפרשים (Ctrl+U)"
       @click="toggleOpen"
     >
       <IconLinkDismiss20Regular v-if="anyHiddenGlobally" />
@@ -130,7 +127,7 @@ function toggleAll() {
 
     <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="`dropdown-${toolbarPosition}`">
       <div v-if="!loaded" class="state-message">טוען...</div>
-      <div v-else-if="commentaries.length === 0" class="state-message">אין סימני מפרשים</div>
+      <div v-else-if="commentaries.length === 0" class="state-message">אין ציוני מפרשים</div>
       <template v-else>
         <label class="marker-row all-row">
           <input
