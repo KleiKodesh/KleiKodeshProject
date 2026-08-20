@@ -59,7 +59,8 @@
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>-</kbd></div><span class="shortcut-description">הקטן תצוגה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>0</kbd></div><span class="shortcut-description">אפס גודל תצוגה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>H</kbd></div><span class="shortcut-description">הצג / הסתר סרגל האפליקציה</span></div>
-    <div class="shortcut-row"><div class="shortcut-keys"><kbd>F9</kbd></div><span class="shortcut-description">מצב קריאה — הסתר / הצג את כל הסרגלים</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>Ctrl</kbd><span class="kbd-plus">+</span><kbd>Shift</kbd><span class="kbd-plus">+</span><kbd>H</kbd></div><span class="shortcut-description">הצג / הסתר פסי גלילה</span></div>
+    <div class="shortcut-row"><div class="shortcut-keys"><kbd>F9</kbd></div><span class="shortcut-description">מצב קריאה — הסתר / הצג את כל הסרגלים ופסי הגלילה</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F11</kbd></div><span class="shortcut-description">מסך מלא</span></div>
     <div class="shortcut-row"><div class="shortcut-keys"><kbd>F7</kbd></div><span class="shortcut-description">הפעלת סמן טקסט לניווט ובחירה</span></div>
   </div>

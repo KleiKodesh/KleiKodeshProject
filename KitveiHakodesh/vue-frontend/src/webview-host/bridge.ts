@@ -667,18 +667,6 @@ export function setTheme(
   }).catch(() => {})
 }
 
-/**
- * Persist the hidden-scrollbars preference in the C# host. The host reads it at
- * WebView2 environment creation and sets ScrollBarStyle accordingly (fluent
- * overlay auto-hide bars vs classic ones); the environment is created once per
- * process, so the value takes effect on the NEXT app launch — there is no live
- * effect. Fire-and-forget; no-op in the dev browser.
- */
-export function setScrollbarsHiddenInHost(hidden: boolean): void {
-  if (typeof window.__webviewAction !== 'function') return
-  action('setScrollbarsHidden', { hidden }).catch(() => {})
-}
-
 // ── Native chrome tabs mirror ────────────────────────────────────────────────
 
 export interface MirroredTab {

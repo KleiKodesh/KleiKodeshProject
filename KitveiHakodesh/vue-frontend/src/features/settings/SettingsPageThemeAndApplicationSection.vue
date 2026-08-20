@@ -99,7 +99,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-scrollbars-hidden" data-nav-label="הסתר פסי גלילה" label="הסתר פסי גלילה" hint="פסי הגלילה יוסתרו ויופיעו רק בזמן גלילה או ריחוף — נכנס לתוקף בהפעלה הבאה של האפליקציה">
+    <SettingRow id="nav-scrollbars-hidden" data-nav-label="הסתר פסי גלילה" label="הסתר פסי גלילה" hint="פסי הגלילה יוסתרו לחלוטין ויופיעו רק בזמן גלילה (Ctrl+Shift+H)">
       <ToggleGroup
         v-model="scrollbarsHidden"
         :options="[

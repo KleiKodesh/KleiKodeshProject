@@ -142,23 +142,6 @@ namespace KitveiHakodeshLib.Settings
         }
 
         /// <summary>
-        /// Persists the hidden-scrollbars preference: fluent overlay auto-hide bars
-        /// (fade when idle, reveal on scroll/hover, no gutter) instead of classic
-        /// always-visible ones. Read at WebView2 environment creation
-        /// (AppViewer.GetSharedEnv) — ScrollBarStyle is fixed for the process, so a
-        /// change takes effect on the next app launch.
-        /// </summary>
-        public static void SaveScrollbarsHidden(bool hidden)
-        {
-            Interaction.SaveSetting("KitveiHakodesh", "Appearance", "ScrollbarsHidden", hidden ? "1" : "0");
-        }
-
-        public static bool LoadScrollbarsHidden()
-        {
-            return Interaction.GetSetting("KitveiHakodesh", "Appearance", "ScrollbarsHidden", "0") == "1";
-        }
-
-        /// <summary>
         /// Persists the Vue theme's title-bar background color (hex, e.g. "#2d2d2d") so the
         /// native chrome tab strip can be themed correctly before the Vue app loads and
         /// sends its first setTheme message. Empty when no theme was ever sent.
