@@ -155,6 +155,7 @@ onMounted(() => {
   /* The scroll container: keeping overflow off the root lets ::before escape it. */
   overflow-y: auto;
   min-height: 0;
+  text-align: justify;
   /* Selectable — the global `* { user-select: none }` reset is opted out of in
      main.css, which this teleported element needs by name. */
   cursor: text;

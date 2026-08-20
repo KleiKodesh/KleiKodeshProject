@@ -206,16 +206,23 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
 .preview-line :deep(.word-link:hover) {
   text-decoration-color: currentColor;
 }
+/* Colored per commentary via --wl-marker-color (palette in main.css), muted by
+   opacity — matches the reading views. */
 .preview-line :deep(.word-link-marker) {
   font-size: 0.72em;
   vertical-align: super;
   line-height: 1;
-  color: var(--accent-color);
+  color: var(--wl-marker-color, var(--text-secondary));
+  opacity: 0.65;
   cursor: pointer;
+  font-style: normal;
+  font-weight: var(--wl-marker-weight, normal);
+  text-decoration: var(--wl-marker-decoration, none);
+  text-underline-offset: 2px;
 }
 /* Label via CSS content — the marker must contribute zero text characters. */
 .preview-line :deep(.word-link-marker)::before {
-  content: attr(data-wl-label);
+  content: var(--wl-marker-open, '') attr(data-wl-label) var(--wl-marker-close, '');
 }
 .preview-empty {
   color: var(--text-secondary);

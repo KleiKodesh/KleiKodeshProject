@@ -525,23 +525,29 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line :deep(.word-link:hover) {
   text-decoration-color: currentColor;
 }
+/* Colored per commentary via --wl-marker-color (palette in main.css), muted by
+   opacity so the marks don't compete with the text; hover restores the affordance. */
 .line :deep(.word-link-marker) {
   font-size: 0.72em;
   vertical-align: super;
   line-height: 1;
-  color: var(--accent-color);
+  color: var(--wl-marker-color, var(--text-secondary));
+  opacity: 0.65;
   cursor: pointer;
   font-style: normal;
-  font-weight: normal;
+  font-weight: var(--wl-marker-weight, normal);
+  text-decoration: var(--wl-marker-decoration, none);
+  text-underline-offset: 2px;
   letter-spacing: 0;
   transition: color 100ms;
 }
 /* Label rendered via CSS so the marker contributes zero text characters —
    annotation offsets and selection extraction must not drift. */
 .line :deep(.word-link-marker)::before {
-  content: attr(data-wl-label);
+  content: var(--wl-marker-open, '') attr(data-wl-label) var(--wl-marker-close, '');
 }
 .line :deep(.word-link-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
+  opacity: 1;
 }
 </style>

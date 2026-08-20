@@ -91,7 +91,7 @@ describe('applyWordLinkAnchors — walker mechanics', () => {
 
   it('inserts a point marker with CSS-only label (no text content)', () => {
     const result = applyWordLinkAnchors('אבגד', [anchor({ charStart: 2, charEnd: null, label: 'א' })])
-    expect(result).toBe('אב<sup class="word-link-marker" data-wl="7:42:99" data-wl-label="א"></sup>גד')
+    expect(result).toBe('אב<sup class="word-link-marker" data-wl="7:42:99" data-wl-c="7" data-wl-label="א"></sup>גד')
   })
 
   it('defaults a missing label to ° and escapes attribute chars', () => {

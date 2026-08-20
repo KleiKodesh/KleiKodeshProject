@@ -8,6 +8,33 @@
 .lines-content *, .commentary-view *, .word-page *, .txt-content *,
 .word-link-tooltip, .word-link-tooltip * { user-select: text; }
 
+/* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).
+   Global because they render in lines, commentary, FTS previews and the link
+   tooltip alike; settingsStore mirrors the toolbar toggle onto this attribute.
+   The markers hold no text content (label is a ::before), so hiding them cannot
+   shift annotation offsets. */
+html[data-word-link-markers='false'] .word-link-marker { display: none; }
+
+/* Per-commentary marker classes. The splicer buckets each marker by its target
+   book (data-wl-c = targetBookId % 8, see wordLinkAnchors.ts), so all markers of
+   one commentary share a treatment. Hue alone is indistinguishable at superscript
+   size, so each bucket pairs a color with a SHAPE — the printed-page approach:
+   plain / (x) / [x] / underlined, in normal and bold weights. Only custom properties
+   live here; the render sites apply them via color / font-weight / text-decoration /
+   ::before content. */
+.word-link-marker[data-wl-c='0'] { --wl-marker-color: #b8605c; }
+.word-link-marker[data-wl-c='1'] { --wl-marker-color: #5a82b8; --wl-marker-open: '('; --wl-marker-close: ')'; }
+.word-link-marker[data-wl-c='2'] { --wl-marker-color: #5d9061; --wl-marker-open: '['; --wl-marker-close: ']'; }
+.word-link-marker[data-wl-c='3'] { --wl-marker-color: #b0813f; --wl-marker-decoration: underline; }
+.word-link-marker[data-wl-c='4'] { --wl-marker-color: #8a6fb0; --wl-marker-weight: 700; }
+.word-link-marker[data-wl-c='5'] { --wl-marker-color: #4a9494; --wl-marker-weight: 700; --wl-marker-open: '('; --wl-marker-close: ')'; }
+.word-link-marker[data-wl-c='6'] { --wl-marker-color: #b06a92; --wl-marker-weight: 700; --wl-marker-open: '['; --wl-marker-close: ']'; }
+.word-link-marker[data-wl-c='7'] { --wl-marker-color: #8a8a4d; --wl-marker-weight: 700; --wl-marker-decoration: underline; }
+
+/* Adjacent markers (different commentaries anchored at the same words) get a gap
+   so they never fuse into one blob. */
+.word-link-marker + .word-link-marker { margin-inline-start: 3px; }
+
 html, body, #app { height: 100%; width: 100%; }
 
 /* App-shell: the viewport itself must never scroll or rubber-band — inner panes own
