@@ -22,6 +22,8 @@ import type { CommentaryGroup } from './useCommentary'
 import type { PinnedCommentaryGroup } from '../bookViewTypes'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
+import type { WordLinkTarget } from '../lines/wordLinkAnchors'
+import type { WordLinkTargetContent } from '../lines/wordLinkExport'
 
 const props = defineProps<{
   panel: CommentaryPanel
@@ -42,6 +44,11 @@ const props = defineProps<{
   getNotesForLine: (lineId: number) => Note[]
   scheduleNotesLoad: (lineIds: number[]) => void
   scheduleWordLinkAnchorsLoad?: (lineIds: number[]) => void
+  // Copy-with-notes needs the notes and citations of lines never scrolled into view,
+  // plus the target lines the citations point at — see useCopyExportData.
+  prepareExportData?: (lineIds: number[]) => Promise<void>
+  prepareExportTargets?: (html: string) => Promise<void>
+  resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
   requestContentPriority?: (lineIds: number[]) => void
   createNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => Promise<Note>
   updateNote: (note: Note, newText: string) => Promise<void>
@@ -125,6 +132,9 @@ defineExpose({ view })
       :get-notes-for-line="getNotesForLine"
       :schedule-notes-load="scheduleNotesLoad"
       :schedule-word-link-anchors-load="scheduleWordLinkAnchorsLoad"
+      :prepare-export-data="prepareExportData"
+      :prepare-export-targets="prepareExportTargets"
+      :resolve-word-link-target="resolveWordLinkTarget"
       :request-content-priority="requestContentPriority"
       :has-saved-scroll-pos="panel.scrollIndex.value != null"
       :create-note="createNote"

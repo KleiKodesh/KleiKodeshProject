@@ -24,6 +24,9 @@ import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
 import WordLinkTooltip from '../lines/WordLinkTooltip.vue'
 import { useWordLinkTooltip } from '../lines/useWordLinkTooltip'
+import { useNoteTooltip } from '../lines/useNoteTooltip'
+import type { WordLinkTarget } from '../lines/wordLinkAnchors'
+import type { WordLinkTargetContent } from '../lines/wordLinkExport'
 import BookViewAbbrevTooltip from '../lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '../lines/useBookViewAbbrevTooltip'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -54,6 +57,11 @@ const props = defineProps<{
   scheduleNotesLoad: (lineIds: number[]) => void
   // Viewport-driven lazy load of word-level link anchors (link_anchor, schema v2+ DBs).
   scheduleWordLinkAnchorsLoad?: (lineIds: number[]) => void
+  // Copy-with-notes needs the notes and citations of lines never scrolled into view,
+  // plus the target lines the citations point at — see useCopyExportData.
+  prepareExportData?: (lineIds: number[]) => Promise<void>
+  prepareExportTargets?: (html: string) => Promise<void>
+  resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
   // Viewport-driven content priority for the two-phase commentary loader —
   // lines can render before their text arrives; visible ones are fetched first.
   requestContentPriority?: (lineIds: number[]) => void
@@ -154,6 +162,9 @@ const flatItems = computed<FlatItem[]>(() => {
 
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('toggle-search'),
+  // Ctrl+C is intercepted so it takes the same path as the menu's copy: the export
+  // warm-up has to be awaited before the clipboard event fires (see prepareAndCopy).
+  onCtrlC: () => onCommentaryCopy(),
   onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
   onCtrlShiftC: () => onCommentarySearchInRepository(),
 })
@@ -292,7 +303,7 @@ function buildAllCommentaryContentHtml(): string {
   return parts.join('')
 }
 
-const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
+const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCopy: onCommentaryCopy, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
     return pinned
@@ -322,6 +333,14 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onPa
   props.getNotesForLine,
   isSelectAll,
   buildAllCommentaryContentHtml,
+  props.prepareExportData && props.prepareExportTargets && props.resolveWordLinkTarget
+    ? {
+        getAllLineIds: () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.lineId)),
+        prepareForLines: props.prepareExportData,
+        prepareForRenderedHtml: props.prepareExportTargets,
+        resolveWordLinkTarget: props.resolveWordLinkTarget,
+      }
+    : undefined,
 )
 useScopedCopy(
   scrollerEl,
@@ -402,6 +421,10 @@ const {
   onNavigate: (target) => emit('open-book', target.bookId, target.lineIndex),
 })
 
+// User-note hover preview — the marker carries its text in data-note-text, so this
+// replaces the native title tooltip the marker used to have.
+const { noteTooltip } = useNoteTooltip(scrollerEl)
+
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 </script>
 
@@ -431,6 +454,12 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
       @pointer-enter="keepWordLinkTooltipOpen"
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
+    />
+    <WordLinkTooltip
+      v-if="noteTooltip"
+      :key="`note-${noteTooltip.id}`"
+      :data="noteTooltip"
+      :interactive="false"
     />
     <BookViewAbbrevTooltip
       v-if="abbrevTooltip"
@@ -715,6 +744,10 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   font-weight: normal;
   letter-spacing: 0;
   transition: color 100ms;
+}
+/* The mark is drawn by CSS so the marker holds no text — see applyUserNoteMarkers. */
+.line :deep(.user-note-marker)::before {
+  content: '[✎]';
 }
 .line :deep(.user-note-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));

@@ -48,10 +48,8 @@ export function useBookViewAnnotations(
 
   // ── Notes ───────────────────────────────────────────────────────────────────
 
-  const { notesByLine, getNotesForLine, createNote, updateNote, deleteNote } = useBookViewNotes(
-    bookId,
-    virtualItemsViewportIds,
-  )
+  const { notesByLine, getNotesForLine, loadNotesForLines, createNote, updateNote, deleteNote } =
+    useBookViewNotes(bookId, virtualItemsViewportIds)
 
   // ── Note bubble state ───────────────────────────────────────────────────────
 
@@ -200,6 +198,7 @@ export function useBookViewAnnotations(
     // Notes
     notesByLine,
     getNotesForLine,
+    loadNotesForLines,
     createNote,
     updateNote,
     deleteNote,

@@ -15,6 +15,8 @@ import { useCommentaryHighlights } from './commentary/useCommentaryHighlights'
 import { useCommentaryNotes } from './commentary/useCommentaryNotes'
 import { useCommentaryTocPaths } from './commentary/useCommentaryTocPaths'
 import { useWordLinkAnchors } from './lines/useWordLinkAnchors'
+import { useCopyExportData } from './lines/useCopyExportData'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookViewLineRenderer } from './lines/useBookViewLineRenderer'
 import { buildBookExportHtml } from './lines/useBookViewLineCopyMenu'
 import { computed } from 'vue'
@@ -40,13 +42,25 @@ export function useBookViewCommentaryAnnotations(
   const { getHighlightsForLine, applyHighlight, clearHighlight } =
     useCommentaryHighlights(groupsForDisplay)
 
-  const { getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote } =
+  const { getNotesForLine, scheduleNotesLoad, loadNotesForLines, createNote, updateNote, deleteNote } =
     useCommentaryNotes(groupsForDisplay)
 
   // Word-level link anchors for commentary lines (they are source lines of their own
   // links, e.g. a Mishnah Berurah line citing Chosen Mishpat). Schedule-driven from
   // CommentaryView's virtualizer watcher, same as notes.
-  const { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad } = useWordLinkAnchors()
+  const { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad, loadWordLinkAnchorsForLines } =
+    useWordLinkAnchors()
+
+  // What copy-with-notes needs beyond the rendered markup — built here because this
+  // is where the commentary's lazy note/citation stores live. CommentaryView receives
+  // the two entry points as props and hands them to its copy menu.
+  const booksDataStore = useBooksDataStore()
+  const { prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget } = useCopyExportData({
+    loadNotes: loadNotesForLines,
+    loadWordLinkAnchors: loadWordLinkAnchorsForLines,
+    getWordLinkAnchorsForLine,
+    getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+  })
 
   const { commentaryTocPaths } = useCommentaryTocPaths(
     groupsForDisplay,
@@ -70,6 +84,7 @@ export function useBookViewCommentaryAnnotations(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad,
+    prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget,
     commentaryTocPaths,
     buildExportHtml,
   }

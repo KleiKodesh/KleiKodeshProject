@@ -1,3 +1,4 @@
+import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import type { LineItem } from './useBookViewLinesTable'
@@ -9,6 +10,15 @@ import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { escapeHtml, htmlToText } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
+import {
+  applyWordLinkExport,
+  buildWordLinkEndnotesHtml,
+  stripWordLinkMarkers,
+  ENDNOTES_SEPARATOR,
+  type WordLinkEndnote,
+  type WordLinkTargetContent,
+} from './wordLinkExport'
+import type { WordLinkTarget } from './wordLinkAnchors'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { triggerCopy } from '@/composables/useLineCopy'
@@ -31,6 +41,16 @@ interface CopyMenuOptions {
   onClearHighlight?: () => void
   onAddNote?: () => void
   onCopyLineLink?: () => void
+  /**
+   * Warms the lazily-loaded notes and citations for a set of lines before an export
+   * reads them. Awaited by the copy actions — see prepareAndCopy for why the
+   * select-all case is additionally warmed the moment the selection is made.
+   */
+  prepareForLines?: (lineIds: number[]) => Promise<void>
+  /** Resolves only the citations already rendered in a fragment — the selection path. */
+  prepareForRenderedHtml?: (html: string) => Promise<void>
+  /** Resolves one point citation's target for its endnote. Synchronous by necessity. */
+  resolveWordLinkTarget?: (target: WordLinkTarget) => WordLinkTargetContent | undefined
 }
 
 // ── Note marker helpers ───────────────────────────────────────────────────────
@@ -66,13 +86,23 @@ function extractEndnotes(
   return { html: replaced, endnotes }
 }
 
-function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
-  if (!endnotes.length) return ''
-  const separator = '<hr dir="rtl" style="border:none;border-top:1px solid #ccc;margin:8pt 0"/>'
-  const items = endnotes
+function buildNoteEndnoteItems(endnotes: EndnoteEntry[]): string {
+  return endnotes
     .map((e) => `<div dir="rtl" id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</div>`)
     .join('\n')
-  return `\n${separator}\n${items}`
+}
+
+/**
+ * Both endnote sequences under one rule: the user's notes first, then the DB's own
+ * citations. The two are numbered independently on purpose — each keeps the mark it
+ * carries in the line itself, which is what a reader matches them up by.
+ */
+function buildEndnotesHtml(endnotes: EndnoteEntry[], wordLinks: WordLinkEndnote[] = []): string {
+  const blocks = [buildNoteEndnoteItems(endnotes), buildWordLinkEndnotesHtml(wordLinks)].filter(
+    (block) => block !== '',
+  )
+  if (!blocks.length) return ''
+  return `\n${ENDNOTES_SEPARATOR}\n${blocks.join('\n')}`
 }
 
 // ── Hebrew search query extraction ───────────────────────────────────────────
@@ -238,7 +268,7 @@ export function buildBookExportHtml(
 //   OFF: leave text as-is
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onPasteIntoWord: () => void, onSearchInRepository: () => void } {
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void } {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
 
@@ -344,10 +374,17 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         return undefined
       }
       const { html: extracted, endnotes } = extractEndnotes(joined, resolveNote)
-      html = extracted
-      endnotesHtml = buildEndnotesHtml(endnotes)
+      // The DB's own citations travel with the user's notes: a range citation
+      // becomes a real link on the cited words, a point citation becomes an endnote
+      // in its own sequence. Both need target data prepareForLines already loaded;
+      // anything still unresolved is dropped rather than exported half-formed.
+      const linked = options.resolveWordLinkTarget
+        ? applyWordLinkExport(extracted, options.resolveWordLinkTarget)
+        : { html: extracted, endnotes: [] as WordLinkEndnote[] }
+      html = linked.html
+      endnotesHtml = buildEndnotesHtml(endnotes, linked.endnotes)
     } else {
-      html = stripNoteMarkers(joined)
+      html = stripWordLinkMarkers(stripNoteMarkers(joined))
     }
 
     // ── Step 2: copyJoinLines — flatten to one continuous run ─────────────────
@@ -428,17 +465,58 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     return html + endnotesHtml
   }
 
+  /** The current selection's rendered markup, for resolving the citations inside it. */
+  function selectionHtml(): string {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return ''
+    const holder = document.createElement('div')
+    holder.appendChild(sel.getRangeAt(0).cloneContents())
+    return holder.innerHTML
+  }
+
+  /**
+   * Loads what the export needs, then fires the native copy event — useScopedCopy
+   * intercepts it and applies all active flags (copyJoinLines, copySourcePosition,
+   * copyWithNotes, copyCleanText).
+   *
+   * The await is what makes copy-with-notes independent of what happens to be
+   * scrolled into view. It stays inside the browser's user-activation window because
+   * each branch is bounded: a live selection only resolves the citations already in
+   * its markup, and the whole-book case was already warmed when the select-all
+   * happened (watch below). Were the await to outlast that window,
+   * execCommand('copy') would quietly do nothing.
+   */
+  async function prepareAndCopy(afterCopy?: () => void): Promise<void> {
+    if (settingsStore.copyWithNotes) {
+      // A failed warm-up costs endnotes, not the copy itself.
+      try {
+        // Select-all builds from the model, so re-rendering during the await is
+        // harmless there; a live selection must not be re-rendered out from under
+        // itself, hence the narrower branch. See useCopyExportData.
+        if (isSelectAll.value) await options.prepareForLines?.(lines().map((l) => l.id))
+        else await options.prepareForRenderedHtml?.(selectionHtml())
+      } catch { /* export degrades; proceed */ }
+    }
+    triggerCopy(afterCopy)
+  }
+
+  // Select-all is the one case whose warm-up can be big, so it runs here — outside
+  // any clipboard gesture — rather than inside the copy action. Covers both routes
+  // into select-all (Ctrl+A and the menu item), since both set this flag.
+  watch(isSelectAll, (on) => {
+    if (!on || !settingsStore.copyWithNotes || !options.prepareForLines) return
+    void options.prepareForLines(lines().map((l) => l.id))
+  })
+
   function onCopy(): void {
-    // Fire the native copy event — useScopedCopy intercepts it and applies all
-    // active flags (copyJoinLines, copySourcePosition, copyWithNotes, copyCleanText).
-    triggerCopy()
+    void prepareAndCopy()
   }
 
   // Uses the same copy path as onCopy — triggerCopy fires the copy event so useScopedCopy
   // writes the formatted HTML to the clipboard — then calls pasteIntoWord() from inside
   // the copy event handler, after the clipboard write is guaranteed complete.
   function onPasteIntoWord(): void {
-    triggerCopy(() => pasteIntoWord().catch(() => {}))
+    void prepareAndCopy(() => pasteIntoWord().catch(() => {}))
   }
 
   function onSearchInRepository(): void {
@@ -522,6 +600,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       annotationRow,
     ],
     buildFormattedHtml,
+    onCopy,
     onPasteIntoWord,
     onSearchInRepository,
   }

@@ -1,5 +1,15 @@
+import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import {
+  applyWordLinkExport,
+  buildWordLinkEndnotesHtml,
+  stripWordLinkMarkers,
+  ENDNOTES_SEPARATOR,
+  type WordLinkEndnote,
+  type WordLinkTargetContent,
+} from '../lines/wordLinkExport'
+import type { WordLinkTarget } from '../lines/wordLinkAnchors'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
@@ -37,7 +47,20 @@ export function useCommentaryCopy(
   // independent (the DOM only holds the lines currently scrolled into view).
   isSelectAll?: Ref<boolean>,
   getAllContentHtml?: () => string,
+  // What copy-with-notes needs beyond the rendered markup: the notes and citations
+  // of lines that were never scrolled into view, and the target lines the citations
+  // point at. See useCopyExportData for why this splits into an async warm-up and a
+  // synchronous resolve.
+  exportData?: {
+    /** Every line id in the (filtered) commentary document — the select-all scope. */
+    getAllLineIds: () => number[]
+    prepareForLines: (lineIds: number[]) => Promise<void>
+    /** Resolves only the citations already rendered in a fragment — the selection path. */
+    prepareForRenderedHtml: (html: string) => Promise<void>
+    resolveWordLinkTarget: (target: WordLinkTarget) => WordLinkTargetContent | undefined
+  },
 ) {
+  const resolveWordLinkTarget = exportData?.resolveWordLinkTarget
   const settingsStore = useSettingsStore()
   const paneNavigation = usePaneNavigation()
 
@@ -181,11 +204,11 @@ export function useCommentaryCopy(
       /<sup[^>]*class="user-note-marker"[^>]*data-note-id="(\d+)"[^>]*>.*?<\/sup>/gs,
       (match: string, noteIdStr: string) => {
         const noteId = parseInt(noteIdStr, 10)
-        // The note text lives in the marker's own title attribute (set by the
-        // renderer). Read it straight from the matched HTML — this is
+        // The note text lives in the marker's own data-note-text attribute (set by
+        // the renderer). Read it straight from the matched HTML — this is
         // virtualization-safe, so select-all copy resolves notes on off-screen
-        // lines too. Fall back to a DOM lookup only if the title is missing.
-        let noteText = decodeTitleAttr(match)
+        // lines too. Fall back to a DOM lookup only if the attribute is missing.
+        let noteText = decodeNoteTextAttr(match)
         if (noteText == null) {
           if (!getNotesForLine) return ''
           const scroller = scrollerEl.value
@@ -206,21 +229,26 @@ export function useCommentaryCopy(
     return { html: replaced, endnotes }
   }
 
-  /** Extracts and decodes the title="…" of a note marker <sup>, or null if absent. */
-  function decodeTitleAttr(supHtml: string): string | null {
-    const m = supHtml.match(/\btitle="([^"]*)"/)
+  /** Extracts and decodes the data-note-text="…" of a note marker <sup>, or null. */
+  function decodeNoteTextAttr(supHtml: string): string | null {
+    const m = supHtml.match(/\bdata-note-text="([^"]*)"/)
     if (!m) return null
     // The renderer HTML-escaped the note text into the attribute; decode it back.
     return htmlToText(m[1]!)
   }
 
-  function buildEndnotesHtml(endnotes: EndnoteEntry[]): string {
-    if (!endnotes.length) return ''
-    const separator = '<hr dir="rtl" style="border:none;border-top:1px solid #ccc;margin:8pt 0"/>'
+  /**
+   * Both endnote sequences under one rule: the user's notes first, then the DB's own
+   * citations. The two are numbered independently on purpose — each keeps the mark it
+   * carries in the line itself, which is what a reader matches them up by.
+   */
+  function buildEndnotesHtml(endnotes: EndnoteEntry[], wordLinks: WordLinkEndnote[] = []): string {
     const items = endnotes
       .map((e) => `<div dir="rtl" id="note-${e.number}"><a href="#ref-${e.number}" style="color:var(--accent-color,#0078d4);text-decoration:none">${e.number}.</a> ${e.noteText}</div>`)
       .join('\n')
-    return `\n${separator}\n${items}`
+    const blocks = [items, buildWordLinkEndnotesHtml(wordLinks)].filter((block) => block !== '')
+    if (!blocks.length) return ''
+    return `\n${ENDNOTES_SEPARATOR}\n${blocks.join('\n')}`
   }
 
   // ── Copy actions ────────────────────────────────────────────────────────────
@@ -271,10 +299,17 @@ export function useCommentaryCopy(
     let endnotesHtml = ''
     if (settingsStore.copyWithNotes) {
       const { html: extracted, endnotes } = extractEndnotes(joined)
-      html = extracted
-      endnotesHtml = buildEndnotesHtml(endnotes)
+      // The DB's own citations travel with the user's notes: a range citation becomes
+      // a real link on the cited words, a point citation becomes an endnote in its own
+      // sequence. Anything whose target data never loaded is dropped rather than
+      // exported half-formed (see applyWordLinkExport).
+      const linked = resolveWordLinkTarget
+        ? applyWordLinkExport(extracted, resolveWordLinkTarget)
+        : { html: extracted, endnotes: [] as WordLinkEndnote[] }
+      html = linked.html
+      endnotesHtml = buildEndnotesHtml(endnotes, linked.endnotes)
     } else {
-      html = stripNoteMarkers(joined)
+      html = stripWordLinkMarkers(stripNoteMarkers(joined))
     }
 
     // ── Step 2: copyJoinLines — flatten to one continuous run ─────────────────
@@ -373,17 +408,60 @@ export function useCommentaryCopy(
     return html + endnotesHtml
   }
 
+  /** The current selection's rendered markup, for resolving the citations inside it. */
+  function selectionHtml(): string {
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0) return ''
+    const holder = document.createElement('div')
+    holder.appendChild(sel.getRangeAt(0).cloneContents())
+    return holder.innerHTML
+  }
+
+  /**
+   * Loads what the export needs, then fires the native copy event — useScopedCopy
+   * intercepts it and applies all active flags (copyJoinLines, copySourcePosition,
+   * copyWithNotes, copyCleanText).
+   *
+   * The await is what makes copy-with-notes independent of what happens to be
+   * scrolled into view. It stays inside the browser's user-activation window because
+   * each branch is bounded: a live selection only resolves the citations already in
+   * its markup, and the whole-document case was already warmed when the select-all
+   * happened (watch below). Were the await to outlast that window,
+   * execCommand('copy') would quietly do nothing.
+   */
+  async function prepareAndCopy(afterCopy?: () => void): Promise<void> {
+    if (settingsStore.copyWithNotes && exportData) {
+      // A failed warm-up costs endnotes, not the copy itself.
+      try {
+        // Select-all builds from the model, so re-rendering during the await is
+        // harmless there; a live selection must not be re-rendered out from under
+        // itself, hence the narrower branch. See useCopyExportData.
+        if (isSelectAll?.value) await exportData.prepareForLines(exportData.getAllLineIds())
+        else await exportData.prepareForRenderedHtml(selectionHtml())
+      } catch { /* export degrades; proceed */ }
+    }
+    triggerCopy(afterCopy)
+  }
+
+  // Select-all is the one case whose warm-up can be big, so it runs here — outside
+  // any clipboard gesture — rather than inside the copy action. Covers both routes
+  // into select-all (Ctrl+A and the menu item), since both set this flag.
+  if (isSelectAll) {
+    watch(isSelectAll, (on) => {
+      if (!on || !settingsStore.copyWithNotes || !exportData) return
+      void exportData.prepareForLines(exportData.getAllLineIds())
+    })
+  }
+
   function onCopy(): void {
-    // Fire the native copy event — useScopedCopy intercepts it and applies all
-    // active flags (copyJoinLines, copySourcePosition, copyWithNotes, copyCleanText).
-    triggerCopy()
+    void prepareAndCopy()
   }
 
   // Uses the same copy path as onCopy — triggerCopy fires the copy event so useScopedCopy
   // writes the formatted HTML to the clipboard — then calls pasteIntoWord() from inside
   // the copy event handler, after the clipboard write is guaranteed complete.
   function onPasteIntoWord(): void {
-    triggerCopy(() => pasteIntoWord().catch(() => {}))
+    void prepareAndCopy(() => pasteIntoWord().catch(() => {}))
   }
 
   function onSearchInRepository(): void {
@@ -470,6 +548,7 @@ export function useCommentaryCopy(
   return {
     contextMenuItems,
     buildFormattedHtml,
+    onCopy,
     onPasteIntoWord,
     onSearchInRepository,
   }

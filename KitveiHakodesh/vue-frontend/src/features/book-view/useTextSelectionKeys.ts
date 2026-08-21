@@ -4,7 +4,17 @@ import { useSelectAllInContainer } from './useSelectAllInContainer'
 
 export function useScopedKeys(
   containerRef: Ref<HTMLElement | null>,
-  options?: { onCtrlF?: () => void; onCtrlV?: () => void; onCtrlShiftC?: () => void },
+  options?: {
+    onCtrlF?: () => void
+    /**
+     * Takes over plain Ctrl+C. The copy paths need to load data before writing the
+     * clipboard (see the copy menus' prepareAndCopy), which the native copy event
+     * cannot wait for — so the key is handled here and the copy is fired from code.
+     */
+    onCtrlC?: () => void
+    onCtrlV?: () => void
+    onCtrlShiftC?: () => void
+  },
 ) {
   // Select-all detection lives in a standalone composable so features that only need
   // the boolean (not the key handling) can reuse it. Ctrl+A here just drives it.
@@ -28,6 +38,9 @@ export function useScopedKeys(
     } else if (event.code === 'KeyC' && event.shiftKey && options?.onCtrlShiftC) {
       event.preventDefault()
       options.onCtrlShiftC()
+    } else if (event.code === 'KeyC' && !event.shiftKey && options?.onCtrlC) {
+      event.preventDefault()
+      options.onCtrlC()
     }
   })
 

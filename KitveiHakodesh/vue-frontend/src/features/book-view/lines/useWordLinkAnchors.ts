@@ -19,6 +19,13 @@ import type { WordLinkAnchor } from '@/webview-host/queries.types'
 const EMPTY: WordLinkAnchor[] = []
 
 /**
+ * Chunk size for the immediate export load. The viewport path asks for a screenful,
+ * well under SQLite's bound-parameter limit; a select-all export asks for the whole
+ * book and would blow past it in one statement.
+ */
+const LOAD_CHUNK = 400
+
+/**
  * Two wiring modes, matching the two existing lazy-annotation patterns:
  *   - pass `getVisibleLineIds` and loading is watch-driven (lines view, like useBookViewNotes)
  *   - omit it and call the returned `scheduleWordLinkAnchorsLoad` from the component's
@@ -32,7 +39,19 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
   const anchorsByLine = ref<Map<number, WordLinkAnchor[]>>(new Map())
   // lineIds already sent to (or in flight toward) the DB — each is queried once.
   const requested = new Set<number>()
+  // In-flight query per lineId. `requested` is marked BEFORE a query resolves, so
+  // "already requested" does not mean "already available" — an export that must be
+  // able to await the citations needs the promise, not just the flag.
+  const inFlight = new Map<number, Promise<void>>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
+  function track(ids: number[], work: Promise<void>): Promise<void> {
+    for (const id of ids) inFlight.set(id, work)
+    return work.finally(() => {
+      for (const id of ids) if (inFlight.get(id) === work) inFlight.delete(id)
+    })
+  }
 
   // Per-source-book fallback treatments (rank by ascending target book id, plus the
   // sign-vocabulary guard — see buildWordLinkTreatments). Promise-cached so each book's
@@ -69,9 +88,13 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
     if (debounceTimer !== null) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       debounceTimer = null
+      // Re-filter: `pending` was computed before the debounce, and an export's
+      // immediate load may have claimed some of these lines in the meantime.
+      const stillPending = pending.filter((id) => !requested.has(id))
+      if (!stillPending.length) return
       // Mark before the async call so concurrent scroll events don't double-query.
-      for (const id of pending) requested.add(id)
-      void _loadForLines(pending)
+      for (const id of stillPending) requested.add(id)
+      void track(stillPending, _loadForLines(stillPending))
     }, 100)
   }
 
@@ -107,11 +130,38 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
     }
   }
 
+  /**
+   * Immediate, awaitable load — for the export paths, which need the citations of
+   * every selected line (a select-all covers lines that were never rendered, so
+   * their citations were never spliced into the markup at all) and cannot wait on
+   * the scroll debounce. Skips lines already loaded or in flight, exactly like
+   * scheduleLoad, so the two paths never double-query the same line.
+   */
+  async function loadForLines(lineIds: number[]): Promise<void> {
+    const ids = lineIds.filter((id) => id > 0)
+    // Work the viewport path already started for these lines: awaiting it is the
+    // whole point of this method, since the skip-set alone cannot tell "requested"
+    // from "arrived" — and an export that skipped it would silently drop every
+    // citation on those lines.
+    const waits = [...new Set(ids.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
+    const pending = ids.filter((id) => !requested.has(id))
+    for (const id of pending) requested.add(id)
+    await Promise.all(waits)
+    for (let i = 0; i < pending.length; i += LOAD_CHUNK) {
+      const chunk = pending.slice(i, i + LOAD_CHUNK)
+      await track(chunk, _loadForLines(chunk))
+    }
+  }
+
   if (getVisibleLineIds) watch(getVisibleLineIds, (ids) => scheduleLoad(ids), { immediate: true })
 
   function getWordLinkAnchorsForLine(lineId: number): WordLinkAnchor[] {
     return anchorsByLine.value.get(lineId) ?? EMPTY
   }
 
-  return { getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad: scheduleLoad }
+  return {
+    getWordLinkAnchorsForLine,
+    scheduleWordLinkAnchorsLoad: scheduleLoad,
+    loadWordLinkAnchorsForLines: loadForLines,
+  }
 }

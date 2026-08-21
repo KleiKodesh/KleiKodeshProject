@@ -110,6 +110,14 @@ describe('applyWordLinkAnchors — walker mechanics', () => {
     expect(numeric).toContain('data-wl-c="7"')
   })
 
+  it('treats a blank label as no label, never as a sign', () => {
+    // A blank label counted as "carries its own sign" would render as nothing at
+    // all — an invisible, unclickable mark.
+    const blank = applyWordLinkAnchors('אב', [anchor({ charStart: 1, label: '   ' })])
+    expect(blank).toContain('data-wl-label="§"')
+    expect(blank).toContain('data-wl-c=')
+  })
+
   it('renders a loader-assigned slot and inline enclosure glyphs', () => {
     const treated = applyWordLinkAnchors('אב', [
       anchor({ charStart: 1, label: 'א', colorBucket: 4, encOpen: '[', encClose: ']' }),

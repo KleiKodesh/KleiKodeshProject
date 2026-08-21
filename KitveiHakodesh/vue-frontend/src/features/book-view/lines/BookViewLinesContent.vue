@@ -26,7 +26,9 @@ import BookViewAbbrevTooltip from './BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
 import WordLinkTooltip from './WordLinkTooltip.vue'
 import { useWordLinkTooltip } from './useWordLinkTooltip'
+import { useNoteTooltip } from './useNoteTooltip'
 import { useWordLinkAnchors } from './useWordLinkAnchors'
+import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
@@ -80,6 +82,9 @@ const scrollerEl = ref<HTMLElement | null>(null)
 useZoomHandler({ zoom, target: scrollerEl, keyboard: true })
 const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlF: () => emit('ctrl-f'),
+  // Ctrl+C is intercepted so it takes the same path as the menu's copy: the export
+  // warm-up has to be awaited before the clipboard event fires (see prepareAndCopy).
+  onCtrlC: () => onCopy(),
   onCtrlV: () => triggerCopy(() => pasteIntoWord().catch(() => {})),
   onCtrlShiftC: () => onSearchInRepository(),
 })
@@ -109,6 +114,7 @@ useVirtualScrollerKeys(
 const {
   getHighlightsForLine,
   getNotesForLine,
+  loadNotesForLines,
   updateNote,
   deleteNote,
   activeBubbleNote,
@@ -138,7 +144,7 @@ const { setProgrammaticScroll, onScroll, captureScrollPos } = useBookViewLinesSc
 
 // Word-level link anchors (link_anchor, schema v2+ DBs) — lazy, viewport-driven,
 // a no-op on DBs without the table.
-const { getWordLinkAnchorsForLine } = useWordLinkAnchors(
+const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines } = useWordLinkAnchors(
   () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
 )
 
@@ -167,7 +173,17 @@ watch(
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
 const { copyLineLink } = useBookViewLineLink({ scrollerEl, lines: () => props.lines, bookId })
-const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord, onSearchInRepository } = useBookViewLineCopyMenu({
+const booksDataStore = useBooksDataStore()
+// What copy-with-notes needs beyond the rendered markup: the notes and citations of
+// lines that were never scrolled into view, plus the target lines those citations
+// point at (they become endnotes). Warmed by the copy actions, never on render.
+const { prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget } = useCopyExportData({
+  loadNotes: loadNotesForLines,
+  loadWordLinkAnchors: loadWordLinkAnchorsForLines,
+  getWordLinkAnchorsForLine,
+  getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
+})
+const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, onSearchInRepository } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
   isSelectAll,
@@ -183,6 +199,9 @@ const { items: contextMenuItems, buildFormattedHtml, onPasteIntoWord, onSearchIn
   onClearHighlight,
   onAddNote,
   onCopyLineLink: copyLineLink,
+  prepareForLines,
+  prepareForRenderedHtml,
+  resolveWordLinkTarget,
 })
 useScopedCopy(
   scrollerEl,
@@ -205,7 +224,10 @@ useContextMenuLongPress(scrollerEl, (event) => {
 
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 
-const booksDataStore = useBooksDataStore()
+// User-note hover preview — the marker carries its text in data-note-text, so this
+// replaces the native title tooltip the marker used to have.
+const { noteTooltip } = useNoteTooltip(scrollerEl)
+
 const {
   wordLinkTooltip,
   keepOpen: keepWordLinkTooltipOpen,
@@ -312,6 +334,12 @@ defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPo
       @pointer-enter="keepWordLinkTooltipOpen"
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
+    />
+    <WordLinkTooltip
+      v-if="noteTooltip"
+      :key="`note-${noteTooltip.id}`"
+      :data="noteTooltip"
+      :interactive="false"
     />
     <div
       ref="scrollerEl"
@@ -511,6 +539,10 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   font-weight: normal;
   letter-spacing: 0;
   transition: color 100ms;
+}
+/* The mark is drawn by CSS so the marker holds no text — see applyUserNoteMarkers. */
+.line :deep(.user-note-marker)::before {
+  content: '[✎]';
 }
 .line :deep(.user-note-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));

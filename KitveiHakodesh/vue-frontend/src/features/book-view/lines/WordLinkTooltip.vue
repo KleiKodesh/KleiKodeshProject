@@ -1,7 +1,10 @@
 <script setup lang="ts">
 /**
- * Hover preview for a word-level link: the target line's content, headed by the
- * target book's title. Positioning follows the BookViewAbbrevTooltip pattern:
+ * Hover preview panel for the reading views. Two callers: the word-link preview
+ * (useWordLinkTooltip — target line content headed by the target book's title) and
+ * the user-note preview (useNoteTooltip — the note's own text, `interactive: false`).
+ *
+ * Positioning follows the BookViewAbbrevTooltip pattern:
  * Teleported to body, rendered hidden first so real dimensions can be measured,
  * then fixed above the anchor (flipped below when clipped by the viewport top).
  *
@@ -22,7 +25,20 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
 
-const props = defineProps<{ data: WordLinkTooltipData }>()
+const props = withDefaults(
+  defineProps<{
+    data: WordLinkTooltipData
+    /**
+     * Whether the panel accepts the pointer. True (the default) for the word-link
+     * preview, whose long content scrolls and whose text is selectable. False for
+     * the user-note preview: its content is short, its editable original is one
+     * click away, and capturing the pointer there would fight the marker's own
+     * click-to-edit. A static panel needs no gap bridge either.
+     */
+    interactive?: boolean
+  }>(),
+  { interactive: true },
+)
 const emit = defineEmits<{
   'pointer-enter': []
   'pointer-leave': []
@@ -104,7 +120,7 @@ onMounted(() => {
     <div
       ref="tooltipRef"
       class="word-link-tooltip"
-      :class="`is-${placement}`"
+      :class="[`is-${placement}`, { 'is-static': !interactive }]"
       :style="style"
       dir="rtl"
       @mouseenter="emit('pointer-enter')"
@@ -167,6 +183,15 @@ onMounted(() => {
 
 .word-link-tooltip.is-below::before {
   bottom: 100%;
+}
+
+/* Read-only preview: never takes the pointer, so it cannot swallow a click meant
+   for the marker underneath, and needs no bridge to travel into. */
+.word-link-tooltip.is-static {
+  pointer-events: none;
+}
+.word-link-tooltip.is-static::before {
+  content: none;
 }
 
 .word-link-tooltip-body {
