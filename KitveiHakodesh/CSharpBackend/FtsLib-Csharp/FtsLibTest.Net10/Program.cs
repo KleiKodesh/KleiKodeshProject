@@ -1,4 +1,5 @@
 ﻿using System;
+using System.IO;
 using System.Text;
 
 namespace FtsLibTest
@@ -66,8 +67,155 @@ namespace FtsLibTest
                 case "mergetest":         MergeTest.Run(args); return;
                 case "crashmergetest":    CrashMergeTest.Run(args); return;
                 case "searchduringmerge": SearchDuringMergeTest.Run(args); return;
+
+                case "buildat":
+                {
+                    // Explicit-path build: bypasses ResolveDbPath() so a specific DB file
+                    // can be indexed regardless of what other seforim.db candidates exist
+                    // on the machine. Usage: buildat <dbPath> [tier=full] [indexDir]
+                    if (args.Length < 2)
+                    {
+                        Console.WriteLine("Usage: buildat <dbPath> [tier=full] [indexDir]");
+                        return;
+                    }
+                    string dbPath   = args[1];
+                    string tier     = args.Length > 2 ? args[2] : "full";
+                    string indexDir = args.Length > 3 ? args[3]
+                        : Path.Combine(AppDomain.CurrentDomain.BaseDirectory, $"index_{tier}_custom");
+                    BuildTest.RunAndGetFragment(tier, dbPath, indexDir);
+                    Console.WriteLine("buildat: done.");
+                    return;
+                }
+
+                case "forcemergeat":
+                {
+                    // Explicit-path force-merge — same idea as buildat. Collapses every
+                    // live segment into one, which is the topology production search runs
+                    // against (fresh builds leave several unmerged L0/L1 segments).
+                    if (args.Length < 3)
+                    {
+                        Console.WriteLine("Usage: forcemergeat <indexDir> <dbPath>");
+                        return;
+                    }
+                    string indexDir = args[1];
+                    string dbPath   = args[2];
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    idx.ForceMerge();
+                    sw.Stop();
+                    Console.WriteLine($"Force merge complete in {sw.Elapsed.TotalSeconds:F1}s.");
+                    return;
+                }
+
+                case "queryidsat":
+                {
+                    // Same as queryat but calls SearchIds() — skips the per-row DB content
+                    // fetch entirely. Isolates pure index-intersection time from total
+                    // pipeline time, to tell apart "the index is slow" from "fetching
+                    // 18k rows of content from SQLite is slow".
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("Usage: queryidsat <indexDir> <dbPath> \"query\" [\"query2\" ...]");
+                        return;
+                    }
+                    string indexDir = args[1];
+                    string dbPath   = args[2];
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    for (int i = 3; i < args.Length; i++)
+                    {
+                        string q = args[i];
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        int cnt = 0;
+                        foreach (var _ in idx.SearchIds(q)) cnt++;
+                        sw.Stop();
+                        Console.WriteLine($"{q,-30}  {cnt,10:N0} ids  {sw.ElapsedMilliseconds,7} ms");
+                    }
+                    return;
+                }
+
+                case "fts5buildat":
+                {
+                    // Builds a SQLite FTS5 (detail=none, external-content) index from the
+                    // same seforim DB, using the REAL production Tokenizer for terms — so
+                    // the AND-of-terms comparison against SeforimIndex is apples-to-apples
+                    // (same terms, same machine, same runtime), isolating "posting-list
+                    // engine" differences from tokenizer differences.
+                    // Usage: fts5buildat <dbPath> <outDbPath>
+                    if (args.Length < 3)
+                    {
+                        Console.WriteLine("Usage: fts5buildat <dbPath> <outDbPath>");
+                        return;
+                    }
+                    Fts5Compare.Build(args[1], args[2]);
+                    return;
+                }
+
+                case "fts5queryat":
+                {
+                    // ids-only AND query against the FTS5 db built by fts5buildat — no
+                    // content fetch, so it's directly comparable to FtsLib's SearchIds.
+                    // Usage: fts5queryat <outDbPath> "term1 term2" ["term3 term4" ...]
+                    if (args.Length < 3)
+                    {
+                        Console.WriteLine("Usage: fts5queryat <outDbPath> \"term1 term2\" [\"term3 term4\" ...]");
+                        return;
+                    }
+                    Fts5Compare.Query(args[1], args[2..]);
+                    return;
+                }
+
+                case "querycapat":
+                {
+                    // Same as queryat but with a result cap — mirrors how a real UI
+                    // consumes search results (a page of hits, not the whole match set).
+                    if (args.Length < 5)
+                    {
+                        Console.WriteLine("Usage: querycapat <indexDir> <dbPath> <cap> \"query\" [\"query2\" ...]");
+                        return;
+                    }
+                    string indexDir = args[1];
+                    string dbPath   = args[2];
+                    int cap = int.Parse(args[3]);
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    for (int i = 4; i < args.Length; i++)
+                    {
+                        string q = args[i];
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        int cnt = 0;
+                        foreach (var _ in idx.Search(q, cap: cap)) cnt++;
+                        sw.Stop();
+                        Console.WriteLine($"{q,-30}  {cnt,10:N0} fetched  {sw.ElapsedMilliseconds,7} ms");
+                    }
+                    return;
+                }
+
+                case "queryat":
+                {
+                    // Explicit-path ad-hoc query with timing — same measurement as
+                    // BuildTest's smoke search (full enumeration of index.Search()).
+                    if (args.Length < 4)
+                    {
+                        Console.WriteLine("Usage: queryat <indexDir> <dbPath> \"query\" [\"query2\" ...]");
+                        return;
+                    }
+                    string indexDir = args[1];
+                    string dbPath   = args[2];
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    for (int i = 3; i < args.Length; i++)
+                    {
+                        string q = args[i];
+                        var sw = System.Diagnostics.Stopwatch.StartNew();
+                        int cnt = 0;
+                        foreach (var _ in idx.Search(q)) cnt++;
+                        sw.Stop();
+                        Console.WriteLine($"{q,-30}  {cnt,10:N0} results  {sw.ElapsedMilliseconds,7} ms");
+                    }
+                    return;
+                }
                 default:
                     Console.WriteLine("net10 test port. Commands: bench fetchbench build buildfresh search speed perf query parsertest orderedtest worddist snippettest snippetdiag ketivtest ketivquery verify filtertest probe dumpids monitor docsource interrupttest mergetest crashmergetest searchduringmerge");
+                    Console.WriteLine("Explicit-path commands (index dir + db path given on the command line): buildat forcemergeat queryat queryidsat querycapat");
+                    Console.WriteLine("SQLite FTS5 comparison: fts5buildat fts5queryat");
                     return;
             }
         }

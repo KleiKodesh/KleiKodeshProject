@@ -48,10 +48,15 @@ async function switchTo(id: string) {
 }
 
 async function confirmDelete(id: string) {
+  // Captured BEFORE the delete: deleteWorkspace reassigns activeId, so asking afterwards
+  // always answers "not the one we deleted" and the reload never ran - leaving the deleted
+  // workspace's live tabs in memory under the surviving workspace's id, which persistTabs
+  // then wrote straight over that workspace's saved tab list.
+  const wasActive = wsStore.activeId === id
   await wsStore.deleteWorkspace(id)
   confirmDeleteId.value = null
   // If we deleted the active workspace, the store already switched — reload
-  if (wsStore.activeId !== id) return
+  if (!wasActive) return
   window.location.reload()
 }
 

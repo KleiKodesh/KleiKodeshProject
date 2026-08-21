@@ -35,11 +35,20 @@ internal static class HttpProtocol
         /// <summary>The Range request header (e.g. "bytes=0-1023"), or null. Used by GET /file
         /// so pdf.js loads a PDF progressively instead of fetching the whole file.</summary>
         public string? Range { get; init; }
-        public byte[] Body { get; init; } = [];
+        /// <summary>Empty until <see cref="ReadBodyAsync"/> runs. The host reads the body only
+        /// AFTER the bearer token checks out, so an unauthenticated caller cannot make us
+        /// allocate up to <see cref="MaxBodyBytes"/>.</summary>
+        public byte[] Body { get; internal set; } = [];
+        /// <summary>Declared Content-Length, already range-checked against MaxBodyBytes.</summary>
+        public int ContentLength { get; init; }
+        /// <summary>Body bytes that already arrived in the same TCP segment as the headers.</summary>
+        internal byte[] Prebuffered { get; init; } = [];
     }
 
-    /// <summary>Reads one HTTP request, or null when the peer closed before sending anything.</summary>
-    public static async Task<Request?> ReadRequestAsync(Stream stream, CancellationToken ct)
+    /// <summary>Reads the request line and headers only, or null when the peer closed before
+    /// sending anything. The body is left on the wire for <see cref="ReadBodyAsync"/> so the
+    /// caller can authenticate first.</summary>
+    public static async Task<Request?> ReadHeadAsync(Stream stream, CancellationToken ct)
     {
         // Accumulate raw bytes until the end-of-headers marker (\r\n\r\n) appears.
         byte[] buf = new byte[8192];
@@ -86,19 +95,35 @@ internal static class HttpProtocol
             throw new InvalidDataException($"Bad Content-Length: {contentLength}");
 
         // The body may partly (or fully) already sit in the accumulation buffer past the header.
+        // Keep just those bytes; the rest stays on the wire until the caller asks for it.
         int bodyStart = headerEnd + HeaderTerminator.Length;
-        byte[] body = new byte[contentLength];
-        int have = Math.Min(total - bodyStart, contentLength);
-        if (have > 0) Array.Copy(all, bodyStart, body, 0, have);
-        int read = have;
-        while (read < contentLength)
+        int have = Math.Max(0, Math.Min(total - bodyStart, contentLength));
+        byte[] prebuffered = new byte[have];
+        if (have > 0) Array.Copy(all, bodyStart, prebuffered, 0, have);
+
+        return new Request
         {
-            int n = await stream.ReadAsync(body.AsMemory(read, contentLength - read), ct);
+            Method = reqLine[0], Path = reqLine[1], Origin = origin, Token = token, Range = range,
+            ContentLength = contentLength, Prebuffered = prebuffered,
+        };
+    }
+
+    /// <summary>Reads the declared body into <see cref="Request.Body"/>. Call only for a request
+    /// that has been authorized — this is where the up-to-64 MB allocation happens. Idempotent.</summary>
+    public static async Task ReadBodyAsync(Request req, Stream stream, CancellationToken ct)
+    {
+        if (req.ContentLength == 0 || req.Body.Length == req.ContentLength) return;
+
+        byte[] body = new byte[req.ContentLength];
+        int read = req.Prebuffered.Length;
+        if (read > 0) req.Prebuffered.CopyTo(body, 0);
+        while (read < req.ContentLength)
+        {
+            int n = await stream.ReadAsync(body.AsMemory(read, req.ContentLength - read), ct);
             if (n == 0) throw new InvalidDataException("Unexpected EOF in HTTP body");
             read += n;
         }
-
-        return new Request { Method = reqLine[0], Path = reqLine[1], Origin = origin, Token = token, Range = range, Body = body };
+        req.Body = body;
     }
 
     /// <summary>Writes the headers for a file response (200 or 206), advertising byte-range

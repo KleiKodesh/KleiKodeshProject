@@ -11,7 +11,7 @@
  * that needs the list, so it is fetched once per book in the background after mount
  * — one indexed query, off the render path, the same one an open would have run.
  */
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onScopeDispose } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconLink20Regular, IconLinkDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -49,6 +49,13 @@ watch(
     // Clear before refetching: an empty list hides the button, which is the honest
     // state for a book whose citations are not known yet — showing the previous
     // book's commentaries for a moment would not be.
+    // A retry armed for the previous book would re-enter load() reading the NEW bookId,
+    // duplicating the query below (and one live chain per switch when switching fast).
+    cancelRetry()
+    // Release the shared promise too: it belongs to the OLD book, and handing it to the
+    // load below would make that load resolve on a query that bails on its own
+    // book-switched guard - leaving the new book's list never fetched at all.
+    inFlight = null
     isOpen.value = false
     loaded.value = false
     loadedForBookId.value = null
@@ -58,6 +65,7 @@ watch(
 )
 
 onMounted(() => void load())
+onScopeDispose(cancelRetry)
 
 // ── The book's marker commentaries — lazy, once per book ────────────────────
 
@@ -79,7 +87,31 @@ const loadedForBookId = ref<number | null>(null)
  */
 const RETRY_DELAYS_MS = [400, 1500, 4000]
 
-async function load(attempt = 0) {
+/** The armed retry, so a book switch or teardown can disarm it. */
+let retryTimer: ReturnType<typeof setTimeout> | null = null
+/** The load in flight, so two callers share one query instead of both issuing it. */
+let inFlight: Promise<void> | null = null
+
+function cancelRetry() {
+  if (retryTimer !== null) {
+    clearTimeout(retryTimer)
+    retryTimer = null
+  }
+}
+
+/**
+ * One load at a time. onMounted's background load and a fast toggleOpen both pass the
+ * loaded/loadedForBookId guard (nothing has resolved yet), so without this they issue the
+ * same query twice for the same book.
+ */
+function load(attempt = 0): Promise<void> {
+  inFlight ??= loadOnce(attempt).finally(() => {
+    inFlight = null
+  })
+  return inFlight
+}
+
+async function loadOnce(attempt = 0) {
   const bookId = props.bookId
   if (bookId == null) return
   if (loaded.value && loadedForBookId.value === bookId) return
@@ -96,7 +128,13 @@ async function load(attempt = 0) {
     // an empty answer, and schedule that attempt.
     loadedForBookId.value = null
     const delay = RETRY_DELAYS_MS[attempt]
-    if (delay != null) setTimeout(() => void load(attempt + 1), delay)
+    if (delay != null) {
+      cancelRetry()
+      retryTimer = setTimeout(() => {
+        retryTimer = null
+        void load(attempt + 1)
+      }, delay)
+    }
     return
   }
   const ids = [...new Set(targets.map((t) => t.targetBookId))]

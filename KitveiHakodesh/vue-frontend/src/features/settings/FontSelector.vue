@@ -41,6 +41,10 @@ async function toggle() {
   }
   isOpen.value = true
   emit('toggle')
+  // Enumeration starts BEFORE positioning. The early return below only means "cannot
+  // measure yet"; when it also skipped the load, the dropdown stayed open showing an empty
+  // list with no loading row, and only a close-and-reopen ever populated it.
+  void loadFonts()
   await nextTick()
   if (!boxRef.value || !dropdownRef.value) return
   const rect = boxRef.value.getBoundingClientRect()
@@ -58,6 +62,9 @@ async function toggle() {
       ? { bottom: window.innerHeight - rect.top + 4 + 'px', top: 'auto' }
       : { top: rect.bottom + 4 + 'px', bottom: 'auto' }),
   }
+}
+
+async function loadFonts() {
   const generation = ++loadGeneration
   isLoading.value = true
   availableFonts.value = []

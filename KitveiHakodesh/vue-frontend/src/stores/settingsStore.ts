@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import type { Ref } from 'vue'
 import { lsGet, lsSet, lsDelete, lsKeys } from '@/utils/persistence'
 
@@ -114,13 +114,18 @@ const DEFAULTS = {
   fixedLineHeight: false,
   commentaryHeaderFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
   commentaryTextFont: "'Times New Roman', Times, serif",
-  commentaryFontSize: 100,
+  // Tracks fontSize: while useSeparateCommentarySettings is off the commentary mirrors the
+  // main text, so a different default here would visibly shrink the commentary the moment
+  // the user first turns separate settings ON, with no action of their own.
+  commentaryFontSize: 105,
   commentaryLinePadding: 1.6,
   useSeparateCommentarySettings: false,
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
   booksView: 'list' as BooksView,
+  fileSearchSortOrder:
+    'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   pdfPageFilters: false,
   resumeLastRead: true,
   showClock: false,
@@ -223,7 +228,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const contentBorder = ref(DEFAULTS.contentBorder)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
-  const fileSearchSortOrder = ref<import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder>('relevance')
+  const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
   /** Which layout the book catalog page renders in. */
   const booksView = ref<BooksView>(DEFAULTS.booksView)
 
@@ -515,7 +520,13 @@ export const useSettingsStore = defineStore('settings', () => {
     lsSet(KEYS.SETTINGS_MIDOT_DISCLAIMER, true)
   }
 
-  function reset() {
+  /**
+   * Back to defaults, in memory and on disk. Returns a promise that resolves once
+   * localStorage has actually been cleared — the clear has to wait for the persist
+   * watchers to flush, so a caller that reloads the page immediately should await this
+   * rather than race it.
+   */
+  async function reset() {
     divineNameMode.value = DEFAULTS.divineNameMode
     elokimMode.value = DEFAULTS.elokimMode
     otherNamesSelected.value = [...DEFAULTS.otherNamesSelected]
@@ -558,8 +569,16 @@ export const useSettingsStore = defineStore('settings', () => {
     contentBorder.value = DEFAULTS.contentBorder
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
-    clearPersistedSettings()
+    // Both of these have a persist watcher and a stored key, so leaving them out left the
+    // key deleted while the ref kept the old value — memory and disk disagreeing until the
+    // next reload.
+    booksView.value = DEFAULTS.booksView
+    fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
     applyCSSVariables()
+    // The persist watchers flush on nextTick, so clearing synchronously here would be
+    // undone by them re-writing every key we just deleted. Clear once they have run.
+    await nextTick()
+    clearPersistedSettings()
   }
 
   return {

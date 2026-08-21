@@ -114,11 +114,15 @@ public sealed class LocalFileGrants
     /// <summary>Mint an unguessable capability handle for a folder. The GET /file endpoint can
     /// serve any file within (and below) this folder using the path
     /// <c>/file/&lt;handle&gt;/relative/path</c>. Traversal outside the root is rejected by
-    /// <see cref="TryResolveFolder"/>.</summary>
+    /// <see cref="TryResolveFolder"/>.
+    /// <para>Returns "" (no grant) for a volume or UNC-share root: a folder grant is recursive, so
+    /// granting a root would hand the caller the whole drive. Callers treat "" as "no folder
+    /// grant" - the file itself is still served through its own single-file handle.</para></summary>
     public string GrantFolder(string canonicalFolderPath)
     {
         // Normalise: strip trailing separator so prefix-check in TryResolveFolder is consistent.
         string folder = canonicalFolderPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (string.IsNullOrEmpty(folder) || IsVolumeRoot(canonicalFolderPath)) return "";
         string handle = MintHandle();
         _folderByHandle[handle] = folder;
         _order.Enqueue(handle);
@@ -165,6 +169,23 @@ public sealed class LocalFileGrants
 
         fullPath = candidate;
         return true;
+    }
+
+    /// <summary>True when the path IS its own root - "C:\", "\\server\share\", "/". TrimEnd would
+    /// reduce those to "C:" / "\\server\share", and the prefix check in TryResolveFolder would then
+    /// accept every path on the volume.</summary>
+    private static bool IsVolumeRoot(string path)
+    {
+        try
+        {
+            string full = Path.GetFullPath(path);
+            string? root = Path.GetPathRoot(full);
+            return !string.IsNullOrEmpty(root)
+                && string.Equals(full.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                 root!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+                                 StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return true; } // unparseable - refuse the grant
     }
 
     private static string MintHandle() =>

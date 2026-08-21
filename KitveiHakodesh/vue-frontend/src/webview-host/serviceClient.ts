@@ -61,8 +61,12 @@ function getEndpoint(): Promise<KhsEndpoint> {
 async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Promise<Response> {
   let lastErr: unknown
   for (let attempt = 0; attempt < 6; attempt++) {
+    // Checked at the top of every attempt, not only around the fetch: the caller can abort
+    // while we are in a backoff delay or inside endpoint discovery's own retry loop.
+    if (signal?.aborted) throw signal.reason ?? new Error('aborted')
     try {
       const { base, token } = await getEndpoint()
+      if (signal?.aborted) throw signal.reason ?? new Error('aborted')
       const res = await fetch(`${base}${path}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream', 'X-KHS-Token': token },
@@ -120,9 +124,20 @@ interface Envelope {
   Error?: string
 }
 
-/** Call a service op and return its result, throwing on a service-side error. */
-export async function serviceCall<T = unknown>(op: string, args: object = {}): Promise<T> {
-  const res = await postRpc('/rpc', encodeRequest(op, args))
+/**
+ * Call a service op and return its result, throwing on a service-side error.
+ *
+ * `signal` is optional but worth passing from any view that can be torn down while a call is
+ * in flight: without it there is no way out of the retry ladder, and a service that is
+ * genuinely down leaves the call pending for minutes (six attempts, each re-entering
+ * endpoint discovery's own retry loop).
+ */
+export async function serviceCall<T = unknown>(
+  op: string,
+  args: object = {},
+  signal?: AbortSignal,
+): Promise<T> {
+  const res = await postRpc('/rpc', encodeRequest(op, args), signal)
   if (!res.ok) throw new Error(`service '${op}' failed: ${res.status} ${res.statusText}`)
   const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
   if (!env.Ok) throw new Error(env.Error || `service '${op}' error`)

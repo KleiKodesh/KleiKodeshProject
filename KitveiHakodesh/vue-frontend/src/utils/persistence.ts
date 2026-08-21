@@ -103,19 +103,43 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-catalog-toc-cache': null,
 }
 
+// In-flight opens, keyed by database name. The handle is only set in `onsuccess`, so two
+// concurrent first-time calls for the same database used to open TWO connections and keep
+// only the second — the orphan then blocked `dropDatabase` forever (its `onblocked` resolves
+// silently, so a full app reset reported success while the database survived).
+const opening: Record<string, Promise<IDBDatabase> | undefined> = {}
+// Bumped by dropDatabase. An open already in flight when the database is dropped must not
+// publish its connection afterwards: it would resurrect the handle we just cleared and hold
+// the deleted database open.
+const openEpoch: Record<string, number> = {}
+
 function openDb(name: string): Promise<IDBDatabase> {
   if (handles[name]) return Promise.resolve(handles[name]!)
-  return new Promise((resolve, reject) => {
+  const inFlight = opening[name]
+  if (inFlight) return inFlight
+
+  const epoch = openEpoch[name] ?? 0
+  const open = new Promise<IDBDatabase>((resolve, reject) => {
     const req = indexedDB.open(name, 1)
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE)
     }
     req.onsuccess = () => {
+      if ((openEpoch[name] ?? 0) !== epoch) {
+        // Dropped while we were opening — close rather than publish.
+        try { req.result.close() } catch { /* already closing */ }
+        reject(new Error(`database ${name} was dropped while opening`))
+        return
+      }
       handles[name] = req.result
       resolve(req.result)
     }
     req.onerror = () => reject(req.error)
+  }).finally(() => {
+    if (opening[name] === open) delete opening[name]
   })
+  opening[name] = open
+  return open
 }
 
 // ── Core get / set / delete ───────────────────────────────────────────────────
@@ -184,19 +208,23 @@ export async function dbCount(dbName: string): Promise<number> {
   })
 }
 
-/** Keys in cursor order, optionally stopping after `limit` — values are not read. */
-export async function dbListKeys(dbName: string, limit?: number): Promise<string[]> {
+/**
+ * Every entry as a [key, value] pair, in cursor order. For a caller that has to RANK
+ * entries by something inside the value (a retention cap by recency, say) — cursor
+ * order is lexicographic by key and says nothing about age.
+ */
+export async function dbListEntries<T>(dbName: string): Promise<Array<[string, T]>> {
   const idb = await openDb(dbName)
   return new Promise((resolve, reject) => {
-    const acc: string[] = []
-    const req = idb.transaction(STORE).objectStore(STORE).openKeyCursor()
+    const acc: Array<[string, T]> = []
+    const req = idb.transaction(STORE).objectStore(STORE).openCursor()
     req.onsuccess = () => {
       const cursor = req.result
-      if (!cursor || (limit !== undefined && acc.length >= limit)) {
+      if (!cursor) {
         resolve(acc)
         return
       }
-      acc.push(cursor.key as string)
+      acc.push([cursor.key as string, cursor.value as T])
       cursor.continue()
     }
     req.onerror = () => reject(req.error)
@@ -213,6 +241,10 @@ export async function dbListKeys(dbName: string, limit?: number): Promise<string
 export function dropDatabase(name: string): Promise<void> {
   handles[name]?.close()
   handles[name] = null
+  // An open still in flight would otherwise publish its handle after the delete and
+  // resurrect the entry in `handles` — the epoch bump makes it close instead.
+  openEpoch[name] = (openEpoch[name] ?? 0) + 1
+  delete opening[name]
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(name)
     req.onsuccess = () => resolve()

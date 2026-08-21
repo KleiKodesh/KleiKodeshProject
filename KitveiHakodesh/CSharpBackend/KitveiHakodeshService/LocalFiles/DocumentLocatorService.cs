@@ -62,87 +62,147 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
 
     private DocumentLocator.PathIndex? _index;
     private readonly SemaphoreSlim _buildGate = new(1, 1);
-    private Task? _buildTask;
+    private Task<DocumentLocator.PathIndex>? _buildTask;
 
     /// <summary>
     /// Ensures the index is open and fully built, then returns it.
     /// The build is run once; subsequent calls return the already-open instance.
     /// Progress is swallowed — the caller's loading animation covers the wait.
+    /// <para>The build is SHARED, so it deliberately carries no caller's cancellation token:
+    /// whoever asks first must not be able to cancel the build every other client is waiting on
+    /// by closing their tab. <paramref name="ct"/> cancels only this caller's WAIT. The index
+    /// instance is owned by the build task, so an abandoned wait leaks nothing.</para>
     /// </summary>
     private async Task<DocumentLocator.PathIndex> EnsureIndexAsync(CancellationToken ct)
     {
         if (_index is not null) return _index;
 
+        Task<DocumentLocator.PathIndex> build;
         await _buildGate.WaitAsync(ct);
         try
         {
             if (_index is not null) return _index;
-
-            var index = new DocumentLocator.PathIndex(IndexPath);
-
             // Run the (potentially slow) build on a thread-pool thread so we
             // don't block the host's async machinery.
-            if (_buildTask is null || _buildTask.IsCompleted)
-            {
-                _buildTask = Task.Run(() =>
-                {
-                    try
-                    {
-                        index.Build(
-                            msg => logger.LogDebug("[DocumentLocator] {Message}", msg),
-                            ct);
-                    }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        logger.LogError(ex, "[DocumentLocator] Index build failed");
-                    }
-                }, ct);
-            }
-
-            await _buildTask.WaitAsync(ct);
-            _index = index;
-
-            // Start the live USN journal update loop now that the initial build is done.
-            // One background thread per NTFS drive, each blocked in kernel-wait — zero CPU.
-            // When the journal cursor goes stale (very rare — requires the NTFS journal to
-            // be recreated), the callback triggers a full rebuild automatically.
-            index.StartLiveUpdates(CancellationToken.None, (message, ex) =>
-            {
-                if (ex != null)
-                    logger.LogWarning(ex, "[DocumentLocator] {Message}", message);
-                else
-                    logger.LogInformation("[DocumentLocator] {Message} — triggering rebuild", message);
-
-                // Reset and rebuild: dispose the stale index, clear state, kick off a fresh build.
-                _ = Task.Run(async () =>
-                {
-                    try { await ReindexAsync(CancellationToken.None); }
-                    catch (Exception rebuildEx)
-                    {
-                        logger.LogError(rebuildEx, "[DocumentLocator] Rebuild after live-update failure failed");
-                    }
-                });
-            });
-
-            // When we're not elevated the USN watcher can't start, and without it the
-            // index is frozen at build time — it never sees files the user adds, deletes,
-            // or renames. Reading the USN journal needs a raw volume handle, which is
-            // admin-only by design, so there is no unprivileged substitute; the only
-            // mitigation is to rescan periodically and bound how stale the index can get.
-            // (Same approach Everything uses for its no-NTFS "Folder Indexing" mode.)
-            // No-ops entirely when every drive has a live watcher.
-            index.StartPeriodicRescan(
-                RescanInterval,
-                CancellationToken.None,
-                message => logger.LogInformation("[DocumentLocator] {Message}", message),
-                (message, ex) => logger.LogError(ex, "[DocumentLocator] {Message}", message));
-
-            return _index;
+            _buildTask ??= Task.Run(BuildIndex);
+            build = _buildTask;
         }
         finally
         {
             _buildGate.Release();
         }
+
+        DocumentLocator.PathIndex built;
+        try
+        {
+            built = await build.WaitAsync(ct);
+        }
+        catch when (build.IsFaulted)
+        {
+            // The BUILD failed (not our wait). Drop the memo so a later search starts a fresh
+            // attempt instead of replaying this exception for the rest of the process lifetime.
+            await _buildGate.WaitAsync(CancellationToken.None);
+            try
+            {
+                if (ReferenceEquals(_buildTask, build)) _buildTask = null;
+            }
+            finally
+            {
+                _buildGate.Release();
+            }
+            throw;
+        }
+
+        bool ours;
+        await _buildGate.WaitAsync(ct);
+        try
+        {
+            ours = ReferenceEquals(_buildTask, build);
+            if (ours) _index = built;
+        }
+        finally
+        {
+            _buildGate.Release();
+        }
+        if (ours) return built;
+
+        // A Reindex dropped this build while we were waiting on it, so this instance is nobody's
+        // index - dispose it (it has its own watcher threads) and take the current one instead.
+        try { built.Dispose(); } catch { /* best effort */ }
+        return await EnsureIndexAsync(ct);
+    }
+
+    /// <summary>Opens and builds the index, then starts the live/periodic update loops. Runs
+    /// exactly once per index instance, memoized in <c>_buildTask</c>.</summary>
+    private DocumentLocator.PathIndex BuildIndex()
+    {
+        var index = new DocumentLocator.PathIndex(IndexPath);
+        try
+        {
+            return BuildAndStartWatchers(index);
+        }
+        catch
+        {
+            // Anything past the ctor throwing (starting the USN watchers, the rescan timer)
+            // leaves an index nobody will ever be handed: dispose it here or its Lucene write
+            // lock is held for the process lifetime. The faulted task is dropped by
+            // EnsureIndexAsync, so the next search builds again from scratch.
+            try { index.Dispose(); } catch { /* best effort */ }
+            throw;
+        }
+    }
+
+    private DocumentLocator.PathIndex BuildAndStartWatchers(DocumentLocator.PathIndex index)
+    {
+        try
+        {
+            index.Build(
+                msg => logger.LogDebug("[DocumentLocator] {Message}", msg),
+                CancellationToken.None);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // A failed crawl still leaves a usable (if incomplete) index — searches return
+            // whatever was written. Only the failures below are fatal to the instance.
+            logger.LogError(ex, "[DocumentLocator] Index build failed");
+        }
+
+        // Start the live USN journal update loop now that the initial build is done.
+        // One background thread per NTFS drive, each blocked in kernel-wait — zero CPU.
+        // When the journal cursor goes stale (very rare — requires the NTFS journal to
+        // be recreated), the callback triggers a full rebuild automatically.
+        index.StartLiveUpdates(CancellationToken.None, (message, ex) =>
+        {
+            if (ex != null)
+                logger.LogWarning(ex, "[DocumentLocator] {Message}", message);
+            else
+                logger.LogInformation("[DocumentLocator] {Message} — triggering rebuild", message);
+
+            // Reset and rebuild: dispose the stale index, clear state, kick off a fresh build.
+            _ = Task.Run(async () =>
+            {
+                try { await ReindexAsync(CancellationToken.None); }
+                catch (Exception rebuildEx)
+                {
+                    logger.LogError(rebuildEx, "[DocumentLocator] Rebuild after live-update failure failed");
+                }
+            });
+        });
+
+        // When we're not elevated the USN watcher can't start, and without it the
+        // index is frozen at build time — it never sees files the user adds, deletes,
+        // or renames. Reading the USN journal needs a raw volume handle, which is
+        // admin-only by design, so there is no unprivileged substitute; the only
+        // mitigation is to rescan periodically and bound how stale the index can get.
+        // (Same approach Everything uses for its no-NTFS "Folder Indexing" mode.)
+        // No-ops entirely when every drive has a live watcher.
+        index.StartPeriodicRescan(
+            RescanInterval,
+            CancellationToken.None,
+            message => logger.LogInformation("[DocumentLocator] {Message}", message),
+            (message, ex) => logger.LogError(ex, "[DocumentLocator] {Message}", message));
+
+        return index;
     }
 
     // ── Public API ────────────────────────────────────────────────────────────
@@ -214,8 +274,13 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             _buildGate.Release();
         }
 
-        // Kick off a fresh build in the background (fire-and-forget).
-        _ = EnsureIndexAsync(CancellationToken.None);
+        // Kick off a fresh build in the background. Fire-and-forget, but never unobserved:
+        // a rebuild that fails here would otherwise leave no index and say nothing.
+        _ = Task.Run(async () =>
+        {
+            try { await EnsureIndexAsync(CancellationToken.None); }
+            catch (Exception ex) { logger.LogError(ex, "[DocumentLocator] Rebuild after reindex failed"); }
+        });
     }
 
     /// <summary>

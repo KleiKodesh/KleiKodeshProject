@@ -104,9 +104,11 @@ export function useBookViewSessionRestore(
     // fallback reopening a book restored their zoom but reset the text's.
     const restoredZoom = bookSaved?.zoom ?? (useLastRead ? lastRead?.zoom : undefined)
     if (restoredZoom != null) bookViewStore.setLinesZoom(tabId, bookId!, restoredZoom)
-    if (bookSaved?.autoSelectTopLine != null) {
-      bookViewStore.autoSelectTopLine = bookSaved.autoSelectTopLine
-    }
+    // autoSelectTopLine is deliberately NOT restored here. It is a single app-wide
+    // preference (one ref, persisted in localStorage, toggled from the toolbar) — there is
+    // no per-tab storage for it, so writing a per-(tab, book) snapshot into it does not
+    // restore anything, it flips the setting for every other tab and the other split pane.
+    // The field stays in the saved state as a record of what was in force at the time.
 
     // Per-panel state: the tab's own save wins, then the book's last-read save.
     // Merged per slot rather than per field so a panel never restores half of one

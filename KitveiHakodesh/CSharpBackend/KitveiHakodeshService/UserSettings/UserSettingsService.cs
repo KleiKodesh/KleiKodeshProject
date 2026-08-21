@@ -73,6 +73,7 @@ public sealed class UserSettingsService
     public string QueryRowsJson(string sql, JsonElement[] parameters)
     {
         if (!Available) return "[]";
+        GuardSql(sql, write: false);
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = RewritePlaceholders(sql);
@@ -109,6 +110,7 @@ public sealed class UserSettingsService
     public long Execute(string sql, JsonElement[] parameters)
     {
         if (!Available) return 0;
+        GuardSql(sql, write: true);
         using var conn = Open();
         using var cmd = conn.CreateCommand();
         cmd.CommandText = RewritePlaceholders(sql);
@@ -119,6 +121,112 @@ public sealed class UserSettingsService
         idCmd.CommandText = "SELECT last_insert_rowid()";
         var result = idCmd.ExecuteScalar();
         return result is long l ? l : 0;
+    }
+
+    // The two settings tables. Nothing else in the DB is reachable through this op, and the DB
+    // itself is the only file reachable at all - see GuardSql.
+    private static readonly string[] AllowedTables = ["user_highlights", "user_notes"];
+
+    // Statement verbs, split read vs write so the read op cannot mutate and the write op cannot
+    // be used as an exfiltration channel for a SELECT the frontend was not given.
+    private static readonly string[] ReadVerbs = ["select"];
+    private static readonly string[] WriteVerbs = ["insert", "update", "delete"];
+
+    // Anything that can reach OUTSIDE user_settings.db, change its shape, or run a second
+    // statement. ATTACH is the sharp one: without it in this list, "edit my highlights" is
+    // "create and write an arbitrary SQLite file anywhere the service can write".
+    private static readonly string[] ForbiddenWords =
+    [
+        "attach", "detach", "pragma", "vacuum", "alter", "drop", "create", "reindex",
+        "load_extension", "readfile", "writefile",
+        "sqlite_master", "sqlite_schema", "sqlite_temp_master", "sqlite_dbpage", "sqlite_stat1",
+    ];
+
+    /// <summary>
+    /// The frontend supplies SQL text, so this is the whole boundary between a compromised page
+    /// (or a leaked bearer token) and arbitrary SQLite. It is deliberately a FILTER, not a parser:
+    /// one statement, one allowed verb, only the two settings tables, and none of the words that
+    /// can escape the file. Anything it cannot understand is rejected rather than passed through.
+    /// </summary>
+    private static void GuardSql(string sql, bool write)
+    {
+        if (string.IsNullOrWhiteSpace(sql)) throw new InvalidOperationException("empty statement");
+
+        string bare = StripLiteralsAndComments(sql);
+
+        // No batching: a second statement would never be seen by the verb check below.
+        if (bare.TrimEnd().TrimEnd(';').Contains(';'))
+            throw new InvalidOperationException("only one statement is allowed");
+
+        var tokens = Words(bare);
+        if (tokens.Count == 0) throw new InvalidOperationException("empty statement");
+
+        string verb = tokens[0];
+        string[] allowedVerbs = write ? WriteVerbs : ReadVerbs;
+        if (Array.IndexOf(allowedVerbs, verb) < 0)
+            throw new InvalidOperationException($"statement type '{verb}' is not allowed here");
+
+        foreach (string w in tokens)
+            if (Array.IndexOf(ForbiddenWords, w) >= 0)
+                throw new InvalidOperationException($"'{w}' is not allowed in a settings statement");
+
+        // Every table position - what follows FROM / JOIN / INTO / UPDATE - must be one of ours.
+        for (int i = 0; i < tokens.Count - 1; i++)
+        {
+            if (tokens[i] is not ("from" or "join" or "into" or "update")) continue;
+            if (Array.IndexOf(AllowedTables, tokens[i + 1]) < 0)
+                throw new InvalidOperationException($"table '{tokens[i + 1]}' is not a settings table");
+        }
+    }
+
+    /// <summary>Blanks out string literals and comments so the guard reads structure only - a
+    /// note whose TEXT happens to contain the word "attach" must not be rejected.</summary>
+    private static string StripLiteralsAndComments(string sql)
+    {
+        var sb = new StringBuilder(sql.Length);
+        char quote = '\0';
+        for (int i = 0; i < sql.Length; i++)
+        {
+            char c = sql[i];
+            if (quote != '\0')
+            {
+                if (c == quote) quote = '\0';
+                sb.Append(' ');
+                continue;
+            }
+            if (c is '\'' or '"' or '`' or '[') { quote = c == '[' ? ']' : c; sb.Append(' '); continue; }
+            if (c == '-' && i + 1 < sql.Length && sql[i + 1] == '-')
+            {
+                while (i < sql.Length && sql[i] != '\n') i++;
+                sb.Append('\n');
+                continue;
+            }
+            if (c == '/' && i + 1 < sql.Length && sql[i + 1] == '*')
+            {
+                i += 2;
+                while (i + 1 < sql.Length && !(sql[i] == '*' && sql[i + 1] == '/')) i++;
+                i++;
+                sb.Append(' ');
+                continue;
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Lower-cased identifier/keyword runs. Hand-rolled rather than a Regex so nothing
+    /// here depends on Reflection.Emit under native AOT.</summary>
+    private static List<string> Words(string s)
+    {
+        var words = new List<string>();
+        var cur = new StringBuilder();
+        foreach (char c in s)
+        {
+            if (char.IsLetterOrDigit(c) || c == '_') cur.Append(char.ToLowerInvariant(c));
+            else if (cur.Length > 0) { words.Add(cur.ToString()); cur.Clear(); }
+        }
+        if (cur.Length > 0) words.Add(cur.ToString());
+        return words;
     }
 
     // Rewrite positional '?' to @p0..@pN (Microsoft.Data.Sqlite binds by name),

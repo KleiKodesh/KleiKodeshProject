@@ -18,6 +18,7 @@
  * the same copy costs nothing, and a citation whose target never loaded is dropped
  * from the export rather than emitted half-formed (see applyWordLinkExport).
  */
+import { onScopeDispose } from 'vue'
 import { getLineContents, getTocPathsForLines } from '@/webview-host/seforimApi'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import type { WordLinkTarget } from './wordLinkAnchors'
@@ -45,6 +46,19 @@ export function useCopyExportData(opts: {
 }) {
   // Citation target line id → its full content and TOC path.
   const targetsByLineId = new Map<number, { html: string; tocPath: string }>()
+  // Target line ids already queried, whether or not a content row came back. Without
+  // this, a target with no content row is re-fetched on every single copy for the life
+  // of the view, since `targetsByLineId` only records hits.
+  const queriedTargets = new Set<number>()
+  // In-flight load per target line id, so two overlapping copy actions share one query
+  // instead of both fetching the same targets.
+  const inFlight = new Map<number, Promise<void>>()
+  // A select-all warm-up can walk a whole book's citation targets in sequence; closing the
+  // tab must end that rather than let it run on against a view that is gone.
+  let disposed = false
+  onScopeDispose(() => {
+    disposed = true
+  })
 
   /** Point citations only: a range citation exports as a link on its own words. */
   function pointTargets(lineIds: number[]): WordLinkTarget[] {
@@ -65,20 +79,40 @@ export function useCopyExportData(opts: {
   }
 
   async function loadTargetContent(targets: WordLinkTarget[]): Promise<void> {
-    const missing = [...new Set(targets.map((t) => t.lineId))].filter(
-      (id) => id > 0 && !targetsByLineId.has(id),
-    )
-    // Chunks run in sequence so a select-all cannot fire hundreds of concurrent
-    // queries; the two queries within a chunk are independent and run together.
-    for (const chunk of chunked(missing)) {
-      const [contents, tocPaths] = await Promise.all([
-        getLineContents(chunk),
-        getTocPathsForLines(chunk),
-      ])
-      const tocByLine = new Map(tocPaths.map((row) => [row.lineId, row.tocPath]))
-      for (const row of contents) {
-        targetsByLineId.set(row.id, { html: row.content, tocPath: tocByLine.get(row.id) ?? '' })
+    const wanted = [...new Set(targets.map((t) => t.lineId))].filter((id) => id > 0)
+    // Anything another copy is already fetching: wait on its promise rather than
+    // issuing the same query again.
+    const waits = [...new Set(wanted.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
+    const missing = wanted.filter((id) => !queriedTargets.has(id))
+    for (const id of missing) queriedTargets.add(id)
+
+    const whole = (async () => {
+      await Promise.all(waits)
+      // Chunks run in sequence so a select-all cannot fire hundreds of concurrent
+      // queries; the two queries within a chunk are independent and run together.
+      for (const chunk of chunked(missing)) {
+        if (disposed) return // the view is gone; stop walking the rest of the book
+        try {
+          const [contents, tocPaths] = await Promise.all([
+            getLineContents(chunk),
+            getTocPathsForLines(chunk),
+          ])
+          const tocByLine = new Map(tocPaths.map((row) => [row.lineId, row.tocPath]))
+          for (const row of contents) {
+            targetsByLineId.set(row.id, { html: row.content, tocPath: tocByLine.get(row.id) ?? '' })
+          }
+        } catch {
+          // Transport failure, not a real miss — un-mark so a later copy can retry.
+          for (const id of chunk) queriedTargets.delete(id)
+        }
       }
+    })()
+
+    for (const id of missing) inFlight.set(id, whole)
+    try {
+      await whole
+    } finally {
+      for (const id of missing) if (inFlight.get(id) === whole) inFlight.delete(id)
     }
   }
 

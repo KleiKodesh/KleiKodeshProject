@@ -25,7 +25,8 @@ public sealed class Dispatcher(
     HttpHostState httpState,
     LocalFileGrants localFileGrants,
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
-    IHostApplicationLifetime lifetime)
+    IHostApplicationLifetime lifetime,
+    ILogger<Dispatcher> logger)
 {
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
@@ -782,7 +783,15 @@ public sealed class Dispatcher(
     /// courier (or the SCM, when installed) starts a fresh instance that re-resolves
     /// the seforim DB path.</summary>
     private void RestartSoon() =>
-        _ = Task.Delay(400).ContinueWith(_ => lifetime.StopApplication());
+        _ = Task.Run(async () =>
+        {
+            await Task.Delay(400);
+            // If the stop request itself fails, the service keeps running against the OLD db path
+            // while the frontend has already been told Restarting=true - so it must be logged, not
+            // swallowed into an unobserved task fault.
+            try { lifetime.StopApplication(); }
+            catch (Exception ex) { logger.LogError(ex, "restart after DB path change failed"); }
+        });
 
     private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 

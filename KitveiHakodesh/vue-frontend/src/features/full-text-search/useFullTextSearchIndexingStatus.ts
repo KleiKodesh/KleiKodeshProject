@@ -33,6 +33,11 @@ export function useFullTextSearchIndexingStatus() {
   const cache = useSearchCacheStore()
   let unregister: (() => void) | null = null
   let devAbort: AbortController | null = null
+  // onMounted's body awaits, so the component can unmount while it is still running —
+  // before `unregister` has been assigned. onUnmounted would then find nothing to undo
+  // and the listener would stay registered for good, writing into a dead component's
+  // state on every progress frame. This flag makes the late registration self-cancel.
+  let unmounted = false
 
   onMounted(async () => {
     if (!hasHostBridge) {
@@ -95,6 +100,8 @@ export function useFullTextSearchIndexingStatus() {
       console.warn('[useFullTextSearchIndexingStatus] poll failed:', err)
     }
 
+    if (unmounted) return
+
     unregister = onWebviewEvent((msg) => {
       if (msg.event === 'ftsDbNotFound') {
         state.value = { ...IDLE, dbNotFound: true }
@@ -125,7 +132,9 @@ export function useFullTextSearchIndexingStatus() {
   })
 
   onUnmounted(() => {
+    unmounted = true
     unregister?.()
+    unregister = null
     devAbort?.abort()
   })
 

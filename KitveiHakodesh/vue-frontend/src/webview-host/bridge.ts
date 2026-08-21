@@ -174,7 +174,7 @@ export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResu
       // The URL is /khs-file/<folderHandle>/filename.html — the same "whole folder" model
       // that the hosted C# SetVirtualHostNameToFolderMapping already provides.
       const url = isHtmlFile && r.folderHandle
-        ? `/khs-file/${r.folderHandle}/${servedName}`
+        ? `/khs-file/${r.folderHandle}/${encodeURIComponent(servedName)}`
         : `/khs-file/${r.handle}`
 
       if (isDirect) {
@@ -239,8 +239,11 @@ export async function restoreLocalFile(filePath: string): Promise<LocalFileResto
       const servedExt = r.fileName?.toLowerCase().endsWith('.html') ? '.html' : '.pdf'
       const kind = servedExt === '.html' ? ('html' as const) : ('pdf' as const)
       // HTML files get a folder-scoped URL so siblings load; PDF gets single-file handle.
+      // Encoded per segment: the host percent-DECODES the relative path (so a name with a
+      // space or a non-ASCII character resolves), which means a literal '%' in a filename
+      // has to arrive escaped or it decodes into a different name.
       const url = kind === 'html' && r.folderHandle
-        ? `/khs-file/${r.folderHandle}/${r.fileName}`
+        ? `/khs-file/${r.folderHandle}/${encodeURIComponent(r.fileName ?? '')}`
         : `/khs-file/${r.handle}`
       return { url, kind }
     } catch {

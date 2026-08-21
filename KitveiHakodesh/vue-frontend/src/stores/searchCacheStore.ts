@@ -101,7 +101,13 @@ async function evictIfNeeded(key: string): Promise<void> {
   if (without.length < MAX) return
   // Evict the least-recently-used entry (first element)
   const evictKey = without.shift()!
-  const updatedDisplayLru = displayLru.slice(1)
+  // The two lists are index-parallel over the UNFILTERED lru, so the display entry to drop
+  // is the one at the evicted key's index THERE. displayLru.slice(1) is only the same thing
+  // while `key` is not itself at index 0; when it is, the two lists shift apart by one and
+  // stay that way, and getRecentQueries then shows query text belonging to another entry.
+  const evictIndex = lru.indexOf(evictKey)
+  const updatedDisplayLru =
+    evictIndex !== -1 ? displayLru.filter((_, i) => i !== evictIndex) : displayLru.slice(1)
   await Promise.all([
     deleteEntry(evictKey),
     idbSet(LRU_KEY, without),

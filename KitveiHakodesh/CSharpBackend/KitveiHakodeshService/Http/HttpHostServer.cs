@@ -34,6 +34,14 @@ public sealed class HttpHostServer(
 {
     private TcpListener? _listener;
 
+    // Loopback TCP is reachable by any local process before the bearer token is checked, so the
+    // pre-auth phase is bounded in both directions: a cap on how many sockets can sit in a handler
+    // at once, and a deadline on how long one may take to finish sending its request. Without them
+    // a single local process can hold this service (which idles at ~1 MB) open indefinitely.
+    private const int MaxConcurrentConnections = 128;
+    private const int RequestReadTimeoutMs = 15_000;
+    private int _activeConnections;
+
     // The per-instance token's UTF-8 bytes, precomputed for the fixed-time comparison below.
     private readonly byte[] _tokenBytes = Encoding.UTF8.GetBytes(state.Token);
 
@@ -69,6 +77,16 @@ public sealed class HttpHostServer(
                 catch (OperationCanceledException) { break; }
                 catch (Exception ex) { logger.LogError(ex, "HTTP accept error"); continue; }
 
+                // Refuse rather than queue when the in-flight cap is reached: the caller sees a
+                // closed connection immediately instead of us holding an unbounded backlog.
+                if (Interlocked.Increment(ref _activeConnections) > MaxConcurrentConnections)
+                {
+                    Interlocked.Decrement(ref _activeConnections);
+                    logger.LogDebug("HTTP connection refused: {Max} already in flight", MaxConcurrentConnections);
+                    try { socket.Dispose(); } catch { /* already gone */ }
+                    continue;
+                }
+
                 // Detach: one connection = one request/response, so the accept loop never blocks.
                 _ = HandleAsync(socket, stoppingToken);
             }
@@ -87,12 +105,27 @@ public sealed class HttpHostServer(
 
     private async Task HandleAsync(Socket socket, CancellationToken ct)
     {
+        try { await HandleCoreAsync(socket, ct); }
+        // Nothing here may throw past this point: the slot must come back even if the peer
+        // vanished before we could wrap the socket in a stream, or the count leaks for good.
+        catch (Exception ex) { logger.LogDebug(ex, "HTTP connection setup failed"); }
+        finally { Interlocked.Decrement(ref _activeConnections); }
+    }
+
+    private async Task HandleCoreAsync(Socket socket, CancellationToken ct)
+    {
         using (socket)
         await using (var stream = new NetworkStream(socket, ownsSocket: false))
         {
             try
             {
-                var req = await HttpProtocol.ReadRequestAsync(stream, ct);
+                // The whole request-READ phase runs under a deadline (the response phase does not:
+                // /rpc-stream legitimately stays open for a long search). A peer that sends partial
+                // headers, or dribbles a body, is cut loose instead of parking a handler forever.
+                using var readCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                readCts.CancelAfter(RequestReadTimeoutMs);
+
+                var req = await HttpProtocol.ReadHeadAsync(stream, readCts.Token);
                 if (req is null) return;
 
                 if (req.Method == "OPTIONS")
@@ -123,14 +156,18 @@ public sealed class HttpHostServer(
                     return;
                 }
 
-                // Bearer-token gate for EVERY data endpoint. Checked before the request body
-                // is even looked at, so an unauthenticated caller can neither run an op nor
-                // learn which ops exist. 401 leaks nothing (the envelope stays opaque).
+                // Bearer-token gate for EVERY data endpoint. Checked before the request body is
+                // even READ off the wire, so an unauthenticated caller can neither run an op, nor
+                // learn which ops exist, nor make us allocate its declared Content-Length.
+                // 401 leaks nothing (the envelope stays opaque).
                 if (!TokenValid(req))
                 {
                     await HttpProtocol.WriteStatusAsync(stream, 401, "Unauthorized", req.Origin, ct);
                     return;
                 }
+
+                // Authorized: now it is safe to take the body.
+                await HttpProtocol.ReadBodyAsync(req, stream, readCts.Token);
 
                 if (req.Path == "/rpc-stream")
                 {
@@ -210,7 +247,12 @@ public sealed class HttpHostServer(
         // The handle is always the first path segment (hex, no slashes).
         int slash = tail.IndexOf('/');
         string handle = slash >= 0 ? tail[..slash] : tail;
-        string relativePath = slash >= 0 ? tail[(slash + 1)..] : "";
+        // The relative path arrives percent-encoded (a browser encodes spaces and any non-ASCII
+        // in a sibling asset's filename - the common case for the Otzaria addin pages this grant
+        // exists for), and the request line was read as ASCII. Decode before touching the disk,
+        // or those assets 404 on a name that never existed. Traversal introduced by decoding is
+        // still caught downstream: TryResolveFolder re-canonicalizes and enforces the root.
+        string relativePath = slash >= 0 ? UnescapePath(tail[(slash + 1)..]) : "";
 
         string path;
         if (!string.IsNullOrEmpty(relativePath))
@@ -264,6 +306,15 @@ public sealed class HttpHostServer(
                 await CopyExactAsync(fs, stream, length, ct);
             }
         }
+    }
+
+    /// <summary>Percent-decode one URL path (UTF-8 escapes). Malformed input is served as-is so a
+    /// weird name is a 404 rather than an exception.</summary>
+    private static string UnescapePath(string path)
+    {
+        if (!path.Contains('%')) return path;
+        try { return Uri.UnescapeDataString(path); }
+        catch { return path; }
     }
 
     private static async Task CopyExactAsync(Stream src, Stream dst, long count, CancellationToken ct)

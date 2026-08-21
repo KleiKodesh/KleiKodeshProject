@@ -54,7 +54,18 @@ export function usePinnedCommentary(
 ) {
   const pinnedCommentaryGroup = ref<PinnedCommentaryGroup | null>(null)
   let defaultCommentatorBookIds: number[] = []
-  let defaultCommentatorsLoaded = false
+  // The in-flight (or settled) load, NOT a boolean latch. A flag set before the await let a
+  // second caller return immediately with defaultCommentatorBookIds still empty, and the
+  // groups watcher then bailed on its `!length` guard — the first line selection in a book
+  // could end up with the panel unpinned and unlabelled.
+  let defaultCommentatorsLoad: Promise<void> | null = null
+  // One generation counter PER watcher (never shared — a groups fire must not cancel an
+  // in-flight line-selection callback, which is what decides the default pin). A callback
+  // that resumes after its await checks it is still the latest of its own kind before
+  // writing the pin, so two rapid line selections cannot let the older callback land last
+  // and pin the previous line's commentator.
+  let lineGeneration = 0
+  let groupsGeneration = 0
   // Set to true when the pin is restored from session so the first commentaryLineId
   // watcher fire doesn't overwrite it before the view has rendered.
   let restoredFromSession = false
@@ -62,10 +73,14 @@ export function usePinnedCommentary(
   // before any reactive state changes. Applied by the commentaryLineId watcher.
   let pendingPin: PinnedCommentaryGroup | null = null
 
-  async function ensureDefaultCommentatorsLoaded() {
-    if (defaultCommentatorsLoaded || bookId == null) return
-    defaultCommentatorsLoaded = true
-    defaultCommentatorBookIds = await loadDefaultCommentatorIds(bookId).catch(() => [])
+  function ensureDefaultCommentatorsLoaded(): Promise<void> {
+    if (bookId == null) return Promise.resolve()
+    defaultCommentatorsLoad ??= loadDefaultCommentatorIds(bookId)
+      .catch(() => [])
+      .then((ids) => {
+        defaultCommentatorBookIds = ids
+      })
+    return defaultCommentatorsLoad
   }
 
   /**
@@ -91,7 +106,9 @@ export function usePinnedCommentary(
     }
     const captured = pendingPin
     pendingPin = null
+    const mine = ++lineGeneration
     await ensureDefaultCommentatorsLoaded()
+    if (mine !== lineGeneration) return // a newer line selection owns the pin now
     if (captured) {
       pinnedCommentaryGroup.value = captured
       return
@@ -115,9 +132,13 @@ export function usePinnedCommentary(
   //   refresh the pin with the real sectionLabel/subSectionLabel from the loaded group.
   // - If the current pin is a default that has no links for this line, fall back to the
   //   next default that does.
-  watch(groups, async (newGroups) => {
-    if (!newGroups.length) return
+  watch(groups, async () => {
+    const mine = ++groupsGeneration
     await ensureDefaultCommentatorsLoaded()
+    if (mine !== groupsGeneration) return // superseded while the defaults loaded
+    // Re-read live: the argument captured before the await can be a previous line's groups.
+    const newGroups = groups()
+    if (!newGroups.length) return
     if (!defaultCommentatorBookIds.length) return
     const currentPin = pinnedCommentaryGroup.value
     if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin.bookId)) return

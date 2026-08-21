@@ -178,29 +178,41 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     {
         _ = Task.Run(() =>
         {
-            Task? build;
-            lock (_lock)
-            {
-                _buildCts?.Cancel();
-                build = _buildTask;
-            }
-            try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancelled */ }
-
-            lock (_lock)
-            {
-                _index?.Dispose();
-                _index = null;
-                try { if (Directory.Exists(_indexPath)) Directory.Delete(_indexPath, recursive: true); }
-                catch (Exception ex) { logger.LogError(ex, "catalog TOC index reset: delete failed"); }
-                _isReady = false;
-                _isIndexing = false;
-                _buildStarted = false;
-                _buildTask = null;
-                _buildCts = null;
-            }
-            logger.LogInformation("catalog TOC index reset — rebuilding");
-            EnsureIndex();
+            // Fire-and-forget: without this catch a failure is an unobserved task exception and
+            // the reset silently half-completes (index disposed, nothing rebuilding).
+            try { ResetIndexCore(); }
+            catch (Exception ex) { logger.LogError(ex, "catalog TOC index reset failed"); }
         });
+    }
+
+    private void ResetIndexCore()
+    {
+        Task? build;
+        lock (_lock)
+        {
+            _buildCts?.Cancel();
+            build = _buildTask;
+        }
+        try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancelled */ }
+
+        // Searches run outside _lock, so cancel the in-flight one BEFORE disposing the
+        // index it is reading; a query that still lands mid-dispose comes back Superseded.
+        Interlocked.Exchange(ref _searchCts, null)?.Cancel();
+
+        lock (_lock)
+        {
+            _index?.Dispose();
+            _index = null;
+            try { if (Directory.Exists(_indexPath)) Directory.Delete(_indexPath, recursive: true); }
+            catch (Exception ex) { logger.LogError(ex, "catalog TOC index reset: delete failed"); }
+            _isReady = false;
+            _isIndexing = false;
+            _buildStarted = false;
+            _buildTask = null;
+            _buildCts = null;
+        }
+        logger.LogInformation("catalog TOC index reset — rebuilding");
+        EnsureIndex();
     }
 
     /// <summary>Graceful shutdown: cancel the in-flight build and wait for it to unwind
@@ -269,6 +281,17 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         catch (OperationCanceledException)
         {
             result.Superseded = true;   // a newer search took over — caller discards this
+        }
+        catch (Exception ex) when (ex is ObjectDisposedException
+                                      or DirectoryNotFoundException
+                                      or FileNotFoundException)
+        {
+            // ResetIndex ran under us: it disposes the index (searches are cancelled first, but
+            // the last stretch of a query is not inside a lock) and deletes the directory the
+            // reader's files live in. Neither is a search failure — same contract as a
+            // supersede: the caller discards this and the rebuild serves the next one. Reported
+            // as an error instead, the UI showed "no results" for a perfectly good query.
+            result.Superseded = true;
         }
         catch (Exception ex)
         {
