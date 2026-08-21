@@ -10,7 +10,9 @@ import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { escapeHtml, htmlToText } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
+import { buildLineLink } from './useBookViewLineLink'
 import {
+  appLinkHtml,
   applyWordLinkExport,
   buildWordLinkEndnotesHtml,
   stripWordLinkMarkers,
@@ -31,6 +33,8 @@ interface CopyMenuOptions {
   isSelectAll: Ref<boolean>
   selectAllInContainer: () => void
   bookTitle: string
+  /** The open book — lets the מקור reference link back to the line it names. */
+  bookId?: number
   tabStore: TabStore
   paneNavigation?: PaneNavigation
   getActiveTocEntry?: (lineIndex: number) => TocEntry | null
@@ -309,6 +313,18 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   }
 
   /**
+   * The same reference as HTML, linked back to the exact line it describes — the
+   * reader of a pasted quote can get to its place in the app, and the reference
+   * still reads as plain text everywhere a link means nothing. Falls back to escaped
+   * text when there is no line to point at (nothing resolved a first line index).
+   */
+  function buildSourceHtml(firstLineIndex: number | null, includeComma: boolean = true): string {
+    const source = buildSource(firstLineIndex, includeComma)
+    if (options.bookId == null || options.bookId <= 0 || firstLineIndex == null || firstLineIndex < 0) return escapeHtml(source)
+    return appLinkHtml(source, buildLineLink(options.bookId, firstLineIndex))
+  }
+
+  /**
    * Builds the final HTML for the current selection applying all active copy flags.
    * Returns null when there is no selection.
    * See the copy flag semantics block above for a full description of each flag.
@@ -424,11 +440,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     const position = settingsStore.copySourcePosition
     if (!settingsStore.copyAsSourceWithQuotation) {
       if (position === 'start') {
-        const source = buildSource(firstLineIndex, false)
-        html = `<h2 dir="rtl">${source}</h2>${html}`
+        html = `<h2 dir="rtl">${buildSourceHtml(firstLineIndex, false)}</h2>${html}`
       } else if (position === 'end') {
-        const source = buildSource(firstLineIndex, true)
-        html = `${html} (${source})`
+        html = `${html} (${buildSourceHtml(firstLineIndex, true)})`
       }
     }
 
@@ -439,7 +453,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     // collects the full line content into one inline paragraph regardless of the
     // copyJoinLines setting.
     if (settingsStore.copyAsSourceWithQuotation) {
-      const source = buildSource(firstLineIndex, true)
       // Collect full line content. If copyJoinLines already ran, html is a single
       // <div> — strip note markers, div tags, then join. Otherwise re-collect via extractSelection.
       let inlineText: string
@@ -453,8 +466,9 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
-      // escaped (and not double-encoded). source is plain text from buildSource.
-      const src = escapeHtml(source)
+      // escaped (and not double-encoded). The source is escaped inside
+      // buildSourceHtml, which also links it to the line it names.
+      const src = buildSourceHtml(firstLineIndex, true)
       const quote = escapeHtml(htmlToText(inlineText))
       const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
       // <span>, not <div>: quotation mode is a single inline run by design, so it

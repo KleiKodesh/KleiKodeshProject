@@ -189,6 +189,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   isSelectAll,
   selectAllInContainer,
   bookTitle,
+  bookId,
   tabStore,
   paneNavigation,
   getActiveTocEntry: props.getActiveTocEntry,

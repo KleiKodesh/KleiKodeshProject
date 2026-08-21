@@ -1,7 +1,9 @@
 import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
+import { buildLineLink } from '../lines/useBookViewLineLink'
 import {
+  appLinkHtml,
   applyWordLinkExport,
   buildWordLinkEndnotesHtml,
   stripWordLinkMarkers,
@@ -27,6 +29,8 @@ type CommentaryGroupRef = {
   bookId: number
   sectionLabel?: string
   subSectionLabel?: string
+  /** Positional index of the group's first line — the target its מקור link points at. */
+  lines?: ReadonlyArray<{ lineIndex: number }>
 }
 
 export function useCommentaryCopy(
@@ -94,6 +98,22 @@ export function useCommentaryCopy(
     // separators to a single space. Not a document format used in the sources.
     const flatPath = tocPath?.replace(/\s*\/\s*/g, ' ')
     return flatPath ? `${cleanTitle}, ${flatPath}` : cleanTitle
+  }
+
+  /**
+   * The same reference as HTML, linked back into the app — the reader of a pasted
+   * quote can reach its place, and it still reads as plain text where a link means
+   * nothing. The target is the group's first line, the same place the app itself
+   * opens when you pick that commentary, which is exactly what the reference names.
+   * Falls back to escaped text when the group carries no line to point at.
+   */
+  function buildCommentarySourceHtml(group: CommentaryGroupRef, tocPath?: string): string {
+    const source = buildCommentarySource(group.bookTitle, tocPath)
+    const lineIndex = group.lines?.[0]?.lineIndex
+    // lineIndex < 0 is real: a group with no text for the current line carries a -1
+    // placeholder line, which would otherwise link to "?index=-1".
+    if (group.bookId <= 0 || lineIndex == null || lineIndex < 0) return escapeHtml(source)
+    return appLinkHtml(source, buildLineLink(group.bookId, lineIndex))
   }
 
   // ── Selection extraction (for highlight/note offset tracking) ───────────────
@@ -350,8 +370,7 @@ export function useCommentaryCopy(
     if (!settingsStore.copyAsSourceWithQuotation && (position === 'start' || position === 'end')) {
       const activeGroup = getActiveGroup()
       if (activeGroup) {
-        const tocPath = getTocPath(activeGroup)
-        const source = buildCommentarySource(activeGroup.bookTitle, tocPath)
+        const source = buildCommentarySourceHtml(activeGroup, getTocPath(activeGroup))
         if (position === 'start') {
           html = `<h2 dir="rtl">${source}</h2>${html}`
         } else {
@@ -368,9 +387,8 @@ export function useCommentaryCopy(
     // copyJoinLines setting.
     if (settingsStore.copyAsSourceWithQuotation) {
       const activeGroup = getActiveGroup()
-      const source = activeGroup
-        ? buildCommentarySource(activeGroup.bookTitle, getTocPath(activeGroup))
-        : ''
+      // Already escaped (and linked) — unlike the quote, which is escaped below.
+      const source = activeGroup ? buildCommentarySourceHtml(activeGroup, getTocPath(activeGroup)) : ''
       // Collect full line content into one inline run. On the select-all path (or
       // when copyJoinLines already ran), `html` already holds the complete content
       // from the model — use it directly rather than re-collecting from the DOM,
@@ -396,8 +414,9 @@ export function useCommentaryCopy(
       if (settingsStore.copyCleanText) inlineText = cleanHebrewText(inlineText)
       // Decode any surviving HTML entities to real text, then escape once — the
       // clipboard writer treats the return value as HTML, so bare </>/& must be
-      // escaped (and not double-encoded). source is plain text from buildCommentarySource.
-      const src = escapeHtml(source)
+      // escaped (and not double-encoded). The source arrives already escaped from
+      // buildCommentarySourceHtml, which also links it.
+      const src = source
       const quote = escapeHtml(htmlToText(inlineText))
       const body = position === 'end' ? `"${quote}" (${src})` : `(${src}) "${quote}"`
       // <span>, not <div>: quotation mode is a single inline run by design, so it
