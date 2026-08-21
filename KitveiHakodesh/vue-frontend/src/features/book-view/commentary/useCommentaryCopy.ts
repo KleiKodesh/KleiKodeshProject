@@ -21,6 +21,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { triggerCopy } from '@/composables/useLineCopy'
+import { awaitWithinActivationWindow } from '@/utils/clipboard'
 
 /** The bits of a CommentaryGroup this composable needs: a title to cite, plus
  *  enough identity to look its TOC path up. */
@@ -455,8 +456,16 @@ export function useCommentaryCopy(
         // Select-all builds from the model, so re-rendering during the await is
         // harmless there; a live selection must not be re-rendered out from under
         // itself, hence the narrower branch. See useCopyExportData.
-        if (isSelectAll?.value) await exportData.prepareForLines(exportData.getAllLineIds())
-        else await exportData.prepareForRenderedHtml(selectionHtml())
+        // Bounded by the clipboard's activation window, not just by "each branch is
+        // small": a cold service or a hosted bridge can make either branch slow enough
+        // that execCommand('copy') is a no-op by the time it runs, and the Ctrl+C keydown
+        // was already preventDefault()ed - so a slow warm-up meant copying NOTHING. Past
+        // the budget the copy goes ahead with whatever has arrived; the load keeps running
+        // and the next copy has it all.
+        const prepared = isSelectAll?.value
+          ? exportData.prepareForLines(exportData.getAllLineIds())
+          : exportData.prepareForRenderedHtml(selectionHtml())
+        await awaitWithinActivationWindow(prepared)
       } catch { /* export degrades; proceed */ }
     }
     triggerCopy(afterCopy)
