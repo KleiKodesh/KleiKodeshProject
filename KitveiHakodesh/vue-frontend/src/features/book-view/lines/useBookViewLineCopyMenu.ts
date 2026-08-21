@@ -24,6 +24,7 @@ import type { WordLinkTarget } from './wordLinkAnchors'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 import { triggerCopy } from '@/composables/useLineCopy'
+import { awaitWithinActivationWindow } from '@/utils/clipboard'
 
 type TabStore = ReturnType<typeof useTabStore>
 
@@ -507,8 +508,16 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         // Select-all builds from the model, so re-rendering during the await is
         // harmless there; a live selection must not be re-rendered out from under
         // itself, hence the narrower branch. See useCopyExportData.
-        if (isSelectAll.value) await options.prepareForLines?.(lines().map((l) => l.id))
-        else await options.prepareForRenderedHtml?.(selectionHtml())
+        // Bounded by the clipboard's activation window, not just by "each branch is
+        // small": a cold service or a hosted bridge can make either branch slow enough
+        // that execCommand('copy') is a no-op by the time it runs, and the Ctrl+C keydown
+        // was already preventDefault()ed - so a slow warm-up meant copying NOTHING. Past
+        // the budget the copy goes ahead with whatever has arrived; the load keeps running
+        // and the next copy has it all.
+        const prepared = isSelectAll.value
+          ? options.prepareForLines?.(lines().map((l) => l.id))
+          : options.prepareForRenderedHtml?.(selectionHtml())
+        if (prepared) await awaitWithinActivationWindow(prepared)
       } catch { /* export degrades; proceed */ }
     }
     triggerCopy(afterCopy)
