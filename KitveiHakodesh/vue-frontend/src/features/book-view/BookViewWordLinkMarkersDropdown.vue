@@ -1,13 +1,17 @@
 <script setup lang="ts">
 /**
  * Word-link marker visibility dropdown in the BookView toolbar: one checkbox per
- * marker commentary of the current book (fetched lazily on first open per book),
- * plus an all/none master row. Hidden commentaries persist globally
- * (settingsStore.hiddenWordLinkMarkerBookIds) — hiding one hides its markers in
- * every book. The hiding itself is a stylesheet injected by the settings store,
- * so toggling never re-splices already-rendered lines.
+ * marker commentary of the current book, plus an all/none master row. Hidden
+ * commentaries persist globally (settingsStore.hiddenWordLinkMarkerBookIds) —
+ * hiding one hides its markers in every book. The hiding itself is a stylesheet
+ * injected by the settings store, so toggling never re-splices rendered lines.
+ *
+ * The control exists only where it does something: most books cite nothing with a
+ * marker, and a dropdown that can only say "none" is worse than no button. Deciding
+ * that needs the list, so it is fetched once per book in the background after mount
+ * — one indexed query, off the render path, the same one an open would have run.
  */
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import { IconLink20Regular, IconLinkDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -42,9 +46,18 @@ function toggleOpen() {
 watch(
   () => props.bookId,
   () => {
+    // Clear before refetching: an empty list hides the button, which is the honest
+    // state for a book whose citations are not known yet — showing the previous
+    // book's commentaries for a moment would not be.
     isOpen.value = false
+    loaded.value = false
+    loadedForBookId.value = null
+    commentaries.value = []
+    void load()
   },
 )
+
+onMounted(() => void load())
 
 // ── The book's marker commentaries — lazy, once per book ────────────────────
 
@@ -57,29 +70,43 @@ const commentaries = ref<MarkerCommentary[]>([])
 const loaded = ref(false)
 const loadedForBookId = ref<number | null>(null)
 
-async function load() {
+/**
+ * A transient failure now has to be retried from here. The button is absent until
+ * the list arrives, so there is no longer a re-open to piggyback a retry on — and
+ * without one, a single hiccup would silently cost the reader the control for the
+ * rest of the session. Bounded, because a DB that is still failing after a few
+ * seconds is not going to be fixed by asking again.
+ */
+const RETRY_DELAYS_MS = [400, 1500, 4000]
+
+async function load(attempt = 0) {
   const bookId = props.bookId
   if (bookId == null) return
   if (loaded.value && loadedForBookId.value === bookId) return
-  loaded.value = false
   let targets: Awaited<ReturnType<typeof getWordLinkTargetsForBook>> = null
   try {
     targets = await getWordLinkTargetsForBook(bookId)
   } catch {
-    targets = null // dev service transport error — same retry treatment as a null result
+    targets = null // dev service transport error — same treatment as a null result
   }
   // The tab's book switched while the fetch ran — this result belongs to the old book.
   if (props.bookId !== bookId) return
-  const ids = [...new Set((targets ?? []).map((t) => t.targetBookId))]
+  if (targets == null) {
+    // Leave the book unstamped so a later attempt refetches rather than trusting
+    // an empty answer, and schedule that attempt.
+    loadedForBookId.value = null
+    const delay = RETRY_DELAYS_MS[attempt]
+    if (delay != null) setTimeout(() => void load(attempt + 1), delay)
+    return
+  }
+  const ids = [...new Set(targets.map((t) => t.targetBookId))]
   commentaries.value = ids
     .map((id) => ({
       bookId: id,
       title: booksDataStore.allBooksMap.get(id)?.title ?? `#${id}`,
     }))
     .sort((a, b) => a.title.localeCompare(b.title, 'he'))
-  // null = transient failure: render what we have, but leave the book unstamped so
-  // the next open refetches instead of trusting an empty answer.
-  loadedForBookId.value = targets == null ? null : bookId
+  loadedForBookId.value = bookId
   loaded.value = true
 }
 
@@ -112,9 +139,10 @@ function toggleAll() {
 </script>
 
 <template>
-  <!-- Absent entirely (not just disabled) until the DB is known to support word-link
-       anchors — schema-v1 users never see a control for a subsystem they don't have. -->
-  <div v-if="wordLinkAnchorsSupported" class="wl-markers-wrapper">
+  <!-- Absent entirely (not just disabled) unless this book actually has marker
+       citations to filter: schema-v1 users never see a control for a subsystem they
+       don't have, and neither does anyone reading a book that cites nothing. -->
+  <div v-if="wordLinkAnchorsSupported && commentaries.length > 0" class="wl-markers-wrapper">
     <button
       ref="toggleButtonRef"
       :class="{ active: isOpen || anyHiddenGlobally }"
@@ -126,8 +154,9 @@ function toggleAll() {
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="wl-markers-dropdown" :class="`dropdown-${toolbarPosition}`">
+      <!-- Only reachable while a retry after a failed load is in flight — the button
+           itself does not exist until the list has arrived and is non-empty. -->
       <div v-if="!loaded" class="state-message">טוען...</div>
-      <div v-else-if="commentaries.length === 0" class="state-message">אין ציוני מפרשים</div>
       <template v-else>
         <label class="marker-row all-row">
           <input
