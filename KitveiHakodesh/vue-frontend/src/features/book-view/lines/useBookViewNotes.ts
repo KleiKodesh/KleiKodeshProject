@@ -15,7 +15,7 @@
  * Mutations (create / update / delete) are immediate — they always write to the DB
  * and update the in-memory map synchronously from the caller's perspective.
  */
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import { queryUserSettings, executeUserSettings } from '@/webview-host/userSettingsDb'
 import { USER_SETTINGS_SQL } from '@/webview-host/userSettingsDb.sql'
 
@@ -49,6 +49,15 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
   // able to await the data needs the promise, not just the flag.
   const inFlight = new Map<number, Promise<void>>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  // A select-all warm-up walks the WHOLE book in sequential chunks. Nothing about closing
+  // the tab stops that on its own, so the chunk loop checks this between chunks and the
+  // pending debounce is dropped outright.
+  let disposed = false
+  onScopeDispose(() => {
+    disposed = true
+    if (debounceTimer !== null) clearTimeout(debounceTimer)
+    debounceTimer = null
+  })
 
   /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
   function track(ids: number[], work: Promise<void>): Promise<void> {
@@ -125,11 +134,20 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
     const waits = [...new Set(ids.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
     const pending = ids.filter((id) => !loadedLineIds.has(id))
     for (const id of pending) loadedLineIds.add(id)
-    await Promise.all(waits)
-    for (let i = 0; i < pending.length; i += LOAD_CHUNK) {
-      const chunk = pending.slice(i, i + LOAD_CHUNK)
-      await track(chunk, _loadForLines(chunk))
-    }
+
+    // Register the WHOLE pending set against ONE promise covering every chunk, before the
+    // first await. Marking `loadedLineIds` per id but `inFlight` per chunk let a second
+    // caller compute an empty `pending`, wait only on the chunk that happened to be in
+    // flight, and return while chunks 2..N were still unloaded — an export of a book over
+    // one chunk then wrote most of its lines with no notes at all.
+    const whole = (async () => {
+      await Promise.all(waits)
+      for (let i = 0; i < pending.length; i += LOAD_CHUNK) {
+        if (disposed) return
+        await _loadForLines(pending.slice(i, i + LOAD_CHUNK))
+      }
+    })()
+    await track(pending, whole)
   }
 
   // Watch visible lineIds and schedule a load whenever the set changes

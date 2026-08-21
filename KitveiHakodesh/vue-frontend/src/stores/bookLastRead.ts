@@ -1,4 +1,4 @@
-import { dbGet, dbSet, dbDelete, dbHasKey, dbCount, dbListKeys } from '@/utils/persistence'
+import { dbGet, dbSet, dbDelete, dbHasKey, dbCount, dbListEntries } from '@/utils/persistence'
 
 /**
  * The `app-lastread` slice of persistence — where the reader last was in a book.
@@ -27,6 +27,13 @@ export interface LastReadState {
   commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
   /** The TOC side panel, so reopening a book restores the panel too. */
   toc?: import('@/features/book-view/bookViewTypes').TocPersistState
+  /**
+   * When this position was last written. The on-disk cap evicts by it — without a
+   * timestamp the only order available is the key cursor's (lexicographic by book id),
+   * which would drop whichever books happen to sort lowest, not the stale ones.
+   * Absent on entries written before this field existed; those evict first.
+   */
+  savedAt?: number
 }
 
 // ── On-disk store (LRU-capped) ────────────────────────────────────────────────
@@ -48,7 +55,7 @@ async function writeLastRead(bookId: number, value: LastReadState): Promise<void
   // Check if this key already exists — if so, the count stays the same
   const existing = await dbHasKey(LASTREAD_DB, key)
 
-  await dbSet(LASTREAD_DB, key, value)
+  await dbSet(LASTREAD_DB, key, { ...value, savedAt: Date.now() })
 
   if (!existing) {
     if (diskCount === -1) {
@@ -61,8 +68,13 @@ async function writeLastRead(bookId: number, value: LastReadState): Promise<void
 
   if (diskCount <= DISK_MAX) return
 
-  // Over the cap — evict the oldest entries (only runs when the cap is exceeded)
-  const keysToDelete = await dbListKeys(LASTREAD_DB, diskCount - DISK_MAX)
+  // Over the cap — evict the LEAST RECENTLY SAVED entries. Reading every value is only
+  // paid on the write that crosses the cap, and ranking demands the values: key order is
+  // lexicographic, so evicting by it would delete the lowest-sorting book ids (very
+  // possibly the ones being read right now) and keep whatever sorts high.
+  const entries = await dbListEntries<LastReadState>(LASTREAD_DB)
+  entries.sort((a, b) => (a[1]?.savedAt ?? 0) - (b[1]?.savedAt ?? 0))
+  const keysToDelete = entries.slice(0, diskCount - DISK_MAX).map(([k]) => k)
   await Promise.all(keysToDelete.map((k) => dbDelete(LASTREAD_DB, k)))
   diskCount -= keysToDelete.length
 }

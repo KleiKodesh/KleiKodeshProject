@@ -67,6 +67,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             try
             {
                 string bookId      = root.GetProperty("bookId").GetString();
+                if (!IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
                 string bookTitle   = root.GetProperty("bookTitle").GetString();
                 string tabId       = root.GetProperty("tabId").GetString();
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
@@ -102,6 +103,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string bookTitle   = root.GetProperty("bookTitle").GetString();
                 string url         = root.GetProperty("url").GetString();
                 string tabId       = root.GetProperty("tabId").GetString();
+                if (!IsValidBookId(bookId)) { _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId, notFound = true }); return; }
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
                 // Fall back to registry-configured folder when frontend sends nothing.
                 if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
@@ -159,7 +161,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                     foreach (var element in bookIds.EnumerateArray())
                     {
                         string bookId = element.GetString();
-                        if (string.IsNullOrEmpty(bookId)) continue;
+                        if (!IsValidBookId(bookId)) continue;
                         try
                         {
                             if (File.Exists(Path.Combine(localFolder, bookId + ".pdf")))
@@ -184,6 +186,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             try
             {
                 string bookId      = root.GetProperty("bookId").GetString();
+                if (!IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
                 if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
 
@@ -214,6 +217,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string bookId    = root.GetProperty("bookId").GetString();
                 string bookTitle = root.GetProperty("bookTitle").GetString();
                 string url       = root.GetProperty("url").GetString();
+                if (!IsValidBookId(bookId)) return;
 
                 _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle };
                 NavigateSafe(url);
@@ -328,6 +332,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             try
             {
                 string bookId      = root.GetProperty("bookId").GetString();
+                if (!IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
                 if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
 
@@ -350,6 +355,19 @@ namespace KitveiHakodeshLib.HebrewBooks
                 _bridge.Reply(id, new { ok = true });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+        }
+
+        /// <summary>
+        /// Book ids are numeric on hebrewbooks.org. Anything else could steer the download URL
+        /// or escape the folder we build the {id}.pdf filename in, so it never gets that far.
+        /// Same guard as the service's HebrewBooksService.IsValidBookId - the two legs must
+        /// agree on what a book id is.
+        /// </summary>
+        private static bool IsValidBookId(string bookId)
+        {
+            if (string.IsNullOrWhiteSpace(bookId)) return false;
+            foreach (char c in bookId) if (c < '0' || c > '9') return false;
+            return true;
         }
 
         /// <summary>

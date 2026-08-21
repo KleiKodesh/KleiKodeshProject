@@ -187,6 +187,35 @@ const TRANSIENT_FIELDS = [
   'localFileDownloadProgress',
 ] as const satisfies readonly (keyof Tab)[]
 
+/**
+ * The persisted fields the save watcher TRACKS, and the ONLY list that has to be kept in
+ * step by hand. It is deliberately narrower than "everything except TRANSIENT_FIELDS":
+ * reading a whole tab would also track the live handles above, so a save would fire on
+ * every download-progress tick. The cost of the narrowing is that a persisted field left
+ * out of it never triggers a save at all - which is exactly what happened to
+ * pdfViewerTitleBarVisible, catalogQuery and the three page search queries. persistTabs
+ * asserts the list is complete in dev.
+ */
+const WATCHED_FIELDS = [
+  'id',
+  'title',
+  'route',
+  'pane',
+  'localFileName',
+  'localFilePath',
+  'localFileHbBookId',
+  'localFileHbBookTitle',
+  'pdfViewerTitleBarVisible',
+  'isOtzariaAddin',
+  'bookId',
+  'searchQuery',
+  'catalogQuery',
+  'booksSearchQuery',
+  'hebrewBooksSearchQuery',
+  'fileSearchQuery',
+  'tocPath',
+] as const satisfies readonly (keyof Tab)[]
+
 /** Drops every field that must not outlive the process. */
 function withoutTransientFields(tab: Tab): Tab {
   const copy = { ...tab }
@@ -206,6 +235,24 @@ interface PersistedTabList {
 }
 
 const DEFAULT_TAB: Tab = { id: '1', title: 'בית', route: '/' }
+
+/**
+ * Dev guard for the one list that must be maintained by hand: anything that survives
+ * withoutTransientFields but is missing from WATCHED_FIELDS is a field that persists yet
+ * never triggers a save. Warns once per field name.
+ */
+const unwatchedWarned = new Set<string>()
+
+function assertWatched(saved: Tab): void {
+  for (const key of Object.keys(saved)) {
+    if ((WATCHED_FIELDS as readonly string[]).includes(key)) continue
+    if (unwatchedWarned.has(key)) continue
+    unwatchedWarned.add(key)
+    console.warn(
+      `[tabStore] persisted tab field '${key}' is not in WATCHED_FIELDS - changing it alone will not save the tab list`,
+    )
+  }
+}
 
 export const useTabStore = defineStore('tabs', () => {
   const tabs = ref<Tab[]>([DEFAULT_TAB])
@@ -329,7 +376,10 @@ export const useTabStore = defineStore('tabs', () => {
     const wsId = useWorkspaceStore().activeId
     const persistable = tabs.value.filter((t) => !DESTINATION_ROUTES.includes(t.route))
     lsSet<PersistedTabList>(tabsListKey(wsId), {
-      tabs: persistable.map(withoutTransientFields),
+      tabs: persistable.map(withoutTransientFields).map((t) => {
+        if (import.meta.env.DEV) assertWatched(t)
+        return t
+      }),
       activeTabId: persistable.some((t) => t.id === activeTabId.value)
         ? activeTabId.value
         // Fallback must prefer a pane-1 tab: restoring a pane-2 id as pane 1's
@@ -528,21 +578,16 @@ export const useTabStore = defineStore('tabs', () => {
 
   // Only watch the fields that are actually persisted — avoids IDB writes on every
   // in-memory-only mutation (pdfVirtualUrl, pdfConverting, etc.)
+  // Hand-listed on purpose (tracking every field would save on live handles like
+  // localFileDownloadProgress), which makes it the one place that can silently drift
+  // from what withoutTransientFields actually writes: pdfViewerTitleBarVisible, the
+  // three page search queries and catalogQuery were all missing here, so changing them
+  // never woke the watcher and they were lost on exit. Any NEW persisted Tab field must
+  // be added here too - the dev assertion in persistTabs shouts if one is forgotten.
   const _persistedSnapshot = computed(() =>
     tabs.value
       .filter((t) => !DESTINATION_ROUTES.includes(t.route))
-      .map((t) => ({
-        id: t.id,
-        title: t.title,
-        route: t.route,
-        localFileName: t.localFileName,
-        localFilePath: t.localFilePath,
-        localFileHbBookId: t.localFileHbBookId,
-        localFileHbBookTitle: t.localFileHbBookTitle,
-        bookId: t.bookId,
-        searchQuery: t.searchQuery,
-        tocPath: t.tocPath,
-      })),
+      .map((t) => WATCHED_FIELDS.map((f) => t[f])),
   )
   // accessOrder is included so a pane-2 switch (which changes neither the snapshot
   // nor activeTabId) still persists the new recency.

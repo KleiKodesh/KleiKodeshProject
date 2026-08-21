@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The shared Core library: one source tree, two legs.
+
+      net48            — consumed by KitveiHakodeshLib (WebView2 host), the Word VSTO add-in
+                         and KitveiHakodeshDemoApp. Non-negotiable: VSTO supports nothing else.
+      net10.0-windows  — consumed by KitveiHakodeshService. NOT plain net10.0: DocumentLocator's
+                         modern leg is net10.0-windows and a plain net10.0 project cannot
+                         reference it. Registry access needs Windows anyway.
+
+    Settings follow DocumentLocator.csproj, the working multi-target precedent in this repo —
+    see MIGRATION-PLAN.md "csproj pattern to copy" for why each one is here rather than default.
+  -->
+
+  <PropertyGroup>
+    <TargetFrameworks>net48;net10.0-windows</TargetFrameworks>
+    <OutputType>Library</OutputType>
+    <RootNamespace>KitveiHakodesh.Core</RootNamespace>
+    <AssemblyName>KitveiHakodesh.Core</AssemblyName>
+    <Deterministic>true</Deterministic>
+    <!-- One source tree compiles on both legs, so the language level must not drop to the
+         net48 default (C# 7.3) on one of them. -->
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Pure managed code: stay architecture-neutral even when the solution builds this
+         project under Platform=x64/x86, or a host of the other bitness loading it throws
+         BadImageFormatException. -->
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <!-- net48 lands in bin\<cfg>\net48\, net10.0-windows in bin\<cfg>\net10.0-windows\. -->
+    <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <!-- Explicit, platform-suffixed output paths. The SDK default (bin\<Platform>\<Configuration>\)
+       produced CS1566 for DocumentLocator when the solution built it per platform. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(Platform)' == 'AnyCPU'">
+    <OutputPath>bin\Release\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(Platform)' != 'AnyCPU'">
+    <OutputPath>bin\Release-$(Platform)\</OutputPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <OutputPath>bin\Debug\</OutputPath>
+  </PropertyGroup>
+
+  <!-- The Service publishes native AOT and references this leg, so ILC compiles everything in
+       it. IsAotCompatible surfaces an AOT-hostile construct as a warning HERE, at Core's own
+       build, instead of at the Service's link step. See MIGRATION-PLAN rule 0d. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
+    <IsAotCompatible>true</IsAotCompatible>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- net48 rejects the nullable annotations the modern leg is written with; keep the
+       annotation context off there rather than annotating for two dialects. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Nullable>annotations</Nullable>
+    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8605;CS8625</NoWarn>
+  </PropertyGroup>
+
+</Project>

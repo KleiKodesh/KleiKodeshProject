@@ -285,7 +285,13 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     public void ResetIndex()
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
-        _ = Task.Run(DoReset);
+        _ = Task.Run(() =>
+        {
+            // Fire-and-forget: without this catch a failure is an unobserved task exception and
+            // the reset half-completes (index dropped, nothing rebuilding) with nothing logged.
+            try { DoReset(); }
+            catch (Exception ex) { logger.LogError(ex, "FTS index reset failed"); }
+        });
     }
 
     private void DoReset()
@@ -299,8 +305,16 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         }
         try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancellation / aggregate */ }
 
-        // 2) Cancel in-flight search sessions so nothing keeps reading the old segments.
+        // 2) Cancel in-flight search sessions so nothing keeps reading the old segments, then WAIT
+        //    for them to unwind. Cancelling is not releasing: a search that is mid-fetch still
+        //    holds its lease on the segment files, and deleting the directory under it is exactly
+        //    what produces the "could not delete" path below. Every session removes itself in its
+        //    own finally, so an empty dictionary means every reader has let go.
         foreach (var kv in _sessions) kv.Value.Cts.Cancel();
+        for (int i = 0; i < 50 && !_sessions.IsEmpty; i++) Thread.Sleep(100); // bounded: up to 5s
+        if (!_sessions.IsEmpty)
+            logger.LogWarning("FTS reset: {Count} search session(s) still unwinding after 5s — deleting anyway",
+                _sessions.Count);
         _sessions.Clear();
 
         // 3) Delete the whole index directory, then reset state for a fresh build.

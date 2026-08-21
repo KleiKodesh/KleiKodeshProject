@@ -6,7 +6,7 @@
  * - When autoSelectTopLine is enabled, selects the top visible line and
  *   triggers commentary load after a short debounce.
  */
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -86,6 +86,15 @@ export function useBookViewScrollSync(
 
   watch(autoSelectTopLine, (enabled) => {
     if (!enabled && autoSelectCommentaryTimer) {
+      clearTimeout(autoSelectCommentaryTimer)
+      autoSelectCommentaryTimer = null
+    }
+  })
+
+  // The 120ms timer must not outlive the view: firing after teardown sets commentaryLineId
+  // and starts a commentary fetch for a panel that no longer exists.
+  onScopeDispose(() => {
+    if (autoSelectCommentaryTimer) {
       clearTimeout(autoSelectCommentaryTimer)
       autoSelectCommentaryTimer = null
     }

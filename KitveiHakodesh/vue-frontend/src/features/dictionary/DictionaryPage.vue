@@ -74,9 +74,15 @@ const pageData    = ref<WordPageData | null>(null)
 const searching   = ref(false)
 const noResults   = ref(false)
 const suggestions = ref<string[]>([])
+// Bumped on every lookup. A callback that resumes after one of its ~6 awaits writes nothing
+// unless it is still the latest: without this a slow earlier lookup landing after a faster
+// later one overwrote the newer word page, replaced its suggestions, and cleared the spinner
+// while the newer lookup was still running.
+let lookupGeneration = 0
 
 watch(debouncedQuery, async (q) => {
   const trimmed = q.trim()
+  const mine = ++lookupGeneration
   paneNavigation.updateActiveTab({ searchQuery: trimmed || undefined })
   if (!trimmed) {
     pageData.value = null
@@ -89,6 +95,7 @@ watch(debouncedQuery, async (q) => {
   suggestions.value = []
   try {
     const cached = await dictionaryCacheGet(trimmed)
+    if (mine !== lookupGeneration) return
     if (cached) {
       pageData.value = cached
       paneNavigation.updateActiveTab({ title: `מילון · ${trimmed}` })
@@ -134,6 +141,7 @@ watch(debouncedQuery, async (q) => {
       .slice(0, 8)
       .map(x => x.hw)
 
+    if (mine !== lookupGeneration) return
     if (!isExact) {
       // No-results bar: כתיב חסר first, Levenshtein only as fallback
       if (ketivSuggestions.length > 0) {
@@ -166,7 +174,8 @@ watch(debouncedQuery, async (q) => {
       paneNavigation.updateActiveTab({ title: `מילון · ${trimmed}` })
     }
   } finally {
-    searching.value = false
+    // Only the latest lookup owns the spinner.
+    if (mine === lookupGeneration) searching.value = false
   }
 })
 

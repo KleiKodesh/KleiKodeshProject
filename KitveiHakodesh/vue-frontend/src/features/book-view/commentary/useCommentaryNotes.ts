@@ -9,7 +9,7 @@
  *   lineIdToBookId is populated from getGroups() eagerly so createNote() knows
  *   which bookId to use before the async load completes.
  */
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import { queryUserSettings, executeUserSettings } from '@/webview-host/userSettingsDb'
 import { USER_SETTINGS_SQL } from '@/webview-host/userSettingsDb.sql'
 import type { Note } from '../lines/useBookViewNotes'
@@ -33,6 +33,15 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   // able to await the data needs the promise, not just the flag.
   const inFlight = new Map<number, Promise<void>>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  // A select-all warm-up walks EVERY commentary book in sequential chunks. Nothing about
+  // closing the panel stops that on its own, so the chunk loop checks this between chunks
+  // and the pending debounce is dropped outright.
+  let disposed = false
+  onScopeDispose(() => {
+    disposed = true
+    if (debounceTimer !== null) clearTimeout(debounceTimer)
+    debounceTimer = null
+  })
 
   /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
   function track(ids: number[], work: Promise<void>): Promise<void> {
@@ -84,10 +93,12 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
       // immediate load may have claimed some of these lines in the meantime.
       const stillPending = pending.filter((id) => !loadedLineIds.has(id))
       if (!stillPending.length) return
-      // Mark all pending lines before the async call to prevent duplicate queries
-      for (const id of stillPending) loadedLineIds.add(id)
-      // Group by commentary bookId and issue one query per book
+      // Group by commentary bookId and issue one query per book. Marking happens per
+      // GROUPED id, never over the whole input: groupByBook drops any line whose owning
+      // book is not in lineIdToBookId yet, and marking those as loaded would retire them
+      // permanently — their notes would never appear and never export.
       for (const [bookId, ids] of groupByBook(stillPending)) {
+        for (const id of ids) loadedLineIds.add(id)
         void track(ids, _loadForLines(bookId, ids))
       }
     }, 100)
@@ -145,14 +156,31 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
     // from "arrived".
     const waits = [...new Set(ids.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
     const pending = ids.filter((id) => !loadedLineIds.has(id))
-    for (const id of pending) loadedLineIds.add(id)
-    await Promise.all(waits)
-    for (const [bookId, bookIds] of groupByBook(pending)) {
-      for (let i = 0; i < bookIds.length; i += LOAD_CHUNK) {
-        const chunk = bookIds.slice(i, i + LOAD_CHUNK)
-        await track(chunk, _loadForLines(bookId, chunk))
+    // Only ids whose owning book is known can be queried; the rest stay unmarked so a
+    // later call retries them once the groups have caught up.
+    const grouped = groupByBook(pending)
+    const claimed: number[] = []
+    for (const bookIds of grouped.values()) {
+      for (const id of bookIds) {
+        loadedLineIds.add(id)
+        claimed.push(id)
       }
     }
+
+    // One promise for EVERY chunk of every book, registered against all claimed ids before
+    // the first await. Per-chunk registration let a second caller compute an empty `pending`,
+    // wait only on the chunk in flight, and return while the rest was still unloaded — an
+    // export then wrote most of its lines with no notes at all.
+    const whole = (async () => {
+      await Promise.all(waits)
+      for (const [bookId, bookIds] of grouped) {
+        for (let i = 0; i < bookIds.length; i += LOAD_CHUNK) {
+          if (disposed) return
+          await _loadForLines(bookId, bookIds.slice(i, i + LOAD_CHUNK))
+        }
+      }
+    })()
+    await track(claimed, whole)
   }
 
   // ── Per-line lookup ────────────────────────────────────────────────────────

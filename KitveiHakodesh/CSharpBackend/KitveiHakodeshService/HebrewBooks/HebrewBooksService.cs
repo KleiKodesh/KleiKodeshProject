@@ -165,7 +165,7 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
         if (string.IsNullOrWhiteSpace(bookId)) return new(null, false, "empty book id");
         // Book ids are numeric on hebrewbooks.org — reject anything else so a caller can't
         // steer the request URL or the on-disk filename.
-        foreach (char c in bookId) if (c is < '0' or > '9') return new(null, false, "invalid book id");
+        if (!IsValidBookId(bookId)) return new(null, false, "invalid book id");
 
         // 1. Local folder hit.
         string? local = LocalFolderHit(localFolder, bookId);
@@ -286,7 +286,7 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
         if (string.IsNullOrWhiteSpace(localFolder) || !Directory.Exists(localFolder)) return existing;
         foreach (string id in bookIds)
         {
-            if (string.IsNullOrEmpty(id)) continue;
+            if (!IsValidBookId(id)) continue;
             try { if (File.Exists(Path.Combine(localFolder, id + ".pdf"))) existing.Add(id); }
             catch { /* disconnected drive / permission — skip */ }
         }
@@ -296,6 +296,7 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
     /// <summary>Delete {id}.pdf from the user's local folder. Returns (ok, notFound, error).</summary>
     public (bool ok, bool notFound, string? error) DeleteLocalFile(string bookId, string? localFolder)
     {
+        if (!IsValidBookId(bookId)) return (false, false, "invalid book id");
         if (string.IsNullOrWhiteSpace(localFolder)) return (false, false, "לא הוגדרה תיקיית שמירה");
         try
         {
@@ -305,6 +306,16 @@ public sealed class HebrewBooksService(ILogger<HebrewBooksService> logger, HttpC
             return (true, false, null);
         }
         catch (Exception ex) { return (false, false, ex.Message); }
+    }
+
+    /// <summary>Book ids are numeric on hebrewbooks.org. Anything else could steer the download
+    /// URL or escape the folder we build the {id}.pdf filename in, so it never gets that far.
+    /// Every public entry point that turns a caller's id into a path or a URL goes through here.</summary>
+    private static bool IsValidBookId(string? bookId)
+    {
+        if (string.IsNullOrWhiteSpace(bookId)) return false;
+        foreach (char c in bookId) if (c is < '0' or > '9') return false;
+        return true;
     }
 
     /// <summary>Full path to {id}.pdf in the local folder if present and reachable, else null.</summary>

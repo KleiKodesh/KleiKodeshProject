@@ -72,7 +72,11 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
             {
                 logger.LogError(ex, "Pipe accept error");
                 pipe?.Dispose();
-                await Task.Delay(200, stoppingToken);
+                // Back off before re-arming, but NOT under stoppingToken: a cancel here would
+                // throw straight out of the accept loop, fault Task.WhenAll in ExecuteAsync, and
+                // turn an ordinary shutdown into a host-level failure. The while-condition
+                // already ends the loop on the next pass.
+                try { await Task.Delay(200, CancellationToken.None); } catch { /* nothing to do */ }
             }
         }
     }

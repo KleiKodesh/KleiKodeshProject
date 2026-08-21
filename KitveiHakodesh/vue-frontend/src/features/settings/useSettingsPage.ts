@@ -53,8 +53,10 @@ export function useSettings() {
     await bridgeResetCatalogTocIndex()
   }
 
-  function resetSettings() {
-    settings.reset()
+  // Awaited: reset() only clears localStorage after the persist watchers have flushed, so
+  // a caller that returned early could reload the page before the keys were gone.
+  async function resetSettings() {
+    await settings.reset()
     // Reset the title bar to light mode — settings reset implies reverting to
     // defaults, which includes light theme. setTheme(false) also saves false to
     // the registry so the next startup loads light mode correctly.

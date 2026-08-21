@@ -60,6 +60,7 @@ const heading = computed(() => {
 })
 
 const tooltipRef = ref<HTMLElement | null>(null)
+const bodyRef = ref<HTMLElement | null>(null)
 const resolvedTop = ref<number | null>(null)
 const resolvedLeft = ref<number | null>(null)
 /** Which edge faces the anchor — the gap bridge is drawn on that side. */
@@ -110,8 +111,20 @@ const style = computed(() => {
   }
 })
 
+/**
+ * True when a STATIC panel's content is taller than the panel. Such a panel cannot be
+ * scrolled — it never takes the pointer — so the overflow is faded out to read as "there
+ * is more of this note" instead of as the note's end. Measured rather than assumed: a
+ * short note must not get a faded last line.
+ */
+const clipped = ref(false)
+
 onMounted(() => {
-  nextTick(computePosition)
+  nextTick(() => {
+    computePosition()
+    const body = bodyRef.value
+    clipped.value = !props.interactive && !!body && body.scrollHeight > body.clientHeight + 1
+  })
 })
 </script>
 
@@ -120,7 +133,7 @@ onMounted(() => {
     <div
       ref="tooltipRef"
       class="word-link-tooltip"
-      :class="[`is-${placement}`, { 'is-static': !interactive }]"
+      :class="[`is-${placement}`, { 'is-static': !interactive, 'is-clipped': clipped }]"
       :style="style"
       dir="rtl"
       @mouseenter="emit('pointer-enter')"
@@ -129,7 +142,7 @@ onMounted(() => {
     >
       <div v-if="heading" class="word-link-tooltip-title">{{ heading }}</div>
       <!-- eslint-disable-next-line vue/no-v-html -->
-      <div class="word-link-tooltip-body" v-html="html" />
+      <div ref="bodyRef" class="word-link-tooltip-body" v-html="html" />
     </div>
   </Teleport>
 </template>
@@ -192,6 +205,17 @@ onMounted(() => {
 }
 .word-link-tooltip.is-static::before {
   content: none;
+}
+
+/* A preview taller than the panel cannot be scrolled — the pointer can never reach the
+   scrollbar (see is-static above), and entering the panel would end the hover anyway. So
+   don't offer one: clip, and fade the last line out so the cut is legible as "there is
+   more here" rather than as the end of the note. The full text is one click away in the
+   editable bubble. `is-clipped` is measured on mount, so a short note keeps a crisp last
+   line. */
+.word-link-tooltip.is-static.is-clipped .word-link-tooltip-body {
+  overflow: hidden;
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 1.7em), transparent 100%);
 }
 
 .word-link-tooltip-body {

@@ -11,7 +11,7 @@
  * queries, zero render-path cost (getWordLinkAnchorsForLine returns a shared empty
  * array and the renderers skip the splice entirely).
  */
-import { ref, watch } from 'vue'
+import { onScopeDispose, ref, watch } from 'vue'
 import { getWordLinkAnchorsForLines, getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
 import { buildWordLinkTreatments, type WordLinkTreatment } from './wordLinkAnchors'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
@@ -44,6 +44,15 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
   // able to await the citations needs the promise, not just the flag.
   const inFlight = new Map<number, Promise<void>>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+  // A select-all warm-up walks the WHOLE book in sequential chunks. Nothing about closing
+  // the tab stops that on its own, so the chunk loop checks this between chunks and the
+  // pending debounce is dropped outright.
+  let disposed = false
+  onScopeDispose(() => {
+    disposed = true
+    if (debounceTimer !== null) clearTimeout(debounceTimer)
+    debounceTimer = null
+  })
 
   /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
   function track(ids: number[], work: Promise<void>): Promise<void> {
@@ -146,11 +155,20 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
     const waits = [...new Set(ids.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
     const pending = ids.filter((id) => !requested.has(id))
     for (const id of pending) requested.add(id)
-    await Promise.all(waits)
-    for (let i = 0; i < pending.length; i += LOAD_CHUNK) {
-      const chunk = pending.slice(i, i + LOAD_CHUNK)
-      await track(chunk, _loadForLines(chunk))
-    }
+
+    // Register the WHOLE pending set against ONE promise covering every chunk, before the
+    // first await. Marking `requested` per id but `inFlight` per chunk let a second caller
+    // compute an empty `pending`, wait only on the chunk that happened to be in flight, and
+    // return while chunks 2..N were still unloaded — an export of a book over one chunk then
+    // wrote most of its lines with no citations at all.
+    const whole = (async () => {
+      await Promise.all(waits)
+      for (let i = 0; i < pending.length; i += LOAD_CHUNK) {
+        if (disposed) return
+        await _loadForLines(pending.slice(i, i + LOAD_CHUNK))
+      }
+    })()
+    await track(pending, whole)
   }
 
   if (getVisibleLineIds) watch(getVisibleLineIds, (ids) => scheduleLoad(ids), { immediate: true })
