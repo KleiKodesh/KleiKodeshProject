@@ -47,6 +47,18 @@ export interface WordLinkEndnote {
 /** Inline style for exported links: Word keeps the color, and no underline noise. */
 const LINK_STYLE = 'color:var(--accent-color,#0078d4);text-decoration:none'
 
+/**
+ * A reference rendered as a real link back into the app. Shared by the citation
+ * endnotes' trailing source and by the "copy with source" decoration, so a
+ * reference reads and pastes the same way wherever it came from.
+ *
+ * `text` is plain text and is escaped here — callers pass a title, not markup.
+ * `href` comes from buildLineLink, i.e. two numbers, so it needs no escaping.
+ */
+export function appLinkHtml(text: string, href: string): string {
+  return `<a href="${href}" style="${LINK_STYLE}">${escapeHtml(text)}</a>`
+}
+
 /** `'['` → `[` — inline custom properties keep their CSS quotes. */
 function unquote(value: string): string {
   const trimmed = value.trim()
@@ -160,7 +172,7 @@ export function buildWordLinkEndnotesHtml(endnotes: WordLinkEndnote[]): string {
         `<div dir="rtl" id="wlnote-${e.id}">` +
         `<a href="#wlref-${e.id}" style="${LINK_STYLE}">${escapeHtml(e.label)}</a> ` +
         `${e.html} ` +
-        `(<a href="${e.link}" style="${LINK_STYLE}">${escapeHtml(e.source)}</a>)` +
+        `(${appLinkHtml(e.source, e.link)})` +
         `</div>`,
     )
     .join('\n')
