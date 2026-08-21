@@ -53,6 +53,8 @@ interface TraceEvent {
   detail: Record<string, unknown>
 }
 
+import { copyTextToClipboard } from './clipboard'
+
 const LS_ENABLED = 'kitvei-hakodesh.debug.commentaryScrollTrace'
 const LS_EVENTS = 'kitvei-hakodesh.debug.commentaryScrollTrace.events'
 
@@ -287,7 +289,7 @@ async function copy(opts: { raw?: boolean } = {}): Promise<string> {
   flushPersisted()
   const text = serialize(opts)
   try {
-    await navigator.clipboard.writeText(text)
+    if (!(await copyTextToClipboard(text))) throw new Error('clipboard unavailable')
     return `copied ${_events.length} events to the clipboard`
   } catch {
     // eslint-disable-next-line no-console

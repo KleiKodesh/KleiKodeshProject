@@ -18,6 +18,7 @@ import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from './useBookCatalogSearch'
 import { getDiagnostics } from '@/webview-host/bridge'
+import { copyTextToClipboard } from '@/utils/clipboard'
 import type { ComponentPublicInstance } from 'vue'
 
 const paneNavigation = usePaneNavigation()
@@ -108,7 +109,7 @@ watch(error, async (msg) => {
 function copyDiagnostics() {
   if (!diagData.value) return
   const lines = Object.entries(diagData.value).map(([k, v]) => k + ': ' + v)
-  navigator.clipboard.writeText(lines.join('\n')).catch(() => {})
+  void copyTextToClipboard(lines.join('\n'))
 }
 const activeViewComponent = computed(() => {
   if (view.value === 'tree') return BookCatalogViewTree
