@@ -2,6 +2,7 @@ import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { LineItem } from './useBookViewLinesTable'
 import { showToast } from '@/composables/useToast'
+import { copyTextToClipboard } from '@/utils/clipboard'
 
 // Deep-link format for a specific line of a book:
 //   seforimapp://book/<bookId>?index=<lineIndex>
@@ -65,10 +66,10 @@ export function useBookViewLineLink(options: LineLinkOptions): { copyLineLink: (
       showToast('לא זוהתה שורה להעתקת קישור', { variant: 'error' })
       return
     }
-    navigator.clipboard.writeText(buildLineLink(options.bookId, pressedLineIndex)).then(
-      () => showToast('הקישור הועתק'),
-      () => showToast('העתקת הקישור נכשלה', { variant: 'error' }),
-    )
+    copyTextToClipboard(buildLineLink(options.bookId, pressedLineIndex)).then((copied) => {
+      if (copied) showToast('הקישור הועתק')
+      else showToast('העתקת הקישור נכשלה', { variant: 'error' })
+    })
   }
 
   return { copyLineLink }
