@@ -363,6 +363,9 @@ export function useBookView(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     getWordLinkAnchorsForLine, scheduleWordLinkAnchorsLoad,
+    prepareForLines: prepareCommentaryExportData,
+    prepareForRenderedHtml: prepareCommentaryExportTargets,
+    resolveWordLinkTarget: resolveCommentaryWordLinkTarget,
     commentaryTocPaths, buildExportHtml,
   } = useBookViewCommentaryAnnotations(
     () => annotationGroups.value,
@@ -686,6 +689,7 @@ export function useBookView(
     getHighlightsForLine, applyHighlight, clearHighlight,
     getNotesForLine, scheduleNotesLoad, createNote, updateNote, deleteNote,
     scheduleWordLinkAnchorsLoad,
+    prepareCommentaryExportData, prepareCommentaryExportTargets, resolveCommentaryWordLinkTarget,
     commentaryTocPaths,
     // export
     buildExportHtml, bookTitle,

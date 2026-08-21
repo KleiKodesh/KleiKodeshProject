@@ -17,11 +17,43 @@ import type { CommentaryGroup } from './useCommentary'
 
 type NotesByLine = Map<number, Note[]>
 
+/**
+ * Chunk size for the immediate export load. The viewport path asks for a screenful,
+ * well under SQLite's bound-parameter limit; a select-all export asks for the whole
+ * document and would blow past it in one statement.
+ */
+const LOAD_CHUNK = 400
+
 export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   const notesByLine = ref<NotesByLine>(new Map())
   const loadedLineIds = new Set<number>()
   const lineIdToBookId = new Map<number, number>()
+  // In-flight query per lineId. `loadedLineIds` is marked BEFORE a query resolves, so
+  // "already requested" does not mean "already available" — an export that must be
+  // able to await the data needs the promise, not just the flag.
+  const inFlight = new Map<number, Promise<void>>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
+  function track(ids: number[], work: Promise<void>): Promise<void> {
+    for (const id of ids) inFlight.set(id, work)
+    return work.finally(() => {
+      for (const id of ids) if (inFlight.get(id) === work) inFlight.delete(id)
+    })
+  }
+
+  /** Groups line ids by their owning commentary book — one query per book. */
+  function groupByBook(lineIds: number[]): Map<number, number[]> {
+    const byBook = new Map<number, number[]>()
+    for (const lineId of lineIds) {
+      const bookId = lineIdToBookId.get(lineId)
+      if (bookId == null) continue
+      const list = byBook.get(bookId) ?? []
+      list.push(lineId)
+      byBook.set(bookId, list)
+    }
+    return byBook
+  }
 
   // ── Keep lineIdToBookId current as groups change ──────────────────────────
 
@@ -48,19 +80,15 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
     if (debounceTimer !== null) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       debounceTimer = null
+      // Re-filter: `pending` was computed before the debounce, and an export's
+      // immediate load may have claimed some of these lines in the meantime.
+      const stillPending = pending.filter((id) => !loadedLineIds.has(id))
+      if (!stillPending.length) return
       // Mark all pending lines before the async call to prevent duplicate queries
-      for (const id of pending) loadedLineIds.add(id)
+      for (const id of stillPending) loadedLineIds.add(id)
       // Group by commentary bookId and issue one query per book
-      const byBook = new Map<number, number[]>()
-      for (const lineId of pending) {
-        const bookId = lineIdToBookId.get(lineId)
-        if (bookId == null) continue
-        const list = byBook.get(bookId) ?? []
-        list.push(lineId)
-        byBook.set(bookId, list)
-      }
-      for (const [bookId, ids] of byBook) {
-        void _loadForLines(bookId, ids)
+      for (const [bookId, ids] of groupByBook(stillPending)) {
+        void track(ids, _loadForLines(bookId, ids))
       }
     }, 100)
   }
@@ -104,6 +132,29 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
     scheduleLoad(lineIds)
   }
 
+  /**
+   * Immediate, awaitable load — for the export paths, which need the notes of every
+   * selected line (a select-all covers lines that were never rendered) and cannot
+   * wait on the scroll debounce. Same per-book grouping and skip-set as scheduleLoad,
+   * chunked because an export can ask for a whole document at once.
+   */
+  async function loadNotesForLines(lineIds: number[]): Promise<void> {
+    const ids = lineIds.filter((id) => id > 0)
+    // Work the viewport path already started for these lines: awaiting it is the
+    // whole point of this method, since the skip-set alone cannot tell "requested"
+    // from "arrived".
+    const waits = [...new Set(ids.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
+    const pending = ids.filter((id) => !loadedLineIds.has(id))
+    for (const id of pending) loadedLineIds.add(id)
+    await Promise.all(waits)
+    for (const [bookId, bookIds] of groupByBook(pending)) {
+      for (let i = 0; i < bookIds.length; i += LOAD_CHUNK) {
+        const chunk = bookIds.slice(i, i + LOAD_CHUNK)
+        await track(chunk, _loadForLines(bookId, chunk))
+      }
+    }
+  }
+
   // ── Per-line lookup ────────────────────────────────────────────────────────
 
   function getNotesForLine(lineId: number): Note[] {
@@ -114,7 +165,12 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
 
   function _addToMap(note: Note) {
     const list = notesByLine.value.get(note.lineId) ?? []
-    list.push(note)
+    // Idempotent by note id: two loads can legitimately overlap on one line (the
+    // viewport path and an export's immediate load), and a note added twice would
+    // render two markers and produce two endnotes for the same note.
+    const existing = list.findIndex((n) => n.id === note.id)
+    if (existing !== -1) list[existing] = note
+    else list.push(note)
     list.sort((a, b) => a.startOffset - b.startOffset)
     notesByLine.value.set(note.lineId, list)
   }
@@ -187,6 +243,7 @@ export function useCommentaryNotes(getGroups: () => CommentaryGroup[]) {
   return {
     getNotesForLine,
     scheduleNotesLoad,
+    loadNotesForLines,
     createNote,
     updateNote,
     deleteNote,

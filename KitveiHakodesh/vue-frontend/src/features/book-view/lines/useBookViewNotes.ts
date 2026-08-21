@@ -33,11 +33,30 @@ export interface Note {
 
 type NotesByLine = Map<number, Note[]>
 
+/**
+ * Chunk size for the immediate export load. The viewport path asks for a screenful,
+ * well under SQLite's bound-parameter limit; a select-all export asks for the whole
+ * book and would blow past it in one statement.
+ */
+const LOAD_CHUNK = 400
+
 export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number[]) {
   const notesByLine = ref<NotesByLine>(new Map())
   // lineIds for which we have already issued a DB query (success or pending)
   const loadedLineIds = new Set<number>()
+  // In-flight query per lineId. `loadedLineIds` is marked BEFORE a query resolves, so
+  // "already requested" does not mean "already available" — an export that must be
+  // able to await the data needs the promise, not just the flag.
+  const inFlight = new Map<number, Promise<void>>()
   let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+  /** Registers `work` as the in-flight load for `ids` and clears it when it settles. */
+  function track(ids: number[], work: Promise<void>): Promise<void> {
+    for (const id of ids) inFlight.set(id, work)
+    return work.finally(() => {
+      for (const id of ids) if (inFlight.get(id) === work) inFlight.delete(id)
+    })
+  }
 
   // ── Lazy load ─────────────────────────────────────────────────────────────
 
@@ -48,10 +67,14 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
     if (debounceTimer !== null) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => {
       debounceTimer = null
+      // Re-filter: `pending` was computed before the debounce, and an export's
+      // immediate load may have claimed some of these lines in the meantime.
+      const stillPending = pending.filter((id) => !loadedLineIds.has(id))
+      if (!stillPending.length) return
       // Mark all as loaded before the async call so concurrent scroll events
       // don't issue duplicate queries for the same lines
-      for (const id of pending) loadedLineIds.add(id)
-      void _loadForLines(pending)
+      for (const id of stillPending) loadedLineIds.add(id)
+      void track(stillPending, _loadForLines(stillPending))
     }, 100)
   }
 
@@ -88,6 +111,27 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
     }
   }
 
+  /**
+   * Immediate, awaitable load — for the export paths, which need the notes of every
+   * selected line (a select-all covers lines that were never rendered) and cannot
+   * wait on the scroll debounce. Skips lines already loaded or in flight, exactly
+   * like scheduleLoad, so the two paths never double-query the same line.
+   */
+  async function loadForLines(lineIds: number[]): Promise<void> {
+    const ids = lineIds.filter((id) => id > 0)
+    // Work the viewport path already started for these lines: awaiting it is the
+    // whole point of this method, since the skip-set alone cannot tell "requested"
+    // from "arrived".
+    const waits = [...new Set(ids.filter((id) => inFlight.has(id)).map((id) => inFlight.get(id)!))]
+    const pending = ids.filter((id) => !loadedLineIds.has(id))
+    for (const id of pending) loadedLineIds.add(id)
+    await Promise.all(waits)
+    for (let i = 0; i < pending.length; i += LOAD_CHUNK) {
+      const chunk = pending.slice(i, i + LOAD_CHUNK)
+      await track(chunk, _loadForLines(chunk))
+    }
+  }
+
   // Watch visible lineIds and schedule a load whenever the set changes
   watch(
     getVisibleLineIds,
@@ -105,7 +149,12 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
 
   function _addToMap(note: Note) {
     const list = notesByLine.value.get(note.lineId) ?? []
-    list.push(note)
+    // Idempotent by note id: two loads can legitimately overlap on one line (the
+    // viewport path and an export's immediate load), and a note added twice would
+    // render two markers and produce two endnotes for the same note.
+    const existing = list.findIndex((n) => n.id === note.id)
+    if (existing !== -1) list[existing] = note
+    else list.push(note)
     list.sort((a, b) => a.startOffset - b.startOffset)
     notesByLine.value.set(note.lineId, list)
   }
@@ -176,6 +225,7 @@ export function useBookViewNotes(bookId: number, getVisibleLineIds: () => number
   return {
     notesByLine,
     getNotesForLine,
+    loadNotesForLines: loadForLines,
     createNote,
     updateNote,
     deleteNote,

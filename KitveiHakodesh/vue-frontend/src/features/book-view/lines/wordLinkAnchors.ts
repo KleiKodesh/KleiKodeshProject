@@ -117,10 +117,11 @@ export function buildWordLinkTreatments(targets: WordLinkTargetRow[]): Map<numbe
  * Such a label is visually distinct as-is and must render verbatim. Bare Hebrew
  * letters and bare digits are NOT signs: every commentary numbers its notes the
  * same way, so those get the app's fallback color/shape treatment (data-wl-c).
- * A missing label (rendered as '§') is likewise identical everywhere.
+ * A missing or blank label (rendered as '§') is likewise identical everywhere — and
+ * blank must NOT count as a sign, or the marker would render as nothing at all.
  */
 export function labelCarriesOwnSign(label: string | null): boolean {
-  return label != null && !/^[א-ת0-9]+$/.test(label)
+  return label != null && label.trim() !== '' && !/^[א-ת0-9]+$/.test(label)
 }
 
 const pointTag = (a: WordLinkAnchor) => {
@@ -140,7 +141,8 @@ const pointTag = (a: WordLinkAnchor) => {
   // '§' (not '°'): the fallback glyph must stay outside the sign vocabulary real DB
   // labels use, so an app-generated mark can never be mistaken for a source edition's
   // own sign.
-  return `<sup class="word-link-marker" data-wl="${wlData(a)}" data-wl-c="${bucket}"${enc} data-wl-label="${escapeAttr(a.label ?? '§')}"></sup>`
+  const label = a.label?.trim() ? a.label : '§'
+  return `<sup class="word-link-marker" data-wl="${wlData(a)}" data-wl-c="${bucket}"${enc} data-wl-label="${escapeAttr(label)}"></sup>`
 }
 
 interface AnchorEvent {

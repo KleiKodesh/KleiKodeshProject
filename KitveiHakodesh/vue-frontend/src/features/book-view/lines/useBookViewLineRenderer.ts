@@ -334,6 +334,17 @@ export function applyUserHighlights(content: string, highlights: Highlight[]): s
 /**
  * Injects a superscript footnote marker at the endOffset position of each note.
  * Uses the same HTML-aware, diacritic-aware, entity-aware walk as applyUserHighlights.
+ *
+ * The marker carries NO text content: its mark is drawn by CSS (`content:` on
+ * ::before, see the .user-note-marker rules in the reading views), exactly like the
+ * word-link markers. Two things follow, both deliberate:
+ *   - it adds zero visible characters, so the search-mark walk that runs after this
+ *     one — and any text extracted from a selection — is unaffected by it;
+ *   - a plain copy carries no trace of a note, which is what makes "copy with notes"
+ *     a real choice rather than a formatting variant.
+ * The note text rides in `data-note-text` so both the hover tooltip and the export
+ * paths can read it straight off the markup, with no DB round-trip and no
+ * dependence on the owning line still being virtualized in.
  */
 export function applyUserNoteMarkers(content: string, notes: Note[]): string {
   if (!notes.length) return content
@@ -342,13 +353,12 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
     pos: number
     noteId: number
     noteText: string
-    label: string
   }
 
   const events: NoteEvent[] = []
   for (const n of notes) {
     if (n.startOffset >= n.endOffset) continue
-    events.push({ pos: n.endOffset, noteId: n.id, noteText: n.note, label: '[*]' })
+    events.push({ pos: n.endOffset, noteId: n.id, noteText: n.note })
   }
   events.sort((a, b) => a.pos - b.pos)
   if (!events.length) return content
@@ -387,7 +397,7 @@ export function applyUserNoteMarkers(content: string, notes: Note[]): string {
           .replace(/"/g, '&quot;')
           .replace(/</g, '&lt;')
           .replace(/>/g, '&gt;')
-        out.push(`<sup class="user-note-marker" data-note-id="${event.noteId}" title="${escapedText}">${event.label}</sup>`)
+        out.push(`<sup class="user-note-marker" data-note-id="${event.noteId}" data-note-text="${escapedText}"></sup>`)
         eventIndex++
       }
     }
