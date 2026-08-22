@@ -2,17 +2,20 @@
 
 ## Overview
 
-`WpfLib/Themes/` contains a unified, reusable style palette for all KleiKodesh task pane libraries (RegexFindLib, DocDesignLib, WebSitesLib). This eliminates duplication of core UI patterns while preserving library-specific customizations.
+`WpfLib/Themes/` is the one place the project's WPF look is defined. Every task
+pane library (RegexFindLib, DocDesignLib, WebSitesLib, Nakdan) and the ribbon
+settings pane draws from it.
 
-**Single entry point:** `OfficePalette.xaml` merges all shared styles. Consuming libraries import this one file instead of maintaining duplicate copies.
+**Single entry point:** `OfficePalette.xaml` merges all shared styles. Consuming
+libraries merge that one file and then add only what is genuinely theirs.
 
 ---
 
-## What's Included (Shared Across All 3 Task Pane Libs)
+## What's Shared
 
-### 1. **Brushes.xaml** — Adaptive Color Tokens
+### 1. `Brushes.xaml` — Adaptive Color Tokens
 
-10 brush resources that work on any Office theme (light, dark, black):
+11 brush resources that work on any Office theme (light, dark, black):
 
 | Key | Value | Purpose |
 |-----|-------|---------|
@@ -28,220 +31,149 @@
 | `SelectedBrush` | `#3300B4FF` | Selected item highlight (20% accent tint) |
 | `TextSecBrush` | `#99808080` | Secondary text (60% opacity) |
 
-**Why mid-gray overlays?** Mid-gray (#808080) is equidistant from black and white, so it's visible on both light and dark backgrounds. This single palette adapts automatically to any Office theme without hardcoding light/dark variants.
+**Why mid-gray overlays?** Mid-gray (`#808080`) is equidistant from black and
+white, so it is visible on both light and dark backgrounds. One palette adapts to
+any Office theme without light/dark variants.
 
-**Status:** Byte-for-byte identical in RegexFindLib, DocDesignLib, and WebSitesLib. Consolidated here to eliminate duplication.
+### 2. `ScrollBarStyles.xaml` — Thin Edge-Style Scrollbar
 
----
+Implicit `ScrollBar` plus the `ScrollThumb`, `VertScrollBar` and `HorzScrollBar`
+templates. 12px track, no arrows, 20px minimum thumb.
 
-### 2. **ScrollBarStyles.xaml** — Thin Edge-Style Scrollbar
+Note that `Width`/`MinWidth` are set **inside the Vertical trigger**, not on the
+base style. Setting them on the base clamps a horizontal scrollbar to 12px wide —
+that was a real bug in one of the copies this file replaced.
 
-Implicit `ScrollBar` style + templates for vertical and horizontal scrollbars:
+### 3. `ComboBoxStyles.xaml` — Office ComboBox
 
-- **Width/Height:** 12px track, no arrows
-- **Thumb:** Rounded, 20px minimum, mid-gray with hover/drag states
-- **Appearance:** Matches modern browsers (Edge, Chrome)
+Implicit `ComboBox` plus the `OfficeComboItem` container style. 28px height,
+adaptive bg/fg from the ancestor `UserControl`, virtualized RTL-aware dropdown.
 
-**Status:** Identical copy-paste across all 3 libs. Now maintained in one place.
+Set `Tag` to a prompt string to get placeholder text on an editable ComboBox;
+leave `Tag` unset and the placeholder stays collapsed.
 
----
+### 4. `ButtonStyles.xaml` — Buttons & Toggles
 
-### 3. **ComboBoxStyles.xaml** — Office ComboBox
-
-Implicit `ComboBox` style + `OfficeComboItem` container style:
-
-- **Appearance:** 28px height, 4px corner radius, adaptive bg/fg from ancestor UserControl
-- **Behavior:** Virtualized dropdown, RTL-aware, placeholder support for editable mode
-- **Item styling:** Hover/selected/highlighted states with mid-gray overlays
-
-**Status:** DocDesignLib literally comments "Identical to RegexFindLib". WebSitesLib is the same minus placeholder. Consolidated here.
-
----
-
-### 4. **ButtonStyles.xaml** — Button & Toggle Styles
-
-Four keyed styles for common button patterns:
-
-| Style | Type | Use Case |
+| Style | Type | Use case |
 |-------|------|----------|
-| Implicit `Button` | Button | Flat icon buttons (toolbar, inline) |
-| Implicit `ToggleButton` | ToggleButton | Toggle without checked highlight |
-| `CheckedToggle` | ToggleButton | Toggle with blue selected state (toolbar toggles) |
-| `ActionButton` | Button | Bordered action buttons (OK, Apply, Cancel in dialogs) |
+| `IconButton` | Button | Flat icon button. Also the implicit `Button`. |
+| `IconToggle` | ToggleButton | Flat toggle, **no** checked highlight |
+| `AccentToggle` | ToggleButton | Flat toggle, accent fill while checked |
+| `CheckedToggle` | ToggleButton | Bordered toggle, accent fill while checked |
+| `ActionButton` | Button | Bordered dialog button (OK, Apply, Cancel) |
+| `IconPath` | Path | Vector icon inside a button; inherits pane foreground |
 
-All use mid-gray overlays for hover/pressed states. Disabled state at 35% opacity.
+Hover/pressed use mid-gray overlays; disabled is 35% opacity. `IconButton` and
+`ActionButton` bind `TextBlock.Foreground` on the content presenter so button
+*text* follows the Office theme, not just the icon.
 
-**Status:** DocDesignLib and WebSitesLib are identical. RegexFindLib splits these into named variants (`InputIconButton`, `TitleToggle`, `FormatButton`) — those remain library-specific.
+**`AccentToggle` uses `MultiTrigger`s, deliberately.** A plain `IsChecked`
+trigger loses to `IsMouseOver`, so hovering a checked toggle drops the accent and
+an ON control reads as OFF. The MultiTriggers keep it and brighten it instead.
 
----
+**There is no implicit `ToggleButton`.** Both toggle behaviours are legitimate —
+DocDesignLib wants no checked highlight, WebSitesLib wants one — so each library
+picks with a single line of its own:
 
-### 5. **CheckBoxStyles.xaml** — VSCode-Style Checkbox
+```xml
+<Style TargetType="ToggleButton" BasedOn="{StaticResource AccentToggle}"/>
+```
 
-Implicit `CheckBox` style:
+**Sizing is not set here** beyond `Padding`. A library needing a fixed metric
+derives with `BasedOn` and adds `Width`/`Height`/`Margin`, so this file stays
+about how a control *looks*, not how big it is.
 
-- **Appearance:** 14×14 square box, 2px corner radius, 1.5px stroke checkmark
-- **States:** Unchecked (transparent), checked (light tint + darker border), hover (darker border)
-- **Foreground:** Inherits from ancestor FrameworkElement
+### 5. `CheckBoxStyles.xaml` — VSCode-Style Checkbox
 
-**Status:** Identical in RegexFindLib and WebSitesLib. DocDesignLib has a simpler version without the custom template — this is the full-featured version.
-
----
-
-## What's NOT Included (Library-Specific Styles)
-
-### RegexFindLib — Kept Local
-
-These styles are regex-find-specific and don't belong in a shared palette:
-
-| File | Styles | Reason |
-|------|--------|--------|
-| `ButtonStyles.xaml` | `InputIconButton`, `InputIconToggle`, `TitleToggle`, `IconToggle`, `FormatButton` | Named variants for specific regex UI patterns (format toolbar, palette toggles) |
-| `FormatToggle.xaml` | `FormatToggle` | Three-state checkbox (null/true/false) with red diagonal line for "excluded" state — regex-specific |
-| `ColorPickerStyles.xaml` | `ColorPickerButton` + `SwatchTemplate` | Custom color picker control with theme/standard color swatches — regex-specific |
-| `PaletteStyles.xaml` | `RegexTipTemplate`, `RegexPalettePanel` | Regex tip display (symbol | meaning + example) — regex-specific |
-| `SpinnerTextBoxStyles.xaml` | `SpinnerTextBox` | Numeric spinner with up/down buttons — regex-specific |
-| `FormatOptionsRowStyles.xaml` | `FormatOptionsRow` | Format toolbar layout (B/I/U/x²/x₂/A/eraser/pencil) — regex-specific |
-
-**Decision:** These are tightly coupled to regex find & replace UI. Extracting them would require extracting the entire regex domain model. Not worth the abstraction cost.
+Implicit `CheckBox`: 14×14 square box, 2px corner radius, 1.5px vector tick.
 
 ---
 
-### DocDesignLib — Kept Local
+## What Stays Local
 
-| File | Styles | Reason |
-|------|--------|--------|
-| `ExpanderStyles.xaml` | `ExpanderToggleTemplate`, implicit `Expander` | Torah document formatting (columns, paragraphs, spacing) uses expanders for section headers. Not a general UI pattern. |
-| `ButtonStyles.xaml` | `ResetButton`, `IncreaseButton`, `DecreaseButton` | Domain-specific buttons for paragraph/column controls (reset indent, increase/decrease spacing). Hebrew tooltips ("איפוס", "הגדל", "הקטן") are hardcoded. |
-| `MiscStyles.xaml` | `ResultItem`, `InlineTextBox`, `SearchTextBox`, `InputWrapper` | Document formatting-specific input patterns. Not reusable across other task panes. |
+Only genuinely generic styles are shared. These are tied to their domain and stay
+where they are:
 
-**Decision:** These are deeply tied to the Torah document formatting domain. Extracting them would require extracting domain concepts (paragraphs, columns, spacing). Not worth the abstraction cost.
+| Library | Files | Why |
+|---------|-------|-----|
+| **RegexFindLib** | `FormatToggle`, `ColorPickerStyles`, `PaletteStyles`, `SpinnerTextBoxStyles`, `FormatOptionsRowStyles`, `MiscStyles` (`SearchTextBox`, `InputWrapper`, `InlineTextBox`, `ResultItem`) | Find-and-replace UI. Extracting them would mean extracting the regex domain model. |
+| **DocDesignLib** | `ExpanderStyles`, `ButtonStyles` (`ResetButton`, `IncreaseButton`, `DecreaseButton`), `MiscStyles` (`DeleteOverlay`) | Document formatting controls, with hardcoded Hebrew tooltips and icon geometry. |
+| **WebSitesLib** | `AddressBarStyles`, `MiscStyles` (`TabItemStyle`, `DialogListItem`, `SeparatorLine`) | Browser chrome — address bar, tab strip. |
+| **Nakdan** | `OpacityConverter`, `SectionLabel` | A converter and one label style. |
+| **Ribbon** | implicit `Button`, `CheckBox`, `RadioButton`, `Card`, `GroupHeader` | Cards, hairline borders and text buttons are a different surface from the icon toolbars, not a drifted copy of them. |
+| **Build/Installer** | `InstallerStyles.xaml`, `App.xaml` (`SlimScrollThumb`) | A standalone app with its own design language (purple accent, light-only, 6px scrollbar). |
 
----
-
-### WebSitesLib — Kept Local
-
-| File | Styles | Reason |
-|------|--------|--------|
-| `AddressBarStyles.xaml` | `AddressBarCombo`, `DropdownBorder`, `TabTitle`, `TabTitleActive`, `TabClosePath` | Browser-specific UI (address bar, tab strip, tab close button). Not reusable. |
-| `MiscStyles.xaml` | `TabItemStyle`, `DialogListItem` | Browser-specific list item styles. Not reusable. |
-
-**Decision:** These are browser UI patterns specific to the website viewer. No other task pane needs them.
-
----
-
-### Build/Installer — Kept Local
-
-| File | Styles | Reason |
-|------|--------|--------|
-| `InstallerStyles.xaml` | `PrimaryButton`, `SecondaryButton`, `GhostButton`, `AccentProgress` | Light-mode palette (#7333FF purple accent, #FFFFFF bg, #1F1F1F text). Completely different design language from Office theme. Not compatible with task pane libraries. |
-| `App.xaml` | `SlimScrollThumb`, implicit `ScrollBar` | Installer-specific scrollbar (6px visible, 8px track). Different from task pane scrollbar (12px). |
-
-**Decision:** The installer is a standalone WPF app with its own design system. Sharing styles would require conditional logic or multiple palettes. Not worth the complexity.
+Each library's `Icons.xaml` also stays local — the icon sets are fully disjoint.
 
 ---
 
 ## Usage
 
-### For Consuming Libraries
-
-Replace local duplicates with a single import:
-
-**Before (RegexFindLib/RegexFindDictionary.xaml):**
-```xml
-<ResourceDictionary.MergedDictionaries>
-    <ResourceDictionary Source="/RegexFindLib;component/ui/themes/brushes.xaml"/>
-    <ResourceDictionary Source="/RegexFindLib;component/ui/themes/comboboxstyles.xaml"/>
-    <ResourceDictionary Source="/RegexFindLib;component/ui/themes/scrollbarstyles.xaml"/>
-    <!-- ... other local styles ... -->
-</ResourceDictionary.MergedDictionaries>
-```
-
-**After:**
-```xml
-<ResourceDictionary.MergedDictionaries>
-    <!-- Shared palette from WpfLib -->
-    <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
-    <!-- Library-specific styles -->
-    <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
-    <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
-    <!-- ... other local styles ... -->
-</ResourceDictionary.MergedDictionaries>
-```
-
-### For New Libraries
-
-If adding a new task pane library to KleiKodesh:
-
-1. Create a root dictionary (e.g., `MyLibDictionary.xaml`)
-2. Merge `OfficePalette.xaml` first
-3. Add only library-specific styles after
+Merge the palette first, then your own styles:
 
 ```xml
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.MergedDictionaries>
-        <!-- Shared palette -->
         <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
-        <!-- Library-specific -->
         <ResourceDictionary Source="/MyLib;component/ui/themes/mydomainstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
+
+    <!-- pick the toggle behaviour this pane wants -->
+    <Style TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}"/>
 </ResourceDictionary>
 ```
+
+Pack URI paths must be **all-lowercase** — the WPF BAML compiler lowercases them.
+
+### Where a `BasedOn` may point
+
+A `StaticResource` inside a merged dictionary resolves against that dictionary
+and its own merged dictionaries — **not** reliably against a sibling merged into
+the same parent. So:
+
+- A **root** dictionary may `BasedOn` a key from anything it merges. Safe.
+- A **sub**-dictionary that needs a WpfLib key must merge WpfLib itself:
+  ```xml
+  <ResourceDictionary.MergedDictionaries>
+      <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+  </ResourceDictionary.MergedDictionaries>
+  ```
+  DocDesignLib's and RegexFindLib's `ButtonStyles.xaml` both do this.
 
 ---
 
 ## Design Principles
 
-### 1. **Adaptive, Not Hardcoded**
-
-All colors use mid-gray overlays (#808080 at various opacities) instead of hardcoded light/dark variants. This single palette works on any Office theme automatically.
-
-### 2. **VSTO-Safe**
-
-All values are inlined in control templates. No `{StaticResource}` inside `<ControlTemplate>` bodies. This prevents `XamlParseException` when templates are instantiated in separate `HwndSource` windows (Popup, ContextMenu, separate dialogs).
-
-### 3. **Domain-Agnostic**
-
-Only styles that are truly generic (scrollbar, combobox, button, checkbox) are shared. Domain-specific patterns (regex toggles, document formatting controls, browser tabs) stay in their libraries.
-
-### 4. **Minimal Abstraction**
-
-No unnecessary base styles or inheritance chains. Each style is self-contained and can be copied to a library if needed without breaking dependencies.
+1. **Adaptive, not hardcoded.** Mid-gray overlays instead of light/dark variants.
+2. **VSTO-safe.** All values inlined in control templates — no `{StaticResource}`
+   inside a `<ControlTemplate>` body. That throws `XamlParseException` when a
+   template is instantiated in a separate `HwndSource` (Popup, ContextMenu,
+   separate dialog).
+3. **Look here, size there.** WpfLib owns appearance; libraries own metrics.
+4. **A name means one thing.** RegexFindLib's small accent toggle is
+   `PaletteToggle`, not `IconToggle`, because `IconToggle` here is the variant
+   with no checked highlight. The same name meaning opposite things in two panes
+   is a trap.
 
 ---
 
 ## Future Consolidation
 
-As the project evolves, watch for these patterns that could move to WpfLib:
+Watch for these moving up if they appear in 2+ libraries with little variation:
 
-- **TextBox styles** — If multiple libs define similar input patterns (search box, inline edit)
-- **ListBox/ListBoxItem** — If multiple libs use similar list item hover/selected states
-- **Separator/Divider** — If multiple libs define similar line separators
-- **ProgressBar** — If multiple libs need progress indicators
+- **TextBox styles** — search box, inline edit
+- **ListBox / ListBoxItem** — shared hover/selected states
+- **Separator / divider** lines
+- **ProgressBar**
 
-**Rule:** Only consolidate if the style appears in 2+ libraries with minimal variation. One-off styles stay local.
-
----
-
-## Files
-
-| File | Lines | Purpose |
-|------|-------|---------|
-| `Brushes.xaml` | ~30 | 10 adaptive color tokens |
-| `ScrollBarStyles.xaml` | ~60 | Thin Edge-style scrollbar |
-| `ComboBoxStyles.xaml` | ~120 | Office ComboBox + item |
-| `ButtonStyles.xaml` | ~110 | Button, ToggleButton, CheckedToggle, ActionButton |
-| `CheckBoxStyles.xaml` | ~50 | VSCode-style checkbox |
-| `OfficePalette.xaml` | ~20 | Root entry point (merges all 5) |
-
-**Total:** ~390 lines of shared, reusable XAML.
+**Rule:** consolidate only at 2+ libraries with minimal variation. One-offs stay
+local.
 
 ---
 
 ## See Also
 
-- [WPF Best Practices](../../.kiro/steering/wpf/wpf-best-practices.md) — Coding conventions, custom controls, MVVM
-- [ElementHost/VSTO](../../.kiro/steering/wpf/05-elementhost-vsto.md) — Why StaticResource inside ControlTemplates crashes
-- RegexFindLib/README.md — Regex-specific styles
-- DocDesignLib/README.md — Torah formatting-specific styles
-- WebSitesLib/README.md — Browser-specific styles
+- [WPF Best Practices](../../.kiro/steering/wpf/wpf-best-practices.md)
+- [ElementHost/VSTO](../../.kiro/steering/wpf/05-elementhost-vsto.md) — why
+  `StaticResource` inside a `ControlTemplate` crashes
