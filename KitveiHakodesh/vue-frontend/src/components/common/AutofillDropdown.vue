@@ -184,8 +184,10 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  height: 24px;
-  padding: 0 8px 0 4px;
+  /* The separator is the header's bottom border, so the header's own bottom
+     padding is the gap between the title and the line. Without it the title
+     sits right on top of the rule. */
+  padding: 2px 8px 7px 4px;
   margin-bottom: 5px;
   border-bottom: 1px solid var(--border-color);
 }
