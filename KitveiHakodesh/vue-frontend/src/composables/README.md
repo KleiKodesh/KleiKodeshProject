@@ -4,7 +4,7 @@ Shared composables used across multiple features. Feature-specific composables l
 
 Only create a file here if the composable is used by two or more features. Single-feature logic stays in the feature folder.
 
-That rule is enforced, not aspirational. `useTileGridKeys` (book-catalog only), `useTextSelectionKeys` and `useSelectAllInContainer` (book-view only) were moved out into their feature folders on 2026-07-29 for breaking it. If a second feature needs one of them, move it back here — that is the intended lifecycle, not a reason to leave it here pre-emptively.
+That rule is enforced, not aspirational. `useTextSelectionKeys` and `useSelectAllInContainer` (book-view only) were moved out into their feature folders on 2026-07-29 for breaking it. If a second feature needs one of them, move it back here — that is the intended lifecycle, not a reason to leave it here pre-emptively.
 
 **useAppNavigation.ts** — central navigation handler. Routes singletons via `navigateToSingleton`, handles the file picker, external links, and search navigation. Any code that needs to navigate between pages should use this, not call `tabStore` directly.
 

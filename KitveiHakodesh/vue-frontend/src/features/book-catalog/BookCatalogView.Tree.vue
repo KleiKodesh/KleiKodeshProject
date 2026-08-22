@@ -5,6 +5,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { storeToRefs } from 'pinia'
 import TreeView from '@/components/TreeView.vue'
 import type { TreeNodeItem } from '@/components/treeTypes'
+import { withoutHiddenCategories } from '@/features/book-catalog/bookCatalogTree'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { wantsNewTab } from '@/composables/useOpenInNewTab'
@@ -53,7 +54,8 @@ function flatten(nodes: CategoryNode[], parentId: number | null, level: number, 
 
 const flatNodes = computed<FlatNode[]>(() => {
   const out: FlatNode[] = []
-  flatten(store.ROOT.children, null, 0, out)
+  // Same shelves the other catalog views browse — see withoutHiddenCategories.
+  flatten(withoutHiddenCategories(store.ROOT.children), null, 0, out)
   return out
 })
 

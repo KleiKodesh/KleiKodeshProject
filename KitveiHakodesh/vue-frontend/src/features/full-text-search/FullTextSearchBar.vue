@@ -250,24 +250,13 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
   min-width: 40px;
   direction: rtl;
 }
+/* Box, hover, press, disabled and the .active state come from the global .bar-btn
+   rule (main.css). Only the size differs: these sit inside the search pill, which
+   is shorter than a title-bar row, so they cannot take the title-bar button size. */
 .bar-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 4px;
-  flex-shrink: 0;
-}
-.bar-btn:not(:disabled):hover {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-}
-.bar-btn:not(:disabled):active {
-  background: color-mix(in srgb, var(--text-primary) 14%, transparent);
-}
-.bar-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+  padding: 0;
 }
 .filter-active {
   color: var(--accent-color);

@@ -3,6 +3,7 @@ import { storeToRefs } from 'pinia'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookCatalogSearch } from './useBookCatalogSearch'
+import { withoutHiddenCategories } from './bookCatalogTree'
 import type { CategoryNode } from './bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 export type FsItem =
@@ -11,7 +12,16 @@ export type FsItem =
 
 export function useBookCatalog() {
   const store = useBooksDataStore()
-  const { loading, error, ROOT } = storeToRefs(store)
+  const { loading, error, ROOT: FULL_ROOT } = storeToRefs(store)
+
+  // The root the catalog BROWSES: the store's, minus the categories that are not
+  // seforim shelves. Only browsing is filtered — catalog search and the rest of
+  // the app read the store's own root, so nothing becomes unreachable.
+  const ROOT = computed<CategoryNode>(() => ({
+    ...FULL_ROOT.value,
+    children: withoutHiddenCategories(FULL_ROOT.value.children),
+  }))
+
   const path = ref<CategoryNode[]>([ROOT.value])
 
   watch(

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useListKeys } from '@/composables/useListKeyNav'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
@@ -30,14 +30,30 @@ function getTooltip(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
 }
 
-const { focusedIndex, containerFocused } = useListKeys(
-  scrollEl,
-  () => props.items.length,
-  activateIndex,
+// Combobox model, the same one the search results use: DOM focus never leaves the
+// page's search input — the page forwards its keydown here and the arrows move a
+// HIGHLIGHT through this list. Previously this list owned its own focus, so the
+// first ArrowDown pulled the caret out of the field and the user could not keep
+// typing.
+const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
+  getCount: () => props.items.length,
+  onActivate: activateIndex,
+  containerElement: scrollEl,
+})
+
+// Entering a folder swaps the whole item list, so the old highlight would point at
+// a different row — and a highlight past the new end sends the next ArrowDown to
+// the LAST item instead of the first, since moveTo clamps. useInputListNavigation
+// leaves this to the caller by contract.
+watch(
+  () => props.items,
+  () => {
+    focusedIndex.value = -1
+  },
 )
 
 defineExpose({
-  focusContainer: () => scrollEl.value?.focus(),
+  onSearchInputKeydown: (event: KeyboardEvent) => onKeydown(event),
 })
 
 function selectItem(index: number, event?: MouseEvent) {
@@ -48,14 +64,14 @@ function selectItem(index: number, event?: MouseEvent) {
 
 <template>
   <p v-if="!items.length" class="empty">אין פריטים</p>
-  <div v-else ref="scrollEl" class="scroller" tabindex="0">
+  <div v-else ref="scrollEl" class="scroller">
     <div class="list-items">
       <div
         v-for="(item, index) in items"
         :key="item.uid"
         class="fs-item"
         data-nav-item
-        :class="{ 'is-focused': containerFocused && focusedIndex === index }"
+        :class="{ 'is-focused': focusedIndex === index }"
         :title="getTooltip(item)"
         @click="selectItem(index, $event)"
         @auxclick.middle="selectItem(index, $event)"

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
-import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewTree from './BookCatalogView.Tree.vue'
@@ -9,7 +8,6 @@ import BookCatalogViewTiles from './BookCatalogView.Tiles.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
-import BottomSearchBar from '@/components/BottomSearchBar.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
 import { useSettingsStore, type BooksView } from '@/stores/settingsStore'
@@ -48,11 +46,13 @@ const { booksView: view } = storeToRefs(useSettingsStore())
 const booksTabId = paneNavigation.activeTabId
 
 // ── Query persistence across navigation ────────────────────────────────────────
-// Restore the typed query saved on the tab (booksSearchQuery), so switching away
-// and back keeps the input. The VSTO host seed (catalogQuery) wins if present —
-// it's a one-shot search request, not a restored session. That seed watch runs
-// synchronously at setup (immediate), before this onMounted, and fills
-// searchQuery; so only restore when searchQuery is still empty.
+// The catalog has no search input of its own any more; the only thing that fills
+// searchQuery is the VSTO host seed below. This still earns its keep: it holds
+// that seeded query on the tab so leaving and coming back returns to the results
+// rather than to the browse view. The seed itself wins when present — it is a
+// fresh one-shot request, not a restored session — and its watch runs
+// synchronously at setup (immediate), before this onMounted, so only restore when
+// searchQuery is still empty.
 onMounted(() => {
   if (!searchQuery.value) {
     const saved = paneNavigation.activeTab.booksSearchQuery
@@ -62,7 +62,7 @@ onMounted(() => {
 
 // On unmount, mirror the file-search rule:
 //  • Tab still '/books' (tab switch, or a NEW tab opened via Ctrl+click) → save
-//    the query so it restores when the user returns to this tab.
+//    the query so the results restore when the user returns to this tab.
 //  • Tab navigated in place to a book (route changed to '/book-view') → clear it.
 onBeforeUnmount(() => {
   const tab = tabStore.tabs.find((t) => t.id === booksTabId)
@@ -120,6 +120,9 @@ const activeViewComponent = computed(() => {
 const activeViewProps = computed(() => (view.value === 'tree' ? {} : { items: treeItems.value }))
 
 type ActiveViewInstance = ComponentPublicInstance & {
+  /** List/tiles forward the search input's keys and keep the caret in the field. */
+  onSearchInputKeydown?: (event: KeyboardEvent) => boolean
+  /** The tree view instead takes focus, having its own tree keyboard model. */
   focusContainer?: () => void
   reset?: () => void
 }
@@ -128,20 +131,34 @@ const activeViewRef = ref<ActiveViewInstance | null>(null)
 const searchResultsRef = ref<InstanceType<typeof BookCatalogSearch> | null>(null)
 const searchInputRef = ref<HTMLInputElement | null>(null)
 
+// One combobox for the whole page: DOM focus stays in the search input and the
+// arrows move a highlight through whichever list is on screen — the search results
+// while a query is running, the browse view otherwise. The caret never leaves the
+// field, so the user can keep typing at any point.
 function onSearchKeydown(event: KeyboardEvent) {
-  if (isSearching.value) {
-    // Combobox model: focus stays in the input; arrows/paging move the search
-    // results highlight, Enter WITH a highlight opens it. An unconsumed Enter
-    // falls through to the single-result shortcut.
-    if (searchResultsRef.value?.onSearchInputKeydown(event)) return
-    if (event.code === 'Enter') onSearchEnter()
+  // Escape first: it means "leave the field", whoever else might want the key.
+  if (event.code === 'Escape' && !searchQuery.value) {
+    editingSearch.value = false
     return
   }
-  // Browsing (no query): arrows/Tab hand focus to the browse view, which owns
-  // its own roving-focus keyboard navigation.
+
+  const list = isSearching.value ? searchResultsRef.value : activeViewRef.value
+  if (list?.onSearchInputKeydown?.(event)) return
+
+  // An Enter the list did not consume (nothing highlighted) falls through to the
+  // single-result shortcut.
+  if (isSearching.value && event.code === 'Enter') {
+    onSearchEnter()
+    return
+  }
+
+  // The tree view is the exception: it is a real tree with its own focus and
+  // expand/collapse keys, not a flat list a highlight can walk, so it cannot be
+  // driven from here. There the arrows still hand focus over to it.
   if (event.code === 'ArrowUp' || event.code === 'ArrowDown' || event.code === 'Tab') {
+    if (!activeViewRef.value?.focusContainer) return
     event.preventDefault()
-    activeViewRef.value?.focusContainer?.()
+    activeViewRef.value.focusContainer()
   }
 }
 
@@ -168,6 +185,49 @@ const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
 
 watch(searchQuery, (val) => (val ? pauseTyping() : resumeTyping()))
 
+// ── Which face the address bar shows ─────────────────────────────────────────
+// The path is the resting state — the bar is a breadcrumb that becomes a text
+// field while you are actually typing in it, exactly like Explorer's. So the field
+// shows only while it holds focus (plus while a query is live, so results are
+// never displayed under a path). Blurring it hands the bar back to the crumbs.
+// Is the user editing the field? The bar shows the field while they are — OR
+// whenever a query is live, because results are on screen then and a path display
+// would misdescribe what they are looking at. Deriving the second half rather than
+// setting it at each call site is what stops the two drifting: opening a result in
+// a NEW tab leaves this page mounted with its query intact, and any handler that
+// only flipped a flag would strand the results under a breadcrumb.
+const editingSearch = ref(false)
+const showSearch = computed(() => editingSearch.value || !!searchQuery.value)
+
+function openSearch() {
+  editingSearch.value = true
+  // The user asked for the field, so put the caret in it — after the v-if has
+  // actually mounted the input.
+  nextTick(() => searchInputRef.value?.focus())
+}
+
+// Leaving the field returns the bar to the path — but only when there is no query.
+// A live query keeps the field regardless (see showSearch), so this is just the
+// empty-field case.
+function onSearchBlur() {
+  if (!searchQuery.value) editingSearch.value = false
+}
+
+// Opening anything — a folder, a book — puts the user back on the shelves, so the
+// bar goes back to showing where they are.
+function onEnterFolder(node: CategoryNode) {
+  editingSearch.value = false
+  enter(node)
+}
+
+// Home from inside the search field: back to the root AND out of search, so the
+// bar returns to the path rather than sitting on an emptied field. navigateTo
+// clears the query; the face has to be switched here, since the page owns it.
+function onGoHome() {
+  editingSearch.value = false
+  navigateTo(0)
+}
+
 function setView(v: BooksView) {
   // Assigning the store ref persists it — settingsStore watches and writes.
   view.value = v
@@ -175,10 +235,15 @@ function setView(v: BooksView) {
 
 onMounted(() => {
   load()
-  nextTick(() => searchInputRef.value?.focus())
+  // Open with the field ready to type in — the catalog is a place you usually
+  // arrive at looking for something. openSearch (not a bare focus call) because
+  // the input only exists while showSearch is true: the default is the crumbs, so
+  // the field has to be swapped in before there is anything to focus.
+  openSearch()
 })
 
 function onSelectBook(book: BookRow, openInNewTab = false) {
+  editingSearch.value = false
   paneNavigation.openOrUpdateActiveTab(
     {
       title: book.title,
@@ -189,6 +254,7 @@ function onSelectBook(book: BookRow, openInNewTab = false) {
   )
 }
 function onSelectToc(item: TocFsItem, openInNewTab = false) {
+  editingSearch.value = false
   paneNavigation.openOrUpdateActiveTab(
     {
       title: item.book.title,
@@ -211,11 +277,28 @@ function onSearchEnter() {
       :view="view"
       :path="path"
       :is-searching="isSearching"
+      :show-search="showSearch"
       @set-view="setView"
       @navigate="navigateTo"
       @navigate-to-sibling="navigateToSibling($event.atIndex, $event.node)"
       @reset="activeViewRef?.reset?.()"
-    />
+      @open-search="openSearch"
+      @go-home="onGoHome"
+    >
+      <template #search>
+        <input
+          ref="searchInputRef"
+          v-model="searchQuery"
+          type="search"
+          class="search-input"
+          :placeholder="placeholder"
+          spellcheck="true"
+          autocomplete="off"
+          @keydown="onSearchKeydown"
+          @blur="onSearchBlur"
+        />
+      </template>
+    </BookCatalogTitleBar>
     <div class="books-content">
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
@@ -258,7 +341,7 @@ function onSearchEnter() {
           v-show="!isSearching"
           v-bind="activeViewProps"
           @select-book="onSelectBook"
-          @enter-folder="enter"
+          @enter-folder="onEnterFolder"
         />
         <!-- select-book/select-toc emit (item, openInNewTab) — the boolean is
              forwarded straight through to the pane-navigation helper. -->
@@ -276,23 +359,16 @@ function onSearchEnter() {
         </template>
       </template>
     </div>
-    <BottomSearchBar>
-      <template #left><IconSearch20Regular class="search-icon" /></template>
-      <input
-        ref="searchInputRef"
-        v-model="searchQuery"
-        type="search"
-        class="search-input"
-        :placeholder="placeholder"
-        spellcheck="true"
-        autocomplete="off"
-        @keydown="onSearchKeydown"
-      />
-    </BottomSearchBar>
   </div>
 </template>
 
 <style scoped>
+/* Fill, border, colors, placeholder and the search-cancel button all come from
+   the global `.search-inner input` rule; the sizing comes from the title bar. */
+.search-input {
+  flex: 1;
+  min-width: 0;
+}
 .books-page {
   display: flex;
   flex-direction: column;
@@ -303,23 +379,6 @@ function onSearchEnter() {
   flex: 1;
   overflow: hidden;
   position: relative;
-}
-.search-icon {
-  color: var(--text-secondary);
-}
-.search-input {
-  flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-.search-input::-webkit-search-cancel-button {
-  filter: grayscale(1) opacity(0.4);
 }
 .state.error {
   padding: 32px 16px;

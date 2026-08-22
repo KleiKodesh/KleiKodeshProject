@@ -61,6 +61,35 @@ export function buildTree(categories: CategoryRow[], books: BookRow[]): Category
 }
 
 /**
+ * Top-level categories the catalog does not browse. "אודות" holds the collection's
+ * own about/credits material rather than seforim, so it is noise in a shelf the
+ * user is browsing for a book.
+ *
+ * Hidden from BROWSING only — see `withoutHiddenCategories`. The full tree still
+ * reaches everything: catalog search, the full-text-search filter tree and the
+ * book-view word links all read the unfiltered store, so a book in here stays
+ * findable and stays openable by a link that already points at it.
+ */
+const HIDDEN_ROOT_CATEGORY_PREFIX = 'אודות'
+
+/**
+ * The root's children minus the categories the catalog does not browse. Top level
+ * only: this hides one shelf, and a category deeper in the tree that happens to
+ * start with the same word is a real subject heading, not this one.
+ *
+ * Matched on the FIRST WORD, not the whole title: in the shipped database the
+ * category is two words — the second names the program — so an exact-title test
+ * silently matches nothing, and hard-coding the full title would break the moment
+ * that second word is reworded. The word alone heads no real subject shelf.
+ */
+export function withoutHiddenCategories(children: CategoryNode[]): CategoryNode[] {
+  return children.filter((node) => {
+    const [firstWord] = node.title.trim().split(/\s+/)
+    return firstWord !== HIDDEN_ROOT_CATEGORY_PREFIX
+  })
+}
+
+/**
  * Bottom-up pass that fills `subtreeBookIds` on every node so the filter tree
  * never has to recursively flatten a subtree at render time. Returns the ids so
  * callers can reuse the top-level result if needed.

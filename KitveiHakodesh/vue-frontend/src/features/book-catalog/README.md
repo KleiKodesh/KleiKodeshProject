@@ -39,4 +39,3 @@ The top-level `runTocHeuristics` function runs all four stages in sequence and a
 
 **SEARCH.md** — detailed design document for the book catalog search architecture.
 
-**useTileGridKeys.ts** — 2D arrow-key navigation for the tile grids, computing the column count from container width so Up/Down move a whole row. Used by `BookCatalogView.Tiles.vue` and `BookCatalogSearch.vue`. Lived in `src/composables/` until 2026-07-29 and moved here because this feature is its only consumer; move it back if a second feature needs it.
