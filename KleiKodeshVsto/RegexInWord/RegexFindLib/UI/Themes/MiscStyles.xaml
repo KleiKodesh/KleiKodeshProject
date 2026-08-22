@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
@@ -32,7 +33,7 @@
 
     <!-- ── Input wrapper border — adaptive ───────────────────────── -->
     <Style x:Key="InputWrapper" TargetType="Border">
-        <Setter Property="BorderBrush"     Value="#50808080"/>
+        <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius"    Value="4"/>
         <Setter Property="Background"      Value="Transparent"/>

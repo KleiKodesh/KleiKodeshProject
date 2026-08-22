@@ -1,4 +1,4 @@
-<UserControl x:Class="WebSitesLib.UI.WebSitesView"
+﻿<UserControl x:Class="WebSitesLib.UI.WebSitesView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -147,10 +147,10 @@
                                         </Border>
                                         <DataTemplate.Triggers>
                                             <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
-                                                <Setter TargetName="DropItem" Property="Background" Value="#0A808080"/>
+                                                <Setter TargetName="DropItem" Property="Background" Value="{StaticResource HoverBrush}"/>
                                             </DataTrigger>
                                             <DataTrigger Binding="{Binding IsSelected}" Value="True">
-                                                <Setter TargetName="DropItem" Property="Background" Value="#14808080"/>
+                                                <Setter TargetName="DropItem" Property="Background" Value="{StaticResource PressedBrush}"/>
                                             </DataTrigger>
                                         </DataTemplate.Triggers>
                                     </DataTemplate>
@@ -192,7 +192,7 @@
                                 <!-- 2px accent indicator at bottom — active only -->
                                 <Border x:Name="ActiveBar"
                                         Height="2"
-                                        Background="#0078D4"
+                                        Background="{StaticResource AccentBrush}"
                                         VerticalAlignment="Bottom"
                                         Visibility="Collapsed"/>
 
@@ -233,7 +233,7 @@
                             <DataTemplate.Triggers>
                                 <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
                                     <Setter TargetName="CloseTabBtn" Property="Visibility" Value="Visible"/>
-                                    <Setter TargetName="TabRoot"     Property="Background" Value="#0A808080"/>
+                                    <Setter TargetName="TabRoot"     Property="Background" Value="{StaticResource HoverBrush}"/>
                                     <Setter TargetName="TabTitle"    Property="Opacity"    Value="0.9"/>
                                 </DataTrigger>
                                 <DataTrigger Binding="{Binding IsSelected}" Value="True">
