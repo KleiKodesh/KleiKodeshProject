@@ -3,6 +3,7 @@
                     xmlns:converters="clr-namespace:WpfLib.Converters;assembly=WpfLib"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
@@ -22,7 +23,7 @@
 
     <!-- ── Separator ─────────────────────────────────────────────── -->
     <Style TargetType="Separator">
-        <Setter Property="Background" Value="#50808080"/>
+        <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
         <Setter Property="Margin"     Value="0,2"/>
     </Style>
 

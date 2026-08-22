@@ -1,4 +1,4 @@
-<UserControl x:Class="DocDesign.DocDesignView"
+﻿<UserControl x:Class="DocDesign.DocDesignView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -157,7 +157,7 @@
                                IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
                                AllowsTransparency="False"
                                MaxHeight="220">
-                            <Border BorderBrush="#50808080"
+                            <Border BorderBrush="{StaticResource BorderBrush}"
                                     BorderThickness="1"
                                     MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}"
                                     Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
@@ -168,7 +168,7 @@
                                                 <Setter Property="Background" Value="Transparent"/>
                                                 <Style.Triggers>
                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="#0A808080"/>
+                                                        <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
                                                     </Trigger>
                                                 </Style.Triggers>
                                             </Style>
@@ -178,7 +178,7 @@
                                                   Padding="4,0"
                                                   Margin="8,5"/>
                                     </Border>
-                                    <Separator Background="#50808080" Margin="0,2"/>
+                                    <Separator Background="{StaticResource BorderBrush}" Margin="0,2"/>
                                     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                                   VerticalScrollBarVisibility="Auto"
                                                   MaxHeight="180">
@@ -191,7 +191,7 @@
                                                                 <Setter Property="Background" Value="Transparent"/>
                                                                 <Style.Triggers>
                                                                     <Trigger Property="IsMouseOver" Value="True">
-                                                                        <Setter Property="Background" Value="#0A808080"/>
+                                                                        <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
                                                                     </Trigger>
                                                                 </Style.Triggers>
                                                             </Style>

@@ -1,7 +1,11 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:RegexFindLib.UI"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
 
     <!-- ── SpinnerTextBox ──────────────────────────────────────────────── -->
     <Style TargetType="local:SpinnerTextBox">
@@ -102,7 +106,7 @@
 
                                 <!-- Divider between ▲ and ▼ -->
                                 <Border Grid.Row="0" Grid.RowSpan="2"
-                                        BorderBrush="#50808080" BorderThickness="1,0,0,0"
+                                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1,0,0,0"
                                         IsHitTestVisible="False"/>
 
                                 <!-- ▼ Down -->
