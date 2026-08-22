@@ -13,6 +13,19 @@ libraries merge that one file and then add only what is genuinely theirs.
 
 ## What's Shared
 
+### 0. `Typography.xaml` — Type Tokens
+
+| Key | Value | Purpose |
+|-----|-------|---------|
+| `UiFontFamily` | Segoe UI | The UI chrome font |
+| `FontSizeSmall` | 11 | Secondary labels, section headers |
+| `FontSizeNormal` | 12 | The default for controls |
+| `FontSizeLarge` | 13 | Text inputs, anything read at length |
+
+Sizes are named for their role, not their value, so the scale can be retuned in
+one edit. This is the UI chrome font and has nothing to do with the Hebrew
+document fonts `WpfLib.Helpers.FontsProvider` enumerates.
+
 ### 1. `Brushes.xaml` — Adaptive Color Tokens
 
 11 brush resources that work on any Office theme (light, dark, black):
@@ -87,6 +100,15 @@ about how a control *looks*, not how big it is.
 
 Implicit `CheckBox`: 14×14 square box, 2px corner radius, 1.5px vector tick.
 
+### 6. `UpDownTextBoxStyles.xaml` — WpfLib's Own Controls
+
+Implicit styles for `UpDownTextBox` and `UpDownFloatTextBox`, which are declared
+in `WpfLib/Controls`. A control's look belongs with the control.
+
+These are implicit styles rather than a `generic.xaml` default style: the
+assembly has no `ThemeInfo` attribute, and everything else here is picked up by
+merging the palette. One mechanism, not two.
+
 ---
 
 ## What Stays Local
@@ -104,6 +126,34 @@ where they are:
 | **Build/Installer** | `InstallerStyles.xaml`, `App.xaml` (`SlimScrollThumb`) | A standalone app with its own design language (purple accent, light-only, 6px scrollbar). |
 
 Each library's `Icons.xaml` also stays local — the icon sets are fully disjoint.
+
+---
+
+## Shared Converters
+
+`WpfLib/Converters/` is the same idea for `IValueConverter`. Generic ones live
+there: `BoolToVisibilityConverter`, `InverseBoolToVisibilityConverter`,
+`IntToVisibilityConverter`, `ColorToBrushConverter`,
+`BoolToFlowDirectionConverter`, `ReverseBoolConverter` and the rest.
+
+Domain converters stay local — Nakdan's `GenreDescriptionConverter` and
+`OpacityConverter`, for instance.
+
+---
+
+## Looked At, Deliberately Not Shared
+
+Recorded so the same candidates are not re-investigated:
+
+- **`TextBlock`** — only DocDesignLib defines one at dictionary level. What look
+  like copies elsewhere are inline `<TextBlock.Style>` blocks on single elements,
+  driving status text with `DataTrigger`s. Not duplication.
+- **`Separator`** — DocDesignLib uses `BorderBrush` at `Margin="0,2"`; the ribbon
+  pane uses the pane foreground at 20% opacity, `Margin="0,8"`. Two surfaces, two
+  intents.
+- **`Path` in WebSitesLib** — sets size only (12×12). `IconPath` owns appearance;
+  sizing stays with the caller.
+- **`TextBox` / `ListBox`** — each styled in exactly one library.
 
 ---
 
