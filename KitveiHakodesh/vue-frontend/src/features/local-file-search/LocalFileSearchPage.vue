@@ -3,7 +3,6 @@ import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
-  IconWarning20Regular,
   IconArrowSort20Regular,
   IconCheckmark20Regular,
 } from '@iconify-prerendered/vue-fluent'
@@ -241,23 +240,20 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
     </TopSearchBar>
 
     <div class="local-file-search-content">
-      <!-- Error state -->
-      <div v-if="errorMessage" class="state-banner error-banner">
-        <IconWarning20Regular class="banner-icon banner-icon--error" />
-        <span>{{ errorMessage }}</span>
-      </div>
-
       <!-- Results or empty state -->
-      <div v-else class="results-container">
+      <div class="results-container">
         <!-- Loading while any search is in flight for more than 200ms -->
         <div v-if="showLoadingAnimation" class="searching-state">
           <LoadingAnimation text="מחפש..." />
         </div>
 
-        <!-- Empty state when idle with no results -->
+        <!-- Empty state when idle with no results. A failed search lands here too:
+             it leaves nothing to list, so the message belongs in the empty area
+             rather than in a banner of its own. -->
         <div v-else-if="!results.length" class="empty-state">
           <IconSearch20Regular class="empty-icon" />
-          <span class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
+          <span v-if="errorMessage" class="empty-msg error-msg">{{ errorMessage }}</span>
+          <span v-else class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
         </div>
 
         <!-- Results list -->
@@ -324,31 +320,6 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
   flex: 1;
 }
 
-/* Banners */
-.state-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-secondary) 8%, transparent);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-.error-banner {
-  color: var(--status-danger);
-  background: color-mix(in srgb, var(--status-danger) 8%, transparent);
-}
-.banner-icon {
-  flex-shrink: 0;
-  font-size: 16px;
-  color: inherit;
-}
-.banner-icon svg {
-  color: inherit;
-}
-
 /* Searching state */
 .searching-state {
   display: flex;
@@ -378,6 +349,11 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
   color: var(--text-secondary);
   opacity: 0.25;
   font-weight: 500;
+}
+/* No colour of its own — an error here reads as the empty state's message, same as
+   the placeholder. It only drops the fade, so it is legible rather than a hint. */
+.empty-msg.error-msg {
+  opacity: 1;
 }
 
 /* Opening overlay */
