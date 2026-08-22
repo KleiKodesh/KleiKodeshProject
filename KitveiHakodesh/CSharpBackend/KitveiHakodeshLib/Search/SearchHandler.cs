@@ -420,11 +420,21 @@ namespace KitveiHakodeshLib.Search
             });
         }
 
+        /// <summary>
+        /// Stops the watcher and any in-flight build. Queued onto the actor thread like every
+        /// other lifecycle action: StopWatcher touches _watcherCts with plain (non-volatile)
+        /// reads and writes, so it is only safe on that one thread — calling it directly from
+        /// a caller's thread could race StartBuildOrWatch and drop a cancel on the floor.
+        /// </summary>
         public void StopIndexing()
         {
-            Console.WriteLine("[SearchHandler] StopIndexing called");
-            StopWatcher();
-            _indexState.StopAll();
+            Console.WriteLine("[SearchHandler] StopIndexing queued");
+            _lifecycleQueue.Add(() =>
+            {
+                Console.WriteLine("[SearchHandler] StopIndexing executing");
+                StopWatcher();
+                _indexState.StopAll();
+            });
         }
 
         // ── Action handlers ───────────────────────────────────────────────────────
