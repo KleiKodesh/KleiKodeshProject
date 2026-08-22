@@ -5,7 +5,7 @@ import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
@@ -30,34 +30,20 @@ function getTooltip(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
 }
 
-// Tiles wrap into rows, so one ArrowDown step is one visual ROW. Count the tiles
-// sharing the first one's offsetTop — exact for any width or gap, with no tile-size
-// constant to keep in sync with the CSS.
-function getColumnsPerRow(): number {
-  const tiles = tilesEl.value?.querySelectorAll<HTMLElement>('[data-nav-item]')
-  if (!tiles?.length) return 1
-  const firstRowTop = tiles[0]!.offsetTop
-  let columns = 0
-  while (columns < tiles.length && tiles[columns]!.offsetTop === firstRowTop) columns++
-  return Math.max(1, columns)
-}
 
-// Combobox model, the same one the search results use: DOM focus never leaves the
-// page's search input — the page forwards its keydown here and the arrows move a
-// HIGHLIGHT through the grid. Previously this grid owned its own focus, so the
-// first ArrowDown pulled the caret out of the field and the user could not keep
-// typing.
+// Combobox model (see useInputListNavigation): DOM focus stays in the page's
+// search input, which forwards its keydown here to move a highlight through this
+// grid. Nothing here may take focus, or the caret leaves the field mid-type.
 const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: activateIndex,
   containerElement: tilesEl,
-  getColumnsPerRow,
+  getColumnsPerRow: () => countGridColumns(tilesEl.value),
 })
 
-// Entering a folder swaps the whole item list, so the old highlight would point at
-// a different row — and a highlight past the new end sends the next ArrowDown to
-// the LAST item instead of the first, since moveTo clamps. useInputListNavigation
-// leaves this to the caller by contract.
+// Required by useInputListNavigation's contract: a new item list leaves the old
+// highlight pointing at a different item, and one past the new end sends the next
+// ArrowDown to the LAST item, since moveTo clamps.
 watch(
   () => props.items,
   () => {
@@ -143,13 +129,12 @@ function selectItem(i: number, event?: MouseEvent) {
 .tile:active .tile-icon {
   transform: scale(0.95);
 }
-/* The home tiles are real buttons and show keyboard focus through
-   `:focus-visible` — the icon simply grows. This grid drives focus itself (the
-   container holds the tabstop and marks the active tile), so the same look has to
-   come from the class. That also means opting out of the global
-   `[data-nav-item].is-focused` background, which home never triggers: with the
-   grown icon doing the work, the filled square underneath is a second, louder
-   focus ring saying the same thing. */
+/* Keyboard focus reads as the grown icon, the same as the home page's tiles. It
+   has to come from a class rather than `:focus-visible`, because DOM focus never
+   reaches a tile — it stays in the search field, and this grid only tracks WHICH
+   tile is current. That also means opting out of the global
+   `[data-nav-item].is-focused` background: with the grown icon doing the work,
+   the filled square underneath is a second, louder ring saying the same thing. */
 .tile.is-focused {
   background: none;
 }

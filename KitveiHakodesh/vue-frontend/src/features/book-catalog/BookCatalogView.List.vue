@@ -30,21 +30,18 @@ function getTooltip(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
 }
 
-// Combobox model, the same one the search results use: DOM focus never leaves the
-// page's search input — the page forwards its keydown here and the arrows move a
-// HIGHLIGHT through this list. Previously this list owned its own focus, so the
-// first ArrowDown pulled the caret out of the field and the user could not keep
-// typing.
+// Combobox model (see useInputListNavigation): DOM focus stays in the page's
+// search input, which forwards its keydown here to move a highlight through this
+// list. Nothing here may take focus, or the caret leaves the field mid-type.
 const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: activateIndex,
   containerElement: scrollEl,
 })
 
-// Entering a folder swaps the whole item list, so the old highlight would point at
-// a different row — and a highlight past the new end sends the next ArrowDown to
-// the LAST item instead of the first, since moveTo clamps. useInputListNavigation
-// leaves this to the caller by contract.
+// Required by useInputListNavigation's contract: a new item list leaves the old
+// highlight pointing at a different item, and one past the new end sends the next
+// ArrowDown to the LAST item, since moveTo clamps.
 watch(
   () => props.items,
   () => {

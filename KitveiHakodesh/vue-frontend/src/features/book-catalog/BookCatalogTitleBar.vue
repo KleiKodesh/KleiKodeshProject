@@ -72,12 +72,7 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
          clicking it turns that stretch into a text field. So the bar never changes
          size or shape — only what fills its middle changes. -->
     <div class="search-inner">
-      <!-- Every child of the pill is a direct sibling, so ONE `gap` spaces the lot
-           and no element needs a margin of its own. (They were split across two
-           containers before, which meant three competing spacing rules and a
-           different gap depending on which pair you looked at.)
-
-           mousedown.prevent on the buttons: blur fires BEFORE click, so without it
+      <!-- mousedown.prevent on the buttons: blur fires BEFORE click, so without it
            clicking one while typing would collapse the field first and move the
            button out from under the pointer. -->
       <button class="bar-btn pill-btn" title="איפוס" @mousedown.prevent @click="goHome">
@@ -124,9 +119,9 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
 .titlebar {
   display: flex;
   align-items: center;
-  /* No background of its own, so the chrome reads as one continuous surface from
-     the app title bar down into the page — the separator below the bar is what
-     divides it from the listing.
+  /* No background and no divider of its own: the chrome reads as one continuous
+     surface from the app title bar down into the page, and the pill's own outline
+     is the only drawn edge on it.
 
      Padding matches the full-text-search page's bar (TopSearchBar), so the pill
      sits at the same inset from the page edge on both pages. */
@@ -140,11 +135,10 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
    padding, height and the inset shadow match the full-text-search page's pill
    (TopSearchBar), so the app's two search bars are one control.
 
-   All spacing inside the pill is THIS ONE `gap`. Every child is a direct sibling
-   of every other, so the buttons are evenly spaced by construction and none of
-   them carries a margin — which is what stopped the ends from needing individual
-   tuning every time one moved. Just enough to keep them apart; they are one
-   cluster of controls, not separated groups. */
+   All spacing inside the pill is THIS ONE `gap`: every child is a direct sibling
+   of every other, so they are evenly spaced by construction and none carries a
+   margin. Keep it that way — a margin here means the ends need re-tuning whenever
+   anything between them changes. */
 .search-inner {
   gap: 4px;
   padding: 0 12px;
@@ -196,12 +190,12 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
   color: var(--text-secondary);
 }
 
-/* The pill's buttons take its scale, not the title bar's — the same rule the
-   full-text-search bar's in-pill buttons follow. No margins: the pill's gap is
-   the only thing that positions them. */
+/* The pill's buttons take its scale, not the title bar's — the same 20px the
+   full-text-search bar gives its own in-pill buttons, both sitting in a 30px
+   pill. No margins: the pill's gap is the only thing that positions them. */
 .pill-btn {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
 }
 .rtl-flip {
