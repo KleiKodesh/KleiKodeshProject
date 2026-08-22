@@ -332,6 +332,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 // Also clean the app version stamp
                 DeleteRegistrySubtree(Registry.CurrentUser, @"SOFTWARE\KleiKodesh", result, log);
 
+                // kitveihakodeshapp:// URL scheme (registered unconditionally on install)
+                DeleteRegistrySubtree(Registry.CurrentUser, @"Software\Classes\kitveihakodeshapp", result, log);
+
                 if (deepClean)
                 {
                     // ── Corrupted Hebrew ghost key in HKLM 32-bit ──────────────────────────

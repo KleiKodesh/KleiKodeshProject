@@ -49,6 +49,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             status?.Report("יוצר קיצור דרך...");
             AddinInstaller.CreateKitveiHakodeshShortcut();
 
+            // Claim the kitveihakodeshapp:// scheme so deep links copied from the app
+            // open in it. Unconditional, unlike the "Open with" preference on
+            // ComponentSettingsPage: that one claims other applications' file types,
+            // this is the app opening its own links.
+            ShellRegistrationHelper.RegisterProtocol();
+
             // Register (or re-register) the DocumentLocator Windows Service.
             // Normally a no-op on updates (already registered at the same path);
             // when registration IS needed it surfaces one UAC prompt.

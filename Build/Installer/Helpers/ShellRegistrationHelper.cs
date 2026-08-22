@@ -26,6 +26,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     ///
     /// The preference (checked/unchecked) is persisted via SettingsManager so that
     /// re-running the installer restores the user's previous choice.
+    ///
+    /// This class also owns the kitveihakodeshapp:// URL scheme (RegisterProtocol) — a
+    /// separate concern, kept here because this is where HKCU\Software\Classes and the
+    /// exe name already live. Unlike the above, that one is not a preference.
     /// </summary>
     public static class ShellRegistrationHelper
     {
@@ -34,6 +38,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         private const string ExeName      = "כתבי הקודש.exe";
         private const string SettingSection = "KitveiHakodesh";
         private const string SettingKey     = "ShellRegistered";
+        private const string ProtocolScheme = "kitveihakodeshapp";
 
         private static readonly string[] SupportedExtensions =
             { ".pdf", ".doc", ".docx", ".rtf", ".txt", ".htm", ".html" };
@@ -63,6 +68,53 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 Register(exePath);
             else
                 Unregister();
+        }
+
+        /// <summary>
+        /// Registers the kitveihakodeshapp:// URL scheme so deep links copied from the
+        /// app open in it. Unlike the "Open with" entry above this is registered
+        /// unconditionally: the scheme is our own, not a claim on another
+        /// application's file types.
+        ///
+        ///   HKCU\Software\Classes\kitveihakodeshapp
+        ///     (Default)     = "URL:<FriendlyName>"
+        ///     URL Protocol  = ""              (empty — this is what makes it a protocol)
+        ///     DefaultIcon\(Default)          = "<exe>,0"
+        ///     shell\open\command\(Default)   = "\"<exe>\" \"%1\""
+        ///
+        /// The app itself needs nothing further: Program.cs already accepts the URL as
+        /// argv[1] and the single-instance pipe turns a second launch into a new tab in
+        /// the running window.
+        /// </summary>
+        public static void RegisterProtocol()
+        {
+            try
+            {
+                string exePath = Path.Combine(AddinInstaller.InstallPath, ExeName);
+
+                using (var classesRoot = OpenClassesRoot(writable: true))
+                {
+                    if (classesRoot == null) return;
+
+                    // CreateSubKey, not OpenSubKey: re-running the installer must overwrite
+                    // the command, so an update that moves the install folder cannot leave
+                    // the old path behind.
+                    using (var key = classesRoot.CreateSubKey(ProtocolScheme))
+                    {
+                        key.SetValue("", "URL:" + FriendlyName);
+                        key.SetValue("URL Protocol", "");
+
+                        using (var icon = key.CreateSubKey("DefaultIcon"))
+                            icon.SetValue("", exePath + ",0");
+
+                        // Both halves quoted: the exe name contains a space, and quoting
+                        // %1 keeps the URL one argv element whatever it grows.
+                        using (var cmd = key.CreateSubKey(@"shell\open\command"))
+                            cmd.SetValue("", "\"" + exePath + "\" \"%1\"");
+                    }
+                }
+            }
+            catch { /* non-fatal */ }
         }
 
         // ── Private helpers ───────────────────────────────────────────────────────
