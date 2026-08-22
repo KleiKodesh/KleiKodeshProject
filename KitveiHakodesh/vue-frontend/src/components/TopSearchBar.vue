@@ -26,8 +26,20 @@
    (home, TOC, commentary, filters) are untouched. */
 .search-inner {
   gap: 6px;
-  padding: 5px 12px;
+  padding: 0 12px;
   box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
+  /* The bar owns its height, so every page that uses it gets the same one. Without
+     this the pill just took the height of its tallest child, which differs per page
+     — a page with 20px icon buttons in its slots came out taller than one with only
+     an input. Callers should not need to restate this. */
+  height: 30px;
+}
+/* Also the bar's, not the page's: the field's type size is part of the control.
+   Fill/border/outline/placeholder colors come from the global `.search-inner input`
+   rule in main.css, so a caller's slotted input needs no styling of its own beyond
+   `flex: 1` and its text direction. */
+.search-inner :slotted(input) {
+  font-size: 13px;
 }
 .slot-left {
   display: flex;
