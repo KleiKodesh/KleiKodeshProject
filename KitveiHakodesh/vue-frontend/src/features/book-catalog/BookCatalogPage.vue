@@ -170,8 +170,14 @@ const showSearch = computed(() => editingSearch.value || !!searchQuery.value)
 
 function openSearch() {
   editingSearch.value = true
-  // The user asked for the field, so put the caret in it — after the v-if has
-  // actually mounted the input.
+  focusSearchInput()
+}
+
+// The field drives the whole page's keyboard, so it has to hold focus even while
+// the bar is showing the path — otherwise the arrows stop working the moment the
+// user clicks anything. Clicking a row moves focus to it (or to <body>), so every
+// navigation puts it back.
+function focusSearchInput() {
   nextTick(() => searchInputRef.value?.focus())
 }
 
@@ -187,14 +193,28 @@ function onSearchBlur() {
 function onEnterFolder(node: CategoryNode) {
   editingSearch.value = false
   enter(node)
+  focusSearchInput()
 }
 
 // Home from inside the search field: back to the root AND out of search, so the
 // bar returns to the path rather than sitting on an emptied field. navigateTo
 // clears the query; the face has to be switched here, since the page owns it.
+// Walking the path from a crumb (or its chevron dropdown) is a navigation like any
+// other: the list underneath changes, so the keyboard has to keep working on it.
+function onNavigate(index: number) {
+  navigateTo(index)
+  focusSearchInput()
+}
+
+function onNavigateToSibling(atIndex: number, node: CategoryNode) {
+  navigateToSibling(atIndex, node)
+  focusSearchInput()
+}
+
 function onGoHome() {
   editingSearch.value = false
   navigateTo(0)
+  focusSearchInput()
 }
 
 onMounted(() => {
@@ -240,8 +260,8 @@ function onSearchEnter() {
     <BookCatalogTitleBar
       :path="path"
       :show-search="showSearch"
-      @navigate="navigateTo"
-      @navigate-to-sibling="navigateToSibling($event.atIndex, $event.node)"
+      @navigate="onNavigate"
+      @navigate-to-sibling="onNavigateToSibling($event.atIndex, $event.node)"
       @open-search="openSearch"
       @go-home="onGoHome"
     >

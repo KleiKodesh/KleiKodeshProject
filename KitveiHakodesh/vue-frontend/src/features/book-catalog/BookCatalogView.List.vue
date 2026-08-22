@@ -70,6 +70,7 @@ function selectItem(index: number, event?: MouseEvent) {
         data-nav-item
         :class="{ 'is-focused': focusedIndex === index }"
         :title="getTooltip(item)"
+        @mousedown.prevent
         @click="selectItem(index, $event)"
         @auxclick.middle="selectItem(index, $event)"
       >

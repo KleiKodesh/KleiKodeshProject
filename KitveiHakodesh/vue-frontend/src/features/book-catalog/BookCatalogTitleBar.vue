@@ -38,13 +38,14 @@ defineEmits<{
       </button>
     </template>
 
-    <!-- v-show, NOT v-if: the field carries the page's keydown handler, and the
-         whole page is one combobox driven from it — the arrows move a highlight
-         through the list below whether or not the user is searching. Unmounting it
-         with the path face took the keyboard with it, so browsing by keyboard died
-         the moment you entered a folder. It stays mounted and keeps focus; only
-         its visibility changes. -->
-    <div v-show="showSearch" class="pill-middle">
+    <!-- The field is ALWAYS mounted and always focusable, even on the path face —
+         it carries the page's keydown handler, and the whole page is one combobox
+         driven from it: the arrows move a highlight through the list below whether
+         or not the user is searching. So the path face hides it by collapsing it to
+         nothing (see .pill-middle.is-hidden) rather than with `display: none` or a
+         `v-if`, either of which would stop it holding focus and kill the keyboard
+         the moment you opened a category. -->
+    <div class="pill-middle" :class="{ 'is-hidden': !showSearch }">
       <IconSearch20Regular class="search-icon" />
       <slot name="search" />
     </div>
@@ -94,6 +95,16 @@ defineEmits<{
    takes a text caret rather than the default arrow. */
 .pill-path {
   cursor: text;
+}
+/* Hidden, but still laid out and still focusable: a `display: none` input cannot
+   hold DOM focus, and focus is what the whole keyboard model rests on. Collapsed
+   to zero width with no visible ink instead. */
+.pill-middle.is-hidden {
+  flex: 0 0 0;
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 :deep(.search-inner input) {
   flex: 1;

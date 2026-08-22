@@ -97,6 +97,7 @@ function selectListItem(i: number, event?: MouseEvent) {
             'is-focused': listActiveIndex === vRow.index,
           }"
           :title="itemTooltip(items[vRow.index]!)"
+          @mousedown.prevent
           @click="selectListItem(vRow.index, $event)"
           @auxclick.middle="selectListItem(vRow.index, $event)"
         >
