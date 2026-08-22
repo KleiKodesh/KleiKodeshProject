@@ -10,6 +10,8 @@ Shared reusable components used across multiple features. Only add a component h
 
 **BottomSearchBar.vue** — compact search bar for use at the bottom of panels.
 
+**TopSearchBar.vue** — the same bar docked at the top of a page. Unlike its sibling it is transparent — no toolbar band and no divider — so the search field's pill is the only chrome. Pages are moving from the bottom-docked bar to this one; use it for new search bars, and note that popups opened from inside it (dropdowns, panels) must open downward.
+
 **FloatingSearchBar.vue** (`common/`) — floating search bar that overlays content. Supports match navigation, mode toggle, and auto-focus.
 
 **ContextMenu.vue** — right-click / long-press context menu. Item types: text, separator, checkbox (persistent toggle, does not close the menu), component (custom row), and submenu (one level of nesting only — a submenu holds text/separator/checkbox items and opens on hover or tap toward the inline-start side, flipping and shifting to stay inside the viewport). Items carry no icons — labels only.

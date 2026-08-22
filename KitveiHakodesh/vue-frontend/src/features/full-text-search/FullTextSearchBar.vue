@@ -9,7 +9,7 @@ import {
   IconArrowSort20Regular,
   IconCheckmark20Regular,
 } from '@iconify-prerendered/vue-fluent'
-import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import TopSearchBar from '@/components/TopSearchBar.vue'
 import AutofillDropdown from '@/components/common/AutofillDropdown.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAutofill } from '@/composables/useAutofill'
@@ -133,7 +133,7 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
 </script>
 
 <template>
-  <BottomSearchBar>
+  <TopSearchBar>
     <template #left>
       <button
         ref="filterBtnRef"
@@ -238,7 +238,7 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
         <IconSearch20Regular v-else />
       </button>
     </template>
-  </BottomSearchBar>
+  </TopSearchBar>
 </template>
 
 <style scoped>
@@ -288,7 +288,7 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
 }
 .sort-dropdown {
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   /* The sort toggle sits at the far-left corner of the (RTL) bar, so anchoring the
      dropdown's right edge would push it off the left of the screen. Anchor its left
      edge to the toggle's left edge instead, so it opens rightward into the viewport. */
