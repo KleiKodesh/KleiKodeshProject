@@ -118,8 +118,8 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
    too big. The vertical gap between items is what is left of the 44px pitch. */
 .nav-sidebar {
   --nav-panel-width: 44px;
-  /* Inset on both sides; the window-edge pane drops one below. --nav-panel-inset itself is
-     global (main.css) because the title bar matches its vertical padding to it. */
+  --nav-panel-inset: 6px;
+  /* Inset on both sides; the window-edge pane drops one below. */
   --nav-panel-side-insets: 2;
   position: relative;
   flex-shrink: 0;
