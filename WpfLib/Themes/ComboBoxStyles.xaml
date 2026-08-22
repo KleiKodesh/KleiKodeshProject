@@ -1,5 +1,9 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
     <!--
         Office-style ComboBox — adaptive, inherits bg/fg from ancestor UserControl.
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
@@ -11,8 +15,8 @@
     <!-- ── ComboBoxItem (shared by all ComboBox styles) ─────────── -->
     <Style x:Key="OfficeComboItem" TargetType="ComboBoxItem">
         <Setter Property="Padding"         Value="8,5"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"        Value="{StaticResource FontSizeNormal}"/>
         <Setter Property="Cursor"          Value="Hand"/>
         <Setter Property="HorizontalContentAlignment" Value="Right"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
@@ -45,8 +49,8 @@
         <Setter Property="Foreground"      Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="BorderBrush"     Value="#50808080"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"        Value="{StaticResource FontSizeNormal}"/>
         <Setter Property="Height"          Value="28"/>
         <Setter Property="Padding"         Value="6,0"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>

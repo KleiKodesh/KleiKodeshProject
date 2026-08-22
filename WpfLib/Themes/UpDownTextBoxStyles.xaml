@@ -1,6 +1,10 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:WpfLib.Controls">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
     <!--
         The look of WpfLib's own numeric text boxes.
 
@@ -24,8 +28,8 @@
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="BorderBrush"      Value="#50808080"/>
         <Setter Property="BorderThickness"  Value="1"/>
-        <Setter Property="FontFamily"       Value="Segoe UI"/>
-        <Setter Property="FontSize"         Value="12"/>
+        <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="TextAlignment"    Value="Center"/>
         <Setter Property="FocusVisualStyle"  Value="{x:Null}"/>

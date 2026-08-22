@@ -1,9 +1,10 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Merged here, not only in DocDesignDictionary, so the BasedOn keys below
          resolve inside this dictionary rather than relying on a sibling. -->
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
@@ -69,8 +70,8 @@
          Use CheckedToggle for toggles that should show their state. -->
     <Style TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}">
         <Setter Property="Padding"    Value="8,4"/>
-        <Setter Property="FontSize"   Value="12"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize"   Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="FontFamily" Value="{StaticResource UiFontFamily}"/>
     </Style>
 
     <!-- CheckedToggle comes from WpfLib/Themes/ButtonStyles.xaml. -->

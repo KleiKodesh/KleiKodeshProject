@@ -1,9 +1,10 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         OfficePalette — shared style palette for all KleiKodesh task pane libraries.
 
         Merging this single dictionary gives a library:
+          - Type tokens: UiFontFamily, FontSizeSmall/Normal/Large (Typography.xaml)
           - Adaptive brush tokens (Brushes.xaml)
           - Implicit ComboBox + keyed OfficeComboItem (ComboBoxStyles.xaml)
           - Implicit Button + keyed IconButton, IconToggle, AccentToggle,
@@ -24,6 +25,7 @@
         NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
     -->
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>

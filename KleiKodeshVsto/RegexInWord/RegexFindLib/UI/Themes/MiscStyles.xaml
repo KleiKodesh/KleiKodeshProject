@@ -1,6 +1,10 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
 
     <!-- UpDownTextBox comes from WpfLib/Themes/UpDownTextBoxStyles.xaml. -->
 
@@ -9,8 +13,8 @@
         <Setter Property="Background"      Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding"         Value="8,0"/>
-        <Setter Property="FontSize"        Value="13"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontSize"        Value="{StaticResource FontSizeLarge}"/>
+        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
         <Setter Property="Foreground"
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="CaretBrush"
@@ -40,8 +44,8 @@
         <Setter Property="Background"      Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Padding"         Value="8,0"/>
-        <Setter Property="FontSize"        Value="13"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontSize"        Value="{StaticResource FontSizeLarge}"/>
+        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
         <Setter Property="Foreground"
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
@@ -60,7 +64,7 @@
         <Setter Property="Background"      Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="Cursor"          Value="Hand"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="Template">
             <Setter.Value>
