@@ -1,6 +1,15 @@
+<script setup lang="ts">
+// `gap` is the spacing between everything in the pill. It is a prop rather than a
+// per-caller CSS override because it is the ONLY spacing inside the pill: nothing
+// in here carries a margin, so one value keeps the contents evenly spaced however
+// many controls a page slots in. Pages with a control at each end want it tighter
+// than the default.
+withDefaults(defineProps<{ gap?: string }>(), { gap: '6px' })
+</script>
+
 <template>
   <div class="top-search-bar">
-    <div class="search-inner">
+    <div class="search-inner" :style="{ gap }">
       <div v-if="$slots.left" class="slot-left"><slot name="left" /></div>
       <slot />
       <div v-if="$slots.right" class="slot-right"><slot name="right" /></div>
@@ -25,7 +34,8 @@
    this pill is what makes the control visible. Scoped, so the other search bars
    (home, TOC, commentary, filters) are untouched. */
 .search-inner {
-  gap: 6px;
+  /* gap comes from the `gap` prop (inline), so a caller can tighten it without
+     restating any of the rest. */
   padding: 0 12px;
   box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
   /* The bar owns its height, so every page that uses it gets the same one. Without
@@ -44,12 +54,16 @@
 .slot-left {
   display: flex;
   align-items: center;
+  gap: inherit;
   flex-shrink: 0;
 }
+/* Same gap as the pill's, so buttons in an end slot sit exactly as far apart as
+   everything else in the bar — one spacing value for the whole control, not one
+   between the slots and a tighter one inside them. */
 .slot-right {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: inherit;
   flex-shrink: 0;
 }
 </style>

@@ -135,11 +135,16 @@ function selectTileItem(i: number, event?: MouseEvent) {
     </div>
   </div>
   <div v-else ref="tilesEl" class="tiles-grid">
-    <div
+    <!-- A <button>, like the browse grid's and the home page's: it is a control,
+         and unlike a div it does not stretch to fill its grid cell, which is what
+         keeps it the same 72px as theirs. -->
+    <button
       v-for="(item, i) in items"
       :key="item.uid"
+      type="button"
       class="tile"
       data-nav-item
+      tabindex="-1"
       :class="{ 'is-focused': tilesActiveIndex === i }"
       :title="itemTooltip(item)"
       @click="selectTileItem(i, $event)"
@@ -147,7 +152,7 @@ function selectTileItem(i: number, event?: MouseEvent) {
     >
       <div class="tile-icon"><IconBookRtl20 /></div>
       <span class="tile-label">{{ itemTitle(item) }}</span>
-    </div>
+    </button>
   </div>
 </template>
 
@@ -247,36 +252,55 @@ function selectTileItem(i: number, event?: MouseEvent) {
   box-sizing: border-box;
   align-content: flex-start;
 }
+/* The same tile as the browse grid's (BookCatalogView.Tiles.vue), which is the
+   home page's: one catalog, one tile. Only the icon differs — these are always
+   books, never folders. */
 .tile {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 5px;
   width: 72px;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  padding-block: 4px;
-  padding-inline: 3px;
-  border-radius: 6px;
 }
 .tile:hover .tile-icon {
-  transform: scale(1.08);
+  transform: scale(1.15);
 }
 .tile:active .tile-icon {
   transform: scale(0.95);
 }
+/* Keyboard focus reads as the grown icon rather than the global
+   `[data-nav-item].is-focused` fill, matching the browse grid: DOM focus stays in
+   the search field, so the class is the only signal, and a filled square under a
+   grown icon is the same thing said twice. */
+.tile.is-focused {
+  background: none;
+}
+.tile.is-focused .tile-icon {
+  transform: scale(1.25);
+}
 .tile-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  transition: transform 0.15s;
-  font-size: 22px;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  background: none;
+  font-size: 28px;
+  transition:
+    transform 0.15s ease,
+    opacity 0.12s ease;
 }
 .tile-icon svg {
+  width: 1em;
+  height: 1em;
   color: #c1440e;
 }
 .tile-label {
@@ -284,7 +308,7 @@ function selectTileItem(i: number, event?: MouseEvent) {
   color: var(--text-primary);
   text-align: center;
   line-height: 1.3;
-  width: 100%;
+  max-width: 68px;
   overflow: hidden;
   white-space: normal;
   word-break: break-word;

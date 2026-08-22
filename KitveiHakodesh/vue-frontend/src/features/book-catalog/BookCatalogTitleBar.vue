@@ -7,6 +7,7 @@ import {
   IconHome16Regular,
   IconSearch20Regular,
 } from '@iconify-prerendered/vue-fluent'
+import TopSearchBar from '@/components/TopSearchBar.vue'
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { Component } from 'vue'
@@ -66,38 +67,46 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
 </script>
 
 <template>
-  <div class="titlebar">
-    <!-- The Explorer address bar: ONE pill holds the whole thing. Home and the view
-         toggle are permanent caps at either end; the middle is the path, and
-         clicking it turns that stretch into a text field. So the bar never changes
-         size or shape — only what fills its middle changes. -->
-    <div class="search-inner">
-      <!-- mousedown.prevent on the buttons: blur fires BEFORE click, so without it
-           clicking one while typing would collapse the field first and move the
-           button out from under the pointer. -->
+  <!-- The Explorer address bar: ONE pill holds the whole thing. Home sits at one
+       end and the search/view buttons at the other; the middle is the path, and
+       clicking it turns that stretch into a text field. The buttons are in the
+       bar's own end slots, so they hold their positions when the middle swaps —
+       switching faces cannot resize or reflow the bar.
+
+       It IS the app's search bar (TopSearchBar), not a copy of it: the padding,
+       height, pill and inset shadow come from there, which is what keeps this and
+       the full-text-search bar the same control. `gap` is tightened because this
+       one has a button at each end rather than an input filling it. -->
+  <TopSearchBar gap="4px">
+    <!-- mousedown.prevent on every button: blur fires BEFORE click, so without it
+         clicking one while typing would collapse the field first and move the
+         button out from under the pointer. -->
+    <template #left>
       <button class="bar-btn pill-btn" title="איפוס" @mousedown.prevent @click="goHome">
         <IconHome16Regular />
       </button>
+    </template>
 
-      <div v-if="showSearch" class="pill-middle">
-        <IconSearch20Regular class="search-icon" />
-        <slot name="search" />
-      </div>
+    <div v-if="showSearch" class="pill-middle">
+      <IconSearch20Regular class="search-icon" />
+      <slot name="search" />
+    </div>
 
-      <!-- The path. Clicking anywhere that is not a crumb opens the field, the way
-           an address bar does — the crumbs and chevrons stop their own clicks, so
-           what reaches here is the slack around them. -->
-      <div v-else class="pill-middle pill-path" @click="$emit('openSearch')">
-        <BookCatalogBreadcrumb
-          v-if="showBreadcrumb"
-          :path="path"
-          @navigate="$emit('navigate', $event)"
-          @navigate-to-sibling="$emit('navigateToSibling', $event)"
-        />
-        <!-- Tree view has no path to walk; the stretch is just the way into search. -->
-        <span v-else class="pill-hint">חיפוש</span>
-      </div>
+    <!-- The path. Clicking anywhere that is not a crumb opens the field, the way
+         an address bar does — the crumbs and chevrons stop their own clicks, so
+         what reaches here is the slack around them. -->
+    <div v-else class="pill-middle pill-path" @click="$emit('openSearch')">
+      <BookCatalogBreadcrumb
+        v-if="showBreadcrumb"
+        :path="path"
+        @navigate="$emit('navigate', $event)"
+        @navigate-to-sibling="$emit('navigateToSibling', $event)"
+      />
+      <!-- Tree view has no path to walk; the stretch is just the way into search. -->
+      <span v-else class="pill-hint">חיפוש</span>
+    </div>
 
+    <template #right>
       <button
         v-if="!showSearch"
         class="bar-btn pill-btn"
@@ -107,49 +116,21 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
       >
         <IconSearch20Regular />
       </button>
-
       <button class="bar-btn pill-btn" :title="viewToggleTitle" @mousedown.prevent @click="cycleView">
         <component :is="current.icon" :key="current.value" :class="{ 'rtl-flip': current.flip }" />
       </button>
-    </div>
-  </div>
+    </template>
+  </TopSearchBar>
 </template>
 
 <style scoped>
-.titlebar {
-  display: flex;
-  align-items: center;
-  /* No background and no divider of its own: the chrome reads as one continuous
-     surface from the app title bar down into the page, and the pill's own outline
-     is the only drawn edge on it.
+/* The pill itself — padding, height, fill, border, inset shadow, and the slotted
+   input's type size — all come from TopSearchBar. What is left here is only what
+   this bar adds: the swapping middle, and the buttons in its end slots.
 
-     Padding matches the full-text-search page's bar (TopSearchBar), so the pill
-     sits at the same inset from the page edge on both pages. */
-  padding: 8px 10px 6px;
-  position: relative;
-  z-index: 10;
-}
-
-/* ── The address bar ──────────────────────────────────────────────────────────
-   Shape, fill and border come from the global `.search-inner` rule (main.css);
-   padding, height and the inset shadow match the full-text-search page's pill
-   (TopSearchBar), so the app's two search bars are one control.
-
-   All spacing inside the pill is THIS ONE `gap`: every child is a direct sibling
-   of every other, so they are evenly spaced by construction and none carries a
-   margin. Keep it that way — a margin here means the ends need re-tuning whenever
-   anything between them changes. */
-.search-inner {
-  gap: 4px;
-  padding: 0 12px;
-  height: 30px;
-  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-/* The pill's middle in both states — the field or the path — taking whatever the
-   buttons leave. */
+   The middle takes whatever the end buttons leave. `flex-basis: 0` keeps its width
+   independent of what is typed into it, so a long query cannot widen the field and
+   push the buttons out. */
 .pill-middle {
   display: flex;
   align-items: center;
@@ -159,16 +140,15 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
   height: 100%;
 }
 /* The path stretch is clickable dead space — clicking it opens the field, so it
-   takes a text caret rather than the pill's default arrow. */
+   takes a text caret rather than the default arrow. */
 .pill-path {
   cursor: text;
 }
-.search-inner :slotted(input) {
+:deep(.search-inner input) {
   flex: 1;
   /* Inputs carry an intrinsic min-width that would otherwise hold the pill open
      and push the buttons out of it. */
   min-width: 0;
-  font-size: 13px;
   direction: rtl;
 }
 /* The magnifier is a hint for a field nobody is using yet; once focused it gives
@@ -189,10 +169,9 @@ const showBreadcrumb = computed(() => props.view !== 'tree' || props.isSearching
   font-size: 13px;
   color: var(--text-secondary);
 }
-
 /* The pill's buttons take its scale, not the title bar's — the same 20px the
    full-text-search bar gives its own in-pill buttons, both sitting in a 30px
-   pill. No margins: the pill's gap is the only thing that positions them. */
+   pill. No margins: the bar's gap is the only thing that positions them. */
 .pill-btn {
   width: 20px;
   height: 20px;
