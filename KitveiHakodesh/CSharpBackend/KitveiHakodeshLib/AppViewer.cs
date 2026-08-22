@@ -605,12 +605,20 @@ namespace KitveiHakodeshLib
                 if (_webView.CoreWebView2 != null)
                 {
                     _webView.CoreWebView2.WebMessageReceived -= OnMessageReceived;
-                    _webView.CoreWebView2.DownloadStarting -= _hb.OnDownloadStarting;
+                    // Must be OUR OnDownloadStarting, not _hb's: `-=` matches on delegate
+                    // target, and we subscribed this class's method (which forwards to _hb).
+                    // Unsubscribing _hb's was a silent no-op that left the handler attached.
+                    _webView.CoreWebView2.DownloadStarting -= OnDownloadStarting;
+                    _webView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                    // OnNavigationCompleted self-unsubscribes on first fire, but only on the
+                    // happy path — a navigation that never completes leaves it attached.
+                    _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
                 }
 
-                // Release all PDF virtual host mappings so WebView2 does not hold
-                // folder handles after the process exits.
+                // Release all virtual host mappings so WebView2 does not hold folder
+                // handles after the process exits.
                 _localFile?.DisposeAllHosts();
+                _hb?.DisposeAllHosts();
 
                 _fileSystemSearch?.Dispose();
                 _userSettings?.Dispose();

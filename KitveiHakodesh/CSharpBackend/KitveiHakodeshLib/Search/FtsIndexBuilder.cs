@@ -186,11 +186,19 @@ namespace KitveiHakodeshLib.Search
             // Collapse the freshly built index into a single segment (perf audit
             // F04): every term lookup and vocabulary scan afterwards touches one
             // segment instead of four. Searches keep running during the merge
-            // (commit-only locking) and shutdown aborts it in under a second via
-            // the build token. This runs AFTER the version stamp on purpose: an
-            // interruption leaves a complete, stamped, multi-segment index — a
-            // performance difference only — and WAL recovery settles any partial
-            // merge at the next start.
+            // (commit-only locking).
+            //
+            // NOT cancellable: ForceMerge takes no token and never consults one, so
+            // a StopAll arriving here blocks on indexingTask.Wait() for the whole
+            // merge — a minute-plus on the full index — which means shutdown and
+            // "delete index" wait it out. That is the accepted cost of the untimed
+            // wait that fixed the index-corruption bug; do not "fix" it by putting
+            // the timeout back. (An earlier comment here claimed the build token
+            // aborted this in under a second. It never did.)
+            //
+            // This runs AFTER the version stamp on purpose: an interruption leaves a
+            // complete, stamped, multi-segment index — a performance difference only
+            // — and WAL recovery settles any partial merge at the next start.
             try
             {
                 Console.WriteLine("[SearchHandler] FTS post-build force merge starting...");

@@ -462,25 +462,30 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
         var session = new SearchSession();
         string id = "s" + Interlocked.Increment(ref _searchCounter);
-        _sessions[id] = session;
 
-        // A new search SUPERSEDES the previous in-flight one — cancel it so the service
-        // never keeps burning cores generating snippets for results the caller has already
-        // moved on from. "Latest search wins" is a SERVICE guarantee (mirroring the hosted
-        // FtsSearchExecutor): a client only ever starts a new stream, nothing else. The
-        // atomic swap makes rapid back-to-back searches race-safe.
-        var prevId = Interlocked.Exchange(ref _currentSearchId, id);
-        if (prevId != null && _sessions.TryRemove(prevId, out var prev))
-        {
-            // Cancel, but do NOT dispose: the superseded search is still inside its own
-            // StreamSearch call with a linked source built off this token. It disposes its
-            // CTS in its own finally once it unwinds — which it may already have done between
-            // our TryRemove and this call, hence the guard. Already disposed == already done.
-            try { prev.Cts.Cancel(); } catch (ObjectDisposedException) { }
-        }
-
+        // Everything from the registration on is inside the try, so no path can leave a
+        // session sitting in _sessions with an undisposed CTS. Cancel() can surface callback
+        // exceptions from the superseded search, so "nothing throws between here and the
+        // try" is not a safe assumption to build on.
         try
         {
+            _sessions[id] = session;
+
+            // A new search SUPERSEDES the previous in-flight one — cancel it so the service
+            // never keeps burning cores generating snippets for results the caller has already
+            // moved on from. "Latest search wins" is a SERVICE guarantee (mirroring the hosted
+            // FtsSearchExecutor): a client only ever starts a new stream, nothing else. The
+            // atomic swap makes rapid back-to-back searches race-safe.
+            var prevId = Interlocked.Exchange(ref _currentSearchId, id);
+            if (prevId != null && _sessions.TryRemove(prevId, out var prev))
+            {
+                // Cancel, but do NOT dispose: the superseded search is still inside its own
+                // StreamSearch call with a linked source built off this token. It disposes its
+                // CTS in its own finally once it unwinds — which it may already have done
+                // between our TryRemove and this call, hence the guard.
+                try { prev.Cts.Cancel(); } catch (ObjectDisposedException) { }
+            }
+
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
             try
             {
@@ -495,18 +500,20 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                 logger.LogError(ex, "FTS streaming search failed");
                 try { await emit(new FtsStreamChunk { Done = true, Error = ex.Message }); } catch { /* client gone */ }
             }
-            finally
-            {
-                _sessions.TryRemove(id, out _);
-                Interlocked.CompareExchange(ref _currentSearchId, null, id);
-            }
         }
         finally
         {
-            // Outer finally so this runs AFTER the inner `using linked` has been disposed: a
-            // linked source registers a callback on session.Cts, and disposing the parent while
-            // that registration is live is exactly the kind of teardown order that bites. The
-            // session is already out of _sessions by now, so no superseding search can reach it.
+            // Unregister here rather than in an inner finally so it covers every path in,
+            // including a throw out of the supersede block above — a session left in
+            // _sessions would make ResetIndex wait out its full 5s unwind timeout for a
+            // search that is already gone.
+            _sessions.TryRemove(id, out _);
+            Interlocked.CompareExchange(ref _currentSearchId, null, id);
+
+            // Last, so it runs AFTER the inner `using linked` has been disposed: a linked
+            // source registers a callback on session.Cts, and disposing the parent while that
+            // registration is live is exactly the kind of teardown order that bites. By now
+            // the session is out of _sessions, so no superseding search can reach it.
             session.Cts.Dispose();
         }
     }

@@ -22,6 +22,11 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
 
   const workers: Partial<Record<OcrScript, Worker>> = {}
   const workerReady: Partial<Record<OcrScript, boolean>> = {}
+  // In-flight spawns, keyed by script. `workers` only tells us about FINISHED ones, and a
+  // spawn takes seconds (WASM core + traineddata) — two callers racing that window would
+  // both spawn, and the second assignment would orphan the first worker beyond the reach of
+  // onUnmounted's sweep. Callers await the same promise instead.
+  const workerSpawns: Partial<Record<OcrScript, Promise<void>>> = {}
 
   // ── Tesseract workers ──────────────────────────────────────────────────────
 
@@ -33,21 +38,35 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   // never be terminated and its WASM heap would leak for every tab closed mid-load.
   let disposed = false
 
-  async function initWorker(targetScript: OcrScript) {
-    if (workers[targetScript]) return
-    const { createWorker } = await import('tesseract.js')
-    const worker = await createWorker(LANG_FILES[targetScript], 1, {
-      langPath: '/tesseract/',
-      gzip: false,
-      workerPath: '/tesseract/worker.min.js',
-      corePath: '/tesseract/tesseract-core.wasm.js',
-    })
-    if (disposed) {
-      void worker.terminate()
-      return
-    }
-    workers[targetScript] = worker
-    workerReady[targetScript] = true
+  function initWorker(targetScript: OcrScript): Promise<void> {
+    if (workers[targetScript]) return Promise.resolve()
+    const existing = workerSpawns[targetScript]
+    if (existing) return existing // a spawn is already in flight — share it
+
+    const spawn = (async () => {
+      const { createWorker } = await import('tesseract.js')
+      const worker = await createWorker(LANG_FILES[targetScript], 1, {
+        langPath: '/tesseract/',
+        gzip: false,
+        workerPath: '/tesseract/worker.min.js',
+        corePath: '/tesseract/tesseract-core.wasm.js',
+      })
+      // Torn down while we were spawning: onUnmounted's sweep has already run and will not
+      // run again, so this worker is ours to terminate.
+      if (disposed) {
+        void worker.terminate()
+        return
+      }
+      workers[targetScript] = worker
+      workerReady[targetScript] = true
+    })()
+
+    workerSpawns[targetScript] = spawn
+    // Clear the slot either way, so a failed spawn can be retried rather than the rejection
+    // being replayed to every later caller. The catch is on this bookkeeping chain only —
+    // `spawn` itself is returned untouched, so callers still see the rejection.
+    spawn.catch(() => {}).finally(() => { delete workerSpawns[targetScript] })
+    return spawn
   }
 
   onUnmounted(() => {

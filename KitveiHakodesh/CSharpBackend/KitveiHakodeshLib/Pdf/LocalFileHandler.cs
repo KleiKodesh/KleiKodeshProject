@@ -467,6 +467,15 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 try { _webView.CoreWebView2?.ClearVirtualHostNameToFolderMapping(kvp.Value.HostName); } catch { }
             }
+            // Served hosts are backed by a WebResourceRequested handler rather than a folder
+            // mapping, so clearing the dictionaries is not enough — the handler keeps this
+            // instance rooted on the long-lived CoreWebView2. Reset the flag too, or a later
+            // RegisterServedFolder would skip re-subscribing and silently serve nothing.
+            if (_servedHandlerInstalled)
+            {
+                try { _webView.CoreWebView2.WebResourceRequested -= OnServedResourceRequested; } catch { }
+                _servedHandlerInstalled = false;
+            }
             _hosts.Clear();
             _servedHosts.Clear();
             _servedFolderByHost.Clear();

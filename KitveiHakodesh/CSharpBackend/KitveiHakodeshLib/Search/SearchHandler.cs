@@ -304,7 +304,18 @@ namespace KitveiHakodeshLib.Search
             var cts = new CancellationTokenSource();
             _watcherCts = cts;
 
-            Thread watcher = new Thread(() => WatchOtherProcessBuild(dbPath, cts.Token))
+            // The thread owns the CTS: it is the only reader of the token, so it is the only
+            // place that can dispose safely. StopWatcher cancels but must NOT dispose — the
+            // thread may still be inside its poll loop reading the token.
+            Thread watcher = new Thread(() =>
+            {
+                try { WatchOtherProcessBuild(dbPath, cts.Token); }
+                finally
+                {
+                    Interlocked.CompareExchange(ref _watcherCts, null, cts);
+                    cts.Dispose();
+                }
+            })
             {
                 IsBackground = true,
                 Name         = "FtsIndexWatcher"
@@ -345,7 +356,10 @@ namespace KitveiHakodeshLib.Search
         {
             var cts = _watcherCts;
             _watcherCts = null;
-            cts?.Cancel();
+            // The watcher thread owns the CTS and disposes it when it exits — which it does
+            // on its own once the other process finishes building. So by the time we get
+            // here it may already be gone, and Cancel() on a disposed source throws.
+            try { cts?.Cancel(); } catch (ObjectDisposedException) { }
         }
 
         /// <summary>
