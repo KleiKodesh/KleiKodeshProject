@@ -1,4 +1,5 @@
-﻿using KitveiHakodeshLib.Settings;
+﻿using KitveiHakodeshLib;
+using KitveiHakodeshLib.Settings;
 using System;
 using System.IO;
 using System.IO.Pipes;
@@ -10,6 +11,9 @@ namespace KitveiHakodeshDemoApp
     internal static class Program
     {
         // Stable identifiers — never change these; they are the per-user IPC channel.
+        // PipeName says "OpenFile" for historical reasons: it now carries any open
+        // request, a file path or a deep link. Renaming it would break the channel
+        // between an installed instance and a newly launched one mid-upgrade.
         private const string MutexName = "KitveiHakodesh-SingleInstance-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
         private const string PipeName  = "KitveiHakodesh-OpenFile-{4A7B2C9E-1F3D-4E8A-B6C0-D2F5A3E7B9C4}";
 
@@ -21,7 +25,8 @@ namespace KitveiHakodeshDemoApp
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            string filePath = GetFilePathArgument();
+            // A file path or a kitveihakodeshapp:// deep link — see GetOpenRequestArgument.
+            string request = GetOpenRequestArgument();
 
             // Debug harness: `--plain` hosts the viewer in a bare Form with no chrome-tabs
             // strip / mirror, to isolate whether the strip steals web-content focus. Runs
@@ -29,7 +34,8 @@ namespace KitveiHakodeshDemoApp
             if (Array.Exists(Environment.GetCommandLineArgs(),
                     a => string.Equals(a, "--plain", StringComparison.OrdinalIgnoreCase)))
             {
-                Application.Run(new PlainDebugForm(filePath));
+                // The plain harness hosts a file, so a deep link has nowhere to go here.
+                Application.Run(new PlainDebugForm(HostLink.TryParse(request) == null ? request : null));
                 return;
             }
 
@@ -40,15 +46,17 @@ namespace KitveiHakodeshDemoApp
                 {
                     // First instance — start the pipe listener and run the app.
                     StartPipeListener();
-                    _mainForm = new MainForm(filePath);
+                    _mainForm = new MainForm(request);
                     Application.Run(_mainForm);
                     try { mutex.ReleaseMutex(); } catch { }
                 }
                 else
                 {
-                    // An instance is already running. Forward the file path to it and exit.
-                    if (!string.IsNullOrEmpty(filePath))
-                        SendFilePathToPipe(filePath);
+                    // An instance is already running. Forward the request to it and exit —
+                    // a second window is never opened, for a deep link exactly as for a file:
+                    // the running instance turns it into a new tab.
+                    if (!string.IsNullOrEmpty(request))
+                        SendOpenRequestToPipe(request);
 
                     // Only restore if minimized — do NOT call SetForegroundWindow cross-process.
                     // On a maximized WebView2-hosted window, SetForegroundWindow posts a
@@ -70,11 +78,23 @@ namespace KitveiHakodeshDemoApp
 
         // ── Command-line argument parsing ─────────────────────────────────────────
 
-        private static string GetFilePathArgument()
+        /// <summary>
+        /// The one startup argument this app takes: an existing file to open, or a
+        /// deep link into a book — <c>kitveihakodeshapp://book/&lt;id&gt;?index=&lt;n&gt;</c>,
+        /// this app's own format, or either of the other two families
+        /// <see cref="HostLink"/> parses (<c>otzaria://</c>, <c>zayit://</c>), which cost
+        /// nothing to accept and open the same way.
+        /// Windows passes the URL as argv[1] when the app is the registered handler for
+        /// the scheme — see Build/Installer/README.md, "URL protocol registration".
+        /// Anything else returns null, so flags like --plain are never read as a request.
+        /// </summary>
+        private static string GetOpenRequestArgument()
         {
             string[] args = Environment.GetCommandLineArgs();
             if (args.Length < 2) return null;
             string candidate = args[1];
+            // Order matters only for clarity: a URL can never be an existing file path.
+            if (HostLink.TryParse(candidate) != null) return candidate;
             return File.Exists(candidate) ? candidate : null;
         }
 
@@ -93,16 +113,31 @@ namespace KitveiHakodeshDemoApp
                             server.WaitForConnection();
                             using (var reader = new StreamReader(server))
                             {
-                                string path = reader.ReadToEnd()?.Trim();
-                                if (!string.IsNullOrEmpty(path) && File.Exists(path))
+                                // Validation lives in MainForm.OpenRequest, which is the one
+                                // place that knows what an open request may be.
+                                string request = reader.ReadToEnd()?.Trim();
+                                // Own try/catch: a failed dispatch must not take the listener
+                                // down with it, or every later request silently opens nothing.
+                                // IsHandleCreated because the listener starts before the form.
+                                try
                                 {
-                                    _mainForm?.BeginInvoke(new Action(() =>
+                                    if (!string.IsNullOrEmpty(request) &&
+                                        _mainForm != null && _mainForm.IsHandleCreated)
                                     {
-                                        if (IsIconic(_mainForm.Handle))
-                                            ShowWindow(_mainForm.Handle, SW_RESTORE);
-                                        _mainForm.OpenFile(path);
-                                    }));
+                                        _mainForm.BeginInvoke(new Action(() =>
+                                        {
+                                            if (IsIconic(_mainForm.Handle))
+                                                ShowWindow(_mainForm.Handle, SW_RESTORE);
+                                            // In-process, on our own UI thread, so this is not the
+                                            // cross-process SetForegroundWindow the caller avoids.
+                                            // Without it a link clicked in Word or a browser opens a
+                                            // tab in a window the user never sees.
+                                            _mainForm.Activate();
+                                            _mainForm.OpenRequest(request);
+                                        }));
+                                    }
                                 }
+                                catch { /* window went away mid-dispatch; keep listening */ }
                             }
                         }
                     }
@@ -116,7 +151,7 @@ namespace KitveiHakodeshDemoApp
             thread.Start();
         }
 
-        private static void SendFilePathToPipe(string filePath)
+        private static void SendOpenRequestToPipe(string request)
         {
             try
             {
@@ -124,7 +159,7 @@ namespace KitveiHakodeshDemoApp
                 {
                     client.Connect(timeout: 3000);
                     using (var writer = new StreamWriter(client) { AutoFlush = true })
-                        writer.Write(filePath);
+                        writer.Write(request);
                 }
             }
             catch { /* running instance may not be listening yet; best-effort */ }

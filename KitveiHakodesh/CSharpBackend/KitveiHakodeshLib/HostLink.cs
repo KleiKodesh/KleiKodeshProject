@@ -4,8 +4,8 @@ using System.Text.RegularExpressions;
 namespace KitveiHakodeshLib
 {
     /// <summary>
-    /// A parsed otzaria://, zayit:// or seforimapp:// deep link pointing at a line of
-    /// a book.
+    /// A parsed otzaria://, zayit:// or kitveihakodeshapp:// deep link pointing at a
+    /// line of a book.
     ///
     /// Otzaria format:
     ///   otzaria://open/book/&lt;bookId&gt;?index=&lt;lineIndex&gt;
@@ -13,12 +13,14 @@ namespace KitveiHakodeshLib
     ///   optionally &amp;m=&lt;url-encoded&gt; → highlight a specific span within the line
     ///   The reference is a 0-based POSITIONAL line/segment index (finest granularity).
     ///
-    /// SeforimApp format (this app's own links — see the frontend's
-    /// useBookViewLineLink.ts, which is the only place they are generated):
-    ///   seforimapp://book/&lt;bookId&gt;?index=&lt;lineIndex&gt;
+    /// This app's own format (generated only by the frontend's utils/appDeepLink.ts,
+    /// which holds the matching single definition of the scheme):
+    ///   kitveihakodeshapp://book/&lt;bookId&gt;?index=&lt;lineIndex&gt;
     ///   Deliberately the same shape and the same query parameters as Otzaria, minus
     ///   the "open/" segment, so both are parsed by one code path and `index` means the
     ///   same thing in both: a 0-based POSITIONAL line index, never a DB row id.
+    ///   LegacyAppScheme is the name this scheme used to have; links copied under it
+    ///   are already sitting in users' documents, so they keep parsing.
     ///
     /// Zayit format:
     ///   zayit://book/&lt;bookId&gt;/line/&lt;lineId&gt;
@@ -28,9 +30,15 @@ namespace KitveiHakodeshLib
     /// </summary>
     public sealed class HostLink
     {
-        public enum LinkScheme { Otzaria, Zayit, SeforimApp }
+        public enum LinkScheme { Otzaria, Zayit, KitveiHakodesh }
 
-        /// <summary>"otzaria", "zayit" or "seforimapp".</summary>
+        /// <summary>This app's own link scheme — the one place it is spelled.</summary>
+        public const string AppScheme = "kitveihakodeshapp";
+
+        /// <summary>The scheme this app's links used before AppScheme; still parsed.</summary>
+        public const string LegacyAppScheme = "seforimapp";
+
+        /// <summary>Which of the three link families this URL came from.</summary>
         public LinkScheme Scheme { get; private set; }
 
         public int BookId { get; private set; }
@@ -49,12 +57,16 @@ namespace KitveiHakodeshLib
 
         // otzaria://open/book/<bookId>?<query>
         private static readonly Regex OtzariaRe = new Regex(
-            @"^otzaria://open/book/(?<book>\d+)(?:\?(?<query>.*))?$",
+            @"^otzaria://open/book/(?<book>\d+)/?(?:\?(?<query>.*))?$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-        // seforimapp://book/<bookId>?<query> — same query grammar as Otzaria.
-        private static readonly Regex SeforimAppRe = new Regex(
-            @"^seforimapp://book/(?<book>\d+)(?:\?(?<query>.*))?$",
+        // kitveihakodeshapp://book/<bookId>?<query> — same query grammar as Otzaria.
+        // Built from the scheme constants so renaming the scheme is a one-line change.
+        // The optional trailing slash is for links that made a round trip through a
+        // browser or the shell, which may normalise the path before launching us.
+        private static readonly Regex AppRe = new Regex(
+            @"^(?:" + Regex.Escape(AppScheme) + "|" + Regex.Escape(LegacyAppScheme) +
+            @")://book/(?<book>\d+)/?(?:\?(?<query>.*))?$",
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         // zayit://book/<bookId>/line/<lineId>
@@ -63,22 +75,23 @@ namespace KitveiHakodeshLib
             RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
         /// <summary>
-        /// Attempts to parse a single URL string. Returns null when it is neither a
-        /// well-formed otzaria:// nor zayit:// book link.
+        /// Attempts to parse a single URL string. Returns null unless it is a well-formed
+        /// book link in one of the three families above — this app's own scheme (or the
+        /// legacy spelling of it), otzaria:// or zayit://.
         /// </summary>
         public static HostLink TryParse(string url)
         {
             if (string.IsNullOrWhiteSpace(url)) return null;
             url = url.Trim();
 
-            // Otzaria and SeforimApp share one body: same path shape, same query
+            // Otzaria and this app's own scheme share one body: same path shape, same query
             // grammar, same meaning for `index`. Only the recorded Scheme differs.
             var indexed = OtzariaRe.Match(url);
             var indexedScheme = LinkScheme.Otzaria;
             if (!indexed.Success)
             {
-                indexed = SeforimAppRe.Match(url);
-                indexedScheme = LinkScheme.SeforimApp;
+                indexed = AppRe.Match(url);
+                indexedScheme = LinkScheme.KitveiHakodesh;
             }
             if (indexed.Success)
             {
@@ -101,7 +114,7 @@ namespace KitveiHakodeshLib
             return null;
         }
 
-        // Shared by the Otzaria and SeforimApp schemes — see TryParse.
+        // Shared by the Otzaria and KitveiHakodesh schemes — see TryParse.
         private static void ParseIndexedQuery(string query, HostLink link)
         {
             if (string.IsNullOrEmpty(query)) return;
@@ -116,7 +129,10 @@ namespace KitveiHakodeshLib
                 switch (key.ToLowerInvariant())
                 {
                     case "index":
-                        if (int.TryParse(val, out int idx)) link.Index = idx;
+                        // Negative is not a line. Left unset, so TryParse rejects the link
+                        // rather than handing the frontend an index it cannot scroll to —
+                        // worth doing now that any web page can hand us a URL.
+                        if (int.TryParse(val, out int idx) && idx >= 0) link.Index = idx;
                         break;
                     case "mark":
                         // Bare flag: &mark highlights the whole line.

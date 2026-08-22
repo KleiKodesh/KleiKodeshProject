@@ -17,11 +17,11 @@ import { getLineIndexFromLineId } from '@/webview-host/seforimApi'
  *    catalog → open the book-catalog singleton seeded with the text via
  *              tab.catalogQuery (BookCatalogPage reads it on mount and searches).
  *
- * 2. hostOpenBook — "פתח קישור בכתבי הקודש": an otzaria://, seforimapp:// or zayit://
+ * 2. hostOpenBook — "פתח קישור בכתבי הקודש": an otzaria://, kitveihakodeshapp:// or zayit://
  *    deep link found in the selection's hyperlinks, parsed C#-side into:
- *      { event: 'hostOpenBook', scheme: 'otzaria' | 'seforimapp' | 'zayit', bookId,
+ *      { event: 'hostOpenBook', scheme: 'otzaria' | 'kitveihakodeshapp' | 'zayit', bookId,
  *        index, lineId, mark, markText }
- *    Otzaria and seforimapp (this app's own links, from useBookViewLineLink.ts) both
+ *    Otzaria and kitveihakodeshapp (this app's own links, see @/utils/appDeepLink) both
  *    carry a positional line `index` used directly; Zayit carries a DB `lineId` we
  *    convert to a positional index via getLineIndexFromLineId. Branch on which of
  *    `index`/`lineId` is present, NOT on `scheme` — the two indexed schemes are

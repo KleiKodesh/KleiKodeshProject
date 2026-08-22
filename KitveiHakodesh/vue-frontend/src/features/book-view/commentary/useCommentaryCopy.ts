@@ -1,7 +1,7 @@
 import { watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
-import { buildLineLink } from '../lines/useBookViewLineLink'
+import { buildLineLink } from '@/utils/appDeepLink'
 import {
   appLinkHtml,
   applyWordLinkExport,

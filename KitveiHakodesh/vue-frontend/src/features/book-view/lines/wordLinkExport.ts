@@ -8,7 +8,7 @@
  * can hold:
  *
  *   range citation → the cited words themselves become a real link
- *                    (`<a href="seforimapp://book/…?index=…">the cited text</a>`),
+ *                    (`<a href="kitveihakodeshapp://book/…?index=…">the cited text</a>`),
  *                    so the reference rides along inside the sentence.
  *   point citation → an endnote, in its own sequence, keeping the marker the
  *                    reader already sees in the line as its reference mark. The
@@ -23,7 +23,7 @@
  * carries highlight/search marks inside a citation span, and matching balanced
  * markup with a regex is exactly where that breaks.
  */
-import { buildLineLink } from './useBookViewLineLink'
+import { buildLineLink } from '@/utils/appDeepLink'
 import { parseWordLinkData, type WordLinkTarget } from './wordLinkAnchors'
 import { escapeHtml } from '@/utils/htmlText'
 
