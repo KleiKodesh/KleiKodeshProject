@@ -3,132 +3,166 @@
         xmlns:kk="http://schemas.kleikodesh.org/wpf"
         x:Class="WpfLib.Gallery.MainWindow"
         Title="WpfLib Gallery"
-        Height="820" Width="1080"
+        Height="620" Width="900"
+        MinHeight="480" MinWidth="700"
         Background="#FFFFFFFF"
         Foreground="#FF262626"
         FontFamily="{StaticResource UiFontFamily}"
         WindowStartupLocation="CenterScreen">
     <!--
-        Every style in the palette, on one screen, so it can be looked at.
+        Every style in the palette, one section at a time, picked from the rail
+        on the left. Sections rather than one long scroll, so a section fits on
+        screen without hunting for it.
 
-        The theme switch at the top is the point of the window as much as the
-        controls are. The palette claims to adapt to any Office theme because
-        it is built from mid-gray overlays rather than fixed light and dark
-        values. That claim is only worth anything if you can flip the
-        background and watch it hold, so flip it.
+        The theme switch is as much the point as the controls are. The palette
+        claims to adapt to any Office theme because it is built from mid-gray
+        overlays rather than fixed light and dark values. That only means
+        something if you can flip the background and watch it hold.
+
+        The rail is itself a ListBox using the palette's own list styles, so
+        the navigation is also a specimen.
     -->
-    <DockPanel Margin="16">
+    <DockPanel Margin="14">
 
         <Border DockPanel.Dock="Top" Padding="0,0,0,12">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="WpfLib Gallery" FontSize="18" FontWeight="SemiBold"
-                           VerticalAlignment="Center"/>
-                <TextBlock Style="{StaticResource SecondaryText}" VerticalAlignment="Center"
-                           Text="the same palette the task panes merge"/>
-                <StackPanel Orientation="Horizontal" Margin="24,0,0,0" VerticalAlignment="Center">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
                     <TextBlock Text="Theme" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                    <ComboBox x:Name="ThemePicker" Width="150"
-                              SelectionChanged="OnThemeChanged"
-                              SelectedIndex="0">
+                    <ComboBox x:Name="ThemePicker" Width="150" SelectedIndex="0"
+                              SelectionChanged="OnThemeChanged">
                         <ComboBoxItem Content="Office White"/>
                         <ComboBoxItem Content="Office Light Gray"/>
                         <ComboBoxItem Content="Office Dark Gray"/>
                         <ComboBoxItem Content="Office Black"/>
                     </ComboBox>
                 </StackPanel>
-            </StackPanel>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="WpfLib Gallery" FontSize="17" FontWeight="SemiBold"
+                               VerticalAlignment="Center" Margin="0,0,10,0"/>
+                    <TextBlock Style="{StaticResource SecondaryText}" VerticalAlignment="Center"
+                               Text="the same palette the task panes merge"/>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="170"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-                <GroupBox Header="Buttons">
-                    <WrapPanel>
-                        <Button Content="Implicit"      Margin="0,0,8,8"/>
-                        <Button Content="ActionButton"  Style="{StaticResource ActionButton}" Margin="0,0,8,8"/>
-                        <Button Content="Disabled"      Style="{StaticResource ActionButton}" IsEnabled="False" Margin="0,0,8,8"/>
-                        <ToggleButton Content="AccentToggle" Margin="0,0,8,8"/>
-                        <ToggleButton Content="IconToggle"   Style="{StaticResource IconToggle}"   Margin="0,0,8,8"/>
-                        <ToggleButton Content="CheckedToggle" Style="{StaticResource CheckedToggle}" Margin="0,0,8,8"/>
-                    </WrapPanel>
-                </GroupBox>
+            <ListBox x:Name="Nav" Grid.Column="0" SelectedIndex="0"
+                     SelectionChanged="OnSectionChanged" Margin="0,0,14,0">
+                <ListBoxItem Content="Buttons"           Tag="SecButtons"/>
+                <ListBoxItem Content="Selection"         Tag="SecSelection"/>
+                <ListBoxItem Content="Text input"        Tag="SecInput"/>
+                <ListBoxItem Content="Type"              Tag="SecType"/>
+                <ListBoxItem Content="Lists &amp; trees" Tag="SecLists"/>
+                <ListBoxItem Content="Containers"        Tag="SecContainers"/>
+                <ListBoxItem Content="Indicators"        Tag="SecIndicators"/>
+                <ListBoxItem Content="Menus"             Tag="SecMenus"/>
+                <ListBoxItem Content="Colour tokens"     Tag="SecTokens"/>
+            </ListBox>
 
-                <GroupBox Header="Selection">
-                    <StackPanel>
-                        <CheckBox Content="A checkbox"           Margin="0,0,0,6"/>
-                        <CheckBox Content="Checked"  IsChecked="True" Margin="0,0,0,6"/>
-                        <CheckBox Content="Disabled" IsEnabled="False" Margin="0,0,0,10"/>
-                        <RadioButton Content="First option"  IsChecked="True"/>
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <Grid x:Name="Sections">
+
+                    <StackPanel x:Name="SecButtons">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="BUTTONS"/>
+                        <WrapPanel>
+                            <Button Content="Implicit"     Margin="0,0,8,8"/>
+                            <Button Content="ActionButton" Style="{StaticResource ActionButton}" Margin="0,0,8,8"/>
+                            <Button Content="Disabled"     Style="{StaticResource ActionButton}" IsEnabled="False" Margin="0,0,8,8"/>
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="TOGGLES" Margin="0,14,0,4"/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,6"
+                                   Text="Click them. AccentToggle keeps its accent under the cursor; IconToggle never shows one."/>
+                        <WrapPanel>
+                            <ToggleButton Content="AccentToggle"  Margin="0,0,8,8"/>
+                            <ToggleButton Content="IconToggle"    Style="{StaticResource IconToggle}"    Margin="0,0,8,8"/>
+                            <ToggleButton Content="CheckedToggle" Style="{StaticResource CheckedToggle}" Margin="0,0,8,8"/>
+                            <ToggleButton Content="Disabled"      Style="{StaticResource CheckedToggle}" IsEnabled="False" Margin="0,0,8,8"/>
+                        </WrapPanel>
+                    </StackPanel>
+
+                    <StackPanel x:Name="SecSelection" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="CHECKBOX AND RADIO"/>
+                        <CheckBox Content="A checkbox"                 Margin="0,0,0,6"/>
+                        <CheckBox Content="Checked"  IsChecked="True"  Margin="0,0,0,6"/>
+                        <CheckBox Content="Disabled" IsEnabled="False" Margin="0,0,0,14"/>
+                        <RadioButton Content="First option" IsChecked="True"/>
                         <RadioButton Content="Second option"/>
                         <RadioButton Content="Disabled" IsEnabled="False"/>
                     </StackPanel>
-                </GroupBox>
 
-                <GroupBox Header="Text input">
-                    <StackPanel>
-                        <TextBox Style="{StaticResource OfficeTextBox}" Text="OfficeTextBox"
-                                 Margin="0,0,0,8"/>
-                        <TextBox Style="{StaticResource OfficeTextBox}" Text="Disabled"
-                                 IsEnabled="False" Margin="0,0,0,8"/>
-                        <PasswordBox Password="hunter2" Margin="0,0,0,8"/>
-                        <ComboBox Margin="0,0,0,8" SelectedIndex="0">
+                    <StackPanel x:Name="SecInput" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="TEXT AND CHOICE"/>
+                        <TextBox Style="{StaticResource OfficeTextBox}" Text="OfficeTextBox" Width="300"
+                                 HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                        <TextBox Style="{StaticResource OfficeTextBox}" Text="Disabled" Width="300"
+                                 HorizontalAlignment="Left" IsEnabled="False" Margin="0,0,0,8"/>
+                        <PasswordBox Password="hunter2" Width="300" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                        <ComboBox Width="300" HorizontalAlignment="Left" SelectedIndex="0" Margin="0,0,0,10">
                             <ComboBoxItem Content="A combo box"/>
                             <ComboBoxItem Content="Second entry"/>
                             <ComboBoxItem Content="Third entry"/>
                         </ComboBox>
-                        <ComboBox IsEditable="True" Tag="Editable, with placeholder from Tag"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,4"
+                                   Text="Editable, placeholder text from Tag. It is right aligned, because the panes are RTL."/>
+                        <ComboBox IsEditable="True" Tag="placeholder from Tag" Width="300"
+                                  HorizontalAlignment="Left" Margin="0,0,0,12"/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,4"
+                                   Text="WpfLib's own controls, reached through the kk: namespace:"/>
+                        <StackPanel Orientation="Horizontal">
                             <kk:UpDownTextBox Value="12" Width="70" Margin="0,0,8,0"/>
                             <kk:UpDownFloatTextBox Value="1.5" Width="70"/>
-                            <TextBlock Style="{StaticResource SecondaryText}" Margin="10,0,0,0"
-                                       Text="WpfLib's own controls, via the kk: namespace"/>
                         </StackPanel>
                     </StackPanel>
-                </GroupBox>
 
-                <GroupBox Header="Type">
-                    <StackPanel>
-                        <TextBlock Style="{StaticResource SectionLabel}"  Text="SECTION LABEL"/>
+                    <StackPanel x:Name="SecType" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="SECTION LABEL"/>
                         <TextBlock Style="{StaticResource OfficeTextBlock}" Text="OfficeTextBlock, the body default."/>
-                        <TextBlock Style="{StaticResource SecondaryText}" Text="SecondaryText, for hints and counts."/>
-                        <Separator/>
-                        <TextBlock>
-                            <Hyperlink Style="{StaticResource OfficeHyperlink}">OfficeHyperlink</Hyperlink>
-                        </TextBlock>
+                        <TextBlock Style="{StaticResource SecondaryText}"  Text="SecondaryText, for hints and counts."/>
+                        <Separator Margin="0,10"/>
+                        <TextBlock><Hyperlink>OfficeHyperlink</Hyperlink></TextBlock>
                     </StackPanel>
-                </GroupBox>
 
-                <GroupBox Header="Lists and trees">
-                    <Grid>
+                    <Grid x:Name="SecLists" Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
-                        <ListBox Grid.Column="0" Height="120" Margin="0,0,8,0" SelectedIndex="1">
-                            <ListBoxItem Content="First row"/>
-                            <ListBoxItem Content="Selected row"/>
-                            <ListBoxItem Content="Third row"/>
-                            <ListBoxItem Content="Fourth row"/>
-                        </ListBox>
-                        <TreeView Grid.Column="1" Height="120">
-                            <TreeViewItem Header="Expanded branch" IsExpanded="True">
-                                <TreeViewItem Header="Leaf one"/>
-                                <TreeViewItem Header="Leaf two"/>
-                            </TreeViewItem>
-                            <TreeViewItem Header="Collapsed branch">
-                                <TreeViewItem Header="Hidden leaf"/>
-                            </TreeViewItem>
-                            <TreeViewItem Header="Leaf at root"/>
-                        </TreeView>
+                        <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                            <TextBlock Style="{StaticResource SectionLabel}" Text="LISTBOX"/>
+                            <ListBox Height="170" SelectedIndex="1">
+                                <ListBoxItem Content="First row"/>
+                                <ListBoxItem Content="Selected row"/>
+                                <ListBoxItem Content="Third row"/>
+                                <ListBoxItem Content="Disabled row" IsEnabled="False"/>
+                            </ListBox>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Style="{StaticResource SectionLabel}" Text="TREEVIEW"/>
+                            <TreeView Height="170">
+                                <TreeViewItem Header="Expanded branch" IsExpanded="True">
+                                    <TreeViewItem Header="Leaf one"/>
+                                    <TreeViewItem Header="Leaf two"/>
+                                </TreeViewItem>
+                                <TreeViewItem Header="Collapsed branch">
+                                    <TreeViewItem Header="Hidden leaf"/>
+                                </TreeViewItem>
+                                <TreeViewItem Header="Leaf at root"/>
+                            </TreeView>
+                        </StackPanel>
                     </Grid>
-                </GroupBox>
 
-                <GroupBox Header="Containers">
-                    <StackPanel>
-                        <TabControl Height="110" Margin="0,0,0,10">
+                    <StackPanel x:Name="SecContainers" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="TABS, EXPANDER, GROUP BOX"/>
+                        <TabControl Height="120" Margin="0,0,0,12">
                             <TabItem Header="First tab">
                                 <TextBlock Style="{StaticResource OfficeTextBlock}"
-                                           Text="Selected tabs get an accent underline."/>
+                                           Text="The selected tab gets an accent underline. Only the header goes semibold."/>
                             </TabItem>
                             <TabItem Header="Second tab">
                                 <TextBlock Style="{StaticResource OfficeTextBlock}" Text="Second panel."/>
@@ -137,29 +171,34 @@
                         </TabControl>
                         <Expander Header="An expander" IsExpanded="True">
                             <TextBlock Style="{StaticResource OfficeTextBlock}"
-                                       Text="The chevron rotates. Same one the tree uses."/>
+                                       Text="The chevron rotates. Same glyph the tree uses."/>
                         </Expander>
-                        <Expander Header="Collapsed by default">
-                            <TextBlock Style="{StaticResource OfficeTextBlock}" Text="Hidden."/>
+                        <Expander Header="Collapsed by default" Margin="0,0,0,12">
+                            <TextBlock Style="{StaticResource OfficeTextBlock}" Text="Hidden until opened."/>
                         </Expander>
+                        <GroupBox Header="A group box">
+                            <TextBlock Style="{StaticResource OfficeTextBlock}" Text="Header above a hairline border."/>
+                        </GroupBox>
                     </StackPanel>
-                </GroupBox>
 
-                <GroupBox Header="Indicators">
-                    <StackPanel>
-                        <ProgressBar Value="35" Margin="0,0,0,10"/>
-                        <ProgressBar IsIndeterminate="True" Margin="0,0,0,10"/>
-                        <Slider Minimum="0" Maximum="100" Value="40" Margin="0,0,0,10"/>
+                    <StackPanel x:Name="SecIndicators" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="PROGRESS, SLIDER, TOOLTIP"/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Text="Determinate, 35%:"/>
+                        <ProgressBar Value="35" Margin="0,4,0,12"/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Text="Indeterminate - sweeps, rather than sitting full:"/>
+                        <ProgressBar IsIndeterminate="True" Margin="0,4,0,12"/>
+                        <Slider Minimum="0" Maximum="100" Value="40" Margin="0,0,0,12"/>
                         <Button Content="Hover me for a tooltip"
                                 Style="{StaticResource ActionButton}"
                                 HorizontalAlignment="Left"
-                                ToolTip="OfficeToolTip renders in its own Popup."/>
+                                ToolTip="OfficeToolTip renders in its own Popup, so it states its own colours."/>
                     </StackPanel>
-                </GroupBox>
 
-                <GroupBox Header="Menus">
-                    <StackPanel>
-                        <Menu Margin="0,0,0,10">
+                    <StackPanel x:Name="SecMenus" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="MENU AND CONTEXT MENU"/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,6"
+                                   Text="Top-level headers inherit the pane foreground; only items inside a popup go light on dark."/>
+                        <Menu Margin="0,0,0,14" HorizontalAlignment="Left">
                             <MenuItem Header="_File">
                                 <MenuItem Header="New"  InputGestureText="Ctrl+N"/>
                                 <MenuItem Header="Open" InputGestureText="Ctrl+O"/>
@@ -172,7 +211,7 @@
                                 <MenuItem Header="Undo" InputGestureText="Ctrl+Z"/>
                             </MenuItem>
                         </Menu>
-                        <Border Padding="12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                        <Border Padding="14" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
                                 CornerRadius="4" HorizontalAlignment="Left">
                             <TextBlock Style="{StaticResource OfficeTextBlock}"
                                        Text="Right-click here for the context menu."/>
@@ -185,13 +224,16 @@
                             </Border.ContextMenu>
                         </Border>
                     </StackPanel>
-                </GroupBox>
 
-                <GroupBox Header="Colour tokens">
-                    <WrapPanel x:Name="SwatchPanel"/>
-                </GroupBox>
+                    <StackPanel x:Name="SecTokens" Visibility="Collapsed">
+                        <TextBlock Style="{StaticResource SectionLabel}" Text="BRUSHES.XAML"/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,8"
+                                   Text="Read out of the merged palette, so a new token appears here on its own."/>
+                        <WrapPanel x:Name="SwatchPanel"/>
+                    </StackPanel>
 
-            </StackPanel>
-        </ScrollViewer>
+                </Grid>
+            </ScrollViewer>
+        </Grid>
     </DockPanel>
 </Window>

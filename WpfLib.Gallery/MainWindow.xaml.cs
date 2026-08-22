@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -38,6 +38,26 @@ namespace WpfLib.Gallery
         {
             InitializeComponent();
             BuildSwatches();
+        }
+
+        /// <summary>
+        /// Show the section the rail selected and hide the rest. Each nav item
+        /// carries the x:Name of its panel in Tag, so adding a section is one
+        /// ListBoxItem plus one panel, with nothing to keep in sync here.
+        /// </summary>
+        private void OnSectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsInitialized) return;
+
+            var wanted = (Nav.SelectedItem as ListBoxItem)?.Tag as string;
+            if (wanted == null) return;
+
+            foreach (UIElement child in Sections.Children)
+            {
+                var named = child as FrameworkElement;
+                if (named == null) continue;
+                child.Visibility = named.Name == wanted ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         private void OnThemeChanged(object sender, SelectionChangedEventArgs e)
