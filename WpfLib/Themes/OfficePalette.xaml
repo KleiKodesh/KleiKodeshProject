@@ -10,6 +10,8 @@
             CheckedToggle, ActionButton, IconPath (ButtonStyles.xaml)
           - Implicit CheckBox with VSCode-style square tick (CheckBoxStyles.xaml)
           - Implicit ScrollBar — thin Edge-style, no arrows (ScrollBarStyles.xaml)
+          - The look of WpfLib's own UpDownTextBox / UpDownFloatTextBox
+            (UpDownTextBoxStyles.xaml)
 
         ToggleButton has no implicit style on purpose: both toggle behaviours are
         legitimate, so a library picks one with a single line of its own —
@@ -27,5 +29,6 @@
         <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/updowntextboxstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>
