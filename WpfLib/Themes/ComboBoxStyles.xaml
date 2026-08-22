@@ -151,6 +151,20 @@
                             <Setter TargetName="ContentSite"          Property="Visibility" Value="Hidden"/>
                             <Setter TargetName="PART_EditableTextBox"  Property="Visibility" Value="Visible"/>
                         </Trigger>
+                        <!--
+                            Show the placeholder while the box is editable and
+                            empty. Without this the TextBlock above stays
+                            Collapsed forever, which is what it did for as long
+                            as it existed: the markup was there, the trigger
+                            never was, so Tag did nothing.
+                        -->
+                        <MultiDataTrigger>
+                            <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource Self}}" Value="True"/>
+                                <Condition Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value=""/>
+                            </MultiDataTrigger.Conditions>
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                        </MultiDataTrigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush"     Value="#0078D4"/>
                             <Setter TargetName="Bd" Property="BorderThickness" Value="1,1,1,2"/>
