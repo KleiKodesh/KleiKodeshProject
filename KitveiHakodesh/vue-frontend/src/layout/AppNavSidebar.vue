@@ -126,6 +126,16 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
   width: calc(var(--nav-panel-width) + var(--nav-panel-inset) * var(--nav-panel-side-insets));
   /* Above the content panel it sits over. */
   z-index: 20;
+  /* The inset has to read as a gap, and the shell behind it paints --bg-secondary - the
+     panel's own colour - so on its own the inset was invisible and the panel looked like
+     flush chrome with a stray border round it. What shows through has to be whatever the
+     row behind it is: chrome for the title bar's band across the top, page below it, where
+     the content panel is. Hence the hard stop at --title-bar-height rather than a flat
+     fill, which ran a white stripe up through the title bar. */
+  background: linear-gradient(
+    var(--bg-secondary) 0 var(--title-bar-height),
+    var(--bg-primary) var(--title-bar-height) 100%
+  );
 }
 .nav-sidebar:has(.nav-panel.is-window-edge) {
   --nav-panel-side-insets: 1;
