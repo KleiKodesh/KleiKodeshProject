@@ -1,11 +1,9 @@
-using System.Windows.Media;
-
 namespace RegexFindLib.UI
 {
     /// <summary>
-    /// Represents a single font in the font picker.
-    /// IsHebrew is true when the font's glyph map contains 'א' — same detection
-    /// used by KitveiHakodeshLib.Helpers.FontsProvider.
+    /// Represents a single font in the font picker. IsHebrew comes from
+    /// WpfLib.Helpers.FontsProvider, the solution's shared DirectWrite font source — the same
+    /// enumeration and the same א glyph test the Kitvei Hakodesh font picker uses.
     /// </summary>
     public class FontItem
     {
@@ -20,26 +18,6 @@ namespace RegexFindLib.UI
         {
             Name     = name;
             IsHebrew = isHebrew;
-        }
-
-        /// <summary>
-        /// Returns true when the font family contains a glyph for 'א'.
-        /// </summary>
-        public static bool DetectHebrew(string fontName)
-        {
-            try
-            {
-                var family = new FontFamily(fontName);
-                foreach (var typeface in family.GetTypefaces())
-                {
-                    GlyphTypeface glyph;
-                    if (typeface.TryGetGlyphTypeface(out glyph) &&
-                        glyph.CharacterToGlyphMap.ContainsKey('א'))
-                        return true;
-                }
-            }
-            catch { }
-            return false;
         }
 
         // So the editable ComboBox can display/match by name

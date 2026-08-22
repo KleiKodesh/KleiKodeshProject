@@ -1,6 +1,6 @@
-using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
+using WpfLib.Helpers;
 
 namespace RegexFindLib.UI
 {
@@ -20,13 +20,14 @@ namespace RegexFindLib.UI
             {
                 try
                 {
-                    List<FontItem> items;
-                    using (var col = new System.Drawing.Text.InstalledFontCollection())
-                        items = col.Families
-                            .Select(f => new FontItem(f.Name, FontItem.DetectHebrew(f.Name)))
-                            .OrderBy(f => f.IsHebrew ? 0 : 1)
-                            .ThenBy(f => f.Name)
-                            .ToList();
+                    // WpfLib.Helpers.FontsProvider is the solution's shared font source: one
+                    // DirectWrite enumeration that already returns Hebrew families first,
+                    // alphabetical within each group. It replaced InstalledFontCollection, which
+                    // reports GDI families rather than the ones WPF resolves by name and is a
+                    // process-lifetime snapshot that never sees fonts installed mid-session.
+                    var items = FontsProvider.GetFontFamilies()
+                        .Select(f => new FontItem(f.Name, f.HasHebrew))
+                        .ToList();
 
                     dispatcher.BeginInvoke(new System.Action(() =>
                     {

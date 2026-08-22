@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -12,6 +12,10 @@
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
+    <!-- Helpers\FontsProvider.cs calls DirectWrite through unmanaged function pointers,
+         which need C# 9+ and unsafe. -->
+    <LangVersion>latest</LangVersion>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
   </PropertyGroup>
@@ -119,6 +123,7 @@
     <Compile Include="Helpers\DependencyHelper.cs" />
     <Compile Include="Helpers\EventArgs.cs" />
     <Compile Include="Helpers\FontsHelper.cs" />
+    <Compile Include="Helpers\FontsProvider.cs" />
     <Compile Include="Helpers\HebrewDateHelper.cs" />
     <Compile Include="Helpers\HebrewNumbering.cs" />
     <Compile Include="Helpers\MsgBox.cs" />
@@ -159,6 +164,10 @@
       <SubType>Designer</SubType>
     </Page>
     <Page Include="Themes\ButtonStyles.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Page Include="Themes\UpDownTextBoxStyles.xaml">
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>

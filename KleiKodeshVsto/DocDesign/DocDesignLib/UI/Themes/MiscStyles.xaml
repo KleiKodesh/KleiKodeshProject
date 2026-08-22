@@ -22,77 +22,8 @@
         <Setter Property="Margin"     Value="0,2"/>
     </Style>
 
-    <!-- ── UpDownTextBox — CornerRadius="4", accent focus border ─── -->
-    <Style TargetType="controls:UpDownTextBox">
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="BorderBrush"     Value="#50808080"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="FontSize"        Value="12"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="TextAlignment"   Value="Center"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="Bd"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4">
-                        <ScrollViewer x:Name="PART_ContentHost"
-                                      Margin="4,0" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#0078D4"/>
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#80808080"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!-- ── UpDownFloatTextBox — same template ────────────────────── -->
-    <Style TargetType="controls:UpDownFloatTextBox">
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="BorderBrush"     Value="#50808080"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="FontSize"        Value="12"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="TextAlignment"   Value="Center"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="Bd"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4">
-                        <ScrollViewer x:Name="PART_ContentHost"
-                                      Margin="4,0" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#0078D4"/>
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#80808080"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <!-- UpDownTextBox and UpDownFloatTextBox come from
+         WpfLib/Themes/UpDownTextBoxStyles.xaml. -->
 
     <!-- ── Delete overlay — red diagonal line (same as RegexFindLib FormatToggle false state) ── -->
     <!-- Usage: add as a sibling inside a Grid alongside the icon Viewbox -->

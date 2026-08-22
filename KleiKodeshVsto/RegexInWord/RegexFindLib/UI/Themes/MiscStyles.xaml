@@ -2,40 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
 
-    <!-- ── UpDownTextBox — adaptive, inherits fg from ancestor ──── -->
-    <Style TargetType="controls:UpDownTextBox">
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="BorderBrush"     Value="#50808080"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="FontFamily"      Value="Segoe UI"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="TextAlignment"   Value="Center"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <Border x:Name="Bd"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4">
-                        <ScrollViewer x:Name="PART_ContentHost"
-                                      Margin="4,0" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#0078D4"/>
-                        </Trigger>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="BorderBrush" Value="#80808080"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
+    <!-- UpDownTextBox comes from WpfLib/Themes/UpDownTextBoxStyles.xaml. -->
 
     <!-- ── Search input TextBox — borderless, fills the input wrapper ──── -->
     <Style x:Key="SearchTextBox" TargetType="TextBox">
