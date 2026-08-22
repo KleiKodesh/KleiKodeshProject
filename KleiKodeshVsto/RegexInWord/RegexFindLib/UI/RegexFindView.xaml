@@ -91,7 +91,7 @@
 
                 <!-- LEFT side (RTL: Dock=Right) — החלפה + regex tips + engine toggle -->
                 <ToggleButton DockPanel.Dock="Right"
-                              Style="{StaticResource IconToggle}"
+                              Style="{StaticResource PaletteToggle}"
                               IsChecked="{Binding ShowReplace}"
                               Height="Auto" Width="Auto" Padding="8,4"
                               ToolTip="החלפה">
@@ -105,7 +105,7 @@
                 </ToggleButton>
 
                 <ToggleButton DockPanel.Dock="Right"
-                              Style="{StaticResource IconToggle}"
+                              Style="{StaticResource PaletteToggle}"
                               IsChecked="{Binding ShowRegexPalette}"
                               ToolTip="לוח תווי רג'קס">
                     <Path Data="{StaticResource Icon.Sparkle}"
@@ -116,7 +116,7 @@
 
                 <!-- Engine toggle — switches between custom regex engine and Word native search -->
                 <ToggleButton DockPanel.Dock="Right"
-                              Style="{StaticResource IconToggle}"
+                              Style="{StaticResource PaletteToggle}"
                               IsChecked="{Binding UseWordSearch}"
                               Height="Auto" Width="Auto" Padding="8,4"
                               ToolTip="חיפוש מובנה של Word">

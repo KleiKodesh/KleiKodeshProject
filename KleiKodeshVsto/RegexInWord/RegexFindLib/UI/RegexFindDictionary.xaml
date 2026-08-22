@@ -6,12 +6,10 @@
         NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
     -->
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
-        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/comboboxstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/miscstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/palettestyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/colorpickerstyles.xaml"/>
