@@ -1,17 +1,29 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        Flat icon button styles — adaptive, work on any Office theme.
+        Flat button and toggle styles — adaptive, work on any Office theme.
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
 
-        Implicit Button  : flat, transparent, hover/pressed overlays, disabled at 35% opacity.
-        Implicit Toggle  : same as Button, no checked highlight.
-        CheckedToggle    : bordered toggle with blue selected state.
-        ActionButton     : bordered action button for dialogs (OK, Apply, etc.).
+        IconButton    : flat icon button — transparent, hover/pressed overlays,
+                        disabled at 35% opacity. Also the implicit Button style.
+        IconToggle    : flat icon toggle — hover/pressed only, NO checked highlight.
+        AccentToggle  : flat icon toggle that fills with accent while checked, and
+                        keeps the accent under the cursor instead of losing it.
+        CheckedToggle : bordered toggle with an accent checked state.
+        ActionButton  : bordered action button for dialogs (OK, Apply, etc.).
+        IconPath      : Path inside an icon button — inherits the pane foreground.
+
+        Sizing is deliberately NOT set here beyond Padding. A library that needs a
+        fixed metric derives from these with BasedOn and adds Width/Height/Margin,
+        so this file stays about how a control LOOKS, not how big it is.
+
+        There is intentionally no implicit ToggleButton style — the two toggle
+        behaviours are both legitimate, so each library aliases the one it wants:
+            <Style TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}"/>
     -->
 
-    <!-- ── Implicit Button — flat icon button ────────────────────── -->
-    <Style TargetType="Button">
+    <!-- ── IconButton — flat icon button ─────────────────────────── -->
+    <Style x:Key="IconButton" TargetType="Button">
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Padding"          Value="6"/>
@@ -43,8 +55,11 @@
         </Setter>
     </Style>
 
-    <!-- ── Implicit ToggleButton — flat, no checked highlight ────── -->
-    <Style TargetType="ToggleButton">
+    <!-- Implicit Button — every plain Button is an icon button. -->
+    <Style TargetType="Button" BasedOn="{StaticResource IconButton}"/>
+
+    <!-- ── IconToggle — flat, no checked highlight ───────────────── -->
+    <Style x:Key="IconToggle" TargetType="ToggleButton">
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Padding"          Value="6"/>
@@ -75,8 +90,57 @@
         </Setter>
     </Style>
 
-    <!-- ── CheckedToggle — bordered toggle with blue selected state ─ -->
-    <Style x:Key="CheckedToggle" TargetType="ToggleButton" BasedOn="{StaticResource {x:Type ToggleButton}}">
+    <!-- ── AccentToggle — accent fill while checked ──────────────────
+         A plain IsChecked trigger loses to IsMouseOver, so hovering a checked
+         toggle would drop the accent and read as "off". These MultiTriggers
+         keep it, and brighten it under the cursor instead.
+    -->
+    <Style x:Key="AccentToggle" TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <!-- unchecked hover -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked"   Value="False"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+                        </MultiTrigger>
+                        <!-- checked — keep the accent, even under the cursor -->
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked"   Value="True"/>
+                                <Condition Property="IsMouseOver" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#3300B4FF"/>
+                        </MultiTrigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsChecked"   Value="True"/>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="Bd" Property="Background" Value="#4400B4FF"/>
+                        </MultiTrigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#14808080"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ── CheckedToggle — bordered toggle with accent checked state ─ -->
+    <Style x:Key="CheckedToggle" TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}">
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
@@ -141,6 +205,13 @@
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
+    </Style>
+
+    <!-- ── IconPath — vector icon inside a button ─────────────────── -->
+    <Style x:Key="IconPath" TargetType="Path">
+        <Setter Property="Fill"          Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <Setter Property="Stretch"       Value="Uniform"/>
+        <Setter Property="FlowDirection" Value="LeftToRight"/>
     </Style>
 
 </ResourceDictionary>

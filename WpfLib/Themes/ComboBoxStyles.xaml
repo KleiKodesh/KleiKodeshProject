@@ -3,14 +3,17 @@
     <!--
         Office-style ComboBox — adaptive, inherits bg/fg from ancestor UserControl.
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
+
+        Set Tag to a prompt string to get placeholder text on an editable ComboBox;
+        leave Tag unset and the placeholder stays collapsed.
     -->
 
-    <!-- ── ComboBoxItem ──────────────────────────────────────────── -->
+    <!-- ── ComboBoxItem (shared by all ComboBox styles) ─────────── -->
     <Style x:Key="OfficeComboItem" TargetType="ComboBoxItem">
-        <Setter Property="Padding"          Value="8,5"/>
-        <Setter Property="FontFamily"       Value="Segoe UI"/>
-        <Setter Property="FontSize"         Value="12"/>
-        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="Padding"         Value="8,5"/>
+        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="Cursor"          Value="Hand"/>
         <Setter Property="HorizontalContentAlignment" Value="Right"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
@@ -36,20 +39,20 @@
         </Setter>
     </Style>
 
-    <!-- ── Implicit ComboBox ─────────────────────────────────────── -->
+    <!-- ── Implicit Office ComboBox (all other ComboBoxes) ───────── -->
     <Style TargetType="ComboBox">
-        <Setter Property="Background"       Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="Foreground"       Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="BorderBrush"      Value="#50808080"/>
-        <Setter Property="BorderThickness"  Value="1"/>
-        <Setter Property="FontFamily"       Value="Segoe UI"/>
-        <Setter Property="FontSize"         Value="12"/>
-        <Setter Property="Height"           Value="28"/>
-        <Setter Property="Padding"          Value="6,0"/>
+        <Setter Property="Background"      Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <Setter Property="Foreground"      Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <Setter Property="BorderBrush"     Value="#50808080"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="FontFamily"      Value="Segoe UI"/>
+        <Setter Property="FontSize"        Value="12"/>
+        <Setter Property="Height"          Value="28"/>
+        <Setter Property="Padding"         Value="6,0"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/>
-        <Setter Property="VirtualizingPanel.IsVirtualizing"     Value="True"/>
+        <Setter Property="VirtualizingPanel.IsVirtualizing"    Value="True"/>
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
         <Setter Property="ItemContainerStyle" Value="{StaticResource OfficeComboItem}"/>
         <Setter Property="Template">
@@ -61,13 +64,12 @@
                                 BorderBrush="{TemplateBinding BorderBrush}"
                                 BorderThickness="{TemplateBinding BorderThickness}"
                                 CornerRadius="4">
-                            <Grid>
+                            <Grid VerticalAlignment="Stretch">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="24"/>
                                 </Grid.ColumnDefinitions>
-                                <ContentPresenter x:Name="ContentSite"
-                                                  Grid.Column="0"
+                                <ContentPresenter x:Name="ContentSite" Grid.Column="0"
                                                   Content="{TemplateBinding SelectionBoxItem}"
                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
                                                   Margin="{TemplateBinding Padding}"
@@ -86,8 +88,7 @@
                                            TextAlignment="Right"
                                            IsHitTestVisible="False"
                                            Visibility="Collapsed"/>
-                                <TextBox x:Name="PART_EditableTextBox"
-                                         Grid.Column="0"
+                                <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"
                                          Background="Transparent" BorderThickness="0"
                                          Margin="{TemplateBinding Padding}"
                                          FontSize="{TemplateBinding FontSize}"
@@ -108,8 +109,7 @@
                                             <Border Background="Transparent"
                                                     VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
                                                 <Path Data="M4 6L8 10L12 6"
-                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}"
-                                                      StrokeThickness="1.5"
+                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}" StrokeThickness="1.5"
                                                       StrokeLineJoin="Round"
                                                       StrokeStartLineCap="Round"
                                                       StrokeEndLineCap="Round"
