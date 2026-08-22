@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
-import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import TopSearchBar from '@/components/TopSearchBar.vue'
 import { useHebrewBooks } from './useHebrewBooks'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { useLocalFileStore } from '@/stores/localFileStore'
@@ -100,6 +100,20 @@ function onBookClicked(
         <IconDismiss20Regular />
       </button>
     </div>
+    <TopSearchBar>
+      <template #left><IconSearch20Regular class="search-icon" /></template>
+      <input
+        ref="searchInputRef"
+        :value="searchTerm"
+        type="search"
+        placeholder="חפש ספרים, מחברים או נושאים..."
+        class="search-input"
+        dir="rtl"
+        @input="search(($event.target as HTMLInputElement).value)"
+        @keydown="onSearchInputKeydown"
+      />
+    </TopSearchBar>
+
     <div ref="scrollEl" class="hb-list">
       <LoadingAnimation v-if="isLoading" />
 
@@ -139,20 +153,6 @@ function onBookClicked(
         <span v-else>אין היסטוריה — חפש ספר להתחיל</span>
       </div>
     </div>
-
-    <BottomSearchBar>
-      <template #left><IconSearch20Regular class="search-icon" /></template>
-      <input
-        ref="searchInputRef"
-        :value="searchTerm"
-        type="search"
-        placeholder="חפש ספרים, מחברים או נושאים..."
-        class="search-input"
-        dir="rtl"
-        @input="search(($event.target as HTMLInputElement).value)"
-        @keydown="onSearchInputKeydown"
-      />
-    </BottomSearchBar>
   </div>
 </template>
 
@@ -191,20 +191,11 @@ function onBookClicked(
 .search-icon {
   color: var(--text-secondary);
 }
+/* Fill, border, outline, colors, placeholder and the search-cancel button all come
+   from the global `.search-inner input` rule; the type size comes from TopSearchBar. */
 .search-input {
   flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
   direction: rtl;
-}
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-.search-input::-webkit-search-cancel-button {
-  filter: grayscale(1) opacity(0.4);
 }
 
 .hb-error-banner {

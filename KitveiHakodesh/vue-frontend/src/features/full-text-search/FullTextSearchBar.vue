@@ -248,15 +248,7 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
      a tight bar the input refuses to shrink and pushes the buttons and the
      count badge out of the pill. Let it shrink instead. */
   min-width: 40px;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
   direction: rtl;
-}
-.search-input::placeholder {
-  color: var(--text-secondary);
 }
 .bar-btn {
   display: flex;
