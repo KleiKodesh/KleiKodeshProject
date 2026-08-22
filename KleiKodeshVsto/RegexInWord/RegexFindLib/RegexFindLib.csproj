@@ -94,7 +94,6 @@
     <Compile Include="Search\RegexSearchReplace.cs" />
     <Compile Include="Search\WordSearchEngine.cs" />
     <!-- UI -->
-    <Compile Include="UI\Converters.cs" />
     <Compile Include="UI\FontItem.cs" />
     <Compile Include="UI\SpaceBetweenPanel.cs" />
     <Compile Include="UI\PlaceholderBehavior.cs" />

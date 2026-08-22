@@ -1,12 +1,13 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:local="clr-namespace:RegexFindLib.UI">
+                    xmlns:local="clr-namespace:RegexFindLib.UI"
+                    xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib">
 
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
-    <local:ColorToBrushConverter x:Key="ColorToBrush"/>
+    <conv:ColorToBrushConverter x:Key="ColorToBrush"/>
 
     <!-- ── Swatch DataTemplate (ThemeColors + StandardColors) ──────────── -->
     <DataTemplate x:Key="SwatchTemplate" DataType="{x:Type local:WordColor}">

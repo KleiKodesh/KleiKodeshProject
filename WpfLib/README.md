@@ -7,7 +7,7 @@ Shared WPF utilities used by all task pane libraries in KleiKodesh (DocDesignLib
 | Subfolder | Contents | Used By |
 |-----------|----------|---------|
 | `ViewModels/` | Base MVVM classes (ViewModelBase, RelayCommand, TreeItemBase) | All WPF libs |
-| `Helpers/` | Utilities (HebrewDateHelper, HebrewNumbering, FontsHelper, MsgBox) | All WPF libs |
+| `Helpers/` | Utilities (HebrewDateHelper, HebrewNumbering, FontsProvider, FontsHelper, MsgBox) | All WPF libs |
 | `Converters/` | WPF value converters (FlowDirection, Bool, String, Array/List) | All WPF libs |
 | `Controls/` | Custom controls (UpDownTextBox, UpDownFloatTextBox) | DocDesignLib |
 | `AttachedProperties/` | Attached behaviors (ButtonStrip, GridSetup, PopupListBox, TextBoxBehaviours) | All WPF libs |
@@ -25,7 +25,9 @@ Shared WPF utilities used by all task pane libraries in KleiKodesh (DocDesignLib
 ### Helpers/
 - **`HebrewNumbering.cs`** — Converts integers to Hebrew numeral strings. Used by DocDesign for page numbering.
 - **`HebrewDateHelper.cs`** — Hebrew calendar date calculations and formatting.
-- **`FontsHelper.cs`** — Enumerates installed system fonts; font discovery.
+- **`FontsProvider.cs`** — The solution's single font source: DirectWrite enumeration with a real
+  Hebrew-glyph test. Twin file of the service's `HebrewFontsProvider.cs`.
+- **`FontsHelper.cs`** — WPF projection of `FontsProvider` for font pickers.
 - **`MsgBox.cs`** — Themed message box that respects Office theme. Used instead of raw MessageBox.
 - **`ObservableCollectionExtensions.cs`** — `AddRange()`, `RemoveAll()` for ObservableCollection.
 - **`EventArgs.cs`** — Generic `EventArgs<T>` for strongly-typed events.

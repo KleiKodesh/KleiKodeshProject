@@ -1,10 +1,11 @@
-<!-- NakdanView.xaml  |  Hebrew vowelization task-pane  |  RTL  |  MVVM -->
+﻿<!-- NakdanView.xaml  |  Hebrew vowelization task-pane  |  RTL  |  MVVM -->
 <UserControl x:Class="Nakdan.UI.NakdanView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:Nakdan.UI"
+             xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib"
              mc:Ignorable="d"
              d:DesignHeight="600" d:DesignWidth="300"
              FlowDirection="RightToLeft"
@@ -28,7 +29,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <!-- ── Converters ────────────────────────────────────── -->
-            <local:BoolToVisibilityConverter  x:Key="BoolToVis"/>
+            <conv:BoolToVisibilityConverter  x:Key="BoolToVis"/>
             <local:GenreDescriptionConverter  x:Key="GenreDesc"/>
 
         </ResourceDictionary>
