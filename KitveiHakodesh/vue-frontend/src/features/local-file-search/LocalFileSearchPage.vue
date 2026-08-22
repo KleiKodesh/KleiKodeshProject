@@ -8,7 +8,7 @@ import {
   IconCheckmark20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { storeToRefs } from 'pinia'
-import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import TopSearchBar from '@/components/TopSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
 import { useLocalFileSearch } from './useLocalFileSearch'
@@ -192,51 +192,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
 
 <template>
   <div class="local-file-search-page">
-    <div class="local-file-search-content">
-      <!-- Error state -->
-      <div v-if="errorMessage" class="state-banner error-banner">
-        <IconWarning20Regular class="banner-icon banner-icon--error" />
-        <span>{{ errorMessage }}</span>
-      </div>
-
-      <!-- Results or empty state -->
-      <div v-else class="results-container">
-        <!-- Loading while any search is in flight for more than 200ms -->
-        <div v-if="showLoadingAnimation" class="searching-state">
-          <LoadingAnimation text="מחפש..." />
-        </div>
-
-        <!-- Empty state when idle with no results -->
-        <div v-else-if="!results.length" class="empty-state">
-          <IconSearch20Regular class="empty-icon" />
-          <span class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
-        </div>
-
-        <!-- Results list -->
-        <LocalFileSearchResultsList
-          v-else
-          ref="resultsListElement"
-          :items="results"
-          :searching="searching"
-          @open-file="onOpenFile"
-        />
-
-        <!-- Opening overlay -->
-        <div v-if="openingFile" class="opening-overlay">
-          <div class="opening-card">
-            <div class="opening-spinner" />
-            <span class="opening-label">פותח קובץ…</span>
-          </div>
-        </div>
-
-        <!-- Truncation notice -->
-        <div v-if="totalCount > results.length" class="truncation-notice">
-          (מוצגים {{ results.length }} מתוך {{ totalCount }} תוצאות)
-        </div>
-      </div>
-    </div>
-
-    <BottomSearchBar>
+    <TopSearchBar>
       <template #left>
         <!-- Sort toggle button -->
         <div ref="sortControlElement" class="sort-control">
@@ -282,7 +238,51 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
       <template #right>
         <IconSearch20Regular class="search-icon" />
       </template>
-    </BottomSearchBar>
+    </TopSearchBar>
+
+    <div class="local-file-search-content">
+      <!-- Error state -->
+      <div v-if="errorMessage" class="state-banner error-banner">
+        <IconWarning20Regular class="banner-icon banner-icon--error" />
+        <span>{{ errorMessage }}</span>
+      </div>
+
+      <!-- Results or empty state -->
+      <div v-else class="results-container">
+        <!-- Loading while any search is in flight for more than 200ms -->
+        <div v-if="showLoadingAnimation" class="searching-state">
+          <LoadingAnimation text="מחפש..." />
+        </div>
+
+        <!-- Empty state when idle with no results -->
+        <div v-else-if="!results.length" class="empty-state">
+          <IconSearch20Regular class="empty-icon" />
+          <span class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
+        </div>
+
+        <!-- Results list -->
+        <LocalFileSearchResultsList
+          v-else
+          ref="resultsListElement"
+          :items="results"
+          :searching="searching"
+          @open-file="onOpenFile"
+        />
+
+        <!-- Opening overlay -->
+        <div v-if="openingFile" class="opening-overlay">
+          <div class="opening-card">
+            <div class="opening-spinner" />
+            <span class="opening-label">פותח קובץ…</span>
+          </div>
+        </div>
+
+        <!-- Truncation notice -->
+        <div v-if="totalCount > results.length" class="truncation-notice">
+          (מוצגים {{ results.length }} מתוך {{ totalCount }} תוצאות)
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -292,6 +292,14 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
   flex-direction: column;
   height: 100%;
   background: var(--bg-primary);
+}
+/* The sort dropdown drops out of the bar over the results below. Give the bar a layer
+   of its own so that stays true: the results wrapper is positioned, and the moment it
+   gains a z-index or anything else that forms a stacking context (it already holds a
+   backdrop-filter overlay) the dropdown would fall behind it. */
+.local-file-search-page > :deep(.top-search-bar) {
+  position: relative;
+  z-index: 5;
 }
 .local-file-search-content {
   flex: 1;
@@ -310,19 +318,10 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
 .search-icon {
   color: var(--text-secondary);
 }
+/* Fill, border, outline, colors, placeholder and the search-cancel button all come
+   from the global `.search-inner input` rule; the type size comes from TopSearchBar. */
 .search-input {
   flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
-}
-.search-input::placeholder {
-  color: var(--text-secondary);
-}
-.search-input::-webkit-search-cancel-button {
-  filter: grayscale(1) opacity(0.4);
 }
 
 /* Banners */
@@ -453,7 +452,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
 
 .sort-dropdown {
   position: absolute;
-  bottom: calc(100% + 6px);
+  top: calc(100% + 6px);
   right: 0;
   min-width: 160px;
   background: var(--bg-secondary);
