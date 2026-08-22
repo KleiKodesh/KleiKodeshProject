@@ -6,8 +6,52 @@
 pane library (RegexFindLib, DocDesignLib, WebSitesLib, Nakdan) and the ribbon
 settings pane draws from it.
 
-**Single entry point:** `OfficePalette.xaml` merges all shared styles. Consuming
-libraries merge that one file and then add only what is genuinely theirs.
+**Pick your layer.** The palette is separable, so depending on it costs only
+what you use. Merging a layer never drags in the one above it.
+
+| Layer | File | What it gives you | What it changes |
+|-------|------|-------------------|-----------------|
+| 1 | `Tokens.xaml` | Colour and type *names* only | **Nothing.** No styles at all, so it cannot change how a control looks |
+| 2 | `<Control>Styles.xaml` | Keyed styles for one control | Nothing until you apply them by key |
+| 3 | `Defaults.xaml` | Makes layer 2 implicit | Restyles `Button`, `ComboBox`, `CheckBox`, `ScrollBar` |
+| 4 | `OfficePalette.xaml` | All of the above | Everything in layer 3 |
+
+A task pane that wants the whole suite look merges `OfficePalette.xaml` and is
+done. A dialog that wants the suite colours and one bordered button merges
+`tokens.xaml` and `buttonstyles.xaml`, uses `{StaticResource ActionButton}`, and
+has every other control in it left completely alone.
+
+**Do not merge `OfficePalette.xaml` just to reach a token or a single style** —
+it applies a look to four control types.
+
+The control dictionaries declare **keyed styles only**. That is the whole point
+of the split: merging `ButtonStyles.xaml` to get `ActionButton` must not silently
+restyle every `Button` in the consuming app. Nothing in WpfLib imposes a look
+until `Defaults.xaml` is merged, or until you alias a style yourself:
+
+```xml
+<Style TargetType="Button" BasedOn="{StaticResource IconButton}"/>
+```
+
+The one exception is `UpDownTextBoxStyles.xaml`, which stays implicit. Those are
+WpfLib's own controls, so that is their default look rather than a look imposed
+on somebody else's control.
+
+---
+
+## Referencing WpfLib from XAML
+
+The library ships an `XmlnsDefinition`, so one declaration covers controls,
+converters, attached properties and view models:
+
+```xml
+xmlns:kk="http://schemas.kleikodesh.org/wpf"
+
+<kk:UpDownTextBox Value="{Binding Size}"/>
+<kk:BoolToVisibilityConverter x:Key="BoolToVis"/>
+```
+
+The older `clr-namespace:WpfLib.Controls;assembly=WpfLib` form still works.
 
 ---
 
@@ -159,7 +203,7 @@ Recorded so the same candidates are not re-investigated:
 
 ## Usage
 
-Merge the palette first, then your own styles:
+**The whole look** — a task pane. Merge the palette first, then your own styles:
 
 ```xml
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -172,6 +216,18 @@ Merge the palette first, then your own styles:
     <!-- pick the toggle behaviour this pane wants -->
     <Style TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}"/>
 </ResourceDictionary>
+```
+
+**Only what you need** — a dialog, a standalone window, anything that already has
+its own control styling:
+
+```xml
+<ResourceDictionary.MergedDictionaries>
+    <!-- names only; changes nothing -->
+    <ResourceDictionary Source="/WpfLib;component/themes/tokens.xaml"/>
+    <!-- keyed styles; applies to nothing until you ask -->
+    <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+</ResourceDictionary.MergedDictionaries>
 ```
 
 Pack URI paths must be **all-lowercase** — the WPF BAML compiler lowercases them.
