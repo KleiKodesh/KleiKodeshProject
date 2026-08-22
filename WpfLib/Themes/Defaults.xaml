@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Defaults — the opt-in layer that makes the keyed styles implicit.
+
+        The control dictionaries in this folder deliberately declare KEYED
+        styles only. That way merging ButtonStyles.xaml to get ActionButton
+        does not silently restyle every Button in the consuming app. Nothing
+        in WpfLib imposes a look until this file is merged.
+
+        Merge this when you want the whole app to follow the suite look
+        without applying styles by hand. Or skip it and alias only the
+        controls you want:
+
+            <Style TargetType="Button" BasedOn="{StaticResource IconButton}"/>
+
+        ToggleButton is absent on purpose. IconToggle shows no checked state
+        and AccentToggle does; both are legitimate, so the choice stays with
+        the consumer. See ButtonStyles.xaml.
+
+        UpDownTextBoxStyles.xaml is also absent, and stays implicit in its own
+        file. Those are WpfLib's own controls, so that is their default look
+        rather than a look imposed on somebody else's control.
+
+        NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <Style TargetType="Button"    BasedOn="{StaticResource IconButton}"/>
+    <Style TargetType="ComboBox"  BasedOn="{StaticResource OfficeComboBox}"/>
+    <Style TargetType="CheckBox"  BasedOn="{StaticResource OfficeCheckBox}"/>
+    <Style TargetType="ScrollBar" BasedOn="{StaticResource OfficeScrollBar}"/>
+
+</ResourceDictionary>

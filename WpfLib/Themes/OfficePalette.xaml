@@ -1,36 +1,48 @@
-﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
-        OfficePalette — shared style palette for all KleiKodesh task pane libraries.
+        OfficePalette — the whole shared look, in one merge.
 
-        Merging this single dictionary gives a library:
-          - Type tokens: UiFontFamily, FontSizeSmall/Normal/Large (Typography.xaml)
-          - Adaptive brush tokens (Brushes.xaml)
-          - Implicit ComboBox + keyed OfficeComboItem (ComboBoxStyles.xaml)
-          - Implicit Button + keyed IconButton, IconToggle, AccentToggle,
-            CheckedToggle, ActionButton, IconPath (ButtonStyles.xaml)
-          - Implicit CheckBox with VSCode-style square tick (CheckBoxStyles.xaml)
-          - Implicit ScrollBar — thin Edge-style, no arrows (ScrollBarStyles.xaml)
+        This is the usual choice for a KleiKodesh task pane: tokens, every
+        control style, and the implicit aliases that apply them. Merging it
+        gives a library:
+
+          - Type tokens: UiFontFamily, FontSizeSmall/Normal/Large
+          - Adaptive brush tokens: BgSecBrush, BorderBrush, AccentBrush, ...
+          - Keyed IconButton, IconToggle, AccentToggle, CheckedToggle,
+            ActionButton, IconPath, OfficeComboBox, OfficeComboItem,
+            OfficeCheckBox, OfficeScrollBar, ScrollThumb, Vert/HorzScrollBar
           - The look of WpfLib's own UpDownTextBox / UpDownFloatTextBox
-            (UpDownTextBoxStyles.xaml)
+          - Implicit Button, ComboBox, CheckBox and ScrollBar (via Defaults)
 
-        ToggleButton has no implicit style on purpose: both toggle behaviours are
-        legitimate, so a library picks one with a single line of its own —
-            <Style TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}"/>
-        Sizing lives in the library too; derive with BasedOn and add Width/Height.
+        DO NOT merge this just to get at the tokens or one keyed style. It
+        applies a look to four control types. The layers are separable, and
+        each is a legitimate thing to depend on:
 
-        Usage in a library's root dictionary:
-            <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
+          Tokens.xaml           colour and type names, NO styles at all.
+                                Cannot change how anything looks.
+          <Control>Styles.xaml  keyed styles for one control. Take
+                                ActionButton without restyling every Button.
+          Defaults.xaml         turns the keyed styles into implicit ones.
+          OfficePalette.xaml    all of it (this file).
+
+        So a dialog that wants the suite colours and one bordered button
+        merges tokens.xaml and buttonstyles.xaml, and is untouched otherwise.
+
+        There is deliberately no implicit ToggleButton at any layer: both
+        toggle behaviours are legitimate, so a consumer picks in one line.
+        Sizing lives with the consumer too; derive with BasedOn and add
+        Width/Height.
 
         NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
     -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/tokens.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/updowntextboxstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/defaults.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

@@ -1,0 +1,28 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Tokens — the colour and type vocabulary, and nothing else.
+
+        This is the cheapest thing to depend on in WpfLib. It contains no
+        styles at all, implicit or keyed, so merging it cannot change how a
+        single control in your app looks. It only gives you names:
+
+            Background="{StaticResource BgSecBrush}"
+            FontFamily="{StaticResource UiFontFamily}"
+
+        Merge this when you want your app to agree with the rest of the suite
+        on colour and type but keep your own control styling.
+
+        Layer above this:
+          Tokens.xaml         names only, no styles           (this file)
+          <Control>Styles     keyed styles, opt in per control
+          Defaults.xaml       makes the keyed styles implicit
+          OfficePalette.xaml  all of the above, the usual choice for a task pane
+
+        NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

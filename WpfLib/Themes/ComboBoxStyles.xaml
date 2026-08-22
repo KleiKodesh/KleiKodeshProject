@@ -44,7 +44,7 @@
     </Style>
 
     <!-- ── Implicit Office ComboBox (all other ComboBoxes) ───────── -->
-    <Style TargetType="ComboBox">
+    <Style x:Key="OfficeComboBox" TargetType="ComboBox">
         <Setter Property="Background"      Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Foreground"      Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="BorderBrush"     Value="#50808080"/>

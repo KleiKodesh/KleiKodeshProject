@@ -9,7 +9,7 @@
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
     -->
 
-    <Style TargetType="CheckBox">
+    <Style x:Key="OfficeCheckBox" TargetType="CheckBox">
         <Setter Property="Foreground"
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=FrameworkElement}}"/>
         <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
