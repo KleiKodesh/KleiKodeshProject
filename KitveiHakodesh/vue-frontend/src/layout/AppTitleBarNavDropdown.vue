@@ -3,9 +3,12 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
-import { IconOpen28Regular } from '@iconify-prerendered/vue-fluent'
-import { IconSettings24 } from '@iconify-prerendered/vue-fluent-color'
-import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
+import {
+  IconOpen28Regular,
+  IconChevronDoubleLeft20Regular,
+} from '@iconify-prerendered/vue-fluent'
+import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { useSettingsStore } from '@/stores/settingsStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { showPopOutButton } from '@/webview-host/bridge'
 import { togglePopOut } from '@/webview-host/bridge'
@@ -22,42 +25,37 @@ useDropdownClose(menuRef, () => emit('close'), {
   toggleButton: computed(() => props.toggleButtonEl ?? null),
 })
 
-// All nav items in order — tiles + settings + (conditionally) pop-out.
-// Icons come from the shared table (utils/documentIcons) rather than being listed
-// again here: this list, the home tiles and the tab strip must agree, and every
-// time they were separate copies they drifted.
-function navIcon(key: DocumentIconKey) {
-  const icon = documentIcon(key)
-  return { icon: icon.icon24, color: icon.color || undefined }
+const settingsStore = useSettingsStore()
+
+// The rows below the divider, in render order. Pop-out is hosted-only, so the keyboard
+// indexes are read off this list rather than counted by hand.
+//
+// The sidebar row only ever offers to OPEN the sidebar: while the sidebar is up this menu
+// cannot be reached at all (AppTitleBar drops the hamburger and Ctrl+M), and closing it
+// again is the rail's own bottom button.
+type MenuRow = 'settings' | 'navSidebar' | 'popOut'
+
+const menuRows: MenuRow[] = ['settings', 'navSidebar', ...(showPopOutButton ? ['popOut' as const] : [])]
+
+function menuRowIndex(row: MenuRow) {
+  return APP_NAV_ITEMS.length + menuRows.indexOf(row)
 }
 
-const tiles = [
-  { label: 'קטלוג הספרים', ...navIcon('library'), shortcut: 'Ctrl+1' },
-  { label: 'חיפוש', ...navIcon('search'), shortcut: 'Ctrl+2' },
-  { label: 'היברו-בוקס', ...navIcon('hbooks'), shortcut: 'Ctrl+3' },
-  { label: 'פתח קובץ', ...navIcon('folder'), shortcut: 'Ctrl+4' },
-  { label: 'חיפוש קבצים', ...navIcon('fileSearch'), shortcut: 'Ctrl+5' },
-  { label: 'מילון', ...navIcon('dict'), shortcut: 'Ctrl+6' },
-  { label: 'לוח שנה', ...navIcon('calendar'), shortcut: 'Ctrl+7' },
-  { label: 'מידות ושיעורים', ...navIcon('ruler'), shortcut: 'Ctrl+8' },
-  { label: 'סביבות עבודה', ...navIcon('apps'), shortcut: 'Ctrl+9' },
-]
+const itemCount = APP_NAV_ITEMS.length + menuRows.length
 
-// Count includes tiles + settings row + optional pop-out row
-const itemCount = computed(() => tiles.length + 1 + (showPopOutButton ? 1 : 0))
-
-const { focusedIndex } = useListKeys(menuRef, () => itemCount.value, (index) => {
+const { focusedIndex } = useListKeys(menuRef, () => itemCount, (index) => {
   activateIndex(index)
 })
 
 function activateIndex(index: number) {
-  if (index < tiles.length) {
-    onTap(tiles[index]!.label)
-  } else if (index === tiles.length) {
-    onTap('הגדרות')
-  } else {
-    onPopOut()
+  if (index < APP_NAV_ITEMS.length) {
+    onTap(APP_NAV_ITEMS[index]!.label)
+    return
   }
+  const row = menuRows[index - APP_NAV_ITEMS.length]
+  if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
+  else if (row === 'navSidebar') onShowNavSidebar()
+  else if (row === 'popOut') onPopOut()
 }
 
 // Close on Escape
@@ -77,6 +75,11 @@ async function onTap(label: string) {
   emit('close')
 }
 
+function onShowNavSidebar() {
+  settingsStore.navSidebarVisible = true
+  emit('close')
+}
+
 function onPopOut() {
   togglePopOut()
   emit('close')
@@ -86,36 +89,46 @@ function onPopOut() {
 <template>
   <div ref="menuRef" class="nav-dropdown" tabindex="0" @click.stop>
     <button
-      v-for="(tile, index) in tiles"
-      :key="tile.label"
+      v-for="(item, index) in APP_NAV_ITEMS"
+      :key="item.label"
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === index }"
       data-nav-item
-      :title="`${tile.label} (${tile.shortcut})`"
-      @click="onTap(tile.label)"
+      :title="`${item.label} (${item.shortcut})`"
+      @click="onTap(item.label)"
     >
       <span class="nav-icon">
-        <component :is="tile.icon" :style="tile.color ? { color: tile.color } : {}" />
+        <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
       </span>
-      <span class="nav-label">{{ tile.label }}</span>
-      <span class="nav-shortcut">{{ tile.shortcut }}</span>
+      <span class="nav-label">{{ item.label }}</span>
+      <span class="nav-shortcut">{{ item.shortcut }}</span>
     </button>
     <hr class="nav-divider" />
     <button
       class="nav-row"
-      :class="{ 'nav-row--focused': focusedIndex === tiles.length }"
+      :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('settings') }"
       data-nav-item
-      title="הגדרות (F1)"
-      @click="onTap('הגדרות')"
+      :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})`"
+      @click="onTap(APP_NAV_SETTINGS_ITEM.label)"
     >
-      <span class="nav-icon"><IconSettings24 /></span>
-      <span class="nav-label">הגדרות</span>
-      <span class="nav-shortcut">F1</span>
+      <span class="nav-icon"><component :is="APP_NAV_SETTINGS_ITEM.icon" /></span>
+      <span class="nav-label">{{ APP_NAV_SETTINGS_ITEM.label }}</span>
+      <span class="nav-shortcut">{{ APP_NAV_SETTINGS_ITEM.shortcut }}</span>
+    </button>
+    <button
+      class="nav-row"
+      :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('navSidebar') }"
+      data-nav-item
+      title="הצג סרגל צד"
+      @click="onShowNavSidebar"
+    >
+      <span class="nav-icon"><IconChevronDoubleLeft20Regular /></span>
+      <span class="nav-label">סרגל צד</span>
     </button>
     <button
       v-if="showPopOutButton"
       class="nav-row"
-      :class="{ 'nav-row--focused': focusedIndex === tiles.length + 1 }"
+      :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('popOut') }"
       data-nav-item
       title="פתח בחלון עצמאי או החזר לחלונית"
       @click="onPopOut"

@@ -62,10 +62,12 @@ The shell is two levels: a split-view container and one or two pane shells insid
 - Split view requires `appWidth >= 768` (`SPLIT_VIEW_MIN_WIDTH`) and is unavailable in the VSTO environment; it auto-disables when the window shrinks below that
 - Also renders the app-wide overlays: `ClockWidget`, `SetupWizard` (async, only when `!setupDone`), `GlobalContextMenu`, `ToastBanner`, and the reset overlay
 
-`AppShell.vue` is one pane. It takes a `paneId` prop (1 or 2) and stacks:
+`AppShell.vue` is one pane. It takes a `paneId` prop (1 or 2) and is a **row** of:
 
-- `AppTitleBar.vue` — fixed 40px header, receives `paneId`
-- `AppPageView.vue` — fills remaining height, renders the active page, receives `paneId`
+- `AppNavSidebar.vue` — icon rail owning the pane's edge for its full height, only while `settingsStore.navSidebarVisible`
+- `.app-shell-main` — the column beside it, which is where everything document-scoped begins:
+  - `AppTitleBar.vue` — fixed 40px header, spans `.app-shell-main` and never the rail, receives `paneId`
+  - `AppPageView.vue` — fills the remaining height and width, renders the active page, receives `paneId`
 
 Each pane is an Edge-style inset content panel: `--content-inset`, `--content-border-width`, and `--content-border-radius` are set by `settingsStore.applyCSSVariables`, so turning the "content border" setting off zeroes them and the content sits flush. The chrome surface (`--bg-secondary`) flows continuously from the title bar around the panel — there is no separator line between them.
 
@@ -115,7 +117,7 @@ Completion: `settings.completeSetup()` sets `setupDone = true` and persists it t
 
 `AppTitleBar.vue` is the persistent chrome of a single pane — it takes a `paneId` and there is one instance per pane in split view. It is not app-global.
 
-- Physical left side: hamburger nav menu (`AppTitleBarNavDropdown`), theme toggle, toolbar toggle (book view only), PDF filter toggle (PDF tabs only)
+- Physical left side: hamburger nav menu (`AppTitleBarNavDropdown`, not rendered while `settingsStore.navSidebarVisible` — and `Ctrl+M` is inert then too, because `AppNavSidebar` is that same menu already on screen), split-view toggle (also handed over to the rail while it is up), theme toggle, toolbar toggle (book view only), PDF filter toggle (PDF tabs only)
 - Center: `AddressBar.vue` when in search mode, otherwise the active tab title + `AppTitleBarTocBreadcrumb`
 - Physical right side: home button, new tab button, close tab button
 - The address bar's dropdown doubles as the tab list — an empty field shows all tabs. There is no separate tab-dropdown component.
@@ -190,7 +192,7 @@ The PDF route is `/pdf-view`, not `/pdf-viewer` — the feature *folder* is `pdf
 
 ### home/
 
-Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in `AppTitleBarNavDropdown.vue` are the two entry points to the same set of destinations — they must always be kept in sync. When adding, removing, or renaming a navigation destination, update both files. The home page uses `navigate()` (navigates in the active tab); the nav dropdown uses `navigateInNewTab()` (always opens a new tab). Neither list is derived from the other — they are maintained in parallel.
+Home page navigation tiles. The tile list in `HomePage.vue` and the menu list in `layout/appNavItems.ts` (rendered by both `AppTitleBarNavDropdown.vue` and `AppNavSidebar.vue`) are the two entry points to the same set of destinations — they must always be kept in sync. When adding, removing, or renaming a navigation destination, update both files. The home page uses `navigate()` (navigates in the active tab); the nav dropdown uses `navigateInNewTab()` (always opens a new tab). Neither list is derived from the other — they are maintained in parallel.
 
 - `HomePage.vue` — page shell: layout, search input markup, tile keyboard traversal, cold-start focus. No search/tile/date logic.
 - `HomePageTile.vue` — one tile; emits `tap` (with the Ctrl/⌘ flag), `togglePin`, `remove`
@@ -251,7 +253,7 @@ The main book reader. Orchestrates a split pane (text above, commentary below), 
 - `useBookViewLinesTable.ts` — paginated line fetching in chunks of 200; pre-allocates placeholder slots so the virtualizer has the correct total height immediately, then fills content as chunks arrive; exposes `prioritise(lineIndex)` to move a chunk to the front of the fetch queue
 - `useBookViewLineRenderer.ts` — line rendering logic
 - `useBookViewLineCopyMenu.ts` — context menu for line copying
-- `useBookViewLineLink.ts` — "copy link to this section" menu action; builds and copies a `seforimapp://book/<bookId>?index=<lineIndex>` deep link, shaped to match the `otzaria://` links `HostLink.cs` parses (no protocol handler is registered — format is future-proofing)
+- `useBookViewLineLink.ts` — "copy link to this section" menu action; copies the deep link built by `buildLineLink` in `utils/appDeepLink.ts` — the single definition of this app's link format, `kitveihakodeshapp://book/<bookId>?index=<lineIndex>`, shaped to match the `otzaria://` links `HostLink.cs` parses (the app opens such a link when it is launched with one — `Program.GetOpenRequestArgument` / `MainForm.OpenRequest` route it through the same single-instance pipe as a file path, so it lands as a new tab; registering the scheme with Windows is an installer step, specified in `Build/Installer/README.md`)
 - `useBookViewLinesScroll.ts` / `useBookViewLinesNavigation.ts` — scroll and navigation within the lines view
 - `useBookViewHighlights.ts`, `useBookViewNotes.ts`, `useBookViewAnnotations.ts` — user annotations; `bookViewAnnotationColors.ts`, `BookViewAnnotationMenuRow.vue`, `BookViewNoteBubble.vue`
 - `useBookViewAbbrevTooltip.ts` + `BookViewAbbrevTooltip.vue` — abbreviation expansion tooltip
@@ -431,16 +433,19 @@ Hebrew calendar page. Monthly grid and weekly detail views with zmanim. Singleto
 
 ## App Shell (`src/layout/`)
 
-- `AppShell.vue` — one pane: title bar + page view, provides `paneId` and `PANE_NAVIGATION_KEY`
+- `AppShell.vue` — one pane: nav sidebar beside the title-bar-plus-page-view column, provides `paneId` and `PANE_NAVIGATION_KEY`
 - `AppTitleBar.vue`, `AppPageView.vue`, `AppTitleBarNavDropdown.vue`
+- `appNavItems.ts` — the one list of nav destinations (`APP_NAV_ITEMS`, `APP_NAV_SETTINGS_ITEM`), read by both the nav dropdown and the nav sidebar
+- `AppNavSidebar.vue` — the nav menu as an always-on icon rail at the pane's edge, one per pane, owning the pane's edge for its full height with the title bar starting beside it, never under it — the rail is a sibling of the shell that holds the tab-header strip, not of the strip. It splits with the pane (a pane is a whole shell, not an editor group, so each gets one). Surface is the title bar's own `--bg-secondary`, inherited from `.app-shell` — it is frame, not a panel. No border on any side and no shadow (only floating panels cast one): the column of items is what marks the rail out, not an edge around it. 44px wide with 32×32 items (24px glyph plus a 4px inset — sized from the hover band, not the icon pitch), 6px gutters, 4px radius; destinations at the top and a bottom `.nav-group-end` group (split view, pop-out, settings, collapse — settings always the floor) separated by space rather than a rule. Icons only, label as the tooltip, and a `ChevronDoubleRight` button at the bottom that folds it back into the edge. Shown while `settingsStore.navSidebarVisible` (persisted as `app.navSidebar`), opened from the nav dropdown's `ChevronDoubleLeft` row — which is the only way in, since the hamburger is gone while it is up
 - `AddressBar.vue` — Explorer-style address bar in the title bar; hosts the tab dropdown and reuses the home search. There is no `AppTitleBarTabDropdown.vue`.
 - `AppTitleBarTocBreadcrumb.vue` — interactive breadcrumb rendered in the title bar center for `/book-view` and `/pdf-view` tabs. Each segment has a chevron before it listing siblings; the active segment gets a trailing chevron if it has children. Emits `navigateToTocEntry` and `navigateToPdfEntry`.
 - `AppTitleBarBreadcrumbChevronDropdown.vue` — teleported chevron dropdown listing `BreadcrumbItem[]` entries. Used by `AppTitleBarTocBreadcrumb` for both TOC and PDF siblings. Scrolls to the active item on open.
 - `AppTitleBarHistoryButton.vue` — one Back or Forward button (`direction` prop); click steps the active tab's history, press-and-hold opens a teleported dropdown of all frames in that direction for a direct jump (`useAppShellPane.goToHistoryIndex`).
+- `useSplitViewAvailable.ts` — `SPLIT_VIEW_MIN_WIDTH` (768) plus the availability computed, shared by the two surfaces that offer the split toggle (`AppTitleBar`, `AppNavSidebar`); `App.vue` imports the threshold but measures the app element, since it owns the auto-disable
 - `useAppTitleBarShortcuts.ts` — every keyboard shortcut the title bar owns, for one pane; splits them into pane-scoped and pane-1-only app-wide, and forwards iframe `Ctrl`+key events into the top-level pipeline
 - `useAppTitleBarTocBreadcrumb.ts` — parses `tab.tocPath` into `BreadcrumbSegment[]` for both `/book-view` (splits on ` / `, reads `TocBridge`) and `/pdf-view` (splits on ` · `, reads `PdfBridge`). Each segment includes `siblings` and `children` for the chevron dropdowns.
 
-`AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
+`AppTitleBarNavDropdown` is the hamburger nav menu. Its destination list is `appNavItems.ts`, which `AppNavSidebar` renders too, and it mirrors the tiles in `HomePage.vue` — see the `home/` section for the sync rule.
 
 ## Shared Components (`src/components/`)
 
@@ -485,7 +490,7 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 - **tabStatePersistence.ts** — the `app-tabs` slice: everything keyed by workspace + tab. `TabState` (search filters, scroll restore, per-tab zoom), `BookState` (reading position, commentary layout, per tab *and* book), the book-state cache, and `deleteAllStateForTab` — the single teardown call every close path uses.
 - **bookLastRead.ts** — the `app-lastread` slice: the global per-book last-read position. Deliberately not tab-scoped and it outlives tab close, which is what separates it from `BookState` (same shape, one tab's view). Always write via `setLastReadPos` so the 1000-entry on-disk cap is enforced.
 
-**hostSearchStore** — receives "navigate from the VSTO host" pushes and routes them to a page. The Word ribbon's context menu calls into the C# AppViewer, which pushes `hostSearch` (`target: 'fts' | 'catalog'` plus cleaned selection text) or `hostOpenBook` (an `otzaria://` / `zayit://` deep link). Seeds `tab.searchQuery` or `tab.catalogQuery`, which the target page reads on mount.
+**hostSearchStore** — receives "navigate from the VSTO host" pushes and routes them to a page. The Word ribbon's context menu calls into the C# AppViewer, which pushes `hostSearch` (`target: 'fts' | 'catalog'` plus cleaned selection text) or `hostOpenBook` (an `otzaria://` / `kitveihakodeshapp://` / `zayit://` deep link). Seeds `tab.searchQuery` or `tab.catalogQuery`, which the target page reads on mount.
 
 **pdfOcrStore** — PDF OCR state and results caching.
 
