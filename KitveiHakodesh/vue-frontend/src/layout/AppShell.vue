@@ -46,11 +46,11 @@ provide(PANE_NAVIGATION_KEY, {
 
 <template>
   <div class="app-shell" @pointerdown.capture="onPaneFocus">
-    <!-- The nav menu as an always-on icon rail, and it defines an area to itself: the
-         rail owns this pane's edge for the pane's full height, and everything belonging
-         to the document - title bar included, since that is where the tab's title,
-         breadcrumb and per-tab controls live - starts BESIDE it. One rail per pane: a
-         pane here is a whole shell, so the rail splits with it. -->
+    <!-- The nav menu as an always-on panel docked to this pane's edge: it owns the edge
+         for the pane's full height, and everything belonging to the document - title bar
+         included, since that is where the tab's title, breadcrumb and per-tab controls
+         live - starts BESIDE it. One rail per pane: a pane here is a whole shell, so the
+         rail splits with it. -->
     <AppNavSidebar v-if="settingsStore.navSidebarVisible" />
     <div class="app-shell-main">
       <AppTitleBar :pane-id="props.paneId" />

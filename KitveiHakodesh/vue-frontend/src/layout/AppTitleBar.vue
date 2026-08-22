@@ -307,6 +307,9 @@ useAppTitleBarShortcuts({
   align-items: center;
   height: var(--title-bar-height);
   padding: var(--title-bar-padding);
+  /* box-sizing is border-box app-wide, so the vertical padding added below eats into this
+     height rather than growing the bar - the bar stays the height the density mode sets. */
+  box-sizing: border-box;
   background: var(--bg-secondary);
   /* Divider width is driven by the settings store: 0 when the content border is
      on (seamless merge), 1px when off (title bar shows its own divider). */
@@ -315,6 +318,13 @@ useAppTitleBarShortcuts({
   /* Regular arrow over the bar and the breadcrumb/title; only the buttons and
      breadcrumb chevrons use the pointer (hand). */
   cursor: default;
+}
+/* While the nav sidebar is up, the bar takes the same vertical padding as the sidebar's
+   horizontal one (--nav-panel-inset, 6px), so the address bar's box lines up with the top
+   of the sidebar's panel beside it instead of running past it. Only then: with no sidebar
+   there is nothing to line up with, and the bar keeps the tighter density padding. */
+.title-bar.nav-sidebar-on {
+  padding-block: var(--nav-panel-inset, 6px);
 }
 .bar-start {
   display: flex;
@@ -370,15 +380,6 @@ useAppTitleBarShortcuts({
   flex: 1 1 auto;
   min-width: 0;
   margin-inline: 6px;
-}
-/* With the nav rail up, the hamburger and split-view buttons move into the rail,
-   which can leave .bar-start with nothing in it — and then the field's start margin
-   is bare whitespace between the rail and the field. Close it up so the field starts
-   at the rail's edge. The :has() guard keeps the margin whenever a button (theme
-   toggle, text search, toolbar, OCR) is still rendered there to be spaced away from. */
-.title-bar.nav-sidebar-on:not(:has(.bar-start button)) .bar-search,
-.title-bar.nav-sidebar-on:not(:has(.bar-start button)) .bar-title {
-  margin-inline-start: 0;
 }
 /* Block pointer events on text spans so clicks bubble to the header toggle,
    but leave buttons (chevrons) fully interactive. */
