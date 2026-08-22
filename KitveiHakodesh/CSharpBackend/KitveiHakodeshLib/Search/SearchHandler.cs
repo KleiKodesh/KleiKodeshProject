@@ -425,6 +425,12 @@ namespace KitveiHakodeshLib.Search
         /// other lifecycle action: StopWatcher touches _watcherCts with plain (non-volatile)
         /// reads and writes, so it is only safe on that one thread — calling it directly from
         /// a caller's thread could race StartBuildOrWatch and drop a cancel on the floor.
+        ///
+        /// Fire-and-forget: it returns as soon as the action is queued. Nothing calls this
+        /// today; if you are adding the first caller AND it is an app-shutdown hook, queueing
+        /// is not enough on its own — the actor is a background thread, so pending work is
+        /// dropped at process exit and StopAll (whose untimed wait is what stops a half-killed
+        /// build from corrupting the index) may never run. Wait for the drain in that case.
         /// </summary>
         public void StopIndexing()
         {
