@@ -310,7 +310,12 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         //    holds its lease on the segment files, and deleting the directory under it is exactly
         //    what produces the "could not delete" path below. Every session removes itself in its
         //    own finally, so an empty dictionary means every reader has let go.
-        foreach (var kv in _sessions) kv.Value.Cts.Cancel();
+        // ObjectDisposedException: that session finished and disposed its CTS while we were
+        // iterating — it is already gone, which is the state we are asking for.
+        foreach (var kv in _sessions)
+        {
+            try { kv.Value.Cts.Cancel(); } catch (ObjectDisposedException) { }
+        }
         for (int i = 0; i < 50 && !_sessions.IsEmpty; i++) Thread.Sleep(100); // bounded: up to 5s
         if (!_sessions.IsEmpty)
             logger.LogWarning("FTS reset: {Count} search session(s) still unwinding after 5s — deleting anyway",
@@ -356,7 +361,11 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             _buildCts?.Cancel();
             build = _buildTask;
         }
-        foreach (var kv in _sessions) kv.Value.Cts.Cancel();   // stop live searches too
+        // stop live searches too; already-disposed means already finished (see ResetIndex)
+        foreach (var kv in _sessions)
+        {
+            try { kv.Value.Cts.Cancel(); } catch (ObjectDisposedException) { }
+        }
         try { build?.Wait(TimeSpan.FromSeconds(25)); }
         catch { /* OperationCanceledException / AggregateException on cancel */ }
         logger.LogInformation("FTS build stopped for graceful shutdown");
@@ -461,26 +470,44 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         // FtsSearchExecutor): a client only ever starts a new stream, nothing else. The
         // atomic swap makes rapid back-to-back searches race-safe.
         var prevId = Interlocked.Exchange(ref _currentSearchId, id);
-        if (prevId != null && _sessions.TryRemove(prevId, out var prev)) prev.Cts.Cancel();
+        if (prevId != null && _sessions.TryRemove(prevId, out var prev))
+        {
+            // Cancel, but do NOT dispose: the superseded search is still inside its own
+            // StreamSearch call with a linked source built off this token. It disposes its
+            // CTS in its own finally once it unwinds — which it may already have done between
+            // our TryRemove and this call, hence the guard. Already disposed == already done.
+            try { prev.Cts.Cancel(); } catch (ObjectDisposedException) { }
+        }
 
-        using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
         try
         {
-            await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
-                linked.Token, built => emit(new FtsStreamChunk { Results = built }));
-            await emit(new FtsStreamChunk { Done = true });
-        }
-        catch (OperationCanceledException) { /* superseded, reset, or client left */ }
-        catch (IOException) { /* client disconnected mid-stream — that IS the cancel signal */ }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "FTS streaming search failed");
-            try { await emit(new FtsStreamChunk { Done = true, Error = ex.Message }); } catch { /* client gone */ }
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
+            try
+            {
+                await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
+                    linked.Token, built => emit(new FtsStreamChunk { Results = built }));
+                await emit(new FtsStreamChunk { Done = true });
+            }
+            catch (OperationCanceledException) { /* superseded, reset, or client left */ }
+            catch (IOException) { /* client disconnected mid-stream — that IS the cancel signal */ }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "FTS streaming search failed");
+                try { await emit(new FtsStreamChunk { Done = true, Error = ex.Message }); } catch { /* client gone */ }
+            }
+            finally
+            {
+                _sessions.TryRemove(id, out _);
+                Interlocked.CompareExchange(ref _currentSearchId, null, id);
+            }
         }
         finally
         {
-            _sessions.TryRemove(id, out _);
-            Interlocked.CompareExchange(ref _currentSearchId, null, id);
+            // Outer finally so this runs AFTER the inner `using linked` has been disposed: a
+            // linked source registers a callback on session.Cts, and disposing the parent while
+            // that registration is live is exactly the kind of teardown order that bites. The
+            // session is already out of _sessions by now, so no superseding search can reach it.
+            session.Cts.Dispose();
         }
     }
 

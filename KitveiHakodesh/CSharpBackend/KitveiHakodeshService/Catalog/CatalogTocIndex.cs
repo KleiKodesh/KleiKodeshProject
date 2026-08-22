@@ -296,6 +296,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             _reader.Dispose();
             _reader = null;
             _searcher = null;
+            // Derived from the reader we just disposed, and the whole point of this call is
+            // to give memory back — the vocab set and skeleton map are the largest thing
+            // here, so keeping them would defeat the idle trim. Rebuilt lazily on next use.
+            _variants = null;
             return true;
         }
     }

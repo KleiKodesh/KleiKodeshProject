@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import type { AltTocSection } from './useBookViewToc'
 import type { TocPersistState } from '../bookViewTypes'
 import type { TocEntry } from '@/webview-host/queries.types'
@@ -90,6 +90,24 @@ function applyState(saved: TocPersistState) {
  * away with the old component instance, which is exactly what happened: the ids
  * persisted correctly and the tree still came back collapsed.
  */
+// restoreState is called through defineExpose from useBookViewSessionRestore, which reaches
+// it after both an await and a nextTick — so the watches below are created with no active
+// effect scope and unmount disposes none of them. Each self-stops on success, but neither
+// condition is guaranteed: a book with no alt-TOC structure never satisfies the first, and a
+// tab closed while the TOC is still loading never satisfies the second. Track and dispose.
+const restoreWatchStops = new Set<() => void>()
+function trackRestoreWatch(stop: () => void): () => void {
+  restoreWatchStops.add(stop)
+  return () => {
+    restoreWatchStops.delete(stop)
+    stop()
+  }
+}
+onBeforeUnmount(() => {
+  for (const stop of restoreWatchStops) stop()
+  restoreWatchStops.clear()
+})
+
 function applyAltState(saved: TocPersistState) {
   const apply = () => {
     if (saved.altExpanded?.length) altSectionRef.value?.setExpanded(saved.altExpanded)
@@ -100,16 +118,19 @@ function applyAltState(saved: TocPersistState) {
   }
   if (altSectionRef.value) apply()
   // Re-apply on every (re)mount of the alt section until one sticks, then stop.
-  const stop = watch(
-    () => props.selectedAltTocSection?.structure.id,
-    (id) => {
-      if (id == null) return
-      nextTick(() => {
-        apply()
-        stop()
-      })
-    },
-    { flush: 'post' },
+  let stop: (() => void) | undefined
+  stop = trackRestoreWatch(
+    watch(
+      () => props.selectedAltTocSection?.structure.id,
+      (id) => {
+        if (id == null) return
+        nextTick(() => {
+          apply()
+          stop?.()
+        })
+      },
+      { flush: 'post' },
+    ),
   )
 }
 
@@ -118,13 +139,16 @@ function restoreState(saved: TocPersistState | undefined) {
   // The sections only exist once the TOC has loaded — restoring into nothing
   // would silently drop the state, so wait for the load when one is in flight.
   if (props.loading) {
-    const stop = watch(
-      () => props.loading,
-      (busy) => {
-        if (busy) return
-        stop()
-        nextTick(() => applyState(saved))
-      },
+    let stop: (() => void) | undefined
+    stop = trackRestoreWatch(
+      watch(
+        () => props.loading,
+        (busy) => {
+          if (busy) return
+          stop?.()
+          nextTick(() => applyState(saved))
+        },
+      ),
     )
     return
   }

@@ -136,7 +136,13 @@ public static unsafe partial class AotWordConverter
                 {
                     nint descBstr = *(nint*)(exBuf + 16);
                     int scode = *(int*)(exBuf + 56);
-                    string? desc = descBstr != 0 ? Marshal.PtrToStringBSTR(descBstr) : "";
+                    string? desc = "";
+                    if (descBstr != 0)
+                    {
+                        // EXCEPINFO strings are ours to free once copied out.
+                        desc = Marshal.PtrToStringBSTR(descBstr);
+                        Marshal.FreeBSTR(descBstr);
+                    }
                     extra = $" [scode=0x{scode:X8} desc='{desc}']";
                 }
                 throw new COMException($"Word Invoke(dispid={dispid}) hr=0x{hr:X8}{extra}", hr);
@@ -145,9 +151,24 @@ public static unsafe partial class AotWordConverter
         }
         finally
         {
+            // Free the CONTENTS of the argument VARIANTs, not just the array holding them.
+            // Bstr() allocates on the COM heap and the callee does not take ownership of
+            // caller-supplied args, so without this every Bstr(path) argument leaks.
+            for (int i = 0; i < n; i++) ClearVariant(ref argsReversed[i]);
             if (argMem != 0) Marshal.FreeHGlobal(argMem);
             if (namedMem != 0) Marshal.FreeHGlobal(namedMem);
         }
+    }
+
+    /// <summary>Release whatever a VARIANT owns and blank it. Safe to call twice: it clears
+    /// <c>vt</c>, so a second call is a no-op. Only BSTR and IDispatch carry an allocation —
+    /// I4/BOOL/ERROR are inline values with nothing to free.</summary>
+    private static void ClearVariant(ref VARIANT v)
+    {
+        if (v.vt == VT_BSTR && v.ptr != 0) Marshal.FreeBSTR(v.ptr);
+        else if (v.vt == VT_DISPATCH && v.ptr != 0) Release(v.ptr);
+        v.vt = 0; // VT_EMPTY
+        v.ptr = 0;
     }
 
     private static VARIANT Bstr(string s) => new() { vt = VT_BSTR, ptr = Marshal.StringToBSTR(s) };
@@ -155,24 +176,43 @@ public static unsafe partial class AotWordConverter
     private static VARIANT Bool(bool b) => new() { vt = VT_BOOL, i4 = b ? -1 : 0 };
     private static VARIANT Missing() => new() { vt = VT_ERROR, i4 = DISP_E_PARAMNOTFOUND };
 
+    // Invoke returns a VARIANT the caller owns. Every wrapper below must therefore either
+    // hand that ownership on (PropGetDispatch / InvokeMethodDispatch return the raw pointer
+    // and the caller Releases it) or clear it. A discarded result that happened to be an
+    // IDispatch is exactly what leaves a WINWORD process running after we Quit.
+
     private static void PropPut(nint disp, string name, VARIANT val)
-        => Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYPUT, [val]);
+    {
+        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYPUT, [val]);
+        ClearVariant(ref r);
+    }
 
     private static nint PropGetDispatch(nint disp, string name)
     {
         var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYGET, []);
-        if (r.vt != VT_DISPATCH) throw new COMException($"'{name}' did not return an IDispatch (vt={r.vt})");
-        return r.ptr;
+        if (r.vt != VT_DISPATCH)
+        {
+            ClearVariant(ref r); // wrong type, but it may still own a BSTR
+            throw new COMException($"'{name}' did not return an IDispatch (vt={r.vt})");
+        }
+        return r.ptr; // ownership transfers to the caller
     }
 
     private static nint InvokeMethodDispatch(nint disp, string name, VARIANT[] argsReversed)
     {
         var r = Invoke(disp, GetDispId(disp, name), DISPATCH_METHOD, argsReversed);
-        return r.vt == VT_DISPATCH ? r.ptr : 0;
+        if (r.vt == VT_DISPATCH) return r.ptr; // ownership transfers to the caller
+        ClearVariant(ref r);
+        return 0;
     }
 
     private static void InvokeMethodVoid(nint disp, string name, VARIANT[] argsReversed)
-        => Invoke(disp, GetDispId(disp, name), DISPATCH_METHOD, argsReversed);
+    {
+        // "Void" describes how we use it, not what Word returns — e.g. Documents.Open-shaped
+        // calls hand back an IDispatch even when we ignore it. Clear it or it leaks.
+        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_METHOD, argsReversed);
+        ClearVariant(ref r);
+    }
 
     /// <summary>Convert <paramref name="sourcePath"/> to a PDF at <paramref name="outputPath"/> via
     /// Word. Throws COMException on failure (e.g. Word not installed). Releases every interface and
@@ -350,7 +390,9 @@ public static unsafe partial class AotWordConverter
     private static int GetInt(nint disp, string name)
     {
         var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYGET, []);
-        return r.vt == VT_I4 ? r.i4 : 0;
+        int value = r.vt == VT_I4 ? r.i4 : 0;
+        ClearVariant(ref r); // a non-I4 answer may still own a BSTR or interface pointer
+        return value;
     }
 
 }

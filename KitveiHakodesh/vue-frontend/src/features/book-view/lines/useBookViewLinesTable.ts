@@ -75,17 +75,28 @@ export function useLines(bookId: () => number | undefined) {
 
   // Write a completed chunk's rows into lines.value.
   function writeRows(rows: { id: number; lineIndex: number; content: string }[]) {
+    // Grow ONCE to fit the whole chunk before writing. Growing per row re-copied the entire
+    // array for each of up to CHUNK_SIZE/BACKFILL_CHUNK_SIZE rows — and since the first chunk
+    // is fetched before load() pre-sizes to totalLines, that path runs on every book open.
+    let maxLineIndex = -1
+    for (const row of rows) if (row.lineIndex > maxLineIndex) maxLineIndex = row.lineIndex
+    growTo(maxLineIndex + 1)
+
     for (const row of rows) {
-      if (row.lineIndex >= lines.value.length) {
-        const extra = Array.from({ length: row.lineIndex - lines.value.length + 1 }, (_, i) => ({
-          id: -(lines.value.length + i + 1),
-          lineIndex: lines.value.length + i,
-          content: null,
-        }))
-        lines.value = [...lines.value, ...extra]
-      }
       lines.value[row.lineIndex] = { id: row.id, lineIndex: row.lineIndex, content: row.content ?? '' }
     }
+  }
+
+  /** Extend `lines` with placeholders up to `count` entries. No-op if already that long. */
+  function growTo(count: number) {
+    const from = lines.value.length
+    if (count <= from) return
+    const extra = Array.from({ length: count - from }, (_, i) => ({
+      id: -(from + i + 1),
+      lineIndex: from + i,
+      content: null,
+    }))
+    lines.value = [...lines.value, ...extra]
   }
 
   async function fetchRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
@@ -215,14 +226,7 @@ export function useLines(bookId: () => number | undefined) {
       book?.hasCommentaryConnection
     )
 
-    if (totalLines > lines.value.length) {
-      const extra = Array.from({ length: totalLines - lines.value.length }, (_, i) => ({
-        id: -(lines.value.length + i + 1),
-        lineIndex: lines.value.length + i,
-        content: null,
-      }))
-      lines.value = [...lines.value, ...extra]
-    }
+    growTo(totalLines)
 
     // Queue the rest of the book as large backfill ranges (needed for in-book
     // search and instant scrolling) and fill up to CONCURRENT_CHUNKS workers.

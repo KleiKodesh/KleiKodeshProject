@@ -28,19 +28,30 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
   // Tesseract is imported dynamically on first use so it does not add to the
   // initial JS parse cost — it's only needed when the user opens a PDF tab and
   // activates OCR mode.
+  // Set once the composable's owner has torn down. createWorker is awaited, so a worker can
+  // finish spawning AFTER onUnmounted has already swept `workers` — without this it would
+  // never be terminated and its WASM heap would leak for every tab closed mid-load.
+  let disposed = false
+
   async function initWorker(targetScript: OcrScript) {
     if (workers[targetScript]) return
     const { createWorker } = await import('tesseract.js')
-    workers[targetScript] = await createWorker(LANG_FILES[targetScript], 1, {
+    const worker = await createWorker(LANG_FILES[targetScript], 1, {
       langPath: '/tesseract/',
       gzip: false,
       workerPath: '/tesseract/worker.min.js',
       corePath: '/tesseract/tesseract-core.wasm.js',
     })
+    if (disposed) {
+      void worker.terminate()
+      return
+    }
+    workers[targetScript] = worker
     workerReady[targetScript] = true
   }
 
   onUnmounted(() => {
+    disposed = true
     for (const worker of Object.values(workers)) worker?.terminate()
     window.removeEventListener('message', onMessage)
   })
@@ -81,19 +92,23 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
       processingProgress.value = 0
       
       // Run Tesseract on the canvas data URL received from the iframe
+      let progressInterval: ReturnType<typeof setInterval> | null = null
       try {
         const targetScript = script.value
         if (!workerReady[targetScript]) await initWorker(targetScript)
-        
+        // Torn down while the worker was spawning — initWorker already terminated it.
+        if (disposed || !workers[targetScript]) return
+
         // Simulate progress updates during OCR
-        const progressInterval = setInterval(() => {
+        progressInterval = setInterval(() => {
           if (processingProgress.value < 0.9) {
             processingProgress.value += Math.random() * 0.3
           }
         }, 200)
-        
+
         const { data } = await workers[targetScript]!.recognize(event.data.dataUrl)
         clearInterval(progressInterval)
+        progressInterval = null
         processingProgress.value = 1
         
         const cleanText = data.text
@@ -107,6 +122,9 @@ export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {
         console.error('[OcrSelection] OCR failed:', error)
         result.value = { text: '', isOcr: true }
       } finally {
+        // recognize() throwing (or initWorker failing) used to leave this 200ms timer
+        // running for the life of the page, writing into component state forever.
+        if (progressInterval != null) clearInterval(progressInterval)
         isProcessing.value = false
         processingProgress.value = 0
       }

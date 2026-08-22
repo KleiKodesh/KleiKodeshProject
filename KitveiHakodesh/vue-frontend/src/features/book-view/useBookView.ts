@@ -602,9 +602,17 @@ export function useBookView(
     { immediate: true },
   )
 
+  // Stop handle for the post-restore TOC-sync watch created inside onMounted (below).
+  // `unmounted` matters as much as the handle: restoreSession() awaits IndexedDB, so a tab
+  // closed during that await runs onBeforeUnmount FIRST — with the handle still null — and
+  // the continuation then creates a watch nothing owns. Check the flag after the await.
+  let stopTocSyncWatch: (() => void) | null = null
+  let unmounted = false
+
   onMounted(async () => {
     groups.value = []
     await restoreSession()
+    if (unmounted) return // tab closed while restore awaited IndexedDB
 
     // Panel visibility is final for this restore — release the lines backfill
     // right away when no commentary panel is reopening.
@@ -620,11 +628,16 @@ export function useBookView(
       if (tocEntries.value.length > 0) {
         syncTocPathForLineIndex(restoredLineIndex)
       } else {
-        const stopWatch = watch(
+        // Created after `await restoreSession()`, so this is outside the component's effect
+        // scope and Vue will never dispose it. It self-stops once entries arrive, but a book
+        // with no TOC leaves the count at 0 forever — hence the explicit handle, cleared by
+        // onBeforeUnmount below.
+        stopTocSyncWatch = watch(
           () => tocEntries.value.length,
           (count) => {
             if (count === 0) return
-            stopWatch()
+            stopTocSyncWatch?.()
+            stopTocSyncWatch = null
             syncTocPathForLineIndex(restoredLineIndex)
           },
         )
@@ -642,6 +655,13 @@ export function useBookView(
   bookViewStore.registerTocBridge(tabId, tocBridge)
 
   onBeforeUnmount(() => {
+    // Detached (created after an await), so nothing else will dispose it. The flag covers
+    // the other half: if we unmount BEFORE the await resumes, there is no handle yet and
+    // the continuation must not create the watch at all.
+    unmounted = true
+    stopTocSyncWatch?.()
+    stopTocSyncWatch = null
+
     // Both the bridge and tocPath are keyed by tab, and an in-place navigation
     // mounts the next book before this one tears down — so only clear what we
     // still own, or we wipe the incoming book's breadcrumb state.

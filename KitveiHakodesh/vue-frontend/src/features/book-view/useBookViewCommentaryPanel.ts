@@ -10,7 +10,7 @@
  * Scroll position is kept as a flat virtualizer index + offset so it survives the
  * panel being unmounted (v-if) and remounted.
  */
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onScopeDispose } from 'vue'
 import type { PinnedCommentaryGroup } from './bookViewTypes'
 
 type CommentaryGroup = { bookId: number; bookTitle: string; sectionLabel?: string; subSectionLabel?: string }
@@ -36,6 +36,27 @@ export function useBookViewCommentaryPanel(
   const commentaryVisible = ref(false)
   const commentaryScrollIndex = ref<number | null>(null)
   const commentaryScrollOffset = ref<number | null>(null)
+
+  // onCommentaryPanelMounted runs from a setTimeout, so Vue's active effect scope is gone
+  // by then and every watch() created inside it is DETACHED — unmounting disposes none of
+  // them. They self-stop on success, but a panel that closes (or a tab that dies) before
+  // that condition lands would leak the watcher, its closure, and everything the closure
+  // holds: `groups`, the whole `lines` array, and a dead CommentaryView instance. Since
+  // the panel re-runs that function on every toggle and every layout remount, the leak
+  // accumulates per open, not per tab. Track the handles and dispose them with the scope.
+  const detachedWatchStops = new Set<() => void>()
+  /** Register a detached watch's stop handle; auto-unregisters when the watch self-stops. */
+  function trackDetachedWatch(stop: () => void): () => void {
+    detachedWatchStops.add(stop)
+    return () => {
+      detachedWatchStops.delete(stop)
+      stop()
+    }
+  }
+  onScopeDispose(() => {
+    for (const stop of detachedWatchStops) stop()
+    detachedWatchStops.clear()
+  })
 
   // Tracks the scroll position that was last successfully restored so that
   // onCommentaryPanelMounted does not redundantly restore the same position again
@@ -68,15 +89,17 @@ export function useBookViewCommentaryPanel(
     // null because lines haven't loaded yet).
     if (selectedLineId.value != null && commentaryLineId.value == null) {
       let stop: (() => void) | undefined
-      stop = watch(
-        () => lines().some((l) => l.content !== null),
-        (hasContent) => {
-          if (!hasContent) return
-          stop?.()
-          if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
-            commentaryLineId.value = selectedLineId.value
-        },
-        { immediate: true },
+      stop = trackDetachedWatch(
+        watch(
+          () => lines().some((l) => l.content !== null),
+          (hasContent) => {
+            if (!hasContent) return
+            stop?.()
+            if (commentaryVisible.value && selectedLineId.value != null && commentaryLineId.value == null)
+              commentaryLineId.value = selectedLineId.value
+          },
+          { immediate: true },
+        ),
       )
     }
 
@@ -99,11 +122,14 @@ export function useBookViewCommentaryPanel(
       let stopLoading: (() => void) | undefined
       let stopViewRef: (() => void) | undefined
       const cancelRestore = () => { stopLoading?.(); stopViewRef?.() }
-      const stopVisibleGuard = watch(commentaryVisible, (visible) => {
-        if (!visible) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard() }
-      })
+      let stopVisibleGuard: (() => void) | undefined
+      stopVisibleGuard = trackDetachedWatch(
+        watch(commentaryVisible, (visible) => {
+          if (!visible) { cancelRestore(); lastRestoredCommentaryKey = null; stopVisibleGuard?.() }
+        }),
+      )
 
-      stopLoading = watch(
+      stopLoading = trackDetachedWatch(watch(
         () => !commentaryLoading.value && groups.value.length > 0,
         (ready) => {
           if (!ready) return
@@ -128,7 +154,7 @@ export function useBookViewCommentaryPanel(
               if (applied) lastRestoredCommentaryKey = restoreKey
             })
           } else {
-            stopViewRef = watch(
+            stopViewRef = trackDetachedWatch(watch(
               () => commentaryViewRef(),
               (newRef) => {
                 if (!newRef) return
@@ -139,11 +165,11 @@ export function useBookViewCommentaryPanel(
                   if (applied) lastRestoredCommentaryKey = restoreKey
                 })
               },
-            )
+            ))
           }
         },
         { flush: 'post', immediate: true },
-      )
+      ))
     } else if (groups.value.length > 0 && pinnedCommentaryGroup.value) {
       // No saved scroll position - scroll to pinned group (e.g. after a layout change).
       nextTick(() => {

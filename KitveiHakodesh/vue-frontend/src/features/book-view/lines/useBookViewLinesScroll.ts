@@ -116,6 +116,10 @@ export function useBookViewLinesScroll(
   // ── Initial scroll on load ──────────────────────────────────────────────────
 
   let cancelStabilize: (() => void) | null = null
+  // Vue does not drop queued nextTick callbacks on unmount, and cancelStabilize is only
+  // assigned INSIDE the one below — so an unmount in between leaves onBeforeUnmount with
+  // nothing to call while the callback still runs and creates a watch nobody owns.
+  let scrollTeardown = false
   // Timer for the deep-link line flash; cleared on cancel/unmount so it never fires
   // against a stale element.
   let flashTimer: number | null = null
@@ -139,7 +143,7 @@ export function useBookViewLinesScroll(
         const target: number = targetIndex
 
         nextTick(() => {
-          if (restored) return
+          if (restored || scrollTeardown) return
           restored = true
 
           let cancelled = false
@@ -147,6 +151,11 @@ export function useBookViewLinesScroll(
             cancelled = true
             programmaticScrolling = false
             if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
+            // Created inside this nextTick, so it is outside the effect scope and unmount
+            // won't dispose it. The `cancelled` flag already neuters its effects, but the
+            // watcher itself would stay subscribed to lines() and retain the closure.
+            stopContentWatch?.()
+            stopContentWatch = null
           }
           programmaticScrolling = true
 
@@ -416,6 +425,7 @@ export function useBookViewLinesScroll(
   useEventListener(window, 'beforeunload', savePos)
 
   onBeforeUnmount(() => {
+    scrollTeardown = true
     cancelStabilize?.()
     programmaticScrolling = false
     if (programmaticScrollTimer) {
