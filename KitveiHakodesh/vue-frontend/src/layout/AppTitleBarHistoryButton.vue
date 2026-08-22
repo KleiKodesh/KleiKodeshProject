@@ -100,7 +100,7 @@ function onSelectItem(index: number) {
 <template>
   <button
     ref="buttonRef"
-    class="history-button"
+    class="bar-btn"
     tabindex="-1"
     :disabled="!isEnabled"
     :title="title"
@@ -136,29 +136,6 @@ function onSelectItem(index: number) {
     </div>
   </Teleport>
 </template>
-
-<style scoped>
-/* Mirrors AppTitleBar's .bar-btn — the parent's scoped styles cannot reach this
-   fragment root, so the sizing lives here. Hover/active come from the global
-   button rules in main.css. */
-.history-button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--title-bar-button-size);
-  height: var(--title-bar-button-size);
-  padding: 6px;
-  border-radius: 4px;
-}
-.history-button svg {
-  width: 16px;
-  height: 16px;
-}
-.history-button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-</style>
 
 <style>
 /* Unscoped — teleported to <body>, lives outside this component's scope */

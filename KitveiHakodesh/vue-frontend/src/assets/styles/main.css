@@ -92,9 +92,40 @@ button {
 button:hover { background: var(--hover-bg); color: var(--text-primary); }
 button:active { transform: scale(0.92); transition: transform 0.1s; }
 
+/* THE app's icon button — the square, centred, 16px-icon button the title bar is
+   built from, and the default for any new icon button anywhere in the app. It
+   lives here rather than in AppTitleBar because it was never really that bar's:
+   the theme toggle already borrowed it by rendering inside that scope, and the
+   history button and the search bar each had to re-declare it by hand. Global,
+   so a component only needs the class.
+   `.bar-btn.active` is the pressed/selected state (accent tint + ring). */
+.bar-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--title-bar-button-size);
+  height: var(--title-bar-button-size);
+  padding: 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+.bar-btn svg { width: 16px; height: 16px; }
+/* Pressed tint. The generic `button:active` only scales, so without this a
+   .bar-btn had no press feedback beyond the dip — which is what the title bar and
+   the search bar both had before this rule was shared. */
+.bar-btn:not(:disabled):active { background: color-mix(in srgb, var(--text-primary) 14%, transparent); }
+.bar-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.bar-btn:disabled:hover { background: transparent; color: var(--text-secondary); }
+.bar-btn:disabled:active { transform: none; }
+.bar-btn.active {
+  color: var(--accent-color);
+  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
+}
+
 .c-pointer { cursor: pointer; }
 
-/* Keyboard nav highlight — used by useInputListNavigation / useListKeys / useTilesKeys */
+/* Keyboard nav highlight — used by useInputListNavigation / useListKeys */
 [data-nav-item].is-focused { background: color-mix(in srgb, var(--text-primary) 10%, transparent); }
 .tiles-grid [data-nav-item].is-focused { border-radius: 6px; }
 

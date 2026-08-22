@@ -58,7 +58,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
       class="chevron-button"
       :class="{ open: isOpen }"
       :title="isOpen ? 'סגור' : 'הצג תיקיות'"
-      @click="onToggle"
+      @click.stop="onToggle"
     >
       <IconChevronDown16Regular />
     </button>
@@ -101,7 +101,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
   justify-content: center;
   width: 18px;
   height: 22px;
-  border-radius: 3px;
+  border-radius: 4px;
   color: var(--text-secondary);
   opacity: 0.6;
   padding: 0;

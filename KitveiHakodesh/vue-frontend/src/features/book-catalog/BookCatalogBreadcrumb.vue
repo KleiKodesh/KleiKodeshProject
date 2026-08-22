@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { IconHome16Regular } from '@iconify-prerendered/vue-fluent'
 import BookCatalogBreadcrumbChevronDropdown from './BookCatalogBreadcrumbChevronDropdown.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 
@@ -9,17 +8,9 @@ defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: C
 
 <template>
   <nav class="breadcrumb">
-    <!-- Home crumb — its dropdown lists root-level children (path[0].children) -->
-    <button
-      class="crumb"
-      :class="{ active: path.length === 1 }"
-      title="איפוס"
-      @click="$emit('navigate', 0)"
-    >
-      <IconHome16Regular />
-    </button>
-
-    <!-- Separator after home: lists root children so user can jump sideways from root -->
+    <!-- Root's dropdown, leading the crumbs: lists the root's children, so it is
+         how the user jumps sideways from the top level. (Home itself is the
+         pill's leading cap, in BookCatalogTitleBar.) -->
     <BookCatalogBreadcrumbChevronDropdown
       :parent-node="path[0]!"
       :active-child-id="path.length > 1 ? path[1]!.id : -1"
@@ -31,7 +22,7 @@ defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: C
       <button
         class="crumb"
         :class="{ active: i === path.length - 2 }"
-        @click="$emit('navigate', i + 1)"
+        @click.stop="$emit('navigate', i + 1)"
       >
         {{ node.title }}
       </button>
@@ -51,21 +42,33 @@ defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: C
 .breadcrumb {
   display: flex;
   align-items: center;
-  padding-inline: 4px;
-  /* Fill the toolbar height (set by the parent .titlebar) rather than a fixed
-     value, so the catalog toolbar matches the BookView toolbar in every density. */
-  height: 100%;
-  flex: 1;
+  /* Fills the address bar's middle, the way the path fills Explorer's. The bare
+     stretch beside it is only the slack a short path leaves over — not a reserved
+     band, which just made the bar look half-empty at every depth. Clicking that
+     slack still opens the field, and the magnifier cap beside it is the way in
+     that is always there whatever the path costs.
+
+     Shrinks and scrolls rather than widening the pill, so a deep path never
+     pushes the caps off its ends. */
+  flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
+  height: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+.breadcrumb::-webkit-scrollbar {
+  display: none;
 }
 .crumb {
   display: inline-flex;
   align-items: center;
-  padding: 0 5px;
+  padding: 0 8px;
+  /* Sized to the pill it sits in rather than to the toolbar button height: the
+     address bar is 30px inside its border, so a 32px crumb would not fit. */
   height: 22px;
-  border-radius: 3px;
-  font-size: 12px;
+  border-radius: 4px;
+  font-size: 13px;
   color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;

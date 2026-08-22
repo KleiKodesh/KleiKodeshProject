@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import { IconFolder20Filled } from '@iconify-prerendered/vue-fluent'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useTilesKeys } from './useTileGridKeys'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{ items: FsItem[] }>()
@@ -30,14 +30,43 @@ function getTooltip(item: FsItem) {
   return item.kind === 'folder' ? item.node.title : withNewTabHint(item.book.title)
 }
 
-const { focusedIndex, containerFocused } = useTilesKeys(
-  tilesEl,
-  () => props.items.length,
-  activateIndex,
+// Tiles wrap into rows, so one ArrowDown step is one visual ROW. Count the tiles
+// sharing the first one's offsetTop — exact for any width or gap, with no tile-size
+// constant to keep in sync with the CSS.
+function getColumnsPerRow(): number {
+  const tiles = tilesEl.value?.querySelectorAll<HTMLElement>('[data-nav-item]')
+  if (!tiles?.length) return 1
+  const firstRowTop = tiles[0]!.offsetTop
+  let columns = 0
+  while (columns < tiles.length && tiles[columns]!.offsetTop === firstRowTop) columns++
+  return Math.max(1, columns)
+}
+
+// Combobox model, the same one the search results use: DOM focus never leaves the
+// page's search input — the page forwards its keydown here and the arrows move a
+// HIGHLIGHT through the grid. Previously this grid owned its own focus, so the
+// first ArrowDown pulled the caret out of the field and the user could not keep
+// typing.
+const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
+  getCount: () => props.items.length,
+  onActivate: activateIndex,
+  containerElement: tilesEl,
+  getColumnsPerRow,
+})
+
+// Entering a folder swaps the whole item list, so the old highlight would point at
+// a different row — and a highlight past the new end sends the next ArrowDown to
+// the LAST item instead of the first, since moveTo clamps. useInputListNavigation
+// leaves this to the caller by contract.
+watch(
+  () => props.items,
+  () => {
+    focusedIndex.value = -1
+  },
 )
 
 defineExpose({
-  focusContainer: () => tilesEl.value?.focus(),
+  onSearchInputKeydown: (event: KeyboardEvent) => onKeydown(event),
 })
 
 function selectItem(i: number, event?: MouseEvent) {
@@ -47,14 +76,19 @@ function selectItem(i: number, event?: MouseEvent) {
 </script>
 
 <template>
-  <p v-if="!items.length" class="empty">׳׳™׳ ׳₪׳¨׳™׳˜׳™׳</p>
-  <div v-else ref="tilesEl" class="tiles-grid" tabindex="0">
-    <div
+  <p v-if="!items.length" class="empty">אין פריטים</p>
+  <div v-else ref="tilesEl" class="tiles-grid">
+    <!-- A <button>, like the home page tiles: it is a control, so it gets the
+         semantics for free — and, unlike a div, it does not stretch to fill its
+         grid cell, which is what keeps it the same 72px as home's. -->
+    <button
       v-for="(item, i) in items"
       :key="item.uid"
+      type="button"
       class="tile"
       data-nav-item
-      :class="{ 'is-focused': containerFocused && focusedIndex === i }"
+      tabindex="-1"
+      :class="{ 'is-focused': focusedIndex === i }"
       :title="getTooltip(item)"
       @click="selectItem(i, $event)"
       @auxclick.middle="selectItem(i, $event)"
@@ -63,7 +97,7 @@ function selectItem(i: number, event?: MouseEvent) {
         <IconFolder20Filled v-if="item.kind === 'folder'" /><IconBookRtl20 v-else />
       </div>
       <span class="tile-label">{{ getTitle(item) }}</span>
-    </div>
+    </button>
   </div>
 </template>
 
@@ -91,32 +125,58 @@ function selectItem(i: number, event?: MouseEvent) {
   align-items: center;
   gap: 5px;
   width: 72px;
+  padding: 6px 4px;
+  background: none;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  padding-block: 4px;
-  padding-inline: 3px;
-  border-radius: 6px;
   position: relative;
 }
+/* Same three states, same curve and scales as the home page tiles
+   (HomePageTile.vue) — the icon grows on hover, grows further when it is the
+   keyboard-focused tile, and dips on press. Only the icon moves; the label and
+   the tile box stay put, so a grid of them does not jitter. */
 .tile:hover .tile-icon {
-  transform: scale(1.08);
+  transform: scale(1.15);
 }
 .tile:active .tile-icon {
   transform: scale(0.95);
 }
+/* The home tiles are real buttons and show keyboard focus through
+   `:focus-visible` — the icon simply grows. This grid drives focus itself (the
+   container holds the tabstop and marks the active tile), so the same look has to
+   come from the class. That also means opting out of the global
+   `[data-nav-item].is-focused` background, which home never triggers: with the
+   grown icon doing the work, the filled square underneath is a second, louder
+   focus ring saying the same thing. */
+.tile.is-focused {
+  background: none;
+}
+.tile.is-focused .tile-icon {
+  transform: scale(1.25);
+}
 .tile .tile-icon {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: var(--bg-secondary);
-  transition: transform 0.15s;
+  width: 48px;
+  height: 48px;
+  border-radius: 6px;
+  /* No chip behind the glyph, as on the home page: the icon itself carries the
+     colour, and the tile reads lighter without a filled square under every one. */
+  background: none;
+  font-size: 28px;
+  transition:
+    transform 0.15s ease,
+    opacity 0.12s ease;
 }
+/* Sized by the icon font, the way the home tiles size theirs, rather than by a
+   fixed px box — so both pages scale from the same number. */
 .tile .tile-icon svg {
-  width: 22px;
-  height: 22px;
+  width: 1em;
+  height: 1em;
 }
 .tile .folder-icon svg {
   color: var(--status-warning);
@@ -129,7 +189,7 @@ function selectItem(i: number, event?: MouseEvent) {
   color: var(--text-primary);
   text-align: center;
   line-height: 1.3;
-  width: 100%;
+  max-width: 68px;
   overflow: hidden;
   white-space: normal;
   word-break: break-word;

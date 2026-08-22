@@ -154,7 +154,7 @@ useAppTitleBarShortcuts({
 <template>
   <!-- Keyboard event listener is always active (above), but only render the visual header when titleBarVisible is true -->
   <div ref="barRef" class="title-bar-container" :class="{ hidden: !titleBarVisible }">
-    <header class="title-bar" @click="onTitleBarClick">
+    <header class="title-bar" :class="{ 'nav-sidebar-on': settingsStore.navSidebarVisible }" @click="onTitleBarClick">
     <div class="bar-start">
       <div class="nav-btn-wrap">
         <button
@@ -371,6 +371,15 @@ useAppTitleBarShortcuts({
   min-width: 0;
   margin-inline: 6px;
 }
+/* With the nav rail up, the hamburger and split-view buttons move into the rail,
+   which can leave .bar-start with nothing in it — and then the field's start margin
+   is bare whitespace between the rail and the field. Close it up so the field starts
+   at the rail's edge. The :has() guard keeps the margin whenever a button (theme
+   toggle, text search, toolbar, OCR) is still rendered there to be spaced away from. */
+.title-bar.nav-sidebar-on:not(:has(.bar-start button)) .bar-search,
+.title-bar.nav-sidebar-on:not(:has(.bar-start button)) .bar-title {
+  margin-inline-start: 0;
+}
 /* Block pointer events on text spans so clicks bubble to the header toggle,
    but leave buttons (chevrons) fully interactive. */
 .bar-title .breadcrumb-title-name,
@@ -404,23 +413,6 @@ useAppTitleBarShortcuts({
      (see the truncation note in AppTitleBarTocBreadcrumb.vue). */
   direction: ltr;
 }
-.bar-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: var(--title-bar-button-size);
-  height: var(--title-bar-button-size);
-  padding: 6px;
-  border-radius: 4px;
-}
-.bar-btn svg {
-  width: 16px;
-  height: 16px;
-}
-.bar-btn.active {
-  color: var(--accent-color);
-  background: color-mix(in srgb, var(--accent-color) 15%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 30%, transparent);
-}
+/* .bar-btn (and its .active state) is global now — see main.css. */
 
 </style>
