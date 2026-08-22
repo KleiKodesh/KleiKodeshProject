@@ -12,6 +12,28 @@
         TextSec : #5A5A5A
     -->
 
+    <!--
+        DO NOT fold these into WpfLib/Themes/OfficePalette.xaml.
+
+        Every WPF surface inside the add-in shares that palette, so this file
+        looks like the last hold-out. It is not one. The installer is a
+        standalone app with a different design language on purpose:
+
+          - Fixed light mode. The palette is built from mid-gray (#808080)
+            opacity overlays precisely so it adapts to whatever Office theme
+            the host is running. The installer has no host and no theme to
+            follow, so it commits to white and hardcodes real colors.
+          - KleiKodesh purple (#7333FF), not Office accent blue (#0078D4).
+          - Its own scrollbar (6px thumb, App.xaml) rather than the 12px
+            task pane one.
+
+        This project also does not reference WpfLib, and should not start
+        referencing it for styling alone -- the installer is what runs before
+        anything is installed, so its dependency list is deliberately short.
+
+        See WpfLib/Themes/README.md, "What Stays Local".
+    -->
+
     <!-- Primary button — accent fill, 28px, 4px radius -->
     <Style x:Key="PrimaryButton" TargetType="Button">
         <Setter Property="Foreground"      Value="White"/>
