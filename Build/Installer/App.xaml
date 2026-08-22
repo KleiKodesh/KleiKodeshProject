@@ -5,7 +5,17 @@
              ShutdownMode="OnLastWindowClose">
     <Application.Resources>
 
-        <!-- Slim scrollbar thumb — 6px visible, matches Edge/modern browser style -->
+        <!--
+            Slim scrollbar thumb — 6px visible, matches Edge/modern browser style.
+
+            Deliberately NOT WpfLib/Themes/ScrollBarStyles.xaml, which every task
+            pane shares. That one is a 12px track sized for a docked Office pane;
+            this is a 6px thumb sized for a wizard window. Same idea, different
+            surface — leave them separate.
+
+            See Resources/InstallerStyles.xaml for why the installer keeps its own
+            design language, and WpfLib/Themes/README.md, "What Stays Local".
+        -->
         <Style x:Key="SlimScrollThumb" TargetType="{x:Type Thumb}">
             <Setter Property="Template">
                 <Setter.Value>
