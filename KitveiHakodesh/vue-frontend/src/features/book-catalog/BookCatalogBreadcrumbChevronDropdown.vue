@@ -58,6 +58,7 @@ const hasChildren = computed(() => props.parentNode.children.length > 0)
       class="chevron-button"
       :class="{ open: isOpen }"
       :title="isOpen ? 'סגור' : 'הצג תיקיות'"
+      @mousedown.prevent
       @click.stop="onToggle"
     >
       <IconChevronDown16Regular />

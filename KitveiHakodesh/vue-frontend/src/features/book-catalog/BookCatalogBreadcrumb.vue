@@ -22,6 +22,7 @@ defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: C
       <button
         class="crumb"
         :class="{ active: i === path.length - 2 }"
+        @mousedown.prevent
         @click.stop="$emit('navigate', i + 1)"
       >
         {{ node.title }}
