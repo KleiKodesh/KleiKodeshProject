@@ -1,0 +1,197 @@
+<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:kk="http://schemas.kleikodesh.org/wpf"
+        x:Class="WpfLib.Gallery.MainWindow"
+        Title="WpfLib Gallery"
+        Height="820" Width="1080"
+        Background="#FFFFFFFF"
+        Foreground="#FF262626"
+        FontFamily="{StaticResource UiFontFamily}"
+        WindowStartupLocation="CenterScreen">
+    <!--
+        Every style in the palette, on one screen, so it can be looked at.
+
+        The theme switch at the top is the point of the window as much as the
+        controls are. The palette claims to adapt to any Office theme because
+        it is built from mid-gray overlays rather than fixed light and dark
+        values. That claim is only worth anything if you can flip the
+        background and watch it hold, so flip it.
+    -->
+    <DockPanel Margin="16">
+
+        <Border DockPanel.Dock="Top" Padding="0,0,0,12">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="WpfLib Gallery" FontSize="18" FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <TextBlock Style="{StaticResource SecondaryText}" VerticalAlignment="Center"
+                           Text="the same palette the task panes merge"/>
+                <StackPanel Orientation="Horizontal" Margin="24,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Theme" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <ComboBox x:Name="ThemePicker" Width="150"
+                              SelectionChanged="OnThemeChanged"
+                              SelectedIndex="0">
+                        <ComboBoxItem Content="Office White"/>
+                        <ComboBoxItem Content="Office Light Gray"/>
+                        <ComboBoxItem Content="Office Dark Gray"/>
+                        <ComboBoxItem Content="Office Black"/>
+                    </ComboBox>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+
+                <GroupBox Header="Buttons">
+                    <WrapPanel>
+                        <Button Content="Implicit"      Margin="0,0,8,8"/>
+                        <Button Content="ActionButton"  Style="{StaticResource ActionButton}" Margin="0,0,8,8"/>
+                        <Button Content="Disabled"      Style="{StaticResource ActionButton}" IsEnabled="False" Margin="0,0,8,8"/>
+                        <ToggleButton Content="AccentToggle" Margin="0,0,8,8"/>
+                        <ToggleButton Content="IconToggle"   Style="{StaticResource IconToggle}"   Margin="0,0,8,8"/>
+                        <ToggleButton Content="CheckedToggle" Style="{StaticResource CheckedToggle}" Margin="0,0,8,8"/>
+                    </WrapPanel>
+                </GroupBox>
+
+                <GroupBox Header="Selection">
+                    <StackPanel>
+                        <CheckBox Content="A checkbox"           Margin="0,0,0,6"/>
+                        <CheckBox Content="Checked"  IsChecked="True" Margin="0,0,0,6"/>
+                        <CheckBox Content="Disabled" IsEnabled="False" Margin="0,0,0,10"/>
+                        <RadioButton Content="First option"  IsChecked="True"/>
+                        <RadioButton Content="Second option"/>
+                        <RadioButton Content="Disabled" IsEnabled="False"/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Text input">
+                    <StackPanel>
+                        <TextBox Style="{StaticResource OfficeTextBox}" Text="OfficeTextBox"
+                                 Margin="0,0,0,8"/>
+                        <TextBox Style="{StaticResource OfficeTextBox}" Text="Disabled"
+                                 IsEnabled="False" Margin="0,0,0,8"/>
+                        <PasswordBox Password="hunter2" Margin="0,0,0,8"/>
+                        <ComboBox Margin="0,0,0,8" SelectedIndex="0">
+                            <ComboBoxItem Content="A combo box"/>
+                            <ComboBoxItem Content="Second entry"/>
+                            <ComboBoxItem Content="Third entry"/>
+                        </ComboBox>
+                        <ComboBox IsEditable="True" Tag="Editable, with placeholder from Tag"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <kk:UpDownTextBox Value="12" Width="70" Margin="0,0,8,0"/>
+                            <kk:UpDownFloatTextBox Value="1.5" Width="70"/>
+                            <TextBlock Style="{StaticResource SecondaryText}" Margin="10,0,0,0"
+                                       Text="WpfLib's own controls, via the kk: namespace"/>
+                        </StackPanel>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Type">
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource SectionLabel}"  Text="SECTION LABEL"/>
+                        <TextBlock Style="{StaticResource OfficeTextBlock}" Text="OfficeTextBlock, the body default."/>
+                        <TextBlock Style="{StaticResource SecondaryText}" Text="SecondaryText, for hints and counts."/>
+                        <Separator/>
+                        <TextBlock>
+                            <Hyperlink Style="{StaticResource OfficeHyperlink}">OfficeHyperlink</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Lists and trees">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <ListBox Grid.Column="0" Height="120" Margin="0,0,8,0" SelectedIndex="1">
+                            <ListBoxItem Content="First row"/>
+                            <ListBoxItem Content="Selected row"/>
+                            <ListBoxItem Content="Third row"/>
+                            <ListBoxItem Content="Fourth row"/>
+                        </ListBox>
+                        <TreeView Grid.Column="1" Height="120">
+                            <TreeViewItem Header="Expanded branch" IsExpanded="True">
+                                <TreeViewItem Header="Leaf one"/>
+                                <TreeViewItem Header="Leaf two"/>
+                            </TreeViewItem>
+                            <TreeViewItem Header="Collapsed branch">
+                                <TreeViewItem Header="Hidden leaf"/>
+                            </TreeViewItem>
+                            <TreeViewItem Header="Leaf at root"/>
+                        </TreeView>
+                    </Grid>
+                </GroupBox>
+
+                <GroupBox Header="Containers">
+                    <StackPanel>
+                        <TabControl Height="110" Margin="0,0,0,10">
+                            <TabItem Header="First tab">
+                                <TextBlock Style="{StaticResource OfficeTextBlock}"
+                                           Text="Selected tabs get an accent underline."/>
+                            </TabItem>
+                            <TabItem Header="Second tab">
+                                <TextBlock Style="{StaticResource OfficeTextBlock}" Text="Second panel."/>
+                            </TabItem>
+                            <TabItem Header="Disabled" IsEnabled="False"/>
+                        </TabControl>
+                        <Expander Header="An expander" IsExpanded="True">
+                            <TextBlock Style="{StaticResource OfficeTextBlock}"
+                                       Text="The chevron rotates. Same one the tree uses."/>
+                        </Expander>
+                        <Expander Header="Collapsed by default">
+                            <TextBlock Style="{StaticResource OfficeTextBlock}" Text="Hidden."/>
+                        </Expander>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Indicators">
+                    <StackPanel>
+                        <ProgressBar Value="35" Margin="0,0,0,10"/>
+                        <ProgressBar IsIndeterminate="True" Margin="0,0,0,10"/>
+                        <Slider Minimum="0" Maximum="100" Value="40" Margin="0,0,0,10"/>
+                        <Button Content="Hover me for a tooltip"
+                                Style="{StaticResource ActionButton}"
+                                HorizontalAlignment="Left"
+                                ToolTip="OfficeToolTip renders in its own Popup."/>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Menus">
+                    <StackPanel>
+                        <Menu Margin="0,0,0,10">
+                            <MenuItem Header="_File">
+                                <MenuItem Header="New"  InputGestureText="Ctrl+N"/>
+                                <MenuItem Header="Open" InputGestureText="Ctrl+O"/>
+                                <MenuItem Header="Recent">
+                                    <MenuItem Header="Submenus work too"/>
+                                </MenuItem>
+                                <MenuItem Header="Disabled" IsEnabled="False"/>
+                            </MenuItem>
+                            <MenuItem Header="_Edit">
+                                <MenuItem Header="Undo" InputGestureText="Ctrl+Z"/>
+                            </MenuItem>
+                        </Menu>
+                        <Border Padding="12" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                                CornerRadius="4" HorizontalAlignment="Left">
+                            <TextBlock Style="{StaticResource OfficeTextBlock}"
+                                       Text="Right-click here for the context menu."/>
+                            <Border.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Cut"   InputGestureText="Ctrl+X"/>
+                                    <MenuItem Header="Copy"  InputGestureText="Ctrl+C"/>
+                                    <MenuItem Header="Paste" InputGestureText="Ctrl+V"/>
+                                </ContextMenu>
+                            </Border.ContextMenu>
+                        </Border>
+                    </StackPanel>
+                </GroupBox>
+
+                <GroupBox Header="Colour tokens">
+                    <WrapPanel x:Name="SwatchPanel"/>
+                </GroupBox>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
