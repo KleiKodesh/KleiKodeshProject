@@ -133,6 +133,14 @@
         <Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Auto"/>
         <Setter Property="VirtualizingPanel.IsVirtualizing"     Value="True"/>
         <Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/>
+        <Setter Property="ScrollViewer.CanContentScroll"        Value="True"/>
+        <!--
+            IsVirtualizing is an inherited attached property, so setting it on
+            the TreeView reaches every TreeViewItem below it. The item template
+            leaves ItemsPanel alone on purpose: TreeViewItem already defaults to
+            a VirtualizingStackPanel, and replacing it would switch hierarchical
+            virtualization off without any warning.
+        -->
         <Setter Property="ItemContainerStyle" Value="{StaticResource OfficeTreeViewItem}"/>
     </Style>
 
