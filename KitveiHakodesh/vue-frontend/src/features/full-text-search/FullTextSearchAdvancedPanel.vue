@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconMinimize20Regular } from '@iconify-prerendered/vue-fluent'
 
 const props = defineProps<{
   maxWordDistance: number
@@ -55,7 +55,7 @@ function onContextWordsInput(event: Event) {
         </button>
       </div>
       <button class="close-btn" title="סגור" @click="emit('close')">
-        <IconDismiss20Regular />
+        <IconMinimize20Regular />
       </button>
     </div>
 

@@ -114,6 +114,7 @@ const _scrollMirror = lsGet<{ i: number; o: number }>(scrollMirrorKey)
 const initialScrollIndex = ref<number | undefined>(_scrollMirror?.i)
 const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
 const isAdvancedOpen = ref(false)
+const advancedPanelRef = ref<HTMLElement | null>(null)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
@@ -141,6 +142,23 @@ useDropdownClose(
     toggleButton: computed(() => searchBarRef.value?.filterBtnRef ?? null),
     enabled: isOverlayMode,
   },
+)
+
+// The advanced panel is a popup over the results in every size, so unlike the filter
+// panel it closes on outside-click unconditionally — no overlay-mode gate.
+//
+// The toggle button has to be named, or clicking it while the panel is open would close
+// it and then reopen it: onClickOutside runs on the CLICK, capture-phase on window, so
+// it fires before the button's own bubble-phase handler (@click.stop can't cancel a
+// capture listener that already ran). Naming the button makes the composable return
+// without closing, leaving the single close to the button's toggle. Nothing reads the
+// returned `justClosed` — that guard is for toggles that set the flag themselves.
+useDropdownClose(
+  advancedPanelRef,
+  () => {
+    if (isAdvancedOpen.value) isAdvancedOpen.value = false
+  },
+  { toggleButton: computed(() => searchBarRef.value?.advancedBtnRef ?? null) },
 )
 
 // Re-run the search whenever any advanced setting changes — the current results
@@ -390,6 +408,7 @@ onBeforeUnmount(() => {
       />
       <FullTextSearchAdvancedPanel
         v-if="isAdvancedOpen"
+        ref="advancedPanelRef"
         :max-word-distance="maxWordDistance"
         :require-ordered="requireOrdered"
         :context-words="settings.searchContextMarginWords"
