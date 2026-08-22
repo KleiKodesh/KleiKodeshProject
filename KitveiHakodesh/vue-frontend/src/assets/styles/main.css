@@ -55,6 +55,13 @@ body {
   font-size: 13px;
 }
 
+/* How far the nav sidebar's docked panel is inset from the pane's edges. Global rather
+   than scoped to AppNavSidebar because AppTitleBar matches its vertical padding to this
+   while the sidebar is up, so the address bar lines up with the top of that panel. */
+:root {
+  --nav-panel-inset: 6px;
+}
+
 /* Density mode — compact (default) matches PDF.js toolbar dimensions */
 :root {
   --title-bar-height: 32px;
