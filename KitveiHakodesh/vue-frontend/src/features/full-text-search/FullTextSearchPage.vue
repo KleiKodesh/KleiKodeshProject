@@ -497,15 +497,21 @@ onBeforeUnmount(() => {
   .results-list-wrap {
     min-width: 0;
   }
+  /* Flex, so the panel inside can stretch to the shell's full height. As a plain block
+     the panel had nothing to stretch against and collapsed to its content height. */
   .filter-shell {
     position: static;
     background: none;
     height: 100%;
     flex-shrink: 0;
+    display: flex;
   }
+  /* `height: 100%` would resolve against the shell and then ADD the panel's own margin,
+     overflowing the area by that much at top and bottom. Stretching instead lets the
+     margin be a true inset: the panel fills the height that's left over. */
   .results-area :deep(.panel) {
     position: static;
-    height: 100%;
+    align-self: stretch;
     flex-shrink: 0;
   }
 }

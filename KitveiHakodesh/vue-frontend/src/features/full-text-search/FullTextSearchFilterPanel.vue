@@ -304,6 +304,11 @@ function onInputKeydown(e: KeyboardEvent) {
 </template>
 
 <style scoped>
+/* A menu panel, not a wall: the app's dropdown surface (--bg-secondary + 1px border +
+   4px radius + drop shadow, per AppTitleBarNavDropdown) inset from the edges of the area
+   it fills, so it reads as a sheet floating over the results rather than a second column
+   fused to them. It still fills the full height of that area - the inset is a margin, and
+   the list inside is what grows. */
 .panel {
   position: absolute;
   right: 0;
@@ -314,13 +319,22 @@ function onInputKeydown(e: KeyboardEvent) {
   flex-direction: column;
   min-width: 180px;
   max-width: 300px;
+  margin: 6px;
   background: var(--bg-secondary);
-  border-left: 1px solid var(--border-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  /* The rounded corners have to clip the header band and the scrolling list, or both
+     square themselves off against the radius. */
+  overflow: hidden;
 }
+/* Menu-height rows throughout (32px, matching the nav dropdown) - the old 26px band was
+   sized for a toolbar strip and read as chrome rather than as the panel's own title. */
 .panel-header {
   display: flex;
   align-items: center;
-  height: 26px;
+  height: 32px;
+  padding-inline: 2px;
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
 }
@@ -329,8 +343,9 @@ function onInputKeydown(e: KeyboardEvent) {
   align-items: center;
   flex: 1;
   height: 26px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -352,6 +367,8 @@ function onInputKeydown(e: KeyboardEvent) {
 .header-check.checked .check-mark { display: block; }
 .header-check.indet   .dash-mark  { display: block; }
 .panel-title { flex: 1; }
+/* Rounded hover bands like every other menu control in the app; square ones fought the
+   panel's own rounded corner right next to them. */
 .close-btn,
 .expand-all-btn {
   display: flex;
@@ -360,7 +377,7 @@ function onInputKeydown(e: KeyboardEvent) {
   width: 26px;
   height: 26px;
   flex-shrink: 0;
-  border-radius: 0;
+  border-radius: 4px;
   color: var(--text-secondary);
 }
 .expand-all-btn {
@@ -386,9 +403,12 @@ function onInputKeydown(e: KeyboardEvent) {
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
 }
+/* The field is the panel's own footer, so it sits ON the panel surface rather than in a
+   separate strip: no top rule, just breathing room around the pill. The rule was there to
+   fence the field off from the tree when the panel had no edges of its own; now the
+   panel's border does that job. */
 .panel-search {
-  padding: 5px 6px 6px;
-  border-top: 1px solid var(--border-color);
+  padding: 6px;
   flex-shrink: 0;
 }
 .search-inner {
@@ -402,6 +422,9 @@ function onInputKeydown(e: KeyboardEvent) {
   border: 1px solid var(--border-color);
   min-height: 26px;
   cursor: text;
+  /* Same inset the top search bar's pill carries (TopSearchBar), so the two fields on
+     the page read as one control at two sizes. */
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .search-inner:focus-within {
   border-color: var(--accent-color);
