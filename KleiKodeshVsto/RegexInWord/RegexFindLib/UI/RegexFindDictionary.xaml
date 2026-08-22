@@ -7,7 +7,8 @@
     -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
-        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/comboboxstyles.xaml"/>
