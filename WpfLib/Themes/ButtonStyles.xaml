@@ -8,6 +8,10 @@
         Flat button and toggle styles — adaptive, work on any Office theme.
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
 
+        Foreground is set with a PriorityBinding, not left to inherit and not
+        bound to a single ancestor. See the note on IconButton below; getting
+        this wrong is what made button labels dark on a dark theme.
+
         IconButton    : flat icon button — transparent, hover/pressed overlays,
                         disabled at 35% opacity. Also the implicit Button style.
         IconToggle    : flat icon toggle — hover/pressed only, NO checked highlight.
@@ -28,13 +32,31 @@
 
     <!-- ── IconButton — flat icon button ─────────────────────────── -->
     <Style x:Key="IconButton" TargetType="Button">
+        <!--
+            Foreground has to be stated, and it has to work in both hosts.
+
+            Leaving it unset does NOT inherit: WPF's theme style for Button
+            sets Foreground, and theme-style setters outrank inheritance, so
+            an unset Foreground lands on Aero's dark default and button text
+            comes out near-black on a dark Office theme.
+
+            Binding it to an ancestor UserControl works in a task pane and
+            fails in a plain Window. PriorityBinding takes whichever resolves:
+            the pane's UserControl if there is one, otherwise the Window.
+        -->
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Padding"          Value="6"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -64,13 +86,31 @@
 
     <!-- ── IconToggle — flat, no checked highlight ───────────────── -->
     <Style x:Key="IconToggle" TargetType="ToggleButton">
+        <!--
+            Foreground has to be stated, and it has to work in both hosts.
+
+            Leaving it unset does NOT inherit: WPF's theme style for Button
+            sets Foreground, and theme-style setters outrank inheritance, so
+            an unset Foreground lands on Aero's dark default and button text
+            comes out near-black on a dark Office theme.
+
+            Binding it to an ancestor UserControl works in a task pane and
+            fails in a plain Window. PriorityBinding takes whichever resolves:
+            the pane's UserControl if there is one, otherwise the Window.
+        -->
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Padding"          Value="6"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
@@ -186,13 +226,31 @@
 
     <!-- ── ActionButton — bordered, for dialogs (OK, Apply, etc.) ── -->
     <Style x:Key="ActionButton" TargetType="Button">
+        <!--
+            Foreground has to be stated, and it has to work in both hosts.
+
+            Leaving it unset does NOT inherit: WPF's theme style for Button
+            sets Foreground, and theme-style setters outrank inheritance, so
+            an unset Foreground lands on Aero's dark default and button text
+            comes out near-black on a dark Office theme.
+
+            Binding it to an ancestor UserControl works in a task pane and
+            fails in a plain Window. PriorityBinding takes whichever resolves:
+            the pane's UserControl if there is one, otherwise the Window.
+        -->
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Padding"          Value="12,5"/>
         <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
         <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
@@ -225,7 +283,32 @@
 
     <!-- ── IconPath — vector icon inside a button ─────────────────── -->
     <Style x:Key="IconPath" TargetType="Path">
-        <Setter Property="Fill"          Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <!--
+            Fill is not an inherited property, so unlike Foreground above it
+            cannot just be left alone. Reading the inherited TextElement.
+            Foreground off the Path itself follows exactly the same chain that
+            text follows, and works in a Window as well as in a task pane.
+        -->
+        <!--
+            Foreground has to be stated, and it has to work in both hosts.
+
+            Leaving it unset does NOT inherit: WPF's theme style for Button
+            sets Foreground, and theme-style setters outrank inheritance, so
+            an unset Foreground lands on Aero's dark default and button text
+            comes out near-black on a dark Office theme.
+
+            Binding it to an ancestor UserControl works in a task pane and
+            fails in a plain Window. PriorityBinding takes whichever resolves:
+            the pane's UserControl if there is one, otherwise the Window.
+        -->
+        <Setter Property="Fill">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
         <Setter Property="Stretch"       Value="Uniform"/>
         <Setter Property="FlowDirection" Value="LeftToRight"/>
     </Style>

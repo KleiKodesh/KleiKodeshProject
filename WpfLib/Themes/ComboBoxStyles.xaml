@@ -48,8 +48,34 @@
 
     <!-- ── Implicit Office ComboBox (all other ComboBoxes) ───────── -->
     <Style x:Key="OfficeComboBox" TargetType="ComboBox">
-        <Setter Property="Background"      Value="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="Foreground"      Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
+        <!--
+            Foreground has to be stated, and it has to work in both hosts.
+
+            Leaving it unset does NOT inherit: WPF's theme style for Button
+            sets Foreground, and theme-style setters outrank inheritance, so
+            an unset Foreground lands on Aero's dark default and button text
+            comes out near-black on a dark Office theme.
+
+            Binding it to an ancestor UserControl works in a task pane and
+            fails in a plain Window. PriorityBinding takes whichever resolves:
+            the pane's UserControl if there is one, otherwise the Window.
+        -->
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
+        <!--
+            Transparent rather than the pane's Background, and Foreground left
+            to inherit. Both used to bind to an ancestor UserControl, which is
+            absent in a plain Window: the bindings failed, so the box fell back
+            to system colours and read as light-on-light or dark-on-dark. The
+            drop-down states its own opaque surface, so nothing here needs one.
+        -->
+        <Setter Property="Background"      Value="Transparent"/>
         <Setter Property="BorderBrush"     Value="#50808080"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>

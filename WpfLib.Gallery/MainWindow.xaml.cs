@@ -27,6 +27,19 @@ namespace WpfLib.Gallery
             ("#FF262626", "#FFD4D4D4"), // Black
         };
 
+        /// <summary>Section labels, in rail order. Shared with the snapshot renderer.</summary>
+        public static readonly string[] SectionNames =
+        {
+            "Buttons", "Selection", "Text input", "Type",
+            "Lists & trees", "Containers", "Indicators", "Menus", "Colour tokens",
+        };
+
+        /// <summary>Theme names, in picker order. Shared with the snapshot renderer.</summary>
+        public static readonly string[] ThemeNames =
+        {
+            "Office White", "Office Light Gray", "Office Dark Gray", "Office Black",
+        };
+
         private static readonly string[] TokenNames =
         {
             "BgSecBrush", "BgTerBrush", "HoverBrush", "PressedBrush",
@@ -57,6 +70,32 @@ namespace WpfLib.Gallery
                 var named = child as FrameworkElement;
                 if (named == null) continue;
                 child.Visibility = named.Name == wanted ? Visibility.Visible : Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>Switch theme by name, without going through the picker.</summary>
+        public void ApplyTheme(string themeName)
+        {
+            var index = System.Array.IndexOf(ThemeNames, themeName);
+            if (index < 0) return;
+            ThemePicker.SelectedIndex = index;
+            var theme = Themes[index];
+            Background = Brush(theme.Bg);
+            Foreground = Brush(theme.Fg);
+        }
+
+        /// <summary>Show one section by its rail label, without going through the rail.</summary>
+        public void ApplySection(string label)
+        {
+            var index = System.Array.IndexOf(SectionNames, label);
+            if (index < 0) return;
+            Nav.SelectedIndex = index;
+
+            var wanted = (Nav.SelectedItem as ListBoxItem)?.Tag as string;
+            foreach (UIElement child in Sections.Children)
+            {
+                if (child is FrameworkElement named)
+                    child.Visibility = named.Name == wanted ? Visibility.Visible : Visibility.Collapsed;
             }
         }
 

@@ -1,0 +1,3 @@
+# Verify writes these beside the baselines when a test fails; they are the
+# actual render, kept for eyeballing, never committed.
+*.received.*
