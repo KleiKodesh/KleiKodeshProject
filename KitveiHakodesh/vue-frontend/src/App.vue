@@ -8,6 +8,7 @@ import SetupWizard from '@/features/settings/SetupWizard.vue'
 import { ref, computed, watch } from 'vue'
 import { useResizeObserver, useEventListener } from '@vueuse/core'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { SPLIT_VIEW_MIN_WIDTH } from '@/layout/useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useTabStore } from '@/stores/tabStore'
 import { storeToRefs } from 'pinia'
@@ -23,9 +24,10 @@ const tabStore = useTabStore()
 const { setupDone, showClock } = storeToRefs(settingsStore)
 
 // ── Split view availability ───────────────────────────────────────────────────
-// Split view requires enough horizontal space for two usable panes.
-// Below 768px the panes would be too narrow to be comfortable.
-const SPLIT_VIEW_MIN_WIDTH = 768
+// Split view requires enough horizontal space for two usable panes. The threshold is
+// shared with the surfaces that offer the toggle (layout/useSplitViewAvailable); what
+// differs here is that this measures the app element, not the window, because this is
+// what auto-disables an open split when the element shrinks.
 
 const containerRef = ref<HTMLElement | null>(null)
 const appWidth = ref(window.innerWidth)

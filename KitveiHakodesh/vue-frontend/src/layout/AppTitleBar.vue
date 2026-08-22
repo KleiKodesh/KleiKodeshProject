@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, defineAsyncComponent } from 'vue'
-import { useWindowSize } from '@vueuse/core'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
@@ -25,10 +24,10 @@ import AppTitleBarHistoryButton from './AppTitleBarHistoryButton.vue'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
+import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
-import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -38,11 +37,7 @@ const settingsStore = useSettingsStore()
 const pdfOcrStore = usePdfOcrStore()
 const { titleBarVisible } = useUiChromeVisibility(props.paneId)
 
-const { width: windowWidth } = useWindowSize()
-
-// Split view requires enough horizontal space for two usable panes.
-const SPLIT_VIEW_MIN_WIDTH = 768
-const isSplitViewAvailable = computed(() => !isVsto && windowWidth.value >= SPLIT_VIEW_MIN_WIDTH)
+const isSplitViewAvailable = useSplitViewAvailable()
 
 // ── TOC breadcrumb ────────────────────────────────────────────────────────────
 
@@ -128,7 +123,11 @@ function onTitleBarClick() {
   enterSearchMode()
 }
 
+// The nav sidebar is this menu, always on - so while it is up there is nothing left for
+// the menu to offer. Both ways in are closed off: the button below is not rendered, and
+// Ctrl+M does nothing.
 function toggleNavDropdown() {
+  if (settingsStore.navSidebarVisible) return
   navDropdownOpen.value = !navDropdownOpen.value
 }
 
@@ -159,7 +158,7 @@ useAppTitleBarShortcuts({
     <div class="bar-start">
       <div class="nav-btn-wrap">
         <button
-          v-if="isTitleBarButtonVisible('hamburger')"
+          v-if="isTitleBarButtonVisible('hamburger') && !settingsStore.navSidebarVisible"
           ref="navBtnRef"
           class="bar-btn"
           tabindex="-1"
@@ -200,7 +199,7 @@ useAppTitleBarShortcuts({
         <IconOptions24Regular v-else />
       </button>
       <button
-        v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable"
+        v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable && !settingsStore.navSidebarVisible"
         class="bar-btn"
         tabindex="-1"
         :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"

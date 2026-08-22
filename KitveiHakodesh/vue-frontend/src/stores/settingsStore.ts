@@ -59,6 +59,7 @@ const KEYS = {
   SETTINGS_COMPACT_MODE: 'app.compactMode',
   SETTINGS_CONTENT_BORDER: 'app.contentBorder',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
+  SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
@@ -156,6 +157,9 @@ const DEFAULTS = {
   // class + per-element scroll activity tracking) is owned by
   // useUiChromeVisibility, not this store.
   scrollbarsHidden: false,
+  // The always-on icon rail beside the page (AppNavSidebar), off until the reader
+  // turns it on from the nav menu.
+  navSidebarVisible: false,
   showRecentlyOpened: true,
 }
 
@@ -227,6 +231,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const compactMode = ref(DEFAULTS.compactMode)
   const contentBorder = ref(DEFAULTS.contentBorder)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
+  const navSidebarVisible = ref(DEFAULTS.navSidebarVisible)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
   /** Which layout the book catalog page renders in. */
@@ -380,6 +385,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
     loadSetting(KEYS.SETTINGS_CONTENT_BORDER, contentBorder)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
+    loadSetting(KEYS.SETTINGS_NAV_SIDEBAR, navSidebarVisible)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     loadSetting(KEYS.SETTINGS_BOOKS_VIEW, booksView)
@@ -433,6 +439,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
   persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
+  persistSetting(navSidebarVisible, KEYS.SETTINGS_NAV_SIDEBAR)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
@@ -568,6 +575,7 @@ export const useSettingsStore = defineStore('settings', () => {
     compactMode.value = DEFAULTS.compactMode
     contentBorder.value = DEFAULTS.contentBorder
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
+    navSidebarVisible.value = DEFAULTS.navSidebarVisible
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     // Both of these have a persist watcher and a stored key, so leaving them out left the
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
@@ -601,6 +609,7 @@ export const useSettingsStore = defineStore('settings', () => {
     compactMode,
     contentBorder,
     scrollbarsHidden,
+    navSidebarVisible,
     showRecentlyOpened,
     fileSearchSortOrder,
     booksView,
