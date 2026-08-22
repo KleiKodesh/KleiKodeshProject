@@ -14,6 +14,10 @@ namespace KitveiHakodeshService.LocalFiles;
 /// process-lifetime snapshot that never sees fonts installed while the app runs (verified
 /// 2026-08-20), while DirectWrite's checkForUpdates re-scan refreshes in-process.
 ///
+/// WpfLib/Helpers/FontsProvider.cs is a THIRD copy of the net48 leg, serving the rest of the
+/// solution (FontsHelper, the RegexFindLib font picker). Fix any enumeration or cmap bug in all
+/// three; all three collapse into Core at migration time.
+///
 /// Parity with the hosted list is the goal, and the test is the same one: does the family map
 /// א (U+05D0)? Measured on a dev box this returns all 79 families WPF reports, plus 2 (Cascadia
 /// Code/Mono). Those 2 are not a false positive: Windows Terminal installs its own larger Cascadia

@@ -115,7 +115,17 @@ namespace WpfLib.Helpers
         /// frontend's canvas probe. Never throws.</summary>
         public static string[] GetHebrewFonts()
         {
-            return GetFontFamilies().Where(f => f.HasHebrew).Select(f => f.Name).ToArray();
+            // Sorted here rather than relying on GetFontFamilies' order: filtering to the Hebrew
+            // families happens to leave that order alphabetical today, but only because Hebrew is
+            // its primary sort key. Reordering the picker must not silently reorder this.
+            try
+            {
+                return Enumerate(hebrewOnly: true)
+                    .Select(f => f.Name)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch { return new string[0]; }
         }
 
         /// <summary>Every system font family, Hebrew-capable ones first and alphabetical within
@@ -123,13 +133,16 @@ namespace WpfLib.Helpers
         /// DirectWrite is unavailable. Never throws.</summary>
         public static FontFamilyInfo[] GetFontFamilies()
         {
-            try { return Enumerate(); }
+            try { return Enumerate(hebrewOnly: false); }
             catch { return new FontFamilyInfo[0]; }
         }
 
-        /// <summary>True when the named family has a glyph for א. Looks the one family up by name
-        /// rather than enumerating them all, so it is cheap enough to call per font. False when the
-        /// name is unknown or DirectWrite is unavailable. Never throws.</summary>
+        /// <summary>True when the named family has a glyph for א. False when the name is unknown or
+        /// DirectWrite is unavailable. Never throws.
+        ///
+        /// For ONE font whose name you already have. It still builds a factory and re-scans the
+        /// system font collection, so it is not cheap in a loop — to classify many fonts call
+        /// GetFontFamilies once and read HasHebrew off the results.</summary>
         public static bool HasHebrew(string familyName)
         {
             if (string.IsNullOrWhiteSpace(familyName)) return false;
@@ -174,7 +187,7 @@ namespace WpfLib.Helpers
             }
         }
 
-        private static unsafe FontFamilyInfo[] Enumerate()
+        private static unsafe FontFamilyInfo[] Enumerate(bool hebrewOnly)
         {
             if (DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, in IID_IDWriteFactory, out nint factory) < 0
                 || factory == 0)
@@ -202,9 +215,15 @@ namespace WpfLib.Helpers
                     if (getFamily(collection, i, &family) < 0 || family == 0) continue;
                     try
                     {
+                        // Test for Hebrew first when that is all the caller wants: reading the
+                        // localized name is its own set of COM round-trips, and skipping it for
+                        // the non-Hebrew majority is most of this path's cost.
+                        bool hasHebrew = FamilyHasHebrew(family);
+                        if (hebrewOnly && !hasHebrew) continue;
+
                         string? name = ReadFamilyName(family);
                         if (!string.IsNullOrWhiteSpace(name))
-                            families.Add(new FontFamilyInfo(name!, FamilyHasHebrew(family)));
+                            families.Add(new FontFamilyInfo(name!, hasHebrew));
                     }
                     finally { Release(family); }
                 }

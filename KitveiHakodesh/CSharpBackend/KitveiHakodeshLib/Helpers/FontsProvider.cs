@@ -14,6 +14,11 @@ namespace KitveiHakodeshLib.Helpers
     /// MIGRATION-PLAN.md. The only intended difference is the factory import: DllImport here,
     /// LibraryImport (net7+ source generator) there.
     ///
+    /// A THIRD copy of this net48 implementation lives in WpfLib/Helpers/FontsProvider.cs, where it
+    /// serves the rest of the solution (FontsHelper, the RegexFindLib font picker). It adds a
+    /// GetFontFamilies/HasHebrew surface those pickers need but is otherwise the same code — fix any
+    /// enumeration or cmap bug in all three. All three collapse into Core at migration time.
+    ///
     /// Why DirectWrite and not WPF (verified 2026-08-20): WPF's Fonts.SystemFontFamilies is a
     /// process-lifetime snapshot — after a per-user font install + AddFontResource + WM_FONTCHANGE
     /// broadcast, InstalledFontsChanged fired but re-enumeration still returned the old set, so a
