@@ -4,7 +4,7 @@ import { useVirtualizer } from '@tanstack/vue-virtual'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useInputListNavigation } from '@/composables/useInputListNavigation'
+import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
 const props = defineProps<{
@@ -40,23 +40,12 @@ const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListN
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
 })
 
-// Tiles wrap into rows, so one ArrowDown step is one visual row. Count the
-// rendered tiles sharing the first tile's offsetTop — exact for any width, no
-// magic tile-size constants.
-function getTileColumnsPerRow(): number {
-  const tiles = tilesEl.value?.querySelectorAll<HTMLElement>('[data-nav-item]')
-  if (!tiles?.length) return 1
-  const firstRowTop = tiles[0]!.offsetTop
-  let columns = 0
-  while (columns < tiles.length && tiles[columns]!.offsetTop === firstRowTop) columns++
-  return Math.max(1, columns)
-}
 
 const { activeIndex: tilesActiveIndex, onKeydown: onTilesKeydown } = useInputListNavigation({
   getCount: () => (props.view === 'tiles' ? props.items.length : 0),
   onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
   containerElement: tilesEl,
-  getColumnsPerRow: getTileColumnsPerRow,
+  getColumnsPerRow: () => countGridColumns(tilesEl.value),
 })
 
 // New results make the old highlight point at a different item — drop it.

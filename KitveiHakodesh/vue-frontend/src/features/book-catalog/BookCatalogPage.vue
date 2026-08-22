@@ -46,13 +46,11 @@ const { booksView: view } = storeToRefs(useSettingsStore())
 const booksTabId = paneNavigation.activeTabId
 
 // ── Query persistence across navigation ────────────────────────────────────────
-// The catalog has no search input of its own any more; the only thing that fills
-// searchQuery is the VSTO host seed below. This still earns its keep: it holds
-// that seeded query on the tab so leaving and coming back returns to the results
-// rather than to the browse view. The seed itself wins when present — it is a
-// fresh one-shot request, not a restored session — and its watch runs
-// synchronously at setup (immediate), before this onMounted, so only restore when
-// searchQuery is still empty.
+// Holds the query on the tab so leaving and coming back returns to the results
+// rather than to the browse view. The VSTO host seed (catalogQuery) wins when
+// present — it is a fresh one-shot request, not a restored session — and its watch
+// runs synchronously at setup (immediate), before this onMounted, so only restore
+// when searchQuery is still empty.
 onMounted(() => {
   if (!searchQuery.value) {
     const saved = paneNavigation.activeTab.booksSearchQuery
@@ -186,16 +184,15 @@ const { pause: pauseTyping, resume: resumeTyping } = useIntervalFn(() => {
 watch(searchQuery, (val) => (val ? pauseTyping() : resumeTyping()))
 
 // ── Which face the address bar shows ─────────────────────────────────────────
-// The path is the resting state — the bar is a breadcrumb that becomes a text
-// field while you are actually typing in it, exactly like Explorer's. So the field
-// shows only while it holds focus (plus while a query is live, so results are
-// never displayed under a path). Blurring it hands the bar back to the crumbs.
-// Is the user editing the field? The bar shows the field while they are — OR
-// whenever a query is live, because results are on screen then and a path display
-// would misdescribe what they are looking at. Deriving the second half rather than
-// setting it at each call site is what stops the two drifting: opening a result in
-// a NEW tab leaves this page mounted with its query intact, and any handler that
-// only flipped a flag would strand the results under a breadcrumb.
+// The path is the resting state: the bar is a breadcrumb that becomes a text field
+// while the user is typing in it, like Explorer's.
+//
+// `showSearch` is DERIVED, never assigned — the field shows while the user is
+// editing OR whenever a query is live, because results are on screen then and a
+// path display would misdescribe what they are looking at. Deriving the second
+// half is what keeps the two from drifting: opening a result in a NEW tab leaves
+// this page mounted with its query intact, and a handler that merely flipped a
+// flag would strand those results under a breadcrumb.
 const editingSearch = ref(false)
 const showSearch = computed(() => editingSearch.value || !!searchQuery.value)
 

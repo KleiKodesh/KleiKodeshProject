@@ -42,14 +42,10 @@ defineEmits<{ navigate: [number]; navigateToSibling: [{ atIndex: number; node: C
 .breadcrumb {
   display: flex;
   align-items: center;
-  /* Fills the address bar's middle, the way the path fills Explorer's. The bare
-     stretch beside it is only the slack a short path leaves over — not a reserved
-     band, which just made the bar look half-empty at every depth. Clicking that
-     slack still opens the field, and the magnifier cap beside it is the way in
-     that is always there whatever the path costs.
-
-     Shrinks and scrolls rather than widening the pill, so a deep path never
-     pushes the caps off its ends. */
+  /* Fills the address bar's middle. The slack a short path leaves over is the
+     bar's click target — clicking it opens the field — so this must not also
+     carry a margin or a width cap eating into it. Shrinks and scrolls rather than
+     widening the pill, so a deep path never pushes the buttons off its ends. */
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
