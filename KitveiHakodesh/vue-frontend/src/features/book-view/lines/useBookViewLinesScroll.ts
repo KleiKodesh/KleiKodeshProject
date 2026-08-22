@@ -120,6 +120,10 @@ export function useBookViewLinesScroll(
   // assigned INSIDE the one below — so an unmount in between leaves onBeforeUnmount with
   // nothing to call while the callback still runs and creates a watch nobody owns.
   let scrollTeardown = false
+  // The post-restore correction window installs a MutationObserver and three listeners on
+  // the scroller. They are only torn down by its own 10s timer, so without a handle up here
+  // they stay attached to a detached element for up to 10s after unmount. Idempotent.
+  let finishPostRestore: (() => void) | null = null
   // Timer for the deep-link line flash; cleared on cancel/unmount so it never fires
   // against a stale element.
   let flashTimer: number | null = null
@@ -156,6 +160,10 @@ export function useBookViewLinesScroll(
             // watcher itself would stay subscribed to lines() and retain the closure.
             stopContentWatch?.()
             stopContentWatch = null
+            // Disconnects the observer and drops the scroller listeners now instead of
+            // leaving them on a detached element until the 10s window expires.
+            finishPostRestore?.()
+            finishPostRestore = null
           }
           programmaticScrolling = true
 
@@ -260,6 +268,7 @@ export function useBookViewLinesScroll(
                       postObserver = new MutationObserver(() => postCorrect())
                       postObserver.observe(postEl, { childList: true, subtree: true, attributes: false })
                       setTimeout(postFinish, POST_RESTORE_WINDOW_MS + 100)
+                      finishPostRestore = postFinish // so teardown can close the window early
                     }
 
                     // FTS: scroll to the highlighted mark once positioned.

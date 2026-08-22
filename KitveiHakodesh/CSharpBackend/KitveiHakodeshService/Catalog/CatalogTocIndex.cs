@@ -296,10 +296,16 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             _reader.Dispose();
             _reader = null;
             _searcher = null;
-            // Derived from the reader we just disposed, and the whole point of this call is
-            // to give memory back — the vocab set and skeleton map are the largest thing
-            // here, so keeping them would defeat the idle trim. Rebuilt lazily on next use.
-            _variants = null;
+            // _variants is deliberately KEPT. It is a materialized vocab set + skeleton map
+            // with no reference back to the reader, so it stays valid and correct after the
+            // reader goes. Nulling it here looks like a memory win but costs correctness:
+            // Search reads the searcher and the variants under two SEPARATE lock
+            // acquisitions, so a trim landing between them hands the search a live searcher
+            // and null variants — GetVariantsLocked cannot rebuild with _reader null — and
+            // the query silently loses its prefix/spelling expansion and its literal-vs-
+            // variant ranking. It would also re-scan the whole term dictionary inside _lock
+            // on the first search after every trim. Only a vocabulary change invalidates
+            // this, which is why SwapReaderLocked nulls it and we do not.
             return true;
         }
     }

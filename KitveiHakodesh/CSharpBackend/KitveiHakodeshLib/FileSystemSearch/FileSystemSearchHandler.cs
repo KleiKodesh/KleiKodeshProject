@@ -80,11 +80,20 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 : DefaultMaxResults;
 
             // Cancel previous in-flight search so rapid keystrokes don't stack up.
-            var previous = Interlocked.Exchange(ref _currentSearch, new CancellationTokenSource());
-            previous?.Cancel();
-            previous?.Dispose();
-
-            var cts = _currentSearch;
+            // Cancel but do NOT dispose: the superseded task is still reading cts.Token
+            // below, and Token throws ObjectDisposedException once the source is gone —
+            // which is not an OperationCanceledException, so it would skip the "superseded"
+            // catches and reply with a spurious error. Each task disposes its own in the
+            // finally below.
+            //
+            // Keep our OWN instance instead of re-reading the field afterwards: a concurrent
+            // search can supersede us and its finally can null the field or dispose what it
+            // points at, so a re-read yields null or a disposed source — and a disposed
+            // source's Token throws the same spurious error all over again.
+            var cts = new CancellationTokenSource();
+            var previous = Interlocked.Exchange(ref _currentSearch, cts);
+            // Already disposed means that search finished on its own — nothing to cancel.
+            try { previous?.Cancel(); } catch (ObjectDisposedException) { }
 
             Task.Run(async () =>
             {
@@ -123,6 +132,13 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 {
                     _bridge.Reply(id, new { error = Unwrap(ex).Message });
                 }
+                finally
+                {
+                    // Ours to dispose — we are the only reader of this token, and we are done
+                    // with it. Clear the field first so a superseding search cannot pick it up.
+                    Interlocked.CompareExchange(ref _currentSearch, null, cts);
+                    cts.Dispose();
+                }
             });
         }
 
@@ -135,11 +151,11 @@ namespace KitveiHakodeshLib.FileSystemSearch
         /// </summary>
         public void HandleReindex(string id)
         {
-            var previous = Interlocked.Exchange(ref _reindexCts, new CancellationTokenSource());
-            previous?.Cancel();
-            previous?.Dispose();
-
-            var cts = _reindexCts;
+            // Cancel only — see HandleSearch: the superseded reindex still reads this token.
+            // Own instance, not a field re-read — see HandleSearch.
+            var cts = new CancellationTokenSource();
+            var previous = Interlocked.Exchange(ref _reindexCts, cts);
+            try { previous?.Cancel(); } catch (ObjectDisposedException) { } // see HandleSearch
             _bridge.Reply(id, new { });
 
             Task.Run(async () =>
@@ -154,7 +170,17 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 {
                     Console.WriteLine("[FileSystemSearch] Reindex error: " + Unwrap(ex).Message);
                 }
-            }, cts.Token);
+                finally
+                {
+                    Interlocked.CompareExchange(ref _reindexCts, null, cts);
+                    cts.Dispose();
+                }
+            });
+            // NOTE: deliberately NOT Task.Run(..., cts.Token). That form hands the token to
+            // the SCHEDULER, so a token already cancelled before the pool dequeues the
+            // delegate makes the task go straight to Canceled and the body — including the
+            // finally above — never runs, leaking the CTS and leaving the field stale. The
+            // body observes cancellation through ReindexAsync(cts.Token) instead.
         }
 
         // ── Excluded folders manager ──────────────────────────────────────────────
@@ -256,15 +282,20 @@ namespace KitveiHakodeshLib.FileSystemSearch
             return ex;
         }
 
+        /// <summary>
+        /// Cancels any in-flight search/reindex. Deliberately does NOT dispose their sources:
+        /// the tasks are still reading those tokens and each disposes its own in its finally.
+        /// Disposing here would throw ObjectDisposedException out of the task instead of a
+        /// clean cancellation — and out of THIS method if a task got there first, which would
+        /// skip the rest of the caller's teardown.
+        /// </summary>
         public void Dispose()
         {
             var reindexCts = Interlocked.Exchange(ref _reindexCts, null);
-            reindexCts?.Cancel();
-            reindexCts?.Dispose();
+            try { reindexCts?.Cancel(); } catch (ObjectDisposedException) { }
 
             var searchCts = Interlocked.Exchange(ref _currentSearch, null);
-            searchCts?.Cancel();
-            searchCts?.Dispose();
+            try { searchCts?.Cancel(); } catch (ObjectDisposedException) { }
         }
     }
 }

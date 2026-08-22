@@ -234,6 +234,9 @@ namespace KitveiHakodeshLib.Search
                 // mid-build when first segment was flushed).
                 if (_state != State.Building && _state != State.Ready) return false;
                 _state       = State.Ready;
+                // The build that owned this CTS is finished, so nothing reads its token any
+                // more. Without the Dispose we leak one finalizable source per build.
+                _indexingCts?.Dispose();
                 _indexingCts = null;
                 return true;
             }
@@ -253,6 +256,7 @@ namespace KitveiHakodeshLib.Search
                 // Only reset to Idle if we never became searchable.
                 if (_state == State.Building)
                     _state = State.Idle;
+                _indexingCts?.Dispose(); // build over — see TryMarkReady
                 _indexingCts = null;
             }
         }
@@ -283,7 +287,13 @@ namespace KitveiHakodeshLib.Search
                 indexingTask = _indexingTask;
             }
 
-            cts?.Cancel();
+            // Guarded: we read cts under the lock and then released it, so the build thread
+            // can reach TryMarkReady/TryMarkIdle and dispose this very source before we get
+            // here. Already disposed means the build already finished — there is nothing to
+            // cancel, and letting the exception out would abort the rest of the lifecycle
+            // action (DeleteAllCaches / DeleteFtsIndex + reindex never run, so the user's
+            // "delete index" or "reset" would silently do nothing).
+            try { cts?.Cancel(); } catch (ObjectDisposedException) { }
 
             // Wait WITHOUT a timeout for the build task to stop.
             //
@@ -304,6 +314,10 @@ namespace KitveiHakodeshLib.Search
             {
                 _state        = State.Idle;
                 _indexingTask = null;
+                // Safe to dispose: we waited for indexingTask above, so the build that read
+                // this token has fully drained. TryMarkReady/TryMarkIdle may have disposed
+                // and nulled it already — Dispose is idempotent and this is null-guarded.
+                _indexingCts?.Dispose();
                 _indexingCts  = null;
             }
         }

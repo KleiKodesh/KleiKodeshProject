@@ -472,6 +472,23 @@ namespace KitveiHakodeshLib.HebrewBooks
             foreach (char c in Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
             return name.Length > 80 ? name.Substring(0, 80) : name;
         }
+
+        /// <summary>
+        /// Releases the virtual host mappings this instance registered on its WebView2, so
+        /// WebView2 does not keep folder handles after teardown. Mirrors
+        /// <c>LocalFileHandler.DisposeAllHosts</c>, which this class was left out of.
+        /// The static folder-to-host NAME registry is intentionally kept: it only maps a
+        /// folder to a stable host string, holds no OS resource, and reusing the same name
+        /// across instances is the point of it being static.
+        /// </summary>
+        public void DisposeAllHosts()
+        {
+            foreach (string hostName in _registeredOnThisWebView)
+            {
+                try { _webView.CoreWebView2?.ClearVirtualHostNameToFolderMapping(hostName); } catch { }
+            }
+            _registeredOnThisWebView.Clear();
+        }
     }
 }
 

@@ -42,7 +42,8 @@ public static unsafe partial class AotWordConverter
     private const ushort DISPATCH_METHOD = 1, DISPATCH_PROPERTYGET = 2, DISPATCH_PROPERTYPUT = 4;
     private const int DISPID_PROPERTYPUT = -3;
 
-    private const ushort VT_I4 = 3, VT_BSTR = 8, VT_DISPATCH = 9, VT_ERROR = 10, VT_BOOL = 11;
+    private const ushort VT_I4 = 3, VT_BSTR = 8, VT_DISPATCH = 9, VT_ERROR = 10, VT_BOOL = 11,
+                         VT_UNKNOWN = 13;
     private const int DISP_E_PARAMNOTFOUND = unchecked((int)0x80020004);
     private const int DISP_E_EXCEPTION = unchecked((int)0x80020009);
 
@@ -127,6 +128,8 @@ public static unsafe partial class AotWordConverter
             Guid iid = Guid.Empty;
             VARIANT result = default;
             byte* exBuf = stackalloc byte[64]; // EXCEPINFO (x64): bstrDescription @16, scode @56
+            // REQUIRED, not defensive init: the error path frees the three BSTR slots, so a
+            // slot the callee did not fill has to read as NULL rather than as stack garbage.
             for (int i = 0; i < 64; i++) exBuf[i] = 0;
             int hr = fn(disp, dispid, &iid, 0, flags, &dp, &result, (nint)exBuf, 0);
             if (hr < 0)
@@ -134,14 +137,20 @@ public static unsafe partial class AotWordConverter
                 string extra = "";
                 if (hr == DISP_E_EXCEPTION)
                 {
+                    // EXCEPINFO (x64): bstrSource @8, bstrDescription @16, bstrHelpFile @24.
+                    // Whichever of the three the callee filled in are ours to free — we only
+                    // read the description, but leaving the other two allocated leaks them on
+                    // every Word error. (In the pfnDeferredFillIn form all three come back
+                    // NULL and the loop below no-ops; we never invoke that callback.) This
+                    // relies on exBuf being zeroed above — without it these offsets would be
+                    // arbitrary stack qwords handed to SysFreeString.
                     nint descBstr = *(nint*)(exBuf + 16);
                     int scode = *(int*)(exBuf + 56);
-                    string? desc = "";
-                    if (descBstr != 0)
+                    string? desc = descBstr != 0 ? Marshal.PtrToStringBSTR(descBstr) : "";
+                    foreach (int off in stackalloc int[] { 8, 16, 24 })
                     {
-                        // EXCEPINFO strings are ours to free once copied out.
-                        desc = Marshal.PtrToStringBSTR(descBstr);
-                        Marshal.FreeBSTR(descBstr);
+                        nint b = *(nint*)(exBuf + off);
+                        if (b != 0) Marshal.FreeBSTR(b);
                     }
                     extra = $" [scode=0x{scode:X8} desc='{desc}']";
                 }
@@ -166,7 +175,9 @@ public static unsafe partial class AotWordConverter
     private static void ClearVariant(ref VARIANT v)
     {
         if (v.vt == VT_BSTR && v.ptr != 0) Marshal.FreeBSTR(v.ptr);
-        else if (v.vt == VT_DISPATCH && v.ptr != 0) Release(v.ptr);
+        // VT_UNKNOWN is refcounted the same way as VT_DISPATCH — Release lives at vtable
+        // slot 2 on IUnknown, which IDispatch derives from, so one path covers both.
+        else if ((v.vt == VT_DISPATCH || v.vt == VT_UNKNOWN) && v.ptr != 0) Release(v.ptr);
         v.vt = 0; // VT_EMPTY
         v.ptr = 0;
     }
@@ -181,15 +192,34 @@ public static unsafe partial class AotWordConverter
     // and the caller Releases it) or clear it. A discarded result that happened to be an
     // IDispatch is exactly what leaves a WINWORD process running after we Quit.
 
+    /// <summary>Resolve <paramref name="name"/> and Invoke it. Arguments are evaluated by the
+    /// CALLER before this runs, so a GetDispId failure would otherwise strand every BSTR in
+    /// <paramref name="argsReversed"/> — Invoke's finally is what frees them, and it never
+    /// runs if we never get there. Own the args from here on.</summary>
+    private static VARIANT InvokeNamed(nint disp, string name, ushort flags, VARIANT[] argsReversed)
+    {
+        int dispid;
+        try
+        {
+            dispid = GetDispId(disp, name);
+        }
+        catch
+        {
+            for (int i = 0; i < argsReversed.Length; i++) ClearVariant(ref argsReversed[i]);
+            throw;
+        }
+        return Invoke(disp, dispid, flags, argsReversed); // clears the args in its own finally
+    }
+
     private static void PropPut(nint disp, string name, VARIANT val)
     {
-        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYPUT, [val]);
+        var r = InvokeNamed(disp, name, DISPATCH_PROPERTYPUT, [val]);
         ClearVariant(ref r);
     }
 
     private static nint PropGetDispatch(nint disp, string name)
     {
-        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYGET, []);
+        var r = InvokeNamed(disp, name, DISPATCH_PROPERTYGET, []);
         if (r.vt != VT_DISPATCH)
         {
             ClearVariant(ref r); // wrong type, but it may still own a BSTR
@@ -200,7 +230,7 @@ public static unsafe partial class AotWordConverter
 
     private static nint InvokeMethodDispatch(nint disp, string name, VARIANT[] argsReversed)
     {
-        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_METHOD, argsReversed);
+        var r = InvokeNamed(disp, name, DISPATCH_METHOD, argsReversed);
         if (r.vt == VT_DISPATCH) return r.ptr; // ownership transfers to the caller
         ClearVariant(ref r);
         return 0;
@@ -210,7 +240,7 @@ public static unsafe partial class AotWordConverter
     {
         // "Void" describes how we use it, not what Word returns — e.g. Documents.Open-shaped
         // calls hand back an IDispatch even when we ignore it. Clear it or it leaks.
-        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_METHOD, argsReversed);
+        var r = InvokeNamed(disp, name, DISPATCH_METHOD, argsReversed);
         ClearVariant(ref r);
     }
 
@@ -389,7 +419,7 @@ public static unsafe partial class AotWordConverter
     /// <summary>Read an integer property (e.g. Documents.Count).</summary>
     private static int GetInt(nint disp, string name)
     {
-        var r = Invoke(disp, GetDispId(disp, name), DISPATCH_PROPERTYGET, []);
+        var r = InvokeNamed(disp, name, DISPATCH_PROPERTYGET, []);
         int value = r.vt == VT_I4 ? r.i4 : 0;
         ClearVariant(ref r); // a non-I4 answer may still own a BSTR or interface pointer
         return value;

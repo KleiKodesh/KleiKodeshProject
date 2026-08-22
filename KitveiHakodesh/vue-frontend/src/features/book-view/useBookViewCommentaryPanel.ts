@@ -45,6 +45,11 @@ export function useBookViewCommentaryPanel(
   // the panel re-runs that function on every toggle and every layout remount, the leak
   // accumulates per open, not per tab. Track the handles and dispose them with the scope.
   const detachedWatchStops = new Set<() => void>()
+  // The dispatch below is a setTimeout, so the scope can dispose inside that 0ms window —
+  // after which onCommentaryPanelMounted would register watches into an already-swept
+  // registry and nothing would ever sweep it again. The flag stops it running at all.
+  let panelDisposed = false
+  let pendingMountTimer: ReturnType<typeof setTimeout> | null = null
   /** Register a detached watch's stop handle; auto-unregisters when the watch self-stops. */
   function trackDetachedWatch(stop: () => void): () => void {
     detachedWatchStops.add(stop)
@@ -54,6 +59,8 @@ export function useBookViewCommentaryPanel(
     }
   }
   onScopeDispose(() => {
+    panelDisposed = true
+    if (pendingMountTimer != null) { clearTimeout(pendingMountTimer); pendingMountTimer = null }
     for (const stop of detachedWatchStops) stop()
     detachedWatchStops.clear()
   })
@@ -81,6 +88,7 @@ export function useBookViewCommentaryPanel(
    *    saved position exists.
    */
   function onCommentaryPanelMounted() {
+    if (panelDisposed) return // scope died inside the dispatch window
     if (!commentaryVisible.value) return
     void ensureStaticFilterGroupsLoaded()
 
@@ -186,9 +194,18 @@ export function useBookViewCommentaryPanel(
   watch(commentaryVisible, (visible) => {
     if (!visible) {
       lastRestoredCommentaryKey = null
+      // A close cancels a mount that has not run yet — it would no-op on the visibility
+      // check anyway, but leaving it pending means the handle we hold is stale.
+      if (pendingMountTimer != null) { clearTimeout(pendingMountTimer); pendingMountTimer = null }
       return
     }
-    setTimeout(() => onCommentaryPanelMounted(), 0)
+    // Replace rather than stack: only ever one mount in flight, and the handle we keep is
+    // always the live one, so onScopeDispose can actually cancel it.
+    if (pendingMountTimer != null) clearTimeout(pendingMountTimer)
+    pendingMountTimer = setTimeout(() => {
+      pendingMountTimer = null
+      onCommentaryPanelMounted()
+    }, 0)
   }, { flush: 'post' })
 
   watch(hasCommentaries, (has) => {

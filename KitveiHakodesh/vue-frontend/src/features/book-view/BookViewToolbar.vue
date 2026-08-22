@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconSearch20Regular,
@@ -104,6 +104,11 @@ function stopContinuousZoom() {
     zoomInterval = null
   }
 }
+
+// Only pointerup/leave/cancel stopped these, and none of them fire when the button
+// unmounts under the pointer — closing the tab while holding zoom left an 80ms interval
+// calling zoomIn/zoomOut on a dead tab for the life of the page.
+onBeforeUnmount(stopContinuousZoom)
 
 const autoSelectTopLineTitle = computed(() =>
   autoSelectTopLine.value
