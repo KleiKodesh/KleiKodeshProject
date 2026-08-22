@@ -59,6 +59,7 @@
     <Style TargetType="PasswordBox"  BasedOn="{StaticResource OfficePasswordBox}"/>
     <Style TargetType="Label"        BasedOn="{StaticResource OfficeLabel}"/>
     <Style TargetType="Separator"    BasedOn="{StaticResource OfficeSeparator}"/>
+    <Style TargetType="Hyperlink"    BasedOn="{StaticResource OfficeHyperlink}"/>
     <Style TargetType="ListBox"      BasedOn="{StaticResource OfficeListBox}"/>
     <Style TargetType="ListBoxItem"  BasedOn="{StaticResource OfficeListBoxItem}"/>
     <Style TargetType="ListView"     BasedOn="{StaticResource OfficeListView}"/>
