@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RunSettings>
+  <!--
+    UIAutomation has to be driven from an STA thread; on an MTA thread the
+    COM calls marshal and FlaUI's element lookups become flaky.
+  -->
+  <RunConfiguration>
+    <ExecutionThreadApartmentState>STA</ExecutionThreadApartmentState>
+    <MaxCpuCount>1</MaxCpuCount>
+  </RunConfiguration>
+</RunSettings>
