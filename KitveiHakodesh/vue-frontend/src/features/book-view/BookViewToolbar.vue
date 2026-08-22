@@ -352,10 +352,7 @@ defineExpose({ tocBtnRef })
   justify-content: center;
   gap: 0;
   padding: var(--toolbar-horizontal-padding);
-  /* The same surface as the nav sidebar's docked panel and the title bar, not the
-     --bg-toolbar ramp between the two - this strip is chrome around the page, so it reads
-     as part of that frame rather than as a third shade sitting between them. */
-  background: var(--bg-secondary);
+  background: var(--bg-toolbar);
   flex-shrink: 0;
   transition: background 120ms;
 }
