@@ -62,9 +62,6 @@
         </Setter>
     </Style>
 
-    <!-- Implicit Button — every plain Button is an icon button. -->
-    <Style TargetType="Button" BasedOn="{StaticResource IconButton}"/>
-
     <!-- ── IconToggle — flat, no checked highlight ───────────────── -->
     <Style x:Key="IconToggle" TargetType="ToggleButton">
         <Setter Property="Background"       Value="Transparent"/>
