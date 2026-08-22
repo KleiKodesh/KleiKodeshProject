@@ -65,7 +65,6 @@ const KEYS = {
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
 
   // Per-feature preferences
-  SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
@@ -89,8 +88,6 @@ import {
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
-/** Layout modes for the book catalog page. */
-export type BooksView = 'list' | 'tiles' | 'tree'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
@@ -124,7 +121,6 @@ const DEFAULTS = {
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
-  booksView: 'list' as BooksView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   pdfPageFilters: false,
@@ -234,8 +230,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const navSidebarVisible = ref(DEFAULTS.navSidebarVisible)
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
-  /** Which layout the book catalog page renders in. */
-  const booksView = ref<BooksView>(DEFAULTS.booksView)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -293,12 +287,11 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     document.documentElement.setAttribute('data-density', compactMode.value ? 'compact' : 'normal')
-    // Content-border toggle — zero the inset/border/radius (and re-show the title
-    // bar divider) when off; the app-shell / title-bar CSS reads these vars.
+    // Content-border toggle — zero the inset/border/radius when off so the content fills
+    // flush; the app-shell / nav-sidebar CSS reads these vars.
     style.setProperty('--content-inset', contentBorder.value ? '3px' : '0px')
     style.setProperty('--content-border-width', contentBorder.value ? '1px' : '0px')
     style.setProperty('--content-border-radius', contentBorder.value ? '8px' : '0px')
-    style.setProperty('--title-bar-divider-width', contentBorder.value ? '0px' : '1px')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
@@ -388,7 +381,6 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_NAV_SIDEBAR, navSidebarVisible)
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
-    loadSetting(KEYS.SETTINGS_BOOKS_VIEW, booksView)
     applyCSSVariables()
   }
 
@@ -442,7 +434,6 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(navSidebarVisible, KEYS.SETTINGS_NAV_SIDEBAR)
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
-  persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -580,7 +571,6 @@ export const useSettingsStore = defineStore('settings', () => {
     // Both of these have a persist watcher and a stored key, so leaving them out left the
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
     // next reload.
-    booksView.value = DEFAULTS.booksView
     fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
@@ -612,7 +602,6 @@ export const useSettingsStore = defineStore('settings', () => {
     navSidebarVisible,
     showRecentlyOpened,
     fileSearchSortOrder,
-    booksView,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
   }

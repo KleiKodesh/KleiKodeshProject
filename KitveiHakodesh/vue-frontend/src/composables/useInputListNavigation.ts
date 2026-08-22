@@ -13,11 +13,7 @@ import type { Virtualizer } from '@tanstack/vue-virtual'
 //
 // Key map (everything else falls through to the input untouched):
 //   ArrowDown / ArrowUp   — move the highlight (down enters at the first item,
-//                           up enters at the last, per the APG pattern). One
-//                           visual ROW at a time when getColumnsPerRow is given.
-//   ArrowLeft / ArrowRight — GRIDS ONLY (getColumnsPerRow given): step within the
-//                           row. Lists leave them alone: they are the caret keys,
-//                           and a list row is a whole row already.
+//                           up enters at the last, per the APG pattern)
 //   PageDown / PageUp     — move the highlight a chunk at a time
 //   Ctrl+Home / Ctrl+End  — jump to the first / last item (plain Home/End stay
 //                           caret keys, as a text field demands)
@@ -51,32 +47,6 @@ export interface UseInputListNavigationOptions {
   itemSelector?: string
   /** For @tanstack/vue-virtual lists — used instead of containerElement. */
   getVirtualizer?: () => Virtualizer<Element, Element>
-  /**
-   * For tile grids: how many items one ArrowDown/ArrowUp step skips (one visual
-   * row). Lists omit it (defaults to 1).
-   */
-  getColumnsPerRow?: () => number
-}
-
-/**
- * Column count for a wrapping tile grid, for `getColumnsPerRow`.
- *
- * Counted off the rendered tiles — those sharing the first one's `offsetTop` are
- * its row — rather than derived from an assumed tile-plus-gap width, so it is
- * exact at any width and any gap and there is no constant to keep in sync with
- * the CSS. Lives here because `getColumnsPerRow` is the only thing that consumes
- * it, and every tile grid needs the same answer.
- */
-export function countGridColumns(
-  container: HTMLElement | null | undefined,
-  itemSelector = '[data-nav-item]',
-): number {
-  const tiles = container?.querySelectorAll<HTMLElement>(itemSelector)
-  if (!tiles?.length) return 1
-  const firstRowTop = tiles[0]!.offsetTop
-  let columns = 0
-  while (columns < tiles.length && tiles[columns]!.offsetTop === firstRowTop) columns++
-  return Math.max(1, columns)
 }
 
 const PAGE_STEP = 10
@@ -130,32 +100,15 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
     if (!count) return false
 
     const ctrl = event.ctrlKey || event.metaKey
-    const isGrid = !!options.getColumnsPerRow
-    const rowStep = Math.max(1, options.getColumnsPerRow?.() ?? 1)
 
     if (event.code === 'ArrowDown' && !ctrl) {
       event.preventDefault()
-      moveTo(activeIndex.value < 0 ? 0 : activeIndex.value + rowStep)
+      moveTo(activeIndex.value < 0 ? 0 : activeIndex.value + 1)
       return true
     }
     if (event.code === 'ArrowUp' && !ctrl) {
       event.preventDefault()
-      moveTo(activeIndex.value < 0 ? count - 1 : activeIndex.value - rowStep)
-      return true
-    }
-    // Left/right step WITHIN a row, and so exist only for grids — a list has one
-    // item per row, and in a text field these are the caret keys, which the user
-    // needs to edit the query they are typing. `getColumnsPerRow` is what says
-    // "this is a grid", so it gates them.
-    //
-    // The page is RTL: the visually NEXT tile is to the LEFT, so ArrowLeft
-    // advances and ArrowRight goes back. (Reading `dir` off the container would
-    // handle both directions, but this app is RTL throughout and an untested
-    // LTR branch is worse than an honest assumption.)
-    if (isGrid && (event.code === 'ArrowLeft' || event.code === 'ArrowRight') && !ctrl) {
-      const step = event.code === 'ArrowLeft' ? 1 : -1
-      event.preventDefault()
-      moveTo(activeIndex.value < 0 ? 0 : activeIndex.value + step)
+      moveTo(activeIndex.value < 0 ? count - 1 : activeIndex.value - 1)
       return true
     }
     if (event.code === 'PageDown') {
