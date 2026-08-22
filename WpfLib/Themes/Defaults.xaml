@@ -1,4 +1,4 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         Defaults — the opt-in layer that makes the keyed styles implicit.
@@ -14,11 +14,24 @@
 
             <Style TargetType="Button" BasedOn="{StaticResource IconButton}"/>
 
-        ToggleButton is absent on purpose. IconToggle shows no checked state
-        and AccentToggle does; both are legitimate, so the choice stays with
-        the consumer. See ButtonStyles.xaml.
+        Two controls are deliberately NOT aliased here:
 
-        UpDownTextBoxStyles.xaml is also absent, and stays implicit in its own
+        ToggleButton, because IconToggle shows no checked state and
+        AccentToggle does, and both are legitimate. The choice stays with the
+        consumer. See ButtonStyles.xaml.
+
+        TextBlock, because an implicit TextBlock style reaches inside other
+        controls' templates and changes text that was already laid out
+        deliberately. Apply OfficeTextBlock, SectionLabel or SecondaryText by
+        key instead.
+
+        TextBox, for the same reason and with a concrete victim: an editable
+        ComboBox has a PART_EditableTextBox inside its template, including the
+        one in this library. An implicit TextBox style would give that inner
+        box OfficeTextBox's bordered template and its MinHeight of 28, inside
+        a combo that is 28 high. Apply OfficeTextBox or FlatTextBox by key.
+
+        UpDownTextBoxStyles is also absent, and stays implicit in its own
         file. Those are WpfLib's own controls, so that is their default look
         rather than a look imposed on somebody else's control.
 
@@ -29,11 +42,39 @@
         <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/textinputstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/liststyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/selectioncontrolstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/indicatorstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/containerstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/menustyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/treeviewstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
-    <Style TargetType="Button"    BasedOn="{StaticResource IconButton}"/>
-    <Style TargetType="ComboBox"  BasedOn="{StaticResource OfficeComboBox}"/>
-    <Style TargetType="CheckBox"  BasedOn="{StaticResource OfficeCheckBox}"/>
-    <Style TargetType="ScrollBar" BasedOn="{StaticResource OfficeScrollBar}"/>
+    <Style TargetType="Button"       BasedOn="{StaticResource IconButton}"/>
+    <Style TargetType="ComboBox"     BasedOn="{StaticResource OfficeComboBox}"/>
+    <Style TargetType="CheckBox"     BasedOn="{StaticResource OfficeCheckBox}"/>
+    <Style TargetType="ScrollBar"    BasedOn="{StaticResource OfficeScrollBar}"/>
+    <Style TargetType="PasswordBox"  BasedOn="{StaticResource OfficePasswordBox}"/>
+    <Style TargetType="Label"        BasedOn="{StaticResource OfficeLabel}"/>
+    <Style TargetType="Separator"    BasedOn="{StaticResource OfficeSeparator}"/>
+    <Style TargetType="ListBox"      BasedOn="{StaticResource OfficeListBox}"/>
+    <Style TargetType="ListBoxItem"  BasedOn="{StaticResource OfficeListBoxItem}"/>
+    <Style TargetType="ListView"     BasedOn="{StaticResource OfficeListView}"/>
+    <Style TargetType="ListViewItem" BasedOn="{StaticResource OfficeListViewItem}"/>
+    <Style TargetType="RadioButton"  BasedOn="{StaticResource OfficeRadioButton}"/>
+    <Style TargetType="ProgressBar"  BasedOn="{StaticResource OfficeProgressBar}"/>
+    <Style TargetType="ToolTip"      BasedOn="{StaticResource OfficeToolTip}"/>
+    <Style TargetType="Slider"       BasedOn="{StaticResource OfficeSlider}"/>
+    <Style TargetType="Expander"     BasedOn="{StaticResource OfficeExpander}"/>
+    <Style TargetType="GroupBox"     BasedOn="{StaticResource OfficeGroupBox}"/>
+    <Style TargetType="TabControl"   BasedOn="{StaticResource OfficeTabControl}"/>
+    <Style TargetType="TabItem"      BasedOn="{StaticResource OfficeTabItem}"/>
+    <Style TargetType="TreeView"     BasedOn="{StaticResource OfficeTreeView}"/>
+    <Style TargetType="TreeViewItem" BasedOn="{StaticResource OfficeTreeViewItem}"/>
+    <Style TargetType="Menu"         BasedOn="{StaticResource OfficeMenu}"/>
+    <Style TargetType="MenuItem"     BasedOn="{StaticResource OfficeMenuItem}"/>
+    <Style TargetType="ContextMenu"  BasedOn="{StaticResource OfficeContextMenu}"/>
 
 </ResourceDictionary>

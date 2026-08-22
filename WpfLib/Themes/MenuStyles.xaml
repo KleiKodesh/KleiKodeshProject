@@ -1,0 +1,133 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        Menus and context menus.
+
+        A ContextMenu and a submenu are each their own Popup, so they render in
+        a separate HwndSource. That is precisely the case the VSTO rule exists
+        for, and it also means they inherit nothing from the pane: unlike the
+        in-tree controls, these have to state their own Background and
+        Foreground rather than letting them flow down.
+
+        They therefore commit to a dark menu surface, the same one ToolTip uses
+        in IndicatorStyles, so a popped-up surface looks deliberate on both a
+        light and a dark Office theme rather than half-inheriting either.
+    -->
+
+    <Style x:Key="OfficeMenuItem" TargetType="MenuItem">
+        <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="Foreground"       Value="#FFF0F0F0"/>
+        <Setter Property="Padding"          Value="10,6"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Grid>
+                        <Border x:Name="Bd"
+                                Background="Transparent"
+                                Padding="{TemplateBinding Padding}"
+                                CornerRadius="2">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <ContentPresenter Grid.Column="0"
+                                                  ContentSource="Header"
+                                                  RecognizesAccessKey="True"
+                                                  VerticalAlignment="Center"/>
+                                <TextBlock Grid.Column="1"
+                                           Text="{TemplateBinding InputGestureText}"
+                                           Opacity="0.55"
+                                           Margin="16,0,0,0"
+                                           VerticalAlignment="Center"/>
+                                <Path x:Name="SubArrow"
+                                      Grid.Column="2"
+                                      Data="M5 3 L9 8 L5 13"
+                                      Stroke="#FFF0F0F0"
+                                      StrokeThickness="1.5"
+                                      StrokeLineJoin="Round"
+                                      Stretch="Uniform"
+                                      Width="7" Height="7"
+                                      Margin="10,0,0,0"
+                                      FlowDirection="LeftToRight"
+                                      VerticalAlignment="Center"
+                                      Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="PART_Popup"
+                               AllowsTransparency="True"
+                               Placement="Right"
+                               IsOpen="{TemplateBinding IsSubmenuOpen}"
+                               Focusable="False"
+                               PopupAnimation="Fade">
+                            <Border Background="#FF2B2B2B"
+                                    BorderBrush="#FF3F3F3F"
+                                    BorderThickness="1"
+                                    CornerRadius="4"
+                                    Padding="3">
+                                <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="Role" Value="SubmenuHeader">
+                            <Setter TargetName="SubArrow" Property="Visibility" Value="Visible"/>
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="#22FFFFFF"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.35"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="OfficeContextMenu" TargetType="ContextMenu">
+        <Setter Property="FontFamily"        Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"          Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="Foreground"        Value="#FFF0F0F0"/>
+        <Setter Property="HasDropShadow"     Value="False"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource OfficeMenuItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="#FF2B2B2B"
+                            BorderBrush="#FF3F3F3F"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="3">
+                        <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Cycle"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="OfficeMenu" TargetType="Menu">
+        <Setter Property="FontFamily"        Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"          Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="Background"        Value="Transparent"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource OfficeMenuItem}"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Menu">
+                    <Border Background="{TemplateBinding Background}">
+                        <StackPanel Orientation="Horizontal" IsItemsHost="True"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
