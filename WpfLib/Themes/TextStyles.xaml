@@ -1,0 +1,70 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
+    <!--
+        Static text and rules.
+
+        Nothing here sets Foreground. Foreground is an inherited property, so
+        text picks up whatever the pane or window is using, which is exactly
+        what makes it work on any Office theme. Emphasis is done with Opacity
+        instead, for the same reason: it stays correct on light and dark.
+    -->
+
+    <Style x:Key="OfficeTextBlock" TargetType="TextBlock">
+        <Setter Property="FontFamily"        Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"          Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="TextWrapping"      Value="Wrap"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!-- Heading above a group of controls. -->
+    <Style x:Key="SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource OfficeTextBlock}">
+        <Setter Property="FontSize"   Value="{StaticResource FontSizeSmall}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Opacity"    Value="0.75"/>
+        <Setter Property="Margin"     Value="0,0,0,4"/>
+    </Style>
+
+    <!-- De-emphasised text: hints, counts, captions. -->
+    <Style x:Key="SecondaryText" TargetType="TextBlock" BasedOn="{StaticResource OfficeTextBlock}">
+        <Setter Property="FontSize" Value="{StaticResource FontSizeSmall}"/>
+        <Setter Property="Opacity"  Value="0.6"/>
+    </Style>
+
+    <Style x:Key="OfficeLabel" TargetType="Label">
+        <Setter Property="FontFamily" Value="{StaticResource UiFontFamily}"/>
+        <Setter Property="FontSize"   Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="Padding"    Value="0,0,6,0"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="OfficeSeparator" TargetType="Separator">
+        <Setter Property="Background" Value="#50808080"/>
+        <Setter Property="Margin"     Value="0,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Separator">
+                    <Rectangle Height="1"
+                               Fill="{TemplateBinding Background}"
+                               SnapsToDevicePixels="True"/>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="OfficeHyperlink" TargetType="Hyperlink">
+        <Setter Property="Foreground"      Value="#0078D4"/>
+        <Setter Property="TextDecorations" Value="{x:Null}"/>
+        <Setter Property="Cursor"          Value="Hand"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Foreground"      Value="#106EBE"/>
+                <Setter Property="TextDecorations" Value="Underline"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
+</ResourceDictionary>
