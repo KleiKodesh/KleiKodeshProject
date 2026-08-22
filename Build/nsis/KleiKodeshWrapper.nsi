@@ -434,6 +434,10 @@ Section Uninstall
   ; Applications entry: HKCU\Software\Classes\Applications\כתבי הקודש.exe
   DeleteRegKey HKCU "Software\Classes\Applications\כתבי הקודש.exe"
 
+  ; kitveihakodeshapp:// URL scheme, written by the installer so deep links
+  ; copied from the app open in it.
+  DeleteRegKey HKCU "Software\Classes\kitveihakodeshapp"
+
   ; ── Default-handler ProgId keys (<ext>_auto_file) ────────────────────────────
   ; When the user sets כתבי הקודש as the *default* app for an extension via
   ; "Always use this app" or Windows Settings → Default Apps, Windows creates a
