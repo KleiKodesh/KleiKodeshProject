@@ -24,7 +24,7 @@ namespace KitveiHakodeshDemoApp
         private Form _popoutWindow;
         private Rectangle _lastNormalBounds;
 
-        public MainForm(string initialFilePath = null)
+        public MainForm(string initialRequest = null)
         {
             Text = "כתבי הקודש";
             ClientSize = new System.Drawing.Size(1000, 750);
@@ -48,9 +48,10 @@ namespace KitveiHakodeshDemoApp
             // Keeps the strip in sync with the Vue tab store, both directions.
             _tabsMirror = new ChromeTabsMirror(this, _viewer);
 
-            // Queue the file to open as soon as the WebView2 bridge is ready.
-            if (!string.IsNullOrEmpty(initialFilePath))
-                _viewer.OpenFileFromPath(initialFilePath);
+            // Queue what we were launched with; the viewer holds it until the bridge
+            // is ready. Same call the pipe listener makes for a second launch.
+            if (!string.IsNullOrEmpty(initialRequest))
+                OpenRequest(initialRequest);
 
             _lastNormalBounds = Bounds;
 
@@ -62,12 +63,26 @@ namespace KitveiHakodeshDemoApp
         }
 
         /// <summary>
-        /// Opens a file in the viewer. Called from the pipe listener when a second instance
-        /// forwards a file path to this running instance.
+        /// Opens whatever this app can be launched with: an existing file, or a deep link
+        /// into a book (<c>kitveihakodeshapp://book/&lt;id&gt;?index=&lt;n&gt;</c>, parsed by
+        /// <see cref="HostLink"/>). Called from the constructor for our own command line and
+        /// from the pipe listener when a second launch forwards its argument here, so both
+        /// land on one code path and a link behaves exactly like a file: a new tab in this
+        /// window, never a second window.
+        ///
+        /// The request is validated here rather than by the callers — this is the only place
+        /// that knows what an open request may be. An unparseable link or a missing file is
+        /// dropped silently, matching the previous behaviour for a path that no longer exists.
         /// </summary>
-        public void OpenFile(string filePath)
+        public void OpenRequest(string request)
         {
-            _viewer.OpenFileFromPath(filePath);
+            if (string.IsNullOrEmpty(request)) return;
+
+            HostLink link = HostLink.TryParse(request);
+            if (link != null)
+                _viewer.OpenBookFromHost(link);
+            else if (System.IO.File.Exists(request))
+                _viewer.OpenFileFromPath(request);
         }
 
         private bool _updateCheckDone = false;

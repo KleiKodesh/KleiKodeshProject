@@ -10,7 +10,7 @@ import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { escapeHtml, htmlToText } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
-import { buildLineLink } from './useBookViewLineLink'
+import { buildLineLink } from '@/utils/appDeepLink'
 import {
   appLinkHtml,
   applyWordLinkExport,

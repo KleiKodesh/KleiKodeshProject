@@ -233,8 +233,8 @@ namespace KitveiHakodeshLib
 
         /// <summary>
         /// Opens a book at a specific line inside the app from the VSTO host — driven
-        /// by an otzaria://, seforimapp:// or zayit:// deep link found in the Word
-        /// selection's hyperlinks (see <see cref="HostLink"/>). Otzaria and SeforimApp
+        /// by an otzaria://, kitveihakodeshapp:// or zayit:// deep link found in the Word
+        /// selection's hyperlinks (see <see cref="HostLink"/>). Otzaria and this app's own
         /// links carry a positional line index that the frontend uses directly; Zayit
         /// links carry a DB line row-id the frontend converts to an index. Queued and
         /// flushed on 'appReady' if Vue is not yet mounted, mirroring
@@ -258,7 +258,7 @@ namespace KitveiHakodeshLib
             switch (link.Scheme)
             {
                 case HostLink.LinkScheme.Zayit: scheme = "zayit"; break;
-                case HostLink.LinkScheme.SeforimApp: scheme = "seforimapp"; break;
+                case HostLink.LinkScheme.KitveiHakodesh: scheme = HostLink.AppScheme; break;
                 default: scheme = "otzaria"; break;
             }
 

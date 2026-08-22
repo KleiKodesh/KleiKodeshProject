@@ -17,7 +17,7 @@ const endnote = (over: Partial<WordLinkEndnote> = {}): WordLinkEndnote => ({
   label: 'A',
   html: 'the target line',
   source: 'Book, Chapter Section',
-  link: 'seforimapp://book/5?index=3',
+  link: 'kitveihakodeshapp://book/5?index=3',
   ...over,
 })
 
@@ -27,7 +27,7 @@ describe('buildWordLinkEndnotesHtml', () => {
     expect(html).toContain('id="wlnote-1"')
     expect(html).toContain('href="#wlref-1"')
     expect(html).toContain('the target line')
-    expect(html).toContain('(<a href="seforimapp://book/5?index=3"')
+    expect(html).toContain('(<a href="kitveihakodeshapp://book/5?index=3"')
     expect(html).toContain('Book, Chapter Section</a>)')
   })
 

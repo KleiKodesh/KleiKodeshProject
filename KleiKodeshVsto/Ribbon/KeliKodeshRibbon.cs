@@ -75,7 +75,7 @@ namespace KleiKodesh.Ribbon
             }
         }
 
-        // Right-click "פתח קישור בכתבי הקודש": open the otzaria:// / seforimapp:// /
+        // Right-click "פתח קישור בכתבי הקודש": open the otzaria:// / kitveihakodeshapp:// /
         // zayit:// link found in the current Word selection's hyperlinks inside the
         // Kitvei Hakodesh app.
         public void openLink_Click(Office.IRibbonControl control)
@@ -109,7 +109,8 @@ namespace KleiKodesh.Ribbon
 
         /// <summary>
         /// Returns the first link among the hyperlinks overlapping the current selection
-        /// that HostLink can parse (otzaria:// / seforimapp:// / zayit://), or null if
+        /// that HostLink can parse (otzaria:// / kitveihakodeshapp:// / zayit://, plus the legacy
+        /// seforimapp:// spelling of this app's own scheme), or null if
         /// there is none. Reads
         /// Selection.Hyperlinks (hyperlinks the selection touches, including one the
         /// caret merely sits inside).
