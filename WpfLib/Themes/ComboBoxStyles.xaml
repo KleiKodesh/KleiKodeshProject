@@ -136,7 +136,24 @@
                                Placement="Bottom" StaysOpen="False"
                                AllowsTransparency="False" Focusable="False"
                                PopupAnimation="Slide">
-                            <Border Background="{Binding Background, RelativeSource={RelativeSource TemplatedParent}}"
+                            <!--
+                                The drop-down is a Popup, so it renders outside
+                                the pane's visual tree. It used to take its
+                                Background from the ComboBox, which takes it
+                                from an ancestor UserControl - and in a plain
+                                Window there is no such ancestor, so the
+                                binding produced null and the popup painted
+                                BLACK, text and all.
+
+                                A popup has to be opaque on its own. System
+                                colours are the only self-sufficient source
+                                here: always solid, and they follow the OS
+                                light or dark setting. Foreground is pinned to
+                                the matching system brush so the two can never
+                                disagree, which is what made it unreadable.
+                            -->
+                            <Border Background="{x:Static SystemColors.WindowBrush}"
+                                    TextElement.Foreground="{x:Static SystemColors.WindowTextBrush}"
                                     BorderBrush="#50808080"
                                     BorderThickness="1"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
@@ -161,13 +178,22 @@
                             as it existed: the markup was there, the trigger
                             never was, so Tag did nothing.
                         -->
-                        <MultiDataTrigger>
-                            <MultiDataTrigger.Conditions>
-                                <Condition Binding="{Binding IsEditable, RelativeSource={RelativeSource Self}}" Value="True"/>
-                                <Condition Binding="{Binding Text, RelativeSource={RelativeSource Self}}" Value=""/>
-                            </MultiDataTrigger.Conditions>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <!--
+                                    A property Condition reads the templated
+                                    parent, and SourceName reads a named part.
+                                    A Binding with RelativeSource Self does
+                                    NOT work here: inside a ControlTemplate it
+                                    resolves against the template root, not the
+                                    ComboBox, so IsEditable never matched and
+                                    the placeholder stayed hidden.
+                                -->
+                                <Condition Property="IsEditable" Value="True"/>
+                                <Condition SourceName="PART_EditableTextBox" Property="Text" Value=""/>
+                            </MultiTrigger.Conditions>
                             <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
-                        </MultiDataTrigger>
+                        </MultiTrigger>
                         <Trigger Property="IsKeyboardFocusWithin" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush"     Value="#0078D4"/>
                             <Setter TargetName="Bd" Property="BorderThickness" Value="1,1,1,2"/>
