@@ -8,6 +8,10 @@
              FontFamily="Segoe UI"
              FontSize="13">
     <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
 
         <Style TargetType="CheckBox">
             <Setter Property="Margin" Value="0,0,0,6"/>
@@ -45,47 +49,7 @@
             <Setter Property="Margin" Value="0,8"/>
         </Style>
 
-        <!-- ── Thin Edge-style scrollbar ─────────────────────────────── -->
-        <ControlTemplate x:Key="ScrollThumb" TargetType="Thumb">
-            <Border x:Name="Bd" Background="#4D808080" CornerRadius="0"
-                    Margin="2,2,2,2" MinHeight="20" MinWidth="8"/>
-            <ControlTemplate.Triggers>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="Bd" Property="Background" Value="#66808080"/>
-                </Trigger>
-                <Trigger Property="IsDragging" Value="True">
-                    <Setter TargetName="Bd" Property="Background" Value="#80808080"/>
-                </Trigger>
-            </ControlTemplate.Triggers>
-        </ControlTemplate>
-
-        <ControlTemplate x:Key="VertScrollBar" TargetType="ScrollBar">
-            <Grid Width="12">
-                <Track x:Name="PART_Track" IsDirectionReversed="True">
-                    <Track.DecreaseRepeatButton>
-                        <RepeatButton Command="ScrollBar.PageUpCommand"
-                                      Background="Transparent" BorderThickness="0" Opacity="0"/>
-                    </Track.DecreaseRepeatButton>
-                    <Track.Thumb><Thumb Template="{StaticResource ScrollThumb}"/></Track.Thumb>
-                    <Track.IncreaseRepeatButton>
-                        <RepeatButton Command="ScrollBar.PageDownCommand"
-                                      Background="Transparent" BorderThickness="0" Opacity="0"/>
-                    </Track.IncreaseRepeatButton>
-                </Track>
-            </Grid>
-        </ControlTemplate>
-
-        <Style TargetType="ScrollBar">
-            <Setter Property="Background"      Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Style.Triggers>
-                <Trigger Property="Orientation" Value="Vertical">
-                    <Setter Property="Width"    Value="12"/>
-                    <Setter Property="MinWidth" Value="12"/>
-                    <Setter Property="Template" Value="{StaticResource VertScrollBar}"/>
-                </Trigger>
-            </Style.Triggers>
-        </Style>
+        <!-- Scrollbars come from WpfLib/Themes/ScrollBarStyles.xaml, merged above. -->
 
         <Style TargetType="Button">
             <Setter Property="Background" Value="Transparent"/>
@@ -120,6 +84,7 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        </ResourceDictionary>
     </UserControl.Resources>
 
     <ScrollViewer VerticalScrollBarVisibility="Auto"
