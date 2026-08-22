@@ -1,6 +1,5 @@
-using Microsoft.Office.Interop.Word;
+﻿using Microsoft.Office.Interop.Word;
 using DocDesign.Helpers;
-using WpfLib;
 using WpfLib.ViewModels;
 
 namespace DocDesign.Columns

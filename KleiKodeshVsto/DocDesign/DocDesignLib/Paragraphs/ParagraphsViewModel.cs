@@ -1,11 +1,10 @@
-using Microsoft.Office.Interop.Word;
+﻿using Microsoft.Office.Interop.Word;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows.Threading;
 using DocDesign.Helpers;
-using WpfLib;
 using WpfLib.ViewModels;
 
 namespace DocDesign.Paragraphs

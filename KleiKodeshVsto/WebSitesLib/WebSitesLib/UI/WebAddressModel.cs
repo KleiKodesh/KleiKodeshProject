@@ -1,5 +1,4 @@
-using WpfLib;
-
+﻿using WpfLib.ViewModels;
 namespace WebSitesLib.UI
 {
     public class WebAddressModel : ViewModelBase
