@@ -200,7 +200,6 @@ function openDafYomi() {
   padding: 8px 16px;
   font-size: 11.5px;
   color: var(--text-secondary);
-  border-top: 1px solid var(--border-color);
   overflow: hidden;
   white-space: nowrap;
 }
