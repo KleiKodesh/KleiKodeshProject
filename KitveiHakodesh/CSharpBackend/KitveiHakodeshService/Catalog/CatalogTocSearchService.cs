@@ -197,7 +197,10 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
 
         // Searches run outside _lock, so cancel the in-flight one BEFORE disposing the
         // index it is reading; a query that still lands mid-dispose comes back Superseded.
-        Interlocked.Exchange(ref _searchCts, null)?.Cancel();
+        // The search owns its CTS (disposed when Search returns), so it may already be gone
+        // by the time we get here — that means it finished on its own, nothing left to cancel.
+        try { Interlocked.Exchange(ref _searchCts, null)?.Cancel(); }
+        catch (ObjectDisposedException) { /* search already completed and disposed it */ }
 
         lock (_lock)
         {
@@ -271,9 +274,21 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         result.Ready = true;
         if (string.IsNullOrWhiteSpace(query)) return result;
 
-        var cts = new CancellationTokenSource();
+        using var cts = new CancellationTokenSource();
         var prev = Interlocked.Exchange(ref _searchCts, cts);
-        prev?.Cancel();
+        // Cancel the superseded search: without the `using` above, one CTS per keystroke-search
+        // accumulates for the service's lifetime — each is finalizable and holds an internal
+        // registration list. Cancel() first — disposing a CTS does not cancel it.
+        //
+        // We deliberately do NOT dispose `prev` here. Its owning Search call is still on
+        // another thread reading that token, and disposing underneath it would throw
+        // ObjectDisposedException into the middle of that search. Each Search disposes its
+        // own CTS via the `using` above once it unwinds — Cancel() is what makes it unwind
+        // promptly. ObjectDisposedException below: it already got there on its own.
+        if (prev is not null)
+        {
+            try { prev.Cancel(); } catch (ObjectDisposedException) { }
+        }
         try
         {
             result.Results = GetIndex().Search(query, cts.Token);
