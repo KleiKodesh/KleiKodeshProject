@@ -154,7 +154,7 @@ useAppTitleBarShortcuts({
 <template>
   <!-- Keyboard event listener is always active (above), but only render the visual header when titleBarVisible is true -->
   <div ref="barRef" class="title-bar-container" :class="{ hidden: !titleBarVisible }">
-    <header class="title-bar" :class="{ 'nav-sidebar-on': settingsStore.navSidebarVisible }" @click="onTitleBarClick">
+    <header class="title-bar" @click="onTitleBarClick">
     <div class="bar-start">
       <div class="nav-btn-wrap">
         <button
@@ -307,24 +307,12 @@ useAppTitleBarShortcuts({
   align-items: center;
   height: var(--title-bar-height);
   padding: var(--title-bar-padding);
-  /* box-sizing is border-box app-wide, so the vertical padding added below eats into this
-     height rather than growing the bar - the bar stays the height the density mode sets. */
-  box-sizing: border-box;
   background: var(--bg-secondary);
-  /* Divider width is driven by the settings store: 0 when the content border is
-     on (seamless merge), 1px when off (title bar shows its own divider). */
-  border-bottom: var(--title-bar-divider-width, 0px) solid var(--border-color);
+  /* No divider under the bar - the chrome runs continuously from the bar into the page. */
   position: relative;
   /* Regular arrow over the bar and the breadcrumb/title; only the buttons and
      breadcrumb chevrons use the pointer (hand). */
   cursor: default;
-}
-/* While the nav sidebar is up, the bar takes the same vertical padding as the sidebar's
-   horizontal one (--nav-panel-inset, 6px), so the address bar's box lines up with the top
-   of the sidebar's panel beside it instead of running past it. Only then: with no sidebar
-   there is nothing to line up with, and the bar keeps the tighter density padding. */
-.title-bar.nav-sidebar-on {
-  padding-block: var(--nav-panel-inset, 6px);
 }
 .bar-start {
   display: flex;
