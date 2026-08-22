@@ -5,7 +5,8 @@
         NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
     -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/DocDesign;component/ui/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/icons.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/miscstyles.xaml"/>
