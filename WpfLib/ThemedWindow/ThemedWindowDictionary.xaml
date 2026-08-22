@@ -7,8 +7,24 @@
     NOTE: Theming system dependencies have been removed. This file is kept as a backup
     for potential future use. The window styles inherit Foreground/Background from
     the parent ContentControl but do not use any dynamic theming system.
-    
+
     To use: Set Window.Style="{StaticResource ThemedWindowStyle}" or ThemedToolWindowStyle
+
+    Deliberately NOT part of Themes/OfficePalette.xaml. That palette styles the
+    controls inside a task pane; this styles the chrome of a standalone Window.
+    A pane merging the palette should not start dragging window chrome with it.
+
+    The correct pack URI, which has been got wrong before:
+
+        pack://application:,,,/WpfLib;component/themedwindow/themedwindowdictionary.xaml
+
+    Note "themedwindow", the folder this file is actually in. The path segment
+    must be lowercase because the WPF BAML compiler lowercases it.
+
+    Currently unreferenced: the one caller, DocDesignLib FirstWordStyle
+    SetFirstWordStyle, is itself never called. WindowButtons.cs is used only by
+    the templates below. Treat the whole ThemedWindow folder as reserved rather
+    than live.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:local="clr-namespace:System.Windows.Controls;assembly=PresentationFramework"

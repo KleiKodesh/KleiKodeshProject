@@ -1,4 +1,4 @@
-using DocDesign.Helpers;
+﻿using DocDesign.Helpers;
 using Microsoft.Office.Interop.Word;
 using Microsoft.VisualBasic;
 using System;
@@ -167,6 +167,11 @@ namespace DocDesign.Paragraphs
             }
         }
 
+        // NOTE: nothing calls this today. The pack URI below pointed at
+        // WpfLib;component/Dictionaries/, a folder that does not exist -- the
+        // dictionary lives in WpfLib/ThemedWindow/. It was only ever wrong
+        // because no caller made it throw. Corrected rather than deleted; if
+        // this really is dead, delete the method.
         public void SetFirstWordStyle()
         {
             var listView = new ListView
@@ -182,7 +187,7 @@ namespace DocDesign.Paragraphs
 
             var window = new System.Windows.Window
             {
-                Style = (System.Windows.Style)new System.Windows.ResourceDictionary { Source = new Uri("pack://application:,,,/WpfLib;component/Dictionaries/ThemedWindowDictionary.xaml") }["ThemedToolWindowStyle"],
+                Style = (System.Windows.Style)new System.Windows.ResourceDictionary { Source = new Uri("pack://application:,,,/WpfLib;component/themedwindow/themedwindowdictionary.xaml") }["ThemedToolWindowStyle"],
                 Content = listView,
                 SizeToContent = System.Windows.SizeToContent.WidthAndHeight,
                 WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen
