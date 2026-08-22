@@ -1,9 +1,10 @@
-<UserControl x:Class="RegexFindLib.UI.RegexFindView"
+﻿<UserControl x:Class="RegexFindLib.UI.RegexFindView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:RegexFindLib.UI"
+             xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib"
              mc:Ignorable="d"
              MinWidth="280"
              d:Height="450"
@@ -23,10 +24,10 @@
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="/RegexFindLib;component/ui/RegexFindDictionary.xaml"/>
             </ResourceDictionary.MergedDictionaries>
-            <local:BoolToVisibilityConverter        x:Key="BoolToVis"/>
-            <local:InverseBoolToVisibilityConverter x:Key="InvBoolToVis"/>
-            <local:BoolToFlowDirectionConverter     x:Key="BoolToFlowDir"/>
-            <local:IntToVisibilityConverter         x:Key="IntToVis"/>
+            <conv:BoolToVisibilityConverter        x:Key="BoolToVis"/>
+            <conv:InverseBoolToVisibilityConverter x:Key="InvBoolToVis"/>
+            <conv:BoolToFlowDirectionConverter     x:Key="BoolToFlowDir"/>
+            <conv:IntToVisibilityConverter         x:Key="IntToVis"/>
 
             <!-- History item template — plain row matching OfficeComboItem style -->
             <DataTemplate x:Key="HistoryItemTemplate">

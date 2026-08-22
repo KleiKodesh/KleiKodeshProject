@@ -113,6 +113,8 @@
     <!-- Converters -->
     <Compile Include="Converters\ArrayToStringConverter.cs" />
     <Compile Include="Converters\BoolToFlowDirectionConverter.cs" />
+    <Compile Include="Converters\ColorToBrushConverter.cs" />
+    <Compile Include="Converters\VisibilityConverters.cs" />
     <Compile Include="Converters\FlowDirectionConverter.cs" />
     <Compile Include="Converters\ListToStringConverter.cs" />
     <Compile Include="Converters\ReverseBoolConverter.cs" />

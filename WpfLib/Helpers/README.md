@@ -21,13 +21,28 @@ Key methods:
 - `IsHoliday(DateTime)` — Checks if date is a Jewish holiday
 - `GetOmerDay()` — Returns current day of Omer count (0 if not in Omer period)
 
-### `FontsHelper.cs`
-System font enumeration and management.
+### `FontsProvider.cs`
+The solution's single font source. Enumerates system font families through DirectWrite and
+tests each one for a real א glyph by parsing the face's own `cmap` table. Replaced WPF's
+`Fonts.SystemFontFamilies` and `System.Drawing`'s `InstalledFontCollection`, both of which are
+process-lifetime snapshots that never see fonts installed while the app runs. Twin file of the
+service's `HebrewFontsProvider.cs` (native-AOT leg) — keep the two in sync.
 
 Key methods:
-- `GetInstalledFonts()` — Returns list of all installed font family names
-- `FontExists(string)` — Checks if a font is installed
-- `GetHebrewFonts()` — Filters to fonts with Hebrew character support
+- `GetFontFamilies()` — Every family as `FontFamilyInfo` (name + `HasHebrew`), Hebrew families
+  first and alphabetical within each group
+- `GetHebrewFonts()` — Just the Hebrew-capable family names, alphabetical
+- `HasHebrew(string)` — Tests one family by name, without enumerating them all
+
+Stateless by design: every call re-scans, so fonts installed mid-session show up. Costs roughly
+a second — call it off the UI thread and show a loading row.
+
+### `FontsHelper.cs`
+WPF projection of `FontsProvider` for font pickers.
+
+Key methods:
+- `GetFontsCollection()` — Every family as a WPF `FontFamily`, Hebrew ones first
+- `HasHebCharacters(this FontFamily)` — Extension method; true when the family has an א glyph
 
 ### `MsgBox.cs`
 Themed message box wrapper. Respects Office theme (light/dark) for consistent appearance.
