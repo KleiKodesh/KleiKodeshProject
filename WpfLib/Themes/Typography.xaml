@@ -1,0 +1,33 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!--
+        Type tokens, the counterpart to the colour tokens in Brushes.xaml.
+
+        Before this file, "Segoe UI" was written out in 26 places across 16
+        files and the sizes were loose literals, so there was no single place
+        to change the UI font.
+
+        Sizes are named for their role, not their value, so a caller says what
+        it means and the scale can be retuned in one edit:
+
+            Small   11   secondary labels, section headers
+            Normal  12   the default for controls
+            Large   13   text inputs, anything that has to be comfortable to read
+
+        These are plain resources, so they are only usable from a Style setter
+        or an element attribute, never from inside a ControlTemplate body. That
+        is the VSTO rule (see the note in OfficePalette.xaml), and it is why the
+        control dictionaries in this folder still inline their font values.
+
+        Note this is the UI chrome font, and has nothing to do with the Hebrew
+        document fonts that WpfLib.Helpers.FontsProvider enumerates.
+    -->
+
+    <FontFamily x:Key="UiFontFamily">Segoe UI</FontFamily>
+
+    <sys:Double x:Key="FontSizeSmall">11</sys:Double>
+    <sys:Double x:Key="FontSizeNormal">12</sys:Double>
+    <sys:Double x:Key="FontSizeLarge">13</sys:Double>
+
+</ResourceDictionary>

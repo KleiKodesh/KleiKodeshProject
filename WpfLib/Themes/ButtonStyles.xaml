@@ -1,5 +1,9 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
     <!--
         Flat button and toggle styles — adaptive, work on any Office theme.
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
@@ -177,8 +181,8 @@
     <!-- ── ActionButton — bordered, for dialogs (OK, Apply, etc.) ── -->
     <Style x:Key="ActionButton" TargetType="Button">
         <Setter Property="Padding"          Value="12,5"/>
-        <Setter Property="FontSize"         Value="12"/>
-        <Setter Property="FontFamily"       Value="Segoe UI"/>
+        <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
+        <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Foreground"
