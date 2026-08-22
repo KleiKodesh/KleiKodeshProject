@@ -1,4 +1,4 @@
-using Nakdan.Core;
+﻿using Nakdan.Core;
 using Nakdan.Helpers;
 using Nakdan.WdStyles;
 using System;
@@ -9,7 +9,6 @@ using System.Threading;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Threading;
-using WpfLib;
 using WpfLib.ViewModels;
 
 namespace Nakdan.UI

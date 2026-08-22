@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 
-namespace WpfLib.ComboBoxThemeBehavior
+namespace WpfLib.AttachedProperties
 {
     public static class TextBoxBehaviours
     {

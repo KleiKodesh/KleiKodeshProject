@@ -1,5 +1,5 @@
-using System.Windows.Media;
-using WpfLib;
+﻿using System.Windows.Media;
+using WpfLib.ViewModels;
 namespace RegexFindLib.UI
 {
     /// <summary>
