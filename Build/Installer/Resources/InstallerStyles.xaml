@@ -28,7 +28,7 @@
             task pane one.
 
         This project also does not reference WpfLib, and should not start
-        referencing it for styling alone -- the installer is what runs before
+        referencing it for styling alone. The installer is what runs before
         anything is installed, so its dependency list is deliberately short.
 
         See WpfLib/Themes/README.md, "What Stays Local".
