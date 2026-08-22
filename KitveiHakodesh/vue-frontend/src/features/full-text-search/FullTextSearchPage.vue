@@ -370,6 +370,42 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="search-page">
+    <div class="search-bar-dock">
+      <FullTextSearchBar
+        ref="searchBarRef"
+        v-model:search-query="searchQuery"
+        :is-searching="isSearching"
+        :result-count="filteredResults.length"
+        :total-result-count="results.length"
+        :filter-count="checkedBookIds.size"
+        :at-filter-count="atFilters.length"
+        :is-advanced-open="isAdvancedOpen"
+        :is-advanced-active="isAdvancedActive"
+        v-model:sort-order="sortOrder"
+        @search="onSearch"
+        @cancel="cancelSearch"
+        @toggle-filter="isFilterOpen = !isFilterOpen"
+        @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
+        @clear="onClearSearch"
+      />
+      <FullTextSearchAdvancedPanel
+        v-if="isAdvancedOpen"
+        :max-word-distance="maxWordDistance"
+        :require-ordered="requireOrdered"
+        :context-words="settings.searchContextMarginWords"
+        :expand-ketiv="expandKetiv"
+        :expand-related="expandRelated"
+        :grammar-wrap="grammarWrap"
+        @update:max-word-distance="maxWordDistance = $event"
+        @update:require-ordered="requireOrdered = $event"
+        @update:context-words="settings.searchContextMarginWords = $event"
+        @update:expand-ketiv="expandKetiv = $event"
+        @update:expand-related="expandRelated = $event"
+        @update:grammar-wrap="grammarWrap = $event"
+        @close="isAdvancedOpen = false"
+      />
+    </div>
+
     <div class="results-area">
       <div class="results-list-wrap">
         <FullTextSearchResultsList
@@ -409,43 +445,6 @@ onBeforeUnmount(() => {
     </div>
 
     <FullTextSearchIndexingOverlay v-if="showIndexingOverlay" :state="indexingState" />
-
-    <div class="search-bar-dock">
-      <FullTextSearchAdvancedPanel
-        v-if="isAdvancedOpen"
-        :max-word-distance="maxWordDistance"
-        :require-ordered="requireOrdered"
-        :context-words="settings.searchContextMarginWords"
-        :expand-ketiv="expandKetiv"
-        :expand-related="expandRelated"
-        :grammar-wrap="grammarWrap"
-        @update:max-word-distance="maxWordDistance = $event"
-        @update:require-ordered="requireOrdered = $event"
-        @update:context-words="settings.searchContextMarginWords = $event"
-        @update:expand-ketiv="expandKetiv = $event"
-        @update:expand-related="expandRelated = $event"
-        @update:grammar-wrap="grammarWrap = $event"
-        @close="isAdvancedOpen = false"
-      />
-
-      <FullTextSearchBar
-        ref="searchBarRef"
-        v-model:search-query="searchQuery"
-        :is-searching="isSearching"
-        :result-count="filteredResults.length"
-        :total-result-count="results.length"
-        :filter-count="checkedBookIds.size"
-        :at-filter-count="atFilters.length"
-        :is-advanced-open="isAdvancedOpen"
-        :is-advanced-active="isAdvancedActive"
-        v-model:sort-order="sortOrder"
-        @search="onSearch"
-        @cancel="cancelSearch"
-        @toggle-filter="isFilterOpen = !isFilterOpen"
-        @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
-        @clear="onClearSearch"
-      />
-    </div>
   </div>
 </template>
 
@@ -464,14 +463,17 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
 }
-/* Anchor for the advanced panel: on wide screens it floats as a popup above
-   the search bar, so it needs the bar's top edge as its containing block. */
+/* Anchor for the advanced panel: on wide screens it floats as a popup below
+   the search bar, so it needs the bar's bottom edge as its containing block. */
 .search-bar-dock {
   position: relative;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* z-index without position:relative on the results area below means the dock's
+     popups (advanced panel, sort dropdown) paint over the results list. */
+  z-index: 5;
 }
 .results-list-wrap {
   flex: 1;
