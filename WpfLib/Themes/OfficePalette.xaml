@@ -5,10 +5,16 @@
 
         Merging this single dictionary gives a library:
           - Adaptive brush tokens (Brushes.xaml)
-          - Implicit ComboBox + ComboBoxItem (ComboBoxStyles.xaml)
-          - Implicit Button, ToggleButton + keyed CheckedToggle, ActionButton (ButtonStyles.xaml)
+          - Implicit ComboBox + keyed OfficeComboItem (ComboBoxStyles.xaml)
+          - Implicit Button + keyed IconButton, IconToggle, AccentToggle,
+            CheckedToggle, ActionButton, IconPath (ButtonStyles.xaml)
           - Implicit CheckBox with VSCode-style square tick (CheckBoxStyles.xaml)
           - Implicit ScrollBar — thin Edge-style, no arrows (ScrollBarStyles.xaml)
+
+        ToggleButton has no implicit style on purpose: both toggle behaviours are
+        legitimate, so a library picks one with a single line of its own —
+            <Style TargetType="ToggleButton" BasedOn="{StaticResource IconToggle}"/>
+        Sizing lives in the library too; derive with BasedOn and add Width/Height.
 
         Usage in a library's root dictionary:
             <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
