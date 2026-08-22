@@ -1,0 +1,16 @@
+<Application xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="WpfLib.Gallery.App"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- The whole point of this app: prove the palette renders. -->
+                <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <!-- The palette leaves ToggleButton to the consumer, so pick one. -->
+            <Style TargetType="ToggleButton" BasedOn="{StaticResource AccentToggle}"/>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

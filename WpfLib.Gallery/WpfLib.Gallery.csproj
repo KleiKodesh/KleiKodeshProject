@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The gallery for WpfLib.
+
+    WpfLib is the one project in the solution whose entire job is how things
+    look, and it was the only one without a demo. Every style in the palette
+    is on one screen here, in all four Office themes, so a change to a
+    template can be looked at instead of reasoned about.
+
+    SDK-style on purpose even though WpfLib is still old-style: this is a new
+    project with no history to preserve, and it keeps the file to a dozen
+    lines. Referencing an old-style project from an SDK-style one is fine.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>WpfLib.Gallery</RootNamespace>
+    <AssemblyName>WpfLib.Gallery</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>AnyCPU</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WpfLib\WpfLib.csproj" />
+  </ItemGroup>
+
+</Project>
