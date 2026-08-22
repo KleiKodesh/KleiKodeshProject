@@ -16,6 +16,9 @@ what you use. Merging a layer never drags in the one above it.
 | 3 | `Defaults.xaml` | Makes layer 2 implicit | Restyles `Button`, `ComboBox`, `CheckBox`, `ScrollBar` |
 | 4 | `OfficePalette.xaml` | All of the above | Everything in layer 3 |
 
+`WpfLib` targets **`net48;net10.0-windows`**, so a WPF app on modern .NET can
+consume the palette. The five old-style Office projects reference it unchanged.
+
 A task pane that wants the whole suite look merges `OfficePalette.xaml` and is
 done. A dialog that wants the suite colours and one bordered button merges
 `tokens.xaml` and `buttonstyles.xaml`, uses `{StaticResource ActionButton}`, and
@@ -140,6 +143,31 @@ picks with a single line of its own:
 derives with `BasedOn` and adds `Width`/`Height`/`Margin`, so this file stays
 about how a control *looks*, not how big it is.
 
+### 4b. The rest of the controls
+
+| File | Keyed styles |
+|------|--------------|
+| `TextInputStyles.xaml` | `OfficeTextBox`, `FlatTextBox`, `OfficePasswordBox` |
+| `TextStyles.xaml` | `OfficeTextBlock`, `SectionLabel`, `SecondaryText`, `OfficeLabel`, `OfficeSeparator`, `OfficeHyperlink` |
+| `ListStyles.xaml` | `OfficeListBox` + item, `BorderedListBox`, `OfficeListView` + item |
+| `SelectionControlStyles.xaml` | `OfficeRadioButton` |
+| `IndicatorStyles.xaml` | `OfficeProgressBar`, `OfficeToolTip`, `OfficeSlider` |
+| `ContainerStyles.xaml` | `OfficeExpander`, `OfficeGroupBox`, `OfficeTabControl` + item, `ChevronToggle` |
+| `MenuStyles.xaml` | `OfficeMenu`, `OfficeMenuItem`, `OfficeContextMenu` |
+| `TreeViewStyles.xaml` | `OfficeTreeView` + item, `TreeExpandToggle` |
+
+Two rules these follow that the older task-pane styles do not:
+
+**Foreground is inherited, not bound to an ancestor `UserControl`.** That
+binding finds nothing in a plain `Window`, and a general library has to work in
+both hosts. Emphasis uses `Opacity`, which stays correct on light and dark.
+
+**Popups state their own colours.** `ToolTip`, `ContextMenu` and submenus live
+in their own `HwndSource`, outside the pane's visual tree, so they inherit
+nothing and commit to a dark surface. `OfficeMenuItem` picks its foreground by
+`Role`, because a top-level `Menu` header sits on the pane background and must
+inherit it — getting that wrong renders white on white.
+
 ### 5. `CheckBoxStyles.xaml` — VSCode-Style Checkbox
 
 Implicit `CheckBox`: 14×14 square box, 2px corner radius, 1.5px vector tick.
@@ -182,6 +210,20 @@ there: `BoolToVisibilityConverter`, `InverseBoolToVisibilityConverter`,
 
 Domain converters stay local — Nakdan's `GenreDescriptionConverter` and
 `OpacityConverter`, for instance.
+
+---
+
+## The Gallery
+
+`WpfLib.Gallery` renders every style on one screen, with a switch for the four
+Office themes. Run it after changing a template.
+
+It is not decoration. Its first run found six defects that all looked fine as
+source: a named `RotateTransform` cannot be a trigger's `TargetName`,
+`TextBlock.Opacity` is not an attached property, a `Binding` inside a
+`Storyboard` throws `XamlParseException`, the checkbox tick had **never**
+rendered in any host, top-level menu headers were white on white, and the
+`ComboBox` placeholder had markup but no trigger.
 
 ---
 
