@@ -300,7 +300,6 @@
       <SubType>UserControl</SubType>
     </Compile>
     <Compile Include="Helpers\JsonExtensions.cs" />
-    <Compile Include="Helpers\MsgBox.cs" />
     <Compile Include="Helpers\TaskPanePopOut.cs" />
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
