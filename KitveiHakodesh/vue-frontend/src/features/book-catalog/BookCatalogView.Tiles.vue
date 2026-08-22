@@ -117,7 +117,6 @@ function selectItem(i: number, event?: MouseEvent) {
   border-radius: 6px;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
-  position: relative;
 }
 /* Same three states, same curve and scales as the home page tiles
    (HomePageTile.vue) — the icon grows on hover, grows further when it is the

@@ -360,12 +360,6 @@ function onSearchEnter() {
 </template>
 
 <style scoped>
-/* Fill, border, colors, placeholder and the search-cancel button all come from
-   the global `.search-inner input` rule; the sizing comes from the title bar. */
-.search-input {
-  flex: 1;
-  min-width: 0;
-}
 .books-page {
   display: flex;
   flex-direction: column;
