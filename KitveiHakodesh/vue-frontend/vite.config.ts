@@ -139,7 +139,18 @@ async function pipeShutdown(): Promise<void> {
   try { await callPipe(encodeReq('shutdown')) } catch { /* it drops the pipe as it exits — expected */ }
 }
 
+// Config-reload handoff: on a vite.config change vite evaluates the NEW config (fresh module,
+// fresh copy of all this state) BEFORE closing the old server, and the new instance reuses the
+// still-running service. A process-global generation counter lets the OLD instance's close
+// handler tell that handoff apart from a real dev-server shutdown — otherwise it stops the
+// service right after the new instance decided to reuse it, leaving vite up with no service.
+const khsGen: number = ((globalThis as any).__khsGen = ((globalThis as any).__khsGen ?? 0) + 1)
+
 let khsProc: ChildProcess | null = null
+// True when this config instance ADOPTED a service left running by the previous instance
+// (config-reload handoff) instead of spawning its own — there is no child handle to supervise,
+// so aliveness is probed over the pipe where it matters (/khs-endpoint).
+let khsReused = false
 // This dev server's own service; `khsReady` gates startup. Module-level so the child's `exit`
 // handler can reassign it when respawning.
 let khsReady: Promise<void> | null = null
@@ -310,6 +321,12 @@ async function spawnKhsExe(): Promise<void> {
     // Supervise it instead: respawn on an UNMANAGED exit — the service's own setSeforimDbPath
     // self-restart, or a crash — so the host (on a fresh port) comes back.
     if (khsShuttingDown || khsManagedStop) return
+    // A newer config instance owns the service now (config-reload handoff); it supervises from
+    // here. Checked against the GLOBAL, not our close handler's flag: on a reload that needs a
+    // rebuild, the new instance stops this child before vite closes the old server, so the exit
+    // can land BEFORE our 'close' disarm and we'd respawn a competitor on the same pipe —
+    // locking the exe the new instance is mid-rebuild of.
+    if ((globalThis as any).__khsGen !== khsGen) return
     const now = Date.now()
     khsRespawnStrikes = now - khsLastRespawn < 3000 ? khsRespawnStrikes + 1 : 0
     khsLastRespawn = now
@@ -319,6 +336,7 @@ async function spawnKhsExe(): Promise<void> {
     }
     setTimeout(() => {
       if (khsShuttingDown || khsManagedStop || khsProc) return
+      if ((globalThis as any).__khsGen !== khsGen) return // handed off while we waited
       console.log('[khs] service went down — respawning')
       khsReady = ensureKhsService().catch((e: any) => console.error('[khs] respawn failed:', e?.message))
     }, 400)
@@ -357,6 +375,7 @@ async function ensureKhsService(): Promise<void> {
   // config reload dropped our khsHttpPort but the instance is still up.)
   if (alreadyUp && !needsBuild) {
     console.log('[khs] our service instance is up and current — reusing it')
+    khsReused = true
     if (!khsHttpPort || !khsHttpToken) ({ port: khsHttpPort, token: khsHttpToken } = await fetchHttpEndpointOverPipe())
     return
   }
@@ -366,6 +385,7 @@ async function ensureKhsService(): Promise<void> {
   // so the exe is unlocked (a rebuild would fail to overwrite it otherwise).
   try {
     khsManagedStop = true
+    khsReused = false // spawning our own child below — supervision is handle-based again
     if (alreadyUp) {
       console.log('[khs] stopping our existing service instance...')
       await gracefulStopKhs()
@@ -425,7 +445,21 @@ function devSqlitePlugin(): Plugin {
         console.error('[khs] failed to start service:', err.message)
       })
 
-      server.httpServer?.on('close', () => stopKhsService())
+      server.httpServer?.on('close', () => {
+        // A newer config instance exists (config-reload restart) — it already reused our
+        // service, so leave it running instead of killing it out from under the new server.
+        if ((globalThis as any).__khsGen !== khsGen) {
+          console.log('[khs] config reload — handing the service to the new dev server instance')
+          // Disarm OUR exit-handler supervisor too: it is still attached to the child, and a
+          // later exit (the service's setSeforimDbPath self-restart, or the new instance's own
+          // managed stop for a rebuild) would make THIS stale module respawn a competitor on
+          // the same pipe. The new instance supervises from here — by handle if it spawned,
+          // lazily via /khs-endpoint pipe probes if it adopted.
+          khsShuttingDown = true
+          return
+        }
+        stopKhsService()
+      })
 
       server.middlewares.use((req: any, res: any, next: any) => {
         // Endpoint discovery: the browser asks the dev server (same-origin) where our
@@ -436,16 +470,46 @@ function devSqlitePlugin(): Plugin {
         // its endpoint (the browser client retries).
         if (req.url === '/khs-endpoint') {
           res.setHeader('Cache-Control', 'no-store')
-          // Only advertise when OUR service child is actually alive — never serve a stale
+          // Only advertise when OUR service is actually alive — never serve a stale
           // port/token from a dead instance (e.g. mid-respawn, or after the crash-loop guard
           // gave up). 503 → the browser client retries until a healthy instance is back.
-          if (khsProc && khsHttpPort > 0 && khsHttpToken) {
-            res.setHeader('Content-Type', 'application/json')
-            res.end(JSON.stringify({ base: `http://${KHS_HOST}:${khsHttpPort}`, token: khsHttpToken }))
-          } else {
-            res.statusCode = 503
-            res.end('{"error":"service not ready"}')
-          }
+          // An ADOPTED instance (config-reload handoff) has no child handle, so aliveness is
+          // a pipe probe; if it died, this is also the respawn trigger — the old instance's
+          // exit-handler supervisor was disarmed at handoff, and the browser's retry loop
+          // lands here anyway, so lazy supervision costs nothing extra.
+          void (async () => {
+            let alive = khsProc != null
+            if (!alive && khsReused) {
+              alive = await khsPipeIsUp()
+              // Re-check khsReused AFTER the probe, not just before it: the browser retries
+              // this endpoint on a timer, so two requests can both pass the pre-probe check
+              // and both fail, and khsProc stays null across the whole build+spawn window —
+              // ensureKhsService's own in-flight guard would not catch the second caller, so
+              // both would reach spawnKhsExe and put two children on one pipe name. Whoever
+              // finishes the probe first flips the flag; the rest 503 and retry. Bail on a
+              // real shutdown or a stale module (post-handoff) as well — this supervisor is
+              // the adopted instance's only one, so it needs the same guards the child-exit
+              // supervisor has.
+              if (!alive && khsReused && !khsShuttingDown && (globalThis as any).__khsGen === khsGen) {
+                khsReused = false
+                khsHttpPort = 0; khsHttpToken = ''
+                console.log('[khs] adopted service went down — respawning')
+                khsReady = ensureKhsService().catch((e: any) => console.error('[khs] respawn failed:', e?.message))
+              }
+            }
+            if (alive && khsHttpPort > 0 && khsHttpToken) {
+              res.setHeader('Content-Type', 'application/json')
+              res.end(JSON.stringify({ base: `http://${KHS_HOST}:${khsHttpPort}`, token: khsHttpToken }))
+            } else {
+              res.statusCode = 503
+              res.end('{"error":"service not ready"}')
+            }
+          })().catch(() => {
+            // The probe made this handler async, so a client that aborts mid-probe leaves the
+            // socket ended and setHeader/end throw ERR_HTTP_HEADERS_SENT. Unhandled, that kills
+            // the dev server; answer if we still can, otherwise drop it.
+            if (!res.headersSent) { res.statusCode = 503; res.end('{"error":"service not ready"}') }
+          })
           return
         }
 
