@@ -52,26 +52,20 @@ defineEmits<{
 
     <!-- The path. Clicking anywhere that is not a crumb opens the field, the way
          an address bar does — the crumbs and chevrons stop their own clicks, so
-         what reaches here is the slack around them. -->
+         what reaches here is the slack around them, including the icon below. -->
     <div v-show="!showSearch" class="pill-middle pill-path" @click="$emit('openSearch')">
       <BookCatalogBreadcrumb
         :path="path"
         @navigate="$emit('navigate', $event)"
         @navigate-to-sibling="$emit('navigateToSibling', $event)"
       />
+      <!-- A picture of what the bar becomes, not a control: it sits INSIDE the
+           clickable path stretch, so clicking it opens the field the same way
+           clicking the blank space beside it does. A button would have been a
+           second way to do one thing, with its own focus and hover to keep in
+           step. -->
+      <IconSearch20Regular class="search-icon path-search-icon" />
     </div>
-
-    <template #right>
-      <button
-        v-if="!showSearch"
-        class="bar-btn pill-btn"
-        title="חיפוש"
-        @mousedown.prevent
-        @click="$emit('openSearch')"
-      >
-        <IconSearch20Regular />
-      </button>
-    </template>
   </TopSearchBar>
 </template>
 
@@ -96,6 +90,10 @@ defineEmits<{
 .pill-path {
   cursor: text;
 }
+/* Pushed to the far end of the path stretch, where the button used to be. */
+.path-search-icon {
+  margin-inline-start: auto;
+}
 /* Hidden, but still laid out and still focusable: a `display: none` input cannot
    hold DOM focus, and focus is what the whole keyboard model rests on. Collapsed
    to zero width with no visible ink instead. */
@@ -113,16 +111,14 @@ defineEmits<{
   min-width: 0;
   direction: rtl;
 }
-/* The magnifier is a hint for a field nobody is using yet; once focused it gives
-   its width back to the text. `:focus-within` reads that straight off the DOM. */
+/* Always shown, on both faces: it is what marks the bar as a search bar, and the
+   field has room for it. (It used to hide on focus to buy width back for the text,
+   from when the bar was cramped enough for that to matter.) */
 .search-icon {
   flex-shrink: 0;
   width: 14px;
   height: 14px;
   color: var(--text-secondary);
-}
-.pill-middle:focus-within .search-icon {
-  display: none;
 }
 /* The pill's buttons take its scale, not the title bar's — the same 20px the
    full-text-search bar gives its own in-pill buttons, both sitting in a 30px
