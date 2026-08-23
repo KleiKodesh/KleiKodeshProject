@@ -38,7 +38,7 @@
             </DataTemplate>
 
             <!-- History list item container — hover + click matching OfficeComboItem -->
-            <Style x:Key="HistoryItemContainerStyle" TargetType="ListBoxItem">
+            <Style x:Key="HistoryItemContainerStyle" TargetType="ListBoxItem" BasedOn="{StaticResource ThemedControl}">
                 <Setter Property="Padding"         Value="8,5"/>
                 <Setter Property="FontFamily"      Value="Segoe UI"/>
                 <Setter Property="FontSize"        Value="12"/>

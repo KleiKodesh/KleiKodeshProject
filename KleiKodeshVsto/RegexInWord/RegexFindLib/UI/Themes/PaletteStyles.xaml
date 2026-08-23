@@ -1,9 +1,13 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:local="clr-namespace:RegexFindLib.UI">
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+
 
     <!-- ── SnippetBlock — justified text with match highlighted ─────────── -->
-    <Style TargetType="local:SnippetBlock">
+    <Style TargetType="local:SnippetBlock" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Foreground"
                 Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
         <Setter Property="Template">
@@ -63,7 +67,7 @@
     </DataTemplate>
 
     <!-- ── RegexPalettePanel ─────────────────────────────────────────────── -->
-    <Style TargetType="local:RegexPalettePanel">
+    <Style TargetType="local:RegexPalettePanel" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="local:RegexPalettePanel">

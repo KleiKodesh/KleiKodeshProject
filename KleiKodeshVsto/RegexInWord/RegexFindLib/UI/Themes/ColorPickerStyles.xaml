@@ -4,6 +4,7 @@
                     xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib">
 
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
     </ResourceDictionary.MergedDictionaries>
@@ -38,7 +39,7 @@
     </DataTemplate>
 
     <!-- ── ColorPickerButton ─────────────────────────────────────────────── -->
-    <Style TargetType="local:ColorPickerButton">
+    <Style TargetType="local:ColorPickerButton" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Width"  Value="26"/>
         <Setter Property="Height" Value="26"/>
         <Setter Property="Cursor" Value="Hand"/>
