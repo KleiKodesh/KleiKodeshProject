@@ -2,6 +2,7 @@
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
@@ -60,7 +61,7 @@
     </Style>
 
     <!-- ── Result list item — hover/pressed/selected ────────────── -->
-    <Style x:Key="ResultItem" TargetType="ListBoxItem">
+    <Style x:Key="ResultItem" TargetType="ListBoxItem" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Padding"         Value="8,5"/>
         <Setter Property="Background"      Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>

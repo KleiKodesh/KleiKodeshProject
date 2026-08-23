@@ -3,12 +3,13 @@
                     xmlns:local="clr-namespace:RegexFindLib.UI"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
 
     <!-- ── SpinnerTextBox ──────────────────────────────────────────────── -->
-    <Style TargetType="local:SpinnerTextBox">
+    <Style TargetType="local:SpinnerTextBox" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Height" Value="28"/>
         <Setter Property="FlowDirection" Value="RightToLeft"/>
         <Setter Property="Template">
