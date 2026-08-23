@@ -23,10 +23,14 @@
 
     <!-- Heading above a group of controls. -->
     <Style x:Key="SectionLabel" TargetType="TextBlock" BasedOn="{StaticResource OfficeTextBlock}">
-        <Setter Property="FontSize"   Value="{StaticResource FontSizeSmall}"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Opacity"    Value="0.75"/>
-        <Setter Property="Margin"     Value="0,0,0,4"/>
+        <Setter Property="FontSize"     Value="{StaticResource FontSizeSmall}"/>
+        <Setter Property="FontWeight"   Value="SemiBold"/>
+        <Setter Property="Opacity"      Value="0.75"/>
+        <Setter Property="Margin"       Value="0,0,0,4"/>
+        <!-- Task panes are narrow. A section label that cannot wrap is a
+             section label that gets clipped, which is what Nakdan had found
+             out for itself before its copy of this was folded back in here. -->
+        <Setter Property="TextWrapping" Value="Wrap"/>
     </Style>
 
     <!-- De-emphasised text: hints, counts, captions. -->
