@@ -89,16 +89,6 @@ provide(PANE_NAVIGATION_KEY, {
      side padding based on THIS pane's width, not the whole viewport — matters
      for split-shell where each pane is only part of the window. */
   container: app-shell / inline-size;
-  /* Edge-style content panel: inset into the shared chrome surface by a small
-     margin on the sides and bottom, so the rounded border clearly frames the
-     page on all visible edges. The top has no margin — the chrome flows
-     straight from the title bar into the panel with no separator line. */
-  /* The inset/border/radius are driven by CSS vars the settings store sets in
-     applyCSSVariables — turning the "content border" setting off zeroes them so
-     the content fills flush (and the title bar restores its own divider). */
-  margin: 0 var(--content-inset, 3px) var(--content-inset, 3px);
-  border: var(--content-border-width, 1px) solid var(--border-color);
-  border-radius: var(--content-border-radius, 8px);
   background: var(--bg-primary);
 }
 </style>

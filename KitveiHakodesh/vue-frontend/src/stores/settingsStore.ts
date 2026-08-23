@@ -57,7 +57,6 @@ const KEYS = {
   SETTINGS_SHOW_CLOCK: 'app.showClock',
   SETTINGS_SETUP_DONE: 'app.setupDone',
   SETTINGS_COMPACT_MODE: 'app.compactMode',
-  SETTINGS_CONTENT_BORDER: 'app.contentBorder',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
   // One per pane: a pane is a whole shell with its own tabs and its own chrome, so its
   // rail is its own state and its own stored value. Pane 1 keeps the original key so an
@@ -152,7 +151,6 @@ const DEFAULTS = {
   commentaryMaxWidth: 0,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   compactMode: true,
-  contentBorder: false,
   // Scrollbars completely hidden except while scrolling. The DOM effect (root
   // class + per-element scroll activity tracking) is owned by
   // useUiChromeVisibility, not this store.
@@ -236,7 +234,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const compactMode = ref(DEFAULTS.compactMode)
-  const contentBorder = ref(DEFAULTS.contentBorder)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
   // Per-pane rail visibility. Each pane owns its own: toggling one never moves the other,
   // and each persists separately, like every other per-pane value.
@@ -311,11 +308,6 @@ export const useSettingsStore = defineStore('settings', () => {
     style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     document.documentElement.setAttribute('data-density', compactMode.value ? 'compact' : 'normal')
-    // Content-border toggle — zero the inset/border/radius when off so the content fills
-    // flush; the app-shell / nav-sidebar CSS reads these vars.
-    style.setProperty('--content-inset', contentBorder.value ? '3px' : '0px')
-    style.setProperty('--content-border-width', contentBorder.value ? '1px' : '0px')
-    style.setProperty('--content-border-radius', contentBorder.value ? '8px' : '0px')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
@@ -400,7 +392,6 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
-    loadSetting(KEYS.SETTINGS_CONTENT_BORDER, contentBorder)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     const navSidebar1 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR)
     if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
@@ -456,7 +447,6 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
-  persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   // Watched deeply because the two panes share one object; each writes its own key.
   watch(
@@ -599,7 +589,6 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     compactMode.value = DEFAULTS.compactMode
-    contentBorder.value = DEFAULTS.contentBorder
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     navSidebarVisibleByPane.value = {
       1: DEFAULTS.navSidebarVisible,
@@ -635,7 +624,6 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth,
     titleBarHiddenButtons,
     compactMode,
-    contentBorder,
     scrollbarsHidden,
     navSidebarVisibleByPane,
     getNavSidebarVisible,
