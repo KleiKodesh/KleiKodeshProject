@@ -46,6 +46,15 @@ namespace WpfLib.Gallery
             AttachConsole(-1);   // a WinExe has no console of its own; borrow the caller's
             Console.WriteLine("WpfLib palette benchmark - " + count + " of each control");
 
+            // Keys the panes rely on. A missing or misspelled key is a silent
+            // fallback to the WPF default at runtime, which compiles happily and
+            // then looks wrong in exactly one pane nobody has opened yet.
+            var palette = new ResourceDictionary { Source = new Uri(PaletteUri) };
+            foreach (var key in new[] { "Card", "GroupHeader", "SectionLabel", "ActionButton",
+                                        "OfficeCheckBox", "OfficeRadioButton", "OfficeSeparator" })
+                Console.WriteLine("  key {0,-18} {1}", key,
+                    palette.Contains(key) ? "resolves" : "MISSING");
+
             _bare = MakeHost(null);
             _themed = MakeHost(new ResourceDictionary { Source = new Uri(PaletteUri) });
 

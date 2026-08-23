@@ -72,4 +72,19 @@
         </Style.Triggers>
     </Style>
 
+    <!--
+        GroupHeader - the heading over a group of settings.
+
+        Distinct from SectionLabel above and both are needed. SectionLabel is a
+        small dimmed caption naming one field; this is the larger, undimmed
+        heading naming a whole group of them. Using SectionLabel for both
+        flattens the hierarchy, which is what the settings pane looked like
+        before it had this.
+    -->
+    <Style x:Key="GroupHeader" TargetType="TextBlock" BasedOn="{StaticResource OfficeTextBlock}">
+        <Setter Property="FontSize"     Value="{StaticResource FontSizeLarge}"/>
+        <Setter Property="FontWeight"   Value="SemiBold"/>
+        <Setter Property="TextWrapping" Value="Wrap"/>
+    </Style>
+
 </ResourceDictionary>
