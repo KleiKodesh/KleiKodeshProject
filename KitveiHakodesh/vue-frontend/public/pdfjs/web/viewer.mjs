@@ -15464,14 +15464,22 @@ class PDFViewer {
         console.error(`scrollPageIntoView: "${destArray[1].name}" is not a valid destination type.`);
         return;
     }
-    // PATCH: preserve the current zoom on every destination jump. These Hebrew
-    // (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and outline
-    // destinations, so PDF.js was snapping to page-fit on reload and on TOC/
-    // outline clicks (scroll and thumbnail nav were unaffected — they carry no
-    // destArray). Forcing ignoreDestinationZoom here jumps to the right page but
-    // keeps whatever scale the user set. We only adopt a scale when none exists
-    // yet (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
-    const ignoreZoom = true; // was: !ignoreDestinationZoom
+    // PATCH: preserve the current zoom on NAMED-fit destination jumps. These
+    // Hebrew (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and
+    // outline destinations, so PDF.js was snapping to page-fit on reload and on
+    // TOC/outline clicks (scroll and thumbnail nav were unaffected — they carry
+    // no destArray). Ignoring those jumps to the right page but keeps whatever
+    // scale the user set. We only adopt a scale when none exists yet
+    // (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
+    //
+    // An EXPLICIT numeric zoom is a different thing and must still be honoured:
+    // that is how session restore replays the saved zoom (ViewHistory builds
+    // "zoom=<percent>,<left>,<top>", which arrives here as an XYZ destination
+    // with destArray[4] set to a number). Swallowing it too made the viewer
+    // reopen at "auto" every time a tab was revisited or the app restarted —
+    // and the resulting "auto" was then written back over the stored zoom.
+    // Named fits ("page-fit"/"page-width"/"page-height") stay suppressed.
+    const ignoreZoom = typeof scale !== "number" || !(scale > 0); // was: !ignoreDestinationZoom
     if (!ignoreZoom) {
       if (scale && scale !== this._currentScale) {
         this.currentScaleValue = scale;
@@ -19025,7 +19033,14 @@ const PDFViewerApplication = {
           rotation,
           sidebarView,
           scrollMode,
-          spreadMode
+          spreadMode,
+          // PATCH: hand the restored zoom over explicitly. A NAMED preset
+          // ("page-width"/"page-height"/"page-actual"/"page-fit") survives
+          // ViewHistory as a string and would otherwise reach
+          // scrollPageIntoView looking exactly like the "/Fit" zoom our ABBYY
+          // PDFs bake into their destinations — which we deliberately ignore.
+          // Applying it directly sidesteps that collision entirely.
+          restoredZoom: stored?.page && viewOnLoad !== ViewOnLoad.INITIAL ? zoom || stored.zoom : zoom || null
         });
         this.eventBus.dispatch("documentinit", {
           source: this
@@ -19282,7 +19297,8 @@ const PDFViewerApplication = {
     rotation,
     sidebarView,
     scrollMode,
-    spreadMode
+    spreadMode,
+    restoredZoom = null
   } = {}) {
     const setRotation = angle => {
       if (isValidRotation(angle)) {
@@ -19300,6 +19316,23 @@ const PDFViewerApplication = {
     this.isInitialViewSet = true;
     this.viewsManager?.setInitialView(sidebarView);
     setViewerModes(scrollMode, spreadMode);
+    // PATCH: restore the saved zoom directly. Numeric zooms also travel inside
+    // storedHash and would be applied by scrollPageIntoView, but named presets
+    // cannot — they are indistinguishable there from the "/Fit" zoom baked into
+    // our ABBYY PDFs' destinations, which scrollPageIntoView deliberately
+    // ignores. Setting it here covers both kinds and runs before the jump, so
+    // the subsequent scroll lands at the right offset for the restored scale.
+    if (restoredZoom) {
+      // ViewHistory stores a PERCENTAGE (150) but currentScaleValue wants a
+      // ratio ("1.5"); a named preset ("page-width", "auto", ...) is passed
+      // through untouched. Match the number strictly rather than leaning on
+      // parseFloat, which would read a malformed preference like "1,5" as 1
+      // and silently apply a 1% zoom. Anything else falls through as a preset
+      // name, and an unrecognised one lands on setInitialView's own "auto"
+      // fallback below.
+      const numericZoom = typeof restoredZoom === "number" ? restoredZoom : /^\d*\.?\d+%?$/.test(String(restoredZoom).trim()) ? parseFloat(restoredZoom) : NaN;
+      this.pdfViewer.currentScaleValue = Number.isFinite(numericZoom) && numericZoom > 0 ? String(numericZoom / 100) : String(restoredZoom);
+    }
     if (this.initialBookmark) {
       setRotation(this.initialRotation);
       delete this.initialRotation;
