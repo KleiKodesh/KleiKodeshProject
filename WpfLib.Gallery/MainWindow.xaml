@@ -113,6 +113,18 @@
                         <ComboBox IsEditable="True" Tag="placeholder from Tag" Width="300"
                                   HorizontalAlignment="Left" Margin="0,0,0,12"/>
                         <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,4"
+                                   Text="Type-to-filter: focus it and type, the list narrows as you go."/>
+                        <ComboBox IsEditable="True" Width="300" HorizontalAlignment="Left"
+                                  Margin="0,0,0,12"
+                                  Tag="type to filter"
+                                  kk:ComboBoxFilter.IsEnabled="True">
+                            <ComboBoxItem Content="Aleph"/>
+                            <ComboBoxItem Content="Bet"/>
+                            <ComboBoxItem Content="Gimel"/>
+                            <ComboBoxItem Content="Dalet"/>
+                            <ComboBoxItem Content="He"/>
+                        </ComboBox>
+                        <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,4"
                                    Text="WpfLib's own controls, reached through the kk: namespace:"/>
                         <StackPanel Orientation="Horizontal">
                             <kk:UpDownTextBox Value="12" Width="70" Margin="0,0,8,0"/>

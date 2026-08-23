@@ -26,7 +26,6 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
-    <!-- UIAutomation must be driven from an STA thread. -->
     <RunSettingsFilePath>$(MSBuildProjectDirectory)\xunit.runsettings</RunSettingsFilePath>
   </PropertyGroup>
 
@@ -40,6 +39,8 @@
 
   <ItemGroup>
     <!-- Build the gallery first so the exe under test is always current. -->
+    <ProjectReference Include="..\WpfLib\WpfLib.csproj"
+                      SetTargetFramework="TargetFramework=net10.0-windows" />
     <ProjectReference Include="..\WpfLib.Gallery\WpfLib.Gallery.csproj"
                       ReferenceOutputAssembly="false"
                       SetTargetFramework="TargetFramework=net48" />

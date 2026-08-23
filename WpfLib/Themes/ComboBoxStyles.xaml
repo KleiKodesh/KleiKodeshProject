@@ -1,6 +1,7 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
@@ -13,7 +14,7 @@
     -->
 
     <!-- ── ComboBoxItem (shared by all ComboBox styles) ─────────── -->
-    <Style x:Key="OfficeComboItem" TargetType="ComboBoxItem">
+    <Style x:Key="OfficeComboItem" TargetType="ComboBoxItem" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Padding"         Value="8,5"/>
         <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
         <Setter Property="FontSize"        Value="{StaticResource FontSizeNormal}"/>
@@ -102,6 +103,44 @@
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="24"/>
                                 </Grid.ColumnDefinitions>
+                                <!--
+                                    The toggle spans the whole box and sits behind
+                                    everything else, so a click anywhere opens the
+                                    list rather than only a click on the chevron.
+
+                                    ContentSite and the placeholder are not hit
+                                    testable, so their clicks fall through to it.
+                                    PART_EditableTextBox IS hit testable and covers
+                                    column 0, so on an editable box the text area
+                                    takes the caret and only the chevron column
+                                    reaches the toggle. That is the behaviour you
+                                    want from a combo you can type into.
+                                -->
+                                <ToggleButton Grid.Column="0" Grid.ColumnSpan="2"
+                                              IsChecked="{Binding IsDropDownOpen,
+                                                  RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                              Background="Transparent" BorderThickness="0"
+                                              Focusable="False" ClickMode="Press" Cursor="Hand"
+                                              VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                                    <ToggleButton.Template>
+                                        <ControlTemplate TargetType="ToggleButton">
+                                            <Border Background="Transparent"
+                                                    VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
+                                                <Path Data="M4 6L8 10L12 6"
+                                                      HorizontalAlignment="Right"
+                                                      Margin="0,0,7,0"
+                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}" StrokeThickness="1.5"
+                                                      StrokeLineJoin="Round"
+                                                      StrokeStartLineCap="Round"
+                                                      StrokeEndLineCap="Round"
+                                                      Width="10" Height="6"
+                                                      Stretch="Uniform"
+                                                      VerticalAlignment="Center"
+                                                      FlowDirection="LeftToRight"/>
+                                            </Border>
+                                        </ControlTemplate>
+                                    </ToggleButton.Template>
+                                </ToggleButton>
                                 <ContentPresenter x:Name="ContentSite" Grid.Column="0"
                                                   Content="{TemplateBinding SelectionBoxItem}"
                                                   ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
@@ -131,30 +170,6 @@
                                          VerticalContentAlignment="Center"
                                          Visibility="Hidden"
                                          IsReadOnly="{TemplateBinding IsReadOnly}"/>
-                                <ToggleButton Grid.Column="1"
-                                              IsChecked="{Binding IsDropDownOpen,
-                                                  RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
-                                              Background="Transparent" BorderThickness="0"
-                                              Focusable="False" ClickMode="Press" Cursor="Hand"
-                                              VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
-                                    <ToggleButton.Template>
-                                        <ControlTemplate TargetType="ToggleButton">
-                                            <Border Background="Transparent"
-                                                    VerticalAlignment="Stretch" HorizontalAlignment="Stretch">
-                                                <Path Data="M4 6L8 10L12 6"
-                                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ComboBox}}" StrokeThickness="1.5"
-                                                      StrokeLineJoin="Round"
-                                                      StrokeStartLineCap="Round"
-                                                      StrokeEndLineCap="Round"
-                                                      Width="10" Height="6"
-                                                      Stretch="Uniform"
-                                                      HorizontalAlignment="Center"
-                                                      VerticalAlignment="Center"
-                                                      FlowDirection="LeftToRight"/>
-                                            </Border>
-                                        </ControlTemplate>
-                                    </ToggleButton.Template>
-                                </ToggleButton>
                             </Grid>
                         </Border>
                         <Popup x:Name="PART_Popup"
@@ -171,22 +186,34 @@
                                 binding produced null and the popup painted
                                 BLACK, text and all.
 
-                                A popup has to be opaque on its own. System
-                                colours are the only self-sufficient source
-                                here: always solid, and they follow the OS
-                                light or dark setting. Foreground is pinned to
-                                the matching system brush so the two can never
-                                disagree, which is what made it unreadable.
+                                A popup has to state its colours; it cannot
+                                borrow them through a tree it is not in. It
+                                mirrors the host through the same
+                                PriorityBinding the controls use, so the list
+                                matches the Office theme. System colours were
+                                the first attempt and were wrong for exactly
+                                that reason: they follow Windows, not Office,
+                                so a dark pane got a white list.
                             -->
-                            <Border Background="{x:Static SystemColors.WindowBrush}"
-                                    TextElement.Foreground="{x:Static SystemColors.WindowTextBrush}"
-                                    BorderBrush="#50808080"
+                            <Border BorderBrush="#50808080"
                                     BorderThickness="1"
                                     CornerRadius="4"
                                     Padding="0,3"
                                     Margin="0,4,0,0"
                                     MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}"
                                     MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <Border.Background>
+                                    <PriorityBinding>
+                                        <Binding Path="Background" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        <Binding Path="Background" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    </PriorityBinding>
+                                </Border.Background>
+                                <TextElement.Foreground>
+                                    <PriorityBinding>
+                                        <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                        <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                    </PriorityBinding>
+                                </TextElement.Foreground>
                                 <ScrollViewer SnapsToDevicePixels="True" CanContentScroll="True">
                                     <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"
                                                     VirtualizingPanel.IsVirtualizing="True"
