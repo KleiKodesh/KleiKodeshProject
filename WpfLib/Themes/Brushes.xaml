@@ -1,5 +1,8 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+                    xmlns:po="http://schemas.microsoft.com/winfx/2006/xaml/presentation/options"
+                    mc:Ignorable="po">
     <!--
         Adaptive color tokens — work with any Office theme (light, dark, black).
 
@@ -11,28 +14,43 @@
         are visible on both light and dark themes.
     -->
 
+    <!--
+        po:Freeze is here for sharing, not for speed.
+
+        Measured with the gallery benchmark, freezing these changed timings by
+        nothing at all, so do not expect it to make anything faster. What it
+        does do is make the brushes immutable. Every pane in the suite merges
+        this file and gets the SAME nineteen brush objects; unfrozen, one pane
+        that assigns to a brush Color changes the colour everywhere at once,
+        including in panes it has never heard of. Frozen, that is an exception
+        at the point of the mistake instead of a colour bug somewhere else.
+
+        They are not frozen otherwise: the benchmark reports 0 of 19 frozen
+        without this attribute, so BAML is not doing it for us.
+    -->
+
     <!-- Background overlays -->
-    <SolidColorBrush x:Key="BgSecBrush"    Color="#0F808080"/>  <!-- ~6%  -->
-    <SolidColorBrush x:Key="BgTerBrush"    Color="#1A808080"/>  <!-- ~10% -->
-    <SolidColorBrush x:Key="HoverBrush"    Color="#0A808080"/>  <!-- ~4%  -->
-    <SolidColorBrush x:Key="PressedBrush"  Color="#14808080"/>  <!-- ~8%  -->
-    <SolidColorBrush x:Key="BorderBrush"   Color="#50808080"/>  <!-- ~31% -->
-    <SolidColorBrush x:Key="BorderStrong"  Color="#80808080"/>  <!-- ~50% -->
+    <SolidColorBrush po:Freeze="True" x:Key="BgSecBrush"    Color="#0F808080"/>  <!-- ~6%  -->
+    <SolidColorBrush po:Freeze="True" x:Key="BgTerBrush"    Color="#1A808080"/>  <!-- ~10% -->
+    <SolidColorBrush po:Freeze="True" x:Key="HoverBrush"    Color="#0A808080"/>  <!-- ~4%  -->
+    <SolidColorBrush po:Freeze="True" x:Key="PressedBrush"  Color="#14808080"/>  <!-- ~8%  -->
+    <SolidColorBrush po:Freeze="True" x:Key="BorderBrush"   Color="#50808080"/>  <!-- ~31% -->
+    <SolidColorBrush po:Freeze="True" x:Key="BorderStrong"  Color="#80808080"/>  <!-- ~50% -->
 
     <!-- Accent — fixed, contrasts on both light and dark -->
-    <SolidColorBrush x:Key="AccentBrush"   Color="#0078D4"/>
-    <SolidColorBrush x:Key="AccentHover"   Color="#106EBE"/>
-    <SolidColorBrush x:Key="AccentPressed" Color="#005A9E"/>
+    <SolidColorBrush po:Freeze="True" x:Key="AccentBrush"   Color="#0078D4"/>
+    <SolidColorBrush po:Freeze="True" x:Key="AccentHover"   Color="#106EBE"/>
+    <SolidColorBrush po:Freeze="True" x:Key="AccentPressed" Color="#005A9E"/>
 
     <!-- Selected state — light blue tint, works on light and dark -->
-    <SolidColorBrush x:Key="SelectedBrush" Color="#3300B4FF"/>  <!-- 20% accent blue -->
+    <SolidColorBrush po:Freeze="True" x:Key="SelectedBrush" Color="#3300B4FF"/>  <!-- 20% accent blue -->
 
     <!-- Secondary text — 60% opacity mid-gray -->
-    <SolidColorBrush x:Key="TextSecBrush"  Color="#99808080"/>
+    <SolidColorBrush po:Freeze="True" x:Key="TextSecBrush"  Color="#99808080"/>
 
     <!-- Selected AND hovered — a shade brighter, so a selected row keeps
          reading as selected under the cursor instead of losing its fill. -->
-    <SolidColorBrush x:Key="SelectedHoverBrush" Color="#4400B4FF"/>
+    <SolidColorBrush po:Freeze="True" x:Key="SelectedHoverBrush" Color="#4400B4FF"/>
 
     <!-- ── Popup surface ──────────────────────────────────────────────
          Deliberately NOT overlays. Everything above is a mid-gray wash that
@@ -40,17 +58,17 @@
          in its own HwndSource with nothing behind it, so it has to be opaque
          and state its own colours. ToolTip and the menus use these.
     -->
-    <SolidColorBrush x:Key="PopupBrush"       Color="#FF2B2B2B"/>
-    <SolidColorBrush x:Key="PopupBorderBrush" Color="#FF3F3F3F"/>
-    <SolidColorBrush x:Key="PopupTextBrush"   Color="#FFF0F0F0"/>
-    <SolidColorBrush x:Key="PopupHoverBrush"  Color="#22FFFFFF"/>
+    <SolidColorBrush po:Freeze="True" x:Key="PopupBrush"       Color="#FF2B2B2B"/>
+    <SolidColorBrush po:Freeze="True" x:Key="PopupBorderBrush" Color="#FF3F3F3F"/>
+    <SolidColorBrush po:Freeze="True" x:Key="PopupTextBrush"   Color="#FFF0F0F0"/>
+    <SolidColorBrush po:Freeze="True" x:Key="PopupHoverBrush"  Color="#22FFFFFF"/>
 
     <!-- ── Scrollbar thumb ────────────────────────────────────────────
          Its own ramp, heavier than the hover/pressed pair above, because a
          thumb has to read as a solid object rather than as a wash.
     -->
-    <SolidColorBrush x:Key="ScrollThumbBrush"        Color="#4D808080"/>
-    <SolidColorBrush x:Key="ScrollThumbHoverBrush"   Color="#66808080"/>
-    <SolidColorBrush x:Key="ScrollThumbDragBrush"    Color="#80808080"/>
+    <SolidColorBrush po:Freeze="True" x:Key="ScrollThumbBrush"        Color="#4D808080"/>
+    <SolidColorBrush po:Freeze="True" x:Key="ScrollThumbHoverBrush"   Color="#66808080"/>
+    <SolidColorBrush po:Freeze="True" x:Key="ScrollThumbDragBrush"    Color="#80808080"/>
 
 </ResourceDictionary>
