@@ -122,17 +122,7 @@
                         <ItemsControl ItemsSource="{Binding Styles}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Background="Transparent" Cursor="Hand">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Background" Value="Transparent"/>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
+                                    <Border Style="{StaticResource HoverRow}">
                                         <CheckBox Content="{Binding DisplayName}"
                                                   IsChecked="{Binding IsIgnored, Mode=TwoWay}"
                                                   Padding="4,0"

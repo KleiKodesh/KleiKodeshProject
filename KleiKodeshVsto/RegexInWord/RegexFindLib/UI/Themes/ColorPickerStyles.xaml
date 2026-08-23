@@ -6,6 +6,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/containerstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
@@ -118,17 +119,7 @@
 
                                     <!-- Auto / No color -->
                                     <UniformGrid Columns="2" Margin="0,0,0,4">
-                                        <Border Height="28" Cursor="Hand" Margin="1">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="Transparent"/>
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
+                                        <Border Style="{StaticResource HoverRow}" Height="28" Margin="1">
                                             <Border.InputBindings>
                                                 <MouseBinding MouseAction="LeftClick"
                                                               Command="{Binding SelectAutoColorCommand,
@@ -146,17 +137,7 @@
                                                            Foreground="{Binding Foreground, RelativeSource={RelativeSource TemplatedParent}}"/>
                                             </StackPanel>
                                         </Border>
-                                        <Border Height="28" Cursor="Hand" Margin="1">
-                                            <Border.Style>
-                                                <Style TargetType="Border">
-                                                    <Setter Property="Background" Value="Transparent"/>
-                                                    <Style.Triggers>
-                                                        <Trigger Property="IsMouseOver" Value="True">
-                                                            <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                        </Trigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </Border.Style>
+                                        <Border Style="{StaticResource HoverRow}" Height="28" Margin="1">
                                             <Border.InputBindings>
                                                 <MouseBinding MouseAction="LeftClick"
                                                               Command="{Binding SelectNoColorCommand,
@@ -213,17 +194,7 @@
                                     <Separator Opacity="0.4" Margin="0,4,0,2"/>
 
                                     <!-- More colors -->
-                                    <Border Height="28" Cursor="Hand">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Background" Value="Transparent"/>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
+                                    <Border Style="{StaticResource HoverRow}" Height="28">
                                         <Border.InputBindings>
                                             <MouseBinding MouseAction="LeftClick"
                                                           Command="{Binding OpenNativePickerCommand,
