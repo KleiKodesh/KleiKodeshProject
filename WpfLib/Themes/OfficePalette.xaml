@@ -41,6 +41,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/WpfLib;component/themes/tokens.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/popupstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>

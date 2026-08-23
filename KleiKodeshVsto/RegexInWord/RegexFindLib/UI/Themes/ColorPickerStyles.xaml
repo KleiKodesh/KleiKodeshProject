@@ -93,10 +93,27 @@
                                PlacementTarget="{Binding ElementName=PART_Button}"
                                Placement="Bottom"
                                StaysOpen="False"
-                               AllowsTransparency="False">
-                            <Border Background="{TemplateBinding Background}"
-                                    BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                               AllowsTransparency="True"
+                               VerticalOffset="4">
+                            <!-- Inlined rather than PopupSurface, and #50808080 rather than
+                                 the BorderBrush resource it used to reference: this Popup is
+                                 inside a ControlTemplate, where a StaticResource throws once
+                                 the template is instantiated in another HwndSource. -->
+                            <Border CornerRadius="4"
+                                    BorderBrush="#50808080" BorderThickness="1"
                                     MinWidth="220" Padding="6">
+                                    <Border.Background>
+                                        <PriorityBinding>
+                                            <Binding Path="Background" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                            <Binding Path="Background" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </PriorityBinding>
+                                    </Border.Background>
+                                    <TextElement.Foreground>
+                                        <PriorityBinding>
+                                            <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                                            <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                        </PriorityBinding>
+                                    </TextElement.Foreground>
                                 <StackPanel>
 
                                     <!-- Auto / No color -->
