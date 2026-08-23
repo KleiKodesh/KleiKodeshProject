@@ -94,20 +94,46 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // the progress file on the next service start.
             if (_buildStarted) return;
 
-            // Provenance check. fts.ver records the change-STAMP of the seforim DB the
-            // index was built from (Common.DbChangeStamp — path + content-free file
-            // metadata), written on build COMPLETION. fts.src records the same stamp at
-            // build START, so an interrupted build still carries provenance. If any index
-            // state exists (segments or a build.progress watermark) and its recorded stamp
-            // doesn't match the current DB — or there is no stamp at all (legacy
-            // interrupted build) — the state belongs to a different/unknown database and
-            // resuming it would permanently skip every line below the old watermark
-            // (2026-07-28 incident: a DB swap under an incomplete build left the whole
+            // Provenance check. fts.ver records the CONTENT stamp of the seforim DB the
+            // index was built from (Common.DbContentStamp — the rows, not the file),
+            // written on build COMPLETION. fts.src records the same stamp at build START,
+            // so an interrupted build still carries provenance. If any index state exists
+            // (segments or a build.progress watermark) and its recorded stamp doesn't
+            // match the current DB — or there is no stamp at all (legacy interrupted
+            // build) — the state belongs to a different/unknown database and resuming it
+            // would permanently skip every line below the old watermark (2026-07-28
+            // incident: a DB swap under an incomplete build left the whole
             // chumash-parshanut corpus unsearchable). Wipe and rebuild.
+            //
+            // This used to use DbChangeStamp, which answers "did anything touch the file?"
+            // — including a rewrite that changed no row. That turned every launch into a
+            // rebuild for users whose DB gets touched on open, and its USN/file-id fields
+            // made it permanent (they never return to a previous value).
             string verFile = Path.Combine(_indexPath, "fts.ver");
-            string currentStamp = Common.DbChangeStamp.Compute(_dbPath!, FtsVersion);
+            string currentStamp = Common.DbContentStamp.Compute(_dbPath!, FtsVersion);
             string? recordedStamp = ReadStamp(verFile) ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
             bool hasIndexState = SegmentsExist() || File.Exists(Path.Combine(_indexPath, "build.progress"));
+
+            // A stamp in the older STAMP FORMAT cannot be compared against a current one;
+            // it would always look like a different DB and wipe a good index once per
+            // format change. A COMPLETED build (fts.ver + segments, no watermark to resume
+            // from) is kept and re-stamped on its next build. Anything resumable is still
+            // wiped: resuming needs positive proof the watermark belongs to this DB.
+            //
+            // Note this covers only an unreadable stamp FORMAT, never a changed FtsVersion
+            // — a bumped FtsVersion means the segment format changed and MUST rebuild, so
+            // it falls through to the mismatch check below. No stamp at all (null) is also
+            // not "legacy": it stays null and the mismatch check wipes, as before.
+            bool completedBuild = File.Exists(verFile) && SegmentsExist()
+                               && !File.Exists(Path.Combine(_indexPath, "build.progress"));
+            if (Common.DbContentStamp.IsLegacy(recordedStamp) && completedBuild)
+            {
+                logger.LogInformation(
+                    "FTS provenance stamp is an older format (recorded={Recorded}) — keeping the completed index",
+                    recordedStamp);
+                recordedStamp = currentStamp; // unverifiable, but not evidence of a different DB
+            }
+
             if (hasIndexState && !string.Equals(recordedStamp, currentStamp, StringComparison.OrdinalIgnoreCase))
             {
                 logger.LogInformation(
@@ -153,7 +179,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             try
             {
                 File.WriteAllText(Path.Combine(_indexPath, "fts.src"),
-                    Common.DbChangeStamp.Compute(_dbPath!, FtsVersion));
+                    Common.DbContentStamp.Compute(_dbPath!, FtsVersion));
             }
             catch (Exception ex) { logger.LogError(ex, "FTS fts.src write failed"); }
             var index = GetIndex();
@@ -220,7 +246,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                 // Record the source-DB change stamp so any later DB change (switch,
                 // edit, or replacement) invalidates this index on the next start.
                 File.WriteAllText(Path.Combine(_indexPath, "fts.ver"),
-                    Common.DbChangeStamp.Compute(_dbPath!, FtsVersion));
+                    Common.DbContentStamp.Compute(_dbPath!, FtsVersion));
                 try { index.DeleteBuildProgressFile(); } catch { }
                 _pct = 100.0;
                 _isReady = true;
@@ -269,9 +295,12 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         string? builtFrom = ReadStamp(Path.Combine(_indexPath, "fts.ver"))
                          ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
         if (builtFrom == null) return false;
+        // An older-format stamp is not comparable — reading it as "changed" here would
+        // wipe and rebuild a live index. EnsureIndexing already re-stamps on the next build.
+        if (Common.DbContentStamp.IsLegacy(builtFrom)) return false;
 
         string current;
-        try { current = Common.DbChangeStamp.Compute(_dbPath!, FtsVersion); } catch { return false; }
+        try { current = Common.DbContentStamp.Compute(_dbPath!, FtsVersion); } catch { return false; }
         if (string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase))
             return false; // unchanged
 
