@@ -10,6 +10,12 @@ namespace WebSitesDemo
         /// </summary>
         protected override void OnStartup(StartupEventArgs e)
         {
+            if (KleiKodesh.DemoShared.PaneTiming.TryTime(e.Args, () => new MainWindow()))
+            {
+                Shutdown(0);
+                return;
+            }
+
             if (KleiKodesh.DemoShared.PaneSnapshot.TryRender(e.Args, () => new MainWindow()))
             {
                 Shutdown(0);
