@@ -31,37 +31,38 @@
         </Style.Resources>
     </Style>
 
-    <!-- ── Increase / Decrease repeat buttons ────────────────────── -->
-    <Style x:Key="IncreaseButton" TargetType="RepeatButton">
-        <Setter Property="ToolTip"          Value="הגדל"/>
+    <!--
+         StepButton - the look. Increase/Decrease add only their icon, which is
+         the one thing that actually differs between them; everything else was
+         the same eight setters written out twice.
+    -->
+    <Style x:Key="StepButton" TargetType="RepeatButton">
         <Setter Property="Margin"           Value="0"/>
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="MinWidth"         Value="{Binding ActualHeight, RelativeSource={RelativeSource Self}}"/>
+    </Style>
+
+    <Style x:Key="IncreaseButton" TargetType="RepeatButton" BasedOn="{StaticResource StepButton}">
+        <Setter Property="ToolTip" Value="הגדל"/>
         <Style.Resources>
             <Style TargetType="Path" BasedOn="{StaticResource IconPath}">
-                <Setter Property="Margin"        Value="5"/>
-                <Setter Property="Width"         Value="10"/>
-                <Setter Property="Data"          Value="M10 2.5a.5.5 0 0 1 .5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3a.5.5 0 0 1 .5-.5"/>
+                <Setter Property="Margin" Value="5"/>
+                <Setter Property="Width"  Value="10"/>
+                <Setter Property="Data"   Value="M10 2.5a.5.5 0 0 1 .5.5v6.5H17a.5.5 0 0 1 0 1h-6.5V17a.5.5 0 0 1-1 0v-6.5H3a.5.5 0 0 1 0-1h6.5V3a.5.5 0 0 1 .5-.5"/>
             </Style>
         </Style.Resources>
     </Style>
 
-    <Style x:Key="DecreaseButton" TargetType="RepeatButton">
-        <Setter Property="ToolTip"          Value="הקטן"/>
-        <Setter Property="Margin"           Value="0"/>
-        <Setter Property="Background"       Value="Transparent"/>
-        <Setter Property="BorderThickness"  Value="0"/>
-        <Setter Property="Cursor"           Value="Hand"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="MinWidth"         Value="{Binding ActualHeight, RelativeSource={RelativeSource Self}}"/>
+    <Style x:Key="DecreaseButton" TargetType="RepeatButton" BasedOn="{StaticResource StepButton}">
+        <Setter Property="ToolTip" Value="הקטן"/>
         <Style.Resources>
             <Style TargetType="Path" BasedOn="{StaticResource IconPath}">
-                <Setter Property="Margin"        Value="5"/>
-                <Setter Property="Width"         Value="10"/>
-                <Setter Property="Data"          Value="M3 10a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 3 10"/>
+                <Setter Property="Margin" Value="5"/>
+                <Setter Property="Width"  Value="10"/>
+                <Setter Property="Data"   Value="M3 10a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13A.5.5 0 0 1 3 10"/>
             </Style>
         </Style.Resources>
     </Style>
