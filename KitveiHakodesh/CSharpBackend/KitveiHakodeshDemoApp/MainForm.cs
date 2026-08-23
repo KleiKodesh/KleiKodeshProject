@@ -87,6 +87,13 @@ namespace KitveiHakodeshDemoApp
 
         private bool _updateCheckDone = false;
 
+        /// <summary>
+        /// Set on load when this copy was installed by the KleiKodesh installer.
+        /// Stays false for a portable copy, which never checks for, downloads, or
+        /// launches an update.
+        /// </summary>
+        private bool _updatesEnabled = false;
+
         private void MainForm_Load(object sender, EventArgs e)
         {
             FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
@@ -96,6 +103,17 @@ namespace KitveiHakodeshDemoApp
 
             if (_updateCheckDone) return;
             _updateCheckDone = true;
+
+            // Portable copy — the updater is not ours to run. It downloads and launches
+            // the KleiKodesh installer, which installs into %LOCALAPPDATA%\KleiKodesh
+            // and registers the Word add-in; doing that from a copy the user merely
+            // unzipped would install software they never asked to install. Only an
+            // installed copy updates, proven by the installer's own registry stamp.
+            // Checked once here so every branch below — including
+            // RunPendingInstaller() on close — stays disarmed.
+            if (!UpdateChecker.IsInstalled()) return;
+
+            _updatesEnabled = true;
 
             // Keep LastSeenVersion current. There is no longer an "עודכן בהצלחה" notice
             // here: updates run the installer visibly now, so the user has already watched
@@ -140,7 +158,8 @@ namespace KitveiHakodeshDemoApp
         {
             AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
-            UpdateChecker.RunPendingInstaller();
+            if (_updatesEnabled)
+                UpdateChecker.RunPendingInstaller();
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)

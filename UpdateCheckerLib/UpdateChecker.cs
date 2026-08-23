@@ -23,6 +23,22 @@ namespace UpdateCheckerLib
 
         public static void RunPendingInstaller() => DownloadManager.RunPendingInstaller();
 
+        /// <summary>
+        /// True when the KleiKodesh installer has run on this machine for this user.
+        ///
+        /// The proof is HKCU\SOFTWARE\KleiKodesh\Version, written by the installer's
+        /// AddinInstaller.SaveVersion() as the last step of a successful install. A
+        /// portable copy — an exe the user unzipped and ran without installing — has
+        /// no such stamp, so it never checks for, downloads, or launches an update.
+        ///
+        /// The updater needs this because it does not update the running exe: it
+        /// downloads the full KleiKodesh installer and runs it, which installs into
+        /// %LOCALAPPDATA%\KleiKodesh and registers the Word add-in. Doing that from a
+        /// portable copy would install software the user never asked to install.
+        /// </summary>
+        public static bool IsInstalled() =>
+            !string.IsNullOrEmpty(GetCurrentVersionFromRegistry());
+
         public static string GetCurrentVersionFromRegistry()
         {
             try
