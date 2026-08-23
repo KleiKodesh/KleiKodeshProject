@@ -155,12 +155,11 @@
                                StaysOpen="False"
                                PlacementTarget="{Binding ElementName=ChooseStylesToggle}"
                                IsOpen="{Binding IsChecked, ElementName=ChooseStylesToggle}"
-                               AllowsTransparency="False"
+                               AllowsTransparency="True"
+                               VerticalOffset="4"
                                MaxHeight="220">
-                            <Border BorderBrush="{StaticResource BorderBrush}"
-                                    BorderThickness="1"
-                                    MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}"
-                                    Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                            <Border Style="{StaticResource PopupSurface}"
+                                    MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}">
                                 <StackPanel>
                                     <Border x:Name="SelectAllBd" Background="Transparent" Cursor="Hand">
                                         <Border.Style>

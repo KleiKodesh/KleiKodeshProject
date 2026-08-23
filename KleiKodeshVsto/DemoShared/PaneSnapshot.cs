@@ -42,6 +42,30 @@ namespace KleiKodesh.DemoShared
         };
 
         /// <summary>
+        /// Applies a theme to a window that is about to be shown normally.
+        ///
+        /// For "--theme office-black" and friends. The renderer cannot help
+        /// with popups: RenderTargetBitmap draws the visual tree, and a Popup
+        /// is a separate HwndSource that is not in it. So checking a drop-down
+        /// against a dark theme needs the demo actually running, themed, with
+        /// the popup open - which is what this is for.
+        /// </summary>
+        internal static void ApplyStartupTheme(string[] args, Window window)
+        {
+            if (args == null || args.Length < 2 || args[0] != "--theme") return;
+
+            foreach (var theme in Themes)
+            {
+                if (!string.Equals(theme.Item1, args[1], StringComparison.OrdinalIgnoreCase)) continue;
+                window.Background = Brush(theme.Item2);
+                window.Foreground = Brush(theme.Item3);
+                window.Loaded += (s, e) =>
+                    ApplyToPane(window, Brush(theme.Item2), Brush(theme.Item3));
+                return;
+            }
+        }
+
+        /// <summary>
         /// Handles "--render &lt;dir&gt;". Returns false when the app was started
         /// normally, so the caller can carry on and show its window.
         /// </summary>

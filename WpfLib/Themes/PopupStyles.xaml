@@ -1,0 +1,60 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        The surface a popup sits on.
+
+        Every pane had hand-rolled its own: a Border inside a Popup with
+        AllowsTransparency off, no corner radius, no gap under the trigger, and
+        a Background bound to an ancestor UserControl. Seven of them, all
+        slightly different from each other and none matching the combo box
+        drop-down, which is the one users see most.
+
+        Wrap a popup's content in this instead:
+
+            <Popup AllowsTransparency="True" VerticalOffset="4" ...>
+                <Border Style="{StaticResource PopupSurface}" MinWidth="...">
+
+        AllowsTransparency matters as much as the style does. With it off,
+        every pixel the Border does not cover paints as the popup's own opaque
+        surface, so rounded corners come out with hard black wedges in them.
+
+        The background follows the host rather than being stated, because a
+        drop-down is a continuation of the pane's own content. That is the
+        opposite of ToolTip and ContextMenu, which are floating surfaces and
+        commit to the dark PopupBrush in Brushes.xaml.
+
+        PriorityBinding rather than a single ancestor: a task pane has a
+        UserControl to bind to and a plain Window, like the demo hosts, does
+        not. Bound to only the UserControl this produced null in the demos,
+        and a null brush on an opaque popup paints black.
+
+        NOT usable from inside a ControlTemplate. A StaticResource there throws
+        when the template is instantiated in another HwndSource, which is
+        exactly what a Popup is. Templates inline these values instead - see
+        ComboBoxStyles and AddressBarStyles.
+    -->
+
+    <Style x:Key="PopupSurface" TargetType="Border">
+        <Setter Property="BorderBrush"     Value="#50808080"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius"    Value="4"/>
+        <Setter Property="Padding"         Value="0,3"/>
+        <Setter Property="Background">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Background" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Background" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="TextElement.Foreground">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>

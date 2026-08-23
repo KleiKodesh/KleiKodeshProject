@@ -111,12 +111,11 @@
                    StaysOpen="False"
                    PlacementTarget="{Binding ElementName=IgnoreStylesToggle}"
                    IsOpen="{Binding IsChecked, ElementName=IgnoreStylesToggle}"
-                   AllowsTransparency="False"
+                   AllowsTransparency="True"
+                   VerticalOffset="4"
                    MaxHeight="220">
-                <Border BorderBrush="{StaticResource BorderBrush}"
-                        BorderThickness="1"
-                        MinWidth="{Binding ActualWidth, ElementName=IgnoreStylesToggle}"
-                        Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}">
+                <Border Style="{StaticResource PopupSurface}"
+                        MinWidth="{Binding ActualWidth, ElementName=IgnoreStylesToggle}">
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Auto"
                                   MaxHeight="200">

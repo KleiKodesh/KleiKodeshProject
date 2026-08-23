@@ -26,6 +26,10 @@ namespace NakdanDemo
             }
 
             base.OnStartup(e);
+
+            var window = new MainWindow();
+            KleiKodesh.DemoShared.PaneSnapshot.ApplyStartupTheme(e.Args, window);
+            window.Show();
         }
     }
 }

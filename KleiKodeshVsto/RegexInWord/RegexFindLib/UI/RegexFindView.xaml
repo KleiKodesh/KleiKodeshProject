@@ -246,10 +246,10 @@
             <!-- find history popup -->
             <Popup x:Name="FindHistoryPopup"
                    PlacementTarget="{Binding ElementName=FindInputBorder}"
-                   Placement="Bottom" StaysOpen="False" AllowsTransparency="False"
+                   Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                   VerticalOffset="4"
                    DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                        BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                <Border Style="{StaticResource PopupSurface}"
                         MinWidth="{Binding ActualWidth, ElementName=FindInputBorder}"
                         MaxHeight="220">
                     <ListBox ItemsSource="{Binding RecentSearchesBinding}"
@@ -387,10 +387,10 @@
                 <!-- replace history popup -->
                 <Popup x:Name="ReplaceHistoryPopup"
                        PlacementTarget="{Binding ElementName=ReplaceInputBorder}"
-                       Placement="Bottom" StaysOpen="False" AllowsTransparency="False"
+                       Placement="Bottom" StaysOpen="False" AllowsTransparency="True"
+                       VerticalOffset="4"
                        DataContext="{Binding DataContext, RelativeSource={RelativeSource AncestorType=UserControl}}">
-                    <Border Background="{Binding Background, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                            BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"
+                    <Border Style="{StaticResource PopupSurface}"
                             MinWidth="{Binding ActualWidth, ElementName=ReplaceInputBorder}"
                             MaxHeight="220">
                         <ListBox ItemsSource="{Binding RecentReplacementsBinding}"
