@@ -15464,30 +15464,12 @@ class PDFViewer {
         console.error(`scrollPageIntoView: "${destArray[1].name}" is not a valid destination type.`);
         return;
     }
-    // PATCH: preserve the current zoom on NAMED-fit destination jumps. These
-    // Hebrew (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and
-    // outline destinations, so PDF.js was snapping to page-fit on reload and on
-    // TOC/outline clicks (scroll and thumbnail nav were unaffected — they carry
-    // no destArray). Ignoring those jumps to the right page but keeps whatever
-    // scale the user set. We only adopt a scale when none exists yet
-    // (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
-    //
-    // An EXPLICIT numeric zoom is a different thing and must still be honoured:
-    // that is how session restore replays the saved zoom (ViewHistory builds
-    // "zoom=<percent>,<left>,<top>", which arrives here as an XYZ destination
-    // with destArray[4] set to a number). Swallowing it too made the viewer
-    // reopen at "auto" every time a tab was revisited or the app restarted —
-    // and the resulting "auto" was then written back over the stored zoom.
-    // Named fits ("page-fit"/"page-width"/"page-height") stay suppressed.
-    const ignoreZoom = typeof scale !== "number" || !(scale > 0); // was: !ignoreDestinationZoom
-    if (!ignoreZoom) {
+    if (!ignoreDestinationZoom) {
       if (scale && scale !== this._currentScale) {
         this.currentScaleValue = scale;
       } else if (this._currentScale === UNKNOWN_SCALE) {
         this.currentScaleValue = DEFAULT_SCALE_VALUE;
       }
-    } else if (this._currentScale === UNKNOWN_SCALE) {
-      this.currentScaleValue = DEFAULT_SCALE_VALUE;
     }
     if (scale === "page-fit" && !destArray[4]) {
       this.#scrollIntoView(pageView);
@@ -19033,14 +19015,7 @@ const PDFViewerApplication = {
           rotation,
           sidebarView,
           scrollMode,
-          spreadMode,
-          // PATCH: hand the restored zoom over explicitly. A NAMED preset
-          // ("page-width"/"page-height"/"page-actual"/"page-fit") survives
-          // ViewHistory as a string and would otherwise reach
-          // scrollPageIntoView looking exactly like the "/Fit" zoom our ABBYY
-          // PDFs bake into their destinations — which we deliberately ignore.
-          // Applying it directly sidesteps that collision entirely.
-          restoredZoom: stored?.page && viewOnLoad !== ViewOnLoad.INITIAL ? zoom || stored.zoom : zoom || null
+          spreadMode
         });
         this.eventBus.dispatch("documentinit", {
           source: this
@@ -19297,8 +19272,7 @@ const PDFViewerApplication = {
     rotation,
     sidebarView,
     scrollMode,
-    spreadMode,
-    restoredZoom = null
+    spreadMode
   } = {}) {
     const setRotation = angle => {
       if (isValidRotation(angle)) {
@@ -19316,23 +19290,6 @@ const PDFViewerApplication = {
     this.isInitialViewSet = true;
     this.viewsManager?.setInitialView(sidebarView);
     setViewerModes(scrollMode, spreadMode);
-    // PATCH: restore the saved zoom directly. Numeric zooms also travel inside
-    // storedHash and would be applied by scrollPageIntoView, but named presets
-    // cannot — they are indistinguishable there from the "/Fit" zoom baked into
-    // our ABBYY PDFs' destinations, which scrollPageIntoView deliberately
-    // ignores. Setting it here covers both kinds and runs before the jump, so
-    // the subsequent scroll lands at the right offset for the restored scale.
-    if (restoredZoom) {
-      // ViewHistory stores a PERCENTAGE (150) but currentScaleValue wants a
-      // ratio ("1.5"); a named preset ("page-width", "auto", ...) is passed
-      // through untouched. Match the number strictly rather than leaning on
-      // parseFloat, which would read a malformed preference like "1,5" as 1
-      // and silently apply a 1% zoom. Anything else falls through as a preset
-      // name, and an unrecognised one lands on setInitialView's own "auto"
-      // fallback below.
-      const numericZoom = typeof restoredZoom === "number" ? restoredZoom : /^\d*\.?\d+%?$/.test(String(restoredZoom).trim()) ? parseFloat(restoredZoom) : NaN;
-      this.pdfViewer.currentScaleValue = Number.isFinite(numericZoom) && numericZoom > 0 ? String(numericZoom / 100) : String(restoredZoom);
-    }
     if (this.initialBookmark) {
       setRotation(this.initialRotation);
       delete this.initialRotation;
@@ -20581,6 +20538,27 @@ function webViewerLoad() {
     // them in anchor tags. Hebrew books have no hyperlinks in body text.
     // This saves DOM nodes on every rendered page.
     enableAutoLinking: false,
+
+    // Ignore the zoom baked into the DOCUMENT's own destinations. ABBYY-scanned
+    // Hebrew books bake a "/Fit" zoom into their OpenAction and every outline
+    // entry, so without this a TOC click or reload snapped the view to
+    // page-fit, discarding the user's zoom. This stock option is threaded by
+    // PDFLinkService.goToDestination into every document-originated jump
+    // (outline clicks, OpenAction, named dests, in-page links) — and ONLY
+    // those: session restore replays the saved zoom via setHash's direct
+    // scrollPageIntoView call, which never carries the flag, so ViewHistory
+    // restore (numeric zooms AND named presets like page-width) still works.
+    // The app never navigates the viewer via URL hashes (see disableAutoFetch
+    // below), so no other zoom source reaches that unflagged path.
+    //
+    // History: this used to be a hand patch forcing ignoreZoom inside
+    // scrollPageIntoView itself (CUSTOMIZATIONS.md §0y, removed 2026-08-23).
+    // That blanket also swallowed the SESSION-RESTORE zoom riding the same
+    // function, so the viewer reopened at "auto" on every tab revisit and
+    // restart — and wrote that "auto" back over the stored zoom. Keying on
+    // the jump's ORIGIN (this flag) instead of its VALUE fixes restore and
+    // keeps /FitR and baked numeric /XYZ zooms suppressed too.
+    ignoreDestinationZoom: true,
 
     // Cap the maximum canvas size to ~16 million pixels (4096×4096).
     // The default is 2^25 (~33M pixels). At high zoom levels a single canvas
