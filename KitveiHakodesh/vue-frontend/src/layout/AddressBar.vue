@@ -22,7 +22,7 @@
  * pane it belongs to for all navigation, so results open in the right pane.
  */
 import { ref, computed, nextTick, watch } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { useIntervalFn, useResizeObserver } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
@@ -115,9 +115,9 @@ const hasDropdownContent = computed(
   () => dropdownTabs.value.length > 0 || hasAnyResults() || isLoadingAny(),
 )
 
-// The one condition the panel renders on. The field's merged styling reads the
-// same value, so it can never square its bottom corners with no panel attached
-// to them.
+// The one condition the panel renders on. The field's merged styling reads this
+// too (ANDed with isPanelMerged below), so it can never square its bottom corners
+// with no panel attached to them.
 const isPanelVisible = computed(() => isDropdownOpen.value && hasDropdownContent.value)
 
 // The address bar belongs to the current tab, so its rows navigate IN PLACE —
@@ -161,27 +161,77 @@ const NARROW_SHELL_WIDTH = 600
 // It still shrinks below this to fit the viewport when space is tight.
 const MAX_DROPDOWN_HEIGHT = 440
 
+// Gap between a FLOATING (unmerged) panel and the field, so the two read as two
+// separate surfaces rather than two things that failed to line up.
+const UNMERGED_PANEL_GAP = 4
+
 const anchorTop = ref(0)
 const anchorLeft = ref(0)
 const anchorRight = ref(0)
 const maxHeight = ref(300)
 
+// Whether the panel and the field join into one omnibox slab.
+//
+// They can only do that when the panel is exactly as wide as the field. On a
+// narrow shell it is not — it spans the whole shell (see the width rule above)
+// and overhangs the field on both sides, so there is no shared edge to merge
+// along: the field's bottom border has nothing sitting under it, and dropping it
+// would just leave the box hanging open. There the two stay separate surfaces.
+//
+// Both halves of the merge read this one flag — the field's own styling and the
+// panel's `merge-with-anchor` — because a merge only works if both cooperate.
+// Merging one half alone is what produces a squared-off panel floating under a
+// borderless field.
+const isPanelMerged = ref(false)
+
+// The shell this address bar lives in — it decides both the merge regime and the
+// panel's horizontal edges. Resolved once here and reused by computeAnchor and the
+// resize observer below.
+const shellEl = computed(() => wrapperRef.value?.closest<HTMLElement>('.app-shell') ?? null)
+
 function computeAnchor() {
   if (!wrapperRef.value) return
   const rect = wrapperRef.value.getBoundingClientRect()
-  const shellRect = wrapperRef.value.closest('.app-shell')?.getBoundingClientRect()
-  const anchor = shellRect && shellRect.width <= NARROW_SHELL_WIDTH ? shellRect : rect
-  // Flush against the field's bottom edge, no gap and no overlap: in merged mode
-  // the field drops its bottom border entirely, so there is no seam line left to
-  // cover and the two backgrounds simply continue into each other. Floored
-  // because getBoundingClientRect returns fractional values at non-integral zoom
-  // or DPI, and a fractional top would leave a hairline of the page showing
-  // through the join — rounding down overlaps by a subpixel instead.
-  anchorTop.value = Math.floor(rect.bottom)
+  const shellRect = shellEl.value?.getBoundingClientRect()
+  const isNarrowShell = !!shellRect && shellRect.width <= NARROW_SHELL_WIDTH
+  const anchor = isNarrowShell ? shellRect! : rect
+  isPanelMerged.value = !isNarrowShell
+  // Merged: flush against the field's bottom edge, no gap and no overlap — the
+  // field drops its bottom border, so there is no seam line left to cover and
+  // the two backgrounds simply continue into each other. Floored because
+  // getBoundingClientRect returns fractional values at non-integral zoom or DPI,
+  // and a fractional top would leave a hairline of the page showing through the
+  // join — rounding down overlaps by a subpixel instead.
+  //
+  // Unmerged: the field KEEPS its bottom border, so that same subpixel overlap
+  // would cover it. Round up and add the gap, leaving the field's own box intact.
+  anchorTop.value = isPanelMerged.value
+    ? Math.floor(rect.bottom)
+    : Math.ceil(rect.bottom) + UNMERGED_PANEL_GAP
   anchorLeft.value = anchor.left
   anchorRight.value = window.innerWidth - anchor.right
-  maxHeight.value = Math.min(MAX_DROPDOWN_HEIGHT, Math.max(120, window.innerHeight - rect.bottom - 12))
+  maxHeight.value = Math.min(
+    MAX_DROPDOWN_HEIGHT,
+    Math.max(120, window.innerHeight - anchorTop.value - 12),
+  )
 }
+
+// Re-anchor while the panel is open, by observing the SHELL rather than listening
+// for window resizes. The shell is what decides both the merge (its width against
+// NARROW_SHELL_WIDTH) and the panel's left/right edges, and it changes size in
+// ways that fire no window resize event at all:
+//   - dragging the split-view divider, which just rewrites a CSS grid fraction
+//   - toggling the nav sidebar, which adds/removes a flex sibling
+// Missing those left the field and the panel disagreeing about whether they are
+// one slab — the exact half-merged frame isPanelMerged exists to prevent — and
+// left the panel horizontally detached from the field. Observing the element
+// covers the divider, the sidebar and plain window resizes in one go.
+//
+// The field wrapper is observed too: the panel hangs off its bottom edge, so the
+// field moving or changing height has to re-anchor as well.
+useResizeObserver([shellEl, wrapperRef], () => {
+  if (isDropdownOpen.value) computeAnchor()
+})
 
 function onInput() {
   // Typing releases the arrow-key pause below — fresh results may reshuffle now.
@@ -338,7 +388,7 @@ nextTick(() => {
   <div
     ref="wrapperRef"
     class="address-bar"
-    :class="{ 'is-merged': isPanelVisible }"
+    :class="{ 'is-merged': isPanelVisible && isPanelMerged }"
     @click.stop="inputRef?.focus()"
   >
     <input
@@ -364,7 +414,7 @@ nextTick(() => {
     <GlobalSearchDropdown
       v-if="isPanelVisible"
       ref="dropdownRef"
-      merge-with-anchor
+      :merge-with-anchor="isPanelMerged"
       :catalog-results="catalogResults"
       :catalog-toc-results="catalogTocResults"
       :hebrew-books-results="hebrewBooksResults"
@@ -417,8 +467,11 @@ nextTick(() => {
 }
 
 /* ── Merged with the dropdown (browser-omnibox seam) ──────────────────────────
-   While the panel is attached below, the field stops being a self-contained box
-   and becomes the top of one continuous slab.
+   While the panel is attached below AND is exactly as wide as the field
+   (isPanelMerged), the field stops being a self-contained box and becomes the
+   top of one continuous slab. On a narrow shell the panel spans the whole shell
+   instead, so none of this applies and the base rules above keep the field a
+   closed, bordered box with the panel floating below it.
 
    Everything here removes a seam:
    - The bottom border AND the accent underline from :focus-within go. That
