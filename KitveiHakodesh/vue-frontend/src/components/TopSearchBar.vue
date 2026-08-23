@@ -19,12 +19,11 @@ withDefaults(defineProps<{ gap?: string }>(), { gap: '6px' })
 
 <style scoped>
 .top-search-bar {
-  /* Roomier than the bottom-docked bar: with no toolbar band behind it the pill
+  /* The top padding is the roomier side: with no toolbar band behind it the pill
      would otherwise sit tight against the top edge of the page. */
   padding: 8px 10px 6px;
   /* No toolbar band and no divider: the bar sits directly on the page surface and
-     the search field's own pill is the only chrome. (BottomSearchBar still carries
-     both — it separates a docked strip from the content above it.) */
+     the search field's own pill is the only chrome. */
   flex-shrink: 0;
 }
 /* The pill shape/fill/border come from the global `.search-inner` rule (main.css):

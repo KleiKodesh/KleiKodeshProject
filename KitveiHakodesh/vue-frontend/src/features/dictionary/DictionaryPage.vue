@@ -3,7 +3,7 @@ import { watch, ref, computed, onMounted, nextTick } from 'vue'
 import { useDebounce } from '@vueuse/core'
 import { storeToRefs } from 'pinia'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
-import BottomSearchBar from '@/components/BottomSearchBar.vue'
+import TopSearchBar from '@/components/TopSearchBar.vue'
 import DictionaryWordPage from './DictionaryWordPage.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useZoomHandler } from '@/composables/useZoom'
@@ -186,6 +186,32 @@ function onSelect(headword: string) {
 
 <template>
   <div class="dict-page">
+    <TopSearchBar>
+      <input
+        ref="searchInputRef"
+        :value="searchQuery"
+        class="dict-search-input"
+        type="text"
+        placeholder="חפש מילה"
+        spellcheck="true"
+        autocomplete="off"
+        @input="searchQuery = ($event.target as HTMLInputElement).value"
+      />
+      <template #right>
+        <IconSearch20Regular class="search-icon" />
+      </template>
+    </TopSearchBar>
+
+    <div v-if="noResults" class="dict-no-results">
+      <template v-if="suggestions.length">
+        <span class="dict-suggestions-label">אולי התכוונת ל: </span>
+        <span v-for="(w, i) in suggestions" :key="w">
+          <button class="dict-suggestion-link" @click="onSelect(w)">{{ w }}</button><span v-if="i < suggestions.length - 1">, </span>
+        </span>
+      </template>
+      <span v-else>לא נמצאו תוצאות</span>
+    </div>
+
     <div class="dict-body">
       <div v-if="searching" class="dict-state">מחפש...</div>
 
@@ -200,32 +226,6 @@ function onSelect(headword: string) {
         <IconSearch20Regular class="dict-empty-icon" />
       </div>
     </div>
-
-    <div v-if="noResults" class="dict-no-results">
-      <template v-if="suggestions.length">
-        <span class="dict-suggestions-label">אולי התכוונת ל: </span>
-        <span v-for="(w, i) in suggestions" :key="w">
-          <button class="dict-suggestion-link" @click="onSelect(w)">{{ w }}</button><span v-if="i < suggestions.length - 1">, </span>
-        </span>
-      </template>
-      <span v-else>לא נמצאו תוצאות</span>
-    </div>
-
-    <BottomSearchBar>
-      <template #left>
-        <IconSearch20Regular class="search-icon" />
-      </template>
-      <input
-        ref="searchInputRef"
-        :value="searchQuery"
-        class="dict-search-input"
-        type="text"
-        placeholder="חפש מילה"
-        spellcheck="true"
-        autocomplete="off"
-        @input="searchQuery = ($event.target as HTMLInputElement).value"
-      />
-    </BottomSearchBar>
   </div>
 </template>
 
@@ -276,15 +276,9 @@ function onSelect(headword: string) {
 }
 .dict-empty-icon { width: 48px; height: 48px; }
 .search-icon { color: var(--text-secondary); }
+/* Fill, border, outline, colors and placeholder come from the global
+   `.search-inner input` rule; the type size comes from TopSearchBar. */
 .dict-search-input {
   flex: 1;
-  background: none;
-  border: none;
-  outline: none;
-  font-size: 13px;
-  color: var(--text-primary);
-  font-family: inherit;
 }
-.dict-search-input::placeholder { color: var(--text-secondary); }
-.dict-search-input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
 </style>
