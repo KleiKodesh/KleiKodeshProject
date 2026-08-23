@@ -48,6 +48,25 @@ namespace KleiKodesh.DemoShared
             if (Application.Current != null)
                 Application.Current.ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
+            // "--timing 7 prewarm" builds the pane once on a BACKGROUND STA
+            // thread before anything is measured, to answer whether the add-in
+            // could hide the first-open cost by warming up at load time.
+            //
+            // Only part of that cost can move. Assembly loading and JIT are
+            // process-wide and do carry over. A Dispatcher, and anything cached
+            // per thread - which includes SharedResourceDictionary, deliberately
+            // - do not. The point of measuring is to find out which half wins,
+            // rather than assuming a warm-up is worth doing to Word's startup.
+            // "prewarm" builds the real pane off-thread. "prewarm-lite" only
+            // touches WPF and the shared palette and never constructs the pane,
+            // which is the version that would actually be safe to run inside
+            // Word: a pane constructor is free to talk to the Word object model,
+            // and doing that from a background thread is a marshalled COM call
+            // at best. The two are measured separately because the safe one is
+            // only worth shipping if it recovers most of what the other does.
+            if (Array.IndexOf(args, "prewarm") >= 0) Prewarm(createWindow);
+            else if (Array.IndexOf(args, "prewarm-lite") >= 0) Prewarm(null);
+
             // Make the host window first, and time that separately. The very
             // first Window in a process drags in most of WPF - the dispatcher,
             // the render thread, the composition target, the theme dictionaries
@@ -200,6 +219,66 @@ namespace KleiKodesh.DemoShared
             Host().Content = null;
             window.Close();
             return stopwatch.Elapsed.TotalMilliseconds;
+        }
+
+        /// <summary>
+        /// Build the pane once on a throwaway STA thread, and wait for it.
+        ///
+        /// Waiting is only so the measurement is clean. A real add-in would
+        /// start this and forget it, which is the whole appeal: the work lands
+        /// while the user is still reading their document rather than after
+        /// they have clicked something and started waiting.
+        /// </summary>
+        private static void Prewarm(Func<Window> createWindow)
+        {
+            var thread = new System.Threading.Thread(() =>
+            {
+                try
+                {
+                    if (createWindow == null)
+                    {
+                        // The safe version: enough WPF to drag in the framework
+                        // and lay something out, plus the palette, and nothing
+                        // that belongs to a pane.
+                        var probe = new System.Windows.Controls.ContentControl
+                        {
+                            Content = new System.Windows.Controls.TextBlock { Text = "warm" },
+                        };
+                        probe.Resources.MergedDictionaries.Add(new ResourceDictionary
+                        {
+                            Source = new Uri("pack://application:,,,/WpfLib;component/themes/officepalette.xaml"),
+                        });
+                        probe.Measure(new Size(420, 900));
+                        probe.Arrange(new Rect(0, 0, 420, 900));
+                        return;
+                    }
+
+                    var window = createWindow();
+                    var content = window.Content as UIElement;
+                    window.Content = null;
+                    if (content != null)
+                    {
+                        content.Measure(new Size(420, 900));
+                        content.Arrange(new Rect(0, 0, 420, 900));
+                    }
+                    window.Close();
+                }
+                catch
+                {
+                    // A pane that will not build off the UI thread simply does
+                    // not get warmed. That is a reason not to warm it, not a
+                    // reason to bring the host down.
+                }
+                System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeShutdown();
+            });
+            thread.SetApartmentState(System.Threading.ApartmentState.STA);
+            thread.IsBackground = true;
+
+            var stopwatch = Stopwatch.StartNew();
+            thread.Start();
+            thread.Join(TimeSpan.FromSeconds(30));
+            stopwatch.Stop();
+            Console.WriteLine("background warm-up took             : {0,8:F1} ms", stopwatch.Elapsed.TotalMilliseconds);
         }
 
         private static Window _host;
