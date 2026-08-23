@@ -70,6 +70,9 @@
     <Compile Include="..\..\DemoShared\PaneSnapshot.cs">
       <Link>PaneSnapshot.cs</Link>
     </Compile>
+    <Compile Include="..\..\DemoShared\PaneTiming.cs">
+      <Link>PaneTiming.cs</Link>
+    </Compile>
     <Compile Include="App.xaml.cs">
       <DependentUpon>App.xaml</DependentUpon>
     </Compile>
