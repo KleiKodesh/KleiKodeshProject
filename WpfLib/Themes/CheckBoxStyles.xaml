@@ -9,6 +9,7 @@
         made the mid-gray palette work in the first place.
     -->
     <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
@@ -17,7 +18,7 @@
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
     -->
 
-    <Style x:Key="OfficeCheckBox" TargetType="CheckBox">
+    <Style x:Key="OfficeCheckBox" TargetType="CheckBox" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
         <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
         <Setter Property="Cursor"           Value="Hand"/>

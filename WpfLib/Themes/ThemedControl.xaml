@@ -1,0 +1,39 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        The one thing every control in this palette has to do: take its
+        Foreground and Background from whatever is hosting it.
+
+        This cannot be left to inheritance, and that is the whole reason this
+        file exists. WPF resolves an unset Foreground against the control's
+        THEME style before it considers inheritance, and the built-in theme
+        style for Button, CheckBox, TextBox and friends sets Foreground itself.
+        So a control with no Foreground setter does not inherit the pane's
+        colour; it lands on the system default and comes out near-black on a
+        dark Office theme, while the TextBlock beside it - not a Control, so no
+        theme style - inherits correctly and looks fine. That mismatch is
+        exactly what "some text changes colour and a lot does not" looks like.
+
+        Binding to one ancestor is not enough either. A task pane has a
+        UserControl to bind to; a plain Window does not, and the binding
+        silently yields nothing. PriorityBinding takes the first that resolves,
+        so the same style works in both hosts.
+
+        Every Control-derived style in this folder derives from this one.
+        TextBlock, Path, Separator and Hyperlink do not: they are not Controls,
+        they have no theme style competing with inheritance, and they are
+        better left to inherit.
+    -->
+
+    <Style x:Key="ThemedControl" TargetType="Control">
+        <Setter Property="Foreground">
+            <Setter.Value>
+                <PriorityBinding>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=UserControl}"/>
+                    <Binding Path="Foreground" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                </PriorityBinding>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+</ResourceDictionary>
