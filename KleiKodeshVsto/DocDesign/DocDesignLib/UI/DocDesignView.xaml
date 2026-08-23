@@ -161,17 +161,7 @@
                             <Border Style="{StaticResource PopupSurface}"
                                     MinWidth="{Binding ActualWidth, ElementName=ChooseStylesToggle}">
                                 <StackPanel>
-                                    <Border x:Name="SelectAllBd" Background="Transparent" Cursor="Hand">
-                                        <Border.Style>
-                                            <Style TargetType="Border">
-                                                <Setter Property="Background" Value="Transparent"/>
-                                                <Style.Triggers>
-                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                        <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                    </Trigger>
-                                                </Style.Triggers>
-                                            </Style>
-                                        </Border.Style>
+                                    <Border x:Name="SelectAllBd" Style="{StaticResource HoverRow}">
                                         <CheckBox Content="סמן הכל"
                                                   IsChecked="{Binding ParagraphsViewModel.CheckAllStyles}"
                                                   Padding="4,0"
@@ -184,17 +174,7 @@
                                         <ItemsControl ItemsSource="{Binding ParagraphsViewModel.ActiveStyles}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Border Background="Transparent" Cursor="Hand">
-                                                        <Border.Style>
-                                                            <Style TargetType="Border">
-                                                                <Setter Property="Background" Value="Transparent"/>
-                                                                <Style.Triggers>
-                                                                    <Trigger Property="IsMouseOver" Value="True">
-                                                                        <Setter Property="Background" Value="{StaticResource HoverBrush}"/>
-                                                                    </Trigger>
-                                                                </Style.Triggers>
-                                                            </Style>
-                                                        </Border.Style>
+                                                    <Border Style="{StaticResource HoverRow}">
                                                         <CheckBox Content="{Binding Name}"
                                                                   IsChecked="{Binding Apply}"
                                                                   Padding="4,0"
