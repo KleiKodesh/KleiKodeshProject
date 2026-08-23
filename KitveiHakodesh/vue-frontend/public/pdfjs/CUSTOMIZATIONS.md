@@ -345,9 +345,31 @@ destination jump — on reload (OpenAction) and on TOC/outline clicks (named
 dest). Scroll and thumbnail navigation were unaffected because they pass no
 `destArray` and return early.
 
-Fix: always ignore the destination-supplied zoom so a jump changes the page but
-keeps the user's current scale. Only adopt a scale when none exists yet
-(`UNKNOWN_SCALE`, i.e. the first paint), so the initial view still gets `"auto"`.
+Fix: ignore the destination-supplied zoom **when it is a named fit**
+(`"page-fit"` / `"page-width"` / `"page-height"` — what the `/Fit*` dest types
+resolve to), so a jump changes the page but keeps the user's current scale. Only
+adopt a scale when none exists yet (`UNKNOWN_SCALE`, i.e. the first paint), so
+the initial view still gets `"auto"`.
+
+An **explicit numeric** zoom must still be honoured. That is how session restore
+replays a percentage zoom: `ViewHistory` produces `zoom=<percent>,<left>,<top>`,
+which `PDFLinkService.setHash` turns into an `XYZ` destination whose
+`destArray[4]` is a number. An earlier version of this patch used a blanket
+`const ignoreZoom = true`, which swallowed that too — so the viewer reopened at
+`"auto"` every time a PDF tab was revisited or the app was restarted, and the
+resulting `"auto"` was then written straight back over the stored zoom. Gating
+on `typeof scale === "number" && scale > 0` keeps the ABBYY protection while
+letting an explicit numeric restore through.
+
+**That gate is not enough on its own**, which is why this section has a second
+half (0y-2 below). When the user's zoom is a *named preset* rather than a
+percentage, `_updateLocation` stores the string (`"page-width"`,
+`"page-height"`, `"page-actual"`, `"page-fit"`), and `setHash` passes that
+string straight into `destArray[4]`. At `scrollPageIntoView` it is then
+indistinguishable from the `/Fit` zoom our ABBYY PDFs bake into their
+destinations — the exact thing this patch exists to ignore. No test on `scale`
+can separate them, so preset restore has to bypass the destination path
+entirely.
 
 In `PDFViewer.scrollPageIntoView`, search for:
 ```js
@@ -362,14 +384,22 @@ In `PDFViewer.scrollPageIntoView`, search for:
 
 Replace with:
 ```js
-    // PATCH: preserve the current zoom on every destination jump. These Hebrew
-    // (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and outline
-    // destinations, so PDF.js was snapping to page-fit on reload and on TOC/
-    // outline clicks (scroll and thumbnail nav were unaffected — they carry no
-    // destArray). Forcing ignoreDestinationZoom here jumps to the right page but
-    // keeps whatever scale the user set. We only adopt a scale when none exists
-    // yet (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
-    const ignoreZoom = true; // was: !ignoreDestinationZoom
+    // PATCH: preserve the current zoom on NAMED-fit destination jumps. These
+    // Hebrew (ABBYY-produced) PDFs bake a "/Fit" zoom into their OpenAction and
+    // outline destinations, so PDF.js was snapping to page-fit on reload and on
+    // TOC/outline clicks (scroll and thumbnail nav were unaffected — they carry
+    // no destArray). Ignoring those jumps to the right page but keeps whatever
+    // scale the user set. We only adopt a scale when none exists yet
+    // (UNKNOWN_SCALE), so the very first paint still has a sane zoom.
+    //
+    // An EXPLICIT numeric zoom is a different thing and must still be honoured:
+    // that is how session restore replays the saved zoom (ViewHistory builds
+    // "zoom=<percent>,<left>,<top>", which arrives here as an XYZ destination
+    // with destArray[4] set to a number). Swallowing it too made the viewer
+    // reopen at "auto" every time a tab was revisited or the app restarted —
+    // and the resulting "auto" was then written back over the stored zoom.
+    // Named fits ("page-fit"/"page-width"/"page-height") stay suppressed.
+    const ignoreZoom = typeof scale !== "number" || !(scale > 0); // was: !ignoreDestinationZoom
     if (!ignoreZoom) {
       if (scale && scale !== this._currentScale) {
         this.currentScaleValue = scale;
@@ -380,6 +410,72 @@ Replace with:
       this.currentScaleValue = DEFAULT_SCALE_VALUE;
     }
 ```
+
+### 0y-2. Restore the saved zoom directly (covers named presets)
+
+Companion to 0y. Because a named preset cannot be told apart from a baked `/Fit`
+inside `scrollPageIntoView`, the restored zoom is handed to `setInitialView` as
+its own option and applied straight to `currentScaleValue`, before the
+hash-driven jump. This covers both numeric and preset zooms, and it runs before
+the scroll so the jump lands at the right offset for the restored scale.
+
+**1. Pass the stored zoom in.** In `PDFViewerApplication.load`, find the
+`setInitialView` call and add the `restoredZoom` property:
+```js
+    this.setInitialView(hash, {
+      rotation,
+      sidebarView,
+      scrollMode,
+      spreadMode,
+      // PATCH: hand the restored zoom over explicitly. A NAMED preset
+      // ("page-width"/"page-height"/"page-actual"/"page-fit") survives
+      // ViewHistory as a string and would otherwise reach
+      // scrollPageIntoView looking exactly like the "/Fit" zoom our ABBYY
+      // PDFs bake into their destinations — which we deliberately ignore.
+      // Applying it directly sidesteps that collision entirely.
+      restoredZoom: stored?.page && viewOnLoad !== ViewOnLoad.INITIAL ? zoom || stored.zoom : zoom || null
+    });
+```
+
+**2. Accept it in `setInitialView`'s signature:**
+```js
+  setInitialView(storedHash, {
+    rotation,
+    sidebarView,
+    scrollMode,
+    spreadMode,
+    restoredZoom = null
+  } = {}) {
+```
+
+**3. Apply it** right after `setViewerModes(scrollMode, spreadMode);`:
+```js
+    // PATCH: restore the saved zoom directly. Numeric zooms also travel inside
+    // storedHash and would be applied by scrollPageIntoView, but named presets
+    // cannot — they are indistinguishable there from the "/Fit" zoom baked into
+    // our ABBYY PDFs' destinations, which scrollPageIntoView deliberately
+    // ignores. Setting it here covers both kinds and runs before the jump, so
+    // the subsequent scroll lands at the right offset for the restored scale.
+    if (restoredZoom) {
+      // ViewHistory stores a PERCENTAGE (150) but currentScaleValue wants a
+      // ratio ("1.5"); a named preset ("page-width", "auto", ...) is passed
+      // through untouched. Match the number strictly rather than leaning on
+      // parseFloat, which would read a malformed preference like "1,5" as 1
+      // and silently apply a 1% zoom. Anything else falls through as a preset
+      // name, and an unrecognised one lands on setInitialView's own "auto"
+      // fallback below.
+      const numericZoom = typeof restoredZoom === "number" ? restoredZoom : /^\d*\.?\d+%?$/.test(String(restoredZoom).trim()) ? parseFloat(restoredZoom) : NaN;
+      this.pdfViewer.currentScaleValue = Number.isFinite(numericZoom) && numericZoom > 0 ? String(numericZoom / 100) : String(restoredZoom);
+    }
+```
+
+`ViewHistory` stores a percentage (`150`) while `currentScaleValue` wants a ratio
+(`"1.5"`), hence the `/100`; a named preset is passed through untouched. The
+strict regex matters because both `stored.zoom` **and** the `defaultZoomValue`
+AppOption flow through here: a bare `parseFloat` would read a malformed
+preference like `"1,5"` as `1` and apply a 1% zoom. `defaultZoomValue` is `""`
+in this app, so that path is currently inert — this is hardening, not a live
+fix.
 
 ---
 
