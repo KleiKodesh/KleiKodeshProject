@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, inject } from 'vue'
 
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
@@ -75,8 +75,11 @@ async function onTap(label: string) {
   emit('close')
 }
 
+// This menu hangs off one pane's title bar, so it opens that pane's rail only.
+const paneId = inject<1 | 2>('paneId', 1)
+
 function onShowNavSidebar() {
-  settingsStore.navSidebarVisible = true
+  settingsStore.setNavSidebarVisible(paneId, true)
   emit('close')
 }
 

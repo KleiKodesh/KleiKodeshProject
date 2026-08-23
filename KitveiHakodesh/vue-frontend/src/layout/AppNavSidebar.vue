@@ -7,6 +7,8 @@ import {
   IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { documentIcon } from '@/utils/documentIcons'
+import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -16,7 +18,8 @@ import { showPopOutButton, togglePopOut } from '@/webview-host/bridge'
 // The nav dropdown's items, always on. Same list, same order, same actions - the only
 // difference is that a row here is its icon alone with the label as its tooltip, because
 // the rail is deliberately too narrow for text. Whether it is showing is a setting
-// (settingsStore.navSidebarVisible), so it survives a restart.
+// (settingsStore, keyed by pane), so it survives a restart. Each pane's rail is its own:
+// closing this one never touches the other pane's.
 //
 // One rail per pane, like the title bar beside it: navigateInNewTab goes through
 // usePaneNavigation, so each rail opens its destination in its own pane's tabs.
@@ -35,18 +38,30 @@ const splitViewTitle = computed(() =>
   bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)',
 )
 
-// Only pane 1 owns the window's edge. In split view pane 2 sits inboard of the sash, so
-// its panel is not against anything to run flush into - it closes its frame on all four
-// sides and keeps its inset, or it would read as a card sliced in half mid-window.
+// Which pane this rail belongs to - it closes its own, not both, and goes home in its own.
 const paneId = inject<1 | 2>('paneId', 1)
-const isDockedToWindowEdge = computed(() => paneId === 1)
+const pane = useAppShellPane(paneId)
+
+// Home is not one of APP_NAV_ITEMS: those are destinations opened in a new tab by label,
+// and home is not one - goHome() reuses the pane's existing home tab if it has one rather
+// than stacking up another. Same reason the title bar keeps its own home button. The icon
+// still comes from the shared table so it matches the rest of the column.
+const homeIcon = documentIcon('home').icon24
 </script>
 
 <template>
   <!-- The strip holds the width in the layout; the panel inside it is the docked sheet,
-       inset from three sides and flush to the app's edge on the fourth. -->
+       full width and inset only at the top and bottom. -->
   <div class="nav-sidebar">
-    <nav class="nav-panel" :class="{ 'is-window-edge': isDockedToWindowEdge }">
+    <nav class="nav-panel">
+      <button
+        class="nav-btn"
+        tabindex="-1"
+        title="בית (Ctrl+G)"
+        @click="pane.goHome()"
+      >
+        <component :is="homeIcon" />
+      </button>
       <button
         v-for="item in APP_NAV_ITEMS"
         :key="item.label"
@@ -96,7 +111,7 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
           class="nav-btn nav-btn-sm"
           tabindex="-1"
           title="הסתר סרגל צד"
-          @click="settingsStore.navSidebarVisible = false"
+          @click="settingsStore.setNavSidebarVisible(paneId, false)"
         >
           <IconChevronDoubleRight20Regular />
         </button>
@@ -107,9 +122,7 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
 
 <style scoped>
 /* The strip is what occupies the layout; the panel inside it is the absolutely-positioned
-   sheet, so the strip has to be as wide as the panel plus whichever of its side insets are
-   actually there - one for the pane docked to the window edge, two for the pane that is
-   inboard of the sash.
+   sheet that fills it.
 
    Panel sizing is taken from where the reference's hover background actually lands: the
    item is the 24px glyph plus a 4px inset all round - 32px - and the panel is that plus a
@@ -119,36 +132,25 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
 .nav-sidebar {
   --nav-panel-width: 44px;
   --nav-panel-inset: 6px;
-  /* Inset on both sides; the window-edge pane drops one below. */
-  --nav-panel-side-insets: 2;
   position: relative;
   flex-shrink: 0;
-  width: calc(var(--nav-panel-width) + var(--nav-panel-inset) * var(--nav-panel-side-insets));
+  /* The panel fills the strip's width - the inset is vertical only, so there is no side gap
+     to leave room for and no surface showing through beside it. */
+  width: var(--nav-panel-width);
   /* Above the content panel it sits over. */
   z-index: 20;
-  /* The inset has to read as a gap, and the shell behind it paints --bg-secondary - the
-     panel's own colour - so on its own the inset was invisible and the panel looked like
-     flush chrome with a stray border round it. What shows through has to be whatever the
-     row behind it is: chrome for the title bar's band across the top, page below it, where
-     the content panel is. Hence the hard stop at --title-bar-height rather than a flat
-     fill, which ran a white stripe up through the title bar. */
-  background: linear-gradient(
-    var(--bg-secondary) 0 var(--title-bar-height),
-    var(--bg-primary) var(--title-bar-height) 100%
-  );
-}
-.nav-sidebar:has(.nav-panel.is-window-edge) {
-  --nav-panel-side-insets: 1;
 }
 
-/* The app menu as a sheet docked to this pane's edge, like the FTS filter panel over its
-   results (FullTextSearchFilterPanel): the same surface, frame and radius as the hamburger
-   dropdown that offers these same items (AppTitleBarNavDropdown), inset from the page so
-   the chrome shows around it rather than merging into the title bar.
+/* The app menu as a sheet docked to this pane's edge: the same surface, frame and radius as
+   the hamburger dropdown that offers these same items (AppTitleBarNavDropdown), so it reads
+   as that menu rather than as the app's frame thickened down one side.
 
-   Framed and inset on all four sides by default, which is what pane 2 needs - in split view
-   it sits inboard of the sash, with page on both sides of it. Only the pane that owns the
-   window's edge opens that side up (.is-window-edge below).
+   Full width of its strip, inset at the top and bottom only, and square on the side against
+   the pane's edge - the two rounded corners face the page, which is the only side there is
+   anything to round against. The side insets went and took a fair amount with them: with a
+   gap beside the panel, something had to paint that gap (the shell behind it is the panel's
+   own colour, so it showed as nothing). None of that is needed once the panel fills its
+   column.
 
    Icons only, and it stays that way: the labels live in the tooltips, and the panel does
    not widen on hover. A width that changed under the pointer moved every icon the moment
@@ -167,21 +169,22 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
   flex-direction: column;
   padding: var(--nav-panel-inset);
   gap: var(--nav-panel-inset);
-  margin: var(--nav-panel-inset);
+  /* Inset at the top and bottom only, which is all the rounded corners need to read as
+     corners. No side margin: the sheet runs the full width of its strip, flush to the
+     pane's edge on one side and to the content on the other. */
+  margin-block: var(--nav-panel-inset);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  overflow-y: auto;
-  scrollbar-width: none;
-}
-/* The pane that owns the window's right edge runs flat into it: no margin, no border and
-   no radius on that side, so the sheet reads as having slid in from off-screen rather than
-   as a card floating a few pixels short of the frame. PHYSICAL `right`, deliberately - the
-   document is dir=rtl, where the logical end edge maps to the physical LEFT. */
-.nav-panel.is-window-edge {
-  margin-right: 0;
+  /* Nothing drawn on the side against the pane's edge - no border there, and square corners
+     - so the sheet runs straight off that edge instead of closing itself off a pixel short
+     of it. The frame and the two rounded corners face the page, which is the only side
+     there is anything to frame against. PHYSICAL right, deliberately, not the logical
+     properties: the document is dir=rtl, where the logical end edge maps to the physical
+     LEFT - the side the page is on. */
   border-right: none;
   border-radius: 6px 0 0 6px;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
 .nav-panel::-webkit-scrollbar {
   display: none;
@@ -215,6 +218,7 @@ const isDockedToWindowEdge = computed(() => paneId === 1)
   height: 24px;
   color: inherit;
 }
+
 /* Glyphs Fluent only ships at 20 (the double chevron, the split-view pair) are drawn at
    20 rather than scaled up to the rail's 24. */
 .nav-btn-sm svg {
