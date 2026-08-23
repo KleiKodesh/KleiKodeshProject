@@ -59,6 +59,8 @@ namespace WpfLib.Gallery
             Rule();
             LoadCost();
             Rule();
+            SharingCost();
+            Rule();
             PerControl(count);
             Rule();
             VisualCost();
@@ -131,6 +133,73 @@ namespace WpfLib.Gallery
                 });
                 Console.WriteLine("{0,-24} {1,7:F1}ms {2,8}", name, ms, keys);
             }
+        }
+
+        /// <summary>
+        /// What a SECOND pane pays.
+        ///
+        /// Every pane in the suite merges the palette into its own Resources,
+        /// and each one writes "new ResourceDictionary { Source = ... }" to do
+        /// it. If WPF caches by URI then only the first pane pays and there is
+        /// nothing to do here. If it does not, every pane pays the full parse
+        /// again, and the fix is to hand them all one shared instance.
+        /// </summary>
+        private static void SharingCost()
+        {
+            var uri = new Uri(PaletteUri);
+            const int panes = 5;
+
+            var fresh = Median(() =>
+            {
+                for (var i = 0; i < panes; i++)
+                {
+                    var d = new ResourceDictionary { Source = uri };
+                    Copy(d, new ResourceDictionary());   // realise it, as a pane would by using it
+                }
+            });
+
+            var shared = new ResourceDictionary { Source = uri };
+            Copy(shared, new ResourceDictionary());
+            var reused = Median(() =>
+            {
+                for (var i = 0; i < panes; i++)
+                {
+                    var host = new ResourceDictionary();
+                    host.MergedDictionaries.Add(shared);
+                    Copy(host, new ResourceDictionary());
+                }
+            });
+
+            Console.WriteLine("{0} panes, own instance each : {1,7:F1}ms", panes, fresh);
+            Console.WriteLine("{0} panes, one shared instance: {1,7:F1}ms", panes, reused);
+            Console.WriteLine("{0,-30} {1,7:F1}ms", "saved by sharing", fresh - reused);
+
+            // Sharing by hand is not the shipping path; panes write XAML. This
+            // loads a dictionary that merges the palette through
+            // SharedResourceDictionary, the way a pane would, and checks that
+            // the second load is the cheap one.
+            WpfLib.Themes.SharedResourceDictionary.ClearCache();
+            var probe = new Uri("pack://application:,,,/WpfLib.Gallery;component/sharedpaletteprobe.xaml");
+
+            var firstPane = Time(() => Copy(new ResourceDictionary { Source = probe }, new ResourceDictionary()));
+            var cachedAfterFirst = WpfLib.Themes.SharedResourceDictionary.CachedCount;
+            var nextPane = Time(() => Copy(new ResourceDictionary { Source = probe }, new ResourceDictionary()));
+
+            Console.WriteLine("{0,-30} {1,7:F1}ms", "via XAML, first pane", firstPane);
+            Console.WriteLine("{0,-30} {1,7:F1}ms", "via XAML, next pane", nextPane);
+            Console.WriteLine("{0,-30} {1,7} {2}", "dictionaries cached", cachedAfterFirst,
+                cachedAfterFirst == 1 ? "" : "<- SHARING DID NOT TAKE EFFECT");
+        }
+
+        /// <summary>One pass, for things that only happen once and cannot be repeated.</summary>
+        private static double Time(Action action)
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+            var sw = Stopwatch.StartNew();
+            action();
+            sw.Stop();
+            return sw.Elapsed.TotalMilliseconds;
         }
 
         /// <summary>
