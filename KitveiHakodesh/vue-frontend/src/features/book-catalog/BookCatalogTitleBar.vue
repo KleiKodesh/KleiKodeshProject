@@ -46,8 +46,11 @@ defineEmits<{
          `v-if`, either of which would stop it holding focus and kill the keyboard
          the moment you opened a category. -->
     <div class="pill-middle" :class="{ 'is-hidden': !showSearch }">
-      <IconSearch20Regular class="search-icon" />
       <slot name="search" />
+      <!-- After the field, not before it: the path face carries the same icon at
+           this same end, so putting it anywhere else would make it jump across the
+           bar the moment the user started typing. -->
+      <IconSearch20Regular class="search-icon" />
     </div>
 
     <!-- The path. Clicking anywhere that is not a crumb opens the field, the way
