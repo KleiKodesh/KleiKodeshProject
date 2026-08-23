@@ -14,6 +14,14 @@ namespace WpfLib.Gallery
         /// </summary>
         protected override void OnStartup(StartupEventArgs e)
         {
+            if (e.Args.Length >= 1 && e.Args[0] == "--benchmark")
+            {
+                var count = e.Args.Length >= 2 && int.TryParse(e.Args[1], out var n) ? n : 100;
+                PaletteBenchmark.Run(count);
+                Shutdown(0);
+                return;
+            }
+
             if (e.Args.Length >= 2 && e.Args[0] == "--render")
             {
                 var written = SnapshotRenderer.RenderAll(e.Args[1]);

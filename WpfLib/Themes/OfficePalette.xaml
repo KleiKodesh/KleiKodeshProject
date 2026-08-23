@@ -42,18 +42,6 @@
         <ResourceDictionary Source="/WpfLib;component/themes/tokens.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/popupstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/textinputstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/liststyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/selectioncontrolstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/indicatorstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/containerstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/menustyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/treeviewstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/updowntextboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/defaults.xaml"/>
     </ResourceDictionary.MergedDictionaries>
