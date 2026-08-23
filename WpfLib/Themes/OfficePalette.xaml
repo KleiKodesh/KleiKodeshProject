@@ -1,4 +1,5 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:themes="clr-namespace:WpfLib.Themes"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         OfficePalette — the whole shared look, in one merge.
@@ -14,8 +15,8 @@
             and tab containers, combo, check and radio, menus and context
             menus, tooltip, slider, progress, expander and group box
           - The look of WpfLib's own UpDownTextBox / UpDownFloatTextBox
-          - Implicit styles for all of them except ToggleButton and
-            TextBlock, which stay opt-in (via Defaults)
+          - Implicit styles for all of them except ToggleButton, TextBlock
+            and TextBox, which stay opt-in (via Defaults)
 
         DO NOT merge this just to get at the tokens or one keyed style. It
         applies a look to roughly two dozen control types. The layers are
@@ -40,8 +41,8 @@
     -->
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/WpfLib;component/themes/tokens.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/popupstyles.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/popupstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/updowntextboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/defaults.xaml"/>
     </ResourceDictionary.MergedDictionaries>

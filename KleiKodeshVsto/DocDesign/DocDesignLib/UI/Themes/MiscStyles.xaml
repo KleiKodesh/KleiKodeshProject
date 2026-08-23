@@ -1,11 +1,12 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:kk="http://schemas.kleikodesh.org/wpf"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                     xmlns:converters="clr-namespace:WpfLib.Converters;assembly=WpfLib"
                     xmlns:controls="clr-namespace:WpfLib.Controls;assembly=WpfLib">
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
 
@@ -31,6 +32,6 @@
         <Setter Property="IsHitTestVisible" Value="False"/>
     </Style>
 
-    <!-- Scrollbars come from WpfLib/Themes/ScrollBarStyles.xaml (merged in DocDesignDictionary). -->
+    <!-- Scrollbars come from WpfLib/Themes/ScrollBarStyles.xaml (via OfficePalette). -->
 
 </ResourceDictionary>

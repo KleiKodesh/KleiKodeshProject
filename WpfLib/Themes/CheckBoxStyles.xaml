@@ -1,4 +1,5 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:themes="clr-namespace:WpfLib.Themes"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         The tick used to bind its Stroke to Foreground on an ancestor
@@ -9,8 +10,8 @@
         made the mid-gray palette work in the first place.
     -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
     <!--
