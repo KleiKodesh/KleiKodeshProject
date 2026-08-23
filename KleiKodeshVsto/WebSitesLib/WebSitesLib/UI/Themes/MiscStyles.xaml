@@ -3,6 +3,7 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/liststyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
 
@@ -33,29 +34,16 @@
     </Style>
 
     <!-- ── Dialog list item ──────────────────────────────────────── -->
-    <Style x:Key="DialogListItem" TargetType="ListBoxItem" BasedOn="{StaticResource ThemedControl}">
-        <Setter Property="FocusVisualStyle"           Value="{x:Null}"/>
-        <Setter Property="Padding"                    Value="10,6"/>
-        <Setter Property="Cursor"                     Value="Hand"/>
-        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ListBoxItem">
-                    <Border x:Name="Bd" Background="Transparent"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
-                        </Trigger>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#14808080"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <!--
+        The palette's list row, at this dialog's padding.
+
+        This used to be a full template: transparent border, hover tint,
+        selected tint. That is OfficeListBoxItem, reached separately - and the
+        standard is the better of the two, because it also handles selected AND
+        hovered together, and dims when disabled, neither of which this had.
+    -->
+    <Style x:Key="DialogListItem" TargetType="ListBoxItem" BasedOn="{StaticResource OfficeListBoxItem}">
+        <Setter Property="Padding" Value="10,6"/>
     </Style>
 
     <!-- CheckBox comes from WpfLib/Themes/CheckBoxStyles.xaml (via OfficePalette). -->
