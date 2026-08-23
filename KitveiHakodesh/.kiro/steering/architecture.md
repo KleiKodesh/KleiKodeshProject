@@ -454,7 +454,7 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 - `TreeView.vue`, `TreeNode.vue` — generic tree
 - `treeTypes.ts` — `TreeNodeItem` interface; import from here, never from `TreeNode.vue`
 - `SplitPane.vue` — resizable split pane (the *bottom-panel* splitter inside book view; the left/right pane splitter is in `App.vue`)
-- `BottomSearchBar.vue`, `ContextMenu.vue`, `GlobalContextMenu.vue`, `ConfirmDialog.vue`, `AlertDialog.vue`, `LoadingAnimation.vue`, `ToastBanner.vue`, `ClockWidget.vue`
+- `TopSearchBar.vue` (every page search bar), `ContextMenu.vue`, `GlobalContextMenu.vue`, `ConfirmDialog.vue`, `AlertDialog.vue`, `LoadingAnimation.vue`, `ToastBanner.vue`, `ClockWidget.vue`
 - `HintIcon.vue` — tooltip hint icon
 - `common/FloatingSearchBar.vue`, `common/AutofillDropdown.vue` — shared search chrome
 - RTL/custom icon wrappers: `IconTreeRtl.vue`, `IconBookRtl20.vue`, `IconBookRtl24.vue`, `IconEverythingSearch.vue`

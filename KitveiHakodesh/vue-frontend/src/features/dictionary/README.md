@@ -4,7 +4,7 @@ Dictionary page. Singleton route `/dictionary`. Queries two databases: `public/d
 
 ## Files
 
-`DictionaryPage.vue` — page shell. Search input via `BottomSearchBar`, debounces the query, calls `combinedLookup`, passes `WordPageData` to `DictionaryWordPage`. Handles spelling suggestions (see lookup scenarios below) when no exact match is found. Manages zoom state via `useZoomHandler` — zoom is stored globally in `settingsStore.dictionaryZoom` (persisted to localStorage) and passed as `fontPx` to `DictionaryWordPage`.
+`DictionaryPage.vue` — page shell. Search input via `TopSearchBar`, debounces the query, calls `combinedLookup`, passes `WordPageData` to `DictionaryWordPage`. Handles spelling suggestions (see lookup scenarios below) when no exact match is found. Manages zoom state via `useZoomHandler` — zoom is stored globally in `settingsStore.dictionaryZoom` (persisted to localStorage) and passed as `fontPx` to `DictionaryWordPage`.
 
 `DictionaryWordPage.vue` — renders a looked-up word. Three sections stacked vertically:
 - מחברת מנחם results (scrollable, capped height) — shown directly under the title
