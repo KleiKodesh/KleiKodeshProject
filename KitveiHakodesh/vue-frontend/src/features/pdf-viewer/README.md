@@ -12,7 +12,7 @@ PDF viewing with OCR-based text extraction and script recognition.
 **OCR Logic:**
 - `usePdfOcrSelection.ts` — composable; manages Tesseract workers, iframe injection, and OCR workflow coordination
 - `pdfOcrInjectedScript.ts` — script injected into the PDF.js iframe; handles rectangle selection, text layer extraction, and canvas capture
-- `pdfViewerTypes.ts` — TypeScript types: `OcrScript` (`'hebrew' | 'rashi' | 'mixed'`), `OcrSelectionResult`
+- `pdfViewerTypes.ts` — TypeScript types: `OcrScript` (`'hebrew' | 'rashi' | 'mixed' | 'english'`), `OcrSelectionResult`
 
 **Page Tracking:**
 - `usePdfViewPageTracking.ts` — composable; reads the PDF's built-in outline (TOC) via `PDFViewerApplication.pdfDocument.getOutline()` and resolves each entry's destination to a 1-based page number. On every `pagechanging` event it finds the deepest outline entry whose page ≤ the current page and writes the full ancestor breadcrumb (e.g. "פרק א · סימן ב") as `tocPath` on the active tab. Falls back to "עמוד X מתוך Y" when the PDF has no outline. `AppTitleBar` renders `tocPath` the same way it renders the book view TOC breadcrumb. Call `attach(contentWindow)` after iframe load and `detach()` before tear-down.
@@ -42,7 +42,7 @@ PDF viewing with OCR-based text extraction and script recognition.
 
 1. `usePdfOcrSelection` receives the `kitvei-hakodesh-ocr-canvas` message
 2. Sets `isProcessing = true` and shows the popup immediately (with empty text and progress bar)
-3. Initializes a Tesseract worker for the selected script (`hebrew`, `rashi`, or `mixed`)
+3. Initializes a Tesseract worker for the selected script (`hebrew`, `rashi`, `mixed`, or `english`)
 4. Calls `worker.recognize(dataUrl)` to OCR the canvas image
 5. Cleans up the recognized text and posts the result to the popup
 6. After popup closes, OCR mode deactivates automatically
@@ -58,10 +58,11 @@ The `PdfOcrResultPopup.vue` modal shows:
 
 ## Script Selection
 
-When OCR mode is active, a floating toolbar slides down from the top with three script buttons:
+When OCR mode is active, a floating toolbar slides down from the top with four script buttons:
 - **עברי** — standard Hebrew (Tesseract `heb` model)
 - **רש"י** — Rashi script (Tesseract `heb_rashi` model)
 - **מעורב** — mixed: both `heb+heb_rashi` combined
+- **English** — Latin script (Tesseract `eng` model); the result textarea switches to LTR for this script
 
 Script selection is synced between `pdfOcrStore.script` and `usePdfOcrSelection.script`. Changing the script:
 1. Updates the composable's script ref
@@ -86,7 +87,7 @@ Script selection is synced between `pdfOcrStore.script` and `usePdfOcrSelection.
 - Initialized on first use (not on app boot) — reduces cold-start parse cost
 - Workers persist in memory across multiple OCR operations
 - Cleaned up in `onUnmounted` when the PDF tab closes
-- Language model files (`heb.traineddata`, `heb_rashi.traineddata`) loaded from `/tesseract/` public folder
+- Language model files (`heb.traineddata`, `heb_rashi.traineddata`, `eng.traineddata`) loaded from `/tesseract/` public folder
 
 **Iframe:**
 - Aggressively torn down in `onBeforeUnmount` — iframe is set to `about:blank` and removed to release the PDF.js worker, canvases, and WebView2 sub-frame immediately
