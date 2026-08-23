@@ -10,6 +10,7 @@ const LANG_FILES: Record<OcrScript, string> = {
   hebrew: 'heb',
   rashi: 'heb_rashi',
   mixed: 'heb+heb_rashi',
+  english: 'eng',
 }
 
 export function usePdfOcrSelection(getIframe: () => HTMLIFrameElement | null) {

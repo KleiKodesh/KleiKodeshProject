@@ -24,6 +24,11 @@ const resultLabel = computed(() => {
   return props.result.isOcr ? 'טקסט מזוהה (OCR)' : 'טקסט נבחר'
 })
 
+// The chrome stays RTL, but the recognised text itself follows the script that
+// produced it — Latin output in an RTL box moves its trailing punctuation to the
+// wrong end, and the box is editable, so the user reads and types into it.
+const textDirection = computed(() => (props.script === 'english' ? 'ltr' : 'rtl'))
+
 const copyButtonLabel = computed(() => {
   return copied.value ? 'הועתק' : 'העתק'
 })
@@ -87,7 +92,7 @@ function onKeydown(event: KeyboardEvent) {
           v-model="editableText"
           :placeholder="editableText ? '' : 'לא נמצא טקסט באזור הנבחר'"
           spellcheck="true"
-          dir="rtl"
+          :dir="textDirection"
           :disabled="props.isProcessing"
         />
         <div v-if="props.isProcessing" class="progress-container">

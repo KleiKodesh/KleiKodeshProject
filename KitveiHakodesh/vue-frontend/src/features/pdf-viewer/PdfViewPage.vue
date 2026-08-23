@@ -284,6 +284,14 @@ function cancelConversion() {
               >
                 מעורב
               </button>
+              <button
+                class="script-btn"
+                :class="{ active: pdfOcrStore.script === 'english' }"
+                @click="pdfOcrStore.setScript('english')"
+                title="English"
+              >
+                English
+              </button>
             </div>
             <button
               class="toggle-btn"
