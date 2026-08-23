@@ -150,11 +150,18 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     public const string IndexFormatVersion = "v19";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
-    /// content-free <see cref="Common.DbChangeStamp"/>, prefixed with this index's
-    /// format version so a schema/pipeline change also forces a rebuild. Any DB change
-    /// (or a format bump) changes the value. Human-readable in the ver file.</summary>
+    /// <see cref="Common.DbContentStamp"/>, prefixed with this index's format version so a
+    /// schema/pipeline change also forces a rebuild. Any change to the DB's ROWS (or a
+    /// format bump) changes the value. Human-readable in the ver file.
+    ///
+    /// Content, not file metadata: this used to use DbChangeStamp, which reports any write
+    /// to the file even when no row changed. Because that stamp includes the per-file USN
+    /// and file id — values that never return to a previous state — a single stray write
+    /// (a `PRAGMA journal_mode` on open, another reader's WAL checkpoint, a copy or
+    /// restore) made the recorded hash unmatchable and rebuilt this index on every launch
+    /// thereafter.</summary>
     public static string ComputeDbHash(string dbPath)
-        => Common.DbChangeStamp.Compute(dbPath, IndexFormatVersion);
+        => Common.DbContentStamp.Compute(dbPath, IndexFormatVersion);
 
     private string VerFile => Path.Combine(rootPath, "catalogtoc.ver");
 

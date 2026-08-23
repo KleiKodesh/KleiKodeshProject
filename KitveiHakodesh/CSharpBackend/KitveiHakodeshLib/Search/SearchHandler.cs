@@ -172,6 +172,15 @@ namespace KitveiHakodeshLib.Search
                 // version) keeps today's behavior and self-heals on the next rebuild.
                 string builtFromDb = FtsIndexState.ReadSourceStamp();
                 string currentDbStamp = FtsIndexState.ComputeDbStamp(dbPath);
+                // A legacy-format stamp cannot be compared against a current one — it would
+                // always look like a different DB and wipe a good index on the first launch
+                // after the format change. Keep the index; the next build re-stamps it.
+                if (FtsIndexState.IsLegacySourceStamp(builtFromDb))
+                {
+                    Console.WriteLine("[SearchHandler] fts.src is an older stamp format ("
+                        + builtFromDb + ") — keeping the index, cannot verify provenance");
+                    builtFromDb = null;
+                }
                 if (builtFromDb != null && currentDbStamp != null &&
                     !string.Equals(builtFromDb, currentDbStamp, StringComparison.OrdinalIgnoreCase))
                 {
@@ -221,9 +230,15 @@ namespace KitveiHakodeshLib.Search
                 // longer matches, the watermark belongs to another database — resuming
                 // would permanently skip every line below it (the segments would answer
                 // for the wrong content). Wipe and rebuild from scratch instead.
+                // Unlike the completed-index check above, a legacy-format stamp is NOT
+                // forgiven here: resuming needs positive proof that the watermark belongs
+                // to this DB, and an unverifiable stamp cannot provide it. Wiping costs a
+                // rebuild that was already in progress; resuming wrongly would silently
+                // skip every line below the watermark for good.
                 string resumeSourceStamp = FtsIndexState.ReadSourceStamp();
                 string resumeDbStamp = FtsIndexState.ComputeDbStamp(dbPath);
                 bool provenanceOk = resumeSourceStamp != null && resumeDbStamp != null &&
+                                    !FtsIndexState.IsLegacySourceStamp(resumeSourceStamp) &&
                                     string.Equals(resumeSourceStamp, resumeDbStamp,
                                                   StringComparison.OrdinalIgnoreCase);
 

@@ -26,13 +26,24 @@ namespace FtsLib.SeforimDb
             }
 
             Console.WriteLine($"[ZayitDb] Opening: {resolved}");
-            _connection = new SQLiteConnection($"Data Source={resolved};Version=3;Page Size=4096;");
+            // seforim.db is a pre-built CONTENT database this app only ever READS (indexing
+            // reads lines; search reads content). Open it READ-ONLY so no write lock is ever
+            // taken — that is what lets the background build and any number of concurrent
+            // searches all read at once, and it keeps the file's bytes and mtime untouched.
+            //
+            // journal_mode is deliberately NOT set: setting it WRITES the DB header and
+            // creates/drops the -wal sidecar on every open, which moved the file's mtime and
+            // WAL state on each launch. FtsIndexState.ComputeDbStamp fingerprints exactly
+            // those, so the stamp no longer matched and every launch wiped and rebuilt the
+            // whole index. It is also not this app's DB mode to dictate.
+            // (Matches the net10 twin, SeforimDbService.Open() and the segment readers.)
+            _connection = new SQLiteConnection(
+                $"Data Source={resolved};Version=3;Page Size=4096;Read Only=True;");
             _connection.Open();
 
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText =
-                    "PRAGMA journal_mode=WAL;" +
                     "PRAGMA cache_size=-65536;" +  // up to 64 MB page cache
                     "PRAGMA temp_store=MEMORY;" +
                     "PRAGMA mmap_size=268435456;"; // 256 MB memory-mapped I/O

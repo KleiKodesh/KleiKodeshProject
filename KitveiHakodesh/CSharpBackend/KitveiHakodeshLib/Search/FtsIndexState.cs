@@ -499,27 +499,111 @@ namespace KitveiHakodeshLib.Search
         // fts.ver (the app-version stamp above) is written only when a build COMPLETES,
         // so an interrupted build used to carry no record of which DB it was indexing —
         // resuming it after a DB switch permanently skipped every line below the old
-        // watermark. fts.src records a cheap content-free fingerprint of the source DB
-        // at build START; ExecuteOnDbReady refuses to resume (and invalidates a
-        // completed index) when it no longer matches the current DB.
+        // watermark. fts.src records a fingerprint of the source DB's CONTENT at build
+        // START; ExecuteOnDbReady refuses to resume (and invalidates a completed index)
+        // when it no longer matches the current DB.
+        //
+        // The fingerprint deliberately describes the CONTENT, not the file. An earlier
+        // version used path + size + mtime + the -wal sidecar's size/mtime, which made
+        // the stamp track journal churn rather than content: anything that touched the
+        // file without changing a single row — a stray `PRAGMA journal_mode` on open, a
+        // copy, a restore, a reinstall — produced a mismatch and wiped the whole index
+        // on the next launch. The queries below are all index seeks or header reads, so
+        // this stays a startup-cheap check; COUNT(*) on `line` is a multi-second full
+        // scan and is deliberately NOT part of it.
 
-        /// <summary>Content-free fingerprint of the seforim DB: path + size + mtime,
-        /// plus the SQLite WAL sidecar when non-empty (a committed write lands there
-        /// before any checkpoint touches the main file). Returns null on error.</summary>
+        /// <summary>Content fingerprint of the seforim DB: path plus the identity of the
+        /// `line` and `book` tables (extremal ids and the schema cookie). Read-only, and
+        /// invariant under anything that rewrites the file without changing its rows.
+        /// Falls back to the file's size alone when the DB cannot be queried, so a
+        /// genuinely different DB still mismatches. Returns null on error.</summary>
         internal static string ComputeDbStamp(string dbPath)
         {
             try
             {
                 if (string.IsNullOrEmpty(dbPath)) return null;
-                if (!File.Exists(dbPath)) return dbPath.ToLowerInvariant() + "|missing";
-                var info = new FileInfo(dbPath);
-                string stamp = dbPath.ToLowerInvariant() + "|" + info.Length + "|" + info.LastWriteTimeUtc.Ticks;
-                var wal = new FileInfo(dbPath + "-wal");
-                if (wal.Exists && wal.Length > 0)
-                    stamp += "|wal=" + wal.Length + ":" + wal.LastWriteTimeUtc.Ticks;
-                return stamp;
+                // Carries StampPrefix like every other branch — without it this stamp would
+                // read as the older format and be excused rather than compared.
+                if (!File.Exists(dbPath)) return StampPrefix + dbPath.ToLowerInvariant() + "|missing";
+
+                string content = TryComputeDbContentStamp(dbPath);
+                if (content != null) return StampPrefix + dbPath.ToLowerInvariant() + "|" + content;
+
+                // The DB is present but unreadable (locked, corrupt, unexpected schema).
+                // Size alone still separates two different databases, and unlike mtime it
+                // does not move when the file is merely rewritten in place.
+                return StampPrefix + dbPath.ToLowerInvariant() + "|len=" + new FileInfo(dbPath).Length;
             }
             catch { return null; }
+        }
+
+        /// <summary>Version tag on every stamp this build writes. Bump it whenever the
+        /// fingerprint's format changes, so old stamps are recognised as a DIFFERENT
+        /// FORMAT rather than compared as a different DB — see IsLegacySourceStamp.</summary>
+        private const string StampPrefix = "v2|";
+
+        /// <summary>True for an fts.src written by an app version whose stamp format
+        /// predates this one. Such a stamp can never compare equal to a current stamp, so
+        /// treating it as a mismatch would wipe a perfectly good index on the first launch
+        /// after every format change. Callers treat it as "provenance unknown" instead:
+        /// a completed index is kept (and re-stamped on its next build), while an
+        /// interrupted build is still wiped rather than resumed on an unverifiable
+        /// watermark.</summary>
+        internal static bool IsLegacySourceStamp(string stamp)
+        {
+            return stamp != null && !stamp.StartsWith(StampPrefix, StringComparison.Ordinal);
+        }
+
+        /// <summary>Queries the DB for a content fingerprint. Returns null if it cannot be
+        /// read, so the caller can fall back. Opens READ-ONLY: this must never write the
+        /// header or create a -wal sidecar (that is the bug this stamp exists to survive).</summary>
+        private static string TryComputeDbContentStamp(string dbPath)
+        {
+            try
+            {
+                using (var conn = new System.Data.SQLite.SQLiteConnection(
+                           "Data Source=" + dbPath + ";Version=3;Read Only=True;FailIfMissing=True;"))
+                {
+                    conn.Open();
+                    using (var cmd = conn.CreateCommand())
+                    {
+                        // schema_version changes on any DDL, so a rebuilt DB with coincidentally
+                        // identical extremal ids still mismatches.
+                        cmd.CommandText = "PRAGMA schema_version";
+                        object schemaVer = cmd.ExecuteScalar();
+
+                        // MIN/MAX over an INTEGER PRIMARY KEY are index seeks, not scans.
+                        cmd.CommandText = "SELECT MIN(id), MAX(id) FROM line";
+                        long lineMin = 0, lineMax = 0;
+                        using (var r = cmd.ExecuteReader())
+                            if (r.Read() && !r.IsDBNull(0))
+                            { lineMin = r.GetInt64(0); lineMax = r.GetInt64(1); }
+
+                        cmd.CommandText = "SELECT MIN(id), MAX(id) FROM book";
+                        long bookMin = 0, bookMax = 0;
+                        using (var r = cmd.ExecuteReader())
+                            if (r.Read() && !r.IsDBNull(0))
+                            { bookMin = r.GetInt64(0); bookMax = r.GetInt64(1); }
+
+                        // A DB swapped for one with the same id ranges but different text would
+                        // slip past the ids alone; the last line's content pins the actual rows.
+                        cmd.CommandText = "SELECT content FROM line WHERE id = @id";
+                        cmd.Parameters.AddWithValue("@id", lineMax);
+                        object lastLine = cmd.ExecuteScalar();
+                        int lastLineLen = lastLine is string s ? s.Length : -1;
+
+                        return "schema=" + schemaVer
+                             + "|line=" + lineMin + ":" + lineMax
+                             + "|book=" + bookMin + ":" + bookMax
+                             + "|tail=" + lastLineLen;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[FtsIndexState] Content stamp unavailable, falling back: " + ex.Message);
+                return null;
+            }
         }
 
         internal static string ReadSourceStamp()
