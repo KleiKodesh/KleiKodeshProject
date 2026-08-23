@@ -5,31 +5,17 @@
         <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/textinputstyles.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/liststyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
 
     <!-- UpDownTextBox comes from WpfLib/Themes/UpDownTextBoxStyles.xaml. -->
 
     <!-- ── Search input TextBox — borderless, fills the input wrapper ──── -->
-    <Style x:Key="SearchTextBox" TargetType="TextBox">
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding"         Value="8,0"/>
-        <Setter Property="FontSize"        Value="{StaticResource FontSizeLarge}"/>
-        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="CaretBrush"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <Style x:Key="SearchTextBox" TargetType="TextBox" BasedOn="{StaticResource FlatTextBox}">
+        <Setter Property="Padding" Value="8,0"/>
+        <Setter Property="CaretBrush" Value="{Binding Foreground, RelativeSource={RelativeSource Self}}"/>
     </Style>
 
     <!-- ── Input wrapper border — adaptive ───────────────────────── -->
@@ -42,57 +28,13 @@
     </Style>
 
     <!-- ── Inline TextBox — inherits fg from ancestor ────────────── -->
-    <Style x:Key="InlineTextBox" TargetType="TextBox">
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding"         Value="8,0"/>
-        <Setter Property="FontSize"        Value="{StaticResource FontSizeLarge}"/>
-        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="TextBox">
-                    <ScrollViewer x:Name="PART_ContentHost" VerticalAlignment="Center"/>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <Style x:Key="InlineTextBox" TargetType="TextBox" BasedOn="{StaticResource FlatTextBox}">
+        <Setter Property="Padding" Value="8,0"/>
     </Style>
 
     <!-- ── Result list item — hover/pressed/selected ────────────── -->
-    <Style x:Key="ResultItem" TargetType="ListBoxItem" BasedOn="{StaticResource ThemedControl}">
-        <Setter Property="Padding"         Value="8,5"/>
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Cursor"          Value="Hand"/>
-        <Setter Property="FontFamily"      Value="{StaticResource UiFontFamily}"/>
-        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ListBoxItem">
-                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
-                        </Trigger>
-                        <Trigger Property="IsSelected" Value="True">
-                            <Setter TargetName="Bd" Property="Background" Value="#3300B4FF"/>
-                        </Trigger>
-                        <MultiTrigger>
-                            <MultiTrigger.Conditions>
-                                <Condition Property="IsMouseOver" Value="True"/>
-                                <Condition Property="IsSelected"  Value="True"/>
-                            </MultiTrigger.Conditions>
-                            <Setter TargetName="Bd" Property="Background" Value="#4400B4FF"/>
-                        </MultiTrigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
+    <Style x:Key="ResultItem" TargetType="ListBoxItem" BasedOn="{StaticResource OfficeListBoxItem}">
+        <Setter Property="Padding" Value="8,5"/>
     </Style>
 
     <!-- Scrollbars come from WpfLib/Themes/ScrollBarStyles.xaml (merged in RegexFindDictionary). -->
