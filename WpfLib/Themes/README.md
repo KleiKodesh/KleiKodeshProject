@@ -89,7 +89,30 @@ document fonts `WpfLib.Helpers.FontsProvider` enumerates.
 | `AccentHover` | `#106EBE` | Accent hover state |
 | `AccentPressed` | `#005A9E` | Accent pressed state |
 | `SelectedBrush` | `#3300B4FF` | Selected item highlight (20% accent tint) |
-| `TextSecBrush` | `#99808080` | Secondary text (60% opacity) |
+| `TextSecBrush` | `#99808080` | Secondary text (60% opacity), and the combo placeholder |
+| `SelectedHoverBrush` | `#4400B4FF` | Selected **and** hovered, so a selected row keeps reading as selected |
+| `ScrollThumbBrush` | `#4D808080` | Scrollbar thumb at rest |
+| `ScrollThumbHoverBrush` | `#66808080` | Thumb hovered |
+| `ScrollThumbDragBrush` | `#80808080` | Thumb being dragged |
+
+The thumb has its own ramp, heavier than hover/pressed, because it has to read
+as a solid object rather than as a wash over the pane.
+
+**Popup surface** — these four are deliberately **not** overlays. Everything
+above is a mid-gray wash that works because there is a pane behind it. A Popup
+renders in its own `HwndSource` with nothing behind it, so it must be opaque and
+state its own colours:
+
+| Key | Value | Purpose |
+|-----|-------|---------|
+| `PopupBrush` | `#FF2B2B2B` | ToolTip and menu surface |
+| `PopupBorderBrush` | `#FF3F3F3F` | Its hairline |
+| `PopupTextBrush` | `#FFF0F0F0` | Text on it |
+| `PopupHoverBrush` | `#22FFFFFF` | A highlighted menu row |
+
+Note the ComboBox drop-down is the exception that proves the rule: it mirrors
+the *host's* background instead, because it is a list of the pane's own content
+rather than a floating surface.
 
 **Why mid-gray overlays?** Mid-gray (`#808080`) is equidistant from black and
 white, so it is visible on both light and dark backgrounds. One palette adapts to
@@ -288,6 +311,31 @@ the same parent. So:
   </ResourceDictionary.MergedDictionaries>
   ```
   DocDesignLib's and RegexFindLib's `ButtonStyles.xaml` both do this.
+
+---
+
+## The Metrics
+
+Written down because they had drifted: buttons and toggles had different
+corners, the same chevron was drawn at two sizes, and four kinds of row had
+four paddings.
+
+| | value | applies to |
+|---|---|---|
+| **Corner radius** | **4** | controls and surfaces: buttons, toggles, inputs, combo, group box, tooltip, menu and drop-down popups |
+| | **2** | small marks and rows: the checkbox tick box, list/tree/menu rows, progress and slider tracks |
+| | 7 | the radio button only, because 7 on a 14px box is a circle |
+| **Border** | 1 or 0 | bordered or flat. Nothing in between |
+| **Row padding** | **8,5** | every selectable row: list, combo, tree, menu |
+| **Input height** | **28** | TextBox, PasswordBox, ComboBox |
+| **Chevron** | **8×8**, stroke 1.5 | expander, tree, submenu. The combo's is 10×6 because it points down, not right |
+| **Selection box** | 14×14 | CheckBox and RadioButton, so the two line up in a column |
+| **Disabled** | Opacity 0.35 | everywhere, no exceptions |
+
+**Interaction states go by kind, not by control.** Fill-hover on buttons, rows
+and containers is `HoverBrush`; border-hover on anything bordered is
+`BorderStrong`; accent-hover on links and the slider is `AccentHover`. A new
+control should pick the row it belongs to rather than inventing a value.
 
 ---
 

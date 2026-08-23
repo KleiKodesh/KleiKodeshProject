@@ -1,4 +1,6 @@
-﻿using System.Windows;
+﻿using System;
+using System.Collections.Generic;
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 
@@ -38,13 +40,6 @@ namespace WpfLib.Gallery
         public static readonly string[] ThemeNames =
         {
             "Office White", "Office Light Gray", "Office Dark Gray", "Office Black",
-        };
-
-        private static readonly string[] TokenNames =
-        {
-            "BgSecBrush", "BgTerBrush", "HoverBrush", "PressedBrush",
-            "BorderBrush", "BorderStrong", "AccentBrush", "AccentHover",
-            "AccentPressed", "SelectedBrush", "TextSecBrush",
         };
 
         public MainWindow()
@@ -111,12 +106,20 @@ namespace WpfLib.Gallery
             Foreground = Brush(theme.Fg);
         }
 
+        /// <summary>
+        /// Read the colour tokens out of the merged palette rather than from a
+        /// list kept here.
+        ///
+        /// There WAS a list here, and it silently went out of date the moment
+        /// Brushes.xaml grew: eight new tokens existed and none of them showed
+        /// up, while the comment above claimed they would. Enumerating the
+        /// dictionary means the gallery cannot drift from the palette.
+        /// </summary>
         private void BuildSwatches()
         {
-            foreach (var name in TokenNames)
+            foreach (var name in BrushTokenNames())
             {
-                var brush = TryFindResource(name) as Brush;
-                if (brush == null) continue;
+                if (!(TryFindResource(name) is Brush brush)) continue;
 
                 SwatchPanel.Children.Add(new StackPanel
                 {
@@ -127,7 +130,7 @@ namespace WpfLib.Gallery
                         {
                             Width = 96,
                             Height = 34,
-                            CornerRadius = new CornerRadius(3),
+                            CornerRadius = new CornerRadius(4),
                             Background = brush,
                             BorderThickness = new Thickness(1),
                             BorderBrush = TryFindResource("BorderBrush") as Brush,
@@ -142,6 +145,29 @@ namespace WpfLib.Gallery
                     },
                 });
             }
+        }
+
+        /// <summary>
+        /// Every SolidColorBrush key the palette defines, sorted by name.
+        ///
+        /// Sorted rather than in declaration order, because a ResourceDictionary
+        /// enumerates in hash order and the strip came out shuffled. Sorted is
+        /// at least stable between runs, which the baselines need.
+        /// </summary>
+        private static List<string> BrushTokenNames()
+        {
+            var brushes = new ResourceDictionary
+            {
+                Source = new Uri("pack://application:,,,/WpfLib;component/themes/brushes.xaml"),
+            };
+
+            var names = new List<string>();
+            foreach (System.Collections.DictionaryEntry entry in brushes)
+                if (entry.Value is SolidColorBrush && entry.Key is string key)
+                    names.Add(key);
+
+            names.Sort(StringComparer.Ordinal);
+            return names;
         }
 
         private static SolidColorBrush Brush(string hex) =>

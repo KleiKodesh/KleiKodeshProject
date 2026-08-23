@@ -35,7 +35,7 @@
                               StrokeThickness="1.5"
                               StrokeLineJoin="Round"
                               Stretch="Uniform"
-                              Width="7" Height="7"
+                              Width="8" Height="8"
                               FlowDirection="LeftToRight"
                               RenderTransformOrigin="0.5,0.5">
                             <Path.RenderTransform>
@@ -63,7 +63,7 @@
     <Style x:Key="OfficeTreeViewItem" TargetType="TreeViewItem" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
         <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
-        <Setter Property="Padding"          Value="4,3"/>
+        <Setter Property="Padding"          Value="8,5"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

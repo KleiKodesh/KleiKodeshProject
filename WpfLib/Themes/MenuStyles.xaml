@@ -22,7 +22,7 @@
     <Style x:Key="OfficeMenuItem" TargetType="MenuItem" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="FontFamily"       Value="{StaticResource UiFontFamily}"/>
         <Setter Property="FontSize"         Value="{StaticResource FontSizeNormal}"/>
-        <Setter Property="Padding"          Value="10,6"/>
+        <Setter Property="Padding"          Value="8,5"/>
         <Setter Property="Cursor"           Value="Hand"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
@@ -55,7 +55,7 @@
                                       StrokeThickness="1.5"
                                       StrokeLineJoin="Round"
                                       Stretch="Uniform"
-                                      Width="7" Height="7"
+                                      Width="8" Height="8"
                                       Margin="10,0,0,0"
                                       FlowDirection="LeftToRight"
                                       VerticalAlignment="Center"
