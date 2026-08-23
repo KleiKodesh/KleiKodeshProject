@@ -530,9 +530,14 @@ export default defineConfig({
     include: [
       '@iconify-prerendered/vue-fluent',
       '@iconify-prerendered/vue-fluent-color',
+      // tesseract.js v7 is CJS-only (main: src/index.js, no ESM build), and Vite
+      // serves EXCLUDED deps raw — so the browser's import() hit `require is not
+      // defined` and OCR silently returned nothing for every language, in dev only
+      // (rollup converts CJS in prod). Pre-bundling converts it once at startup.
+      // Its wasm core, worker, and traineddata never go through the bundle either
+      // way — createWorker() pins all three to /tesseract/ explicitly.
+      'tesseract.js',
     ],
-    // tesseract.js is lazy-loaded (wasm + workers) and must stay unbundled.
-    exclude: ['tesseract.js'],
   },
   build: {
     assetsInlineLimit: Number.MAX_SAFE_INTEGER,
