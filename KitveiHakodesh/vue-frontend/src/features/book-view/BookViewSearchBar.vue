@@ -39,14 +39,39 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const inputValue = ref(props.query ?? '')
 const searchMode = ref<SearchMode>(props.mode)
 
+/**
+ * Focus the field, and with `selectAll` also select what is in it so the next keystroke
+ * replaces it rather than appending.
+ *
+ * Select-all is for a REOPEN, where the text is a query the user already ran and the
+ * likely next move is a different search. It is deliberately NOT used when the bar stays
+ * open and only its target changes (a mode switch, or re-picking the current mode): the
+ * query is carried over verbatim there and may never have been searched at all, so
+ * selecting it would put a half-typed term one keystroke from being wiped.
+ *
+ * select() goes after focus(): focusing places the caret and would collapse a selection
+ * made beforehand.
+ */
+function focusInput({ selectAll = true }: { selectAll?: boolean } = {}) {
+  const el = inputRef.value
+  if (!el) return
+  el.focus()
+  if (selectAll) el.select()
+}
+
 watch(() => props.query, (q) => {
   const nextValue = q ?? ''
   if (nextValue !== inputValue.value) inputValue.value = nextValue
 })
 watch(() => props.mode, (m) => { if (searchMode.value !== m) searchMode.value = m })
 watch(inputValue, (v) => emit('queryChange', v))
-watch(searchMode, (m) => { emit('modeChange', m); nextTick(() => inputRef.value?.focus()) })
-watch(() => props.visible, (v) => { if (v) nextTick(() => inputRef.value?.focus()) })
+// A mode switch retargets WHERE we search, not WHAT — keep the caret, don't select.
+watch(searchMode, (m) => { emit('modeChange', m); nextTick(() => focusInput({ selectAll: false })) })
+// Reopen: select the retained query so the next keystroke replaces it. The nextTick
+// matters: an open can change query and visible in the same tick, and select() needs the
+// new value already written to inputValue by the props.query watch above — deferring past
+// the flush guarantees that whatever order the watchers run in.
+watch(() => props.visible, (v) => { if (v) nextTick(focusInput) })
 // Fall back to content search when the panel being searched closes. Keyed by slot
 // so closing one panel never disturbs a search running in the other.
 watch(() => props.openCommentarySlots, (slots) => {
@@ -144,21 +169,28 @@ function toggleModeMenu() {
 }
 
 function selectSearchMode(mode: SearchMode) {
+  const changed = mode !== searchMode.value
   searchMode.value = mode
   modeMenuOpen.value = false
-  // The searchMode watch refocuses on change; cover re-picking the current mode too.
-  nextTick(() => inputRef.value?.focus())
+  // The searchMode watch refocuses on a real change; this covers re-picking the mode
+  // already active, where the watch never fires. Neither selects — see focusInput.
+  if (!changed) nextTick(() => focusInput({ selectAll: false }))
 }
 
-defineExpose({ focus: () => inputRef.value?.focus() })
+defineExpose({ focus: focusInput })
 </script>
 
 <template>
   <Transition name="search-bar">
     <div v-if="visible" class="search-bar" :class="{ 'bottom-anchored': isBottomAnchored }" :style="panelStyle">
       <div class="search-inner">
+        <!-- data-ctrlf-enabled: Ctrl+F with the caret already in this field is a no-op
+             (useAppTitleBarShortcuts defers to it) instead of falling through to
+             openSearch, which would re-target the bar and select-all over a query the
+             user is still typing. -->
         <input
           ref="inputRef"
+          data-ctrlf-enabled
           :value="inputValue"
           type="search"
           class="search-input"

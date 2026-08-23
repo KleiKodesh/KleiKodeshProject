@@ -67,7 +67,7 @@ type LinesContentInstance = {
   focusScroller: () => void
   $el?: HTMLElement
 }
-type SearchBarInstance = { focus: () => void }
+type SearchBarInstance = { focus: (opts?: { selectAll?: boolean }) => void }
 type CommentaryViewInstance = {
   topVisibleFlatIndex: number
   activeBookId: number | null

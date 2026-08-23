@@ -59,8 +59,14 @@ export interface AutofillController {
    * dropdown — for programmatic focus (e.g. session restore) where a suggestion
    * bubble popping up unbidden would be jarring. A subsequent genuine focus,
    * click, or keystroke opens it as usual.
+   * With `{ selectAll: true }` the existing text is selected, so the first
+   * keystroke replaces it — for a restored query the user has already searched.
+   * Ignored when the field is ALREADY focused: that means the user is in it and
+   * possibly mid-word, and selecting would put their own typing one keystroke from
+   * being wiped. (This focus runs several awaits into the restore, so the user can
+   * beat it to the field.)
    */
-  focus: (opts?: { silent?: boolean }) => void
+  focus: (opts?: { silent?: boolean; selectAll?: boolean }) => void
   /** The input element (for the dropdown to anchor to). */
   inputEl: Readonly<Ref<HTMLInputElement | null>>
   onFocus: () => void
@@ -115,7 +121,7 @@ export function useAutofill(opts: UseAutofillOptions): AutofillController {
     if (activeIndex.value >= suggestions.value.length) activeIndex.value = -1
   }
 
-  function focus(opts?: { silent?: boolean }) {
+  function focus(opts?: { silent?: boolean; selectAll?: boolean }) {
     if (opts?.silent) {
       suppressNextFocusOpen = true
       // Safety net: if .focus() fires no focus event (input already focused, or not
@@ -124,7 +130,13 @@ export function useAutofill(opts: UseAutofillOptions): AutofillController {
       // disarms the leftover case on the next tick.
       nextTick(() => { suppressNextFocusOpen = false })
     }
-    inputEl.value?.focus()
+    // Read "was it already focused" BEFORE focusing, or the answer is always yes.
+    const el = inputEl.value
+    const wasFocused = el != null && document.activeElement === el
+    el?.focus()
+    // select() after focus(): focusing an input places the caret and, in some
+    // browsers, collapses any prior selection, so selecting first would be undone.
+    if (opts?.selectAll && !wasFocused) el?.select()
   }
 
   function onFocus() {
