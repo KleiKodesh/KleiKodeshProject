@@ -144,7 +144,7 @@ input:focus { background: none !important; }
   border: 1px solid var(--border-color);
   border-radius: 999px;
 }
-.search-inner input { background: none; border: none; outline: none; color: var(--text-primary); }
+.search-inner input { background: none; border: none; outline: none; color: var(--text-primary); font-family: inherit; }
 .search-inner input::placeholder { color: var(--text-secondary); }
 .search-inner input::-webkit-search-cancel-button { filter: grayscale(1) opacity(0.4); }
 .hover-bg { transition: background 120ms, color 120ms; }
