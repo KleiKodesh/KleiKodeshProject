@@ -51,7 +51,7 @@ provide(PANE_NAVIGATION_KEY, {
          included, since that is where the tab's title, breadcrumb and per-tab controls
          live - starts BESIDE it. One rail per pane: a pane here is a whole shell, so the
          rail splits with it. -->
-    <AppNavSidebar v-if="settingsStore.navSidebarVisible" />
+    <AppNavSidebar v-if="settingsStore.getNavSidebarVisible(props.paneId)" />
     <div class="app-shell-main">
       <AppTitleBar :pane-id="props.paneId" />
       <main class="app-shell-content">

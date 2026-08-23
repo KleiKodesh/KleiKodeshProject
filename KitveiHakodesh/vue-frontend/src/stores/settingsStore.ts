@@ -59,7 +59,11 @@ const KEYS = {
   SETTINGS_COMPACT_MODE: 'app.compactMode',
   SETTINGS_CONTENT_BORDER: 'app.contentBorder',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
+  // One per pane: a pane is a whole shell with its own tabs and its own chrome, so its
+  // rail is its own state and its own stored value. Pane 1 keeps the original key so an
+  // existing preference carries over.
   SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
+  SETTINGS_NAV_SIDEBAR_PANE2: 'app.navSidebar.pane2',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
@@ -71,7 +75,7 @@ const KEYS = {
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
   SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
 } as const
-import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry } from '@/webview-host/bridge'
+import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
 import { normalizeCopyFlags } from '@/features/book-view/copyFlagExclusivity'
 import {
@@ -153,9 +157,16 @@ const DEFAULTS = {
   // class + per-element scroll activity tracking) is owned by
   // useUiChromeVisibility, not this store.
   scrollbarsHidden: false,
-  // The always-on icon rail beside the page (AppNavSidebar), off until the reader
-  // turns it on from the nav menu.
-  navSidebarVisible: false,
+  // The always-on icon rail beside the page (AppNavSidebar). On by default in the standalone
+  // demo app, which has the width for it and no other chrome competing down that side; off in
+  // the VSTO task pane (too narrow to give 44px away) and in the dev browser, which mirrors
+  // the task pane so that is the path we exercise day to day. hasNativeChromeTabs is exactly
+  // that distinction - the demo host has the bridge and is not VSTO - so it is reused rather
+  // than adding a second flag that means the same thing.
+  //
+  // A default, not a lock: once the reader has toggled the rail either way, their stored
+  // value is what loads (see init), per pane.
+  navSidebarVisible: hasNativeChromeTabs,
   showRecentlyOpened: true,
 }
 
@@ -227,7 +238,20 @@ export const useSettingsStore = defineStore('settings', () => {
   const compactMode = ref(DEFAULTS.compactMode)
   const contentBorder = ref(DEFAULTS.contentBorder)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
-  const navSidebarVisible = ref(DEFAULTS.navSidebarVisible)
+  // Per-pane rail visibility. Each pane owns its own: toggling one never moves the other,
+  // and each persists separately, like every other per-pane value.
+  const navSidebarVisibleByPane = ref<Record<1 | 2, boolean>>({
+    1: DEFAULTS.navSidebarVisible,
+    2: DEFAULTS.navSidebarVisible,
+  })
+
+  function getNavSidebarVisible(paneId: 1 | 2 = 1): boolean {
+    return navSidebarVisibleByPane.value[paneId]
+  }
+
+  function setNavSidebarVisible(paneId: 1 | 2, value: boolean): void {
+    navSidebarVisibleByPane.value[paneId] = value
+  }
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
 
@@ -378,7 +402,10 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
     loadSetting(KEYS.SETTINGS_CONTENT_BORDER, contentBorder)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
-    loadSetting(KEYS.SETTINGS_NAV_SIDEBAR, navSidebarVisible)
+    const navSidebar1 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR)
+    if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
+    const navSidebar2 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR_PANE2)
+    if (navSidebar2 != null) navSidebarVisibleByPane.value[2] = navSidebar2
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     applyCSSVariables()
@@ -431,7 +458,15 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
   persistSetting(contentBorder, KEYS.SETTINGS_CONTENT_BORDER, applyCSSVariables)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
-  persistSetting(navSidebarVisible, KEYS.SETTINGS_NAV_SIDEBAR)
+  // Watched deeply because the two panes share one object; each writes its own key.
+  watch(
+    () => navSidebarVisibleByPane.value[1],
+    (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR, value),
+  )
+  watch(
+    () => navSidebarVisibleByPane.value[2],
+    (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR_PANE2, value),
+  )
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
 
@@ -566,7 +601,10 @@ export const useSettingsStore = defineStore('settings', () => {
     compactMode.value = DEFAULTS.compactMode
     contentBorder.value = DEFAULTS.contentBorder
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
-    navSidebarVisible.value = DEFAULTS.navSidebarVisible
+    navSidebarVisibleByPane.value = {
+      1: DEFAULTS.navSidebarVisible,
+      2: DEFAULTS.navSidebarVisible,
+    }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
     // Both of these have a persist watcher and a stored key, so leaving them out left the
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
@@ -599,7 +637,9 @@ export const useSettingsStore = defineStore('settings', () => {
     compactMode,
     contentBorder,
     scrollbarsHidden,
-    navSidebarVisible,
+    navSidebarVisibleByPane,
+    getNavSidebarVisible,
+    setNavSidebarVisible,
     showRecentlyOpened,
     fileSearchSortOrder,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,

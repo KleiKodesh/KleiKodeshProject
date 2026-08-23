@@ -127,7 +127,7 @@ function onTitleBarClick() {
 // the menu to offer. Both ways in are closed off: the button below is not rendered, and
 // Ctrl+M does nothing.
 function toggleNavDropdown() {
-  if (settingsStore.navSidebarVisible) return
+  if (settingsStore.getNavSidebarVisible(props.paneId)) return
   navDropdownOpen.value = !navDropdownOpen.value
 }
 
@@ -158,7 +158,7 @@ useAppTitleBarShortcuts({
     <div class="bar-start">
       <div class="nav-btn-wrap">
         <button
-          v-if="isTitleBarButtonVisible('hamburger') && !settingsStore.navSidebarVisible"
+          v-if="isTitleBarButtonVisible('hamburger') && !settingsStore.getNavSidebarVisible(props.paneId)"
           ref="navBtnRef"
           class="bar-btn"
           tabindex="-1"
@@ -168,6 +168,16 @@ useAppTitleBarShortcuts({
           <IconLineHorizontal320Regular />
         </button>
       </div>
+      <button
+        v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable && !settingsStore.getNavSidebarVisible(props.paneId)"
+        class="bar-btn"
+        tabindex="-1"
+        :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"
+        @click.stop="bookViewStore.toggleSplitView()"
+      >
+        <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
+        <IconSplitVertical20Regular v-else />
+      </button>
       <ThemeToggle v-if="isTitleBarButtonVisible('theme-toggle')" tabindex="-1" />
       <button
         v-if="isTxtViewActive"
@@ -197,16 +207,6 @@ useAppTitleBarShortcuts({
       >
         <IconOptions24Filled v-if="isBookViewActive ? bookViewStore.getToolbarVisible(props.paneId) : activeTab?.pdfViewerTitleBarVisible !== false" />
         <IconOptions24Regular v-else />
-      </button>
-      <button
-        v-if="isTitleBarButtonVisible('split-view') && isSplitViewAvailable && !settingsStore.navSidebarVisible"
-        class="bar-btn"
-        tabindex="-1"
-        :title="bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)'"
-        @click.stop="bookViewStore.toggleSplitView()"
-      >
-        <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
-        <IconSplitVertical20Regular v-else />
       </button>
       <button
         v-if="isTitleBarButtonVisible('ocr') && activeTab?.route === '/pdf-view'"
@@ -252,7 +252,9 @@ useAppTitleBarShortcuts({
     </span>
 
     <div class="bar-end">
-      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <!-- Dropped while this pane's rail is up, the way the hamburger and the split-view
+           toggle are: the rail carries home itself, and a control is never offered twice. -->
+      <button v-if="isTitleBarButtonVisible('home') && !settingsStore.getNavSidebarVisible(props.paneId)" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
            not between tabs (Ctrl+Tab still does that). Click steps once
            (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.
