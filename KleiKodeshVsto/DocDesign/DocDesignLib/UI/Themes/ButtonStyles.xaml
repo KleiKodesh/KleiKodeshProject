@@ -1,11 +1,12 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:kk="http://schemas.kleikodesh.org/wpf"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
     <!-- Merged here, not only in DocDesignDictionary, so the BasedOn keys below
          resolve inside this dictionary rather than relying on a sibling. -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <kk:SharedResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
     <!-- Icon button — IconButton at this pane's 36px toolbar size. -->

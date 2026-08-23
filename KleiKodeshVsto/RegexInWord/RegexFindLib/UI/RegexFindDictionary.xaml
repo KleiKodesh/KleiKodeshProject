@@ -11,9 +11,9 @@
                          whole palette every time this pane opens. ~20ms, on the UI
                          thread, while the user is waiting for it. -->
                     <kk:SharedResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
-        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
-        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
-        <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
+        <kk:SharedResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
+        <kk:SharedResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
+        <kk:SharedResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/miscstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/palettestyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/colorpickerstyles.xaml"/>

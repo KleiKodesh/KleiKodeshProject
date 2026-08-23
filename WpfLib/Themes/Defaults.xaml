@@ -1,4 +1,5 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:themes="clr-namespace:WpfLib.Themes"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <!--
         Defaults — the opt-in layer that makes the keyed styles implicit.
@@ -38,16 +39,16 @@
         NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
     -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/comboboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/checkboxstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/scrollbarstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/textinputstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/liststyles.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/textinputstyles.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/liststyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/selectioncontrolstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/indicatorstyles.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/containerstyles.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/containerstyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/menustyles.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/treeviewstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>

@@ -1,8 +1,10 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:themes="clr-namespace:WpfLib.Themes"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
-        <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/themedcontrol.xaml"/>
+        <themes:SharedResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
     <!--
@@ -84,7 +86,7 @@
 
     <!-- Bordered variant, for a list that is its own panel rather than filling one. -->
     <Style x:Key="BorderedListBox" TargetType="ListBox" BasedOn="{StaticResource OfficeListBox}">
-        <Setter Property="BorderBrush"     Value="#50808080"/>
+        <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding"         Value="2"/>
     </Style>

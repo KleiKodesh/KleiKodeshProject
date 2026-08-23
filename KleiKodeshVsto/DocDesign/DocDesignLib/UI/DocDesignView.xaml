@@ -16,7 +16,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/DocDesign;component/UI/DocDesignDictionary.xaml"/>
+                <ResourceDictionary Source="/DocDesign;component/ui/docdesigndictionary.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>

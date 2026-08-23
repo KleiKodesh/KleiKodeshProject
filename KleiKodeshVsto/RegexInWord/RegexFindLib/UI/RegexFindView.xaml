@@ -22,7 +22,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/RegexFindLib;component/ui/RegexFindDictionary.xaml"/>
+                <ResourceDictionary Source="/RegexFindLib;component/ui/regexfinddictionary.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <conv:BoolToVisibilityConverter        x:Key="BoolToVis"/>
             <conv:InverseBoolToVisibilityConverter x:Key="InvBoolToVis"/>

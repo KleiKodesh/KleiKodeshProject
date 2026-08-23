@@ -17,7 +17,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="/WebSitesLib;component/ui/WebSitesDictionary.xaml"/>
+                <ResourceDictionary Source="/WebSitesLib;component/ui/websitesdictionary.xaml"/>
             </ResourceDictionary.MergedDictionaries>
             <BooleanToVisibilityConverter x:Key="BoolToVis"/>
 
@@ -107,10 +107,8 @@
                            StaysOpen="False">
                         <Border Style="{StaticResource DropdownBorder}">
                             <ListBox ItemsSource="{Binding ElementName=BrowserTabs, Path=TabsCollection}"
-                                     SelectedIndex="{Binding ElementName=BrowserTabs, Path=SelectedIndex}">
-                                <ListBox.Resources>
-                                    <Style TargetType="ListBoxItem" BasedOn="{StaticResource TabItemStyle}"/>
-                                </ListBox.Resources>
+                                     SelectedIndex="{Binding ElementName=BrowserTabs, Path=SelectedIndex}"
+                                     ItemContainerStyle="{StaticResource TabItemStyle}">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate>
                                         <Border x:Name="DropItem"
@@ -166,10 +164,8 @@
                 <ListBox x:Name="TabStrip"
                          ItemsSource="{Binding ElementName=BrowserTabs, Path=TabsCollection}"
                          SelectedIndex="{Binding ElementName=BrowserTabs, Path=SelectedIndex}"
-                         VerticalAlignment="Stretch">
-                    <ListBox.Resources>
-                        <Style TargetType="ListBoxItem" BasedOn="{StaticResource TabItemStyle}"/>
-                    </ListBox.Resources>
+                         VerticalAlignment="Stretch"
+                         ItemContainerStyle="{StaticResource TabItemStyle}">
                     <ListBox.ItemsPanel>
                         <ItemsPanelTemplate>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Stretch"/>
