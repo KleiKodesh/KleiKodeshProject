@@ -8,6 +8,12 @@
         Flat button and toggle styles — adaptive, work on any Office theme.
         All values inlined — no StaticResource inside ControlTemplates (VSTO rule).
 
+        CORNER RADIUS IS 4, like every other control and surface in the palette.
+        These buttons used to be 2, which put a button and a toggle side by side
+        in the same toolbar with different corners, and made a dialog's OK button
+        tighter than the field above it. 2 is reserved for small marks and rows:
+        the checkbox tick box, a list row, a progress bar.
+
         Foreground is set with a PriorityBinding, not left to inherit and not
         bound to a single ancestor. See the note on IconButton below; getting
         this wrong is what made button labels dark on a dark theme.
@@ -62,7 +68,7 @@
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd"
                             Background="{TemplateBinding Background}"
-                            CornerRadius="2"
+                            CornerRadius="4"
                             Padding="{TemplateBinding Padding}">
                         <ContentPresenter HorizontalAlignment="Center"
                                           VerticalAlignment="Center"
@@ -255,7 +261,7 @@
             <Setter.Value>
                 <ControlTemplate TargetType="Button">
                     <Border x:Name="Bd"
-                            CornerRadius="2"
+                            CornerRadius="4"
                             BorderThickness="1"
                             BorderBrush="#50808080"
                             Background="#0F808080"

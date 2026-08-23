@@ -152,7 +152,7 @@
                                 <TextBlock x:Name="Placeholder"
                                            Grid.Column="0"
                                            Text="{TemplateBinding Tag}"
-                                           Foreground="#969492"
+                                           Foreground="#99808080"
                                            FontSize="{TemplateBinding FontSize}"
                                            FontFamily="{TemplateBinding FontFamily}"
                                            Padding="{TemplateBinding Padding}"
