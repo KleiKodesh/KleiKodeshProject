@@ -351,7 +351,10 @@ onMounted(async () => {
   // Silent focus: place the cursor in the search field on restore without popping the
   // autofill bubble. The restored query is often a prefix of a longer recent search, so a
   // non-silent focus would open the suggestion dropdown unbidden the moment the tab restores.
-  searchBarRef.value?.focus({ silent: true })
+  // selectAll: the restored term is one the user has already searched, so the likely next
+  // move is a NEW search — pre-selecting it means typing replaces it instead of appending.
+  // Editing the old term is still one click or arrow key away.
+  searchBarRef.value?.focus({ silent: true, selectAll: true })
 })
 
 // Save filter state whenever the page goes hidden or is unmounted.

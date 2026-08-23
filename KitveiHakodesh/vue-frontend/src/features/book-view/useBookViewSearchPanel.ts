@@ -49,7 +49,7 @@ export function useBookViewSearchPanel(
   commentarySearches: Record<CommentarySlot, CommentarySearch>,
   linesContentRef: () => LinesContentInstance | null,
   commentaryViewRefs: Record<CommentarySlot, () => CommentaryViewInstance | null>,
-  searchBarRef: () => { focus: () => void } | null,
+  searchBarRef: () => { focus: (opts?: { selectAll?: boolean }) => void } | null,
   clearFullTextSearchHighlights: () => void,
 ) {
   const searchVisible = ref(false)
