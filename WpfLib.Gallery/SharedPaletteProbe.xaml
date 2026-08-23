@@ -1,0 +1,16 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:kk="http://schemas.kleikodesh.org/wpf">
+    <!--
+        Exists only so the benchmark can prove SharedResourceDictionary works
+        through the XAML parser, which is the only way panes ever use it.
+
+        Source is hidden with "new" rather than overridden, because
+        ResourceDictionary.Source is not virtual. Hiding works when the static
+        type is SharedResourceDictionary, and in XAML the element name is what
+        picks the type - so this file is the test that it really does.
+    -->
+    <ResourceDictionary.MergedDictionaries>
+        <kk:SharedResourceDictionary Source="pack://application:,,,/WpfLib;component/themes/officepalette.xaml"/>
+    </ResourceDictionary.MergedDictionaries>
+</ResourceDictionary>

@@ -49,4 +49,5 @@ using System.Windows.Markup;
 [assembly: XmlnsDefinition("http://schemas.kleikodesh.org/wpf", "WpfLib.AttachedProperties")]
 [assembly: XmlnsDefinition("http://schemas.kleikodesh.org/wpf", "WpfLib.ViewModels")]
 [assembly: XmlnsDefinition("http://schemas.kleikodesh.org/wpf", "WpfLib.Helpers")]
+[assembly: XmlnsDefinition("http://schemas.kleikodesh.org/wpf", "WpfLib.Themes")]
 [assembly: XmlnsPrefix("http://schemas.kleikodesh.org/wpf", "kk")]

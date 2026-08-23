@@ -1,12 +1,16 @@
-<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:kk="http://schemas.kleikodesh.org/wpf">
     <!--
         Root theme dictionary — merges all sub-dictionaries.
         Add new theme files here; keep each file under 200 lines.
         NOTE: Pack URI paths must be all-lowercase (WPF BAML compiler lowercases them).
     -->
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
+        <!-- Shared: WPF does not cache by URI, so a plain merge re-parses the
+                         whole palette every time this pane opens. ~20ms, on the UI
+                         thread, while the user is waiting for it. -->
+                    <kk:SharedResourceDictionary Source="/WpfLib;component/themes/officepalette.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/icons.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/RegexFindLib;component/ui/themes/formattoggle.xaml"/>
