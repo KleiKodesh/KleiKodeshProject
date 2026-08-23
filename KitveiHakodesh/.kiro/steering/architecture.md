@@ -69,7 +69,7 @@ The shell is two levels: a split-view container and one or two pane shells insid
   - `AppTitleBar.vue` — fixed 40px header, spans `.app-shell-main` and never the rail, receives `paneId`
   - `AppPageView.vue` — fills the remaining height and width, renders the active page, receives `paneId`
 
-Each pane is an Edge-style inset content panel: `--content-inset`, `--content-border-width`, and `--content-border-radius` are set by `settingsStore.applyCSSVariables`, so turning the "content border" setting off zeroes them and the content sits flush. The chrome surface (`--bg-secondary`) flows continuously from the title bar around the panel — there is no separator line between them.
+Each pane's content sits flush against the chrome with no inset, border, or radius. The chrome surface (`--bg-secondary`) flows continuously from the title bar into the panel — there is no separator line between them.
 
 `.app-shell-content` declares `container: app-shell / inline-size`. Page content must size its padding against this container query, not the viewport, so a narrow pane lays out correctly in split view.
 
