@@ -5,26 +5,21 @@
     <ResourceDictionary.MergedDictionaries>
         <ResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
         <ResourceDictionary Source="/WpfLib;component/themes/typography.xaml"/>
+        <ResourceDictionary Source="/WpfLib;component/themes/textstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 
 
     <converters:ReverseBoolConverter x:Key="ReverseBoolConverter"/>
 
     <!-- ── TextBlock ─────────────────────────────────────────────── -->
-    <Style TargetType="TextBlock">
-        <Setter Property="Foreground"
-                Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=UserControl}}"/>
-        <Setter Property="VerticalAlignment" Value="Center"/>
-        <Setter Property="FontSize"          Value="{StaticResource FontSizeNormal}"/>
-        <Setter Property="FontFamily"        Value="{StaticResource UiFontFamily}"/>
-    </Style>
+    <!-- The palette's text block. It also wraps, which this did not. -->
+    <Style TargetType="TextBlock" BasedOn="{StaticResource OfficeTextBlock}"/>
 
     <!-- CheckBox comes from WpfLib/Themes/CheckBoxStyles.xaml (via OfficePalette). -->
 
     <!-- ── Separator ─────────────────────────────────────────────── -->
-    <Style TargetType="Separator">
-        <Setter Property="Background" Value="{StaticResource BorderBrush}"/>
-        <Setter Property="Margin"     Value="0,2"/>
+    <Style TargetType="Separator" BasedOn="{StaticResource OfficeSeparator}">
+        <Setter Property="Margin" Value="0,2"/>
     </Style>
 
     <!-- UpDownTextBox and UpDownFloatTextBox come from
