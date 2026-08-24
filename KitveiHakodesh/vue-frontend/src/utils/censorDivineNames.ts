@@ -321,11 +321,14 @@ function noHeNameRules(selected: readonly OtherNameKey[]): Rule[] {
     // Supports zero, one, or two single-letter prefixes (ו ב כ ל מ ש ה) with their diacritics.
     // Prefix letters are listed as plain Unicode code points to avoid embedding nikkud inside
     // the character class. The prefix(es) are captured as group 1 and restored unchanged.
+    // The lamed may carry an optional chirik + yud suffix (the possessive form of the same
+    // name), with cantillation allowed on any of those letters. Only that vocalized form is
+    // matched — an unvocalized spelling is left alone, since it is an ordinary word.
     // ב=ב ו=ו כ=כ ל=ל מ=מ ש=ש ה=ה
     rules.push({
       regex: new RegExp(
         `(?:^|(?<=[^\\u05D0-\\u05EA\\u0591-\\u05C7]))` +
-        `([\\u05D1\\u05D5\\u05DB\\u05DC\\u05DE\\u05E9\\u05D4]${D}(?:[\\u05D1\\u05D5\\u05DB\\u05DC\\u05DE\\u05E9\\u05D4]${D})?)?(א[\\u0591-\\u05C7]*\\u05B5[\\u0591-\\u05C7]*)(ל${D})${HWB}`,
+        `([\\u05D1\\u05D5\\u05DB\\u05DC\\u05DE\\u05E9\\u05D4]${D}(?:[\\u05D1\\u05D5\\u05DB\\u05DC\\u05DE\\u05E9\\u05D4]${D})?)?(א[\\u0591-\\u05C7]*\\u05B5[\\u0591-\\u05C7]*)(ל${D}(?:\u05B4${D}י${D})?)${HWB}`,
         'gm',
       ),
       replacement: (_m: string, prefix: string | undefined, a: string, l: string) =>
