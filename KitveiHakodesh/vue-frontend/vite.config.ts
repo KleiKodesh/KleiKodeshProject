@@ -146,6 +146,131 @@ async function pipeShutdown(): Promise<void> {
 // service right after the new instance decided to reuse it, leaving vite up with no service.
 const khsGen: number = ((globalThis as any).__khsGen = ((globalThis as any).__khsGen ?? 0) + 1)
 
+// ── Single-dev-server lock (CROSS-PROCESS) ──────────────────────────────────────
+// khsGen above lives on globalThis, so it only ever sees config reloads INSIDE this node
+// process. It cannot see a second `npm run dev` in another terminal — and that case is
+// actively harmful, not merely redundant:
+//   • Each dev server keys its service pipe to its OWN pid (KitveiHakodesh.<pid>), so both
+//     spawn a service and each publishes a different /khs-endpoint.
+//   • The browser has learned exactly ONE endpoint. When the other dev server rebuilds, it
+//     graceful-stops then taskkills ITS service and re-links the shared exe — but the DLLs
+//     are locked by the sibling instance, so the build fails and/or the browser's service
+//     disappears. The generation guard then makes the owner DECLINE to respawn (it sees a
+//     gen it doesn't recognise), so nothing comes back.
+// The visible symptom is "the service worked for a while, then went unresponsive" while vite
+// itself keeps serving pages — the service is gone (or is the wrong instance) but the page is
+// still up. Guard with a pid-bearing lock file: stale locks (dead pid) are reclaimed
+// automatically, so a hard-killed dev server never wedges the next start.
+const KHS_LOCK = path.join(KHS_DIR, 'bin', '.dev-server.lock')
+
+// Why this dev server has no service, in one human-readable sentence — set when we give up
+// (duplicate dev server, crash-loop). Reported straight back through /khs-endpoint, so
+// ANY caller that asks for the service — the browser, curl, a debugging session — is told the
+// actual reason instead of a bare 503 it has to go and interpret. Null while healthy.
+let khsStrandReason: string | null = null
+// True when THIS dev server declined to start a service because another one held the lock. The
+// condition is temporary — the other dev server can exit — so /khs-endpoint re-attempts the
+// claim instead of leaving this instance permanently stranded on a stale owner pid.
+let khsBlockedByDuplicate = false
+
+/** Record why the service is unavailable, flattened to a single line for transport. */
+function recordStrandReason(kind: string, detail: string): void {
+  khsStrandReason = `${kind}: ${detail.replace(/\s+/g, ' ').trim()}`
+}
+
+/**
+ * The /khs-endpoint 503 body. Two very different situations both produce a 503, and telling
+ * them apart is the whole point:
+ *   • transient — still starting or mid-respawn; the browser's retry loop fixes it (`retry`).
+ *   • STRANDED  — we gave up (duplicate dev server, crash-loop). Retrying is futile and the
+ *     body says what to do about it. `curl localhost:5173/khs-endpoint` then explains the
+ *     failure on the spot, rather than leaving a bare "not ready" to be re-diagnosed.
+ */
+function notReadyBody(): string {
+  return khsStrandReason === null
+    ? JSON.stringify({ error: 'service not ready', retry: true })
+    : JSON.stringify({ error: khsStrandReason, retry: false, stranded: true })
+}
+
+/** True when `pid` is a live process. Signal 0 tests existence without touching it. */
+function pidAlive(pid: number): boolean {
+  try { process.kill(pid, 0); return true } catch { return false }
+}
+
+/**
+ * Claim the single-dev-server lock for this process. Returns null on success, or the owner's
+ * pid when another LIVE dev server already holds it. A lock whose owner is gone (crash,
+ * taskkill, reboot) is treated as free and reclaimed — the pid check is what makes this
+ * self-healing rather than a file someone has to delete by hand.
+ */
+function claimDevServerLock(): number | null {
+  try { fs.mkdirSync(path.dirname(KHS_LOCK), { recursive: true }) } catch { /* see below */ }
+
+  // Fast path: create the lock ATOMICALLY ('wx' fails if it already exists). Without this,
+  // two dev servers started within the same moment both read ENOENT, both decide the lock is
+  // free, and both spawn a service — reproducing the exact bug this guard exists to prevent.
+  // Only the EEXIST case needs the read-and-inspect path below.
+  try {
+    fs.writeFileSync(KHS_LOCK, String(process.pid), { encoding: 'utf8', flag: 'wx' })
+    return null
+  } catch { /* exists, or unwritable — fall through */ }
+
+  try {
+    const owner = Number.parseInt(fs.readFileSync(KHS_LOCK, 'utf8').trim(), 10)
+    // Our own pid: a config reload re-evaluates this module in the SAME process, so the lock
+    // we already hold must not read as a conflict with ourselves.
+    if (Number.isFinite(owner) && owner !== process.pid && pidAlive(owner)) return owner
+  } catch { /* unreadable — treat as free and reclaim below */ }
+
+  // Free, ours, or owned by a dead pid → take it.
+  try {
+    fs.writeFileSync(KHS_LOCK, String(process.pid), 'utf8')
+  } catch { /* best effort: an unwritable lock must never block dev */ }
+  return null
+}
+
+/**
+ * Pop a real Windows message box. A console line is easy to miss — dev servers run in a
+ * terminal nobody is watching, and the failures this reports are exactly the ones the user
+ * discovers 20 minutes later as "the service is unresponsive".
+ *
+ * Fire-and-forget by design: MessageBox BLOCKS until dismissed, so it must never be awaited
+ * (that would stall dev startup behind a dialog). Uses the MessageBox Win32 call rather than
+ * WinForms so it works with no desktop session assumptions, and is fully wrapped — a failed
+ * notification must never take the dev server down with it.
+ */
+function notifyBox(title: string, message: string): void {
+  // Record the reason FIRST and unconditionally: it must survive even when the dialog can't be
+  // shown (non-Windows, no desktop session, spawn refused), because it is what /khs-endpoint
+  // reports back to every caller afterwards.
+  recordStrandReason(title, message)
+  if (process.platform !== 'win32') return
+  // MB_OK | MB_ICONWARNING | MB_SETFOREGROUND | MB_TOPMOST = 0x0 | 0x30 | 0x10000 | 0x40000
+  const ps = [
+    'Add-Type -Name W -Namespace N -MemberDefinition \'[DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern int MessageBox(IntPtr h,string t,string c,uint y);\'',
+    `[N.W]::MessageBox([IntPtr]::Zero, ${psLiteral(message)}, ${psLiteral(title)}, 0x50030) | Out-Null`,
+  ].join('; ')
+  try {
+    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', ps], {
+      detached: true, stdio: 'ignore', windowsHide: true,
+    })
+    child.on('error', () => {}) // spawn failure must stay silent
+    child.unref()               // never hold the event loop open on an undismissed dialog
+  } catch { /* notification is best-effort */ }
+}
+
+/** Single-quoted PowerShell literal: the only escape inside one is a doubled quote. */
+function psLiteral(s: string): string {
+  return `'${s.replace(/'/g, "''")}'`
+}
+
+/** Release the lock, but only if it is still OURS — never stomp a newer owner's claim. */
+function releaseDevServerLock(): void {
+  try {
+    if (fs.readFileSync(KHS_LOCK, 'utf8').trim() === String(process.pid)) fs.rmSync(KHS_LOCK)
+  } catch { /* already gone or not ours */ }
+}
+
 let khsProc: ChildProcess | null = null
 // True when this config instance ADOPTED a service left running by the previous instance
 // (config-reload handoff) instead of spawning its own — there is no child handle to supervise,
@@ -332,6 +457,15 @@ async function spawnKhsExe(): Promise<void> {
     khsLastRespawn = now
     if (khsRespawnStrikes >= 5) {
       console.error('[khs] service is crash-looping — not respawning (fix it, then restart dev)')
+      // Terminal state: nothing will bring the service back, so every data request from here
+      // on fails while vite keeps serving the page. Say so out loud rather than letting it
+      // look like the service went "unresponsive".
+      notifyBox(
+        'KitveiHakodesh service stopped',
+        'The backend service crashed 5 times in a row, so the dev server gave up ' +
+        'restarting it.\n\nThe app will load but anything needing data will fail.\n\n' +
+        'Check the dev-server terminal for the crash, then restart dev.',
+      )
       return
     }
     setTimeout(() => {
@@ -345,6 +479,9 @@ async function spawnKhsExe(): Promise<void> {
   // rather than polling a pipe that can never appear until the 120s timeout expires.
   await Promise.race([waitForKhsPipe(), spawnFailed])
   ;({ port: khsHttpPort, token: khsHttpToken } = await fetchHttpEndpointOverPipe())
+  // A healthy instance clears any stranding reason — otherwise a recovered dev server would
+  // keep reporting a failure that no longer applies.
+  khsStrandReason = null
   console.log(`[khs] service ready — HTTP host on http://${KHS_HOST}:${khsHttpPort} (endpoint learned over the private pipe)`)
 }
 
@@ -438,12 +575,38 @@ function devSqlitePlugin(): Plugin {
       const ftsIndexPath = process.env.FTS_INDEX_PATH ?? env.FTS_INDEX_PATH ?? ''
       khsFtsIndexPath = ftsIndexPath ? path.resolve(ftsIndexPath) : undefined
 
-      // Spawn + supervise THIS dev server's own service instance. The browser talks to its
-      // HTTP host directly, so node is NOT in the data path — it only owns the service's
-      // lifecycle + the one-time port handoff. Kicked off (not awaited) so dev comes up now.
-      khsReady = ensureKhsService().catch((err) => {
-        console.error('[khs] failed to start service:', err.message)
-      })
+      // Refuse to become a SECOND dev server. Two of them fight over one shared service exe
+      // (locked DLLs on rebuild) and publish rival /khs-endpoints, which strands the browser on
+      // a service nobody will respawn. Fail loudly here instead: vite still serves the app, but
+      // it never spawns a competing service, so the running dev server keeps working.
+      const lockOwner = claimDevServerLock()
+      if (lockOwner !== null) {
+        console.error(
+          `[khs] ANOTHER dev server is already running (pid ${lockOwner}).\n` +
+          '      Not starting a service — two dev servers share one service exe and would\n' +
+          '      break each other (locked DLLs on rebuild, rival /khs-endpoints).\n' +
+          `      Use that dev server, or stop it first:  taskkill /pid ${lockOwner} /T /F`,
+        )
+        notifyBox(
+          'KitveiHakodesh dev server',
+          `A dev server is already running (pid ${lockOwner}).\n\n` +
+          'This one will NOT start a backend service, because two dev servers ' +
+          'break each other (locked DLLs on rebuild, rival endpoints).\n\n' +
+          `Use the existing dev server, or stop it first:\n    taskkill /pid ${lockOwner} /T /F`,
+        )
+        // Blocked, but RECOVERABLE: when the other dev server exits, this one should take over
+        // rather than stay stranded reporting a pid that no longer exists. /khs-endpoint re-tries
+        // the claim (the browser already retries it on a timer), so recovery needs no restart.
+        khsBlockedByDuplicate = true
+        khsReady = Promise.resolve()
+      } else {
+        // Spawn + supervise THIS dev server's own service instance. The browser talks to its
+        // HTTP host directly, so node is NOT in the data path — it only owns the service's
+        // lifecycle + the one-time port handoff. Kicked off (not awaited) so dev comes up now.
+        khsReady = ensureKhsService().catch((err) => {
+          console.error('[khs] failed to start service:', err.message)
+        })
+      }
 
       server.httpServer?.on('close', () => {
         // A newer config instance exists (config-reload restart) — it already reused our
@@ -458,6 +621,10 @@ function devSqlitePlugin(): Plugin {
           khsShuttingDown = true
           return
         }
+        // Real shutdown (not a config-reload handoff): drop the single-dev-server lock so the
+        // next `npm run dev` starts cleanly. A hard kill skips this, which is exactly why
+        // claimDevServerLock treats a dead owner's lock as free.
+        releaseDevServerLock()
         stopKhsService()
       })
 
@@ -478,6 +645,19 @@ function devSqlitePlugin(): Plugin {
           // exit-handler supervisor was disarmed at handoff, and the browser's retry loop
           // lands here anyway, so lazy supervision costs nothing extra.
           void (async () => {
+            // Stranded by a duplicate dev server? Re-attempt the claim: the other one may have
+            // exited since startup, and this is the retry surface the browser already polls.
+            // Without this, a dev server started second stays dead forever — reporting an owner
+            // pid that no longer exists — until someone restarts it.
+            if (khsBlockedByDuplicate && !khsShuttingDown && khsProc == null) {
+              const stillOwned = claimDevServerLock()
+              if (stillOwned === null) {
+                console.log('[khs] the other dev server exited — taking over and starting the service')
+                khsBlockedByDuplicate = false
+                khsStrandReason = null
+                khsReady = ensureKhsService().catch((e: any) => console.error('[khs] takeover failed:', e?.message))
+              }
+            }
             let alive = khsProc != null
             if (!alive && khsReused) {
               alive = await khsPipeIsUp()
@@ -502,13 +682,13 @@ function devSqlitePlugin(): Plugin {
               res.end(JSON.stringify({ base: `http://${KHS_HOST}:${khsHttpPort}`, token: khsHttpToken }))
             } else {
               res.statusCode = 503
-              res.end('{"error":"service not ready"}')
+              res.end(notReadyBody())
             }
           })().catch(() => {
             // The probe made this handler async, so a client that aborts mid-probe leaves the
             // socket ended and setHeader/end throw ERR_HTTP_HEADERS_SENT. Unhandled, that kills
             // the dev server; answer if we still can, otherwise drop it.
-            if (!res.headersSent) { res.statusCode = 503; res.end('{"error":"service not ready"}') }
+            if (!res.headersSent) { res.statusCode = 503; res.end(notReadyBody()) }
           })
           return
         }
