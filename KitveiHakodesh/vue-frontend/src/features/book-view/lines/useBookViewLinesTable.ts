@@ -30,8 +30,12 @@ const SLOT_PENDING = 1
 
 export function useLines(bookId: () => number | undefined) {
   const lines = ref<LineItem[]>([])
-  const hasCommentaries = ref(false)
-  const hasRelatedBooks = ref(false)
+  // Start OPEN: the toolbar hides these controls when false, and metadata only
+  // arrives after an await. Starting false would render the toolbar without them
+  // for the first frames, then pop them in and shift every icon in the centred
+  // row. False is set once metadata says the book genuinely has no connections.
+  const hasCommentaries = ref(true)
+  const hasRelatedBooks = ref(true)
   const hasTeamim = ref(false)
 
   // Queue of backfill ranges: [offset, limit] pairs.
@@ -209,7 +213,7 @@ export function useLines(bookId: () => number | undefined) {
 
     const totalLines = book?.totalLines ?? 0
     hasTeamim.value = !!(book?.hasTeamim)
-    // Fail OPEN on a metadata error: false would silently disable the commentary
+    // Fail OPEN on a metadata error: false would silently remove the commentary
     // buttons and force-close the panel with no indication anything went wrong
     // (the panel itself surfaces load errors). False is reserved for a book that
     // genuinely has no connections.
@@ -220,7 +224,9 @@ export function useLines(bookId: () => number | undefined) {
       book?.hasCommentaryConnection ||
       book?.hasOtherConnection
     )
-    hasRelatedBooks.value = !!(
+    // Fails open on a metadata error for the same reason as above: the dropdown
+    // is hidden when false, and a transient error should not make it vanish.
+    hasRelatedBooks.value = metadataFailed || !!(
       book?.hasSourceConnection ||
       book?.hasTargumConnection ||
       book?.hasCommentaryConnection
