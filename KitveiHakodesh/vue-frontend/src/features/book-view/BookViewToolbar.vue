@@ -193,23 +193,24 @@ defineExpose({ tocBtnRef })
       <IconChevronLeft20Regular />
     </button>
     <BookViewRelatedBooksDropdown
+      v-if="hasRelatedBooks"
       :book-id="bookId"
       :filter-groups="filterGroups"
       :related-books-loaded="relatedBooksLoaded"
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
-      :disabled="!hasRelatedBooks"
       :on-open="onRelatedBooksOpen"
     />
     <!--
       RTL: first child sits physically right. The three buttons run right → bottom
       → left, so each sits on the side of the panel it controls. Both side panels
-      need a wide pane, so their buttons are absent on a narrow one.
+      need a wide pane, so their buttons are absent on a narrow one. With no
+      commentaries at all there is nothing any of them could open, so they drop
+      out of the toolbar rather than sitting there greyed out.
     -->
     <button
-      v-if="canUseSidePanel"
+      v-if="canUseSidePanel && hasCommentaries"
       :class="{ active: sideCommentaryVisible }"
-      :disabled="!hasCommentaries"
       :title="sideCommentaryTitle"
       @click="$emit('toggleSideCommentary')"
     >
@@ -217,8 +218,8 @@ defineExpose({ tocBtnRef })
       <IconLayoutColumnTwo20Regular v-else />
     </button>
     <button
+      v-if="hasCommentaries"
       :class="{ active: bottomCommentaryVisible }"
-      :disabled="!hasCommentaries"
       :title="bottomCommentaryTitle"
       @click="$emit('toggleBottomCommentary')"
     >
@@ -226,18 +227,23 @@ defineExpose({ tocBtnRef })
       <IconLayoutRowTwo20Regular v-else />
     </button>
     <button
-      v-if="canUseSidePanel"
+      v-if="canUseSidePanel && hasCommentaries"
       :class="{ active: sideLeftCommentaryVisible }"
-      :disabled="!hasCommentaries"
       :title="sideLeftCommentaryTitle"
       @click="$emit('toggleSideLeftCommentary')"
     >
       <IconLayoutColumnTwoFocusLeft20Filled v-if="sideLeftCommentaryVisible" />
       <IconLayoutColumnTwo20Regular v-else />
     </button>
+    <!--
+      Hidden with the panel toggles above, though it is one app-wide persisted
+      setting rather than a panel: it only ever syncs the commentary panel, so a
+      book with no commentaries has nothing for it to act on. Its default still
+      lives in the app settings, so it is not stranded while a plain book is open.
+    -->
     <button
+      v-if="hasCommentaries"
       :class="{ active: autoSelectTopLine }"
-      :disabled="!hasCommentaries"
       :title="autoSelectTopLineTitle"
       @click="bookViewStore.toggleAutoSelectTopLine()"
     >

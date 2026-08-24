@@ -34,7 +34,6 @@ const props = defineProps<{
   relatedBooksLoaded: boolean
   currentScrollLineIndex: number
   lines: LineItem[]
-  disabled?: boolean
   onOpen?: () => void
 }>()
 
@@ -60,7 +59,6 @@ const { justClosed } = useDropdownClose(dropdownRef, () => setOpen(false), {
 })
 
 function toggleOpen() {
-  if (props.disabled) return
   if (justClosed.value) return
   const opening = !isOpen.value
   setOpen(opening)
@@ -168,7 +166,6 @@ async function onBookClick(book: RelatedBook) {
     <button
       ref="toggleButtonRef"
       :class="{ active: isOpen }"
-      :disabled="disabled"
       title="ספרים קרובים"
       @click="toggleOpen"
     >
