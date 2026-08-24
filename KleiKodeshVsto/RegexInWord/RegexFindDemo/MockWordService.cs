@@ -10,6 +10,8 @@ namespace RegexFindDemo
         public Document     ActiveDocument => null;
         public Selection    Selection => null;
 
+        public int GetStylesCount() => 15;
+
         public IEnumerable<string> GetStyleNames() => new[]
         {
             "Normal", "Heading 1", "Heading 2", "Heading 3",

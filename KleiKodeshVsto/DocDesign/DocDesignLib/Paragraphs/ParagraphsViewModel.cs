@@ -35,6 +35,30 @@ namespace DocDesign.Paragraphs
         public ObservableCollection<ActiveStyle> ActiveStyles { get => _activeStyles; set => SetProperty(ref _activeStyles, value); }
         public bool RefreshStyles { set => RefreshActiveStylesAction(); }
 
+        int _lastSeenStylesCount = -1;
+        string _lastSeenDocName;
+
+        /// <summary>
+        /// Two COM reads (Styles.Count and the document name) that say whether
+        /// the style set could have changed since the last full refresh. The
+        /// focus-return refresh gates on this so it usually costs two calls
+        /// instead of enumerating every style. The document name is part of the
+        /// stamp because a popped-out pane follows the user across documents,
+        /// and two documents easily share a style count. Count misses two rarer
+        /// changes - a rename, and a style newly IN USE - which the ungated
+        /// refreshes (pane shown, styles-picker opened) still catch.
+        /// </summary>
+        public bool StylesLookChanged()
+        {
+            try
+            {
+                var doc = Vsto.ActiveDocument;
+                if (doc == null) return false;
+                return doc.Styles.Count != _lastSeenStylesCount || doc.Name != _lastSeenDocName;
+            }
+            catch { return true; }
+        }
+
         // Resolve selected style names back to COM Style objects at apply-time.
         // Use doc.Styles[name] — direct name lookup, no full scan.
         List<Style> ValidStyles
@@ -89,6 +113,13 @@ namespace DocDesign.Paragraphs
             {
                 var doc = Vsto.ActiveDocument;
                 if (doc == null) return;
+
+                try
+                {
+                    _lastSeenStylesCount = doc.Styles.Count;
+                    _lastSeenDocName = doc.Name;
+                }
+                catch { }
 
                 // Single-pass: build fetched set and add new entries in one loop
                 var fetchedNames = new HashSet<string>();

@@ -95,6 +95,29 @@ namespace DocDesign.Paragraphs
                 System.Windows.Forms.MessageBoxOptions.RightAlign | System.Windows.Forms.MessageBoxOptions.RtlReading);
         }
 
+        int _lastSeenStylesCount = -1;
+        string _lastSeenDocName;
+
+        /// <summary>
+        /// Two COM reads (Styles.Count and the document name) that say whether
+        /// the style set could have changed since this list's last full refresh.
+        /// The focus-return refresh gates on this. Its own stamp, not
+        /// ParagraphsViewModel's: that one is also stamped by the styles-picker
+        /// toggle, which does not refresh this list, so sharing it would let the
+        /// picker silence a refresh this list still needed. A rename slips past
+        /// the count; the ungated refreshes (pane shown) still catch it.
+        /// </summary>
+        public bool StylesLookChanged()
+        {
+            try
+            {
+                var doc = Vsto.ActiveDocument;
+                if (doc == null) return false;
+                return doc.Styles.Count != _lastSeenStylesCount || doc.Name != _lastSeenDocName;
+            }
+            catch { return true; }
+        }
+
         public void RefreshStyles()
         {
             if (Vsto.Application == null) return;
@@ -108,6 +131,12 @@ namespace DocDesign.Paragraphs
                 var doc = Vsto.ActiveDocument;
                 if (doc != null)
                 {
+                    try
+                    {
+                        _lastSeenStylesCount = doc.Styles.Count;
+                        _lastSeenDocName = doc.Name;
+                    }
+                    catch { }
                     foreach (Style s in doc.Styles)
                     {
                         try
