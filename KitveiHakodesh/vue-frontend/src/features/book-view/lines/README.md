@@ -33,7 +33,7 @@ scheme and URL shape are defined: `kitveihakodeshapp://book/<bookId>?index=<line
 
 **useBookViewNotes.ts** - manages user notes for the currently open book. Lazy viewport-driven loading, create/update/delete mutations with immediate in-memory map updates. Called internally by useBookViewAnnotations.
 
-**useBookViewLinesNavigation.ts** - programmatic scroll navigation. `scrollToLineId(id, fallbackIndex)` scrolls to a line by id, skipping if visible. `scrollToLineIndex(index, occurrenceOffset)` scrolls to a specific index with search match highlighting.
+**useBookViewLinesNavigation.ts** - programmatic scroll navigation. `scrollToLine(index, {occurrence, force, skipIfVisible})` is the one scroller every jump goes through (TOC click, section nav, search match, commentary jump); `scrollToLineId(id, fallbackIndex, options)` resolves a line id to its index over the same core. The slow path stabilizes the landing while late chunk loads shift the target.
 
 **useBookViewLinesScroll.ts** - scroll position save and restore. Save: captures `firstVisible.index` (not the overscan item) and the pixel offset within that item; skips saves where the gap between scrollTop and firstVisible.start exceeds 2000px (stale mid-restore state). Restore: two-stage virtualizer-API-only approach — stage 1 calls `scrollToIndex` immediately with estimated heights, stage 2 fires when the target chunk loads, re-issues `scrollToIndex`, then tracks `item.start` in a rAF loop until stable (correcting each time background chunks above shift the layout), then applies the saved sub-line offset via `scrollToOffset` if it fits within the item's actual height. A post-stabilization watch handles late-loading chunks. Never sets `scrollTop` directly.
 

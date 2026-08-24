@@ -12,9 +12,10 @@
 import { computed, watch } from 'vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import type { TocEntry } from '@/webview-host/queries.types'
+import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 type LinesContentInstance = {
-  scrollToLineId: (lineId: number, lineIndex?: number) => void
-  scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void
+  scrollToLine: (lineIndex: number, options?: ScrollToLineOptions) => void
+  scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
 }
 
 type AltTocSection = { entries: { lineIndex: number | null | undefined; text: string }[] }
@@ -29,7 +30,6 @@ export function useBookViewTocNavigation(
   getActiveTocEntry: (lineIndex: number) => TocEntry | null,
   getActiveAltTocEntry: (lineIndex: number) => TocEntry | null,
   getTocPath: (entry: TocEntry) => string,
-  beginTocScroll: (entry: TocEntry) => void,
   selectedAltTocSection: import('vue').Ref<AltTocSection | null>,
   openTocEntryId: number | undefined,
 ) {
@@ -74,8 +74,7 @@ export function useBookViewTocNavigation(
     if (entry.lineId == null) return
     activeTocEntryId.value = entry.id
     paneNavigation.updateActiveTab({ tocPath: getTocPath(entry) })
-    beginTocScroll(entry)
-    linesContentRef()?.scrollToLineId(entry.lineId, entry.lineIndex ?? undefined)
+    linesContentRef()?.scrollToLineId(entry.lineId, entry.lineIndex ?? undefined, { force: true })
     // Both trees show the same position, so a main click moves the alt highlight too.
     if (entry.lineIndex != null) {
       activeAltTocEntryId.value = getActiveAltTocEntry(entry.lineIndex)?.id
@@ -85,10 +84,7 @@ export function useBookViewTocNavigation(
   function onAltTocSelect(entry: TocEntry) {
     if (entry.lineId == null) return
     activeAltTocEntryId.value = entry.id
-    // Latch the programmatic scroll as the main path does, so the scroll events on
-    // the way to the target don't drag the highlight back to the previous entry.
-    beginTocScroll(entry)
-    linesContentRef()?.scrollToLineId(entry.lineId)
+    linesContentRef()?.scrollToLineId(entry.lineId, undefined, { force: true })
     if (entry.lineIndex != null) {
       const mainEntry = getActiveTocEntry(entry.lineIndex)
       if (mainEntry) {
@@ -120,8 +116,7 @@ export function useBookViewTocNavigation(
           lastSectionNavigationTimestamp = Date.now()
           activeTocEntryId.value = candidate.id
           paneNavigation.updateActiveTab({ tocPath: getTocPath(candidate) })
-          beginTocScroll(candidate)
-          linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
+          linesContentRef()?.scrollToLine(candidate.lineIndex, { force: true })
           return
         }
       }
@@ -138,8 +133,7 @@ export function useBookViewTocNavigation(
           lastSectionNavigationTimestamp = Date.now()
           activeTocEntryId.value = candidate.id
           paneNavigation.updateActiveTab({ tocPath: getTocPath(candidate) })
-          beginTocScroll(candidate)
-          linesContentRef()?.scrollToLineIndex(candidate.lineIndex, 0, true)
+          linesContentRef()?.scrollToLine(candidate.lineIndex, { force: true })
           return
         }
       }

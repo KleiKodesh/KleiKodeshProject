@@ -33,7 +33,7 @@ import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
 
 const emit = defineEmits<{
-  scrolled: [number, number]
+  scrolled: [firstVisible: number, firstFull: number, isUserScroll: boolean]
   lineSelected: [lineId: number, isShiftClick: boolean]
   'ctrl-f': []
 }>()
@@ -131,14 +131,16 @@ const {
   () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
 )
 
-const { setProgrammaticScroll, onScroll, captureScrollPos } = useBookViewLinesScroll(
+const { suppressPositionSave, onScroll, captureScrollPos, readCurrentPosition, cancelRestoreCorrection } =
+  useBookViewLinesScroll(
   scrollerEl,
   getVirtualizer,
   () => virtualItems.value,
   () => props.lines,
   props,
   { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId },
-  (event, firstVisible, firstFull) => emit(event, firstVisible, firstFull),
+  (event, firstVisible, firstFull, isUserScroll) =>
+    emit(event, firstVisible, firstFull, isUserScroll),
   props.prioritise,
 )
 
@@ -246,13 +248,14 @@ const {
   },
 })
 
-const { scrollToLineId, scrollToLineIndex } = useBookViewLinesNavigation(
+const { scrollToLine, scrollToLineId } = useBookViewLinesNavigation(
   scrollerEl,
   getVirtualizer,
   () => virtualItems.value,
   () => props.lines,
   () => props.searchBarVisible ?? false,
-  setProgrammaticScroll,
+  suppressPositionSave,
+  cancelRestoreCorrection,
   props.prioritise,
 )
 
@@ -308,7 +311,7 @@ onMounted(() => {
   })
 })
 
-defineExpose({ scrollToLineId, scrollToLineIndex, focusScroller, captureScrollPos })
+defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })
 </script>
 
 <template>

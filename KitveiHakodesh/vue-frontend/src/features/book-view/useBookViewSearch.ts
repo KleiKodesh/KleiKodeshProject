@@ -100,10 +100,28 @@ export function useBookViewSearch(
   const currentMatchLineIndex = computed(() => currentMatch.value?.lineIndex ?? -1)
   const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
 
-  function gotoNearestMatch() {
+  /**
+   * Re-anchor the current match to wherever the reader is now, in the direction
+   * they asked to travel: 'forward' takes the first match at or after the top of
+   * the view, 'backward' the last match above it. Each wraps at the end.
+   *
+   * Direction matters because this runs after the reader has scrolled away, and
+   * an undirected "nearest" would send Shift+Enter forwards — the opposite of the
+   * key they pressed.
+   */
+  function gotoNearestMatch(direction: 'forward' | 'backward' = 'forward') {
     const allMatches = matches.value
     if (!allMatches.length) return
     const cursor = currentLineIndex()
+    if (direction === 'backward') {
+      // Last match strictly above the view; wrap to the final match.
+      let found = -1
+      for (let i = allMatches.length - 1; i >= 0; i--) {
+        if (allMatches[i]!.lineIndex < cursor) { found = i; break }
+      }
+      currentMatchIdx.value = found === -1 ? allMatches.length - 1 : found
+      return
+    }
     const nearestIndex = allMatches.findIndex((m) => m.lineIndex >= cursor)
     currentMatchIdx.value = nearestIndex === -1 ? 0 : nearestIndex
   }

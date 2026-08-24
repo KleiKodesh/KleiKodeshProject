@@ -24,6 +24,8 @@ import type { Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import type { Virtualizer, VirtualItem } from '@tanstack/vue-virtual'
 import type { LineItem } from './useBookViewLinesTable'
+import { SCROLL_LANDING_GAP_PX } from '@/utils/scrollToIndexWithRetry'
+import { SEARCH_BAR_INSET_PX } from './useBookViewLinesNavigation'
 import { COMMENTARY_SLOTS } from '../bookViewTypes'
 import type {
   CommentaryPanelLiveStates,
@@ -79,7 +81,12 @@ export function useBookViewLinesScroll(
   lines: () => LineItem[],
   props: BookViewLinesScrollProps,
   storeRefs: BookViewLinesScrollStoreRefs,
-  emit: (event: 'scrolled', firstVisible: number, firstFull: number) => void,
+  emit: (
+    event: 'scrolled',
+    firstVisible: number,
+    firstFull: number,
+    isUserScroll: boolean,
+  ) => void,
   prioritise: (lineIndex: number) => void,
 ) {
   const { tabStore, bookViewStore, autoSelectTopLine, zoom, tabId, bookId } = storeRefs
@@ -106,8 +113,8 @@ export function useBookViewLinesScroll(
 
   // ── Scroll restore (public wrapper) ────────────────────────────────────────
 
-  let programmaticScrollTimer: ReturnType<typeof setTimeout> | null = null
-  let programmaticScrolling = false
+  let saveSuppressTimer: ReturnType<typeof setTimeout> | null = null
+  let saveSuppressed = false
 
   function restoreScrollPos(lineIndex: number, _scrollOffset = 0) {
     virtualizer().scrollToIndex(lineIndex, { align: 'start' })
@@ -153,7 +160,7 @@ export function useBookViewLinesScroll(
           let cancelled = false
           cancelStabilize = () => {
             cancelled = true
-            programmaticScrolling = false
+            saveSuppressed = false
             if (flashTimer != null) { clearTimeout(flashTimer); flashTimer = null }
             // Created inside this nextTick, so it is outside the effect scope and unmount
             // won't dispose it. The `cancelled` flag already neuters its effects, but the
@@ -165,7 +172,7 @@ export function useBookViewLinesScroll(
             finishPostRestore?.()
             finishPostRestore = null
           }
-          programmaticScrolling = true
+          saveSuppressed = true
 
           // Stage 1 — estimated heights, gets item on screen immediately.
           virtualizer().scrollToIndex(target, { align: 'start' })
@@ -206,14 +213,14 @@ export function useBookViewLinesScroll(
                     if (offsetToApply > 0) {
                       const offsetCache = virtualizer().measurementsCache.find((m) => m.index === target)
                       if (offsetCache && offsetToApply < offsetCache.end - offsetCache.start) {
-                        programmaticScrolling = true
+                        saveSuppressed = true
                         virtualizer().scrollToOffset(offsetCache.start + offsetToApply)
-                        requestAnimationFrame(() => { if (!cancelled) programmaticScrolling = false })
+                        requestAnimationFrame(() => { if (!cancelled) saveSuppressed = false })
                       } else {
-                        programmaticScrolling = false
+                        saveSuppressed = false
                       }
                     } else {
-                      programmaticScrolling = false
+                      saveSuppressed = false
                     }
 
                     // Post-stabilization: late chunks above the target re-measure when
@@ -315,7 +322,7 @@ export function useBookViewLinesScroll(
                   if (++trackAttempts < 200) {
                     requestAnimationFrame(trackAndCorrect)
                   } else {
-                    programmaticScrolling = false
+                    saveSuppressed = false
                   }
                 }
 
@@ -325,23 +332,13 @@ export function useBookViewLinesScroll(
             { immediate: true, flush: 'post' },
           )
 
-          // Safety: clear programmaticScrolling if content never loads.
-          setTimeout(() => { if (!cancelled) programmaticScrolling = false }, 5000)
+          // Safety: clear saveSuppressed if content never loads.
+          setTimeout(() => { if (!cancelled) saveSuppressed = false }, 5000)
 
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() => {
-              if (cancelled) return
-              const scrollTop = scrollerEl.value?.scrollTop ?? 0
-              const items = virtualizer().getVirtualItems()
-              const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
-              const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
-              emit(
-                'scrolled',
-                firstVisible?.index ?? target,
-                firstFull?.index ?? firstVisible?.index ?? target,
-              )
-            }),
-          )
+          // No manual `scrolled` emit here any more. Restore scrolls the scroller,
+          // and onScroll now reports every scroll — this used to be a hand-rolled
+          // copy of onScroll's index maths, needed only because the old latch
+          // swallowed the real event.
           scrollerEl.value?.focus({ preventScroll: true })
         })
       },
@@ -397,7 +394,10 @@ export function useBookViewLinesScroll(
   }
 
   function savePos() {
-    if (programmaticScrolling) return
+    // Mid-flight programmatic positions are transient — persisting one would
+    // overwrite the reader's real place with wherever a jump happened to be
+    // passing through.
+    if (saveSuppressed) return
     const position = lastKnownPos ?? captureScrollPos()
     if (!position) return
 
@@ -436,44 +436,117 @@ export function useBookViewLinesScroll(
   onBeforeUnmount(() => {
     scrollTeardown = true
     cancelStabilize?.()
-    programmaticScrolling = false
-    if (programmaticScrollTimer) {
-      clearTimeout(programmaticScrollTimer)
-      programmaticScrollTimer = null
+    saveSuppressed = false
+    if (saveSuppressTimer) {
+      clearTimeout(saveSuppressTimer)
+      saveSuppressTimer = null
     }
     savePos()
   })
 
   // ── Scroll handler ──────────────────────────────────────────────────────────
 
-  function onScroll() {
-    if (!scrollerEl.value || programmaticScrolling) return
+  // Reports the scroller's position on EVERY scroll, programmatic ones included.
+  //
+  // This deliberately does not consult saveSuppressed. That flag means "do not
+  // persist a reading position right now", which is a statement about saving, not
+  // about where the reader actually is. The `scrolled` consumers — the breadcrumb
+  // (tocPath), the active TOC entry, auto-select — track the CURRENT position and
+  // are just as right after a programmatic jump as after a wheel. Gating them here
+  // is what forced every programmatic caller (TOC click, section nav, restore,
+  // search) to re-derive and re-publish the position itself.
+  //
+  // Consumers that must ignore a jump's in-transit hops still can: the TOC sync
+  // waits for programmatic events to settle before syncing (see
+  // useBookViewScrollSync), keyed off the isUserScroll argument below.
+  /**
+   * Derives which line is at the top of the view RIGHT NOW: the first line
+   * meaningfully visible below the top of the view — below the search bar when it
+   * overlays the scroller, and past a sliver allowance slightly larger than the
+   * landing gap.
+   *
+   * The sliver allowance fixes the TOC flicker that appeared only at section
+   * boundaries: a programmatic landing deliberately stops SCROLL_LANDING_GAP_PX
+   * above its target, leaving that many pixels of the PREVIOUS line at the top.
+   * Counting that sliver made this derivation report the previous line, whose TOC
+   * entry is the previous section — a click on "daf 142a" answered by a sync
+   * announcing "daf 141b". For reader scrolling the allowance is imperceptible:
+   * the active section flips a few pixels later than it used to.
+   *
+   * The fallback chain matters at the very bottom of the book, where the last
+   * line itself may have less than the allowance visible: fall back to the
+   * sliver-counting find rather than items[0], which is the top overscan row.
+   *
+   * CAVEAT — exposed as readCurrentPosition for exactly this: during a long jump
+   * the scroll event fires BEFORE the virtualizer re-renders, so the items here
+   * still describe the window around the OLD position and the derivation returns
+   * old-position garbage (live-verified: every backward TOC jump reported the
+   * previous location minus one row). Consumers acting LATER — the scroll sync's
+   * settle pass — must re-derive fresh instead of trusting an event-time value.
+   */
+  function readCurrentPosition(): { lineIndex: number; fullLineIndex: number } | null {
+    if (!scrollerEl.value) return null
     const scrollTop = scrollerEl.value.scrollTop
     const items = virtualItems()
-    const firstVisible = items.find((v) => v.start + v.size > scrollTop) ?? items[0]
-    const lineIndex = firstVisible?.index ?? 0
-    const firstFull = items.find((v) => v.start >= scrollTop) ?? firstVisible
-    const fullLineIndex = firstFull?.index ?? lineIndex
-    lastKnownPos = captureScrollPos()
-    prioritise(lineIndex)
-    emit('scrolled', lineIndex, fullLineIndex)
+    const inset = props.searchBarVisible ? SEARCH_BAR_INSET_PX : 0
+    const visibleTop = scrollTop + inset + SCROLL_LANDING_GAP_PX + 4
+    const firstVisible =
+      items.find((v) => v.start + v.size > visibleTop) ??
+      items.find((v) => v.start + v.size > scrollTop) ??
+      items[0]
+    if (!firstVisible) return null
+    const lineIndex = firstVisible.index
+    // Fully visible means fully visible BELOW the search bar too — a short line
+    // hidden entirely under the bar is not something auto-select should act on.
+    const firstFull = items.find((v) => v.start >= scrollTop + inset) ?? firstVisible
+    return { lineIndex, fullLineIndex: firstFull.index }
   }
 
-  // ── Programmatic scroll flag ────────────────────────────────────────────────
+  function onScroll() {
+    if (!scrollerEl.value) return
+    const position = readCurrentPosition()
+    if (!position) return
+    const { lineIndex, fullLineIndex } = position
+    lastKnownPos = captureScrollPos()
+    prioritise(lineIndex)
+    // The third argument says whether the READER moved the view, as opposed to a
+    // jump the app performed (TOC click, search match, restore). saveSuppressed
+    // already draws exactly that line and every programmatic scroller sets it, so
+    // it is reused here rather than tracked a second time — and unlike a `wheel`
+    // listener it also catches scrollbar drags and keyboard scrolling.
+    emit('scrolled', lineIndex, fullLineIndex, !saveSuppressed)
+  }
 
-  function setProgrammaticScroll() {
-    programmaticScrolling = true
-    if (programmaticScrollTimer) clearTimeout(programmaticScrollTimer)
-    programmaticScrollTimer = setTimeout(() => { programmaticScrolling = false }, 300)
+  // ── Position-save suppression ───────────────────────────────────────────────
+
+  function suppressPositionSave() {
+    saveSuppressed = true
+    if (saveSuppressTimer) clearTimeout(saveSuppressTimer)
+    saveSuppressTimer = setTimeout(() => { saveSuppressed = false }, 300)
   }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
+  /**
+   * Closes the post-restore correction window early. Restore keeps re-anchoring
+   * its OWN target for up to 10s while late chunks shift it — right up until the
+   * reader goes somewhere else. A new programmatic jump is exactly that, and
+   * without this the two positioners fight: the jump lands, a late chunk shifts
+   * the old restore target, and the observer yanks the view back to the restored
+   * position.
+   */
+  function cancelRestoreCorrection() {
+    finishPostRestore?.()
+    finishPostRestore = null
+  }
+
   return {
     captureScrollPos,
     restoreScrollPos,
-    isProgrammaticScrolling: () => programmaticScrolling,
-    setProgrammaticScroll,
+    readCurrentPosition,
+    cancelRestoreCorrection,
+    isPositionSaveSuppressed: () => saveSuppressed,
+    suppressPositionSave,
     onScroll,
   }
 }

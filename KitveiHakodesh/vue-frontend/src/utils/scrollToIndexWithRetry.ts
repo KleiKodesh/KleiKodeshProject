@@ -1,6 +1,18 @@
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
 /**
+ * Breathing room a programmatic landing leaves above its target: the scroll stops
+ * this many pixels before the line's start, so a section opens with a sliver of
+ * the previous line showing rather than text flush against the edge.
+ *
+ * Defined here — where the landing maths lives — and imported by the book-view
+ * scroller and its top-line derivation, which must all agree on it: the sliver
+ * means the line straddling the very top after a landing is the PREVIOUS line,
+ * and a derivation that counts slivers resolves to the previous TOC entry.
+ */
+export const SCROLL_LANDING_GAP_PX = 8
+
+/**
  * Scrolls a virtualizer to a target index so the item appears at the top of the
  * scroller (offset by topReserved px).
  *
@@ -26,7 +38,7 @@ export function scrollToIndexWithRetry(
   isCancelled?: () => boolean,
 ): void {
   let attempts = 0
-  const gap = topReserved + 8
+  const gap = topReserved + SCROLL_LANDING_GAP_PX
 
   function resolveIndex(): number {
     return typeof index === 'function' ? index() : index

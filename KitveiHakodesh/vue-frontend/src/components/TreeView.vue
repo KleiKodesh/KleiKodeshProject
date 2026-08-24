@@ -59,21 +59,39 @@ function scrollIntoView(id: number) {
   container.scrollTop = top - container.clientHeight / 2 + el.offsetHeight / 2
 }
 
-watch(
-  () => props.activeNodeId,
-  (id) => {
-    if (id != null) {
-      expandAncestors(id)
-      nextTick(() => scrollIntoView(id))
-    }
-  },
-)
+/**
+ * The node this tree has already positioned itself on.
+ *
+ * Every sync is select-then-scroll: record the target, then move to it. A sync for
+ * the node we are ALREADY on returns early, having nothing to do — and that is the
+ * whole gate.
+ *
+ * It has to be a gate on identity rather than a flag on timing because the syncs
+ * do not arrive once. A jump makes the virtualizer settle over many frames, and
+ * each settle re-derives the active entry and re-announces the SAME node. A
+ * one-shot flag is consumed by the first of those and lets every later one
+ * through, which is why suppression worked only some of the time. Comparing
+ * against the node we are on ignores all of them, however many arrive.
+ *
+ * It also covers the click case for free: selectNode records the node before the
+ * change goes out, so when the sync comes back it matches and no scroll happens.
+ * The row stays exactly where the reader clicked it.
+ */
+let positionedNodeId: number | undefined
+
+function syncToNode(id: number | undefined) {
+  // Already here — nothing to do. Repeat announcements land here and stop.
+  if (id === positionedNodeId) return
+  positionedNodeId = id
+  if (id == null) return
+  expandAncestors(id)
+  nextTick(() => scrollIntoView(id))
+}
+
+watch(() => props.activeNodeId, syncToNode)
 
 onMounted(() => {
-  if (props.activeNodeId != null) {
-    expandAncestors(props.activeNodeId)
-    nextTick(() => scrollIntoView(props.activeNodeId!))
-  }
+  syncToNode(props.activeNodeId)
 })
 
 function toggle(node: TreeNodeItem) {
@@ -111,6 +129,11 @@ const { focusedIndex, containerFocused } = useListKeys(
 
 function selectNode(i: number, node: TreeNodeItem, event?: MouseEvent) {
   focusedIndex.value = i
+  // Select first, scroll second — the same order every sync follows. The row is
+  // already under the pointer, so being "positioned" on it is simply true, and
+  // recording that here is what makes the sync coming back a no-op instead of a
+  // scroll that yanks the row to the centre.
+  positionedNodeId = node.id
   emit('select', node, event)
 }
 
