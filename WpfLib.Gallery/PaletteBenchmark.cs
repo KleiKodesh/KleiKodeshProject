@@ -196,8 +196,11 @@ namespace WpfLib.Gallery
 
             Console.WriteLine("{0,-30} {1,7:F1}ms", "via XAML, first pane", firstPane);
             Console.WriteLine("{0,-30} {1,7:F1}ms", "via XAML, next pane", nextPane);
+            // The palette's own nested merges go through the cache too, so the
+            // count is "palette + its shared children", not 1. Zero is the
+            // only count that means the XAML path never reached the cache.
             Console.WriteLine("{0,-30} {1,7} {2}", "dictionaries cached", cachedAfterFirst,
-                cachedAfterFirst == 1 ? "" : "<- SHARING DID NOT TAKE EFFECT");
+                cachedAfterFirst > 0 ? "" : "<- SHARING DID NOT TAKE EFFECT");
         }
 
         /// <summary>One pass, for things that only happen once and cannot be repeated.</summary>
