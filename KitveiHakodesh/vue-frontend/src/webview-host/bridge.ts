@@ -684,13 +684,6 @@ export interface MirroredTab {
   iconKey: string
 }
 
-/** A recently opened document (not currently open) for the native tab-list dropdown. */
-export interface MirroredRecentItem {
-  /** Stable key from recentlyOpenedStore — echoed back by chromeRecentActivated. */
-  key: string
-  title: string
-}
-
 /** Full snapshot of the Vue tab store for the native chrome tab strip. */
 export interface TabsSnapshot {
   tabs: MirroredTab[]
@@ -707,14 +700,12 @@ export interface TabsSnapshot {
   /** Rendered split divider's device-pixel bounds from the viewport left, for exact alignment; -1/0 when unmeasured. */
   splitDividerLeftPx: number
   splitDividerWidthPx: number
-  /** Recently opened documents for the dropdown's "נסגרו לאחרונה" section. */
-  recent: MirroredRecentItem[]
 }
 
 /**
  * Push a full snapshot of the Vue tab store to the C# host so the native chrome
- * tab strip can mirror it (membership, titles, per-pane active tabs, split state),
- * plus recently opened documents for the dropdown. Fire-and-forget.
+ * tab strip can mirror it (membership, titles, per-pane active tabs, split state).
+ * Fire-and-forget.
  */
 export function notifyTabsChanged(snapshot: TabsSnapshot): void {
   if (typeof window.__webviewAction !== 'function') return
