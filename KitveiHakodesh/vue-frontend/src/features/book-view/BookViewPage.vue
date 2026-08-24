@@ -532,7 +532,6 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
           <BookViewSearchBar
             ref="searchBarRef"
             :visible="searchVisible"
-            :toolbar-visible="toolbarVisible"
             :toolbar-position="toolbarPosition"
             :match-count="activeMatchCount"
             :current-match="activeMatchIdx"

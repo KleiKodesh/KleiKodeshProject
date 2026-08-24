@@ -11,7 +11,6 @@ import { useTxtViewSearch } from './useTxtViewSearch'
 import { useTxtViewCopyMenu, useTxtViewScopedCopy } from './useTxtViewCopyMenu'
 import { removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
-import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useContextMenuLongPress } from '@/composables/useContextMenuLongPress'
 import { getTheme } from '@/theme/themes'
 import type { ThemePreset } from '@/theme/themeTypes'
@@ -33,15 +32,6 @@ const tabId = paneNavigation.activeTabId
 const filePath = computed(() => paneNavigation.activeTab.localFilePath ?? null)
 const virtualUrl = computed(() => paneNavigation.activeTab.localFileVirtualUrl ?? null)
 const htmlMaskEnabled = computed(() => settingsStore.pdfPageFilters)
-
-const { titleBarVisible } = useUiChromeVisibility(paneId)
-const searchBarStyle = computed(() => {
-  const titleBarHeight = getComputedStyle(document.documentElement)
-    .getPropertyValue('--title-bar-height')
-    .trim()
-  const offset = titleBarVisible.value ? parseInt(titleBarHeight) : 0
-  return { top: `${offset + 4}px` }
-})
 
 const rawContent = ref<string | null>(null)
 const loading = ref(false)
@@ -174,12 +164,10 @@ function scrollToCurrentMatch() {
   // Let the browser do the minimum scroll to make it visible
   element.scrollIntoView({ behavior: 'instant', block: 'nearest' })
 
-  // Then check if the element is hidden behind the search bar and nudge down
-  const titleBarHeight = parseInt(
-    getComputedStyle(document.documentElement).getPropertyValue('--title-bar-height').trim()
-  )
+  // Then check if the element is hidden behind the search bar and nudge down.
+  // The bar sits 4px below the page top, which is also the scroll container's top.
   const SEARCH_BAR_HEIGHT = 36
-  const topClearance = (titleBarVisible.value ? titleBarHeight : 0) + SEARCH_BAR_HEIGHT + 8
+  const topClearance = SEARCH_BAR_HEIGHT + 8
 
   const containerRect = container.getBoundingClientRect()
   const elementTop = element.getBoundingClientRect().top - containerRect.top
@@ -389,7 +377,7 @@ async function retry() {
 
     <!-- Search bar — same visual style as BookViewSearchBar -->
     <Transition name="search-bar">
-      <div v-if="searchVisible" class="search-bar" :style="searchBarStyle">
+      <div v-if="searchVisible" class="search-bar">
         <div class="search-inner">
           <input
             ref="searchInputRef"
@@ -420,6 +408,9 @@ async function retry() {
 
 <style scoped>
 .txt-view-page {
+  /* Positioning context for the floating search bar: it anchors to this pane's
+     page, NOT the viewport, so in split view each pane centers its own bar. */
+  position: relative;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -470,8 +461,9 @@ async function retry() {
 /* ── Search bar ────────────────────────────────────────────────────────────── */
 
 .search-bar {
-  position: fixed;
+  position: absolute;
   z-index: 9999;
+  top: 4px;
   left: 0;
   right: 0;
   margin: 0 auto;
