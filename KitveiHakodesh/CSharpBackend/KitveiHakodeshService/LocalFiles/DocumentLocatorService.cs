@@ -23,14 +23,24 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
     // ── Index path ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// The on-disk Lucene index directory.  Matches the default used by the
-    /// standalone DocumentLocator.Service.exe so both hosts share the same index.
+    /// The on-disk Lucene index directory, and the excluded-folders list beside it.
+    ///
+    /// Resolved from <see cref="DocumentLocator.PathIndex.DefaultIndexPath"/> — the same
+    /// constant the standalone DocumentLocator.Service.exe uses — rather than a path
+    /// spelled out here. That is the point: this used to hard-code
+    /// %ProgramData%\DocumentLocator\filesystemindex, a third location neither host
+    /// agreed on, while claiming in a comment that it matched the net48 host.
+    ///
+    /// It does NOT follow that both hosts land in the same directory. DefaultIndexPath is
+    /// AppDomain.CurrentDomain.BaseDirectory + "filesystemindex", which is per-process:
+    /// the net48 service resolves it to the install folder, while this service resolves it
+    /// to its own bin folder. This host is dev-only today (it is not in the installer
+    /// payload; vite.config.ts spawns it from bin), so nothing user-facing depends on the
+    /// two agreeing. If it ever ships, KitveiHakodesh.Core's AppFileLocator is the piece
+    /// that would make them genuinely agree — wire it in here rather than re-spelling a
+    /// literal path.
     /// </summary>
-    private static string IndexPath =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
-            "DocumentLocator",
-            "filesystemindex");
+    private static string IndexPath => DocumentLocator.PathIndex.DefaultIndexPath;
 
     /// <summary>
     /// How often to rescan when there is no live USN watcher (i.e. not elevated).

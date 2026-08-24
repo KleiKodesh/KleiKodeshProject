@@ -6,7 +6,8 @@ import { getExcludedFolders, setExcludedFolders, pickFolder } from '@/webview-ho
 
 // Dev-mode counterpart of the hosted app's WinForms ExcludedFoldersForm. Same behaviour —
 // list, add via the native folder dialog, remove the selected row, confirm to persist — and
-// the same storage (excluded_folders.json in the file-search index directory) via the service.
+// the same storage format (excluded_folders.json beside the file-search index directory) via the
+// service — resolved from the dev service's own bin folder, so it is a dev-local list.
 // Cancel discards: nothing is written until אישור.
 
 const emit = defineEmits<{

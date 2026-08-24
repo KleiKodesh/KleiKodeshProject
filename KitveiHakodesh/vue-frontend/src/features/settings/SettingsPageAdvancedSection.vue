@@ -112,8 +112,9 @@ async function resetDbPath() {
 
 // ── Excluded folders ──────────────────────────────────────────────────────────
 // Hosted: the C# host shows the native WinForms manager, which owns its own persistence.
-// Dev: the Vue dialog below mirrors it and persists through the service to the SAME
-// excluded_folders.json in the file-search index directory.
+// Dev: the Vue dialog below mirrors it and persists through the service to an
+// excluded_folders.json beside the file-search index directory — same format, but the
+// dev service resolves that directory from its own bin folder, not the install folder.
 
 const isExcludedFoldersDialogOpen = ref(false)
 
