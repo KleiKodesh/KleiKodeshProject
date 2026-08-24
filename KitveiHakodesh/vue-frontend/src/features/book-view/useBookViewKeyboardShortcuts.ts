@@ -12,9 +12,9 @@ import { useEventListener } from '@vueuse/core'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 
-type LinesContentInstance = {
-  scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void
-}
+// Only `$el` is used here (see below) — the scroller API is not part of this
+// composable's contract.
+type LinesContentInstance = Record<string, unknown>
 
 type CommentaryViewInstance = Record<string, unknown>
 

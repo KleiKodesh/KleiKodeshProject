@@ -60,10 +60,22 @@ export function useCommentarySearch(
   const currentMatchFlatIndex = computed(() => currentMatch.value?.flatIndex ?? -1)
   const currentMatchOccurrence = computed(() => currentMatch.value?.occurrenceInLine ?? 0)
 
-  function gotoNearestMatch() {
+  /**
+   * Re-anchor to wherever the reader has scrolled this panel, in the direction
+   * they asked to travel. Mirrors the book text's gotoNearestMatch.
+   */
+  function gotoNearestMatch(direction: 'forward' | 'backward' = 'forward') {
     const newMatches = matches.value
     if (!newMatches.length) return
     const cur = currentFlatIndex()
+    if (direction === 'backward') {
+      let found = -1
+      for (let i = newMatches.length - 1; i >= 0; i--) {
+        if (newMatches[i]!.flatIndex < cur) { found = i; break }
+      }
+      currentMatchIdx.value = found === -1 ? newMatches.length - 1 : found
+      return
+    }
     const nearestIdx = newMatches.findIndex((m) => m.flatIndex >= cur)
     currentMatchIdx.value = nearestIdx === -1 ? 0 : nearestIdx
   }

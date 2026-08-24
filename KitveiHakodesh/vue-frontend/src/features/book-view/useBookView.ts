@@ -32,7 +32,6 @@ import { useLines } from './lines/useBookViewLinesTable'
 import { useCommentary } from './commentary/useCommentary'
 import { ensureConnectionTypeNamesLoaded } from './commentary/commentaryConnectionTypes'
 import { useBookViewSearch } from './useBookViewSearch'
-import { useBookViewTocScrollTracking } from './toc/useBookViewTocScrollTracking'
 import { useCommentaryNavigation } from './commentary/useCommentaryNavigation'
 import { useCommentaryPanelSlot } from './commentary/useCommentaryPanelSlot'
 import { serializeCommentaryCheckState } from './commentary/uncheckedCommentaryBooks'
@@ -54,6 +53,7 @@ import type {
   CommentarySlot,
   TocPersistState,
 } from './bookViewTypes'
+import type { ScrollToLineOptions } from './lines/useBookViewLinesNavigation'
 import type { Highlight } from './lines/useBookViewHighlights'
 import type { Note } from './lines/useBookViewNotes'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
@@ -62,9 +62,10 @@ export type { SearchMode } from './bookViewTypes'
 // Component instance types — used only for ref typing
 type ToolbarInstance = { tocBtnRef: HTMLElement | null }
 type LinesContentInstance = {
-  scrollToLineId: (lineId: number, lineIndex?: number) => void
-  scrollToLineIndex: (lineIndex: number, occurrence?: number, forceScroll?: boolean) => void
+  scrollToLine: (lineIndex: number, options?: ScrollToLineOptions) => void
+  scrollToLineId: (lineId: number, lineIndex?: number, options?: ScrollToLineOptions) => void
   focusScroller: () => void
+  readCurrentPosition: () => { lineIndex: number; fullLineIndex: number } | null
   $el?: HTMLElement
 }
 type SearchBarInstance = { focus: (opts?: { selectAll?: boolean }) => void }
@@ -311,20 +312,25 @@ export function useBookView(
 
   // ── TOC ───────────────────────────────────────────────────────────────────
 
-  const { beginTocScroll, checkTocScrollProgress } = useBookViewTocScrollTracking()
-
-  const { currentScrollLineIndex, currentFullLineIndex, onLinesScrolled, syncTocPathForLineIndex } = useBookViewScrollSync(
+  const {
+    currentScrollLineIndex,
+    currentFullLineIndex,
+    userScrollTick,
+    onLinesScrolled,
+    syncTocPathForLineIndex,
+  } = useBookViewScrollSync(
     () => lines.value,
     activeTocEntryId,
     activeAltTocEntryId,
     selectedLineId,
     commentaryLineId,
-    checkTocScrollProgress,
     getActiveTocEntry,
+    (id) => tocEntries.value.find((e) => e.id === id) ?? null,
     getActiveAltTocEntry,
     getTocPath,
     captureActivePins,
     applyPendingPins,
+    () => linesContentRef()?.readCurrentPosition() ?? null,
   )
 
   // The alt sections finish loading after the reader is already scrolled, and a
@@ -399,6 +405,7 @@ export function useBookView(
         searchHighlightTerms: undefined,
       })
     },
+    userScrollTick,
   )
 
   // In-session search query: restore the last query for this tab (kept in the
@@ -439,7 +446,6 @@ export function useBookView(
     getActiveTocEntry,
     getActiveAltTocEntry,
     getTocPath,
-    beginTocScroll,
     selectedAltTocSection,
     openTocEntryId,
   )

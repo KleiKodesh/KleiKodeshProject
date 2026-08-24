@@ -23,7 +23,13 @@ import {
 import type { Ref } from 'vue'
 import type { LineItem } from '../lines/useBookViewLinesTable'
 import type { TocEntry } from '@/webview-host/queries.types'
-interface LinesContentRef { scrollToLineId: (lineId: number, lineIndex?: number) => void }
+interface LinesContentRef {
+  scrollToLineId: (
+    lineId: number,
+    lineIndex?: number,
+    options?: { skipIfVisible?: boolean },
+  ) => void
+}
 
 export function useCommentaryNavigation(
   bookId: number | undefined,
@@ -92,7 +98,8 @@ export function useCommentaryNavigation(
       selectedLineId.value = targetLineId
       commentaryLineId.value = targetLineId
       commentaryVisible.value = true
-      linesContentRef()?.scrollToLineId(targetLineId)
+      // Only needs the line on screen — leave the reader where they are if it already is.
+      linesContentRef()?.scrollToLineId(targetLineId, undefined, { skipIfVisible: true })
     }
 
     // Multi-select mode: navigate to the line immediately after the last selected

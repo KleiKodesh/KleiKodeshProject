@@ -5,7 +5,7 @@
  * Owns: panel open/close, mode switching, query forwarding, match navigation,
  * and scrolling the active match into view.
  */
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch } from 'vue'
 import { removeDiacriticsForSearch } from '@/utils/hebrewTextProcessing'
 import { COMMENTARY_SLOTS, searchModeForSlot, slotForSearchMode } from './bookViewTypes'
 import type { CommentarySlot, SearchMode } from './bookViewTypes'
@@ -16,7 +16,7 @@ type ContentSearch = {
   currentMatchIdx: import('vue').Ref<number>
   currentMatchLineIndex: import('vue').Ref<number>
   currentMatchOccurrence: import('vue').Ref<number>
-  gotoNearestMatch?: () => void
+  gotoNearestMatch?: (direction: 'forward' | 'backward') => void
   next: () => void
   prev: () => void
   clear: () => void
@@ -28,14 +28,14 @@ type CommentarySearch = {
   currentMatchIdx: import('vue').Ref<number>
   currentMatchFlatIndex: import('vue').Ref<number>
   currentMatchOccurrence: import('vue').Ref<number>
-  gotoNearestMatch?: () => void
+  gotoNearestMatch?: (direction: 'forward' | 'backward') => void
   next: () => void
   prev: () => void
   clear: () => void
 }
 
 type LinesContentInstance = {
-  scrollToLineIndex: (lineIndex: number, occurrence?: number) => void
+  scrollToLine: (lineIndex: number, options?: { occurrence?: number }) => void
   focusScroller: () => void
 }
 
@@ -51,6 +51,12 @@ export function useBookViewSearchPanel(
   commentaryViewRefs: Record<CommentarySlot, () => CommentaryViewInstance | null>,
   searchBarRef: () => { focus: (opts?: { selectAll?: boolean }) => void } | null,
   clearFullTextSearchHighlights: () => void,
+  /**
+   * Counter bumped whenever the READER scrolls the book text (never when the app
+   * jumps it). Watched below to re-anchor the next Enter/Shift+Enter to wherever
+   * they scrolled to.
+   */
+  userScrollTick: import('vue').Ref<number>,
 ) {
   const searchVisible = ref(false)
   const searchMode = ref<SearchMode>('content')
@@ -70,6 +76,18 @@ export function useBookViewSearchPanel(
     return slot ? commentarySearches[slot] : contentSearch
   }
 
+  // A reader scroll re-arms the re-anchor for the BOOK TEXT search. The next
+  // Enter/Shift+Enter then jumps to the match nearest where they scrolled to,
+  // instead of resuming from the match they left behind — which, after scrolling
+  // a long way, would send them back across the whole book.
+  //
+  // Only 'content' is re-armed: this tick tracks the book text scroller, and each
+  // commentary panel keeps its own place. Their re-anchor already reads a live
+  // cursor (topVisibleFlatIndex), so a commentary scroll needs no signal here.
+  watch(userScrollTick, () => {
+    searchNavigationState.content = false
+  })
+
   const activeSearch = computed(() => searchForMode(searchMode.value))
   const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
   const activeMatchIdx = computed(() => activeSearch.value.currentMatchIdx.value)
@@ -78,10 +96,10 @@ export function useBookViewSearchPanel(
     const slot = slotForSearchMode(searchMode.value)
     if (!slot) {
       if (contentSearch.currentMatchLineIndex.value === -1) return
-      linesContentRef()?.scrollToLineIndex(
-        contentSearch.currentMatchLineIndex.value,
-        contentSearch.currentMatchOccurrence.value,
-      )
+      // Same jump the TOC makes, refined to the matching occurrence within the line.
+      linesContentRef()?.scrollToLine(contentSearch.currentMatchLineIndex.value, {
+        occurrence: contentSearch.currentMatchOccurrence.value,
+      })
       return
     }
     const search = commentarySearches[slot]
@@ -193,31 +211,33 @@ export function useBookViewSearchPanel(
     searchNavigationState[searchMode.value] = false
   }
 
-  function onSearchNext() {
+  /**
+   * One step through the matches, in `direction`.
+   *
+   * The first press after the panel opens, after the query changes, or after the
+   * READER scrolls does not advance — it re-anchors to the match nearest the
+   * current view, travelling the way the key points: Enter to the first match at
+   * or after the top of the view, Shift+Enter to the last one above it. Anything
+   * else would ignore where the reader just navigated to.
+   *
+   * Every later press steps normally from there.
+   */
+  function stepSearch(direction: 'forward' | 'backward') {
     const search = activeSearch.value
     if (search.matchCount.value === 0) return
     if (!searchNavigationState[searchMode.value]) {
       searchNavigationState[searchMode.value] = true
-      search.gotoNearestMatch?.()
-      scrollContentMatch()
-      return
+      search.gotoNearestMatch?.(direction)
+    } else if (direction === 'forward') {
+      search.next()
+    } else {
+      search.prev()
     }
-    search.next()
     scrollContentMatch()
   }
 
-  function onSearchPrev() {
-    const search = activeSearch.value
-    if (search.matchCount.value === 0) return
-    if (!searchNavigationState[searchMode.value]) {
-      searchNavigationState[searchMode.value] = true
-      search.gotoNearestMatch?.()
-      scrollContentMatch()
-      return
-    }
-    search.prev()
-    scrollContentMatch()
-  }
+  function onSearchNext() { stepSearch('forward') }
+  function onSearchPrev() { stepSearch('backward') }
 
   return {
     searchVisible,
