@@ -35,7 +35,10 @@ type CommentarySearch = {
 }
 
 type LinesContentInstance = {
-  scrollToLine: (lineIndex: number, options?: { occurrence?: number }) => void
+  scrollToLine: (
+    lineIndex: number,
+    options?: { occurrence?: number; direction?: 'forward' | 'backward' },
+  ) => void
   focusScroller: () => void
 }
 
@@ -92,13 +95,15 @@ export function useBookViewSearchPanel(
   const activeMatchCount = computed(() => activeSearch.value.matchCount.value)
   const activeMatchIdx = computed(() => activeSearch.value.currentMatchIdx.value)
 
-  function scrollContentMatch() {
+  function scrollContentMatch(direction: 'forward' | 'backward') {
     const slot = slotForSearchMode(searchMode.value)
     if (!slot) {
       if (contentSearch.currentMatchLineIndex.value === -1) return
-      // Same jump the TOC makes, refined to the matching occurrence within the line.
+      // Same jump the TOC makes, refined to the matching occurrence within the
+      // line, and landed at the edge this step is travelling toward.
       linesContentRef()?.scrollToLine(contentSearch.currentMatchLineIndex.value, {
         occurrence: contentSearch.currentMatchOccurrence.value,
+        direction,
       })
       return
     }
@@ -233,7 +238,7 @@ export function useBookViewSearchPanel(
     } else {
       search.prev()
     }
-    scrollContentMatch()
+    scrollContentMatch(direction)
   }
 
   function onSearchNext() { stepSearch('forward') }
