@@ -13,7 +13,7 @@ import {
 } from '@/stores/recentlyOpenedStore'
 
 const TILE_WIDTH = 72
-const TILE_GAP = 16
+const TILE_GAP = 8
 
 /** Hard ceiling on recently-opened tiles, regardless of available row space. */
 const RECENTLY_OPENED_MAX = 20
@@ -64,11 +64,23 @@ export function useHomeTiles(containerWidth: Ref<number>) {
     ]
   })
 
+  /**
+   * How wide the grid is allowed to get: exactly the width of one full row of
+   * static tiles. The static row is the widest the grid ever needs to be, so
+   * capping here means a wide window can never start a row longer than that —
+   * the recently-opened tiles wrap underneath instead of stretching past it.
+   */
+  const gridMaxWidth = computed(
+    () => tiles.value.length * (TILE_WIDTH + TILE_GAP) - TILE_GAP,
+  )
+
   // Fill the gap left on the static tiles' last row, plus one more full row.
   const visibleRecentlyOpenedList = computed(() => {
     if (!showRecentlyOpened.value) return []
     if (!recentlyOpenedList.value.length) return []
-    const effectiveWidth = containerWidth.value || 320
+    // Clamped to the grid's own cap, not just the container: past that width
+    // the grid stops growing, so extra container width buys no extra columns.
+    const effectiveWidth = Math.min(containerWidth.value || 320, gridMaxWidth.value)
     const tilesPerRow = Math.max(
       1,
       Math.floor((effectiveWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)),
@@ -105,6 +117,7 @@ export function useHomeTiles(containerWidth: Ref<number>) {
 
   return {
     tiles,
+    gridMaxWidth,
     visibleRecentlyOpenedList,
     totalTileCount,
     getRecentTileIcon,

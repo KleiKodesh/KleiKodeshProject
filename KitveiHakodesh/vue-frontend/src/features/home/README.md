@@ -6,7 +6,7 @@ Home page with navigation tiles and a unified quick-search bar.
 
 **HomePageTile.vue** — single tile with a filled colored icon and label. Emits `tap` (carrying whether Ctrl/⌘ was held), `togglePin`, and `remove`. Add new tiles via `useHomeTiles.ts`, not by editing the template.
 
-**useHomeTiles.ts** — the tile grid's data: the static navigation tile list, the recently-opened list and its per-route icon map, how many recently-opened tiles fit alongside the static ones, and the pin/remove actions. The static tile list must always be kept in sync with the destination list in `AppTitleBarNavDropdown.vue` — when adding, removing, or renaming a destination, update both. Neither list is derived from the other.
+**useHomeTiles.ts** — the tile grid's data: the static navigation tile list, the recently-opened list and its per-route icon map, how many recently-opened tiles fit alongside the static ones, and the pin/remove actions. It also owns the grid's width cap (`gridMaxWidth`), which `HomePage.vue` binds as an inline `max-width`: one row is never wider than a full row of static tiles, so recently-opened tiles wrap underneath rather than extending the row on a wide window. The static tile list must always be kept in sync with the destination list in `AppTitleBarNavDropdown.vue` — when adding, removing, or renaming a destination, update both. Neither list is derived from the other.
 
 **useHomeSearchBar.ts** — the hero search bar's own state: dropdown open/closed, its fixed-position anchor (computed once on open, never tracked reactively — reactive tracking fights the dropdown's `scrollTop`), the animated typing placeholder, and the input's keyboard handling. Knows nothing about where results come from or where selecting one navigates.
 

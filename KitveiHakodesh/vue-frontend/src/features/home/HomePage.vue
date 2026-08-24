@@ -24,6 +24,7 @@ const { width: containerWidth } = useElementSize(innerRef)
 
 const {
   tiles,
+  gridMaxWidth,
   visibleRecentlyOpenedList,
   totalTileCount,
   getRecentTileIcon,
@@ -157,7 +158,7 @@ async function onTap(label: string) {
           @select-file="navigation.onSelectFile"
         />
       </div>
-      <div class="home-grid">
+      <div class="home-grid" :style="{ maxWidth: `${gridMaxWidth}px` }">
         <HomeTile
           v-for="(tile, index) in tiles"
           :key="tile.label"
@@ -220,7 +221,7 @@ async function onTap(label: string) {
   flex-wrap: wrap;
   justify-content: center;
   gap: 4px 8px;
-  max-width: 920px;
+  /* Width cap comes from useHomeTiles: one full row of static tiles. */
 }
 
 /* Search bar — flows with the tiles (centered as a group when there's room),
