@@ -54,14 +54,20 @@ namespace DocDesign
                 if (DataContext is DocDesignViewModel vm) vm.SpacingViewModel.Live = false;
             };
 
-            // Refresh styles when control becomes visible
+            // Visibility drives two things: the style lists refresh when the
+            // pane shows (ungated on purpose - this is the recovery path for
+            // changes a style count cannot see), and the selection watcher
+            // idles while the pane is hidden, so a hidden pane costs nothing
+            // per caret move. DeferredInit resyncs the spacing values on show.
             IsVisibleChanged += (_, e) =>
             {
-                if ((bool)e.NewValue && DataContext is DocDesignViewModel vm)
-                {
-                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                    vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
-                }
+                if (!(DataContext is DocDesignViewModel vm)) return;
+                bool visible = (bool)e.NewValue;
+                vm.SpacingViewModel.Live = visible;
+                if (!visible) return;
+                vm.SpacingViewModel.DeferredInit();
+                vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
             };
 
             // Refresh styles when focus returns to the pane - the user may have

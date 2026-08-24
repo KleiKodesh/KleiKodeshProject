@@ -39,13 +39,12 @@ namespace DocDesign.Spacing
         bool _subscribed;
 
         /// <summary>
-        /// False once the view's WPF tree is torn down, so the handler of a pane
-        /// that no longer exists costs a boolean check per caret move instead of
-        /// a dozen COM reads. Merely hiding the pane does not raise Unloaded, so
-        /// a hidden pane keeps updating - one handler's worth, which is fine; the
-        /// bug this replaces was N stacked handlers that nothing could turn off.
-        /// The event itself cannot be unhooked cheaply (the delegate would need
-        /// the VSTO event's exact type), and an inert handler is just as quiet.
+        /// False while the pane is hidden or its WPF tree is torn down (the view
+        /// flips it from IsVisibleChanged and Unloaded), so a pane that is not on
+        /// screen costs a boolean check per caret move instead of a dozen COM
+        /// reads. The show path resyncs the values via DeferredInit. The event
+        /// itself cannot be unhooked cheaply (the delegate would need the VSTO
+        /// event's exact type), and an inert handler is just as quiet.
         /// </summary>
         public bool Live { get; set; }
 
@@ -61,11 +60,38 @@ namespace DocDesign.Spacing
             {
                 Vsto.ApplicationFactory.GetVstoObject(Vsto.Application.ActiveDocument).SelectionChange += (_, x) =>
                 {
-                    if (Live) UpdateProperties();
+                    if (Live) ScheduleUpdate();
                 };
                 _subscribed = true;
             }
             catch { }
+        }
+
+        System.Windows.Threading.DispatcherTimer _updateDebounce;
+
+        /// <summary>
+        /// Coalesces a burst of selection changes (a held arrow key, a drag)
+        /// into one property read after the caret settles. Each read is over a
+        /// dozen COM calls including a text scan; paying that per keystroke of
+        /// a key repeat is what a debounce is for.
+        /// </summary>
+        void ScheduleUpdate()
+        {
+            if (_updateDebounce == null)
+            {
+                _updateDebounce = new System.Windows.Threading.DispatcherTimer(
+                    System.Windows.Threading.DispatcherPriority.Background)
+                {
+                    Interval = System.TimeSpan.FromMilliseconds(300)
+                };
+                _updateDebounce.Tick += (_, __) =>
+                {
+                    _updateDebounce.Stop();
+                    if (Live) UpdateProperties();
+                };
+            }
+            _updateDebounce.Stop();
+            _updateDebounce.Start();
         }
 
         /// <summary>
@@ -81,13 +107,16 @@ namespace DocDesign.Spacing
 
         void UpdateProperties()
         {
-            // Selection is null when no document is active (last doc closing, or a
-            // deferred idle / SelectionChange firing without a live selection).
-            var selection = Vsto.Selection;
-            if (selection == null) return;
-
+            // Everything inside the try, the Selection getter included: with zero
+            // documents open the COM property THROWS rather than returning null,
+            // and the debounce means this can run 300ms after the last document
+            // closed - from a timer Tick, where an escaped exception reaches
+            // Word's dispatcher instead of anyone's catch.
             try
             {
+                var selection = Vsto.Selection;
+                if (selection == null) return;
+
                 SetProperty(ref _spaceAfter, selection.ParagraphFormat.SpaceAfter, nameof(SpaceAfter));
                 SetProperty(ref _spaceBefore, selection.ParagraphFormat.SpaceBefore, nameof(SpaceBefore));
                 SetProperty(ref _lineSpacing, selection.ParagraphFormat.LineSpacing, nameof(LineSpacing));
