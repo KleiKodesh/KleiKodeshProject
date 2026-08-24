@@ -1,4 +1,4 @@
-using KleiKodesh.Helpers;
+﻿using KleiKodesh.Helpers;
 using Microsoft.Office.Interop.Word;
 using Microsoft.Office.Tools.Ribbon;
 using Nakdan;
@@ -170,22 +170,19 @@ namespace KleiKodesh.Ribbon
                         TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);
                         break;
                     case "WebSites":
-                        WpfTaskPane.Show(new WebSitesLib.UI.WebSitesView(), "דרך האתרים", 510);
+                        WpfTaskPane.Show(() => new WebSitesLib.UI.WebSitesView(), "דרך האתרים", 510);
                         break;
                     // case "HebrewBooks":
                     //     //WpfTaskPane.Show(new HebrewBooksLib.HebrewBooksView(), LocaleDictionary.Translate(id), 600);
                     //     break;
                     case "DocDesign":
-                        var docDesign = new DocDesign.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory);
-                        WpfTaskPane.Show(docDesign, "עיצוב תורני", 520);
+                        WpfTaskPane.Show(() => new DocDesign.DocDesignView(Globals.ThisAddIn.Application, Globals.Factory), "עיצוב תורני", 520);
                         break;
                     case "Nakdan":
-                        var nakdan = new NakdanView(Globals.ThisAddIn.Application, Globals.Factory);
-                        WpfTaskPane.Show(nakdan, "נקדן דיקטה", 520);
+                        WpfTaskPane.Show(() => new NakdanView(Globals.ThisAddIn.Application, Globals.Factory), "נקדן דיקטה", 520);
                         break;
                     case "RegexFind":
-                        var regexView = new RegexFindLib.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory);
-                        WpfTaskPane.Show(regexView, "חיפוש רגקס", 600);
+                        WpfTaskPane.Show(() => new RegexFindLib.UI.RegexFindView(Globals.ThisAddIn.Application, Globals.Factory), "חיפוש רגקס", 600);
                         break;
                     case "DuplicatePane":
                         try { TaskPaneManager.DuplicateCurrent(); } catch { }

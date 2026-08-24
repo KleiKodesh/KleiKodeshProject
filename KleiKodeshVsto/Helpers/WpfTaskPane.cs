@@ -12,6 +12,42 @@ namespace KleiKodesh.Helpers
     public class WpfHostControl : WinForms.UserControl { }
     public static class WpfTaskPane
     {
+        /// <summary>
+        /// Shows the pane for T, constructing the view only when no pane exists to
+        /// reuse. The eager overload below builds the whole view - and the XAML
+        /// builds its view model, and view models may hook Word events - just to
+        /// throw it away when the pane is already open. With views costing
+        /// 250-560ms to build and one of them leaking a SelectionChange handler
+        /// per construction, every ribbon click on an open pane was paid for twice.
+        /// </summary>
+        public static CustomTaskPane Show<T>(Func<T> factory, string title, int width = 600)
+            where T : UserControl
+        {
+            try
+            {
+                var panes = Globals.ThisAddIn.CustomTaskPanes;
+
+                var pane = panes.Cast<CustomTaskPane>()
+                    .FirstOrDefault(p =>
+                        p.Control is WinForms.UserControl c &&
+                        c.Controls.OfType<ElementHost>().Any(h => h.Child.GetType() == typeof(T)) &&
+                        p.Window == Globals.ThisAddIn.Application.ActiveWindow);
+
+                if (pane != null)
+                {
+                    pane.Visible = true;
+                    return pane;
+                }
+
+                return CreateNew(factory(), title, width);
+            }
+            catch (Exception ex)
+            {
+                WinForms.MessageBox.Show(ex.ToString(), "Error");
+                return null;
+            }
+        }
+
         public static CustomTaskPane Show(UserControl userControl, string title, int width = 600)
         {
             try
