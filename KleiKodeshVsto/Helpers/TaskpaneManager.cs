@@ -27,9 +27,9 @@ namespace KleiKodesh.Helpers
 
                 var pane = panes.Cast<CustomTaskPane>()
                     .FirstOrDefault(p => p.Control.GetType() == type && p.Window == window) ??
-                     CreateNew(userControl, title, width, matchOfficeTheme);
+                     CreateNew(userControl, title, width, matchOfficeTheme, popOutBehavior);
 
-                pane.Visible = true;
+                Reveal(pane);
                 return pane;
             }
             catch (Exception ex)
@@ -37,6 +37,28 @@ namespace KleiKodesh.Helpers
                 MessageBox.Show(ex.ToString(), "Error");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Makes <paramref name="pane"/> visible to the user - which, when its content
+        /// has been popped out into a floating window, means focusing that window rather
+        /// than showing the pane.
+        ///
+        /// Popping out reparents the content control into the form and leaves the pane's
+        /// own control empty. Setting Visible on the pane in that state shows an empty
+        /// task pane, which is what a context-menu search into a popped-out app used to
+        /// produce: the search itself reached the live control in the floating window,
+        /// but a blank pane opened alongside it.
+        /// </summary>
+        public static void Reveal(CustomTaskPane pane)
+        {
+            if (pane == null) return;
+
+            var popOut = TaskPanePopOut.For(pane);
+            if (popOut != null && popOut.IsPoppedOut)
+                popOut.FocusPopOutWindow();
+            else
+                pane.Visible = true;
         }
 
         public static CustomTaskPane DuplicateCurrent()
@@ -62,7 +84,7 @@ namespace KleiKodesh.Helpers
 
                 if (existing != null)
                 {
-                    existing.Visible = true;
+                    Reveal(existing);
                     return existing;
                 }
 
