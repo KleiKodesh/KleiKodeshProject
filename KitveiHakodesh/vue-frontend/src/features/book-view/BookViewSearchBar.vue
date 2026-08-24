@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed, nextTick, inject, type Component } from 'vue'
+import { ref, watch, computed, nextTick, type Component } from 'vue'
 import {
   IconLayoutRowTwoFocusTop20Filled,
   IconLayoutRowTwoFocusBottom20Filled,
@@ -10,13 +10,11 @@ import {
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { searchModeForSlot, slotForSearchMode } from './bookViewTypes'
 import type { CommentarySlot, SearchMode } from './bookViewTypes'
 
 const props = defineProps<{
   visible: boolean
-  toolbarVisible: boolean
   toolbarPosition: 'top' | 'bottom' | 'right' | 'left'
   matchCount: number
   currentMatch: number
@@ -79,27 +77,7 @@ watch(() => props.openCommentarySlots, (slots) => {
   if (slot && !slots.includes(slot)) searchMode.value = 'content'
 }, { deep: true })
 
-const paneId = inject<1 | 2>('paneId', 1)
-const { titleBarVisible } = useUiChromeVisibility(paneId)
-
 const isBottomAnchored = computed(() => props.toolbarPosition === 'bottom')
-
-const panelStyle = computed(() => {
-  const titleBarHeight = parseInt(
-    getComputedStyle(document.documentElement).getPropertyValue('--title-bar-height').trim()
-  )
-  const toolbarHeight = parseInt(
-    getComputedStyle(document.documentElement).getPropertyValue('--toolbar-horizontal-height').trim()
-  )
-
-  if (isBottomAnchored.value) {
-    const toolbarOffset = props.toolbarVisible ? toolbarHeight : 0
-    return { bottom: `${toolbarOffset + 4}px` }
-  }
-  const titleBarOffset = titleBarVisible.value ? titleBarHeight : 0
-  const toolbarOffset = props.toolbarVisible && props.toolbarPosition === 'top' ? toolbarHeight : 0
-  return { top: `${titleBarOffset + toolbarOffset + 4}px` }
-})
 
 const placeholder = computed(() =>
   searchMode.value === 'content' ? 'חיפוש בטקסט...' : 'חיפוש במפרשים...',
@@ -182,7 +160,7 @@ defineExpose({ focus: focusInput })
 
 <template>
   <Transition name="search-bar">
-    <div v-if="visible" class="search-bar" :class="{ 'bottom-anchored': isBottomAnchored }" :style="panelStyle">
+    <div v-if="visible" class="search-bar" :class="{ 'bottom-anchored': isBottomAnchored }">
       <div class="search-inner">
         <!-- data-ctrlf-enabled: Ctrl+F with the caret already in this field is a no-op
              (useAppTitleBarShortcuts defers to it) instead of falling through to
@@ -244,9 +222,12 @@ defineExpose({ focus: focusInput })
 </template>
 
 <style scoped>
+/* Anchored to the pane's .content-area (position: relative), NOT the viewport:
+   in split view each pane centers its own bar over its own content. */
 .search-bar {
-  position: fixed;
+  position: absolute;
   z-index: 9999;
+  top: 4px;
   left: 0;
   right: 0;
   margin: 0 auto;
@@ -315,6 +296,11 @@ defineExpose({ focus: focusInput })
 
 .nav-btn svg, .close-btn svg { width: 16px; height: 16px; }
 .nav-btn:disabled { opacity: 0.3; cursor: default; }
+
+.search-bar.bottom-anchored {
+  top: auto;
+  bottom: 4px;
+}
 
 .search-bar-enter-active, .search-bar-leave-active {
   transition: opacity 150ms ease, transform 150ms ease;
