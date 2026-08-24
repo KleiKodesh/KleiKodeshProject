@@ -35,7 +35,7 @@ namespace KleiKodesh.Helpers
 
                 if (pane != null)
                 {
-                    pane.Visible = true;
+                    TaskPaneManager.Reveal(pane);
                     return pane;
                 }
 
@@ -64,7 +64,7 @@ namespace KleiKodesh.Helpers
 
                 if (pane != null)
                 {
-                    pane.Visible = true;
+                    TaskPaneManager.Reveal(pane);
                     return pane;
                 }
 
@@ -127,15 +127,22 @@ namespace KleiKodesh.Helpers
                 var pane = TaskPaneManager.CreateNew(hostControl, title, width);
                 pane.Visible = true;
 
-                // Forward pop-out toggle action to the WPF control if it supports it
+                // Forward the pop-out toggle to the WPF view if it wants one.
+                // TaskPaneManager.CreateNew already built the handler for hostControl and
+                // offered it SetPopOutToggleAction - which a WpfHostControl does not have,
+                // so the action went nowhere and the real view never received it. Reuse
+                // that handler rather than constructing a second one: two handlers on one
+                // host both subscribe to the same events and both try to reparent the same
+                // content, so whichever runs second finds the content already moved.
                 var setPopOut = userControl.GetType().GetMethod("SetPopOutToggleAction");
-                if (setPopOut != null)
-                {
-                    // TaskPaneManager wired the action to hostControl; we need to re-wire to the WPF view.
-                    // Create a fresh TaskPanePopOut for the hostControl and pass its Toggle to the WPF view.
-                    var popOut = new TaskPanePopOut(hostControl, pane);
+                var popOut = TaskPanePopOut.For(pane);
+                if (setPopOut != null && popOut != null)
                     setPopOut.Invoke(userControl, new object[] { new Action<bool>(popOut.Toggle) });
-                }
+                else if (setPopOut != null)
+                    // The view wants a pop-out button but no handler was registered, so
+                    // clicking it would do nothing at all. Say so rather than shipping a
+                    // dead button silently.
+                    Console.WriteLine("[WpfTaskPane] No pop-out handler registered for " + title);
 
                 setColor();
                 hostControl.ForeColorChanged += (_, __) => setColor();

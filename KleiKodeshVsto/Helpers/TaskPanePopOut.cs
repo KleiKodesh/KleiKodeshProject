@@ -21,8 +21,64 @@ namespace KleiKodesh.Helpers
             _host = host;
             _pane = pane;
 
-            // Listen to host visibility changes to trigger popout/pop-in
-            _host.VisibleChanged += OnHostVisibilityChanged;
+            Register(pane, this);
+        }
+
+        /// <summary>
+        /// True while the content lives in a floating window instead of the task pane.
+        /// This is the single authoritative answer to "is it popped out?" - it reads the
+        /// form, which is the thing that actually holds the content. Callers used to
+        /// infer this from Visible flags on the host and the pane, which are cross-driven
+        /// by this class and so cannot distinguish "hidden because popped out" from
+        /// "hidden because the user closed the pane".
+        /// </summary>
+        public bool IsPoppedOut => _form != null && !_form.IsDisposed;
+
+        // ── Pop-out registry ──────────────────────────────────────────────────
+        // TaskPaneManager.Show needs to know whether a pane it is about to reveal is
+        // currently popped out, but the handler that knows lives here and was never
+        // reachable from there. A ConditionalWeakTable keyed on the pane keeps the
+        // lookup without extending any object's lifetime: when Word drops the pane,
+        // the entry goes with it.
+        static readonly System.Runtime.CompilerServices.ConditionalWeakTable<CustomTaskPane, TaskPanePopOut>
+            _byPane = new System.Runtime.CompilerServices.ConditionalWeakTable<CustomTaskPane, TaskPanePopOut>();
+
+        static void Register(CustomTaskPane pane, TaskPanePopOut handler)
+        {
+            if (pane == null) return;
+            // Remove-then-Add rather than Add: a pane must map to exactly one handler,
+            // and Add throws on a duplicate key. The last handler wired to a pane is
+            // the one holding its content, so it is the one worth keeping.
+            _byPane.Remove(pane);
+            _byPane.Add(pane, handler);
+        }
+
+        /// <summary>
+        /// The pop-out handler owning <paramref name="pane"/>, or null if the pane was
+        /// created without pop-out behaviour.
+        /// </summary>
+        public static TaskPanePopOut For(CustomTaskPane pane)
+        {
+            TaskPanePopOut handler;
+            return pane != null && _byPane.TryGetValue(pane, out handler) ? handler : null;
+        }
+
+        /// <summary>
+        /// Brings the floating window forward, restoring it if minimised. Called instead
+        /// of showing the task pane when content is popped out - without it, driving a
+        /// popped-out pane (a context-menu search, say) looks like nothing happened at
+        /// all when the window is buried behind Word or minimised.
+        /// </summary>
+        public void FocusPopOutWindow()
+        {
+            if (!IsPoppedOut) return;
+            try
+            {
+                if (_form.WindowState == FormWindowState.Minimized)
+                    _form.WindowState = FormWindowState.Normal;
+                _form.Activate();
+            }
+            catch { /* best-effort - focus is a courtesy, not a correctness requirement */ }
         }
 
         Control GetContent()
@@ -39,20 +95,6 @@ namespace KleiKodesh.Helpers
             }
 
             return null;
-        }
-
-        void OnHostVisibilityChanged(object sender, EventArgs e)
-        {
-            // When host becomes invisible, pop out
-            if (!_host.Visible && (_form == null || _form.IsDisposed))
-            {
-                PopOut();
-            }
-            // When host becomes visible while popped out, pop in
-            else if (_host.Visible && _form != null && !_form.IsDisposed)
-            {
-                PopIn();
-            }
         }
 
         public void Toggle(bool goFullScreen = false)
@@ -116,6 +158,14 @@ namespace KleiKodesh.Helpers
                 _pane.Visible = false;
                 _form.Show();
 
+                // Hiding the pane hides the host control that stayed behind - and for
+                // AppViewer that host suspends the WebView2 renderer on VisibleChanged,
+                // hiding the very control we just moved into this form. Un-hide it after
+                // the pane goes down. Previously a context-menu search happened to undo
+                // this by setting pane.Visible = true (which showed an empty pane - the
+                // bug); now that Reveal focuses this window instead, nothing else would.
+                RestoreContentVisibility(content);
+
                 // If requested, enter fullscreen mode immediately after showing
                 if (goFullScreen)
                 {
@@ -124,6 +174,21 @@ namespace KleiKodesh.Helpers
                 }
             }
             catch (Exception ex) { Console.WriteLine(ex.Message); }
+        }
+
+        /// <summary>
+        /// Makes the popped-out content visible again after the task pane hid its former
+        /// host. WebView2 auto-resumes a suspended renderer when its own control becomes
+        /// visible, so restoring Visible is enough - no explicit resume call is needed.
+        /// </summary>
+        static void RestoreContentVisibility(Control content)
+        {
+            try
+            {
+                if (content != null && !content.IsDisposed && !content.Visible)
+                    content.Visible = true;
+            }
+            catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
         }
 
         void PopIn()
@@ -153,13 +218,25 @@ namespace KleiKodesh.Helpers
                 content.Dock = DockStyle.Fill;
                 _host.Controls.Add(content);
             }
+            else
+            {
+                // The host went away while we were popped out (its document closed).
+                // There is nowhere to put the content back, and it is no longer parented
+                // to the form either - dispose it rather than leaking a live WebView2.
+                content.Dispose();
+                _content = null;
+            }
 
             if (!_form.IsDisposed)
                 _form.Close();
 
             _form = null;
 
-            _host.BeginInvoke(new Action(() => _pane.Visible = true));
+            // The host may have no HWND yet - it has been sitting empty while the
+            // content lived in the form, and Word does not necessarily realise an empty
+            // task pane control. BeginInvoke on a handle-less control throws, which used
+            // to abort the pop-in silently and strand the pane hidden.
+            OnHost(() => _pane.Visible = true);
         }
 
         void OnPopoutFormHandleCreated(object sender, EventArgs e)
@@ -188,16 +265,57 @@ namespace KleiKodesh.Helpers
 
         void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            // When user closes popout window, make host visible (which triggers pop-in)
+            // When the user closes the popout window, put the content back in the pane.
             if (!_host.IsDisposed)
                 PopIn();
         }
 
         void OnPaneVisibilityChanged(object sender, EventArgs e)
         {
-            // When taskpane becomes visible while popped out, make host visible (which triggers pop-in)
+            // The user reopened the pane from the ribbon while the content was popped
+            // out - an empty pane is not what they asked for, so pop the content back in.
             if (_pane.Visible && !_host.IsDisposed)
-                _host.Invoke(new Action(() => _host.Visible = true));
+                OnHost(PopIn);
+        }
+
+        /// <summary>
+        /// Defers <paramref name="action"/> to the next turn of the message loop.
+        ///
+        /// The asynchrony is the point, not the thread hop - every caller is already on
+        /// the UI thread. These actions run from inside Word's own pane-visibility
+        /// callbacks, and both re-entering PopIn and setting a CustomTaskPane's Visible
+        /// from within its VisibleChanged notification are reentrant COM calls that Word
+        /// can reject. Letting the current notification finish first avoids that.
+        ///
+        /// BeginInvoke needs a handle, and the host may not have one: it has been sitting
+        /// empty while the content lived in the form, and Word does not necessarily
+        /// realise an empty task pane control. Post to the WinForms synchronisation
+        /// context in that case rather than running inline.
+        /// </summary>
+        void OnHost(Action action)
+        {
+            try
+            {
+                if (_host != null && !_host.IsDisposed && _host.IsHandleCreated)
+                {
+                    _host.BeginInvoke(action);
+                    return;
+                }
+
+                var context = System.Threading.SynchronizationContext.Current;
+                if (context != null)
+                    context.Post(_ => Run(action), null);
+                else
+                    Run(action);
+            }
+            catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
+        }
+
+        // Posted work runs outside the caller's try, so it carries its own.
+        static void Run(Action action)
+        {
+            try { action(); }
+            catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
         }
 
         static Form CreateForm() => new Form
