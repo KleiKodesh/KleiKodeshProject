@@ -13,6 +13,7 @@
  */
 import { computed, watch, nextTick, ref } from 'vue'
 import { useElementBounding, useWindowSize, onClickOutside } from '@vueuse/core'
+import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
 import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
 import type { AutofillController } from '@/composables/useAutofill'
 
@@ -65,6 +66,10 @@ function tail(item: string) {
 }
 
 onClickOutside(bubbleRef, () => af.onBlur(), { ignore: [inputElRef] })
+
+// Pressing the native chrome (tab strip / title bar) produces no DOM event, so the
+// outside-click handler above cannot see it — the host pushes it to us instead.
+onNativeChromePressed(() => af.onBlur())
 
 watch(
   () => af.activeIndex.value,
