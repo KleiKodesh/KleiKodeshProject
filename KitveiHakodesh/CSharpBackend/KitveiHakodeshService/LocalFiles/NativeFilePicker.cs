@@ -75,9 +75,12 @@ public static partial class NativeFilePicker
     /// <summary>Show the dialog and return the picked absolute path, or null when the user
     /// cancelled (or another pick is already showing). Never throws.
     /// <paramref name="filter"/> must be the Win32 \0-separated form (see the constants above);
-    /// it is passed to the dialog verbatim and MUST end with a double \0.</summary>
+    /// it is passed to the dialog verbatim and MUST end with a double \0.
+    /// <paramref name="initialDir"/> opens the dialog in that folder; empty (or a folder that no
+    /// longer exists) falls back to the shell default, which is what we want for a remembered
+    /// folder the user has since deleted.</summary>
     public static async Task<string?> PickAsync(
-        string filter = DocumentFilter, string title = "פתח קובץ")
+        string filter = DocumentFilter, string title = "פתח קובץ", string initialDir = "")
     {
         if (!await Gate.WaitAsync(0)) return null;
         try
@@ -85,7 +88,7 @@ public static partial class NativeFilePicker
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var t = new Thread(() =>
             {
-                try { tcs.TrySetResult(ShowDialog(filter, title)); }
+                try { tcs.TrySetResult(ShowDialog(filter, title, initialDir)); }
                 catch { tcs.TrySetResult(null); }
             })
             { IsBackground = true, Name = "khs-file-picker" };
@@ -96,7 +99,7 @@ public static partial class NativeFilePicker
         finally { Gate.Release(); }
     }
 
-    private static unsafe string? ShowDialog(string filter, string title)
+    private static unsafe string? ShowDialog(string filter, string title, string initialDir)
     {
         const int MaxPath = 32768; // long-path capable buffer
         char[] fileBuf = new char[MaxPath];
@@ -104,6 +107,7 @@ public static partial class NativeFilePicker
         fixed (char* pFile = fileBuf)
         fixed (char* pFilter = filter)
         fixed (char* pTitle = title)
+        fixed (char* pInitialDir = initialDir.Length == 0 ? null : initialDir)
         {
             var ofn = new OPENFILENAMEW
             {
@@ -114,6 +118,7 @@ public static partial class NativeFilePicker
                 lpstrFile = (nint)pFile,
                 nMaxFile = MaxPath,
                 lpstrTitle = (nint)pTitle,
+                lpstrInitialDir = (nint)pInitialDir, // null when unset - the shell picks its default
                 Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR,
             };
 

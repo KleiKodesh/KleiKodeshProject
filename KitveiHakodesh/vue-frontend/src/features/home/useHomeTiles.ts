@@ -11,6 +11,10 @@ import {
   useRecentlyOpenedStore,
   type RecentlyOpenedEntry,
 } from '@/stores/recentlyOpenedStore'
+import {
+  useFrequentFoldersStore,
+  type FrequentFolderEntry,
+} from '@/stores/frequentFoldersStore'
 
 const TILE_WIDTH = 72
 const TILE_GAP = 8
@@ -18,10 +22,13 @@ const TILE_GAP = 8
 /** Hard ceiling on recently-opened tiles, regardless of available row space. */
 const RECENTLY_OPENED_MAX = 20
 
+/** Hard ceiling on frequently-visited folder tiles. */
+const FREQUENT_FOLDERS_TILE_MAX = 4
+
 
 /**
- * The home tile grid: the static navigation tiles plus however many
- * recently-opened tiles fit alongside them.
+ * The home tile grid: the static navigation tiles, then the frequently-visited
+ * folder tiles, then however many recently-opened tiles fit alongside them.
  *
  * The first two tiles are DB-dependent and swap when no database is available.
  * Every other tile is always shown — see the feature README before changing this.
@@ -31,9 +38,11 @@ const RECENTLY_OPENED_MAX = 20
  */
 export function useHomeTiles(containerWidth: Ref<number>) {
   const recentlyOpenedStore = useRecentlyOpenedStore()
-  const { showRecentlyOpened } = storeToRefs(useSettingsStore())
+  const frequentFoldersStore = useFrequentFoldersStore()
+  const { showRecentlyOpened, showFrequentFolders } = storeToRefs(useSettingsStore())
 
   const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
+  const frequentFolderList = ref<FrequentFolderEntry[]>([])
 
   /** A static tile's icon + colour, taken from the shared table. */
   function tileIcon(key: DocumentIconKey): { icon: Component; color: string } {
@@ -74,29 +83,66 @@ export function useHomeTiles(containerWidth: Ref<number>) {
     () => tiles.value.length * (TILE_WIDTH + TILE_GAP) - TILE_GAP,
   )
 
-  // Fill the gap left on the static tiles' last row, plus one more full row.
+  /**
+   * How many tiles sit on one row at the current width. Clamped to the grid's own
+   * cap, not just the container: past that width the grid stops growing, so extra
+   * container width buys no extra columns.
+   */
+  const tilesPerRow = computed(() => {
+    const effectiveWidth = Math.min(containerWidth.value || 320, gridMaxWidth.value)
+    return Math.max(1, Math.floor((effectiveWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)))
+  })
+
+  /**
+   * The folder tiles, shown between the static tiles and the recents.
+   *
+   * These take their slots first — they are the smaller, fixed-size group, and
+   * letting the recents claim the row would push them off screen entirely on a
+   * narrow window.
+   */
+  const visibleFrequentFolderList = computed(() => {
+    if (!showFrequentFolders.value) return []
+    return frequentFolderList.value.slice(0, FREQUENT_FOLDERS_TILE_MAX)
+  })
+
+  // Fill the gap left on the last row of everything above, plus one more full row.
   const visibleRecentlyOpenedList = computed(() => {
     if (!showRecentlyOpened.value) return []
     if (!recentlyOpenedList.value.length) return []
-    // Clamped to the grid's own cap, not just the container: past that width
-    // the grid stops growing, so extra container width buys no extra columns.
-    const effectiveWidth = Math.min(containerWidth.value || 320, gridMaxWidth.value)
-    const tilesPerRow = Math.max(
-      1,
-      Math.floor((effectiveWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)),
-    )
-    const staticTailSlots = tiles.value.length % tilesPerRow
-    const freeOnLastRow = staticTailSlots === 0 ? 0 : tilesPerRow - staticTailSlots
-    const count = Math.min(RECENTLY_OPENED_MAX, freeOnLastRow + tilesPerRow)
+    const perRow = tilesPerRow.value
+    // The folder tiles sit in the same flow, so the gap the recents are filling is
+    // the one left after them — not after the static tiles alone.
+    const precedingCount = tiles.value.length + visibleFrequentFolderList.value.length
+    const tailSlots = precedingCount % perRow
+    const freeOnLastRow = tailSlots === 0 ? 0 : perRow - tailSlots
+    const count = Math.min(RECENTLY_OPENED_MAX, freeOnLastRow + perRow)
     return recentlyOpenedList.value.slice(0, count)
   })
 
-  const totalTileCount = computed(() => tiles.value.length + visibleRecentlyOpenedList.value.length)
+  const totalTileCount = computed(
+    () =>
+      tiles.value.length +
+      visibleFrequentFolderList.value.length +
+      visibleRecentlyOpenedList.value.length,
+  )
 
   function getRecentTileIcon(entry: RecentlyOpenedEntry): { icon: Component; color: string } {
     // The one shared table — see utils/documentIcons.
     const icon = documentIcon(iconKeyForRoute(entry.route, entry.isOtzariaAddin))
     return { icon: icon.icon24, color: icon.color }
+  }
+
+  /** Every folder tile shows the same folder glyph — see utils/documentIcons. */
+  function getFolderTileIcon(): { icon: Component; color: string } {
+    return tileIcon('folder')
+  }
+
+  function onTogglePinFolder(entry: FrequentFolderEntry) {
+    frequentFolderList.value = frequentFoldersStore.togglePin(entry.path)
+  }
+
+  function onRemoveFolder(entry: FrequentFolderEntry) {
+    frequentFolderList.value = frequentFoldersStore.removeEntry(entry.path)
   }
 
   function onTogglePinRecent(entry: RecentlyOpenedEntry) {
@@ -113,14 +159,21 @@ export function useHomeTiles(containerWidth: Ref<number>) {
     recentlyOpenedStore.getList().then((list) => {
       recentlyOpenedList.value = list
     })
+    frequentFoldersStore.getList().then((list) => {
+      frequentFolderList.value = list
+    })
   })
 
   return {
     tiles,
     gridMaxWidth,
+    visibleFrequentFolderList,
     visibleRecentlyOpenedList,
     totalTileCount,
+    getFolderTileIcon,
     getRecentTileIcon,
+    onTogglePinFolder,
+    onRemoveFolder,
     onTogglePinRecent,
     onRemoveRecent,
   }

@@ -9,7 +9,7 @@ import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
 
 const settings = useSettingsStore()
-const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode, scrollbarsHidden, showRecentlyOpened } = storeToRefs(settings)
+const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode, scrollbarsHidden, showRecentlyOpened, showFrequentFolders } = storeToRefs(settings)
 
 const themeStore = useThemeStore()
 const { themePreset } = storeToRefs(themeStore)
@@ -130,6 +130,16 @@ function toggleTitleBarButton(buttonId: string) {
     <SettingRow id="nav-show-recently-opened" data-nav-label="הצג פתוחים לאחרונה" label="הצג מסמכים שנפתחו לאחרונה בדף הבית" hint="מציג אריחי קיצור דרך לקבצים שנפתחו לאחרונה בתחתית דף הבית">
       <ToggleGroup
         v-model="showRecentlyOpened"
+        :options="[
+          { label: 'כן', value: true },
+          { label: 'לא', value: false },
+        ]"
+      />
+    </SettingRow>
+
+    <SettingRow id="nav-show-frequent-folders" data-nav-label="תיקיות נפוצות" label="הצג תיקיות נפוצות בדף הבית" hint="התיקיות שמהן נפתחים הכי הרבה קבצים, לחיצה פותחת בחירת קובץ בתיקייה">
+      <ToggleGroup
+        v-model="showFrequentFolders"
         :options="[
           { label: 'כן', value: true },
           { label: 'לא', value: false },

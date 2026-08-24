@@ -93,6 +93,10 @@ async function clearAllLocalStorage(): Promise<void> {
   // forces the lazy-loaded store to initialise earlier than it otherwise would.
   const { dropHbHistoryDb } = await import('@/stores/hebrewBooksHistoryStore')
   const { dropRecentlyOpenedDb } = await import('@/stores/recentlyOpenedStore')
+  // Driver-owned database, but its store keeps an in-memory list that would be
+  // written back out after the drop if it were not cleared too.
+  const { resetFrequentFoldersCache } = await import('@/stores/frequentFoldersStore')
+  resetFrequentFoldersCache()
   await Promise.all([
     dropDatabase('app-tabs'),
     dropDatabase('app-recent-tabs'),
@@ -102,6 +106,7 @@ async function clearAllLocalStorage(): Promise<void> {
     dropDatabase('app-search-cache'),
     dropDatabase('app-dict-cache'),
     dropDatabase('app-catalog-toc-cache'),
+    dropDatabase('app-frequent-folders'),
   ])
   await dropRemainingAppDatabases()
   // MUST come last. These two clear the __pendingReset flag, so clearing it before

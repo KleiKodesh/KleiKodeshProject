@@ -64,6 +64,7 @@ const KEYS = {
   SETTINGS_NAV_SIDEBAR: 'app.navSidebar',
   SETTINGS_NAV_SIDEBAR_PANE2: 'app.navSidebar.pane2',
   SETTINGS_SHOW_RECENTLY_OPENED: 'app.showRecentlyOpened',
+  SETTINGS_SHOW_FREQUENT_FOLDERS: 'app.showFrequentFolders',
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
 
@@ -166,6 +167,7 @@ const DEFAULTS = {
   // value is what loads (see init), per pane.
   navSidebarVisible: hasNativeChromeTabs,
   showRecentlyOpened: true,
+  showFrequentFolders: true,
 }
 
 /**
@@ -250,6 +252,7 @@ export const useSettingsStore = defineStore('settings', () => {
     navSidebarVisibleByPane.value[paneId] = value
   }
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
+  const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
@@ -398,6 +401,7 @@ export const useSettingsStore = defineStore('settings', () => {
     const navSidebar2 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR_PANE2)
     if (navSidebar2 != null) navSidebarVisibleByPane.value[2] = navSidebar2
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
+    loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
     applyCSSVariables()
   }
@@ -458,6 +462,7 @@ export const useSettingsStore = defineStore('settings', () => {
     (value) => lsSet(KEYS.SETTINGS_NAV_SIDEBAR_PANE2, value),
   )
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
+  persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -595,6 +600,7 @@ export const useSettingsStore = defineStore('settings', () => {
       2: DEFAULTS.navSidebarVisible,
     }
     showRecentlyOpened.value = DEFAULTS.showRecentlyOpened
+    showFrequentFolders.value = DEFAULTS.showFrequentFolders
     // Both of these have a persist watcher and a stored key, so leaving them out left the
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
     // next reload.
@@ -629,6 +635,7 @@ export const useSettingsStore = defineStore('settings', () => {
     getNavSidebarVisible,
     setNavSidebarVisible,
     showRecentlyOpened,
+    showFrequentFolders,
     fileSearchSortOrder,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,

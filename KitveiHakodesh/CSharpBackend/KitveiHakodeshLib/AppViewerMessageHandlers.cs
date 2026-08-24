@@ -55,7 +55,7 @@ namespace KitveiHakodeshLib
                         case "setTurnOffUpdates": _db.HandleSetTurnOffUpdates(root, id); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
                         case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
-                        case "pickFile": _localFile.HandlePickFile(id, this); break;
+                        case "pickFile": _localFile.HandlePickFile(root, id, this); break;
                         case "pickFolder": _localFile.HandlePickFolder(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
                         case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;

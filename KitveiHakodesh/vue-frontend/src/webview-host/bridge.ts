@@ -117,8 +117,15 @@ export function pendingPickOpenInNewTab(): boolean | null {
  * localFileStore, which targets the pane that initiated the pick). The returned
  * result is used only to finalize a cached Word conversion (which has no
  * localFileConversionReady push). Returns null if the user cancels.
+ *
+ * `initialDir` opens the dialog in that folder (used by the home page's frequent-folder
+ * tiles). An empty string, or a folder that no longer exists, leaves the dialog at the
+ * system default rather than failing the pick.
  */
-export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResult | null> {
+export async function pickLocalFile(
+  openInNewTab = false,
+  initialDir = '',
+): Promise<LocalFileResult | null> {
   if (typeof window.__webviewAction !== 'function') {
     // Dev: the SERVICE's native C# open-file dialog replaces the browser <input type=file>.
     // The browser picker only yields a blob (no absolute path), so picked files could never
@@ -131,6 +138,7 @@ export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResu
     try {
       const picked = await serviceCall<{ path?: string; fileName?: string; cancelled?: boolean }>(
         'pickLocalFile',
+        { value: initialDir },
       )
       if (!picked?.path || picked.cancelled) return null
       const filePath = picked.path
@@ -205,7 +213,7 @@ export async function pickLocalFile(openInNewTab = false): Promise<LocalFileResu
       fileName?: string
       filePath?: string
       error?: string
-    }>('pickFile')
+    }>('pickFile', { initialDir })
     if (res.cancelled || res.error || !res.url) return null
     return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }
   } finally {
