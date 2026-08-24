@@ -19,12 +19,6 @@ import {
 const TILE_WIDTH = 72
 const TILE_GAP = 8
 
-/** Hard ceiling on recently-opened tiles, regardless of available row space. */
-const RECENTLY_OPENED_MAX = 20
-
-/** Hard ceiling on frequently-visited folder tiles. */
-const FREQUENT_FOLDERS_TILE_MAX = 4
-
 
 /**
  * The home tile grid: the static navigation tiles, then the frequently-visited
@@ -94,29 +88,46 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   })
 
   /**
-   * The folder tiles, shown between the static tiles and the recents.
+   * How many tiles the two dynamic groups get between them: the gap left on the
+   * static tiles' last row, plus one more full row.
+   */
+  const dynamicTileBudget = computed(() => {
+    const perRow = tilesPerRow.value
+    const tailSlots = tiles.value.length % perRow
+    const freeOnLastRow = tailSlots === 0 ? 0 : perRow - tailSlots
+    return freeOnLastRow + perRow
+  })
+
+  /**
+   * The folder tiles, shown between the static tiles and the documents.
    *
-   * These take their slots first — they are the smaller, fixed-size group, and
-   * letting the recents claim the row would push them off screen entirely on a
-   * narrow window.
+   * Folders get half the budget. They earn their points from the same opens the
+   * documents do, so an unsplit budget would let a folder opened all morning
+   * push the documents off the page entirely — and the two are not substitutes
+   * for each other.
+   *
+   * Rounded down, so an odd budget gives the spare slot to the documents. The
+   * half-share is a ceiling on the folders rather than a reservation, so with
+   * the documents switched off the folders take the whole budget instead of
+   * leaving half the row blank.
    */
   const visibleFrequentFolderList = computed(() => {
     if (!showFrequentFolders.value) return []
-    return frequentFolderList.value.slice(0, FREQUENT_FOLDERS_TILE_MAX)
+    const budget = dynamicTileBudget.value
+    const room = showRecentlyOpened.value ? Math.floor(budget / 2) : budget
+    return frequentFolderList.value.slice(0, room)
   })
 
-  // Fill the gap left on the last row of everything above, plus one more full row.
+  /**
+   * The document tiles. They take the rest of the budget, including whatever the
+   * folders did not claim — a half-share is a ceiling on the folders, not a
+   * reservation held empty on their behalf.
+   */
   const visibleRecentlyOpenedList = computed(() => {
     if (!showRecentlyOpened.value) return []
     if (!recentlyOpenedList.value.length) return []
-    const perRow = tilesPerRow.value
-    // The folder tiles sit in the same flow, so the gap the recents are filling is
-    // the one left after them — not after the static tiles alone.
-    const precedingCount = tiles.value.length + visibleFrequentFolderList.value.length
-    const tailSlots = precedingCount % perRow
-    const freeOnLastRow = tailSlots === 0 ? 0 : perRow - tailSlots
-    const count = Math.min(RECENTLY_OPENED_MAX, freeOnLastRow + perRow)
-    return recentlyOpenedList.value.slice(0, count)
+    const room = dynamicTileBudget.value - visibleFrequentFolderList.value.length
+    return recentlyOpenedList.value.slice(0, Math.max(0, room))
   })
 
   const totalTileCount = computed(

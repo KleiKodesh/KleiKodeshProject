@@ -63,6 +63,10 @@ To add one: put a default in `DEFAULTS`, declare a `ref`, call `loadSetting(KEYS
 
 **hebrewBooksHistoryStore** — owns the `app-hb-history` IDB database. Tracks which HebrewBooks PDFs the user has downloaded, LRU-capped at 25 entries. All history reads and writes go through here — do not import from `persistence.ts` for this database anywhere else.
 
-**recentlyOpenedStore** — owns the `app-recently-opened` IDB database. Tracks the last 16 documents opened across /book-view, /pdf-view, /html-view, and /txt-view. LRU with bump-to-front on re-open. Loaded lazily on first access (no boot-time cost). All recently opened reads and writes go through here.
+**recentlyOpenedStore** — owns the `app-recently-opened` IDB database. Tracks the documents opened across /book-view, /pdf-view, /html-view, and /txt-view, ranked by **popularity, not recency**: a re-open adds a visit's points rather than bumping to the front, so a document opened daily outranks one glanced at an hour ago. Scoring lives in **popularityScore** and is shared with `frequentFoldersStore`. Entries saved before the change carry no score and are migrated on read (seeded with one visit dated to their last access, so an existing list keeps its familiar order and diverges from there). Loaded lazily on first access (no boot-time cost). All recently opened reads and writes go through here.
+
+**popularityScore** — the ranking model behind both dynamic home-tile groups: time-decayed frequency (a visit adds a point, points halve every 14 days), decayed lazily on read rather than by any sweep. Also owns the two rules that stop a full list freezing against newcomers — pins may not fill every slot, and the entry just visited is never evicted. Pure functions, no state, no IDB.
+
+**frequentFoldersStore** — owns the `app-frequent-folders` IDB database. Tracks which folders files are opened from, ranked by the same **popularityScore** model; the home page shows the highest-ranked as tiles that reopen the file dialog in that folder (they get half the dynamic tile budget, so how many depends on the window width). HebrewBooks downloads are excluded (they land in our own cache directory, which the user never chose).
 
 **pdfOcrStore** — Pinia store for PDF OCR state. Manages OCR activation toggle, script selection (Hebrew/Rashi/mixed), and the skip-existing-text flag.
