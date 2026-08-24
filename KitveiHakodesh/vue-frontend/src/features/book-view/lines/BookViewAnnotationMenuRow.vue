@@ -152,7 +152,7 @@ function argbToCss(signedArgb: number): string {
 }
 
 .color-swatch:active {
-  transform: scale(0.92);
+  transform: scale(1.05);
 }
 
 .clear-button {
@@ -176,6 +176,6 @@ function argbToCss(signedArgb: number): string {
 }
 
 .clear-button:active {
-  transform: scale(0.92);
+  transform: scale(0.98);
 }
 </style>

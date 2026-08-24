@@ -210,7 +210,7 @@ async function onDelete() {
 }
 
 .delete-button:active {
-  transform: scale(0.92);
+  transform: scale(0.98);
 }
 
 .note-textarea {

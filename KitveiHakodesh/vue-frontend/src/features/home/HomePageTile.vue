@@ -261,7 +261,7 @@ function onRemove() {
   transform: scale(1.1);
 }
 .tile-action:active {
-  transform: scale(0.9);
+  transform: scale(1.02);
 }
 .tile-action--pin {
   color: var(--accent-color);
