@@ -4,8 +4,11 @@ using Microsoft.Office.Tools;
 using System;
 using System.Drawing;
 using System.IO;
+using System.Linq;
+using Microsoft.VisualBasic;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
+using System.Windows.Forms.Integration;
 
 namespace KleiKodesh.Helpers
 {
@@ -14,12 +17,17 @@ namespace KleiKodesh.Helpers
         readonly UserControl _host;
         readonly CustomTaskPane _pane;
         Control _content;
+        string _settingsKey;
         Form _form;
 
         public TaskPanePopOut(UserControl host, CustomTaskPane pane)
         {
             _host = host;
             _pane = pane;
+
+            // Prime the settings key now, while the host still holds its content.
+            // Popping out empties the host, and the key is first needed after that.
+            _settingsKey = BuildSettingsKey();
 
             Register(pane, this);
         }
@@ -101,12 +109,81 @@ namespace KleiKodesh.Helpers
             }
         }
 
+        /// <summary>
+        /// Restores this window's remembered geometry, centring it on Word instead when
+        /// nothing is saved or when the saved position is off-screen - a monitor that has
+        /// since been unplugged or a resolution change would otherwise open the window
+        /// where the user cannot reach it.
+        /// </summary>
+        void RestoreBounds(Form form)
+        {
+            try
+            {
+                // Ask whether anything is saved rather than inferring it from whether the
+                // bounds moved: LoadFormSettings echoes the form's current values back as
+                // its own defaults, so a window saved at the position it already had
+                // looks identical to one that was never saved at all.
+                if (!HasSavedBounds())
+                {
+                    CenterOnWord(form);
+                    return;
+                }
+
+                FormSettingsHelper.LoadFormSettings(form, "KleiKodesh", SettingsKey);
+
+                if (!IsOnScreen(form.Bounds))
+                    CenterOnWord(form);
+            }
+            catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
+        }
+
+        bool HasSavedBounds()
+        {
+            try
+            {
+                return Interaction.GetSetting(
+                    "KleiKodesh", SettingsKey + "FormSettings", SettingsKey + "_Left", "") != "";
+            }
+            catch { return false; }
+        }
+
+        // A window is reachable if a reasonable part of its title bar is on some screen.
+        static bool IsOnScreen(Rectangle bounds)
+        {
+            var titleBar = new Rectangle(bounds.X, bounds.Y, bounds.Width, 32);
+            foreach (var screen in Screen.AllScreens)
+                if (screen.WorkingArea.IntersectsWith(titleBar))
+                    return true;
+            return false;
+        }
+
+        void CenterOnWord(Form form)
+        {
+            try
+            {
+                var area = Screen.FromHandle(
+                    new IntPtr(Globals.ThisAddIn.Application.ActiveWindow.Hwnd)).WorkingArea;
+                form.Location = new Point(
+                    area.X + (area.Width - form.Width) / 2,
+                    area.Y + (area.Height - form.Height) / 2);
+            }
+            catch
+            {
+                // Setting StartPosition here would do nothing - WinForms applies it during
+                // handle creation, which happened before this runs. Place the window.
+                var area = Screen.PrimaryScreen.WorkingArea;
+                form.Location = new Point(
+                    area.X + (area.Width - form.Width) / 2,
+                    area.Y + (area.Height - form.Height) / 2);
+            }
+        }
+
         void SaveFormBounds()
         {
             try
             {
                 if (_form != null && !_form.IsDisposed)
-                    FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", _content?.AccessibleName);
+                    FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", SettingsKey);
             }
             catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
         }
@@ -150,6 +227,32 @@ namespace KleiKodesh.Helpers
                 _form.Activate();
             }
             catch { /* best-effort - focus is a courtesy, not a correctness requirement */ }
+        }
+
+        /// <summary>
+        /// Identifies this pane's pop-out window in saved settings.
+        ///
+        /// Not the content's type: an AppViewer pops out its bare WebView2, so every
+        /// viewer pane would share a slot. Not the host's type either, for WPF panes -
+        /// they are all wrapped in the same WpfHostControl, so the five of them would
+        /// share one. Look through the wrapper to the view it hosts, which is what
+        /// actually distinguishes a settings window from a regex window.
+        /// </summary>
+        string SettingsKey => _settingsKey ?? (_settingsKey = BuildSettingsKey());
+
+        string BuildSettingsKey()
+        {
+            if (_host == null) return "TaskPane";
+
+            // Computed once and cached: popping out empties the host, so asking again
+            // while popped out - which is exactly when the geometry is saved - would find
+            // no ElementHost and fall back to the shared wrapper name, splitting a
+            // window's saved position across two keys.
+            var view = _host.Controls.OfType<ElementHost>()
+                .Select(h => h.Child)
+                .FirstOrDefault(child => child != null);
+
+            return (view ?? (object)_host).GetType().Name;
         }
 
         Control GetContent()
@@ -201,8 +304,15 @@ namespace KleiKodesh.Helpers
                 content.Dock = DockStyle.Fill;
                 _form.Controls.Add(content);
 
-                _form.Load += (_, __) => { FormSettingsHelper.LoadFormSettings(_form, "KleiKodesh", content.AccessibleName); };
-                _form.FormClosing += (_, __) => { FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", content.AccessibleName); };
+                // Name the window so its saved geometry is its own. Both halves of the
+                // settings key were previously blank - AccessibleName is never set on
+                // these controls, and Form.Name defaults to empty - so every pop-out in
+                // the add-in shared one slot and the last one closed decided where all of
+                // them opened next.
+                _form.Name = SettingsKey;
+
+                _form.Load += (_, __) => RestoreBounds(_form);
+                _form.FormClosing += (_, __) => { FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", SettingsKey); };
 
                 // ── DarkNet title bar theming ─────────────────────────────────────
                 // In the VSTO (Word) context, AppViewer's child WebView2 is moved
@@ -393,7 +503,10 @@ namespace KleiKodesh.Helpers
         {
             Width = 570,
             Height = 850,
-            StartPosition = FormStartPosition.CenterParent,
+            // Manual, not CenterParent: the saved geometry is applied in Load, and
+            // CenterParent would recentre the window afterwards and discard it. A window
+            // with nothing saved is centred explicitly instead - see CenterOnWord.
+            StartPosition = FormStartPosition.Manual,
             ShowInTaskbar = false,
             Icon = File.Exists(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico"))
         ? new Icon(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KleiKodesh_Main.ico"))
