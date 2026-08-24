@@ -30,6 +30,9 @@ namespace KitveiHakodeshService.Catalog;
 ///   - Ordering ignores Lucene relevance entirely: Level ascending (book title = 0,
 ///     then TOC depth), then TreeOrder ascending (catalog tree order, then the
 ///     original TOC order within the book). Nothing else affects ordering.
+///   - After ordering, each book's each TOC structure (per literal block) is truncated
+///     to its shallowest matched level: a shallower hit is the more accurate address,
+///     so the deeper ones under it are dropped (see Search).
 ///
 /// SEARCH-WHILE-BUILDING (near-real-time): there is ONE in-place index directory. A
 /// rebuild writes into it with the writer kept open, and a near-real-time reader is
@@ -57,6 +60,11 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     private const string FieldTreeOrder = "o";
     private const string FieldLevelDv = "vdv";     // numeric doc-values (sort key)
     private const string FieldTreeOrderDv = "odv"; // numeric doc-values (sort key)
+    private const string FieldStructureDv = "sdv"; // numeric doc-values (truncation group)
+
+    /// <summary>Structure id of the regular TOC (and of book-title docs) — the alt
+    /// structures carry their own positive ids from the DB, so 0 never collides.</summary>
+    private const int RegularTocStructureId = 0;
 
     /// <summary>Every indexed field, in the order the per-token OR probes them.</summary>
     private static readonly string[] IndexedFields = [FieldFullTocPath, FieldCatalog, FieldAuthor];
@@ -146,8 +154,18 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     ///   - Keys that also appear verbatim in real titles (יוד, יוט, שע, מוהרן, מוהרנת) now
     ///     carry the literal form as an extra alternative, so those titles stay reachable.
     /// All 309 alternatives now resolve against the raw vocabulary; the --abbrev mode fails
-    /// the build on any future entry that does not.</summary>
-    public const string IndexFormatVersion = "v19";
+    /// the build on any future entry that does not.
+    /// v20: each doc records the TOC STRUCTURE it belongs to (numeric doc-values; 0 = the
+    /// regular TOC, alt structures carry their DB id), which scopes the per-book level
+    /// truncation in Search to one structure at a time. A new field on every document, so
+    /// this bump schedules a full rebuild. Note what that means for the rebuild WINDOW:
+    /// a pre-v20 index keeps serving until the new one is built (the deliberate no-
+    /// downtime design — see CatalogTocSearchService.EnsureIndex), and its segments have
+    /// no structure field, so the doc-values read falls back to 0 for every doc and the
+    /// truncation collapses to the old per-book behavior meanwhile. Old results, never
+    /// wrong paths — and OpenMode.CREATE means a reader is all-v19 or all-v20, never a
+    /// mix.</summary>
+    public const string IndexFormatVersion = "v20";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="Common.DbContentStamp"/>, prefixed with this index's format version so a
@@ -453,7 +471,8 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 lineIndex: firstLines.TryGetValue(b.Id, out var fl) ? fl.LineIndex : -1,
                 fullTocPath: b.Title,
                 level: 0,
-                treeOrder: TreeOrder(b.Id)));
+                treeOrder: TreeOrder(b.Id),
+                structureId: RegularTocStructureId));
             docCount++;
         }
 
@@ -463,7 +482,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             ct.ThrowIfCancellationRequested();
             if (!bookMeta.TryGetValue(group.BookId, out var book)) continue;
             docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                catalogPathByBook.GetValueOrDefault(group.BookId, ""));
+                catalogPathByBook.GetValueOrDefault(group.BookId, ""), RegularTocStructureId);
             if (++bookNo % NrtRefreshEveryBooks == 0) Progress(bookNo, books.Count);
         }
 
@@ -474,7 +493,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             if (!altStructures.TryGetValue(group.StructureId, out var st)) continue;
             if (!bookMeta.TryGetValue(st.BookId, out var book)) continue;
             docCount += IndexTocTree(writer, group.Rows, book, TreeOrder,
-                catalogPathByBook.GetValueOrDefault(st.BookId, ""));
+                catalogPathByBook.GetValueOrDefault(st.BookId, ""), group.StructureId);
         }
 
         // 1+2. The normal index is complete — commit it before the slower verse pass,
@@ -595,7 +614,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                         lineIndex: lineIndex,
                         fullTocPath: path,
                         level: chapterLevel + 1,
-                        treeOrder: treeOrder(book.Id)));
+                        treeOrder: treeOrder(book.Id),
+                        // Generated from the regular TOC's chapters, so they truncate
+                        // together with it — a chapter hit outranks its verse hits.
+                        structureId: RegularTocStructureId));
                     added++;
                     expectedVerse++;
                 }
@@ -654,7 +676,8 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// the order rule's reference text) and stored (the display path). Catalog path and
     /// author are separate fields, each indexed (matchable, order-exempt) + stored.</summary>
     private static Document MakeDoc(
-        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int level, long treeOrder)
+        string catalogPath, string? authors, int bookId, int lineIndex, string fullTocPath, int level, long treeOrder,
+        int structureId)
     {
         var doc = new Document
         {
@@ -669,6 +692,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             // fetch be bounded — see Search().
             new NumericDocValuesField(FieldLevelDv, level),
             new NumericDocValuesField(FieldTreeOrderDv, treeOrder),
+            // Which TOC structure this entry belongs to (0 = the regular TOC). Read
+            // alongside the sort keys so the per-book level truncation can scope itself
+            // to one structure without materializing stored fields.
+            new NumericDocValuesField(FieldStructureDv, structureId),
         };
         if (catalogPath.Length > 0)
             doc.Add(new TextField(FieldCatalog, catalogPath, Field.Store.YES));
@@ -685,7 +712,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     private int IndexTocTree(
         IndexWriter writer, List<TocRow> rows,
         (int Id, string Title, int CategoryId, string? Authors) book,
-        Func<int, long> treeOrder, string catalogPath)
+        Func<int, long> treeOrder, string catalogPath, int structureId)
     {
         rows = StripTitleRoots(rows, book.Title, book.Id);
         rows = ExpandDafAmudim(rows);
@@ -721,7 +748,8 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 lineIndex: row.LineIndex,
                 fullTocPath: path,
                 level: level,
-                treeOrder: treeOrder(book.Id)));
+                treeOrder: treeOrder(book.Id),
+                structureId: structureId));
             added++;
         }
         return added;
@@ -1085,10 +1113,12 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// no in-order hit are kept untouched, so title/catalog word order (משנה תורה vs
     /// תורה משנה) never filters anything.
     ///
-    /// Per-book level truncation (after the discard): within each book (per literal
-    /// block), only the shallowest level that matched is kept — its deeper-level hits
-    /// are dropped. Per book only: a book whose sole matches are deep keeps them; it is
-    /// never truncated by another book's shallower hits.
+    /// Per-structure level truncation (after the discard): within each book's each TOC
+    /// structure (per literal block), only the shallowest level that matched is kept —
+    /// its deeper-level hits are dropped. Scoped that narrowly on purpose: a structure
+    /// whose sole matches are deep keeps them, and neither another book nor another
+    /// structure of the SAME book (alt structures are independent address spaces) can
+    /// truncate it.
     /// </summary>
     public List<CatalogTocHit> Search(string query, CancellationToken ct = default)
     {
@@ -1157,9 +1187,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// <summary>
     /// One search pass: run the query (optionally fuzzy), order by (IsLiteral desc,
     /// Level asc, TreeOrder asc), materialize the ordered top <see cref="MaterializeCap"/>,
-    /// and apply the query-token-order discard and the per-book level truncation (each
-    /// book keeps only its shallowest-level hits). Returns the resulting hit list (empty
-    /// when nothing matched). Used for both the normal pass and the fuzzy append pass.
+    /// and apply the query-token-order discard and the per-structure level truncation
+    /// (each book's each TOC structure keeps only its shallowest-level hits). Returns the
+    /// resulting hit list (empty when nothing matched). Used for both the normal pass and
+    /// the fuzzy append pass.
     /// </summary>
     private List<CatalogTocHit> RunPass(
         IndexSearcher searcher, List<CatalogTocTextRules.QueryToken> tokens, VariantIndex? variants,
@@ -1195,6 +1226,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 Level = ordered[i].Level,
                 TreeOrder = ordered[i].TreeOrder,
                 IsLiteral = ordered[i].IsLiteral,
+                StructureId = ordered[i].StructureId,
             });
         }
 
@@ -1215,20 +1247,26 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
         }
 
-        // Per-book level truncation: within ONE book, a hit at a shallower TOC level is
-        // the more accurate address for the query, so that book's deeper-level hits are
-        // dropped. Strictly per book — a book whose only hits are deep keeps them all at
-        // its own shallowest level; other books' levels never affect it. Grouped by
-        // (IsLiteral, BookId) so a literal deep hit is never discarded in favor of a
+        // Per-structure level truncation: within ONE book's ONE TOC structure, a hit at a
+        // shallower level is the more accurate address for the query, so that structure's
+        // deeper-level hits are dropped. A structure whose only hits are deep keeps them
+        // all at its own shallowest level; nothing outside it ever truncates it.
+        //
+        // Scoped per structure, not per book: a book's alt structures (parshiot/aliyot,
+        // dapim, …) are independent address spaces, so a shallow hit in the regular TOC
+        // must not hide a deeper — and differently-addressed — hit in an alt structure.
+        // Book-title docs and the generated Tanach verses belong to the regular structure.
+        //
+        // Grouped by IsLiteral too, so a literal deep hit is never discarded in favor of a
         // variant/fuzzy shallow one (accuracy-first, same as the sort).
-        var minLevelByBook = new Dictionary<(bool IsLiteral, int BookId), int>();
+        var minLevelByStructure = new Dictionary<(bool IsLiteral, int BookId, int StructureId), int>();
         foreach (var h in hits)
         {
-            var key = (h.IsLiteral, h.BookId);
-            if (!minLevelByBook.TryGetValue(key, out int min) || h.Level < min)
-                minLevelByBook[key] = h.Level;
+            var key = (h.IsLiteral, h.BookId, h.StructureId);
+            if (!minLevelByStructure.TryGetValue(key, out int min) || h.Level < min)
+                minLevelByStructure[key] = h.Level;
         }
-        hits.RemoveAll(h => h.Level > minLevelByBook[(h.IsLiteral, h.BookId)]);
+        hits.RemoveAll(h => h.Level > minLevelByStructure[(h.IsLiteral, h.BookId, h.StructureId)]);
 
         return hits;
     }
@@ -1372,18 +1410,20 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// </summary>
     private sealed class SortKeyCollector(CancellationToken ct, HashSet<int>? literalDocIds) : ICollector
     {
-        public readonly struct Entry(int docId, int level, long treeOrder, bool isLiteral)
+        public readonly struct Entry(int docId, int level, long treeOrder, bool isLiteral, int structureId)
         {
             public readonly int DocId = docId;
             public readonly int Level = level;
             public readonly long TreeOrder = treeOrder;
             public readonly bool IsLiteral = isLiteral;
+            public readonly int StructureId = structureId;
         }
 
         private readonly List<Entry> _entries = [];
         private int _docBase;
         private NumericDocValues? _levels;
         private NumericDocValues? _treeOrders;
+        private NumericDocValues? _structures;
 
         public int Count => _entries.Count;
 
@@ -1394,6 +1434,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             _docBase = context.DocBase;
             _levels = context.AtomicReader.GetNumericDocValues(FieldLevelDv);
             _treeOrders = context.AtomicReader.GetNumericDocValues(FieldTreeOrderDv);
+            _structures = context.AtomicReader.GetNumericDocValues(FieldStructureDv);
         }
 
         public bool AcceptsDocsOutOfOrder => true;
@@ -1407,7 +1448,8 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             // Literal when there is no literal set (variant search never ran, so every
             // hit is by definition literal) or the doc is in it.
             bool isLiteral = literalDocIds is null || literalDocIds.Contains(globalDoc);
-            _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral));
+            int structureId = (int)(_structures?.Get(doc) ?? RegularTocStructureId);
+            _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral, structureId));
         }
 
         public List<Entry> Ordered()
@@ -1590,6 +1632,10 @@ public sealed class CatalogTocHit
     /// of variant ones (accuracy first), before Level and TreeOrder.</summary>
     [MessagePack.IgnoreMember]
     public bool IsLiteral { get; set; }
+    /// <summary>Internal (not on the wire): which TOC structure the entry came from
+    /// (0 = the regular TOC). Scopes the per-structure level truncation.</summary>
+    [MessagePack.IgnoreMember]
+    public int StructureId { get; set; }
     /// <summary>Internal (not on the wire): query tokens appear in typed order in the
     /// path — the last tiebreak within a (book, level) group.</summary>
     [MessagePack.IgnoreMember]
