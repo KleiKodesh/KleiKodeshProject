@@ -21,14 +21,6 @@ namespace KitveiHakodeshLib
         public int Pane { get; set; } = 1;
     }
 
-    /// <summary>A recently opened document (not currently open in a tab), as reported by Vue.</summary>
-    public class MirroredRecentInfo
-    {
-        /// <summary>Stable key from the Vue recently-opened store; echoed back on activation.</summary>
-        public string Key { get; set; }
-        public string Title { get; set; }
-    }
-
     /// <summary>
     /// A Vue request to open the native tab-list dropdown, via the 'toggleChromeTabList' action.
     /// </summary>
@@ -68,8 +60,7 @@ namespace KitveiHakodeshLib
             int focusedPane,
             double splitFraction,
             int dividerLeftPx,
-            int dividerWidthPx,
-            IReadOnlyList<MirroredRecentInfo> recentItems)
+            int dividerWidthPx)
         {
             Tabs = tabs;
             ActiveTabId = activeTabId;
@@ -79,7 +70,6 @@ namespace KitveiHakodeshLib
             SplitFraction = splitFraction;
             DividerLeftPx = dividerLeftPx;
             DividerWidthPx = dividerWidthPx;
-            RecentItems = recentItems;
         }
 
         public IReadOnlyList<MirroredTabInfo> Tabs { get; }
@@ -105,9 +95,6 @@ namespace KitveiHakodeshLib
         /// </summary>
         public int DividerLeftPx { get; }
         public int DividerWidthPx { get; }
-
-        /// <summary>Recently opened documents for the tab-list dropdown's extra section.</summary>
-        public IReadOnlyList<MirroredRecentInfo> RecentItems { get; }
     }
 
     // Tab mirroring between the Vue tab store and a native chrome-tabs host.
@@ -161,21 +148,6 @@ namespace KitveiHakodeshLib
                 }
             }
 
-            var recent = new List<MirroredRecentInfo>();
-            if (root.TryGetProperty("recent", out var recentArr) && recentArr.ValueKind == JsonValueKind.Array)
-            {
-                foreach (var r in recentArr.EnumerateArray())
-                {
-                    string key = r.TryGetProperty("key", out var k) ? k.GetString() : null;
-                    if (string.IsNullOrEmpty(key)) continue;
-                    recent.Add(new MirroredRecentInfo
-                    {
-                        Key = key,
-                        Title = r.TryGetProperty("title", out var rt) ? (rt.GetString() ?? "") : "",
-                    });
-                }
-            }
-
             string activeTabId = root.TryGetProperty("activeTabId", out var a) ? a.GetString() : null;
             string pane2ActiveTabId = root.TryGetProperty("pane2ActiveTabId", out var a2) ? a2.GetString() : null;
             bool splitView = root.TryGetProperty("splitView", out var sv) && sv.ValueKind == JsonValueKind.True;
@@ -193,7 +165,7 @@ namespace KitveiHakodeshLib
             TabsStateChanged?.Invoke(this,
                 new TabsStateChangedEventArgs(
                     tabs, activeTabId, pane2ActiveTabId, splitView, focusedPane, splitFraction,
-                    dividerLeftPx, dividerWidthPx, recent));
+                    dividerLeftPx, dividerWidthPx));
         }
 
         /// <summary>
@@ -267,10 +239,6 @@ namespace KitveiHakodeshLib
         /// <summary>Forwards the native "+" / Ctrl+T gesture to Vue, with the target pane (1 or 2).</summary>
         public void NotifyChromeNewTabRequested(int pane = 1)
             => _bridge?.PushEvent(new { @event = "chromeTabNewRequested", pane });
-
-        /// <summary>Forwards a recently-opened-document activation from the tab-list dropdown to Vue.</summary>
-        public void NotifyChromeRecentActivated(string key)
-            => _bridge?.PushEvent(new { @event = "chromeRecentActivated", key });
 
         /// <summary>Forwards a live drag of the native split divider to Vue (pane 2's width share).</summary>
         public void NotifyChromeSplitFractionChanged(double fraction)
