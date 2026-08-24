@@ -90,7 +90,10 @@ button {
   transition: background 120ms, color 120ms;
 }
 button:hover { background: var(--hover-bg); color: var(--text-primary); }
-button:active { transform: scale(0.92); transition: transform 0.1s; }
+/* Press feedback is a dip, not a squeeze. Fluent (and Material) barely scale a
+   button at all — the tint carries the press — so this stays at the smallest
+   scale that still registers, and eases out instead of snapping back. */
+button:active { transform: scale(0.98); transition: transform 80ms cubic-bezier(0.2, 0, 0, 1); }
 
 /* THE app's icon button — the square, centred, 16px-icon button the title bar is
    built from, and the default for any new icon button anywhere in the app. It
