@@ -158,10 +158,13 @@ public sealed class Dispatcher(
                         : new PickFolderResult { Path = picked }));
                 }
 
-                // Excluded folders for file search — persisted in excluded_folders.json inside the
-                // index directory via the SAME shared ExcludedFoldersPersistence the hosted
-                // DocumentLocator service uses, so the file name and format are identical. Applied
-                // at search time, so an edit takes effect immediately with no reindex.
+                // Excluded folders for file search — persisted in excluded_folders.json BESIDE
+                // the index directory (a reindex deletes that directory) via the SAME shared
+                // ExcludedFoldersPersistence the hosted DocumentLocator service uses, so the
+                // file format and the exclusion semantics are identical. The DIRECTORY is not:
+                // each host resolves it from its own base directory, so this dev-only service
+                // keeps its own list rather than editing the installed one. Applied at search
+                // time, so an edit takes effect immediately with no reindex.
                 case "getExcludedFolders":
                     return RpcResponse.Ok(MsgPack.Ser(new ExcludedFoldersResult
                     {

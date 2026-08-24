@@ -315,9 +315,17 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (normalized.StartsWith("BloomFilters\\", StringComparison.OrdinalIgnoreCase))
                 return true;
 
-            // DocumentLocator NTFS index and user exclusion list (excluded_folders.json).
-            // These are runtime-generated files — never overwrite them on update.
+            // DocumentLocator NTFS index — runtime-generated, never overwrite on update.
             if (normalized.StartsWith("filesystemindex\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // The user's excluded-folders list. It sits BESIDE filesystemindex rather than
+            // inside it (a reindex deletes that directory wholesale), so the prefix above
+            // does not cover it. Belt-and-braces: a runtime-generated user file is never in
+            // the payload, and .json is not purgeable either — the fix for the list being
+            // wiped on upgrade is its location, not this rule. Keep it so a payload that
+            // ever did ship this name could not clobber the user's list.
+            if (string.Equals(normalized, "excluded_folders.json", StringComparison.OrdinalIgnoreCase))
                 return true;
 
             return false;

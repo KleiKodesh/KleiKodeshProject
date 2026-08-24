@@ -445,9 +445,11 @@ export async function openExcludedFoldersManager(): Promise<{ saved: boolean } |
 
 /**
  * Read/write the excluded folders list in dev. The service persists it to
- * excluded_folders.json inside the file-search index directory using the same shared
+ * excluded_folders.json beside the file-search index directory using the same shared
  * ExcludedFoldersPersistence the hosted DocumentLocator service uses, and applies it at
- * search time — so a change takes effect immediately with no reindex.
+ * search time — so a change takes effect immediately with no reindex. Same format and
+ * semantics as hosted, but the dev service resolves the directory from its own bin
+ * folder, so this edits a dev-local list rather than the installed one.
  *
  * Hosted mode does not use these: it opens the native WinForms manager instead
  * (openExcludedFoldersManager), which owns both the UI and the persistence.
