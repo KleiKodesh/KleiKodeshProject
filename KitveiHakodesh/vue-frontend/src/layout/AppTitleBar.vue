@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, defineAsyncComponent } from 'vue'
+import { ref, computed, defineAsyncComponent, watch, nextTick } from 'vue'
+import { useResizeObserver } from '@vueuse/core'
 import { useUiChromeVisibility } from '@/composables/useUiChromeVisibility'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import {
@@ -9,6 +10,7 @@ import {
   IconOptions24Filled,
   IconConvertToText24Regular,
   IconSearch24Regular,
+  IconChevronDoubleDown16Regular,
   IconSplitVertical20Regular,
   IconSplitVertical20Filled,
   // IconColor24Regular,
@@ -135,6 +137,89 @@ function toggleNavDropdown() {
  * Ctrl+E. Also Ctrl+T where there is no native tab strip (VSTO task pane, dev browser):
  * the address bar's dropdown doubles as the tab list there (empty field = tab list).
  */
+// ?? Expand-chevron squeeze rule ?????????????????????????????????????????????
+// The chevron is a decoration; the breadcrumb is the content. When the bar runs
+// out of room the breadcrumb starts clipping, and at that point the chevron's
+// reserved trailing strip is width the breadcrumb could have used ? so it goes,
+// and .bar-title drops the padding that held its place (.is-cramped).
+//
+// Measured, not guessed at from a width breakpoint: how much room a breadcrumb
+// needs depends on the book title and how deep the reader is in the TOC, so the
+// same bar width is roomy for one tab and cramped for the next.
+//
+// The test asks the DESCENDANTS, not .bar-title itself and not just its direct
+// children. Two layers make that necessary:
+//   - .bar-title never overflows. Its labels shrink and clip inside their OWN
+//     boxes (flex-shrink + overflow: hidden), so its scrollWidth stays equal to
+//     its clientWidth no matter how badly the text is cut.
+//   - .toc-breadcrumb is `display: contents`. That removes its BOX, not its DOM
+//     node, so .bar-title has exactly one element child ? the wrapper ? and a
+//     box-less element measures 0/0. Testing direct children alone therefore
+//     compares 0 against 0 forever and never reports a squeeze, while the real
+//     segments underneath it are clipped by hundreds of pixels.
+// So walk the labels themselves, wherever they sit.
+const barTitleRef = ref<HTMLElement | null>(null)
+const isTitleCramped = ref(false)
+
+// The clipping boxes: every element that carries overflow:hidden + flex-shrink
+// in the resting bar. .bar-title-expand is absolutely positioned and is not one
+// of them, so it cannot make the bar look cramped to itself.
+const CLIPPABLE_LABELS =
+  '.breadcrumb-title-name, .breadcrumb-segment, .bar-title-name, .bar-toc-segment, .bar-toc-path'
+
+// 1px of slack: fractional layout at non-integral zoom/DPI leaves scrollWidth a
+// hair above clientWidth on text that is not actually clipped, which would hide
+// the chevron on a perfectly roomy bar.
+const CLIP_SLACK = 1
+
+function measureTitleCramped() {
+  const el = barTitleRef.value
+  if (!el) return
+  const labels = el.querySelectorAll<HTMLElement>(CLIPPABLE_LABELS)
+  isTitleCramped.value = Array.from(labels).some(
+    (label) => label.scrollWidth - label.clientWidth > CLIP_SLACK,
+  )
+}
+
+// The bar resizing is one trigger (window, split-view divider, sidebar toggle);
+// the CONTENT changing is the other, and it fires no resize at all when the new
+// title happens to fill the same box. Re-measure after the DOM settles, since
+// the labels' widths are only known once Vue has patched them in.
+//
+// border-box, not the default content-box: toggling .is-cramped rewrites
+// padding-inline-end, which moves the CONTENT box while the border box holds
+// still. Observing the content box would make this callback re-trigger itself on
+// its own padding write ? a self-inflicted notification storm ("ResizeObserver
+// loop completed with undelivered notifications") for a size change nothing
+// outside this component made. The border box only moves when the BAR really
+// resizes, which is the only thing worth re-measuring for.
+useResizeObserver(barTitleRef, measureTitleCramped, { box: 'border-box' })
+
+// Watch the rendered LABELS, not the entry objects. The measurement depends on
+// the text that reaches the DOM and nothing else, so the sources are the title
+// and the label strings ? deep-traversing every segment's siblings/children
+// arrays of full TocEntry objects would cost a large walk per change to learn
+// something none of those fields affect. The root-entry COUNTS are in because
+// they flip the template between the breadcrumb and the plain-title branch
+// (v-if below), which swaps out the whole set of measured elements.
+watch(
+  () => [
+    barTitle.value,
+    tocBreadcrumbSegments.value.map((segment) => segment.label).join(' '),
+    tocBreadcrumbPlainLabels.value.join(' '),
+    tocBreadcrumbRootTocEntries.value.length,
+    tocBreadcrumbRootPdfEntries.value.length,
+  ],
+  () => nextTick(measureTitleCramped),
+  { immediate: true },
+)
+
+// Text metrics change when a webfont finishes loading, with no resize and no
+// source change ? a title measured against the fallback face can clip (or stop
+// clipping) once the real one lands. document.fonts.ready settles after the
+// initial load; guarded because it is absent in some embedded WebView builds.
+void document.fonts?.ready.then(() => measureTitleCramped())
+
 function toggleAddressBar() {
   if (searchMode.value) searchMode.value = false
   else enterSearchMode()
@@ -228,7 +313,14 @@ useAppTitleBarShortcuts({
       @close="searchMode = false"
     />
 
-    <span v-else class="bar-title" dir="rtl" :title="barTitle">
+    <span
+      v-else
+      ref="barTitleRef"
+      class="bar-title"
+      :class="{ 'is-cramped': isTitleCramped }"
+      dir="rtl"
+      :title="barTitle"
+    >
       <!-- Interactive breadcrumb for book-view and pdf-view tabs -->
       <AppTitleBarTocBreadcrumb
         v-if="tocBreadcrumbSegments.length > 0 || tocBreadcrumbRootTocEntries.length > 0 || tocBreadcrumbRootPdfEntries.length > 0"
@@ -249,6 +341,10 @@ useAppTitleBarShortcuts({
           <span class="bar-toc-segment"><bdi>{{ segment }}</bdi></span>
         </template>
       </template>
+      <!-- Expand affordance: the resting box is a collapsed address bar, and this
+           says so. Gone in search mode ? .bar-search replaces this whole span, so
+           the mark disappears exactly when the field is expanded. -->
+      <IconChevronDoubleDown16Regular v-if="!isTitleCramped" class="bar-title-expand" />
     </span>
 
     <div class="bar-end">
@@ -349,7 +445,13 @@ useAppTitleBarShortcuts({
   overflow: hidden;
   height: 24px;
   margin-inline: 6px;
+  /* Extra room on the PHYSICAL right for the absolutely-positioned
+     .bar-title-expand, so a long centered title clips before it reaches the
+     chevron instead of sliding underneath it. Physical (padding-right) to match
+     the chevron's own physical anchoring ? see .bar-title-expand. */
   padding-inline: 6px;
+  padding-right: 20px;
+  position: relative;
   font-weight: 400;
   font-size: 0.82rem;
   color: var(--text-secondary);
@@ -364,6 +466,35 @@ useAppTitleBarShortcuts({
 }
 .bar-title:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+}
+/* Pinned to the trailing edge rather than left in the flow, because .bar-title
+   CENTERS its content ? in the flow the chevron would drift with the title's
+   width and sit wherever the text happened to end. Absolute keeps it on the box's
+   own edge, and out of the flow it cannot squeeze the title's available width.
+   Deliberately faint: it marks the box as expandable, it is not a second control
+   competing with the title, and .bar-title already carries the click. */
+.bar-title-expand {
+  position: absolute;
+  /* Physical right, NOT inset-inline-end. This box is dir="rtl", so the logical
+     end edge is the LEFT one ? but the editable AddressBar that replaces this
+     box in search mode is not RTL, and puts its trailing search button on the
+     physical right. Anchoring logically would jump the affordance across the bar
+     on a swap that is supposed to be seamless. The chevron is chrome on the box,
+     not part of the RTL text flow, so it follows the box. */
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  color: var(--text-secondary);
+  opacity: 0.45;
+  pointer-events: none;
+}
+.bar-title:hover .bar-title-expand {
+  opacity: 0.75;
+}
+/* No chevron ? no reserved strip. Handing the 20px back is the point of hiding
+   it: the breadcrumb gets the room instead of a blank gap where the mark was. */
+.bar-title.is-cramped {
+  padding-right: 6px;
 }
 /* Search mode swaps in the editable AddressBar, occupying the same box. */
 .bar-search {
