@@ -1,5 +1,6 @@
 import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { onClickOutside, useEventListener, type MaybeElementRef } from '@vueuse/core'
+import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
 
 type MaybeElement = HTMLElement | null | undefined
 
@@ -67,6 +68,18 @@ export function useDropdownClose(
     },
     { ignore: options?.ignore },
   )
+
+  // A press on the native chrome (tab strip / title bar) dispatches no DOM event,
+  // so neither the outside-click nor the blur path above can see it. The host
+  // pushes it to us instead.
+  onNativeChromePressed(() => {
+    if (!isEnabled()) return
+    if (!toValue(target)) return
+    // handler(), not close(): close() arms `justClosed` to swallow the DOM click that
+    // follows a pointerdown, but a native press produces no such click. Arming it here
+    // would instead swallow the user's NEXT real click on the toggle button.
+    handler()
+  })
 
   if (options?.closeOnBlur !== false) {
     useEventListener(window, 'blur', (e: FocusEvent) => {
