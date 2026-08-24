@@ -57,8 +57,11 @@ namespace RegexFindLib.UI
                 if (System.Environment.TickCount - _lastStyleRefreshTick < StyleRefreshThrottleMs) return;
                 _lastStyleRefreshTick = System.Environment.TickCount;
                 Dispatcher.BeginInvoke(new System.Action(() =>
-                    vm.EnsureStylesLoaded()),
-                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+                {
+                    // Styles.Count first: one COM read that skips the full
+                    // enumeration when nothing was added or removed.
+                    if (vm.StylesLookChanged()) vm.EnsureStylesLoaded();
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             };
         }
 

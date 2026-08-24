@@ -16,5 +16,12 @@ namespace RegexFindLib.Search
 
         /// <summary>Returns all in-use style names from the active document.</summary>
         IEnumerable<string> GetStyleNames();
+
+        /// <summary>
+        /// The active document's total style count, or -1 with no document. One
+        /// COM read, used as a cheap has-anything-changed check before paying for
+        /// a full GetStyleNames enumeration.
+        /// </summary>
+        int GetStylesCount();
     }
 }

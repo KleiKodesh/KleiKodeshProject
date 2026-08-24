@@ -81,8 +81,16 @@ namespace DocDesign
                 _lastStyleRefreshTick = Environment.TickCount;
                 Dispatcher.BeginInvoke(new System.Action(() =>
                 {
-                    vm.ParagraphsViewModel.RefreshActiveStylesAction();
-                    vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
+                    // Count-and-document check first: a couple of COM reads that
+                    // skip the full enumerations when nothing was added or
+                    // removed. Each list gates on ITS OWN stamp - the picker
+                    // toggle refreshes only ActiveStyles, and a shared stamp
+                    // would let it silence a FirstWordStyle refresh. The
+                    // ungated refreshes (pane shown) catch what a count misses.
+                    if (vm.ParagraphsViewModel.StylesLookChanged())
+                        vm.ParagraphsViewModel.RefreshActiveStylesAction();
+                    if (vm.ParagraphsViewModel.FirstWordStyle.StylesLookChanged())
+                        vm.ParagraphsViewModel.FirstWordStyle.RefreshStyles();
                 }), DispatcherPriority.ApplicationIdle);
             };
         }

@@ -59,6 +59,10 @@
                 <ControlTemplate TargetType="Expander">
                     <DockPanel>
 
+                        <!-- The header must not take keyboard focus: the pane
+                             refreshes its style lists when focus arrives, and a
+                             focusable header made every expander click pay that
+                             COM work. A chevron toggle works fine unfocused. -->
                         <Border x:Name="HeaderBd"
                                 DockPanel.Dock="Top"
                                 Background="#0F808080"
@@ -70,6 +74,7 @@
                                 IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
                                 Content="{TemplateBinding Header}"
                                 ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                Focusable="False"
                                 Padding="10,7"
                                 FontSize="11"
                                 FontFamily="Segoe UI"

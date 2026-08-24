@@ -16,13 +16,18 @@
         All colour values inlined inside the templates (VSTO rule).
     -->
 
-    <!-- Chevron that rotates when open. Shared by Expander and TreeViewItem. -->
+    <!-- Standalone rotating chevron, kept for consumers that compose their own
+         disclosure headers (none in-tree today - OfficeExpander below inlines
+         its own). Not focusable: its focus visual is nulled, so focus here is
+         invisible, and a pane that does work when focus arrives must not pay
+         that for a disclosure chevron. -->
     <Style x:Key="ChevronToggle" TargetType="ToggleButton" BasedOn="{StaticResource ThemedControl}">
         <Setter Property="Background"       Value="Transparent"/>
         <Setter Property="BorderThickness"  Value="0"/>
         <Setter Property="Width"            Value="16"/>
         <Setter Property="Height"           Value="16"/>
         <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="Focusable"        Value="False"/>
         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -72,9 +77,13 @@
                             <RowDefinition Height="Auto"/>
                             <RowDefinition x:Name="ContentRow" Height="0"/>
                         </Grid.RowDefinitions>
+                        <!-- Not focusable: focus on a disclosure header is
+                             invisible here, and a host that does work when
+                             focus arrives must not pay it for an expand. -->
                         <ToggleButton x:Name="HeaderToggle"
                                       Grid.Row="0"
                                       IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                      Focusable="False"
                                       Background="Transparent"
                                       BorderThickness="0"
                                       Cursor="Hand"

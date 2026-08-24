@@ -49,6 +49,28 @@ namespace RegexFindLib.UI
         // COM (Word Styles) must be accessed on the STA/UI thread — no Task.Run.
 
         bool _styleRefreshInProgress = false;
+        int _lastSeenStylesCount = -1;
+        string _lastSeenDocName;
+
+        /// <summary>
+        /// Two COM reads (Styles.Count and the document name) that say whether
+        /// the style set could have changed since the last full load. The
+        /// focus-return refresh gates on this. The document name is part of the
+        /// stamp because a popped-out pane follows the user across documents,
+        /// and two documents easily share a style count. A rename or a style
+        /// newly in use slips past the count and reappears only when the pane
+        /// is hidden and shown again - the trade for not enumerating ~400
+        /// styles on a click.
+        /// </summary>
+        public bool StylesLookChanged()
+        {
+            try
+            {
+                return _word.GetStylesCount() != _lastSeenStylesCount
+                    || _word.ActiveDocument?.Name != _lastSeenDocName;
+            }
+            catch { return true; }
+        }
 
         void LoadStyles()
         {
@@ -58,6 +80,8 @@ namespace RegexFindLib.UI
 
             try
             {
+                _lastSeenStylesCount = _word.GetStylesCount();
+                try { _lastSeenDocName = _word.ActiveDocument?.Name; } catch { }
                 var names = _word.GetStyleNames().ToList();
 
                 // Only rebuild if actually changed — avoids clearing ComboBox selection

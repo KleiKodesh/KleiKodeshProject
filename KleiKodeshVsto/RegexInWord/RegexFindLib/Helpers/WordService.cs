@@ -10,6 +10,12 @@ namespace RegexFindLib.Helpers
         public Document ActiveDocument => Vsto.ActiveDocument;
         public Selection Selection => Vsto.Selection;
 
+        public int GetStylesCount()
+        {
+            try { return ActiveDocument?.Styles.Count ?? -1; }
+            catch { return -1; }
+        }
+
         public IEnumerable<string> GetStyleNames()
         {
             var doc = ActiveDocument;
