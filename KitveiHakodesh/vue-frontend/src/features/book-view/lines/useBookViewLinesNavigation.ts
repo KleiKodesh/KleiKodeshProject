@@ -56,6 +56,20 @@ export interface ScrollToLineOptions {
    * reading position is not disturbed for a line the reader can already see.
    */
   skipIfVisible?: boolean
+  /**
+   * Which way a search step is travelling, deciding WHERE an off-screen match
+   * comes to rest.
+   *
+   * 'backward' (and the default) lands it at the TOP — you are heading back
+   * through text you have already read, so the match plus what follows it is what
+   * you want in front of you.
+   *
+   * 'forward' lands it at the BOTTOM, because reading advances downward: the
+   * match arrives at the edge you are reading toward, and the lines above it —
+   * the ones leading up to it — stay on screen. Pulling it to the top instead
+   * would discard all of that context and skip the view past everything between.
+   */
+  direction?: 'forward' | 'backward'
 }
 
 export function useBookViewLinesNavigation(
@@ -100,7 +114,7 @@ export function useBookViewLinesNavigation(
     // its own target, or a late chunk load will yank the view back there.
     cancelRestoreCorrection()
 
-    const { occurrence, force = false } = options
+    const { occurrence, force = false, direction = 'backward' } = options
     // No occurrence means no match to refine toward — a plain jump to the line.
     const wantsMark = occurrence != null
     const reserved = searchBarVisible() ? SEARCH_BAR_INSET_PX : 0
@@ -126,7 +140,12 @@ export function useBookViewLinesNavigation(
       const alreadyVisible =
         relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
       if (!alreadyVisible) {
-        scroller.scrollTop += relativeTop - reserved - SCROLL_LANDING_GAP_PX
+        // Land the mark at the edge the reader is travelling toward: bottom when
+        // stepping forward, top when stepping back. See `direction` above.
+        scroller.scrollTop +=
+          direction === 'forward'
+            ? relativeBottom - scrollerRect.height + SCROLL_LANDING_GAP_PX
+            : relativeTop - reserved - SCROLL_LANDING_GAP_PX
       }
       return true
     }
@@ -140,6 +159,25 @@ export function useBookViewLinesNavigation(
     const measurement = virt.measurementsCache.find((cache) => cache.index === lineIndex)
     if (rendered && measurement) {
       suppressPositionSave()
+
+      // A match jump moves the view only if the match is not already on screen.
+      // The target here is the MARK, not the line: hauling the line to the top to
+      // reach a match the reader can already see throws away their position for
+      // nothing — stepping through matches within one screenful should leave the
+      // page still, exactly as a browser's find does. adjustToMark owns that
+      // decision (it repositions only when the mark is not comfortably in view),
+      // so hand it the mark and let it choose.
+      //
+      // Only the FAST path can do this: it means the row is really in the DOM, so
+      // the mark can be applied and measured right now. `force` still overrides —
+      // section navigation is about the line's position, not a match's visibility.
+      if (wantsMark && !force) {
+        applyCurrentMark()
+        if (adjustToMark(scroller)) return
+        // The mark was not in the DOM after all (content still loading) — fall
+        // through to the line scroll and the rAF retry below.
+      }
+
       const targetScrollTop = measurement.start - reserved - SCROLL_LANDING_GAP_PX
       if (force || Math.abs(scroller.scrollTop - targetScrollTop) > 2) {
         scroller.scrollTop = targetScrollTop
