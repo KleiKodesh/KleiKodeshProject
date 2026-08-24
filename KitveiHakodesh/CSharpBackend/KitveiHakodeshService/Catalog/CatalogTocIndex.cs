@@ -1084,6 +1084,11 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// ("תנך בראשית ד יד" keeps פרק ד / פסוק יד and drops פרק יד / פסוק ד). Groups with
     /// no in-order hit are kept untouched, so title/catalog word order (משנה תורה vs
     /// תורה משנה) never filters anything.
+    ///
+    /// Per-book level truncation (after the discard): within each book (per literal
+    /// block), only the shallowest level that matched is kept — its deeper-level hits
+    /// are dropped. Per book only: a book whose sole matches are deep keeps them; it is
+    /// never truncated by another book's shallower hits.
     /// </summary>
     public List<CatalogTocHit> Search(string query, CancellationToken ct = default)
     {
@@ -1152,8 +1157,9 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// <summary>
     /// One search pass: run the query (optionally fuzzy), order by (IsLiteral desc,
     /// Level asc, TreeOrder asc), materialize the ordered top <see cref="MaterializeCap"/>,
-    /// and apply the query-token-order discard. Returns the resulting hit list (empty when
-    /// nothing matched). Used for both the normal pass and the fuzzy append pass.
+    /// and apply the query-token-order discard and the per-book level truncation (each
+    /// book keeps only its shallowest-level hits). Returns the resulting hit list (empty
+    /// when nothing matched). Used for both the normal pass and the fuzzy append pass.
     /// </summary>
     private List<CatalogTocHit> RunPass(
         IndexSearcher searcher, List<CatalogTocTextRules.QueryToken> tokens, VariantIndex? variants,
@@ -1208,6 +1214,21 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             if (groupsWithInOrder.Count > 0)
                 hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
         }
+
+        // Per-book level truncation: within ONE book, a hit at a shallower TOC level is
+        // the more accurate address for the query, so that book's deeper-level hits are
+        // dropped. Strictly per book — a book whose only hits are deep keeps them all at
+        // its own shallowest level; other books' levels never affect it. Grouped by
+        // (IsLiteral, BookId) so a literal deep hit is never discarded in favor of a
+        // variant/fuzzy shallow one (accuracy-first, same as the sort).
+        var minLevelByBook = new Dictionary<(bool IsLiteral, int BookId), int>();
+        foreach (var h in hits)
+        {
+            var key = (h.IsLiteral, h.BookId);
+            if (!minLevelByBook.TryGetValue(key, out int min) || h.Level < min)
+                minLevelByBook[key] = h.Level;
+        }
+        hits.RemoveAll(h => h.Level > minLevelByBook[(h.IsLiteral, h.BookId)]);
 
         return hits;
     }
