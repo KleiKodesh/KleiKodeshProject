@@ -31,7 +31,7 @@
             <!-- ══════════════════════════════════════════════════════
                  SECTION: עיצוב פסקה
             ══════════════════════════════════════════════════════ -->
-            <Expander Header="עיצוב פסקה" IsExpanded="True">
+            <Expander Style="{StaticResource BandedExpander}" Header="עיצוב פסקה" IsExpanded="True">
                 <StackPanel Margin="10,4,10,4">
 
                     <!-- Shared min-line group: buttons hug the start (right, RTL),
@@ -224,7 +224,7 @@
             <!-- ══════════════════════════════════════════════════════
                  SECTION: איזון טורים
             ══════════════════════════════════════════════════════ -->
-            <Expander Header="איזון טורים">
+            <Expander Style="{StaticResource BandedExpander}" Header="איזון טורים">
                 <StackPanel Margin="10,4,10,4">
 
                     <StackPanel Orientation="Horizontal" Margin="0,2,0,4">
@@ -260,7 +260,7 @@
             <!-- ══════════════════════════════════════════════════════
                  SECTION: מרווחים
             ══════════════════════════════════════════════════════ -->
-            <Expander Header="מרווחים">
+            <Expander Style="{StaticResource BandedExpander}" Header="מרווחים">
                 <StackPanel Margin="10,4,10,6">
 
                     <Grid ap:GridSetup.Columns="auto * auto auto auto"

@@ -16,7 +16,31 @@
         All colour values inlined inside the templates (VSTO rule).
     -->
 
-    <!-- Standalone rotating chevron, kept for consumers that compose their own
+        <!--
+        RTL - which glyphs flip.
+
+        FlowDirection inherits, so a pane that sets RightToLeft mirrors layout
+        for free: margins, alignments and grid columns all swap. A Path does
+        too, and that is only sometimes wanted, so every Path in this library
+        makes a deliberate choice between two classes:
+
+          DIRECTION-AWARE (chevrons, arrows, back/forward) - leave unpinned.
+            The glyph MEANS "that way", so it must mirror with reading order.
+            A collapsed chevron points at its content in either direction.
+            Where such a glyph is also rotated, the mirror reverses the sense
+            of the rotation as well, and the two cancel: an expanded chevron
+            still lands pointing down. RTL needs no special case.
+
+          PICTORIAL (check, plus, search, product icons) - pin LeftToRight.
+            The glyph is a picture of a thing, and a mirrored picture is just
+            wrong. IconPath pins for exactly this reason, so every icon that
+            derives from it is safe by default.
+
+        The test is the glyph's meaning, never the host's language. Anything
+        that needs a per-pane RTL patch belongs in this file instead.
+    -->
+
+<!-- Standalone rotating chevron, kept for consumers that compose their own
          disclosure headers (none in-tree today - OfficeExpander below inlines
          its own). Not focusable: its focus visual is nulled, so focus here is
          invisible, and a pane that does work when focus arrives must not pay
@@ -40,7 +64,6 @@
                               StrokeLineJoin="Round"
                               Stretch="Uniform"
                               Width="8" Height="8"
-                              FlowDirection="LeftToRight"
                               RenderTransformOrigin="0.5,0.5">
                             <Path.RenderTransform>
                                 <RotateTransform Angle="0"/>
@@ -105,7 +128,6 @@
                                                   StrokeLineJoin="Round"
                                                   Stretch="Uniform"
                                                   Width="8" Height="8"
-                                                  FlowDirection="LeftToRight"
                                                   VerticalAlignment="Center"
                                                   RenderTransformOrigin="0.5,0.5">
                                                 <Path.RenderTransform>
@@ -132,6 +154,90 @@
                             <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
                         </ToggleButton>
                         <ContentPresenter x:Name="Body" Grid.Row="1" Margin="18,2,0,6"/>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsExpanded" Value="True">
+                            <Setter TargetName="ContentRow" Property="Height" Value="Auto"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        BandedExpander - the same expander with a shaded header band.
+
+        For stacks of expanders, where a tinted full-width header is what
+        separates one section from the next. Plain OfficeExpander suits a
+        single collapsible block; this suits a pane made of them, which is
+        why DocDesign had grown its own copy of exactly this before it moved
+        here. Header tint only - everything else is inherited.
+    -->
+    <Style x:Key="BandedExpander" TargetType="Expander" BasedOn="{StaticResource OfficeExpander}">
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Expander">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition x:Name="ContentRow" Height="0"/>
+                        </Grid.RowDefinitions>
+                        <Border x:Name="HeaderBand" Grid.Row="0" Background="#0F808080">
+                            <ToggleButton x:Name="HeaderToggle"
+                                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                                          Focusable="False"
+                                          FontSize="{StaticResource FontSizeSmall}"
+                                          FontWeight="SemiBold"
+                                          Background="Transparent"
+                                          BorderThickness="0"
+                                          Cursor="Hand"
+                                          HorizontalContentAlignment="Stretch"
+                                          Padding="10,7">
+                                <ToggleButton.Template>
+                                    <ControlTemplate TargetType="ToggleButton">
+                                        <Border x:Name="Bd" Background="Transparent" Padding="{TemplateBinding Padding}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="18"/>
+                                                    <ColumnDefinition Width="*"/>
+                                                </Grid.ColumnDefinitions>
+                                                <!-- Direction-aware: unpinned so it mirrors. -->
+                                                <Path x:Name="Arrow"
+                                                      Grid.Column="0"
+                                                      Data="M5 3 L9 8 L5 13"
+                                                      Stroke="{TemplateBinding Foreground}"
+                                                      StrokeThickness="1.5"
+                                                      StrokeLineJoin="Round"
+                                                      Stretch="Uniform"
+                                                      Width="8" Height="8"
+                                                      VerticalAlignment="Center"
+                                                      RenderTransformOrigin="0.5,0.5">
+                                                    <Path.RenderTransform>
+                                                        <RotateTransform Angle="0"/>
+                                                    </Path.RenderTransform>
+                                                </Path>
+                                                <ContentPresenter Grid.Column="1" VerticalAlignment="Center"/>
+                                            </Grid>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsChecked" Value="True">
+                                                <Setter TargetName="Arrow" Property="RenderTransform">
+                                                    <Setter.Value>
+                                                        <RotateTransform Angle="90"/>
+                                                    </Setter.Value>
+                                                </Setter>
+                                            </Trigger>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="#0A808080"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </ToggleButton.Template>
+                                <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"/>
+                            </ToggleButton>
+                        </Border>
+                        <ContentPresenter x:Name="Body" Grid.Row="1" Margin="0,2,0,6"/>
                     </Grid>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsExpanded" Value="True">
