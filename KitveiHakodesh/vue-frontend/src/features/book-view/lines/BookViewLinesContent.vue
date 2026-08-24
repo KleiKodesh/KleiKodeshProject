@@ -546,7 +546,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 }
 /* The mark is drawn by CSS so the marker holds no text — see applyUserNoteMarkers. */
 .line :deep(.user-note-marker)::before {
-  content: '[✎]';
+  content: '✎︎';
 }
 .line :deep(.user-note-marker:hover) {
   color: color-mix(in srgb, var(--accent-color) 70%, var(--text-primary));
