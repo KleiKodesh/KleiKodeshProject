@@ -28,14 +28,42 @@ namespace DocDesign.Spacing
         public RelayCommand<string> SetCharacterStretchCommand => new RelayCommand<string>(param => SetCharacterStretch(param));
 
 
-        public SpacingViewModel()
+        // The constructor deliberately touches no Word COM. The XAML creates this
+        // view model eagerly, including for views that are built and immediately
+        // discarded (the ribbon used to construct one per click), and a
+        // SelectionChange subscription taken here was never released - every
+        // discarded view left a handler doing COM reads on each caret move,
+        // and they stacked. Attach() is the only place that subscribes.
+        public SpacingViewModel() { }
+
+        bool _subscribed;
+
+        /// <summary>
+        /// False once the view's WPF tree is torn down, so the handler of a pane
+        /// that no longer exists costs a boolean check per caret move instead of
+        /// a dozen COM reads. Merely hiding the pane does not raise Unloaded, so
+        /// a hidden pane keeps updating - one handler's worth, which is fine; the
+        /// bug this replaces was N stacked handlers that nothing could turn off.
+        /// The event itself cannot be unhooked cheaply (the delegate would need
+        /// the VSTO event's exact type), and an inert handler is just as quiet.
+        /// </summary>
+        public bool Live { get; set; }
+
+        /// <summary>
+        /// Subscribes to the document's SelectionChange, once. Called from the
+        /// view's Loaded, which only a pane that is actually shown ever raises.
+        /// </summary>
+        public void Attach()
         {
-            if (Vsto.Application == null) return;
+            Live = true;
+            if (_subscribed || Vsto.Application == null) return;
             try
             {
                 Vsto.ApplicationFactory.GetVstoObject(Vsto.Application.ActiveDocument).SelectionChange += (_, x) =>
-                    UpdateProperties();
-                // Initial property read is deferred to ApplicationIdle by the View
+                {
+                    if (Live) UpdateProperties();
+                };
+                _subscribed = true;
             }
             catch { }
         }

@@ -7,6 +7,12 @@ namespace RegexFindLib.UI
 {
     public partial class RegexFindView : UserControl
     {
+        // Styles are re-read from Word at most this often, however hard the
+        // pane is clicked. TickCount rather than DateTime: it cannot jump when
+        // the clock is adjusted, and wrap-around merely allows one early refresh.
+        const int StyleRefreshThrottleMs = 5000;
+        int _lastStyleRefreshTick = System.Environment.TickCount - StyleRefreshThrottleMs;
+
         public RegexFindView(
             Microsoft.Office.Interop.Word.Application app,
             Microsoft.Office.Tools.Word.ApplicationFactory factory)
@@ -35,11 +41,24 @@ namespace RegexFindLib.UI
                     vm.EnsureStylesLoaded();
             };
 
-            // Refresh styles when control gets focus
+            // Refresh styles when focus returns to the pane - the user may have
+            // changed styles in Word in the meantime. GotFocus bubbles from every
+            // child, so unthrottled this ran a full doc.Styles enumeration on
+            // EVERY click inside the pane, which is what made it feel sticky.
+            // The throttle makes clicking around inside the pane free while
+            // still catching a return from Word; the idle dispatch lets the
+            // click paint before the COM work. (Not IsKeyboardFocusWithinChanged:
+            // under ElementHost, WPF keyboard focus can survive the user
+            // clicking out into Word, so the flag cannot be trusted to flip
+            // and fire again on return.)
             GotFocus += (_, __) =>
             {
-                if (DataContext is RegexFindViewModel vm)
-                    vm.EnsureStylesLoaded();
+                if (!(DataContext is RegexFindViewModel vm)) return;
+                if (System.Environment.TickCount - _lastStyleRefreshTick < StyleRefreshThrottleMs) return;
+                _lastStyleRefreshTick = System.Environment.TickCount;
+                Dispatcher.BeginInvoke(new System.Action(() =>
+                    vm.EnsureStylesLoaded()),
+                    System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             };
         }
 
