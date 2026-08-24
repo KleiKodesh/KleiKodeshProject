@@ -30,6 +30,8 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ToggleButton">
                     <Border Background="Transparent" Width="16" Height="16">
+    <!-- RTL: this arrow is direction-aware and deliberately not pinned, so it
+         mirrors with reading order. See the glyph rule in ContainerStyles.xaml. -->
                         <Path x:Name="Arrow"
                               Data="M5 3 L9 8 L5 13"
                               Stroke="{TemplateBinding Foreground}"
@@ -37,7 +39,6 @@
                               StrokeLineJoin="Round"
                               Stretch="Uniform"
                               Width="8" Height="8"
-                              FlowDirection="LeftToRight"
                               RenderTransformOrigin="0.5,0.5">
                             <Path.RenderTransform>
                                 <RotateTransform Angle="0"/>

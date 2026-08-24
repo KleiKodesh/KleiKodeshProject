@@ -13,6 +13,5 @@
         <ResourceDictionary Source="/DocDesign;component/ui/themes/icons.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/buttonstyles.xaml"/>
         <ResourceDictionary Source="/DocDesign;component/ui/themes/miscstyles.xaml"/>
-        <ResourceDictionary Source="/DocDesign;component/ui/themes/expanderstyles.xaml"/>
     </ResourceDictionary.MergedDictionaries>
 </ResourceDictionary>

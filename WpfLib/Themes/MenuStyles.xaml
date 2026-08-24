@@ -49,6 +49,8 @@
                                            Opacity="0.55"
                                            Margin="16,0,0,0"
                                            VerticalAlignment="Center"/>
+    <!-- RTL: this arrow is direction-aware and deliberately not pinned, so it
+         mirrors with reading order. See the glyph rule in ContainerStyles.xaml. -->
                                 <Path x:Name="SubArrow"
                                       Grid.Column="2"
                                       Data="M5 3 L9 8 L5 13"
@@ -58,7 +60,6 @@
                                       Stretch="Uniform"
                                       Width="8" Height="8"
                                       Margin="10,0,0,0"
-                                      FlowDirection="LeftToRight"
                                       VerticalAlignment="Center"
                                       Visibility="Collapsed"/>
                             </Grid>

@@ -123,10 +123,6 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="UI\Themes\ExpanderStyles.xaml">
-      <Generator>MSBuild:Compile</Generator>
-      <SubType>Designer</SubType>
-    </Page>
     <!-- View -->
     <Page Include="UI\DocDesignView.xaml">
       <Generator>MSBuild:Compile</Generator>

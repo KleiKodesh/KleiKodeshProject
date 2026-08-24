@@ -317,6 +317,14 @@
             </Setter.Value>
         </Setter>
         <Setter Property="Stretch"       Value="Uniform"/>
+        <!--
+            Pinned: an icon is PICTORIAL, a picture of a thing, and a mirrored
+            picture is simply wrong. This is the safe default for everything
+            that derives from IconPath. A DIRECTION-AWARE glyph - a chevron or
+            an arrow, which means "that way" - must not use this style, or must
+            clear the pin, so that it mirrors with reading order. The full rule
+            is written out in ContainerStyles.xaml.
+        -->
         <Setter Property="FlowDirection" Value="LeftToRight"/>
     </Style>
 
