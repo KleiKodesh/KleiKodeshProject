@@ -27,11 +27,9 @@ namespace KleiKodesh.Helpers
             {
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
 
-                var pane = panes.Cast<CustomTaskPane>()
-                    .FirstOrDefault(p =>
-                        p.Control is WinForms.UserControl c &&
-                        c.Controls.OfType<ElementHost>().Any(h => h.Child.GetType() == typeof(T)) &&
-                        p.Window == Globals.ThisAddIn.Application.ActiveWindow);
+                // Match on the hosted view type alone - see TaskPaneManager.Show for why
+                // there is no window to compare against.
+                var pane = FindReusable(panes, typeof(T));
 
                 if (pane != null)
                 {
@@ -53,14 +51,9 @@ namespace KleiKodesh.Helpers
             try
             {
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
-                var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
 
-                var pane = panes.Cast<CustomTaskPane>()
-                    .FirstOrDefault(p =>
-                        p.Control is WinForms.UserControl c &&
-                        c.Controls.OfType<ElementHost>().Any(h => h.Child.GetType() == type) &&
-                        p.Window == Globals.ThisAddIn.Application.ActiveWindow);
+                var pane = FindReusable(panes, type);
 
                 if (pane != null)
                 {
@@ -75,6 +68,40 @@ namespace KleiKodesh.Helpers
                 WinForms.MessageBox.Show(ex.ToString(), "Error");
                 return null;
             }
+        }
+
+        /// <summary>
+        /// The pane hosting <paramref name="viewType"/> that should be brought forward.
+        /// Mirrors TaskPaneManager.FindReusable - duplication means a type match can find
+        /// more than one pane, and the one the user is working in should win over one
+        /// that merely came first.
+        /// </summary>
+        static CustomTaskPane FindReusable(CustomTaskPaneCollection panes, Type viewType)
+        {
+            var matches = panes.Cast<CustomTaskPane>()
+                .Where(p => HostsView(p, viewType))
+                .ToList();
+
+            return matches.FirstOrDefault(TaskPaneManager.IsLastRevealed)
+                ?? matches.FirstOrDefault(TaskPaneManager.IsUsable)
+                ?? matches.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// True when <paramref name="pane"/> hosts a WPF view of <paramref name="viewType"/>.
+        /// A pane whose document has closed throws from every member - the exception
+        /// type varies with how far the teardown got - and a throw from inside a LINQ
+        /// predicate would abort the whole lookup and reach the user as an error dialog.
+        /// Any failure here means the same thing: not a match.
+        /// </summary>
+        static bool HostsView(CustomTaskPane pane, Type viewType)
+        {
+            try
+            {
+                return pane.Control is WinForms.UserControl c &&
+                       c.Controls.OfType<ElementHost>().Any(h => h.Child?.GetType() == viewType);
+            }
+            catch { return false; }
         }
 
         public static CustomTaskPane DuplicateCurrent(WpfHostControl wpfHostControl, CustomTaskPane current)

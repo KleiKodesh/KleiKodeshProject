@@ -144,15 +144,16 @@ namespace KleiKodesh.Ribbon
         }
 
         /// <summary>
-        /// Shows the Kitvei Hakodesh task pane, reusing the already-launched pane for
-        /// the active window if present (TaskPaneManager.Show handles the reuse), and
-        /// returns its live <see cref="KitveiHakodeshLib.AppViewer"/> so callers can
-        /// drive it directly without relaunching.
+        /// Shows the Kitvei Hakodesh task pane, reusing the already-launched pane if
+        /// present (TaskPaneManager.Show handles the reuse), and returns its live
+        /// <see cref="KitveiHakodeshLib.AppViewer"/> so callers can drive it directly
+        /// without relaunching. The viewer is built through a factory so an open pane
+        /// does not pay for a discarded WebView2 on every context-menu search.
         /// </summary>
         private KitveiHakodeshLib.AppViewer ShowKitveiHakodesh()
         {
             var pane = TaskPaneManager.Show(
-                new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true },
+                () => new KitveiHakodeshLib.AppViewer { ShowPopOutButton = true },
                 "כתבי הקודש", 610, popOutBehavior: true);
             return pane?.Control as KitveiHakodeshLib.AppViewer;
         }
@@ -167,7 +168,7 @@ namespace KleiKodesh.Ribbon
                         ShowKitveiHakodesh();
                         break;
                     case "Kiwix":
-                        TaskPaneManager.Show(new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);
+                        TaskPaneManager.Show(() => new KiwixLib.KiwixWebview(), "קיוויקס", 610, popOutBehavior: true);
                         break;
                     case "WebSites":
                         WpfTaskPane.Show(() => new WebSitesLib.UI.WebSitesView(), "דרך האתרים", 510);

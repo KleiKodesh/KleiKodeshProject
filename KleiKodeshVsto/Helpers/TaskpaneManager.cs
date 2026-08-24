@@ -12,6 +12,12 @@ namespace KleiKodesh.Helpers
     {
         private static bool _updateCheckDone = false;
 
+        // The pane the user most recently opened or brought forward. VSTO exposes no
+        // "active pane", and insertion order is not a stand-in for one: with several
+        // panes visible at once, the first in the collection is whichever was created
+        // earliest, not whichever the user is looking at.
+        private static CustomTaskPane _lastRevealed;
+
         public static CustomTaskPane Show(
             UserControl userControl,
             string title,
@@ -22,12 +28,17 @@ namespace KleiKodesh.Helpers
             try
             {
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
-                var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
 
-                var pane = panes.Cast<CustomTaskPane>()
-                    .FirstOrDefault(p => p.Control.GetType() == type && p.Window == window) ??
-                     CreateNew(userControl, title, width, matchOfficeTheme, popOutBehavior);
+                // Match on the control type alone. These panes are created with the
+                // two-argument Add, which leaves Window null on purpose so one pane
+                // serves every window - this add-in opens a second document in a second
+                // window (WordWindowHelper.OpenSoftSnapLeft) and both sides share the
+                // pane. The old predicate also compared Window against a live
+                // ActiveWindow, which a null never matched, so no pane was ever reused
+                // and every ribbon click and context-menu search added another one.
+                var pane = FindReusable(panes, type)
+                    ?? CreateNew(userControl, title, width, matchOfficeTheme, popOutBehavior);
 
                 Reveal(pane);
                 return pane;
@@ -50,9 +61,95 @@ namespace KleiKodesh.Helpers
         /// produce: the search itself reached the live control in the floating window,
         /// but a blank pane opened alongside it.
         /// </summary>
+        /// <summary>
+        /// Shows the pane hosting a <typeparamref name="T"/>, building one only when
+        /// there is no pane to reuse. The eager overload above has to construct the
+        /// control just to learn its type - and an AppViewer constructor spins up a
+        /// WebView2 and starts initialising it - so a context-menu search into an
+        /// already-open pane would build and discard a whole browser control.
+        /// </summary>
+        public static CustomTaskPane Show<T>(
+            Func<T> factory,
+            string title,
+            int width = 600,
+            bool matchOfficeTheme = true,
+            bool popOutBehavior = true)
+            where T : UserControl
+        {
+            try
+            {
+                var pane = FindReusable(Globals.ThisAddIn.CustomTaskPanes, typeof(T))
+                    ?? CreateNew(factory(), title, width, matchOfficeTheme, popOutBehavior);
+
+                Reveal(pane);
+                return pane;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString(), "Error");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// The type of a pane's hosted control, or null if the pane is disposed.
+        /// A pane whose document has gone throws from every member - and not always
+        /// ObjectDisposedException: a released RCW gives COMException (RPC_E_DISCONNECTED)
+        /// or InvalidComObjectException instead. A throw from inside a LINQ predicate
+        /// escapes the whole lookup and reaches the user as an error dialog on an ordinary
+        /// ribbon click, so any failure here means the same thing: not a match.
+        /// </summary>
+        static Type ControlTypeOf(CustomTaskPane pane)
+        {
+            try { return pane.Control?.GetType(); }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// The pane hosting <paramref name="type"/> that the ribbon should bring forward,
+        /// or null if there is none to reuse.
+        ///
+        /// Duplicating a pane creates a second one of the same type, so a type match can
+        /// find more than one. Prefer the one the user is actually working in - the one
+        /// last brought forward, then any that is shown or popped out - over one that was
+        /// merely created first and has since been closed. Revealing a hidden original
+        /// while its duplicate is on screen looks like the wrong pane opening.
+        /// </summary>
+        static CustomTaskPane FindReusable(CustomTaskPaneCollection panes, Type type)
+        {
+            var matches = panes.Cast<CustomTaskPane>()
+                .Where(p => ControlTypeOf(p) == type)
+                .ToList();
+
+            return matches.FirstOrDefault(IsLastRevealed)
+                ?? matches.FirstOrDefault(IsUsable)
+                ?? matches.FirstOrDefault();
+        }
+
+        // Whether this is the pane the user last brought forward.
+        public static bool IsLastRevealed(CustomTaskPane pane) => pane == _lastRevealed;
+
+        // A pane still worth acting on: alive, and either shown or popped out. Visible
+        // alone is not enough - popping out hides the pane by design.
+        public static bool IsUsable(CustomTaskPane pane)
+        {
+            if (ControlTypeOf(pane) == null) return false;
+            var popOut = TaskPanePopOut.For(pane);
+            return IsVisible(pane) || (popOut != null && popOut.IsPoppedOut);
+        }
+
+        // Same disposed-pane hazard as ControlTypeOf.
+        static bool IsVisible(CustomTaskPane pane)
+        {
+            try { return pane.Visible; }
+            catch { return false; }
+        }
+
         public static void Reveal(CustomTaskPane pane)
         {
             if (pane == null) return;
+
+            _lastRevealed = pane;
 
             var popOut = TaskPanePopOut.For(pane);
             if (popOut != null && popOut.IsPoppedOut)
@@ -69,9 +166,13 @@ namespace KleiKodesh.Helpers
                     .Cast<CustomTaskPane>()
                     .ToList();
 
-                var current = panes.FirstOrDefault(p =>
-                    p.Window == Globals.ThisAddIn.Application.ActiveWindow &&
-                    p.Visible);
+                // Prefer the pane the user last brought forward; fall back to the first
+                // visible one. Without the preference, duplicating with both Kitvei
+                // Hakodesh and Settings open would duplicate whichever was created first
+                // rather than the one being used - and a popped-out pane reports itself
+                // invisible, so the fallback alone swings on pop-out state.
+                var current = panes.FirstOrDefault(p => p == _lastRevealed && IsUsable(p))
+                    ?? panes.FirstOrDefault(IsVisible);
 
                 if (current == null)
                     return null;
@@ -122,7 +223,6 @@ namespace KleiKodesh.Helpers
                 CheckForUpdates();
 
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
-                var window = Globals.ThisAddIn.Application.ActiveWindow;
                 var type = userControl.GetType();
                 var pane = panes.Add(userControl, title);
 
@@ -257,6 +357,17 @@ namespace KleiKodesh.Helpers
                 Globals.Factory.GetVstoObject(Globals.ThisAddIn.Application.ActiveDocument)
                     .CloseEvent += () =>
                     {
+                        // Close the floating window first if the content was popped out.
+                        // Disposing the host below would otherwise leave a live window
+                        // owned by a document that no longer exists, with a pop-in target
+                        // that has already been disposed.
+                        TaskPanePopOut.For(pane)?.ClosePopOut();
+
+                        // Don't leave the "last revealed" pointer on a pane that is going
+                        // away - it would keep a dead pane alive and win the preference in
+                        // FindReusable over a live one.
+                        if (_lastRevealed == pane) _lastRevealed = null;
+
                         try { Globals.ThisAddIn.CustomTaskPanes.Remove(pane); } catch { }
                         userControl?.Dispose();
                     };

@@ -46,11 +46,82 @@ namespace KleiKodesh.Helpers
         static void Register(CustomTaskPane pane, TaskPanePopOut handler)
         {
             if (pane == null) return;
-            // Remove-then-Add rather than Add: a pane must map to exactly one handler,
-            // and Add throws on a duplicate key. The last handler wired to a pane is
-            // the one holding its content, so it is the one worth keeping.
+
+            // A pane must map to exactly one handler. Two handlers on one pane both
+            // subscribe to its events and both try to reparent the same content, so the
+            // second to run finds the content already moved. Detach any predecessor
+            // rather than leaving it subscribed and invisible - its event registrations
+            // would otherwise keep it alive and racing.
+            TaskPanePopOut existing;
+            if (_byPane.TryGetValue(pane, out existing) && existing != handler)
+                // ClosePopOut, not Detach: once the table slot is taken, nothing
+                // references the predecessor, so a floating window it still held could
+                // never be closed or popped back in. The incoming handler cannot adopt
+                // it either - it reads content from the host, which the predecessor
+                // emptied.
+                existing.ClosePopOut();
+
             _byPane.Remove(pane);
             _byPane.Add(pane, handler);
+        }
+
+        /// <summary>
+        /// Closes the floating window and disposes its content, without trying to put
+        /// anything back. For use when the pane's document is closing: the host is about
+        /// to be disposed, so there is nothing to pop in to.
+        /// </summary>
+        public void ClosePopOut()
+        {
+            // Detach first and unconditionally: a handler that is not popped out still
+            // holds a live pane subscription, and this is the point at which it stops
+            // being the handler for that pane.
+            Detach();
+            if (!IsPoppedOut) return;
+
+            try
+            {
+                // Save the window's geometry before tearing it down. Dispose does not
+                // raise FormClosing, so the lambda that normally persists bounds never
+                // runs on this path - the user would silently lose a pop-out window they
+                // had sized and placed.
+                SaveFormBounds();
+
+                // Dispose rather than Close: Close is a no-op on a form whose handle was
+                // never created, which would leave a live window with nothing referencing
+                // it once _form is cleared below. Disposing the form disposes the content
+                // with it, since the content is still parented to the form - Detach
+                // removed the handler that would otherwise have reparented it.
+                _form.Dispose();
+            }
+            catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
+            finally
+            {
+                _form = null;
+                _content = null;
+            }
+        }
+
+        void SaveFormBounds()
+        {
+            try
+            {
+                if (_form != null && !_form.IsDisposed)
+                    FormSettingsHelper.SaveFormSettings(_form, "KleiKodesh", _content?.AccessibleName);
+            }
+            catch (Exception ex) { Console.WriteLine("[TaskPanePopOut] " + ex.Message); }
+        }
+
+        /// <summary>
+        /// Stops this handler reacting to its pane and to its form's closing. The
+        /// FormClosing lambda that saves window bounds is anonymous and stays subscribed;
+        /// it only reads the form's own geometry, so letting it run is harmless.
+        /// </summary>
+        void Detach()
+        {
+            if (_pane != null)
+                try { _pane.VisibleChanged -= OnPaneVisibilityChanged; } catch { }
+            if (_form != null && !_form.IsDisposed)
+                try { _form.FormClosing -= OnFormClosing; } catch { }
         }
 
         /// <summary>
