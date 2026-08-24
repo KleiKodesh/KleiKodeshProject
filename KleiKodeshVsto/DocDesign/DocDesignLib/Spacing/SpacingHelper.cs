@@ -15,7 +15,10 @@ namespace DocDesign.Spacing
         {
             Range range = selection.Range.Paragraphs[1].Range;
             range.Collapse();
-            range.MoveUntil(" ");
+            // Bounded: unbounded MoveUntil scans to the END OF THE DOCUMENT when
+            // the paragraph has no space, and this runs on selection changes.
+            // A first word longer than 255 characters is not a word.
+            range.MoveUntil(" ", 255);
             range.MoveEnd();
             return (float)range.Font.Spacing;
         }
