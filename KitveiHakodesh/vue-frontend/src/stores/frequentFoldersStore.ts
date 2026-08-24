@@ -5,57 +5,36 @@
  * than recency. The home page shows the top few as tiles that reopen the file
  * dialog in that folder.
  *
- * Why not plain LRU: a folder opened once an hour ago would outrank the folder
- * the user works in every day, and a single detour through some other directory
- * would evict a daily habit. Scoring is instead time-decayed frequency (LFU with
- * aging): every visit adds a point, and accumulated points lose half their value
- * every HALF_LIFE_MS. Frequency is what ranks folders; age is what lets a folder
- * the user has stopped visiting fall away on its own.
- *
- * The decay is never applied by a sweep. Each entry carries the timestamp its
- * score was last computed at, and the score is decayed forward on read or on the
- * next visit — so an app left closed for a month costs nothing and still comes
- * back with correctly aged scores.
+ * Ranked by popularity rather than recency — see stores/popularityScore for the
+ * scoring model shared with the recently-opened files.
  *
  * Only this store may access the `app-frequent-folders` IDB database.
  */
 import { defineStore } from 'pinia'
 import { dbGet, dbSet } from '@/utils/persistence'
 import { folderDisplayName } from '@/utils/filePath'
+import {
+  capByPopularity,
+  decayEntry,
+  pinBudgetExhausted,
+  scoreAfterVisit,
+  sortByPopularity,
+  VISIT_POINTS,
+  type PopularityScored,
+} from '@/stores/popularityScore'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface FrequentFolderEntry {
+export interface FrequentFolderEntry extends PopularityScored {
   /** Absolute folder path. Also the entry's identity. */
   path: string
   /** Display name — the folder's own last segment. */
   name: string
-  /**
-   * Decayed visit points as of `scoredAt`. Not comparable across entries until
-   * both are decayed to a common instant — always rank via `decayedScore`.
-   */
-  score: number
-  /** When `score` was last brought up to date (ms). */
-  scoredAt: number
-  /** Unix timestamp of the most recent visit (ms), for tie-breaking. */
-  lastVisitedAt: number
-  /** Pinned entries sort ahead of the rest and are never evicted by the cap. */
-  pinned?: boolean
 }
 
 const FREQUENT_FOLDERS_DB = 'app-frequent-folders'
 const LIST_KEY = 'list'
 
-/** Points added per visit, before any decay. */
-const VISIT_POINTS = 1
-
-/** Accumulated points lose half their value over this span. */
-const HALF_LIFE_MS = 14 * 24 * 60 * 60 * 1000
-
-/**
- * How many folders are retained. Larger than the four tiles shown so a folder
- * that drops out of view for a while can climb back without starting from zero.
- */
 const FREQUENT_FOLDERS_MAX = 30
 
 /**
@@ -65,71 +44,18 @@ const FREQUENT_FOLDERS_MAX = 30
  */
 const MAX_PINNED = FREQUENT_FOLDERS_MAX - 4
 
-/**
- * Entries below this decayed score are dropped as noise — a folder visited once
- * and never again decays past it in roughly six half-lives. Without a floor the
- * list fills with one-off detours that can never be evicted by the cap because
- * they keep being re-added.
- */
-const MIN_SCORE = 0.02
-
-// ── Scoring ───────────────────────────────────────────────────────────────────
-
-/** The entry's score decayed forward to `now`. */
-function decayedScore(entry: FrequentFolderEntry, now: number): number {
-  const elapsed = now - entry.scoredAt
-  // Clock skew (or a system clock moved back) must not inflate a score.
-  if (elapsed <= 0) return entry.score
-  return entry.score * Math.pow(0.5, elapsed / HALF_LIFE_MS)
-}
-
-/** Rewrites an entry with its score decayed to `now`. */
-function decayEntry(entry: FrequentFolderEntry, now: number): FrequentFolderEntry {
-  return { ...entry, score: decayedScore(entry, now), scoredAt: now }
-}
-
-/**
- * Ranks by decayed score, most popular first. Pins come first regardless of
- * score — a pin means the user asked for the tile, not that it earned the slot.
- * Ties fall back to recency so equal-score folders order predictably.
- */
-function sortByPopularity(list: FrequentFolderEntry[], now: number): FrequentFolderEntry[] {
-  return [...list].sort((a, b) => {
-    const pinDelta = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
-    if (pinDelta !== 0) return pinDelta
-    const scoreDelta = decayedScore(b, now) - decayedScore(a, now)
-    if (scoreDelta !== 0) return scoreDelta
-    return b.lastVisitedAt - a.lastVisitedAt
-  })
-}
-
-/**
- * Drops faded and surplus entries. Pinned entries survive the score floor, and
- * the remaining slots go to the highest-scoring unpinned entries.
- *
- * `protectedPath` is the folder just visited. It keeps its slot regardless of
- * score: a new folder enters at one point and would otherwise be evicted
- * immediately by long-established entries, so it could never accumulate a score
- * and the list would freeze against newcomers — which is exactly the folder the
- * user is working in today.
- */
+/** This store's cap, on the shared popularity rules. */
 function capList(
   list: FrequentFolderEntry[],
   now: number,
   protectedPath?: string,
 ): FrequentFolderEntry[] {
-  const pinned = list.filter((e) => e.pinned).slice(0, MAX_PINNED)
-  const room = Math.max(0, FREQUENT_FOLDERS_MAX - pinned.length)
-  const unpinned = list
-    .filter((e) => !e.pinned && (e.path === protectedPath || decayedScore(e, now) >= MIN_SCORE))
-    .sort((a, b) => {
-      // The protected entry sorts first so the slice below can never drop it.
-      if (a.path === protectedPath) return -1
-      if (b.path === protectedPath) return 1
-      return decayedScore(b, now) - decayedScore(a, now)
-    })
-    .slice(0, room)
-  return [...pinned, ...unpinned]
+  return capByPopularity(list, now, {
+    max: FREQUENT_FOLDERS_MAX,
+    maxPinned: MAX_PINNED,
+    keyOf: (e) => e.path,
+    protectedKey: protectedPath,
+  })
 }
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -199,7 +125,7 @@ export const useFrequentFoldersStore = defineStore('frequentFolders', () => {
             // Recomputed rather than carried forward: the stored name is only as
             // fresh as the visit that created it.
             name: folderDisplayName(folderPath),
-            score: decayedScore(existing, now) + VISIT_POINTS,
+            score: scoreAfterVisit(existing, now),
             lastVisitedAt: now,
           }
         : {
@@ -233,7 +159,7 @@ export const useFrequentFoldersStore = defineStore('frequentFolders', () => {
     if (_cache === null) return []
     const now = Date.now()
     const target = _cache.find((e) => e.path === path)
-    if (target && !target.pinned && _cache.filter((e) => e.pinned).length >= MAX_PINNED) {
+    if (target && !target.pinned && pinBudgetExhausted(_cache, MAX_PINNED)) {
       return sortByPopularity(_cache, now)
     }
     _cache = capList(

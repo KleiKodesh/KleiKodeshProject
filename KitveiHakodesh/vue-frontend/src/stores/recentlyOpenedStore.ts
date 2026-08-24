@@ -1,21 +1,31 @@
 /**
- * Recently opened documents store.
- * Tracks the last 16 documents the user opened across /book-view, /pdf-view,
- * /html-view, and /txt-view. Opening an already-tracked document bumps it to
- * the front (LRU with bump). The list is loaded lazily on first access — no
+ * Opened documents store.
+ * Tracks the documents the user opened across /book-view, /pdf-view,
+ * /html-view, and /txt-view. Opening an already-tracked document adds a visit's
+ * points rather than simply moving it to the front — ranking is by popularity,
+ * not recency; see stores/popularityScore for the model, shared with the
+ * frequently-visited folders. The list is loaded lazily on first access — no
  * boot-time IDB cost.
  *
  * Only this store may access the `app-recently-opened` IDB database.
  */
 import { defineStore } from 'pinia'
 import type { TabRoute } from '@/stores/tabStore'
+import {
+  capByPopularity,
+  pinBudgetExhausted,
+  scoreAfterVisit,
+  sortByPopularity,
+  VISIT_POINTS,
+  type PopularityScored,
+} from '@/stores/popularityScore'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 export type RecentlyOpenedRoute = '/book-view' | '/pdf-view' | '/html-view' | '/txt-view'
 
-export interface RecentlyOpenedEntry {
-  /** Stable unique key used for LRU bump matching. */
+export interface RecentlyOpenedEntry extends PopularityScored {
+  /** Stable unique key; also what a visit is matched on. */
   key: string
   route: RecentlyOpenedRoute
   title: string
@@ -30,10 +40,11 @@ export interface RecentlyOpenedEntry {
   /** Display name; also the only identifier when localFilePath is empty (older entries saved
    *  before local files carried a real path — those can't be re-served, only re-opened). */
   localFileName?: string
-  /** Unix timestamp of last access (ms). */
+  /**
+   * Unix timestamp of last access (ms). Kept under its original name because it
+   * is already persisted; `lastVisitedAt` mirrors it for the shared scoring.
+   */
   lastAccessedAt: number
-  /** Pinned entries sort ahead of the rest and are never evicted by the cap. */
-  pinned?: boolean
   /** True when the /html-view entry is an Otzaria addin (manifest.json detected next to the HTML file). */
   isOtzariaAddin?: boolean
 }
@@ -41,6 +52,13 @@ export interface RecentlyOpenedEntry {
 const RECENTLY_OPENED_DB = 'app-recently-opened'
 const RECENTLY_OPENED_STORE = 'data'
 const RECENTLY_OPENED_MAX = 20
+
+/**
+ * Pins may not fill the whole list. Without this, pinning every slot would leave
+ * no room for a newly opened document to accumulate a score, so it could never
+ * earn a tile however often it was opened.
+ */
+const MAX_PINNED = RECENTLY_OPENED_MAX - 4
 
 // ── IDB setup ─────────────────────────────────────────────────────────────────
 
@@ -127,29 +145,63 @@ function stripFileExtension(title: string): string {
 
 // ── Ordering & cap ──────────────────────────────────────────────────────────────
 
-/** Returns a new list with pinned entries first, each group newest-first. */
+/**
+ * Brings a stored entry up to the current shape.
+ *
+ * Entries written before ranking moved to popularity carry only `lastAccessedAt`.
+ * They are seeded with a single visit's points dated to that access, so an old
+ * list keeps its familiar order on first read (everything scores the same, and
+ * the recency tiebreak decides) and then diverges as the user opens things.
+ */
+function migrateEntry(entry: RecentlyOpenedEntry): RecentlyOpenedEntry {
+  // Number.isFinite, not typeof: NaN is a number, and an entry carrying a NaN
+  // score would early-return here forever — ranking arbitrarily (every NaN
+  // comparison sorts as equal) and then vanishing the moment the list fills.
+  if (
+    Number.isFinite(entry.score) &&
+    Number.isFinite(entry.scoredAt) &&
+    Number.isFinite(entry.lastVisitedAt)
+  ) {
+    return entry
+  }
+  // A missing or unusable timestamp is dated to now rather than to the epoch:
+  // treating an undatable entry as ancient would decay it to nothing and delete
+  // it, which is a harsh reading of "we don't know when this was opened".
+  const accessed =
+    Number.isFinite(entry.lastAccessedAt) && entry.lastAccessedAt > 0
+      ? entry.lastAccessedAt
+      : Date.now()
+  // lastAccessedAt is rewritten too, so a repaired entry can never early-return
+  // above while still carrying the unusable value that sent it here.
+  return {
+    ...entry,
+    lastAccessedAt: accessed,
+    score: VISIT_POINTS,
+    scoredAt: accessed,
+    lastVisitedAt: accessed,
+  }
+}
+
+/** Pinned entries first, then most popular — see stores/popularityScore. */
 function sortPinnedFirst(list: RecentlyOpenedEntry[]): RecentlyOpenedEntry[] {
-  return [...list].sort((a, b) => {
-    const pinDelta = (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0)
-    if (pinDelta !== 0) return pinDelta
-    return b.lastAccessedAt - a.lastAccessedAt
-  })
+  return sortByPopularity(list, Date.now())
 }
 
 /**
- * Trims the list to the cap without ever evicting pinned entries. All pins are
- * kept (even if that exceeds the cap); the remaining slots go to the newest
- * unpinned entries.
+ * This store's cap, on the shared popularity rules.
+ *
+ * Unlike the folders, a document that has gone quiet is kept until the cap
+ * actually needs its slot: this list is one the user curates and pins, and a
+ * document dropped from it has no way back.
  */
-function capList(list: RecentlyOpenedEntry[]): RecentlyOpenedEntry[] {
-  if (list.length <= RECENTLY_OPENED_MAX) return list
-  const pinned = list.filter((e) => e.pinned)
-  const room = Math.max(0, RECENTLY_OPENED_MAX - pinned.length)
-  const keptUnpinned = list
-    .filter((e) => !e.pinned)
-    .sort((a, b) => b.lastAccessedAt - a.lastAccessedAt)
-    .slice(0, room)
-  return [...pinned, ...keptUnpinned]
+function capList(list: RecentlyOpenedEntry[], protectedKey?: string): RecentlyOpenedEntry[] {
+  return capByPopularity(list, Date.now(), {
+    max: RECENTLY_OPENED_MAX,
+    maxPinned: MAX_PINNED,
+    keyOf: (e) => e.key,
+    protectedKey,
+    floorBelowCap: false,
+  })
 }
 
 // ── In-memory cache ───────────────────────────────────────────────────────────
@@ -162,9 +214,9 @@ function ensureLoaded(): Promise<RecentlyOpenedEntry[]> {
   if (_cache !== null) return Promise.resolve(_cache)
   if (_loadPromise) return _loadPromise
   _loadPromise = idbLoadList().then((entries) => {
-    _cache = entries
+    _cache = entries.map(migrateEntry)
     _loadPromise = null
-    return entries
+    return _cache
   })
   return _loadPromise
 }
@@ -208,11 +260,17 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
     const key = deriveKey(route, bookId, localFilePath, localFileHbBookId, localFileName)
     const displayTitle = route === '/book-view' ? title : stripFileExtension(title)
 
+    const now = Date.now()
     const baseEntry: RecentlyOpenedEntry = {
       key,
       route,
       title: displayTitle,
-      lastAccessedAt: Date.now(),
+      lastAccessedAt: now,
+      // Overwritten below for an entry that already exists; these are the values
+      // a document opened for the first time starts from.
+      score: VISIT_POINTS,
+      scoredAt: now,
+      lastVisitedAt: now,
       ...(bookId !== undefined ? { bookId } : {}),
       ...(localFilePath ? { localFilePath } : {}),
       ...(localFileHbBookId ? { localFileHbBookId } : {}),
@@ -221,10 +279,21 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
       ...(isOtzariaAddin ? { isOtzariaAddin: true } : {}),
     }
 
-    // Re-opening a pinned document keeps it pinned (the fresh entry carries no flag).
+    // The fresh entry carries the current metadata (title, path, flags) but none
+    // of the history, so an existing entry's score and pin are carried across —
+    // otherwise every re-open would reset the document to a single visit.
     const bump = (list: RecentlyOpenedEntry[]): RecentlyOpenedEntry[] => {
-      const entry = list.find((e) => e.key === key)?.pinned ? { ...baseEntry, pinned: true } : baseEntry
-      return capList([entry, ...list.filter((e) => e.key !== key)])
+      const existing = list.find((e) => e.key === key)
+      const entry: RecentlyOpenedEntry = existing
+        ? {
+            ...baseEntry,
+            ...(existing.pinned ? { pinned: true } : {}),
+            score: scoreAfterVisit(migrateEntry(existing), now),
+            scoredAt: now,
+            lastVisitedAt: now,
+          }
+        : baseEntry
+      return capList([entry, ...list.filter((e) => e.key !== key)], key)
     }
 
     if (_cache !== null) {
@@ -245,7 +314,15 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
    */
   function togglePin(key: string): RecentlyOpenedEntry[] {
     if (_cache === null) return []
-    _cache = capList(_cache.map((e) => (e.key === key ? { ...e, pinned: !e.pinned } : e)))
+    const target = _cache.find((e) => e.key === key)
+    // Refused rather than silently dropped by the next write — see pinBudgetExhausted.
+    if (target && !target.pinned && pinBudgetExhausted(_cache, MAX_PINNED)) {
+      return sortPinnedFirst(_cache)
+    }
+    _cache = capList(
+      _cache.map((e) => (e.key === key ? { ...e, pinned: !e.pinned } : e)),
+      key,
+    )
     idbSaveList(_cache)
     return sortPinnedFirst(_cache)
   }
@@ -256,6 +333,8 @@ export const useRecentlyOpenedStore = defineStore('recentlyOpened', () => {
    */
   function removeEntry(key: string): RecentlyOpenedEntry[] {
     if (_cache === null) return []
+    // Not re-capped: removing one tile must remove exactly that tile, and a
+    // shrinking list can never breach the cap anyway.
     _cache = _cache.filter((e) => e.key !== key)
     idbSaveList(_cache)
     return sortPinnedFirst(_cache)
