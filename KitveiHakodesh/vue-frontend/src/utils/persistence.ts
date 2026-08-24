@@ -101,6 +101,7 @@ const handles: Record<string, IDBDatabase | null> = {
   'app-search-cache': null,
   'app-dict-cache': null,
   'app-catalog-toc-cache': null,
+  'app-frequent-folders': null,
 }
 
 // In-flight opens, keyed by database name. The handle is only set in `onsuccess`, so two

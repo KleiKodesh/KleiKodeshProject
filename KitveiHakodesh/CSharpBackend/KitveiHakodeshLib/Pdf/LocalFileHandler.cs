@@ -193,7 +193,10 @@ namespace KitveiHakodeshLib.LocalFile
             }));
         }
 
-        public void HandlePickFile(string id, Control owner)
+        /// <summary>Show the open-file dialog. <paramref name="root"/> may carry an optional
+        /// <c>initialDir</c> (the home page's frequent-folder tiles send one); anything else
+        /// leaves the dialog wherever the shell would put it.</summary>
+        public void HandlePickFile(JsonElement root, string id, Control owner)
         {
             owner.BeginInvoke(new Action(async () =>
             {
@@ -203,6 +206,16 @@ namespace KitveiHakodeshLib.LocalFile
                     {
                         dlg.Title  = "פתח קובץ";
                         dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|כל הקבצים (*.*)|*.*";
+                        // A folder that has since been deleted must not sink the pick: the dialog
+                        // silently falls back to its default when InitialDirectory does not exist.
+                        if (root.ValueKind == JsonValueKind.Object
+                            && root.TryGetProperty("initialDir", out var initialDirProp)
+                            && initialDirProp.ValueKind == JsonValueKind.String)
+                        {
+                            string initialDir = initialDirProp.GetString();
+                            if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
+                        }
+
                         if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
 
                         string filePath = dlg.FileName;

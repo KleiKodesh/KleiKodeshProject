@@ -12,7 +12,7 @@ import { useHomeTiles } from './useHomeTiles'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
-const { navigate } = useAppNavigation()
+const { navigate, openFolderPicker } = useAppNavigation()
 
 const innerRef = ref<HTMLElement | null>(null)
 const searchBarRef = ref<HTMLElement | null>(null)
@@ -25,9 +25,13 @@ const { width: containerWidth } = useElementSize(innerRef)
 const {
   tiles,
   gridMaxWidth,
+  visibleFrequentFolderList,
   visibleRecentlyOpenedList,
   totalTileCount,
+  getFolderTileIcon,
   getRecentTileIcon,
+  onTogglePinFolder,
+  onRemoveFolder,
   onTogglePinRecent,
   onRemoveRecent,
 } = useHomeTiles(containerWidth)
@@ -110,6 +114,12 @@ onMounted(focusSearchInput)
 async function onTap(label: string) {
   await navigate(label)
 }
+
+// The tile's own tap event carries whether Ctrl/meta was held, the same modifier
+// every other tile uses to mean "open in a new tab".
+function onFolderTap(entry: { path: string }, newTab: boolean) {
+  openFolderPicker(entry.path, newTab)
+}
 </script>
 
 <template>
@@ -167,6 +177,19 @@ async function onTap(label: string) {
           @keydown="onTileKeydown($event, index)"
         />
         <HomeTile
+          v-for="(entry, index) in visibleFrequentFolderList"
+          :key="entry.path"
+          :label="entry.name"
+          :icon="getFolderTileIcon().icon"
+          :color="getFolderTileIcon().color"
+          :pinned="entry.pinned"
+          actions
+          @tap="onFolderTap(entry, $event)"
+          @keydown="onTileKeydown($event, tiles.length + index)"
+          @toggle-pin="onTogglePinFolder(entry)"
+          @remove="onRemoveFolder(entry)"
+        />
+        <HomeTile
           v-for="(entry, index) in visibleRecentlyOpenedList"
           :key="entry.key"
           :label="entry.title"
@@ -175,7 +198,7 @@ async function onTap(label: string) {
           :pinned="entry.pinned"
           actions
           @tap="navigation.openRecentEntry(entry, $event)"
-          @keydown="onTileKeydown($event, tiles.length + index)"
+          @keydown="onTileKeydown($event, tiles.length + visibleFrequentFolderList.length + index)"
           @toggle-pin="onTogglePinRecent(entry)"
           @remove="onRemoveRecent(entry)"
         />

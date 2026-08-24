@@ -29,8 +29,13 @@ export function useAppNavigation() {
 
   // ── Shared side-effect actions ────────────────────────────────────────────
 
-  async function handleFilePicker(newTab: boolean): Promise<void> {
-    const result = await pickLocalFile(newTab)
+  /**
+   * Opens the file picker. `initialDir` starts it in a specific folder — the home
+   * page's frequent-folder tiles pass one; everything else opens where the shell
+   * would.
+   */
+  async function handleFilePicker(newTab: boolean, initialDir = ''): Promise<void> {
+    const result = await pickLocalFile(newTab, initialDir)
     if (!result) return
     // Navigation is driven by push events in BOTH modes (pane-aware in localFileStore, so
     // the file opens only in the pane that initiated the pick): hosted gets real C# pushes,
@@ -88,5 +93,14 @@ export function useAppNavigation() {
     if (label === 'בחר מסד ספרים' || label === 'בחר מסד נתונים') { handleDbPicker(); return }
   }
 
-  return { navigate, navigateInNewTab }
+  /**
+   * Opens the file dialog already pointed at `folderPath` — the frequent-folder
+   * tiles' action. Ctrl/middle-click opens the chosen file in a new tab, matching
+   * how every other tile treats the modifier.
+   */
+  function openFolderPicker(folderPath: string, newTab = false): Promise<void> {
+    return handleFilePicker(newTab, folderPath)
+  }
+
+  return { navigate, navigateInNewTab, openFolderPicker }
 }

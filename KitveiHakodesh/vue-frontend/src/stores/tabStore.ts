@@ -41,6 +41,8 @@ import {
   hasNativeChromeTabs,
 } from '@/webview-host/bridge'
 import { useRecentlyOpenedStore, TRACKABLE_ROUTES } from './recentlyOpenedStore'
+import { useFrequentFoldersStore } from '@/stores/frequentFoldersStore'
+import { parentFolder } from '@/utils/filePath'
 import type { RecentlyOpenedRoute } from './recentlyOpenedStore'
 import {
   dropUncheckedCommentaryForTab,
@@ -854,6 +856,14 @@ export const useTabStore = defineStore('tabs', () => {
       tab.localFileName,
       tab.isOtzariaAddin,
     )
+
+    // Folder popularity counts only folders the user actually browsed to. A
+    // HebrewBooks download lands in our own cache directory, which the user never
+    // chose and could not usefully reopen, so those are left out.
+    if (tab.localFilePath && !tab.localFileHbBookId) {
+      const folder = parentFolder(tab.localFilePath)
+      if (folder) useFrequentFoldersStore().trackFolderVisit(folder)
+    }
   }
 
   // ── Tab lifecycle ─────────────────────────────────────────────────────────

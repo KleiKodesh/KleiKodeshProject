@@ -138,7 +138,11 @@ public sealed class Dispatcher(
                 // picking a file grants nothing by itself.
                 case "pickLocalFile":
                 {
-                    string? picked = await LocalFiles.NativeFilePicker.PickAsync();
+                    // An initial folder is optional: the home page's frequent-folder tiles send one,
+                    // the plain open-file action sends an empty string.
+                    var pickArgs = MsgPack.De<StringArg>(req.Args);
+                    string? picked = await LocalFiles.NativeFilePicker.PickAsync(
+                        initialDir: pickArgs.Value ?? "");
                     return RpcResponse.Ok(MsgPack.Ser(picked is null
                         ? new PickLocalFileResult { Cancelled = true }
                         : new PickLocalFileResult { Path = picked, FileName = System.IO.Path.GetFileName(picked) }));
