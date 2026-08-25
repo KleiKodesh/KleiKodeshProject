@@ -387,6 +387,52 @@ namespace KitveiHakodesh.Core.SeforimDb
             "SELECT id, lineIndex, content FROM line WHERE bookId = @bookId AND lineIndex = @lineIndex";
 
         /// <summary>Builds "@p0, @p1, …, @pN-1" for a dynamic IN clause.</summary>
+        // ── Full-text search corpus feed (SeforimDbFtsCorpus) ─────────────────────────
+        // The reads the FTS engine's corpus seam is served from. Ports of FtsLib's internal
+        // ZayitDb queries, kept semantically identical so an index built through Core is
+        // byte-for-byte the index the built-in reader would have built.
+
+        internal const string FtsCountLines = "SELECT COUNT(*) FROM line";
+
+        internal const string FtsCountLinesUpTo = "SELECT COUNT(*) FROM line WHERE id <= @id";
+
+        internal const string FtsGetLineContent = "SELECT content FROM line WHERE id = @id";
+
+        /// <summary>Every line ascending, optionally capped — the from-scratch index feed.
+        /// Streamed by the caller; no ORDER BY alternative exists, ascending id IS the contract.</summary>
+        internal static string FtsReadLines(bool hasLimit) => hasLimit
+            ? "SELECT id, content FROM line ORDER BY id LIMIT @lim"
+            : "SELECT id, content FROM line ORDER BY id";
+
+        /// <summary>Lines strictly after @after, ascending — the resume feed. Exclusive bound,
+        /// so the resume point itself is never indexed twice.</summary>
+        internal static string FtsReadLinesAfter(bool hasLimit) => hasLimit
+            ? "SELECT id, content FROM line WHERE id > @after ORDER BY id LIMIT @lim"
+            : "SELECT id, content FROM line WHERE id > @after ORDER BY id";
+
+        /// <summary>One chunk of search-result rows: content + book title in a single JOIN, so
+        /// titles never need a second query. IN-list sized to the chunk.</summary>
+        internal static string FtsFetchLinesWithTitles(int count) =>
+            "SELECT l.id, l.content, b.title" +
+            " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
+            " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
+
+        /// <summary>
+        /// Neighbour lines for one chunk of matched ids: m is the matched line, n every line in
+        /// the SAME BOOK within ±@radius rows by lineIndex, excluding m itself. Returns the
+        /// matched id, the signed delta, and the neighbour's content — the caller buckets by the
+        /// delta's sign and joins each side in document order. One self-join per chunk, so a
+        /// whole batch of short matches costs one round-trip, and the bookId bound keeps a
+        /// snippet from ever bleeding across a book boundary.
+        /// </summary>
+        internal static string FtsFetchNeighborLines(int count) =>
+            "SELECT m.id, n.lineIndex - m.lineIndex AS delta, n.content" +
+            " FROM line m JOIN line n" +
+            " ON n.bookId = m.bookId" +
+            " AND n.lineIndex BETWEEN m.lineIndex - @radius AND m.lineIndex + @radius" +
+            " AND n.lineIndex <> m.lineIndex" +
+            " WHERE m.id IN (" + InPlaceholders("p", count) + ")";
+
         internal static string InPlaceholders(string prefix, int count)
         {
             var sb = new System.Text.StringBuilder();

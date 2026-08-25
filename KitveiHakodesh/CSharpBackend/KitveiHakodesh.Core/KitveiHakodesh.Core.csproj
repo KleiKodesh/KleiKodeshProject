@@ -85,6 +85,17 @@
     <Compile Remove="Common/WordExporter.cs" />
   </ItemGroup>
 
+  <!-- The FTS engine, one leg each. Same namespace and assembly name (FtsLib) on both, so
+       Core's code is identical across legs; only the project providing it differs. Core feeds
+       it through IFtsCorpus (SeforimDbFtsCorpus) — the engine's built-in corpus reader is not
+       used from here. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <ProjectReference Include="..\FtsLib-Csharp\FtsLib.Net48\FtsLib.Net48.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
+  </ItemGroup>
+
   <!-- The GitHub releases API is JSON — somebody else's wire format, which rule 0e does not
        ask us to pretend is MessagePack. net48 has no System.Text.Json in the framework; the
        modern leg has it built in, and both use the SOURCE GENERATOR (GithubJsonContext) so the
