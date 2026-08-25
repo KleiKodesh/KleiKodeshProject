@@ -28,6 +28,9 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
     <!-- net48 lands in bin\<cfg>\net48\, net10.0-windows in bin\<cfg>\net10.0-windows\. -->
     <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
+    <!-- DbFileFingerprint reads NTFS ChangeTime and the per-file USN through two kernel32
+         calls that take raw pointers. It is the only unsafe code here. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <!-- Explicit, platform-suffixed output paths. The SDK default (bin\<Platform>\<Configuration>\)
