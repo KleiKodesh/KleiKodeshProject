@@ -1293,6 +1293,35 @@ further and this reconciliation gets harder.
 the merge faces 48 files with no provider difference rather than 55 with one.
 
 ### Slice 5 — Full-text search
+
+**STATUS 2026-08-25 — Core's half is WRITTEN (gradual-seam edition).** `SeforimDbFullTextSearch/`
+now holds five files, all compiled against the seam rather than the full inversion:
+
+| File | What it is |
+|---|---|
+| `SeforimDbFtsCorpus` | `IFtsCorpus` over seforim.db — Core feeds the engine; SQL in `SeforimDbSqlStrings` |
+| `SeforimDbFtsIndexer` | provenance (fts.src at start / fts.ver at completion, `SeforimDbContentFingerprint` + `IndexFormatVersion`), Prepare (stale-wipe / keep-legacy-completed), resumable Build with write-lock retry, IsIndexStale, Wipe |
+| `SeforimDbFtsSearcher` | batches of finished `FtsHit`s: parallel snippets, word-distance filter, short-snippet embellishment (radius 2), toc/bookId enrichment via `SeforimDbQueries`. NO cap parameter at all — a transport that must stop early stops consuming the lazy batches |
+| `SeforimDbFtsRelatedFormExpander` | the expansion rewrite; `SEARCH_EXPANSION_DB` env DELETED, artifact found by probing; culture-sensitive `StartsWith("%")` fixed to Ordinal on the way |
+| `SeforimDbFtsModels` | `FtsHit` + `FtsIndexStatus` (wire types, names preserved); the Ready/Done/Error envelopes stay with each transport |
+
+Both indexer and searcher take the `SeforimIndex` AS A PARAMETER — the orchestrator owns the
+one engine instance that serves builds and searches concurrently. That sharing is safe here,
+unlike the catalog: the concurrency machinery (SegmentStore, SearchLease, IndexWriteLock) lives
+INSIDE FtsLib, not in the classes being split.
+
+Two deliberate hardenings over the Service original, both per rule 4: `Prepare` THROWS on a
+failed stale-wipe instead of logging and building over unverifiable state (that path IS the
+poisoned-resume incident), and the fts.src write is not swallowed. `Build` also does not flip
+any ready flag — segments-exist polling and status state are the orchestrator's.
+
+(Two names below — `SeforimDbFtsSnippetRenderer`, `SeforimDbFtsBatchingPolicy` — were the
+full-inversion spec and were never created; the embellish pass and the batch size live in the
+searcher, which is their only caller. Rule 11's test, not a contradiction of it.)
+
+**Still open in this slice: the WIRING** — Lib and the Service adopting these five (and the
+transports keeping their envelopes/streaming). That is app migration, which waits for the word.
+
 Slice 4b already moved the generic engine state into FtsLib and the seforim facade into Core.
 **This slice is much smaller than first scoped.** Verified against the real call sites: these
 three Lib files are thin orchestration over `SeforimIndex`, so once that is in Core, most of
