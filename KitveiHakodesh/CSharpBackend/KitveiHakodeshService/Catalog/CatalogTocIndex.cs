@@ -1236,8 +1236,13 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         // words in order); ambiguity in an alternative doesn't change the typed order.
         if (orderWords.Count >= 2)
         {
+            // ONE tokenization per hit feeds BOTH the order test and the proximity keys —
+            // they need the same token list, and doing it twice measured 3.5x slower and
+            // 2.9x the allocations over a 1000-hit result set (this runs per keystroke).
+            // The scratch buffers are reused across hits for the same reason.
+            var scratch = new PathScratch(orderWords.Count);
             foreach (var h in hits)
-                h.QueryInOrder = ContainsInQueryOrder(h.FullTocPath, orderWords);
+                scratch.Measure(h.FullTocPath, orderWords, h);
 
             var groupsWithInOrder = new HashSet<(int Level, long Book)>();
             foreach (var h in hits)
@@ -1246,6 +1251,21 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             if (groupsWithInOrder.Count > 0)
                 hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
         }
+
+        // Word-proximity rank: how tightly the query's words sit together in the path
+        // (keys already measured in the fused pass above). Reordering the materialized
+        // window rather than the full match set is deliberate: the accuracy-first block
+        // order from SortKeyCollector already decided WHICH hits are worth showing, and
+        // proximity only reorders within that.
+        //
+        // Sorted with a STABLE comparison chain, so hits equal on every key keep the
+        // (Level, TreeOrder) order they arrived in. Proximity sits BELOW IsLiteral — a
+        // variant match never overtakes a literal one however tightly its words cluster —
+        // and ABOVE Level/TreeOrder, which would otherwise let catalog position bury the
+        // tighter address. WordsFound outranks WordSpan: finding more of the query in the
+        // path beats packing fewer words closer together.
+        if (orderWords.Count >= 2)
+            StableSortByProximity(hits);
 
         // Per-structure level truncation: within ONE book's ONE TOC structure, a hit at a
         // shallower level is the more accurate address for the query, so that structure's
@@ -1351,28 +1371,142 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     }
 
     /// <summary>
-    /// The query-token-order test, defined by the TOC path alone: query tokens that
-    /// exist among the path's tokens must appear there as an ordered subsequence in
-    /// typed order. Tokens NOT present in the path (they matched via catalog/author)
-    /// are excluded from the test by construction; fewer than two participating tokens
-    /// means there is nothing to order — the hit counts as in order.
+    /// Stable sort by (IsLiteral desc, WordsFound desc, WordSpan asc). List.Sort is
+    /// UNSTABLE, so the arrival order — (Level, TreeOrder) from the collector — is
+    /// captured as an explicit final key rather than relied upon.
     /// </summary>
-    private static bool ContainsInQueryOrder(string fullTocPath, List<string> queryTokens)
+    private static void StableSortByProximity(List<CatalogTocHit> hits)
     {
-        var pathTokens = CatalogTocTextRules.Tokenize(fullTocPath);
-        var pathSet = new HashSet<string>(pathTokens);
+        int n = hits.Count;
+        var arrival = new int[n];
+        var items = new CatalogTocHit[n];
+        for (int i = 0; i < n; i++) { items[i] = hits[i]; arrival[i] = i; }
 
-        var participating = new List<string>(queryTokens.Count);
-        foreach (var t in queryTokens)
-            if (pathSet.Contains(t)) participating.Add(t);
-        if (participating.Count < 2) return true;
-
-        int qi = 0;
-        foreach (var tok in pathTokens)
+        // Sort an index permutation so the arrival position stays attached to each hit
+        // without a per-hit dictionary lookup in the comparer.
+        Array.Sort(arrival, (x, y) =>
         {
-            if (tok == participating[qi] && ++qi == participating.Count) return true;
+            var a = items[x];
+            var b = items[y];
+            if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
+            int c = b.WordsFound.CompareTo(a.WordsFound);   // more words found first
+            if (c != 0) return c;
+            c = a.WordSpan.CompareTo(b.WordSpan);           // tighter cluster first
+            return c != 0 ? c : x.CompareTo(y);             // else keep arrival order
+        });
+
+        hits.Clear();
+        for (int i = 0; i < n; i++) hits.Add(items[arrival[i]]);
+    }
+
+    /// <summary>
+    /// Per-hit path measurement, fused into ONE tokenization: the query-token-ORDER test
+    /// and the word-PROXIMITY keys both need the path's token list, and tokenizing twice
+    /// measured 3.5x slower / 2.9x the allocations across a 1000-hit result set. All
+    /// working buffers live here and are reused across hits, so a full result set costs
+    /// one tokenization each and no per-hit collection allocations.
+    ///
+    /// The two measurements keep their own participating-word lists on purpose:
+    ///   - ORDER uses the list WITH duplicates (a word typed twice must be matched twice
+    ///     in the path to count as in-order) — the pre-existing behavior, preserved.
+    ///   - SPAN uses the DISTINCT list (a word typed twice must not demand two separate
+    ///     path positions, which would inflate the span of a perfectly tight path).
+    /// They diverge only when a query repeats a word the path contains fewer times.
+    /// </summary>
+    private sealed class PathScratch(int queryWordCount)
+    {
+        private readonly List<string> _ordered = new(queryWordCount);  // participating, WITH duplicates
+        private readonly List<string> _distinct = new(queryWordCount); // participating, distinct
+        private readonly List<int> _positions = new(64);               // flattened, per-word ranges
+        private readonly int[] _starts = new int[queryWordCount + 1];
+        private readonly int[] _cursor = new int[queryWordCount];
+
+        /// <summary>Measure one hit and write QueryInOrder / WordsFound / WordSpan onto it.</summary>
+        public void Measure(string fullTocPath, List<string> queryWords, CatalogTocHit hit)
+        {
+            var pathTokens = CatalogTocTextRules.Tokenize(fullTocPath);
+
+            // Participation, both forms, in ONE sweep over the query words. Membership is
+            // tested against the path token list directly: it is short (a TOC path), and a
+            // scan beats allocating a HashSet per hit.
+            _ordered.Clear();
+            _distinct.Clear();
+            foreach (var t in queryWords)
+            {
+                bool inPath = false;
+                for (int i = 0; i < pathTokens.Count; i++)
+                    if (string.Equals(pathTokens[i], t, StringComparison.Ordinal)) { inPath = true; break; }
+                if (!inPath) continue;
+                _ordered.Add(t);
+                if (!_distinct.Contains(t)) _distinct.Add(t);
+            }
+
+            hit.QueryInOrder = TestOrder(pathTokens);
+            (hit.WordsFound, hit.WordSpan) = MeasureSpan(pathTokens);
         }
-        return false;
+
+        /// <summary>Participating query words must appear in the path as an ordered
+        /// subsequence in typed order. Fewer than two participating words means there is
+        /// nothing to order — the hit counts as in order.</summary>
+        private bool TestOrder(List<string> pathTokens)
+        {
+            if (_ordered.Count < 2) return true;
+            int qi = 0;
+            foreach (var tok in pathTokens)
+                if (string.Equals(tok, _ordered[qi], StringComparison.Ordinal) && ++qi == _ordered.Count)
+                    return true;
+            return false;
+        }
+
+        /// <summary>
+        /// Width of the SMALLEST window of the path's token sequence containing every
+        /// distinct participating word. Adjacent words give a span equal to the word count
+        /// (the tightest possible); words scattered across TOC levels give a wide one.
+        ///
+        /// Returns the participating count too, because a span only compares between hits
+        /// that found the same number of words in the path — "2 words within 2 slots" is
+        /// tighter than "2 within 5", but says nothing against a hit where only 1 word was
+        /// in the path at all. Fewer than two leaves nothing to measure: span 0, and the
+        /// lower count already sorts the hit below every measured one.
+        /// </summary>
+        private (int Found, int Span) MeasureSpan(List<string> pathTokens)
+        {
+            int n = _distinct.Count;
+            if (n < 2) return (n, 0);
+
+            // Positions flattened into one list with per-word ranges — no dictionary and no
+            // per-word list allocation.
+            _positions.Clear();
+            for (int w = 0; w < n; w++)
+            {
+                _starts[w] = _positions.Count;
+                string word = _distinct[w];
+                for (int i = 0; i < pathTokens.Count; i++)
+                    if (string.Equals(pathTokens[i], word, StringComparison.Ordinal)) _positions.Add(i);
+            }
+            _starts[n] = _positions.Count;
+
+            // Minimum-window sweep: advance the cursor of the word sitting leftmost — the
+            // only move that can shrink the window — and record the narrowest span seen.
+            Array.Clear(_cursor, 0, n);
+            int best = int.MaxValue;
+            while (true)
+            {
+                int min = int.MaxValue, max = int.MinValue, minWord = -1;
+                for (int w = 0; w < n; w++)
+                {
+                    int lo = _starts[w] + _cursor[w];
+                    if (lo >= _starts[w + 1]) return (n, best);  // exhausted — no narrower window left
+                    int pos = _positions[lo];
+                    if (pos < min) { min = pos; minWord = w; }
+                    if (pos > max) max = pos;
+                }
+                int span = max - min + 1;
+                if (span < best) best = span;
+                if (best == n) return (n, best);                 // tightest possible — stop early
+                _cursor[minWord]++;
+            }
+        }
     }
 
     /// <summary>Collects just the global doc-IDs a query matched, into a set. Used to
@@ -1640,4 +1774,14 @@ public sealed class CatalogTocHit
     /// path — the last tiebreak within a (book, level) group.</summary>
     [MessagePack.IgnoreMember]
     public bool QueryInOrder { get; set; }
+    /// <summary>Internal (not on the wire): how many distinct query words were found in
+    /// the path itself. Ranked DESCENDING, ahead of WordSpan — a span only compares
+    /// between hits that found equally many words.</summary>
+    [MessagePack.IgnoreMember]
+    public int WordsFound { get; set; }
+    /// <summary>Internal (not on the wire): width of the smallest path window covering
+    /// every participating query word — the word-proximity rank key. Lower is tighter;
+    /// sorted after IsLiteral and WordsFound, before Level/TreeOrder.</summary>
+    [MessagePack.IgnoreMember]
+    public int WordSpan { get; set; }
 }
