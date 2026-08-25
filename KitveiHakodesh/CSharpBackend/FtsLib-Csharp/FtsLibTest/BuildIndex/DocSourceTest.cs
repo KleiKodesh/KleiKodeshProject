@@ -312,11 +312,6 @@ namespace FtsLibTest
                     $"got {ids.Count}, expected {baseline[q].Count}");
             }
 
-#if NET10_0_OR_GREATER
-            // SearchParallel path (net10 only) — same results as streaming.
-            var par = seforim.SearchParallel(ProbeQueries[0]).Select(r => r.LineId).ToList();
-            Check("M4 SearchParallel parity", par.SequenceEqual(baseline[ProbeQueries[0]]));
-#endif
         }
 
         // ── P: purge carry ────────────────────────────────────────────

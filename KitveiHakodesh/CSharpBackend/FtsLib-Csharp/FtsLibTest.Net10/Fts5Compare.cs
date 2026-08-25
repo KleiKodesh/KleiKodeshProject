@@ -109,6 +109,52 @@ namespace FtsLibTest
             Console.WriteLine($"FINAL size: {finalSize:N0} bytes ({finalSize / 1024.0 / 1024:F1} MB) after vacuum ({sw4.Elapsed.TotalSeconds:F1}s)");
         }
 
+        /// <summary>
+        /// Adds a second FTS5 table over the SAME already-built content_bare column
+        /// (from <see cref="Build"/>), using the 'trigram' tokenizer instead of the
+        /// word tokenizer — the config SQLite needs to accelerate LIKE/GLOB substring
+        /// matching (infix/suffix wildcards bare word-based FTS5 can't do). Measures
+        /// the size BEFORE and AFTER, so the delta is the trigram index's own cost,
+        /// isolated from the word index it sits alongside.
+        /// detail=full (not none) because substring matching needs position data to
+        /// confirm a run of trigrams is actually contiguous, not just co-occurring.
+        /// </summary>
+        public static void BuildTrigram(string outDbPath)
+        {
+            long before = new FileInfo(outDbPath).Length;
+            Console.WriteLine($"size before adding trigram index: {before / 1024.0 / 1024:F1} MB");
+
+            using var conn = new SqliteConnection($"Data Source={outDbPath}");
+            conn.Open();
+            Exec(conn, "CREATE VIRTUAL TABLE line_trigram USING fts5(content_bare, content='line_search', content_rowid='lineId', tokenize='trigram')");
+
+            var sw = Stopwatch.StartNew();
+            Exec(conn, "INSERT INTO line_trigram(rowid, content_bare) SELECT lineId, content_bare FROM line_search");
+            Console.WriteLine($"trigram table populated in {sw.Elapsed.TotalSeconds:F1}s");
+
+            var sw2 = Stopwatch.StartNew();
+            Exec(conn, "INSERT INTO line_trigram(line_trigram) VALUES('optimize')");
+            Console.WriteLine($"optimized in {sw2.Elapsed.TotalSeconds:F1}s");
+
+            conn.Close();
+            SqliteConnection.ClearAllPools();
+
+            long preVacuum = new FileInfo(outDbPath).Length;
+            Console.WriteLine($"pre-vacuum size: {preVacuum / 1024.0 / 1024:F1} MB");
+
+            var sw3 = Stopwatch.StartNew();
+            using (var vconn = new SqliteConnection($"Data Source={outDbPath}"))
+            {
+                vconn.Open();
+                Exec(vconn, "VACUUM");
+            }
+            SqliteConnection.ClearAllPools();
+
+            long after = new FileInfo(outDbPath).Length;
+            Console.WriteLine($"size after adding trigram index (post-vacuum): {after / 1024.0 / 1024:F1} MB ({sw3.Elapsed.TotalSeconds:F1}s vacuum)");
+            Console.WriteLine($"TRIGRAM INDEX COST: {(after - before) / 1024.0 / 1024:F1} MB added ({(double)(after - before) / before:P1} of the word-index-only size)");
+        }
+
         public static void Query(string outDbPath, string[] queries)
         {
             using var conn = new SqliteConnection($"Data Source={outDbPath};Mode=ReadOnly");

@@ -20,7 +20,6 @@ namespace FtsLibTest
             {
                 case "bench":             BenchTest.Run(args); return;
                 case "embellishbench":    EmbellishBenchTest.Run(args); return;
-                case "fetchbench":        FetchBenchTest.Run(args); return;
                 case "forcemergebug":     ForceMergeBugTest.Run(args); return;
                 case "build":             BuildTest.Run(args); return;
                 case "buildfresh":        BuildFreshTest.Run(args); return;
@@ -161,6 +160,21 @@ namespace FtsLibTest
                         return;
                     }
                     Fts5Compare.Query(args[1], args[2..]);
+                    return;
+                }
+
+                case "fts5trigramat":
+                {
+                    // Adds a trigram-tokenized FTS5 table alongside the word-based one
+                    // built by fts5buildat, over the same outDbPath — measures how much
+                    // extra disk the trigram index costs on top of the word index.
+                    // Usage: fts5trigramat <outDbPath>
+                    if (args.Length < 2)
+                    {
+                        Console.WriteLine("Usage: fts5trigramat <outDbPath>  (run fts5buildat on it first)");
+                        return;
+                    }
+                    Fts5Compare.BuildTrigram(args[1]);
                     return;
                 }
 
