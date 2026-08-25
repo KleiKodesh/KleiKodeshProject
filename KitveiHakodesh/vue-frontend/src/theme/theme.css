@@ -30,8 +30,9 @@
   --status-danger: #e53e3e;
   --diacritics-1: #e07800;
   --diacritics-2: #e03e00;
-  --header-font: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-  --text-font: 'Times New Roman', Times, serif;
+  --header-font: 'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif;
+  --text-font: 'Frank Ruhl Libre', FrankRuehl, serif;
+  --teamim-text-font: 'Taamey Frank CLM', David, serif;
 }
 
 :root.dark {

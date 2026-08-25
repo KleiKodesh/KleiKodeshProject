@@ -413,6 +413,7 @@ watch(() => props.loading || isPositioning.value, (busy) => {
 const booksDataStore = useBooksDataStore()
 const {
   wordLinkTooltip,
+  closeWordLinkTooltip,
   keepOpen: keepWordLinkTooltipOpen,
   releaseOpen: releaseWordLinkTooltip,
   beginSelection: beginWordLinkTooltipSelection,
@@ -454,6 +455,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
       @pointer-enter="keepWordLinkTooltipOpen"
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
+      @close="closeWordLinkTooltip"
     />
     <WordLinkTooltip
       v-if="noteTooltip"
@@ -684,6 +686,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
   margin-inline: auto;
   font-family: var(--commentary-text-font);
   font-size: var(--commentary-font-size, 100%);
+  font-weight: var(--commentary-font-weight, 400);
   line-height: var(--commentary-line-height, 1.7);
   color: var(--text-primary);
   text-align: justify;
@@ -711,6 +714,8 @@ html[data-fixed-line-height='true'] .line :deep(.user-note-marker),
 html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   line-height: 1;
 }
+/* Headings stay heavier than the body at every slider stop — see the matching rule
+   in BookViewLinesContent.vue for why this is 800 and not bold. */
 .line :deep(h1),
 .line :deep(h2),
 .line :deep(h3),
@@ -718,6 +723,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line :deep(h5),
 .line :deep(h6) {
   font-family: var(--commentary-header-font);
+  font-weight: 800;
 }
 .line-no-text {
   color: var(--text-secondary);

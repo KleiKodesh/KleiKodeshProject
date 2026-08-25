@@ -14,7 +14,9 @@ const KEYS = {
   // Book text display
   SETTINGS_HEADER_FONT: 'text.headerFont',
   SETTINGS_TEXT_FONT: 'text.textFont',
+  SETTINGS_TEAMIM_TEXT_FONT: 'text.teamimTextFont',
   SETTINGS_FONT_SIZE: 'text.fontSize',
+  SETTINGS_FONT_WEIGHT: 'text.fontWeight',
   SETTINGS_LINE_PADDING: 'text.linePadding',
   SETTINGS_FIXED_LINE_HEIGHT: 'text.fixedLineHeight',
   SETTINGS_LINES_CONTENT_MAX_WIDTH: 'text.maxWidth',
@@ -25,6 +27,7 @@ const KEYS = {
   SETTINGS_COMMENTARY_HEADER_FONT: 'commentary.headerFont',
   SETTINGS_COMMENTARY_TEXT_FONT: 'commentary.textFont',
   SETTINGS_COMMENTARY_FONT_SIZE: 'commentary.fontSize',
+  SETTINGS_COMMENTARY_FONT_WEIGHT: 'commentary.fontWeight',
   SETTINGS_COMMENTARY_LINE_PADDING: 'commentary.linePadding',
   SETTINGS_COMMENTARY_MAX_WIDTH: 'commentary.maxWidth',
   SETTINGS_SEPARATE_COMMENTARY: 'commentary.useSeparateSettings',
@@ -105,20 +108,35 @@ const DEFAULTS = {
   otherNamesSelected: DEFAULT_OTHER_NAMES_SELECTED,
   diacriticsState: 0,
   hiddenWordLinkMarkerBookIds: [] as number[],
-  headerFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
-  textFont: "'Times New Roman', Times, serif",
-  fontSize: 105,
+  // Bundled, so headings match across machines; the Segoe faces are Windows-only and
+  // now trail as fallbacks for a build with the font files stripped.
+  headerFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
+  // Bundled, so this resolves on every machine; OS FrankRuehl only if the file is missing.
+  textFont: "'Frank Ruhl Libre', FrankRuehl, serif",
+  // Body font for books whose text carries cantillation marks (the hasTeamim
+  // column). Not every Hebrew face draws te'amim legibly, so those books get
+  // their own family while sharing the main size and line spacing.
+  // Taamey Frank CLM is BUNDLED (public/fonts/) and is the only face here that carries
+  // the cantillation marks, so it always resolves. David follows as the Windows-bundled
+  // fallback for a build with the font files stripped. Frank Ruhl Libre is deliberately
+  // NOT in this chain: its cmap has zero glyphs in U+0591-05AF, so it cannot draw te'amim.
+  teamimTextFont: "'Taamey Frank CLM', David, serif",
+  fontSize: 120,
+  // 400 = CSS `normal`. All three bundled fonts are variable, so any value on the
+  // slider is a real weight rather than the browser faking one from two static faces.
+  fontWeight: 400,
   linePadding: 1.6,
   // Off by default: with an absolute line box, a word larger than the body text
   // overlaps the neighbouring row instead of pushing it apart. That trade — even
   // spacing at the cost of a possible overlap — is the user's to opt into.
   fixedLineHeight: false,
-  commentaryHeaderFont: "'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif",
-  commentaryTextFont: "'Times New Roman', Times, serif",
+  commentaryHeaderFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
+  commentaryTextFont: "'Frank Ruhl Libre', FrankRuehl, serif",
   // Tracks fontSize: while useSeparateCommentarySettings is off the commentary mirrors the
   // main text, so a different default here would visibly shrink the commentary the moment
   // the user first turns separate settings ON, with no action of their own.
-  commentaryFontSize: 105,
+  commentaryFontSize: 120,
+  commentaryFontWeight: 400,
   commentaryLinePadding: 1.6,
   useSeparateCommentarySettings: false,
   appZoom: 1.0,
@@ -192,6 +210,24 @@ function clearPersistedSettings(): void {
   }
 }
 
+/**
+ * First family of a font-stack default, e.g. "'Frank Ruhl Libre', FrankRuehl, serif"
+ * → "Frank Ruhl Libre". The font picker badges a row by bare family name, while the
+ * defaults are full fallback chains — this is the one place that bridges the two, so
+ * the badge cannot drift from the default it claims to mark.
+ */
+function firstFamily(stack: string): string {
+  // Takes the FIRST entry whatever its quoting — matching on the first quoted name
+  // instead would skip past an unquoted leader and badge the wrong row.
+  const first = stack.split(',')[0]!.trim()
+  return first.replace(/^['"]|['"]$/g, '')
+}
+
+/** Default families the font pickers badge — one per picker. */
+export const DEFAULT_HEADER_FONT_FAMILY = firstFamily(DEFAULTS.headerFont)
+export const DEFAULT_TEXT_FONT_FAMILY = firstFamily(DEFAULTS.textFont)
+export const DEFAULT_TEAMIM_FONT_FAMILY = firstFamily(DEFAULTS.teamimTextFont)
+
 export const useSettingsStore = defineStore('settings', () => {
   const divineNameMode = ref<DivineNameMode>(DEFAULTS.divineNameMode)
   const elokimMode = ref<ElokimMode>(DEFAULTS.elokimMode)
@@ -200,12 +236,15 @@ export const useSettingsStore = defineStore('settings', () => {
   const hiddenWordLinkMarkerBookIds = ref<number[]>([...DEFAULTS.hiddenWordLinkMarkerBookIds])
   const headerFont = ref(DEFAULTS.headerFont)
   const textFont = ref(DEFAULTS.textFont)
+  const teamimTextFont = ref(DEFAULTS.teamimTextFont)
   const fontSize = ref(DEFAULTS.fontSize)
+  const fontWeight = ref(DEFAULTS.fontWeight)
   const linePadding = ref(DEFAULTS.linePadding)
   const fixedLineHeight = ref(DEFAULTS.fixedLineHeight)
   const commentaryHeaderFont = ref(DEFAULTS.commentaryHeaderFont)
   const commentaryTextFont = ref(DEFAULTS.commentaryTextFont)
   const commentaryFontSize = ref(DEFAULTS.commentaryFontSize)
+  const commentaryFontWeight = ref(DEFAULTS.commentaryFontWeight)
   const commentaryLinePadding = ref(DEFAULTS.commentaryLinePadding)
   const useSeparateCommentarySettings = ref(DEFAULTS.useSeparateCommentarySettings)
   const appZoom = ref(DEFAULTS.appZoom)
@@ -274,7 +313,9 @@ export const useSettingsStore = defineStore('settings', () => {
     const style = document.documentElement.style
     style.setProperty('--header-font', headerFont.value)
     style.setProperty('--text-font', textFont.value)
+    style.setProperty('--teamim-text-font', teamimTextFont.value)
     style.setProperty('--font-size', `${fontSize.value}%`)
+    style.setProperty('--font-weight', fontWeight.value.toString())
     style.setProperty('--line-height', linePadding.value.toString())
     // Exact line spacing: the reading views resolve --line-height against their own
     // font-size once (an absolute length) instead of letting every inline element
@@ -298,10 +339,12 @@ export const useSettingsStore = defineStore('settings', () => {
     const effectiveCommentaryHeaderFont = useSeparateCommentarySettings.value ? commentaryHeaderFont.value : headerFont.value
     const effectiveCommentaryTextFont = useSeparateCommentarySettings.value ? commentaryTextFont.value : textFont.value
     const effectiveCommentaryFontSize = useSeparateCommentarySettings.value ? commentaryFontSize.value : fontSize.value
+    const effectiveCommentaryFontWeight = useSeparateCommentarySettings.value ? commentaryFontWeight.value : fontWeight.value
     const effectiveCommentaryLinePadding = useSeparateCommentarySettings.value ? commentaryLinePadding.value : linePadding.value
     style.setProperty('--commentary-header-font', effectiveCommentaryHeaderFont)
     style.setProperty('--commentary-text-font', effectiveCommentaryTextFont)
     style.setProperty('--commentary-font-size', `${effectiveCommentaryFontSize}%`)
+    style.setProperty('--commentary-font-weight', effectiveCommentaryFontWeight.toString())
     style.setProperty('--commentary-line-height', effectiveCommentaryLinePadding.toString())
     style.setProperty('--lines-content-max-width', linesContentMaxWidth.value > 0 ? `${linesContentMaxWidth.value}px` : 'none')
     const effectiveCommentaryMaxWidth = useSeparateCommentarySettings.value ? commentaryMaxWidth.value : linesContentMaxWidth.value
@@ -326,12 +369,15 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, hiddenWordLinkMarkerBookIds)
     loadSetting(KEYS.SETTINGS_HEADER_FONT, headerFont)
     loadSetting(KEYS.SETTINGS_TEXT_FONT, textFont)
+    loadSetting(KEYS.SETTINGS_TEAMIM_TEXT_FONT, teamimTextFont)
     loadSetting(KEYS.SETTINGS_FONT_SIZE, fontSize)
+    loadSetting(KEYS.SETTINGS_FONT_WEIGHT, fontWeight)
     loadSetting(KEYS.SETTINGS_LINE_PADDING, linePadding)
     loadSetting(KEYS.SETTINGS_FIXED_LINE_HEIGHT, fixedLineHeight)
     loadSetting(KEYS.SETTINGS_COMMENTARY_HEADER_FONT, commentaryHeaderFont)
     loadSetting(KEYS.SETTINGS_COMMENTARY_TEXT_FONT, commentaryTextFont)
     loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, commentaryFontSize)
+    loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_WEIGHT, commentaryFontWeight)
     loadSetting(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, commentaryLinePadding)
     loadSetting(KEYS.SETTINGS_SEPARATE_COMMENTARY, useSeparateCommentarySettings)
     loadSetting(KEYS.SETTINGS_APP_ZOOM, appZoom)
@@ -410,12 +456,15 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(hiddenWordLinkMarkerBookIds, KEYS.SETTINGS_HIDDEN_WORD_LINK_MARKERS, applyCSSVariables)
   persistSetting(headerFont, KEYS.SETTINGS_HEADER_FONT, applyCSSVariables)
   persistSetting(textFont, KEYS.SETTINGS_TEXT_FONT, applyCSSVariables)
+  persistSetting(teamimTextFont, KEYS.SETTINGS_TEAMIM_TEXT_FONT, applyCSSVariables)
   persistSetting(fontSize, KEYS.SETTINGS_FONT_SIZE, applyCSSVariables)
+  persistSetting(fontWeight, KEYS.SETTINGS_FONT_WEIGHT, applyCSSVariables)
   persistSetting(linePadding, KEYS.SETTINGS_LINE_PADDING, applyCSSVariables)
   persistSetting(fixedLineHeight, KEYS.SETTINGS_FIXED_LINE_HEIGHT, applyCSSVariables)
   persistSetting(commentaryHeaderFont, KEYS.SETTINGS_COMMENTARY_HEADER_FONT, applyCSSVariables)
   persistSetting(commentaryTextFont, KEYS.SETTINGS_COMMENTARY_TEXT_FONT, applyCSSVariables)
   persistSetting(commentaryFontSize, KEYS.SETTINGS_COMMENTARY_FONT_SIZE, applyCSSVariables)
+  persistSetting(commentaryFontWeight, KEYS.SETTINGS_COMMENTARY_FONT_WEIGHT, applyCSSVariables)
   persistSetting(commentaryLinePadding, KEYS.SETTINGS_COMMENTARY_LINE_PADDING, applyCSSVariables)
   persistSetting(useSeparateCommentarySettings, KEYS.SETTINGS_SEPARATE_COMMENTARY, applyCSSVariables)
   persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
@@ -556,12 +605,15 @@ export const useSettingsStore = defineStore('settings', () => {
     hiddenWordLinkMarkerBookIds.value = [...DEFAULTS.hiddenWordLinkMarkerBookIds]
     headerFont.value = DEFAULTS.headerFont
     textFont.value = DEFAULTS.textFont
+    teamimTextFont.value = DEFAULTS.teamimTextFont
     fontSize.value = DEFAULTS.fontSize
+    fontWeight.value = DEFAULTS.fontWeight
     linePadding.value = DEFAULTS.linePadding
     fixedLineHeight.value = DEFAULTS.fixedLineHeight
     commentaryHeaderFont.value = DEFAULTS.commentaryHeaderFont
     commentaryTextFont.value = DEFAULTS.commentaryTextFont
     commentaryFontSize.value = DEFAULTS.commentaryFontSize
+    commentaryFontWeight.value = DEFAULTS.commentaryFontWeight
     commentaryLinePadding.value = DEFAULTS.commentaryLinePadding
     useSeparateCommentarySettings.value = DEFAULTS.useSeparateCommentarySettings
     appZoom.value = DEFAULTS.appZoom
@@ -607,8 +659,8 @@ export const useSettingsStore = defineStore('settings', () => {
 
   return {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
-    diacriticsState, hiddenWordLinkMarkerBookIds, headerFont, textFont, fontSize, linePadding, fixedLineHeight,
-    commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryLinePadding,
+    diacriticsState, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
+    commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding,
     useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,

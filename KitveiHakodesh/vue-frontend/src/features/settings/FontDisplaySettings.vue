@@ -11,6 +11,8 @@ const props = defineProps<{
   headerFont: string
   textFont: string
   fontSize: number
+  /** Optional: a caller that does not offer the weight slider yet renders at 400. */
+  fontWeight?: number
   linePadding: number
   /**
    * Exact line spacing. This setting is global (one attribute on <html>) while this
@@ -20,12 +22,47 @@ const props = defineProps<{
    */
   fixedLineHeight?: boolean
   showFixedLineHeight?: boolean
+  /**
+   * Body font for books that carry cantillation marks. Only the book instance offers
+   * it (the commentary instance leaves both undefined) — teamim appear in the book
+   * text, not in the commentaries.
+   */
+  teamimTextFont?: string
+  showTeamimFont?: boolean
+  /** Default family per picker, badged in its list. Bare family names. */
+  defaultHeaderFont?: string
+  defaultTextFont?: string
+  defaultTeamimFont?: string
 }>()
+
+/**
+ * Names for the weights the slider stops on — the number alone reads as arbitrary.
+ * Falls back to the bare number for a step this map does not cover.
+ *
+ * The range stops at 700: Frank Ruhl Libre and Heebo are variable and keep thickening
+ * past it, but Taamey Frank CLM ships as two STATIC faces (regular + bold), so a
+ * te'amim book only ever renders two of these steps — 300-500 all look regular and
+ * 600-700 both look bold. Offering 800/900 would add steps nothing distinguishes.
+ */
+const WEIGHT_LABELS: Record<number, string> = {
+  300: 'דק',
+  400: 'רגיל',
+  500: 'בינוני',
+  600: 'חצי מודגש',
+  700: 'מודגש',
+}
+
+function formatWeight(value: number): string {
+  const name = WEIGHT_LABELS[value]
+  return name ? `${name} (${value})` : String(value)
+}
 
 const emit = defineEmits<{
   'update:headerFont': [string]
   'update:textFont': [string]
+  'update:teamimTextFont': [string]
   'update:fontSize': [number]
+  'update:fontWeight': [number]
   'update:linePadding': [number]
   'update:fixedLineHeight': [boolean]
   closeOther: []
@@ -33,10 +70,12 @@ const emit = defineEmits<{
 
 const headerFontRef = ref<InstanceType<typeof FontSelectorCmp> | null>(null)
 const textFontRef = ref<InstanceType<typeof FontSelectorCmp> | null>(null)
+const teamimFontRef = ref<InstanceType<typeof FontSelectorCmp> | null>(null)
 
-function closeDropdowns(except?: 'header' | 'text') {
+function closeDropdowns(except?: 'header' | 'text' | 'teamim') {
   if (except !== 'header' && headerFontRef.value) headerFontRef.value.isOpen = false
   if (except !== 'text' && textFontRef.value) textFontRef.value.isOpen = false
+  if (except !== 'teamim' && teamimFontRef.value) teamimFontRef.value.isOpen = false
 }
 
 defineExpose({ closeDropdowns })
@@ -50,6 +89,11 @@ function onTextToggle() {
   closeDropdowns('text')
   emit('closeOther')
 }
+
+function onTeamimToggle() {
+  closeDropdowns('teamim')
+  emit('closeOther')
+}
 </script>
 
 <template>
@@ -60,6 +104,7 @@ function onTextToggle() {
       hint="הגופן שישמש לכותרות הפרקים והסעיפים"
       :model-value="headerFont"
       font-type="sans-serif"
+      :default-font="defaultHeaderFont"
       @update:model-value="emit('update:headerFont', $event)"
       @toggle="onHeaderToggle"
     />
@@ -69,8 +114,20 @@ function onTextToggle() {
       hint="הגופן שישמש לגוף הטקסט של הספר"
       :model-value="textFont"
       font-type="serif"
+      :default-font="defaultTextFont"
       @update:model-value="emit('update:textFont', $event)"
       @toggle="onTextToggle"
+    />
+    <FontSelectorCmp
+      v-if="showTeamimFont"
+      ref="teamimFontRef"
+      label="גופן ספרים עם טעמים"
+      hint="הגופן שישמש לגוף הטקסט בספרים שהטקסט שלהם מנוקד בטעמי המקרא"
+      :model-value="teamimTextFont ?? ''"
+      font-type="serif"
+      :default-font="defaultTeamimFont"
+      @update:model-value="emit('update:teamimTextFont', $event)"
+      @toggle="onTeamimToggle"
     />
     <SliderSetting
       label="גודל גופן"
@@ -81,6 +138,16 @@ function onTextToggle() {
       :step="5"
       suffix="%"
       @update:model-value="emit('update:fontSize', $event)"
+    />
+    <SliderSetting
+      label="עובי גופן"
+      hint="עובי הטקסט. בספרים עם טעמים יש שתי דרגות בלבד — רגיל ומודגש"
+      :model-value="fontWeight ?? 400"
+      :min="300"
+      :max="700"
+      :step="100"
+      :format-value="formatWeight"
+      @update:model-value="emit('update:fontWeight', $event)"
     />
     <SliderSetting
       label="ריווח בין שורות"
