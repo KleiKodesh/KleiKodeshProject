@@ -96,7 +96,6 @@
     <!-- UI -->
     <Compile Include="UI\FontItem.cs" />
     <Compile Include="UI\SpaceBetweenPanel.cs" />
-    <Compile Include="UI\PlaceholderBehavior.cs" />
     <Compile Include="UI\WordColors.cs" />
     <Compile Include="UI\SearchHistory.cs" />
     <Compile Include="UI\SnippetModel.cs" />

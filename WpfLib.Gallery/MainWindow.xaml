@@ -1,4 +1,4 @@
-<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+﻿<Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:kk="http://schemas.kleikodesh.org/wpf"
         x:Class="WpfLib.Gallery.MainWindow"
@@ -109,14 +109,14 @@
                             <ComboBoxItem Content="Third entry"/>
                         </ComboBox>
                         <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,4"
-                                   Text="Editable, placeholder text from Tag. It is right aligned, because the panes are RTL."/>
-                        <ComboBox IsEditable="True" Tag="placeholder from Tag" Width="300"
+                                   Text="Editable, with placeholder text. It is right aligned, because the panes are RTL."/>
+                        <ComboBox IsEditable="True" kk:Placeholder.Text="placeholder text" Width="300"
                                   HorizontalAlignment="Left" Margin="0,0,0,12"/>
                         <TextBlock Style="{StaticResource SecondaryText}" Margin="0,0,0,4"
                                    Text="Type-to-filter: focus it and type, the list narrows as you go."/>
                         <ComboBox IsEditable="True" Width="300" HorizontalAlignment="Left"
                                   Margin="0,0,0,12"
-                                  Tag="type to filter"
+                                  kk:Placeholder.Text="type to filter"
                                   kk:ComboBoxFilter.IsEnabled="True">
                             <ComboBoxItem Content="Aleph"/>
                             <ComboBoxItem Content="Bet"/>

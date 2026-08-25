@@ -1,5 +1,6 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:themes="clr-namespace:WpfLib.Themes"
+                    xmlns:ap="clr-namespace:WpfLib.AttachedProperties"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.MergedDictionaries>
         <themes:SharedResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
@@ -151,10 +152,16 @@
                                                   VerticalAlignment="Center"
                                                   HorizontalAlignment="Stretch"
                                                   IsHitTestVisible="False"/>
-                                <!-- Placeholder — shown when editable and empty -->
+                                <!--
+                                    Placeholder - shown when editable and empty.
+                                    Reads ap:Placeholder.Text, not Tag: Tag is a
+                                    general-purpose slot a consumer may already
+                                    be using for something else, and a named
+                                    property says what it is.
+                                -->
                                 <TextBlock x:Name="Placeholder"
                                            Grid.Column="0"
-                                           Text="{TemplateBinding Tag}"
+                                           Text="{TemplateBinding ap:Placeholder.Text}"
                                            Foreground="#99808080"
                                            FontSize="{TemplateBinding FontSize}"
                                            FontFamily="{TemplateBinding FontFamily}"

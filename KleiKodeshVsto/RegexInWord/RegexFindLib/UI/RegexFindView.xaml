@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:local="clr-namespace:RegexFindLib.UI"
+             xmlns:ap="clr-namespace:WpfLib.AttachedProperties;assembly=WpfLib"
              xmlns:conv="clr-namespace:WpfLib.Converters;assembly=WpfLib"
              mc:Ignorable="d"
              MinWidth="280"
@@ -227,7 +228,7 @@
                              Style="{StaticResource SearchTextBox}"
                              FlowDirection="RightToLeft"
                              Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                             local:PlaceholderBehavior.Placeholder="חיפוש..."
+                             ap:Placeholder.Text="חיפוש..."
                              GotFocus="FindBox_GotFocus"
                              KeyDown="FindBox_KeyDown">
                         <TextBox.ToolTip>
@@ -289,13 +290,13 @@
                           Text="{Binding FindFormatting.StyleName, UpdateSourceTrigger=PropertyChanged}"
                           IsEditable="True" Height="26" FontSize="12"
                           VirtualizingPanel.IsVirtualizing="True"
-                          local:PlaceholderBehavior.Placeholder="בחר סגנון"
+                          ap:Placeholder.Text="בחר סגנון"
                           ToolTip="בחר סגנון"/>
                 <ComboBox Grid.Column="2"
                           ItemsSource="{Binding FontListBinding}"
                           Text="{Binding FindFormatting.FontName, UpdateSourceTrigger=PropertyChanged}"
                           IsEditable="True" Height="26" FontSize="12"
-                          local:PlaceholderBehavior.Placeholder="בחר גופן"
+                          ap:Placeholder.Text="בחר גופן"
                           ToolTip="בחר גופן">
                     <ComboBox.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -377,7 +378,7 @@
                                  Style="{StaticResource SearchTextBox}"
                                  FlowDirection="RightToLeft"
                                  Text="{Binding ReplaceText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                 local:PlaceholderBehavior.Placeholder="החלף ב..."
+                                 ap:Placeholder.Text="החלף ב..."
                                  ToolTip="החלף ב..."
                                  GotFocus="ReplaceBox_GotFocus"
                                  KeyDown="ReplaceBox_KeyDown"/>
@@ -430,13 +431,13 @@
                               Text="{Binding ReplaceFormatting.StyleName, UpdateSourceTrigger=PropertyChanged}"
                               IsEditable="True" Height="26" FontSize="12"
                               VirtualizingPanel.IsVirtualizing="True"
-                              local:PlaceholderBehavior.Placeholder="בחר סגנון"
+                              ap:Placeholder.Text="בחר סגנון"
                               ToolTip="בחר סגנון"/>
                     <ComboBox Grid.Column="2"
                               ItemsSource="{Binding FontListBinding}"
                               Text="{Binding ReplaceFormatting.FontName, UpdateSourceTrigger=PropertyChanged}"
                               IsEditable="True" Height="26" FontSize="12"
-                              local:PlaceholderBehavior.Placeholder="בחר גופן"
+                              ap:Placeholder.Text="בחר גופן"
                               ToolTip="בחר גופן">
                         <ComboBox.ItemsPanel>
                             <ItemsPanelTemplate>
