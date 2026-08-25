@@ -65,8 +65,19 @@
        PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
        SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
        fails with a sharing violation. Matches the version KitveiHakodeshService already uses. -->
+  <!-- HttpClient is in the framework on net48 but not in the default reference set, so the
+       HebrewBooks downloader and catalog updater do not compile there without this. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="System.Net.Http" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- HebrewBooksCatalogUpdater parses upstream book pages. VERIFIED AOT-CLEAN: a native-AOT
+         console app calling LoadHtml + GetElementbyId + SelectNodes published with no ILC
+         warnings and ran correctly. The reflection in this package lives in HtmlWeb and the
+         object-encapsulator APIs, which nothing here touches and ILC trims away. -->
+    <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
   </ItemGroup>
 
 </Project>

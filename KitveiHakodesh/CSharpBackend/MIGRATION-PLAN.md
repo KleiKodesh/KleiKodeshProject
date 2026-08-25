@@ -1002,9 +1002,42 @@ Pure backend merge, **zero frontend change** (raw SQL stays by design).
     else's site; monthly is more traffic than the data justifies. A named `const` here —
     **not** a config field: nobody has asked to tune it, and speculative configuration
     is how an options object turns into a bag
-  - resumes from `maxId + 1`, walking IDs upward; stops after **10 consecutive empty** IDs
+  - resumes from `maxId + 1`, walking IDs upward
   - **1000 ms** between requests — it is scraping someone else's site; keep the courtesy delay
-  - backs up before writing; row = `Id, Title, Author, Place, Year, Pages, Tags`
+  - row = `Id, Title, Author, Place, Year, Pages, Tags`
+
+  **⚠ The "stop after 10 consecutive empty IDs" rule is BROKEN — do not restore it.**
+  Measured against the shipped catalog: 59,583 books over an ID range ending at 69,871, and
+  the gaps between consecutive IDs reach **2,766** overall and **1,447 within the last ten
+  thousand IDs** (454 within the last five thousand). A 10-miss stop halts at the first
+  ordinary gap — and because the walk resumes from the highest ID it *holds*, every later run
+  halts in the same place. The catalog stops growing permanently and silently.
+  Restored as **`MaxConsecutiveMissingIds = 1500`**, clearing every gap observed in this
+  catalog. Cost: a tail of at most 1,500 requests (~25 min at the courtesy delay), once a
+  quarter.
+
+  **Last-run stamp: `_metadata.last_scrape_date` in the catalog, NOT the registry.**
+  The catalog already carries this key (written by the 2026-06-02 CSV→SQLite conversion).
+  It is the better home because the stamp belongs to the *file*: replacing the catalog
+  replaces its history with it, and a second machine reading the same file does not re-walk
+  ground the first already covered. So `AppSettings.HbCsvLastUpdated` is **deleted, not
+  reconnected** — which removes the orphan key the map complains about, by retiring it rather
+  than reviving it.
+
+  **No pre-write backup.** The CSV version copied the file first because `AppendRow` wrote
+  raw text with no transaction and a mangled line was unrecoverable. Appending parameterised
+  rows to SQLite has neither problem, and a backup of a 7 MB catalog per run is a copy of a
+  shipped database (rule 0b).
+
+  **Writes IN PLACE, one catalog.** On a read-only install the catalog cannot grow; that is
+  reported as `CatalogNotWritable` and search keeps working on what shipped. No writable
+  overlay copy — that would be a second catalog, and the reader would then need to know which
+  one wins.
+
+  **`HtmlAgilityPack` is AOT-clean — CONFIRMED, not assumed.** A native-AOT console app
+  calling `LoadHtml` + `GetElementbyId` + XPath `SelectNodes` (the whole surface this uses)
+  published with no ILC warnings and ran correctly. The reflection in that package is in
+  `HtmlWeb` and the object-encapsulator APIs, which nothing here touches and ILC trims.
 
   Changes needed for Core:
   - **CSV → SQLite**: append into `HebrewBooksCatalog.db` via `HebrewBooksCatalogDbQueries`,
@@ -1013,9 +1046,8 @@ Pure backend merge, **zero frontend change** (raw SQL stays by design).
     return a result the orchestrator can surface; a silent scrape that half-fails is worse
     than one that reports
   - **Paths injected** (rule 2) — it hardcoded `AppDomain.CurrentDomain.BaseDirectory`
-  - `HtmlAgilityPack` is net48-only in this repo today; confirm it works on the net10 leg or
-    parse without it (rule 0d: no reflection-heavy libraries under AOT)
-  - Reconnect `AppSettings.HbCsvLastUpdated`, which has had no caller since the deletion
+  - `HtmlAgilityPack` moves from a Lib `<Reference>` to a Core `PackageReference` so both
+    legs get it — AOT confirmed above
 - Delete the orphan `KitveiHakodeshLib/HebrewBooks.db` (declared in no csproj)
 - Unify the file name on **`HebrewBooksCatalog.db`** (Service's) — `HebrewBooks.db` (Lib's) does not say it is a catalog
 - WebView2 `DownloadStarting` interception **stays in Lib**
