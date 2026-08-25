@@ -31,7 +31,8 @@ import { useEventListener } from '@vueuse/core'
 import { getLineContents, getTocPathsForLines } from '@/webview-host/seforimApi'
 import { hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { parseWordLinkData, type WordLinkTarget } from './wordLinkAnchors'
-import { loadWordLinkSection } from './wordLinkSection'
+import { loadWordLinkSection, loadSectionTocEntries } from './wordLinkSection'
+import type { TocEntry } from '@/webview-host/queries.types'
 
 export interface WordLinkTooltipData {
   /** Unique per hover — used as component key so a new target remounts/re-measures. */
@@ -47,10 +48,16 @@ export interface WordLinkTooltipData {
    * lines and scrolls the cited one into view, so the citation is read in context.
    * Absent for a single-line preview (no TOC, oversized section, or the note
    * tooltip, which has no section at all) — then `html` is the whole content.
+   *
+   * One optional object rather than two parallel optional fields: lines without a
+   * focus index, or an index with no lines, are both meaningless, and keeping them
+   * in one object makes those states unrepresentable instead of merely unused.
    */
-  sectionLines?: { id: number; html: string }[]
-  /** Index into `sectionLines` of the cited line — the one scrolled to. */
-  focusIndex?: number
+  section?: {
+    lines: { id: number; html: string }[]
+    /** Index into `lines` of the cited line — the one scrolled to. */
+    focusIndex: number
+  }
 }
 
 const HOVER_DELAY_MS = 250
@@ -185,22 +192,31 @@ export function useWordLinkTooltip(
     // here, for this one hover, and live only as long as the tooltip does.
     let content: string
     let tocPath: string
+    let tocEntries: TocEntry[]
     try {
-      const [contentRows, tocRows] = await Promise.all([
+      // All three depend only on the target, so they go out together. The TOC is
+      // what the section resolution needs before it can ask for lines, and awaiting
+      // it after these would put four round-trips in series behind a 250ms hover.
+      // Its failure is not fatal — it only costs the section — so it is caught
+      // individually rather than taking the whole preview down with it.
+      const [contentRows, tocRows, entries] = await Promise.all([
         getLineContents([target.lineId]),
         getTocPathsForLines([target.lineId]),
+        loadSectionTocEntries(target.bookId).catch(() => [] as TocEntry[]),
       ])
       content = contentRows[0]?.content ?? ''
       tocPath = tocRows[0]?.tocPath ?? ''
+      tocEntries = entries
     } catch {
       return
     }
+    // The cited line is the fallback preview AND the anchor within the section, so
+    // an empty one means there is nothing worth showing at all.
     if (token !== hoverToken || !content) return
 
-    // The cited line is the fallback preview AND the anchor within the section, so
-    // it is fetched first and unconditionally: a section that fails to resolve must
-    // still leave a usable preview, not an empty one.
-    const section = await loadWordLinkSection(target.bookId, target.lineIndex).catch(() => null)
+    const section = tocEntries.length
+      ? await loadWordLinkSection(target.bookId, target.lineIndex, tocEntries).catch(() => null)
+      : null
     if (token !== hoverToken) return
 
     // The section is only worth showing if the cited line is actually in it. A
@@ -220,8 +236,10 @@ export function useWordLinkTooltip(
       anchorRect: el.getBoundingClientRect(),
       ...(useSection
         ? {
-            sectionLines: section.lines.map((l) => ({ id: l.id, html: l.content })),
-            focusIndex,
+            section: {
+              lines: section.lines.map((l) => ({ id: l.id, html: l.content })),
+              focusIndex,
+            },
           }
         : {}),
     }
@@ -327,6 +345,17 @@ export function useWordLinkTooltip(
   useEventListener(() => document, 'click', () => {
     if (!wordLinkTooltip.value || pointerInTooltip || contextMenuOpen()) return
     scheduleClose()
+  })
+
+  // Escape dismisses the preview. On the document, because the panel is teleported
+  // out of the scroller and takes no focus, so a scoped listener would never see the
+  // key. Gated on a preview actually being open and NOT stopped from propagating:
+  // Escape is heavily overloaded here (search bars, bubbles, menus), and a preview
+  // is the shallowest thing on screen — swallowing the key would strand whatever
+  // else the user meant to close.
+  useEventListener(() => document, 'keydown', (event: KeyboardEvent) => {
+    if (event.key !== 'Escape' || !wordLinkTooltip.value) return
+    closeWordLinkTooltip()
   })
 
   // Unmounting mid-delay would otherwise let the hover timer fire for a dead view

@@ -64,12 +64,12 @@ const html = computed(() => censorDivineNames(props.data.html, settingsStore.cen
  * Null for a single-line preview, which the template renders from `html` instead.
  */
 const sectionLines = computed(() => {
-  const lines = props.data.sectionLines
-  if (!lines) return null
-  return lines.map((line, index) => ({
+  const section = props.data.section
+  if (!section) return null
+  return section.lines.map((line, index) => ({
     id: line.id,
     html: censorDivineNames(line.html, settingsStore.censorOptions),
-    isFocus: index === props.data.focusIndex,
+    isFocus: index === section.focusIndex,
   }))
 })
 
@@ -220,22 +220,65 @@ const clipped = ref(false)
  * A focus line at the very start needs no scroll at all, which is also the common
  * case — a citation usually opens its section.
  */
+/**
+ * Frames the correction loop below is allowed to run for. Each pass renders the
+ * lines it lands among, which shifts the offsets above it, so the target converges
+ * rather than being known up front. Convergence is normally 2-3 passes; the cap is
+ * a backstop against a layout that never settles, not an expected cost.
+ */
+const MAX_SCROLL_PASSES = 8
+
+/**
+ * Whether two scroll positions are the same position on screen.
+ *
+ * NOT `===`: `offsetTop` is a rounded integer while `scrollTop` reads back as a
+ * fractional double once the browser snaps it to the device pixel grid — which it
+ * does at any non-integer display scaling, and this app runs in WebView2 where
+ * 125%/150% Windows scaling is the norm. Exact equality would then be permanently
+ * false, the convergence test would never fire, and the pass cap would silently
+ * become the only exit — load-bearing rather than the backstop it is meant to be.
+ */
+function isSamePosition(a: number, b: number): boolean {
+  return Math.abs(a - b) < 1
+}
+
 function scrollToFocusLine() {
   const body = bodyRef.value
-  if (!body || props.data.focusIndex == null) return
+  if (!body || !props.data.section) return
   const line = body.querySelector<HTMLElement>('[data-focus-line]')
   if (!line) return
-  body.scrollTop = line.offsetTop
+
   // The lines above the focus line are `content-visibility: auto`, so until they
-  // are rendered they contribute their `contain-intrinsic-size` estimate and the
-  // offset just used was an estimate too — the first scroll lands near the target,
-  // not on it. Scrolling there forces those lines to render, so re-reading the
-  // offset on the next frame gives the real one. Corrected before paint, in the
-  // same frame the panel becomes visible, so no jump is ever seen.
-  requestAnimationFrame(() => {
-    if (!bodyRef.value) return
-    bodyRef.value.scrollTop = line.offsetTop
-  })
+  // render they contribute their `contain-intrinsic-size` estimate and `offsetTop`
+  // is an estimate too — one scroll lands near the target, not on it. Scrolling
+  // there forces the lines around the landing point to render, which corrects the
+  // offsets above and moves the target again.
+  //
+  // So iterate rather than correcting once: re-read and re-scroll until the offset
+  // stops changing. Runs in rAF, before paint, so the intermediate positions are
+  // never shown — the panel appears already at the cited line.
+  let passes = 0
+  // What this loop last wrote, so a pass can tell its own effect apart from the
+  // user's. null until the first write.
+  let written: number | null = null
+  const settle = () => {
+    const el = bodyRef.value
+    if (!el) return
+    // The user took over — scrolled the panel themselves since the last pass. Their
+    // position wins: re-asserting the target here would yank the panel back under
+    // them. Compared against what this loop wrote rather than against the target,
+    // so a pass that simply has not converged yet is not mistaken for a user scroll.
+    if (written !== null && !isSamePosition(el.scrollTop, written)) return
+    // Clamped to what the container can actually reach: a focus line near the end
+    // of the section cannot be brought to the top, and comparing against the raw
+    // offset would then never match and burn every pass on an unreachable target.
+    const target = Math.min(line.offsetTop, el.scrollHeight - el.clientHeight)
+    if (isSamePosition(el.scrollTop, target) || ++passes > MAX_SCROLL_PASSES) return
+    el.scrollTop = target
+    written = el.scrollTop
+    requestAnimationFrame(settle)
+  }
+  settle()
 }
 
 onMounted(() => {
