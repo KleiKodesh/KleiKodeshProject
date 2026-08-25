@@ -66,16 +66,24 @@ namespace KitveiHakodesh.Core.Common
 
             // 2. This assembly's own folder — differs from (1) when the library is loaded
             //    from outside the entry application's directory.
+            // 3. The entry executable's folder. This is WINWORD.EXE under the add-in, which
+            //    is what today's code accidentally relies on — kept as a candidate, not a rule.
+            //
+            // IL3000: Assembly.Location returns "" in a single-file app. That is fine here and
+            // is the reason this is a PROBE rather than a lookup — an empty or wrong answer is
+            // dropped by the IsNullOrWhiteSpace filter in CandidateRoots and the next candidate
+            // is tried. Suppressed rather than removed because these two are the only roots
+            // that resolve when the library is loaded from outside the entry app's folder.
+#pragma warning disable IL3000
             yield return SafeDirectory(() =>
                 Path.GetDirectoryName(typeof(AppFileLocator).Assembly.Location));
 
-            // 3. The entry executable's folder. This is WINWORD.EXE under the add-in, which
-            //    is what today's code accidentally relies on — kept as a candidate, not a rule.
             yield return SafeDirectory(() =>
             {
                 var entry = System.Reflection.Assembly.GetEntryAssembly();
                 return entry == null ? null : Path.GetDirectoryName(entry.Location);
             });
+#pragma warning restore IL3000
 
             // 4. The working directory — right when launched from a shortcut whose "Start in"
             //    points at the app, wrong often enough not to rank higher.
