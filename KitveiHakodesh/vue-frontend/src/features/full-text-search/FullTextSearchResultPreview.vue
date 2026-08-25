@@ -122,6 +122,7 @@ const paneNavigation = usePaneNavigation()
 const booksDataStore = useBooksDataStore()
 const {
   wordLinkTooltip,
+  closeWordLinkTooltip,
   keepOpen: keepWordLinkTooltipOpen,
   releaseOpen: releaseWordLinkTooltip,
   beginSelection: beginWordLinkTooltipSelection,
@@ -149,6 +150,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
       @pointer-enter="keepWordLinkTooltipOpen"
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
+      @close="closeWordLinkTooltip"
     />
     <BookViewAbbrevTooltip
       v-if="abbrevTooltip"

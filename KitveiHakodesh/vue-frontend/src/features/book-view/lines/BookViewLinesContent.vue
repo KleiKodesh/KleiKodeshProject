@@ -235,7 +235,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 
 // User-note hover preview — the marker carries its text in data-note-text, so this
 // replaces the native title tooltip the marker used to have.
-const { noteTooltip } = useNoteTooltip(scrollerEl)
+const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
 const {
   wordLinkTooltip,
@@ -352,6 +352,7 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
       :key="`note-${noteTooltip.id}`"
       :data="noteTooltip"
       :interactive="false"
+      @close="closeNoteTooltip"
     />
     <div
       ref="scrollerEl"
