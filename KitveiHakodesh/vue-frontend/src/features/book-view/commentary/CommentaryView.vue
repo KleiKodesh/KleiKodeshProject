@@ -424,7 +424,7 @@ const {
 
 // User-note hover preview — the marker carries its text in data-note-text, so this
 // replaces the native title tooltip the marker used to have.
-const { noteTooltip } = useNoteTooltip(scrollerEl)
+const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
 const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 </script>
@@ -462,6 +462,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
       :key="`note-${noteTooltip.id}`"
       :data="noteTooltip"
       :interactive="false"
+      @close="closeNoteTooltip"
     />
     <BookViewAbbrevTooltip
       v-if="abbrevTooltip"

@@ -3,9 +3,11 @@
  * and markers spliced by wordLinkAnchors.ts).
  *
  * Delegated listeners on the scroller (one set per view, not per line):
- *   hover  — 250ms intent delay, then the target line's content and full TOC path
- *            are fetched for that one hover and shown in a WordLinkTooltip
- *            anchored to the link element. Nothing is cached or prefetched.
+ *   hover  — 250ms intent delay, then the target's enclosing TOC section is fetched
+ *            for that one hover and shown in a WordLinkTooltip anchored to the link
+ *            element, scrolled to the cited line (see wordLinkSection.ts for why a
+ *            section and not just the line). A target whose section cannot be
+ *            resolved falls back to its single line. Nothing is cached or prefetched.
  *   click  — navigates to the target via the caller's onNavigate (opens the book
  *            at the target line). Runs in the CAPTURE phase with stopPropagation
  *            so the line's own click handler (commentary line selection) doesn't
@@ -29,6 +31,7 @@ import { useEventListener } from '@vueuse/core'
 import { getLineContents, getTocPathsForLines } from '@/webview-host/seforimApi'
 import { hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { parseWordLinkData, type WordLinkTarget } from './wordLinkAnchors'
+import { loadWordLinkSection } from './wordLinkSection'
 
 export interface WordLinkTooltipData {
   /** Unique per hover — used as component key so a new target remounts/re-measures. */
@@ -38,6 +41,16 @@ export interface WordLinkTooltipData {
   tocPath: string
   html: string
   anchorRect: DOMRect
+  /**
+   * The target's whole TOC section, when one could be resolved: every line of it,
+   * with `focusIndex` marking the cited line. The panel renders these as separate
+   * lines and scrolls the cited one into view, so the citation is read in context.
+   * Absent for a single-line preview (no TOC, oversized section, or the note
+   * tooltip, which has no section at all) — then `html` is the whole content.
+   */
+  sectionLines?: { id: number; html: string }[]
+  /** Index into `sectionLines` of the cited line — the one scrolled to. */
+  focusIndex?: number
 }
 
 const HOVER_DELAY_MS = 250
@@ -183,12 +196,34 @@ export function useWordLinkTooltip(
       return
     }
     if (token !== hoverToken || !content) return
+
+    // The cited line is the fallback preview AND the anchor within the section, so
+    // it is fetched first and unconditionally: a section that fails to resolve must
+    // still leave a usable preview, not an empty one.
+    const section = await loadWordLinkSection(target.bookId, target.lineIndex).catch(() => null)
+    if (token !== hoverToken) return
+
+    // The section is only worth showing if the cited line is actually in it. A
+    // mismatch would scroll the panel to the wrong place and silently reframe the
+    // citation, so fall back to the single line rather than guessing an index.
+    const focusIndex = section?.lines.findIndex((l) => l.id === target.lineId) ?? -1
+    const useSection = section !== null && focusIndex >= 0
+
     wordLinkTooltip.value = {
       id: token,
       bookTitle: opts.getBookTitle(target.bookId),
-      tocPath,
+      // The section's own TOC text already names the section; prefer the line's
+      // full path, which is the more specific of the two, and fall back to the
+      // section heading when the line has no line_toc row of its own.
+      tocPath: tocPath || (useSection ? section.tocPath : ''),
       html: content,
       anchorRect: el.getBoundingClientRect(),
+      ...(useSection
+        ? {
+            sectionLines: section.lines.map((l) => ({ id: l.id, html: l.content })),
+            focusIndex,
+          }
+        : {}),
     }
   }
 
