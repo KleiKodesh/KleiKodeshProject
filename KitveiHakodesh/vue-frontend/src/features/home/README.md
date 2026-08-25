@@ -46,4 +46,6 @@ When `isHosted && !dbReady`: the first two tiles are **הורד מסד ספרי�
 
 When DB is available (or not hosted): the first two tiles are **ספרים** and **חיפוש**, which require a DB to function.
 
-Never hide or conditionally render any tile beyond these first two — the rest (פתח קובץ, היברו-בוקס, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, סביבות עבודה, הגדרות) are always shown.
+Never hide or conditionally render any tile beyond these first two — the rest (פתח קובץ, היברו-בוקס, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, הגדרות) are always shown.
+
+Workspaces (סביבות עבודה) is deliberately **not** a tile and not a page: it is a picker, reached from the shell's own menus (`layout/WorkspaceMenu.vue`), not a place you navigate to.

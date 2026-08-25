@@ -138,8 +138,6 @@ export function iconKeyForRoute(route: string, isOtzariaAddin = false): Document
       return 'calendar'
     case '/midot':
       return 'ruler'
-    case '/workspaces':
-      return 'apps'
     case '/file-search':
       return 'fileSearch'
     case '/settings':
