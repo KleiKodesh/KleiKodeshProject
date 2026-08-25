@@ -4,11 +4,12 @@
  * (useWordLinkTooltip — target line content headed by the target book's title) and
  * the user-note preview (useNoteTooltip — the note's own text, `interactive: false`).
  *
- * Positioning follows the BookViewAbbrevTooltip pattern:
- * Teleported to body, rendered hidden first so real dimensions can be measured,
- * then fixed beside the anchor — on whichever side has more room, with the height
- * capped to that side so no part of the panel can ever fall outside the viewport.
- * See computePosition for why the height is capped rather than the panel nudged.
+ * Positioning follows the BookViewAbbrevTooltip pattern: Teleported to body,
+ * rendered hidden first so real dimensions can be measured, then fixed near the
+ * anchor. Two hard constraints hold together — the panel never falls outside the
+ * viewport, and it never covers the link that triggered it. It takes the side with
+ * more room and caps its height to that side; when neither side can seat it, it
+ * goes beside the link instead. See computePosition.
  *
  * The parent keys this component by hover id so a new target remounts and
  * re-measures. Content is trusted seforim-DB HTML (same trust level as the book
@@ -88,19 +89,48 @@ const bodyRef = ref<HTMLElement | null>(null)
 const resolvedTop = ref<number | null>(null)
 const resolvedLeft = ref<number | null>(null)
 /** Which edge faces the anchor — the gap bridge is drawn on that side. */
-const placement = ref<'above' | 'below'>('above')
+const placement = ref<'above' | 'below' | 'beside'>('above')
+/**
+ * Which side of the anchor the beside placement put the panel on — the side the gap
+ * bridge goes on. Physical left/right, not logical start/end: it is derived from
+ * viewport coordinates and consumed by physical CSS offsets, and mixing in the
+ * panel's RTL direction here would flip the bridge to the wrong flank.
+ */
+const besideSide = ref<'left' | 'right'>('right')
 
 const MARGIN = 8
 const MAX_WIDTH = 360
 
 /**
- * The smallest height the panel can actually occupy: border + padding + the header
- * line, none of which shrink. Asking for less via max-height is ignored by layout,
- * so the placement maths must work in terms of this floor or it computes positions
- * for a panel size that cannot exist — which is how a "contained" panel ends up
- * hanging off the edge in a short viewport.
+ * The smallest height the panel can actually occupy. Asking for less via max-height
+ * is ignored by layout, so the placement maths must work in terms of this floor or
+ * it computes positions for a panel size that cannot exist — which is how a
+ * "contained" panel ends up hanging off the edge in a short viewport.
+ *
+ * MEASURED, not assumed: it differs between the two callers (an interactive panel
+ * always carries a header, a static note preview may not) and would drift silently
+ * against any padding or font-size change. The measurement phase renders the panel
+ * uncapped, so `scrollHeight` of the non-shrinking parts is readable then.
  */
-const MIN_HEIGHT = 40
+const minHeight = ref(0)
+
+/**
+ * The panel's irreducible height: everything that does not shrink. The body has
+ * `min-height: 0` and scrolls, so it contributes nothing; the header does not shrink
+ * and the border and padding are fixed, so their sum is the floor.
+ */
+function measureMinHeight(): number {
+  const el = tooltipRef.value
+  if (!el) return 0
+  const header = el.querySelector<HTMLElement>('.word-link-tooltip-title')
+  const styles = getComputedStyle(el)
+  const chrome =
+    parseFloat(styles.paddingTop) +
+    parseFloat(styles.paddingBottom) +
+    parseFloat(styles.borderTopWidth) +
+    parseFloat(styles.borderBottomWidth)
+  return chrome + (header?.offsetHeight ?? 0)
+}
 
 /**
  * Hard ceiling on the panel height, resolved against the space actually available
@@ -111,22 +141,32 @@ const MIN_HEIGHT = 40
 const resolvedMaxHeight = ref<number | null>(null)
 
 /**
- * Places the panel so that no part of it falls outside the viewport, under any
- * anchor position or content size.
+ * Width ceiling, set only by the beside placement — where the panel must fit within
+ * one flank of the anchor to stay clear of it. Null everywhere else, leaving the
+ * usual MAX_WIDTH to apply.
+ */
+const resolvedMaxWidth = ref<number | null>(null)
+
+/**
+ * Places the panel under two hard constraints, both of which must hold together:
+ * no part of it may fall outside the viewport, and no part of it may cover the link
+ * that triggered it. Covering the anchor is not a lesser evil to be traded away —
+ * it hides the very text the preview is about, and it puts the link under the
+ * pointer's path into the panel, so moving there re-enters the link.
  *
- * Side choice is by available room, not merely by clipping: picking "above unless
- * the top clips" hands a link near the top a below-placement that may be the more
- * cramped of the two. Whichever side has more room wins, ties going to above (the
- * habitual reading position for these previews).
+ * Above/below is chosen by available room, not merely by clipping: "above unless the
+ * top clips" hands a link near the top a below-placement that may be the more cramped
+ * of the two. Whichever side has more room wins, ties going to above.
  *
- * The height is then capped to that side's room rather than the panel being pushed
- * back inside, because pushing would slide the panel over its own anchor — the link
- * would end up underneath the preview, and moving the pointer to reach the panel
- * would cross the link again. Capping keeps the anchor clear; the content scrolls,
- * which it already does.
+ * The height is capped to the chosen side's room, never pushed back inside — pushing
+ * is exactly what slides the panel over the anchor. When a side has room for the
+ * panel's floor height, capping alone satisfies both constraints and the content
+ * scrolls, which it already does.
  *
- * Every value is finally clamped, so even a viewport too small for the minimum
- * usable panel yields an in-bounds rect rather than a negative offset.
+ * When NEITHER side can hold even the floor height, no vertical placement can honour
+ * both constraints, so the panel goes BESIDE the link instead: full available height,
+ * offset horizontally clear of the anchor. That is the one arrangement that is both
+ * inside the viewport and off the link. See placeBeside.
  */
 function computePosition() {
   const rect = props.data.anchorRect
@@ -135,44 +175,94 @@ function computePosition() {
   const width = tooltipRef.value?.offsetWidth ?? MAX_WIDTH
   const height = tooltipRef.value?.offsetHeight ?? 60
 
-  // Center horizontally on the link, then clamp. Math.max runs LAST so that a panel
-  // wider than the viewport pins to the near edge instead of resolving to a negative
-  // left — with the two clamps the other way round, the upper bound wins and the
-  // panel starts off-screen.
-  let left = rect.left + rect.width / 2 - width / 2
-  left = Math.max(MARGIN, Math.min(left, viewportW - width - MARGIN))
+  // Only placeBeside narrows the panel, so clear that here rather than leaving it to
+  // the branch that does not set it. Currently this runs once per mount, but a stale
+  // width surviving into a vertical placement would be silent and baffling, and the
+  // reset costs nothing.
+  resolvedMaxWidth.value = null
 
   // Room between the anchor and each viewport edge, once the gap and margin are paid.
   const roomAbove = rect.top - MARGIN * 2
   const roomBelow = viewportH - rect.bottom - MARGIN * 2
 
+  // Neither side can seat the panel's irreducible height without either overhanging
+  // the viewport or riding up over the link — go beside it.
+  if (Math.max(roomAbove, roomBelow) < minHeight.value) {
+    placeBeside(rect, height, viewportW, viewportH)
+    return
+  }
+
   const placeAbove = roomAbove >= roomBelow
   placement.value = placeAbove ? 'above' : 'below'
 
-  // The panel cannot actually be squeezed below MIN_HEIGHT: the header does not
-  // shrink (it is flex-shrink: 0 and always present on an interactive panel), and
-  // the border and padding are fixed. So a max-height under that floor would be
-  // silently ignored and the panel would overhang the edge it was being fitted to.
-  // Clamp the height to what the panel can really be, and let the final top clamp
-  // below decide where a panel that large actually fits.
-  const room = Math.max(0, placeAbove ? roomAbove : roomBelow)
-  const constrainedHeight = Math.max(MIN_HEIGHT, Math.min(height, room))
+  const room = placeAbove ? roomAbove : roomBelow
+  // The height the panel will ACTUALLY render at: capped to the room, but never below
+  // the floor it cannot shrink past. The guard above guarantees room >= the floor, so
+  // this is just min(height, room) in practice — stated explicitly because `top` is
+  // derived from it, and deriving a position from a size the panel cannot take is the
+  // precise mechanism by which a "contained" panel overhangs an edge.
+  const constrainedHeight = Math.max(minHeight.value, Math.min(height, room))
 
-  // Anchored to the near edge of the link on the chosen side, then clamped to the
-  // viewport. The clamp uses the REAL height, so when the preferred side is too
-  // small the panel slides to where it fits rather than overhanging — at the cost
-  // of overlapping the anchor, which beats rendering outside the viewport.
-  let top = placeAbove ? rect.top - MARGIN - constrainedHeight : rect.bottom + MARGIN
-  top = Math.max(MARGIN, Math.min(top, viewportH - constrainedHeight - MARGIN))
+  // Anchored to the near edge of the link on the chosen side. No viewport clamp is
+  // applied to `top`: the height is already capped to this side's room, so the panel
+  // cannot reach an edge — and clamping here is what used to drag it over the anchor.
+  const top = placeAbove ? rect.top - MARGIN - constrainedHeight : rect.bottom + MARGIN
 
-  // A viewport too short for even the minimum panel has no in-bounds placement;
-  // pin to the top edge so the overflow is at the bottom, where it is at least
-  // predictable, rather than splitting across both edges.
-  if (viewportH < constrainedHeight + MARGIN * 2) top = MARGIN
-
-  resolvedMaxHeight.value = Math.max(MIN_HEIGHT, room)
+  resolvedMaxHeight.value = room
   resolvedTop.value = top
-  resolvedLeft.value = left
+  resolvedLeft.value = clampLeft(rect.left + rect.width / 2 - width / 2, width, viewportW)
+}
+
+/**
+ * Horizontal centre on the anchor, clamped into the viewport. Math.max runs LAST so a
+ * panel wider than the viewport pins to the near edge rather than resolving negative —
+ * with the clamps the other way round the upper bound wins and the panel starts
+ * off-screen.
+ */
+function clampLeft(left: number, width: number, viewportW: number): number {
+  return Math.max(MARGIN, Math.min(left, viewportW - width - MARGIN))
+}
+
+/**
+ * Last-resort placement for an anchor with no usable room above or below: sit the
+ * panel to one side of the link, spanning the full viewport height.
+ *
+ * Taking the side with more room keeps the widest panel possible, and the panel is
+ * pushed fully clear of the anchor's near edge, so the link stays visible. If even
+ * that side is too narrow to be worth reading, the panel keeps its minimum width and
+ * is pinned to the viewport edge — still never over the link, because the anchor's
+ * own edge is the boundary it is pinned against.
+ */
+function placeBeside(rect: DOMRect, height: number, viewportW: number, viewportH: number) {
+  // Vertical: the whole viewport is available, so centre the panel's real height on
+  // the anchor and clamp it inside. Capped to the viewport first, since the panel
+  // measured taller than the space is exactly the case that got us here.
+  const available = viewportH - MARGIN * 2
+  const seated = Math.min(height, available)
+  resolvedMaxHeight.value = available
+  resolvedTop.value = Math.max(MARGIN, Math.min(rect.top + rect.height / 2 - seated / 2, viewportH - seated - MARGIN))
+
+  // Horizontal: whichever flank has more room, sized to fit inside it so the panel
+  // is pushed fully clear of the link rather than merely nudged off centre.
+  const roomLeft = rect.left - MARGIN * 2
+  const roomRight = viewportW - rect.right - MARGIN * 2
+  const useStart = roomLeft >= roomRight
+  const flank = Math.max(0, useStart ? roomLeft : roomRight)
+  // Sized to the flank, with no floor: the panel has no min-width, so it can genuinely
+  // be this narrow. A cramped preview is degraded but still honours both constraints,
+  // whereas any floor wide enough to "look right" would have to spill over the link or
+  // past the edge. This only bites for a link boxed in on all four sides — a viewport
+  // barely larger than the link itself — where nothing renders well anyway.
+  const beside = Math.min(MAX_WIDTH, flank)
+
+  resolvedMaxWidth.value = beside
+  resolvedLeft.value = useStart ? rect.left - MARGIN - beside : rect.right + MARGIN
+  // The gap to bridge is horizontal now — the panel is level with the link, not
+  // above or below it — and the bridge belongs on the flank that faces the anchor.
+  placement.value = 'beside'
+  // useStart put the panel to the LEFT of the anchor, so the anchor is off its
+  // right edge, and that is where the bridge belongs.
+  besideSide.value = useStart ? 'right' : 'left'
 }
 
 const style = computed(() => {
@@ -191,7 +281,9 @@ const style = computed(() => {
     position: 'fixed' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    maxWidth: `${Math.min(MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
+    // The beside placement narrows the panel to fit one flank of the anchor; every
+    // other placement keeps the usual width.
+    maxWidth: `${Math.min(resolvedMaxWidth.value ?? MAX_WIDTH, MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
     // Overrides the stylesheet's preferred cap. That one is a comfort target; this
     // is the constraint that keeps the panel inside the viewport, so it has to win
     // — hence inline, and hence unconditional rather than only when it bites.
@@ -283,6 +375,12 @@ function scrollToFocusLine() {
 
 onMounted(() => {
   nextTick(async () => {
+    // The floor first: computePosition derives both its side choice and the height it
+    // positions against from this, and a guessed value would let it compute positions
+    // for a size the panel cannot render at. Read here, in the measurement phase,
+    // while the panel is still uncapped.
+    minHeight.value = measureMinHeight()
+
     // Measures the panel at its natural (stylesheet-capped) size and resolves the
     // placement, which may impose a SMALLER max-height for the side it chose.
     computePosition()
@@ -319,7 +417,11 @@ useEventListener(() => window, 'resize', () => emit('close'))
     <div
       ref="tooltipRef"
       class="word-link-tooltip"
-      :class="[`is-${placement}`, { 'is-static': !interactive, 'is-clipped': clipped }]"
+      :class="[
+        `is-${placement}`,
+        placement === 'beside' && `is-beside-${besideSide}`,
+        { 'is-static': !interactive, 'is-clipped': clipped },
+      ]"
       :style="style"
       dir="rtl"
       @mouseenter="emit('pointer-enter')"
@@ -451,6 +553,11 @@ useEventListener(() => window, 'resize', () => emit('close'))
 .word-link-tooltip::before {
   content: '';
   position: absolute;
+}
+
+/* Above/below: the gap is vertical, so the bridge spans the panel's full width. */
+.word-link-tooltip.is-above::before,
+.word-link-tooltip.is-below::before {
   left: 0;
   right: 0;
   height: 10px;
@@ -462,6 +569,27 @@ useEventListener(() => window, 'resize', () => emit('close'))
 
 .word-link-tooltip.is-below::before {
   bottom: 100%;
+}
+
+/* Beside placement: the gap to cross is horizontal, so the bridge spans the panel's
+   full height on the flank facing the anchor. Only that flank — a bridge on both
+   would reach back across the link on the anchor side and keep re-triggering the
+   hover it is meant to let the pointer leave. */
+.word-link-tooltip.is-beside::before {
+  top: 0;
+  bottom: 0;
+  height: auto;
+  width: 10px;
+}
+
+/* `is-beside-<side>` names the panel edge the anchor sits off, so the bridge hangs
+   from that edge and reaches only across the MARGIN gap — never back over the link. */
+.word-link-tooltip.is-beside-right::before {
+  left: 100%;
+}
+
+.word-link-tooltip.is-beside-left::before {
+  right: 100%;
 }
 
 /* Read-only preview: never takes the pointer, so it cannot swallow a click meant
