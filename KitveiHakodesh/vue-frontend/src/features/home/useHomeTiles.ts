@@ -20,6 +20,8 @@ const TILE_WIDTH = 72
 const TILE_GAP = 8
 /** How many full rows the folder and document tiles get, on top of the static row's tail. */
 const DYNAMIC_TILE_ROWS = 5
+/** The most folder tiles ever shown, however much budget there is to go round. */
+const MAX_FOLDER_TILES = 9
 
 
 /**
@@ -102,21 +104,22 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   /**
    * The folder tiles, shown between the static tiles and the documents.
    *
-   * Folders get half the budget. They earn their points from the same opens the
-   * documents do, so an unsplit budget would let a folder opened all morning
-   * push the documents off the page entirely — and the two are not substitutes
-   * for each other.
+   * Folders get half the budget, or MAX_FOLDER_TILES — whichever is lower. They earn
+   * their points from the same opens the documents do, so an unsplit budget would let
+   * a folder opened all morning push the documents off the page entirely — and the two
+   * are not substitutes for each other. The flat cap is what keeps that true once the
+   * budget is big: half of five rows is more folders than anyone works in.
    *
-   * Rounded down, so an odd budget gives the spare slot to the documents. The
-   * half-share is a ceiling on the folders rather than a reservation, so with
-   * the documents switched off the folders take the whole budget instead of
-   * leaving half the row blank.
+   * The half is rounded down, so an odd budget gives the spare slot to the documents.
+   * Both limits are ceilings on the folders rather than reservations, so with the
+   * documents switched off the folders still stop at MAX_FOLDER_TILES and the rest of
+   * the budget simply goes unused rather than filling the page with folders.
    */
   const visibleFrequentFolderList = computed(() => {
     if (!showFrequentFolders.value) return []
     const budget = dynamicTileBudget.value
-    const room = showRecentlyOpened.value ? Math.floor(budget / 2) : budget
-    return frequentFolderList.value.slice(0, room)
+    const half = showRecentlyOpened.value ? Math.floor(budget / 2) : budget
+    return frequentFolderList.value.slice(0, Math.min(MAX_FOLDER_TILES, half))
   })
 
   /**
