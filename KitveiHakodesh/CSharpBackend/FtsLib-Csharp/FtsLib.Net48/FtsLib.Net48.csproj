@@ -113,6 +113,7 @@
   </ItemGroup>
   <ItemGroup>
     <!-- Indexing: building and maintaining the on-disk index -->
+    <Compile Include="IFtsCorpus.cs" />
     <Compile Include="Indexing\CorruptIndexException.cs" />
     <Compile Include="Indexing\ForceMerger.cs" />
     <Compile Include="Indexing\FtsLog.cs" />

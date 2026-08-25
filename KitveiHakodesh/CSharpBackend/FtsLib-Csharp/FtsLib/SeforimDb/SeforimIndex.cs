@@ -32,9 +32,20 @@ namespace FtsLib.SeforimDb
     /// </summary>
     public sealed class SeforimIndex
     {
-        private readonly string       _indexPath;
-        private readonly string       _dbPath;
-        private          SegmentStore _store;
+        private readonly string           _indexPath;
+        private readonly Func<IFtsCorpus> _openCorpus;
+        private          SegmentStore     _store;
+
+        /// <summary>The built-in seforim reader, opened fresh per operation. Kept private: a
+        /// caller that wants this behaviour asks for it with the (indexPath, dbPath) constructor,
+        /// and a caller supplying its own corpus never needs to know this type exists.</summary>
+        private static Func<IFtsCorpus> MakeSeforimCorpusFactory(string dbPath)
+        {
+            if (string.IsNullOrWhiteSpace(dbPath))
+                throw new ArgumentException("dbPath must not be empty.", nameof(dbPath));
+
+            return () => new ZayitDb(dbPath);
+        }
 
         /// <summary>Default visible-character budget for the snippet window.</summary>
         public const int DefaultSnippetLength = SnippetPipeline.DefaultContextWords; // kept for binary compat
@@ -42,15 +53,33 @@ namespace FtsLib.SeforimDb
         /// <summary>Default number of words of context shown on each side of the match.</summary>
         public const int DefaultContextWords = SnippetPipeline.DefaultContextWords;
 
+        /// <summary>
+        /// Opens an index over the seforim database at <paramref name="dbPath"/>, read by this
+        /// library's own built-in reader. UNCHANGED BEHAVIOUR — every existing caller uses this.
+        /// </summary>
         public SeforimIndex(string indexPath, string dbPath)
+            : this(indexPath, MakeSeforimCorpusFactory(dbPath))
+        {
+        }
+
+        /// <summary>
+        /// Opens an index over documents the CALLER supplies, so this library reads no content
+        /// database of its own. See <see cref="IFtsCorpus"/> for why the parameter is a factory
+        /// rather than an instance.
+        ///
+        /// This is the route that lets the corpus live outside the engine; the other constructor
+        /// stays for as long as anything still uses the built-in reader. Both are live at once on
+        /// purpose — callers move over one at a time.
+        /// </summary>
+        public SeforimIndex(string indexPath, Func<IFtsCorpus> openCorpus)
         {
             if (string.IsNullOrWhiteSpace(indexPath))
                 throw new ArgumentException("indexPath must not be empty.", nameof(indexPath));
-            if (string.IsNullOrWhiteSpace(dbPath))
-                throw new ArgumentException("dbPath must not be empty.", nameof(dbPath));
+            if (openCorpus == null)
+                throw new ArgumentNullException(nameof(openCorpus));
 
-            _indexPath = indexPath;
-            _dbPath    = dbPath;
+            _indexPath  = indexPath;
+            _openCorpus = openCorpus;
 
             // Initialise the store eagerly so crash recovery runs once at startup
             // and the live segment state is ready before the first search.
@@ -267,14 +296,14 @@ namespace FtsLib.SeforimDb
 
         public long CountLines()
         {
-            using (var db = new ZayitDb(_dbPath))
-                return db.CountLines();
+            using (var corpus = _openCorpus())
+                return corpus.CountDocuments();
         }
 
         public long CountLinesUpTo(int upToId)
         {
-            using (var db = new ZayitDb(_dbPath))
-                return db.CountLinesUpTo(upToId);
+            using (var corpus = _openCorpus())
+                return corpus.CountDocumentsUpTo(upToId);
         }
 
         public bool BuildIndex(int limit = 0, Action<long> onProgress = null,
@@ -289,7 +318,7 @@ namespace FtsLib.SeforimDb
             using (new IndexWriteLock(_indexPath))
             {
                 FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex", "IndexWriteLock acquired");
-                bool result = IndexingPipeline.Build(_indexPath, _dbPath, _store, limit, totalLines, resumeOffset, onProgress, onFlush, ct);
+                bool result = IndexingPipeline.Build(_indexPath, _openCorpus, _store, limit, totalLines, resumeOffset, onProgress, onFlush, ct);
                 if (_store.IsWiped)
                 {
                     FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
@@ -372,7 +401,7 @@ namespace FtsLib.SeforimDb
             IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
             var lease = AcquireSearchLease(out var livePaths);
-            return SearchPipeline.Search(query, _indexPath, _dbPath, livePaths, lease, cap, expandKetiv, filterIds, ct);
+            return SearchPipeline.Search(query, _indexPath, _openCorpus, livePaths, lease, cap, expandKetiv, filterIds, ct);
         }
 
         /// <param name="filterIds">Optional line-ID keep-set — see <see cref="Search"/>.</param>
@@ -422,7 +451,7 @@ namespace FtsLib.SeforimDb
         public SnippetResult GenerateSnippet(int lineId, string query)
         {
             var terms = SearchPipeline.ExtractTerms(query);
-            return SnippetPipeline.GenerateFromDb(lineId, terms, _dbPath);
+            return SnippetPipeline.GenerateFromDb(lineId, terms, _openCorpus);
         }
 
         /// <summary>
@@ -437,8 +466,15 @@ namespace FtsLib.SeforimDb
         {
             if (lineIds == null || lineIds.Count == 0 || radius <= 0)
                 return new System.Collections.Generic.Dictionary<int, (string, string)>();
-            using (var db = new ZayitDb(_dbPath))
-                return db.FetchNeighborContext(lineIds, radius);
+            // Copied into the concrete type this method has always returned, rather than
+            // widening the signature and breaking the two callers that hold the result.
+            using (var corpus = _openCorpus())
+            {
+                var neighbours = new System.Collections.Generic.Dictionary<int, (string Prev, string Next)>();
+                foreach (var entry in corpus.FetchNeighbourText(lineIds, radius))
+                    neighbours[entry.Key] = (entry.Value.Previous, entry.Value.Next);
+                return neighbours;
+            }
         }
 
         public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,

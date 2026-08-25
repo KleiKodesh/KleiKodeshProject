@@ -133,9 +133,11 @@ namespace FtsLib.SeforimDb
         /// Optional callback invoked after each line is processed.
         /// Receives the running count of lines processed in this session.
         /// </param>
+        /// <param name="openCorpus">Opens the documents to index. A FACTORY, because this owns
+        /// what it opens and disposes it when the build ends — see <see cref="FtsLib.IFtsCorpus"/>.</param>
         internal static bool Build(
             string             indexPath,
-            string             dbPath,
+            Func<IFtsCorpus>   openCorpus,
             SegmentStore       store      = null,
             int                limit      = 0,
             long               totalLines = 0,
@@ -146,7 +148,7 @@ namespace FtsLib.SeforimDb
         {
             FtsLib.Indexing.FtsLog.Separator("IndexingPipeline.Build START");
             FtsLib.Indexing.FtsLog.Write("IndexingPipeline.Build",
-                $"indexPath={indexPath} dbPath={dbPath} limit={limit} totalLines={totalLines} resumeOffset={resumeOffset}");
+                $"indexPath={indexPath} limit={limit} totalLines={totalLines} resumeOffset={resumeOffset}");
 
             // Log current index directory state at entry
             try
@@ -300,12 +302,12 @@ namespace FtsLib.SeforimDb
 
             bool cancelled = false;
 
-            using (var db = new ZayitDb(dbPath))
+            using (var corpus = openCorpus())
             using (writer)
             {
                 var lineSource = resumeLineId != 0
-                    ? db.ReadLinesFrom(resumeLineId, limit, ct)
-                    : db.ReadLines(limit, ct);
+                    ? corpus.ReadDocumentsAfter(resumeLineId, limit, ct)
+                    : corpus.ReadDocuments(limit, ct);
 
                 try
                 {

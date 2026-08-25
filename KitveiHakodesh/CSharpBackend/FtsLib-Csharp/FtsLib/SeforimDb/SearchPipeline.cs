@@ -1,3 +1,4 @@
+using System;
 using FtsLib.Indexing;
 using FtsLib.Search;
 using System.Collections.Generic;
@@ -35,7 +36,9 @@ namespace FtsLib.SeforimDb
         /// </summary>
         /// <param name="query">Raw query string from the user.</param>
         /// <param name="indexPath">Directory containing the segment files.</param>
-        /// <param name="dbPath">Path to the seforim SQLite database.</param>
+        /// <param name="openCorpus">Opens the documents to fetch results from. A FACTORY: this
+        /// returns a LAZY sequence, so the corpus must stay open until enumeration finishes, not
+        /// until the call returns — which means the `using` has to live inside the iterator here.</param>
         /// <param name="cap">Maximum results to return. 0 = no cap.</param>
         /// <param name="filterIds">Optional line-ID keep-set: only these IDs can be
         /// returned. Null = no filtering; an empty collection matches nothing.</param>
@@ -43,7 +46,7 @@ namespace FtsLib.SeforimDb
         internal static IEnumerable<SearchResult> Search(
             string            query,
             string            indexPath,
-            string            dbPath,
+            Func<IFtsCorpus>  openCorpus,
             List<(string dat, string db)> livePaths,
             SearchLease       lease,
             int               cap = 0,
@@ -120,9 +123,9 @@ namespace FtsLib.SeforimDb
             var runs = docMap.SplitBySource(ids);
             if (runs == null)
             {
-                using (var db = new ZayitDb(dbPath))
+                using (var corpus = openCorpus())
                 {
-                    foreach (var (lineId, content, bookTitle) in db.FetchSearchResultsStreaming(ids))
+                    foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
                     {
                         ct.ThrowIfCancellationRequested();
                         yield return new SearchResult(lineId, bookTitle, content, matchedGroups, originalGroupCount, prepared);
@@ -143,10 +146,10 @@ namespace FtsLib.SeforimDb
                         $"({run.Count} result(s)); only the library (source 0) is wired up.");
 
                 long offset = run.Offset;
-                using (var db = new ZayitDb(dbPath))
+                using (var corpus = openCorpus())
                 {
                     foreach (var (srcId, content, bookTitle) in
-                             db.FetchSearchResultsStreaming(TranslateRun(ids, run)))
+                             corpus.FetchDocuments(TranslateRun(ids, run)))
                     {
                         ct.ThrowIfCancellationRequested();
                         int docId = (int)(srcId - offset); // back to the app-visible id
