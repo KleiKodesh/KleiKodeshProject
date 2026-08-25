@@ -39,7 +39,7 @@ const emit = defineEmits<{ 'update:open': [boolean]; close: [] }>()
 
 /** Breathing room kept between the panel and the viewport edges. */
 const VIEWPORT_MARGIN = 8
-/** Gap between the button and the panel hanging below it - 3px, as .nav-dropdown uses. */
+/** Gap between the title bar's edge and the panel hanging below it - 3px, as .nav-dropdown uses. */
 const ANCHOR_GAP = 3
 
 const panelRef = ref<HTMLElement | null>(null)
@@ -209,11 +209,20 @@ function place() {
 
   // ── Vertical: under the button, flipped above only when that is roomier ──
   //
+  // The button sits inset a few pixels INSIDE the title bar, so hanging off its own rect
+  // puts the panel's top edge flush with - or a hair into - the bar's bottom edge, and the
+  // ANCHOR_GAP is swallowed by the inset. The edge the panel must clear is the BAR's, so
+  // the drop edges are the union of the two rects: the gap then reads as a real gap below
+  // the bar, not as the tail of the button's inset.
+  const barRect = anchorEl.closest('.title-bar')?.getBoundingClientRect()
+  const dropBottom = Math.max(a.bottom, barRect?.bottom ?? a.bottom)
+  const dropTop = Math.min(a.top, barRect?.top ?? a.top)
+
   // Re-measured, because the width cap above may have narrowed the panel and rewrapped its
   // rows. The height taken before that would be the height of a wider panel.
   const height = panel.offsetHeight
-  const roomBelow = vh - VIEWPORT_MARGIN - (a.bottom + ANCHOR_GAP)
-  const roomAbove = a.top - ANCHOR_GAP - VIEWPORT_MARGIN
+  const roomBelow = vh - VIEWPORT_MARGIN - (dropBottom + ANCHOR_GAP)
+  const roomAbove = dropTop - ANCHOR_GAP - VIEWPORT_MARGIN
   // Down is the default and stays the default while the panel fits: a dropdown that jumped
   // above its button the moment the list grew by a row would move under the reader's hand.
   // It only flips when down cannot hold it AND up genuinely holds more.
@@ -234,7 +243,7 @@ function place() {
   panel.style.maxHeight = height > room ? `${room}px` : ''
 
   const effectiveHeight = Math.min(height, room)
-  top.value = openAbove ? a.top - ANCHOR_GAP - effectiveHeight : a.bottom + ANCHOR_GAP
+  top.value = openAbove ? dropTop - ANCHOR_GAP - effectiveHeight : dropBottom + ANCHOR_GAP
 
   placed.value = true
 }
