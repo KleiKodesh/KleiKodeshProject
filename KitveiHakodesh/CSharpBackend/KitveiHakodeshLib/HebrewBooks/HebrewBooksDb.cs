@@ -69,7 +69,7 @@ namespace KitveiHakodeshLib.HebrewBooks
 
     /// <summary>
     /// Provides search and retrieval operations on the Hebrew Books SQLite database.
-    /// The database is deployed as a content file (Resources/HebrewBooks.db) and opened read-only.
+    /// The database is deployed as a content file (Resources/HebrewBooksCatalog.db) and opened read-only.
     /// A single shared connection is maintained for the lifetime of the app.
     /// </summary>
     public class HebrewBooksDb
@@ -89,7 +89,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             _dbPath = Path.Combine(
                 AppDomain.CurrentDomain.BaseDirectory,
                 "Resources",
-                "HebrewBooks.db");
+                "HebrewBooksCatalog.db");
         }
 
         public void Initialize()

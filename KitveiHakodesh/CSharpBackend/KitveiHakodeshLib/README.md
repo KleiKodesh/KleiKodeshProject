@@ -19,7 +19,7 @@ KitveiHakodeshLib/
 ├── AppViewerTheme.cs               — AppViewer partial: DarkNet title-bar theme wiring and setTheme handler
 ├── SplashOverlay.cs                — Fade-in splash screen shown while WebView2 loads
 ├── WordExporter.cs                 — Exports content to Word
-├── HebrewBooks.db                  — Local HebrewBooks catalogue database
+├── HebrewBooks.db                  — ORPHAN: byte-identical duplicate, in no csproj
 ├── KleiKodesh_Main.png             — Splash screen image resource
 ├── Bridge/
 │   ├── JsBridge.cs                 — Injects window.__webviewAction into the page; routes messages
@@ -48,7 +48,7 @@ KitveiHakodeshLib/
 ├── Properties/
 │   └── AssemblyInfo.cs             — Assembly metadata
 ├── Resources/
-│   └── HebrewBooks.db              — Embedded HebrewBooks catalogue DB resource
+│   └── HebrewBooksCatalog.db       — HebrewBooks catalogue DB resource
 ├── Search/
 │   ├── SearchHandler.cs            — FtsLib indexing & search; index lifecycle management
 │   ├── FtsIndexBuilder.cs          — Background index builder
