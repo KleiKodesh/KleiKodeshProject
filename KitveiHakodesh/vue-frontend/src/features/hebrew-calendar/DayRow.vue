@@ -22,10 +22,12 @@ const ZMANIM_ROWS: Array<{ key: keyof CalendarDay['zmanim']; label: string }> = 
   { key: 'alot', label: 'עלות השחר' },
   { key: 'misheyakir', label: 'משיכיר' },
   { key: 'sunrise', label: 'הנץ החמה' },
-  { key: 'sofShmaGra', label: 'סו״ז ק״ש גר״א' },
+  // MGA's day starts at alot, so each MGA deadline lands before its GRA
+  // counterpart (shma-MGA → shma-GRA → tfilla-MGA → tfilla-GRA).
   { key: 'sofShmaMga', label: 'סו״ז ק״ש מג״א' },
-  { key: 'sofTfillaGra', label: 'סו״ז תפילה גר״א' },
+  { key: 'sofShmaGra', label: 'סו״ז ק״ש גר״א' },
   { key: 'sofTfillaMga', label: 'סו״ז תפילה מג״א' },
+  { key: 'sofTfillaGra', label: 'סו״ז תפילה גר״א' },
   { key: 'chatzot', label: 'חצות היום' },
   { key: 'minchaGedola', label: 'מנחה גדולה' },
   { key: 'minchaKetana', label: 'מנחה קטנה' },
