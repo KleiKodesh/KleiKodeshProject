@@ -1417,7 +1417,39 @@ second constructor `(indexPath, Func<IFtsCorpus>)`. Core's `SeforimDbFtsIndexer`
 `SeforimDbQueries`, hand the factory in, and the engine reads nothing. Every existing
 caller still uses `(indexPath, dbPath)` unchanged.
 
-### ⛔ Slice 6 NEEDS A DECISION BEFORE IT CAN BE WRITTEN
+### ✅ Slice 6 DECIDED AND WRITTEN (2026-08-25): one class, files split by job
+
+**The user chose option 1.** `SeforimDbCatalogIndex` is ONE partial type across
+`SeforimDbCatalogIndexer.cs` (build + provenance + the class doc) and
+`SeforimDbCatalogSearcher.cs` (search + the reader lifecycle) — the
+`SeforimDbQueries`/`SeforimDbConnection` precedent. Zero behaviour change; the shared
+lock/reader/directory stay private to one type.
+
+Core's `SeforimDbCatalog/` now holds six files: the two halves, `SeforimDbCatalogAnalyzer`
+(the lifted PipelineAnalyzer + its private tokenizer), `SeforimDbCatalogTextNormalizer`,
+`SeforimDbCatalogAbbreviations` (now the hand-edited source of truth — the generated-file
+banner is retired; the generator's two invariants become unit tests), and
+`SeforimDbCatalogModels` (`CatalogTocHit`, name preserved — it is on the wire).
+
+Execution notes, all mechanical (the 5,367 Hebrew characters were verified byte-identical
+before and after — pure moves, surgical ASCII edits only):
+- The primary constructor became two fields + an explicit ctor with the SAME parameter names,
+  because primary-ctor parameters are not in scope in the other partial file — and matching
+  names meant zero body edits.
+- Its 8 SQL statements moved to `SeforimDbSqlStrings` (rule 9); `OpenDb` now uses
+  `SqliteConnectionFactory.OpenCorpusRead`. The catalog's category/book queries stay SEPARATE
+  consts from `GetAllCategories`/`GetAllBooks` — different SELECT lists, positional readers.
+- `TanachBookTitles` went private (zero external callers, as the plan predicted).
+- net48 leg gaps → `Common/NetFrameworkPolyfills.cs` (`System.Index`/`System.Range` +
+  `GetValueOrDefault`, `#if NETFRAMEWORK`) plus four one-line overload fixes — where
+  `EndsWith(char)` became `EndsWith(string)`, the comparison is EXPLICITLY Ordinal, because
+  the parameterless string overload is culture-sensitive and the char one never was.
+- Lucene.Net 4.8.0-beta00018 on both Core legs. ⚠ An app publishing native AOT must still
+  root it (`TrimmerRootAssembly`) — the Service already does; a library cannot do it for them.
+- The orchestrator (`CatalogTocSearchService` + starter + RPC DTOs) stays in the Service,
+  exactly as `FullTextSearchService` did.
+
+--- the original decision text, kept for the reasoning ---
 
 Rule 11 says split `CatalogTocIndex.cs` (1644 lines) into `SeforimDbCatalogIndexer` and
 `SeforimDbCatalogSearcher`. Tracing the code first: **those two share more than a file.**

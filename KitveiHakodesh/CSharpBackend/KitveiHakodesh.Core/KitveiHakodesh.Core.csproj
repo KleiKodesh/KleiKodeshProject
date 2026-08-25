@@ -130,6 +130,12 @@
          THIS compilation, which is why Core declares its own resolver (CoreMessagePackResolver)
          rather than relying on the Service's — a generator cannot see across assemblies. -->
     <PackageReference Include="MessagePack" Version="3.1.8" />
+    <!-- The catalog index (SeforimDbCatalog/). Same version as the Service. NOTE FOR AOT
+         PUBLISHERS: Lucene discovers codecs via reflection (NamedSPILoader +
+         Activator.CreateInstance), so the APP that publishes native AOT must root the
+         assembly - <TrimmerRootAssembly Include="Lucene.Net" /> - as KitveiHakodeshService
+         already does. A library cannot do that for its consumers. -->
+    <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
   </ItemGroup>
 
 </Project>
