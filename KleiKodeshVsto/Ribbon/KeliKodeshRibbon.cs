@@ -4,7 +4,9 @@ using Microsoft.Office.Tools.Ribbon;
 using Nakdan;
 using Nakdan.UI;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
@@ -96,6 +98,71 @@ namespace KleiKodesh.Ribbon
             {
                 MessageBox.Show(ex.Message);
             }
+        }
+
+        // Right-click "השווה עם כתבי הקודש": rewrite the Word selection into the text
+        // currently selected in the Kitvei Hakodesh pane, as tracked revisions
+        // (issue #244). The pane's selection is read live at click time - a browser
+        // keeps its selection when focus leaves it - so there is no stale state to
+        // manage. Requires an already-open pane: creating one here would produce an
+        // empty viewer with nothing selected.
+        public async void compareText_Click(Office.IRibbonControl control)
+        {
+            try
+            {
+                var viewers = TaskPaneManager.FindAllUsable(typeof(KitveiHakodeshLib.AppViewer))
+                    .Select(p => p.Control as KitveiHakodeshLib.AppViewer)
+                    .Where(v => v != null)
+                    .ToList();
+                if (viewers.Count == 0)
+                {
+                    MessageBox.Show("יש לפתוח את כתבי הקודש ולסמן בו את הקטע להשוואה", "השוואת טקסט");
+                    return;
+                }
+
+                // Read every open viewer, not just the most recent one: a browser keeps
+                // its selection indefinitely, so with duplicated panes the only reliable
+                // sign of which pane the user meant is where a selection actually is.
+                // Exactly one non-empty selection decides; several is ambiguous, and
+                // guessing would silently rewrite the paragraph into the wrong text.
+                var selections = new List<string>();
+                foreach (var v in viewers)
+                    selections.Add(await v.GetSelectedTextAsync());
+                var nonEmpty = selections.Where(t => !string.IsNullOrWhiteSpace(t)).ToList();
+
+                if (nonEmpty.Count == 0)
+                {
+                    MessageBox.Show("לא נמצא טקסט מסומן בכתבי הקודש", "השוואת טקסט");
+                    return;
+                }
+                if (nonEmpty.Count > 1)
+                {
+                    MessageBox.Show("נמצא טקסט מסומן בכמה חלוניות של כתבי הקודש - השאר סימון בחלונית אחת בלבד", "השוואת טקסט");
+                    return;
+                }
+                string reference = nonEmpty[0];
+
+                // The await resumes on the UI thread through the WinForms context;
+                // Invoke covers the rare case it does not, since everything below is
+                // Word COM and must run there.
+                var marshal = viewers[0];
+                if (marshal.InvokeRequired)
+                    marshal.Invoke((Action)(() => RunCompare(reference)));
+                else
+                    RunCompare(reference);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message);
+            }
+        }
+
+        private static void RunCompare(string reference)
+        {
+            string message = TrackedCompare.ApplyReference(
+                Globals.ThisAddIn.Application.Selection, reference);
+            if (message != null)
+                MessageBox.Show(message, "השוואת טקסט");
         }
 
         // Only show the "open link" item when the selection actually contains a
