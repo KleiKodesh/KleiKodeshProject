@@ -20,7 +20,6 @@ export function useAppNavigation() {
     'קטלוג הספרים': '/books',
     הגדרות: '/settings',
     'היברו-בוקס': '/hebrewbooks',
-    'סביבות עבודה': '/workspaces',
     'לוח שנה': '/hebrew-calendar',
     מילון: '/dictionary',
     'מידות ושיעורים': '/midot',

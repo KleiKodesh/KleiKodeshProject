@@ -65,7 +65,7 @@ export function useAppTitleBarShortcuts(options: {
     () => !bookViewStore.splitViewEnabled || bookViewStore.focusedPaneId === paneId,
   )
 
-  /** Quick-nav destinations for Ctrl+1..Ctrl+9, in order. */
+  /** Quick-nav destinations for Ctrl+1..Ctrl+8, in order. */
   const QUICK_NAV_LABELS = [
     'קטלוג הספרים',
     'חיפוש',
@@ -75,7 +75,6 @@ export function useAppTitleBarShortcuts(options: {
     'מילון',
     'לוח שנה',
     'מידות ושיעורים',
-    'סביבות עבודה',
   ]
 
   // Forward Ctrl+key shortcuts from child iframes (HTML/txt viewer) back into the
