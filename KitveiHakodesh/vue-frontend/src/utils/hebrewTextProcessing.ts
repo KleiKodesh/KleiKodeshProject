@@ -87,7 +87,7 @@ export function isSearchIgnoredMark(ch: string): boolean {
 
 /** Strip Hebrew diacritics for search matching, keeping the maqaf as a space. */
 export function removeDiacriticsForSearch(text: string): string {
-  return text.replace(SEARCH_IGNORED_MARKS, '').replaceAll(MAQAF, ' ')
+  return text.replace(SEARCH_IGNORED_MARKS, '').split(MAQAF).join(' ')
 }
 
 /**
