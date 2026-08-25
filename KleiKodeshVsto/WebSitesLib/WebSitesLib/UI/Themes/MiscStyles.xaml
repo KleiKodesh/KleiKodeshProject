@@ -47,11 +47,4 @@
 
     <!-- CheckBox comes from WpfLib/Themes/CheckBoxStyles.xaml (via OfficePalette). -->
 
-    <!-- ── Separator line ────────────────────────────────────────── -->
-    <Style x:Key="SeparatorLine" TargetType="Rectangle">
-        <Setter Property="Height"           Value="1"/>
-        <Setter Property="IsHitTestVisible" Value="False"/>
-        <Setter Property="Fill"             Value="{StaticResource BorderBrush}"/>
-    </Style>
-
 </ResourceDictionary>
