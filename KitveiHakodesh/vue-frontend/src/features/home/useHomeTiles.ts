@@ -18,6 +18,8 @@ import {
 
 const TILE_WIDTH = 72
 const TILE_GAP = 8
+/** How many full rows the folder and document tiles get, on top of the static row's tail. */
+const DYNAMIC_TILE_ROWS = 5
 
 
 /**
@@ -88,13 +90,13 @@ export function useHomeTiles(containerWidth: Ref<number>) {
 
   /**
    * How many tiles the two dynamic groups get between them: the gap left on the
-   * static tiles' last row, plus one more full row.
+   * static tiles' last row, plus DYNAMIC_TILE_ROWS more full rows.
    */
   const dynamicTileBudget = computed(() => {
     const perRow = tilesPerRow.value
     const tailSlots = tiles.value.length % perRow
     const freeOnLastRow = tailSlots === 0 ? 0 : perRow - tailSlots
-    return freeOnLastRow + perRow
+    return freeOnLastRow + DYNAMIC_TILE_ROWS * perRow
   })
 
   /**

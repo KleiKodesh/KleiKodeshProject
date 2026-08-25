@@ -51,7 +51,7 @@ export interface RecentlyOpenedEntry extends PopularityScored {
 
 const RECENTLY_OPENED_DB = 'app-recently-opened'
 const RECENTLY_OPENED_STORE = 'data'
-const RECENTLY_OPENED_MAX = 20
+const RECENTLY_OPENED_MAX = 50
 
 /**
  * Pins may not fill the whole list. Without this, pinning every slot would leave
