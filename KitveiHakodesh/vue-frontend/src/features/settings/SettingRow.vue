@@ -11,8 +11,11 @@ defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
     <div class="setting-control">
       <slot />
       <!-- A row whose control speaks for itself needs no label, but may still
-           carry a hint — keep it reachable next to the control. -->
-      <HintIcon v-if="hint && !label" :hint="hint" />
+           carry a hint — keep it reachable next to the control. Absolutely
+           positioned so it takes no width: otherwise this row's control is
+           ~20px narrower than its siblings' and its toggle grid resolves to
+           different track sizes than theirs. -->
+      <HintIcon v-if="hint && !label" class="control-hint" :hint="hint" />
     </div>
   </div>
 </template>
@@ -42,6 +45,14 @@ defineProps<{ label?: string; wrap?: boolean; hint?: string }>()
   gap: 6px;
   flex-wrap: nowrap;
   width: 100%;
+  position: relative;
+}
+.control-hint {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  translate: 0 -50%;
+  margin: 0;
 }
 .wrap .setting-control {
   flex-wrap: wrap;
