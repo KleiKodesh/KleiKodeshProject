@@ -62,7 +62,6 @@ export function useHomeTiles(containerWidth: Ref<number>) {
       { label: 'מילון', ...tileIcon('dict') },
       { label: 'לוח שנה', ...tileIcon('calendar') },
       { label: 'מידות ושיעורים', ...tileIcon('ruler') },
-      { label: 'סביבות עבודה', ...tileIcon('apps') },
       { label: 'הגדרות', ...tileIcon('settings') },
     ]
   })

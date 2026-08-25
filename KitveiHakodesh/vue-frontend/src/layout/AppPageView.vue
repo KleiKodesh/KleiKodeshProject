@@ -42,9 +42,6 @@ const pages: Record<string, unknown> = {
   '/hebrewbooks': defineAsyncComponent(
     () => import('@/features/hebrewbooks/HebrewBooksPage.vue'),
   ),
-  '/workspaces': defineAsyncComponent(
-    () => import('@/features/workspace/WorkspaceManagerPage.vue'),
-  ),
   '/search': defineAsyncComponent(() => import('@/features/full-text-search/FullTextSearchPage.vue')),
   '/hebrew-calendar': defineAsyncComponent(
     () => import('@/features/hebrew-calendar/HebrewCalendarPage.vue'),

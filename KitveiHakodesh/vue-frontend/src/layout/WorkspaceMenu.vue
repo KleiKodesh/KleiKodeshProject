@@ -10,6 +10,23 @@ import {
 import { useWorkspaceStore } from '@/stores/workspaceStore'
 import type { Workspace } from '@/stores/workspaceStore'
 
+/**
+ * The whole of workspace management, as a menu panel rather than a page.
+ *
+ * It used to be a destination - a tab, a home tile, Ctrl+9 - for a list that is only
+ * ever a few short rows and is picked from mid-task, so it is a menu now: a flyout off
+ * the nav rail and a submenu inside the hamburger menu. Both surfaces render THIS
+ * component, the way both render `appNavItems`, so the two can never drift.
+ *
+ * Every mutation lives in `workspaceStore`. What is here is the rows and the three bits
+ * of row-local state: which row is being renamed, which is confirming a delete, and the
+ * new-name box.
+ *
+ * No surface of its own - the panel that hosts it paints the background, frame and
+ * shadow, so it drops into either host unchanged.
+ */
+const emit = defineEmits<{ close: [] }>()
+
 const wsStore = useWorkspaceStore()
 
 const newName = ref('')
@@ -42,7 +59,11 @@ function cancelEdit() {
 }
 
 async function switchTo(id: string) {
-  if (id === wsStore.activeId) return
+  // Picking the workspace that is already active is just a dismissal - no reload.
+  if (id === wsStore.activeId) {
+    emit('close')
+    return
+  }
   await wsStore.switchWorkspace(id)
   window.location.reload()
 }
@@ -55,7 +76,7 @@ async function confirmDelete(id: string) {
   const wasActive = wsStore.activeId === id
   await wsStore.deleteWorkspace(id)
   confirmDeleteId.value = null
-  // If we deleted the active workspace, the store already switched — reload
+  // If we deleted the active workspace, the store already switched - reload
   if (!wasActive) return
   window.location.reload()
 }
@@ -64,10 +85,26 @@ function startConfirmDelete(id: string) {
   confirmDeleteId.value = id
   editingId.value = null
 }
+
+/**
+ * Keys typed in here are this menu's own and must not reach the host menu.
+ *
+ * The hamburger dropdown runs `useListKeys` on its root, which listens for bubbled
+ * keydowns: without this, Enter in the new-name box would be swallowed and re-activate
+ * whichever row the arrow keys had last focused, and the arrow keys would walk that
+ * menu's rows while the caret sat in a text field.
+ *
+ * Escape is deliberately let through: it is the host's "back out one level", and this
+ * component does not own a level of its own to back out of.
+ */
+function onKeydown(e: KeyboardEvent) {
+  if (e.code === 'Escape') return
+  e.stopPropagation()
+}
 </script>
 
 <template>
-  <div class="ws-page">
+  <div class="ws-menu" @click.stop @keydown="onKeydown">
     <div class="ws-list">
       <div
         v-for="ws in wsStore.workspaces"
@@ -81,7 +118,7 @@ function startConfirmDelete(id: string) {
             name="workspace-name-edit"
             class="ws-input ws-input-inline"
             @keydown.enter="commitEdit"
-            @keydown.escape="cancelEdit"
+            @keydown.escape.stop="cancelEdit"
             autofocus
           />
           <button class="icon-btn" title="שמור" @click="commitEdit">
@@ -92,7 +129,7 @@ function startConfirmDelete(id: string) {
           </button>
         </template>
         <template v-else-if="confirmDeleteId === ws.id">
-          <span class="ws-name confirm-text">למחוק את "{{ ws.name }}"?</span>
+          <span class="ws-name confirm-text">{{ ws.name }} — למחוק?</span>
           <button class="icon-btn danger" @click="confirmDelete(ws.id)">מחק</button>
           <button class="icon-btn" @click="confirmDeleteId = null">ביטול</button>
         </template>
@@ -121,46 +158,48 @@ function startConfirmDelete(id: string) {
         v-model="newName"
         name="workspace-name-new"
         class="ws-input"
-        placeholder="שם סביבת עבודה חדשה"
+        placeholder="סביבת עבודה חדשה"
         @keydown.enter="create"
       />
-      <button class="create-btn" :disabled="!newName.trim()" @click="create">
+      <button class="create-btn" :disabled="!newName.trim()" title="צור" @click="create">
         <IconAdd20Regular />
-        <span>צור</span>
       </button>
     </div>
   </div>
 </template>
 
 <style scoped>
-.ws-page {
+/* No height of its own: the panel that hosts it clamps to the viewport (WorkspaceSubmenu),
+   and this menu takes whatever that leaves. `min-height: 0` is what lets the list below
+   actually shrink and scroll inside a flex column instead of overflowing it, which is how
+   the create box stays reachable in a short window. */
+.ws-menu {
   display: flex;
   flex-direction: column;
-  height: 100%;
-  background: var(--bg-primary);
+  min-width: 200px;
+  min-height: 0;
   direction: rtl;
 }
 
 .ws-list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
+/* 32px rows, matching the menu rows of the surfaces that host this - the panel is a
+   continuation of that menu, not a panel dropped inside one. */
 .ws-row {
   display: flex;
   align-items: center;
-  height: 44px;
-  padding: 0 12px;
-  gap: 6px;
-  border-bottom: 1px solid var(--border-color);
+  height: 32px;
+  padding: 0 10px;
+  gap: 4px;
 }
 .ws-row:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
-}
-.ws-row.active {
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
-  border-inline-start: 2px solid var(--accent-color);
-  padding-inline-start: 10px;
 }
 .ws-row.active .ws-name {
   color: var(--accent-color);
@@ -193,6 +232,8 @@ function startConfirmDelete(id: string) {
   flex-shrink: 0;
 }
 
+/* Revealed on row hover, like the rest of the app's list rows: two more glyphs on every
+   row at rest would read as four columns of controls rather than a list of names. */
 .ws-actions {
   display: flex;
   gap: 2px;
@@ -207,15 +248,15 @@ function startConfirmDelete(id: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  min-width: 24px;
+  height: 24px;
   border-radius: 4px;
   font-size: 11px;
-  padding: 0 6px;
+  padding: 0 5px;
 }
 .icon-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 .icon-btn.danger {
   color: var(--status-danger);
@@ -230,28 +271,29 @@ function startConfirmDelete(id: string) {
 
 .ws-input-inline {
   flex: 1;
-  height: 28px;
+  height: 24px;
+  font-size: 12px;
 }
 
 .ws-create {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 6px 8px;
   border-top: 1px solid var(--border-color);
-  background: var(--bg-secondary);
   flex-shrink: 0;
 }
 
 .ws-input {
   flex: 1;
-  height: 32px;
-  padding: 0 10px;
+  min-width: 0;
+  height: 26px;
+  padding: 0 8px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 12px;
   outline: none;
 }
 .ws-input:focus {
@@ -264,11 +306,10 @@ function startConfirmDelete(id: string) {
 .create-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 32px;
-  padding: 0 12px;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
   border-radius: 4px;
-  font-size: 13px;
   color: var(--accent-color);
   border: 1px solid color-mix(in srgb, var(--accent-color) 40%, transparent);
   background: color-mix(in srgb, var(--accent-color) 8%, transparent);
@@ -282,7 +323,7 @@ function startConfirmDelete(id: string) {
   pointer-events: none;
 }
 .create-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 15px;
+  height: 15px;
 }
 </style>

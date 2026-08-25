@@ -35,8 +35,13 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
   navItem('מילון', 'dict', 'Ctrl+6'),
   navItem('לוח שנה', 'calendar', 'Ctrl+7'),
   navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
-  navItem('סביבות עבודה', 'apps', 'Ctrl+9'),
 ]
+
+/**
+ * Workspaces is deliberately NOT in the list above, and has no route at all: it is not a
+ * destination but a picker, so both surfaces open `WorkspaceMenu` in place - a flyout off
+ * the rail, a submenu in the dropdown. Adding it back here would give it a tab again.
+ */
 
 /** Settings sits below a divider in both surfaces, so it is not part of the list above. */
 export const APP_NAV_SETTINGS_ITEM: AppNavItem = navItem('הגדרות', 'settings', 'F1')
