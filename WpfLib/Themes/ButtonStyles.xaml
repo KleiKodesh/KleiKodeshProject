@@ -288,6 +288,30 @@
         </Setter>
     </Style>
 
+    <!--
+        StepButton - a bare repeat button for steppers: the +/- beside a value,
+        the arrows on a spinner. No chrome of its own, because it always sits
+        against something that already has some.
+
+        Square by default: MinWidth tracks ActualHeight, so a stepper stays as
+        wide as it is tall whatever height the call site gives it. Not
+        focusable - a stepper is a mouse affordance, and its neighbour, the
+        field it steps, is the thing worth tabbing to.
+
+        The icon and any tooltip belong at the call site: those are what
+        distinguish one stepper from another, and they are all this style
+        leaves for a consumer to add.
+    -->
+    <Style x:Key="StepButton" TargetType="RepeatButton">
+        <Setter Property="Margin"           Value="0"/>
+        <Setter Property="Background"       Value="Transparent"/>
+        <Setter Property="BorderThickness"  Value="0"/>
+        <Setter Property="Cursor"           Value="Hand"/>
+        <Setter Property="Focusable"        Value="False"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="MinWidth"         Value="{Binding ActualHeight, RelativeSource={RelativeSource Self}}"/>
+    </Style>
+
     <!-- ── IconPath — vector icon inside a button ─────────────────── -->
     <Style x:Key="IconPath" TargetType="Path">
         <!--

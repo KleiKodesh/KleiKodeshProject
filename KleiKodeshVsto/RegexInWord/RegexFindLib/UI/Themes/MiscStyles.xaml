@@ -19,15 +19,6 @@
         <Setter Property="CaretBrush" Value="{Binding Foreground, RelativeSource={RelativeSource Self}}"/>
     </Style>
 
-    <!-- ── Input wrapper border — adaptive ───────────────────────── -->
-    <Style x:Key="InputWrapper" TargetType="Border">
-        <Setter Property="BorderBrush"     Value="{StaticResource BorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius"    Value="4"/>
-        <Setter Property="Background"      Value="Transparent"/>
-        <Setter Property="Height"          Value="32"/>
-    </Style>
-
     <!-- ── Inline TextBox — inherits fg from ancestor ────────────── -->
     <Style x:Key="InlineTextBox" TargetType="TextBox" BasedOn="{StaticResource FlatTextBox}">
         <Setter Property="Padding" Value="8,0"/>
