@@ -71,10 +71,9 @@ Per-leg differences use `<Compile Remove>` or `#if NET10_0_OR_GREATER`, followin
 ## Layout
 
 ```
-CoreOptions.cs        injected config — Core reads no environment variables
-Exceptions/           specific exception types, never one catch-all
-Common/               reusable, knows nothing about this app
-  Sqlite/  Files/  Office/  Fonts/  Update/  Diagnostics/  Shell/
+Common/               reusable, knows nothing about this app. FLAT — no subfolders;
+                      the file names already say what each one is. Holds AppFileLocator,
+                      which is how Core finds its own files (see below)
 Settings/             registry-backed app settings + seforim DB path resolution
 SeforimDb/            SQL strings, queries, models — the ONE reader for seforim.db
 SeforimDbFullTextSearch/   feeds and searches the FTS index (engine logic is FtsLib's)
@@ -86,9 +85,20 @@ UserAnnotations/      highlights + notes — user CONTENT, the only write path h
 Resources/            Dictionary.db, HebrewBooksCatalog.db — ONE copy of each, ever
 ```
 
-`Common/` holds genuinely reusable code — SQLite native loading, update checking, file
-fingerprinting, Office COM, font enumeration, environment probes. Nothing in it may know the
-KitveiHakodesh app exists.
+`Common/` holds genuinely reusable code — file location, SQLite connections, update
+checking, file fingerprinting, Office COM, font enumeration, environment probes. Nothing in
+it may know the KitveiHakodesh app exists.
+
+There is **no `CoreOptions`** and no injected path bag. Core finds its own files through
+`Common/AppFileLocator`, which probes candidate roots in order and takes the first that
+exists, falling back to the installer's `%LocalAppData%\KleiKodesh`. This is not a
+preference: the service keeps data beside its binary, the VSTO add-in is shadow-copied so its
+own location is a temp folder, and the **portable** DemoApp runs from a path that changes per
+run and may be read-only. Probing answers all three. Reading and writing are separate
+questions — `ResolveWritablePath` *tests* writability rather than assuming it.
+
+Exceptions are **specific types living beside the code that throws them** — no `Exceptions/`
+folder (that groups by kind) and never one catch-all `CoreException`.
 
 ---
 

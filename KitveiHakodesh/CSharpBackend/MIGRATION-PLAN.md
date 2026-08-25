@@ -41,68 +41,49 @@ specific types named for the failure, never one `CoreException`.
 KitveiHakodesh.Core/
   KitveiHakodesh.Core.csproj          <TargetFrameworks>net48;net10.0-windows</TargetFrameworks>
 
-  CoreOptions.cs                      the ONE object the orchestrator injects, so Core reads
-                                      no environment and discovers no host state (rule 2).
-                                      FIVE PATHS, nothing else — each a place only the host
-                                      can point to:
-                                        ResourceDirectory      bundled DBs
-                                        FtsIndexDirectory
-                                        CatalogIndexDirectory
-                                        SearchExpansionDbPath
-                                        LogFilePath
-                                      NOT the seforim DB path — SeforimDbPathResolver owns
-                                      that (registry -> probe); passing it in as well would
-                                      be circular. DB_PATH deleted.
-                                      NOT KHS_DISABLE_WORD — its own comment calls it a
-                                      "test seam", and tests do not shape Core's surface
-                                      (rule 0c); a test constructs Core with Word disabled.
-                                      NOT the catalog-update interval — nobody asked to tune
-                                      it, so it is a named const in the updater until they do
+  (no CoreOptions.cs — DELETED as a concept.) Core discovers its own files via
+  Common/AppFileLocator: probe each candidate root in order, take the first that
+  EXISTS, fall back to the installer's %LocalAppData%\KleiKodesh. Nothing is passed in.
+  The seforim DB path stays with SeforimDbPathResolver (registry -> probe).
 
-  Common/                             reusable — nothing here knows the app exists
-    Sqlite/
-      SqliteConnectionFactory.cs      per-purpose pooling/pragma policy  [new]
-                                      + SqliteOpenFailedException, thrown only here so it
-                                      lives in this file (rule 12 — a tiny type with one
-                                      thrower does not need its own file)
-                                      (no SqlPlaceholderRewriter here — after slices 2 and 4
-                                      retire __webviewQuery/__webviewDictQuery, the only
-                                      caller left is UserAnnotationStore, so the '?'->@p0
-                                      rewrite lives there. One caller = that caller's own
-                                      bookkeeping)
-    Files/
-      DbFileFingerprint.cs            (was DbChangeStamp) size + mtime + ctime + USN
-                                      + file id + -wal
-      DbChangeWatcher.cs
-      TextEncodingDetector.cs         IsValidUtf8 + charset label (never decodes) [new]
-    Office/                           [net48 leg only where Interop]
-      RunningWordFinder.cs            ROT detection (GetActiveObject)    [new]
-      WordThesaurus.cs                (was WordThesaurusProvider) autonomous:
-                                      no running Word -> empty result
-      WordExporter.cs
-      WordToPdfConverter.cs           (was WordConversionService / WordToPdfConverter)
-    Fonts/
-      HebrewFontsProvider.cs          (merges Lib FontsProvider)
-                                      per-TFM: WPF (net48) / DirectWrite (net10)
-    Update/
-      UpdateChecker.cs                from UpdateCheckerLib (~893 portable lines)
-      UpdateDownloader.cs             (was DownloadManager) MessageBox REMOVED -> throws
-                                      UpdateDownloadFailedException, declared here.
-                                      NOTE: UpdateCheckerLib/UpdateException.cs (84 lines)
-                                      must be READ and split into specific types (rule 10)
-      GithubRelease.cs                response model
-    Diagnostics/                      (rule 11 split of EnvironmentDiagnostics' probe half —
-                                      one file per question asked)
-      WordInstallProbe.cs             bitness, version, path, install type, winword PE bitness
-      DotNetRuntimeProbe.cs           CLR version, runtime directory
-      OperatingSystemProbe.cs         OS version + bitness
-      ProcessBitnessProbe.cs          process bitness + executable path
-      FileLogger.cs                   (was AppLogger — `App*` banned here) log path
-                                      INJECTED, not hardcoded.
-                                      Documented exception to rule 4 — see rule 10 note
-    Shell/
-      ShellRegistration.cs            HKCU\Software\Classes "Open With" handler;
-                                      app values parameterized
+  Common/                             reusable — nothing here knows the app exists.
+                                      FLAT: no subfolders. The names already say what each
+                                      file is, so Sqlite/ Files/ Office/ ... would only group
+                                      by kind — the Models/ mistake again
+    AppFileLocator.cs               [new] WHERE ARE MY FILES — probes candidate roots, first
+                                    that exists wins, %LocalAppData%\KleiKodesh last.
+                                    ResolveWritablePath TESTS writability (the portable app
+                                    may sit on a USB stick / read-only share)
+    SqliteConnectionFactory.cs      [new] per-purpose pooling/pragma policy
+                                    + SqliteOpenFailedException, thrown only here
+    DbFileFingerprint.cs            (was DbChangeStamp) size + mtime + ctime + USN
+                                    + file id + -wal
+    DbChangeWatcher.cs
+    TextEncodingDetector.cs         [new] IsValidUtf8 + charset label (never decodes)
+    RunningWordFinder.cs            [new] ROT detection (GetActiveObject)   [net48 leg]
+    WordThesaurus.cs                (was WordThesaurusProvider) autonomous: no running
+                                    Word -> empty result                    [net48 leg]
+    WordExporter.cs                                                         [net48 leg]
+    WordToPdfConverter.cs           (was WordConversionService)             [per-TFM]
+    HebrewFontsProvider.cs          (merges Lib FontsProvider) per-TFM:
+                                    WPF (net48) / DirectWrite (net10)
+    UpdateChecker.cs                from UpdateCheckerLib (~893 portable lines)
+    UpdateDownloader.cs             (was DownloadManager) MessageBox REMOVED -> throws
+                                    UpdateDownloadFailedException, declared here.
+                                    NOTE: UpdateCheckerLib/UpdateException.cs (84 lines)
+                                    must be READ and split into specific types (rule 10)
+    GithubRelease.cs                response model
+    WordInstallProbe.cs             bitness, version, path, install type, winword PE bitness
+    DotNetRuntimeProbe.cs           CLR version, runtime directory
+    OperatingSystemProbe.cs         OS version + bitness
+    ProcessBitnessProbe.cs          process bitness + executable path
+    FileLogger.cs                   (was AppLogger — `App*` banned here). Documented
+                                    exception to rule 4 — see rule 10 note
+    ShellRegistration.cs            HKCU\Software\Classes "Open With" handler;
+                                    app values parameterized
+                                    (no SqlPlaceholderRewriter — after slices 2 and 4 retire
+                                    __webviewQuery/__webviewDictQuery its only caller is
+                                    UserAnnotationStore, so the '?'->@p0 rewrite lives there)
 
   Settings/                           --- app-specific ---
     AppSettingsRegistry.cs            HKCU\Software\VB and VBA Program Settings\...
@@ -470,8 +451,24 @@ Service wins and Lib is adjusted — with the documented exceptions in section 7
 
 1. **Core knows nothing about the orchestrators.** No `using KitveiHakodeshService.Ipc`,
    no Lib types, no transport types, no wire attributes.
-2. **Core is self-sufficient.** All config (paths, flags, index directories) is injected
-   via constructor/options. Core reads **no environment variables** and resolves no host state.
+2. **Core is self-sufficient — it FINDS its own files, it is not told where they are.**
+   Core reads **no environment variables**. It also takes no injected path bag: there is no
+   `CoreOptions`. Every file lookup goes through `Common/AppFileLocator`, which probes
+   candidate roots in order and takes the first that **exists**.
+
+   2a. **Why probing rather than injection.** No single expression is right in all three hosts:
+   the **service** keeps data next to its binary on purpose; the **VSTO add-in** is
+   shadow-copied, so `Assembly.Location` is a temp folder with no data and
+   `AppDomain.BaseDirectory` is WINWORD's folder; the **portable DemoApp** runs from a USB
+   stick or share whose path changes per run and may be read-only. Probing answers all three
+   with one mechanism and nothing to pass in. Last resort is the installer's own per-user root,
+   `%LocalAppData%\KleiKodesh` — keep it in step with `AddinInstaller.InstallPath`.
+
+   2b. **Reading and writing are different questions.** `FindFile`/`FindDirectory` locate what
+   already exists; `ResolveWritablePath` picks somewhere that can actually be written, and
+   **tests** it — a portable app on read-only media looks fine until the first write. Prefer a
+   root that already holds the item so an index is updated in place instead of a second copy
+   appearing elsewhere.
 3. **Core has no UI.** No `MessageBox`, no dialogs, no windows. It returns data.
 4. **Core returns data or throws.** It never swallows errors (`Debug.WriteLine` is a no-op
    in Release). Orchestrators catch, decide severity, and surface to the frontend.
@@ -755,7 +752,7 @@ Additional rule-10 renames — only where the old name hid or under-specified th
 
 Everything else keeps its conventional name: `SqliteConnectionFactory`,
 `DbChangeWatcher`, `ShellRegistration`, `GithubRelease`, `WordExporter`, `WordThesaurus`,
-`HebrewFontsProvider`, `SearchExpansion`, `UpdateChecker`, `CoreOptions`, `AppSettingsRegistry`,
+`HebrewFontsProvider`, `SearchExpansion`, `UpdateChecker`, `AppSettingsRegistry`,
 `UserAnnotationStore`, the `Fts*` trio,
 `SeforimDbPathResolver`, and the folders `Common/`, `Resources/`, `Diagnostics/`.
 (The planned `Models/` folder is dropped — its 27 types live in one `SeforimDbModels.cs`;
@@ -891,14 +888,15 @@ never carry inline SQL across into Core.
 - `KitveiHakodesh.Core.csproj`: `net48;net10.0-windows`, `Microsoft.Data.Sqlite` **10.0.9**
   (the FtsLib pin — 11.x breaks the segment-writer `File.Move`), conditional `FtsLib` legs,
   `PlatformTarget=AnyCPU`, explicit `OutputPath`, `IsAotCompatible` for net10
-- `CoreOptions` — **five paths only**: resource dir, FTS index dir, catalog index dir,
-  search-expansion DB, log file. No DB path (the resolver owns it), no test seams, no flags
+- `Common/AppFileLocator` — **no `CoreOptions` at all.** Core finds its own files by
+  probing candidate roots in order and taking the first that exists; writes go to the first
+  root that is genuinely writable, with `%LocalAppData%\KleiKodesh` last. See rule 2a
 - `Exceptions/` — SPECIFIC types (`SeforimDbUnavailableException`, `SqliteOpenFailedException`,
   `IndexBuildFailedException`, `UpdateDownloadFailedException`), never one catch-all
-- `Common/Sqlite/SqliteConnectionFactory` with **per-purpose** policy:
+- `Common/SqliteConnectionFactory` with **per-purpose** policy:
   corpus reads = pooled + pragmas + `Mode=ReadOnly`; FTS segment writes = `Pooling=false`;
   `user_settings.db` = fresh connections + `Pooling=False` + WAL + busy timeout
-- `Common/Sqlite/SqlPlaceholderRewriter` — the quote-aware `?` → `@p0` rewriter
+- the quote-aware `?` → `@p0` rewrite lives in `UserAnnotationStore`, its only caller
 - `Settings/AppSettingsRegistry` (Service name; Lib `AppSettings` merged in)
 - `Settings/SeforimDbPathResolver` (was `SeforimDbLocator`). **Three corrections on move:**
   1. it must call `AppSettingsRegistry.Get/Set` instead of carrying its own
@@ -907,7 +905,7 @@ never carry inline SQL across into Core.
      practice: `Resolve()` checks the registry **first** and returns on a hit, so `DB_PATH`
      only fires on a machine where the DB was never configured — and vite's fallback chain
      ends at `./data.db`, which is **0 bytes** in this repo. A developer changes the setting
-     in the app exactly like a user. So: no `CoreOptions.DbPathOverride`, vite stops
+     in the app exactly like a user. So: no override field anywhere, vite stops
      forwarding it, and `KitveiHakodeshService.Tests` sets the registry (or takes a path
      argument) like everything else
   3. `RegistryKeyPath` stays public — `DbChangeWatcher` subscribes to it because the hosted
@@ -1002,7 +1000,7 @@ Pure backend merge, **zero frontend change** (raw SQL stays by design).
   - `RunIfDue()` at startup, but on a **~90-day (few-month) interval, not the original 30**.
     The upstream catalog grows slowly and the scrape is a courtesy request against someone
     else's site; monthly is more traffic than the data justifies. A named `const` here —
-    **not** a `CoreOptions` field: nobody has asked to tune it, and speculative configuration
+    **not** a config field: nobody has asked to tune it, and speculative configuration
     is how an options object turns into a bag
   - resumes from `maxId + 1`, walking IDs upward; stops after **10 consecutive empty** IDs
   - **1000 ms** between requests — it is scraping someone else's site; keep the courtesy delay
@@ -1172,7 +1170,7 @@ what remains is transport belonging in Lib.
   which stays Service-side exactly as Lib's envelopes stay Lib-side
 - Service `SearchExpansionService` + Lib `SearchExpansion` →
   `SeforimDbFullTextSearch/RelatedFormExpander`; dedup the pair, including the duplicated
-  `SEARCH_EXPANSION_DB` read → `CoreOptions`
+  `SEARCH_EXPANSION_DB` read → `AppFileLocator.FindFile`
 - Its 2 one-line queries stay as `const`s at the top of `SeforimDbFtsRelatedFormExpander` (rule 9
   threshold) — dedup them, but do not give them a file
 - Reconcile `ResetFtsIndex` + `DeleteFtsIndex` → `ftsResetIndex` (**semantic** merge, not a rename)
@@ -1235,12 +1233,12 @@ what remains is transport belonging in Lib.
   surgical namespace-line edits only — never read-and-rewrite
 
 ### Slice 7 — Reusable toolkit (`Common/`)
-- `UpdateCheckerLib` ~893 portable lines → `Core/Common/Update` (**remove the MessageBox at
+- `UpdateCheckerLib` ~893 portable lines → `Core/Common/` (**remove the MessageBox at
   `DownloadManager.cs:270`** → throw). ~382 UI lines stay net48. `ServicePointManager` (2 uses)
   needs a net10 conditional. DemoApp references `UpdateCheckerLib` directly — repoint it
 - `FileLogger`, `DbFileFingerprint` / `DbChangeWatcher`,
   `TextEncodingDetector`
-- **Split** Lib `EnvironmentDiagnostics`: probes → `Core/Common/Diagnostics/` (one file per question),
+- **Split** Lib `EnvironmentDiagnostics`: probes → `Core/Common/` (one file per question asked),
   report composition stays in Lib. The Word/Office probes benefit both orchestrators
   (dev has none today)
 - Office (net48 leg): `WordThesaurusProvider` → `WordThesaurus`, **autonomous via
