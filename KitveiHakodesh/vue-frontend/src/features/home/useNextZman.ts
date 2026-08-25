@@ -20,10 +20,13 @@ export const ZMAN_ORDER: Array<{ key: keyof CalendarZmanim; label: string }> = [
   { key: 'alot', label: 'עלות השחר' },
   { key: 'misheyakir', label: 'משיכיר' },
   { key: 'sunrise', label: 'הנץ החמה' },
-  { key: 'sofShmaGra', label: 'סו״ז ק״ש (גר״א)' },
+  // MGA's day starts at alot, so each MGA deadline lands BEFORE its GRA
+  // counterpart — and tfilla-MGA still lands after shma-GRA (gap = one GRA
+  // hour minus 24 min, positive at any habitable latitude).
   { key: 'sofShmaMga', label: 'סו״ז ק״ש (מג״א)' },
-  { key: 'sofTfillaGra', label: 'סו״ז תפילה (גר״א)' },
+  { key: 'sofShmaGra', label: 'סו״ז ק״ש (גר״א)' },
   { key: 'sofTfillaMga', label: 'סו״ז תפילה (מג״א)' },
+  { key: 'sofTfillaGra', label: 'סו״ז תפילה (גר״א)' },
   { key: 'chatzot', label: 'חצות היום' },
   { key: 'minchaGedola', label: 'מנחה גדולה' },
   { key: 'minchaKetana', label: 'מנחה קטנה' },
@@ -146,10 +149,11 @@ export function useNextZman() {
     ensureDay(current)
     if (!cachedToday || !cachedTomorrow) return null
 
-    // Search today's ordered zmanim, then roll into tomorrow's once all passed.
-    const day = cachedToday
-    const nextDay = cachedTomorrow
-    for (const src of [day, nextDay]) {
+    // Days are keyed by the actual civil date only — the post-tzeit Hebrew-date
+    // advance (HomePageDateBar's dateReference) is display-only and never leaks
+    // in here. Search today's ordered zmanim, then roll into tomorrow's once all
+    // passed, so the bar always has an upcoming zman to show.
+    for (const src of [cachedToday, cachedTomorrow]) {
       for (const { key } of ZMAN_ORDER) {
         const t = src[key]
         const label = NEXT_LABELS[key]
@@ -183,14 +187,23 @@ export function useNextZman() {
     if (!ready.value || !cachedToday) return []
     // Touch `now` so the table re-marks isNext/passed as time advances.
     const current = now.value
-    const nextKey = next.value?.key
+    const n = next.value
+    const nextTime = n?.time.getTime()
+    // Show the day the next zman belongs to: today's table normally, tomorrow's
+    // once all of today's zmanim have passed (post-tzeit the date display has
+    // advanced too, so the popup stays consistent with the bar and the row of
+    // the next zman is actually present to highlight).
+    const fromTomorrow = !!n && cachedToday![n.key]?.getTime() !== nextTime
+    const day = fromTomorrow && cachedTomorrow ? cachedTomorrow : cachedToday!
     return ZMAN_ORDER.map(({ key, label }) => {
-      const t = cachedToday![key]
+      const t = day[key]
       return {
         key,
         label,
         time: t ? fmt(t) : '—',
-        isNext: key === nextKey,
+        // Match by exact instant, not key, so a rolled-over next zman can never
+        // highlight a same-named row from the wrong day.
+        isNext: !!t && t.getTime() === nextTime,
         passed: !!t && t.getTime() <= current.getTime(),
       }
     })
