@@ -185,7 +185,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
             int bookId = _catalog.MaxBookId() + 1;
             int consecutiveMissing = 0;
 
-            using var connection = SqliteConnectionFactory.OpenUserData(_catalog.DatabasePath);
+            using var connection = SqliteConnectionFactory.OpenBundledWrite(_catalog.DatabasePath);
 
             while (consecutiveMissing < MaxConsecutiveMissingIds)
             {

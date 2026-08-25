@@ -55,10 +55,33 @@ KitveiHakodesh.Core/
                                     ResolveWritablePath TESTS writability (the portable app
                                     may sit on a USB stick / read-only share)
     SqliteConnectionFactory.cs      [new] per-purpose pooling/pragma policy
-                                    + SqliteOpenFailedException, thrown only here
+                                    + SqliteOpenFailedException, thrown only here.
+                                    FIVE policies, not three: CorpusRead, CorpusProbe
+                                    (provenance — read-only, unpooled, NO pragmas, so the
+                                    check causes none of the churn it exists to see through),
+                                    BundledWrite (the catalog updated in place — read-write,
+                                    unpooled, and it must NEVER set journal_mode=WAL: that is
+                                    a persistent property of the FILE, so one write converts
+                                    the shipped database for good and every later reader then
+                                    needs write access to a -shm file), SegmentWrite, UserData
     DbFileFingerprint.cs            (was DbChangeStamp) size + mtime + ctime + USN
                                     + file id + -wal
-    DbChangeWatcher.cs
+    DbChangeWatcher.cs              file + sidecars, settle-then-confirm, CALLBACK only.
+                                    The settle timer is a PRIVATE nested class — it is how
+                                    this watcher decides when to fire, not a job of its own,
+                                    and it was public only for tests (rule 0c). Its
+                                    KHS_DB_WATCH_*_MS env overrides are DELETED (Core reads
+                                    no environment) — the windows are ctor params with
+                                    production defaults
+    RegistryValueWatcher.cs         [new — MISSED BY THE ORIGINAL MAP] RegNotifyChangeKeyValue
+                                    on the deepest EXISTING ancestor, so a key that does not
+                                    exist yet is still watchable. Rule 11: watching a registry
+                                    value is not watching a file, so it is not part of
+                                    DbChangeWatcher. Extracted from the same Service class,
+                                    which bundled both plus IHostedService, ILogger,
+                                    IHostApplicationLifetime and direct references to
+                                    FullTextSearchService + CatalogTocSearchService — ALL of
+                                    which stay with the orchestrator (rule 3)
     TextEncodingDetector.cs         [new] IsValidUtf8 + charset label (never decodes)
     RunningWordFinder.cs            [new] ROT detection (GetActiveObject)   [net48 leg]
     WordThesaurus.cs                (was WordThesaurusProvider) autonomous: no running
@@ -105,6 +128,16 @@ KitveiHakodesh.Core/
                                       of the query class, used to pick the SQL variant
                                       (`SeforimSql.GetAllCategories(hasOrder)`). Splitting
                                       it out would undo correct co-location)
+    SeforimDbContentFingerprint.cs    [MISSED BY THE ORIGINAL MAP — Service
+                                      Common/DbContentStamp.cs, 132 lines] "are these the
+                                      same ROWS?", the provenance counterpart to
+                                      DbFileFingerprint's "did anything touch this file?".
+                                      NOT in Common/: it reads `line` and `book` by name, so
+                                      it knows this schema and must not pretend to be reusable.
+                                      Keeping the two apart is load-bearing — using the file
+                                      fingerprint for provenance made EVERY launch a rebuild,
+                                      because USN and file id never return to a previous value
+                                      once a checkpoint or a copy has bumped them
     SeforimDbModels.cs                29 MessagePack-annotated row types in ONE file —
                                       BookRow, CategoryRow, LineRow, TocEntryRow, …
                                       (attribute-free was the PRE-rule-0e plan; section 5
@@ -1266,6 +1299,20 @@ what remains is transport belonging in Lib.
 - Repoint ~1489 lines of tests; keep `ManualCatalogPipeline.cs` as a regression oracle
 - **Working constraint:** 1484 Hebrew occurrences across 6 files. Pure file moves plus
   surgical namespace-line edits only — never read-and-rewrite
+
+### ⛔ Slice 5 CANNOT be written before slice 4b — ORDERING CONSTRAINT
+
+Core's `SeforimDbFtsIndexer` / `SeforimDbFtsSearcher` are the seforim FACADE over the engine,
+and the facade does not exist to move yet: today `FtsLib.SeforimDb.SeforimIndex` is constructed
+as `SeforimIndex(indexPath, dbPath)` and reads the corpus ITSELF, through
+`FtsLib/SeforimDb/IndexingPipeline.cs` and `ZayitDb.cs`. There is no generic writer API in
+`FtsLib/Indexing/` for Core to feed lines into.
+
+So writing Core's FTS classes means either doing 4b first, or inventing an FtsLib API that does
+not exist and hoping 4b lands on the same shape. Every OTHER Core stage is standalone —
+Dictionary, HebrewBooks, SeforimDb, Catalog (slice 6) and the Common toolkit (slice 7) all
+depend only on packages and on Core's own code. **Slice 5 is the one that waits for its
+FtsLib half.**
 
 ### Slice 7 — Reusable toolkit (`Common/`)
 - `UpdateCheckerLib` ~893 portable lines → `Core/Common/` (**remove the MessageBox at

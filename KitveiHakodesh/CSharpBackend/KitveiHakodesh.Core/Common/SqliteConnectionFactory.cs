@@ -12,6 +12,13 @@ namespace KitveiHakodesh.Core.Common
     ///   CorpusRead    the shipped, read-only databases (seforim, dictionary, catalog).
     ///                 MUST be Mode=ReadOnly. Pooled, with a page cache and mmap, because
     ///                 these are large and read constantly.
+    ///   CorpusProbe   the same databases, when the point is to touch them as little as
+    ///                 possible: read-only, unpooled, NO pragmas. Used by provenance
+    ///                 fingerprinting, which exists to survive incidental churn and must not
+    ///                 cause any.
+    ///   BundledWrite  a shipped database being updated in place (the HebrewBooks catalog).
+    ///                 Read-write and unpooled, and deliberately does NOT set WAL — see the
+    ///                 warning on that method.
     ///   SegmentWrite  FtsLib's index segments. Pooling MUST be off — the writer does
     ///                 File.Move on a just-written file and a pooled handle blocks it.
     ///   UserData      user_settings.db (highlights and notes). WAL, no pooling, and a busy
@@ -64,6 +71,61 @@ namespace KitveiHakodesh.Core.Common
                 "PRAGMA cache_size=" + CorpusCacheSizeKib + ";" +
                 "PRAGMA mmap_size=" + CorpusMmapSizeBytes + ";");
 
+            return connection;
+        }
+
+        /// <summary>
+        /// A shipped database, opened to be looked at rather than read from: read-only,
+        /// unpooled, and no pragmas at all.
+        ///
+        /// The pragmas the read policy applies are per-connection and harmless, but the
+        /// caller here is provenance fingerprinting — code whose whole purpose is to NOT
+        /// react to incidental churn in the file. Opening it with the same policy as a
+        /// hot read path invites exactly the sort of header or sidecar activity it is
+        /// trying to see through. Unpooled so no handle outlives the check.
+        /// </summary>
+        public static SqliteConnection OpenCorpusProbe(string dbPath)
+        {
+            if (string.IsNullOrWhiteSpace(dbPath))
+                throw new ArgumentException("dbPath is required", nameof(dbPath));
+
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = SqliteOpenMode.ReadOnly,   // see PROVIDER-SWAP TRAP above
+                Pooling = false,
+            }.ConnectionString;
+
+            var connection = new SqliteConnection(connectionString);
+            connection.Open();
+            return connection;
+        }
+
+        /// <summary>
+        /// A database that SHIPS with the app, being updated in place — today only the
+        /// HebrewBooks catalog.
+        ///
+        /// ⚠ DO NOT ADD journal_mode=WAL HERE. journal_mode is a persistent property of the
+        /// FILE, so setting it once converts the shipped database for good, leaving -wal and
+        /// -shm sidecars beside it. Every later reader then needs write access to the -shm
+        /// file: on read-only media, or a per-machine install a user cannot write, the
+        /// database stops being readable at all. WAL is right for user data, which is why it
+        /// lives on that method and not this one.
+        /// </summary>
+        public static SqliteConnection OpenBundledWrite(string dbPath)
+        {
+            if (string.IsNullOrWhiteSpace(dbPath))
+                throw new ArgumentException("dbPath is required", nameof(dbPath));
+
+            var connectionString = new SqliteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                Mode = SqliteOpenMode.ReadWrite,  // never Create: a missing catalog is a bug, not a blank one
+                Pooling = false,
+            }.ConnectionString;
+
+            var connection = new SqliteConnection(connectionString);
+            connection.Open();
             return connection;
         }
 
