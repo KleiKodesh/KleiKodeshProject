@@ -214,7 +214,15 @@ export async function pickLocalFile(
       filePath?: string
       error?: string
     }>('pickFile', { initialDir })
-    if (res.cancelled || res.error || !res.url) return null
+    // An error reply and a cancel both come back as null, and the caller treats null as
+    // "nothing to do" - so a genuine host-side failure looked exactly like the user
+    // pressing Cancel, and the picker not opening had nothing to say for itself. Log it:
+    // cancel stays silent, a failure names itself in the console.
+    if (res.error) {
+      console.error('[bridge] pickFile failed in the host: ' + res.error)
+      return null
+    }
+    if (res.cancelled || !res.url) return null
     return { url: res.url, fileName: res.fileName!, filePath: res.filePath! }
   } finally {
     _pendingPickOpenInNewTab = null

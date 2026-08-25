@@ -198,6 +198,23 @@ namespace KitveiHakodeshLib.LocalFile
         /// leaves the dialog wherever the shell would put it.</summary>
         public void HandlePickFile(JsonElement root, string id, Control owner)
         {
+            // Read out of `root` HERE, not inside the queued action below.
+            //
+            // The JsonDocument this element belongs to is owned by a `using` in
+            // OnMessageReceivedAsync, and BeginInvoke returns the instant it has queued the
+            // action - so that `using` disposes the document before the action ever runs.
+            // Touching `root` from in there hits a disposed document: ValueKind throws
+            // ObjectDisposedException, the catch turns it into an error reply, and the
+            // frontend maps an error reply to null and returns quietly. The picker simply
+            // never opened, with nothing to say why. A plain string captured up here has no
+            // such lifetime.
+            string initialDir =
+                root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("initialDir", out var initialDirProp)
+                && initialDirProp.ValueKind == JsonValueKind.String
+                    ? initialDirProp.GetString()
+                    : null;
+
             owner.BeginInvoke(new Action(async () =>
             {
                 try
@@ -208,13 +225,7 @@ namespace KitveiHakodeshLib.LocalFile
                         dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|כל הקבצים (*.*)|*.*";
                         // A folder that has since been deleted must not sink the pick: the dialog
                         // silently falls back to its default when InitialDirectory does not exist.
-                        if (root.ValueKind == JsonValueKind.Object
-                            && root.TryGetProperty("initialDir", out var initialDirProp)
-                            && initialDirProp.ValueKind == JsonValueKind.String)
-                        {
-                            string initialDir = initialDirProp.GetString();
-                            if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
-                        }
+                        if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
 
                         if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
 
