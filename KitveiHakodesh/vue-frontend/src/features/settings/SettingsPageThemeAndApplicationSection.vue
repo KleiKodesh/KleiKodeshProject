@@ -9,7 +9,7 @@ import ToggleGroup from './ToggleGroup.vue'
 import ThemePicker from './ThemePicker.vue'
 
 const settings = useSettingsStore()
-const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, compactMode, scrollbarsHidden, showRecentlyOpened, showFrequentFolders } = storeToRefs(settings)
+const { appZoom, newTabPage, titleBarHiddenButtons, pdfPageFilters, scrollbarsHidden, showRecentlyOpened, showFrequentFolders } = storeToRefs(settings)
 
 const themeStore = useThemeStore()
 const { themePreset } = storeToRefs(themeStore)
@@ -77,16 +77,6 @@ function toggleTitleBarButton(buttonId: string) {
           { label: 'לא', value: false },
         ]"
         @update:model-value="applyPdfPageFilters"
-      />
-    </SettingRow>
-
-    <SettingRow id="nav-compact-mode" data-nav-label="מצב קומפקטי" label="הפעל מצב קומפקטי" hint="מקטין את גובה סרגלי הכלים והכפתורים">
-      <ToggleGroup
-        v-model="compactMode"
-        :options="[
-          { label: 'כן', value: true },
-          { label: 'לא', value: false },
-        ]"
       />
     </SettingRow>
 
