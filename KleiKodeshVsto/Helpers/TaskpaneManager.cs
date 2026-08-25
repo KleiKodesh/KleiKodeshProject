@@ -1,5 +1,6 @@
 ﻿using Microsoft.Office.Tools;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -125,6 +126,19 @@ namespace KleiKodesh.Helpers
                 ?? matches.FirstOrDefault(IsUsable)
                 ?? matches.FirstOrDefault();
         }
+
+        /// <summary>
+        /// Every live pane hosting <paramref name="controlType"/> that is shown or
+        /// popped out, the one the user last brought forward first. Never creates one -
+        /// for features that read from a pane rather than show it. Returns all
+        /// candidates rather than picking one: with duplicated panes only the caller
+        /// can tell which pane's content is the one the user meant.
+        /// </summary>
+        public static List<CustomTaskPane> FindAllUsable(Type controlType) =>
+            Globals.ThisAddIn.CustomTaskPanes.Cast<CustomTaskPane>()
+                .Where(p => ControlTypeOf(p) == controlType && IsUsable(p))
+                .OrderByDescending(IsLastRevealed)
+                .ToList();
 
         // Whether this is the pane the user last brought forward.
         public static bool IsLastRevealed(CustomTaskPane pane) => pane == _lastRevealed;

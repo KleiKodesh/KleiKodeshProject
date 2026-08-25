@@ -301,6 +301,7 @@
     </Compile>
     <Compile Include="Helpers\JsonExtensions.cs" />
     <Compile Include="Helpers\TaskPanePopOut.cs" />
+    <Compile Include="Helpers\TrackedCompare.cs" />
     <Compile Include="Helpers\OfficeThemeWatcher.cs" />
     <Compile Include="Helpers\SettingsManager.cs" />
     <Compile Include="Helpers\TaskpaneManager.cs" />

@@ -232,6 +232,26 @@ namespace KitveiHakodeshLib
         }
 
         /// <summary>
+        /// The text currently selected inside the web app, read live from the browser
+        /// at the moment of the call. A browser keeps its selection when the window
+        /// loses focus (it just greys out), so this works from a Word context-menu
+        /// click while the pane is unfocused. Returns "" when nothing is selected or
+        /// the view is not ready.
+        /// </summary>
+        public async Task<string> GetSelectedTextAsync()
+        {
+            if (IsDisposed || _webView.IsDisposed || _webView.CoreWebView2 == null)
+                return string.Empty;
+
+            // ExecuteScriptAsync returns the result JSON-encoded (a quoted, escaped
+            // string for a string result), so it round-trips newlines and quotes in
+            // the selection safely.
+            string json = await _webView.CoreWebView2.ExecuteScriptAsync(
+                "window.getSelection().toString()");
+            return JsonSerializer.Deserialize<string>(json) ?? string.Empty;
+        }
+
+        /// <summary>
         /// Opens a book at a specific line inside the app from the VSTO host — driven
         /// by an otzaria://, kitveihakodeshapp:// or zayit:// deep link found in the Word
         /// selection's hyperlinks (see <see cref="HostLink"/>). Otzaria and this app's own
