@@ -1,0 +1,179 @@
+using System;
+using System.Globalization;
+using Microsoft.Win32;
+
+namespace KitveiHakodesh.Core.Settings
+{
+    /// <summary>
+    /// The app's own preferences, in the Windows registry.
+    ///
+    /// Layout is fixed by history: the net4.8 code wrote these through VB's
+    /// <c>Interaction.GetSetting/SaveSetting</c>, which store under
+    /// <c>HKCU\Software\VB and VBA Program Settings\{app}\{section}</c> with the key as the
+    /// value name. This mirrors that byte for byte, so the hosted app, the add-in, the demo
+    /// app and the service all read one source of truth. Raw <see cref="Registry"/> rather
+    /// than VB Interaction, which is net48-only and would not compile on the modern leg.
+    ///
+    /// Do NOT change an (app, section, key) tuple: an old install keeps writing the old
+    /// location and the setting silently forks.
+    ///
+    /// NOT here: the seforim database path — that belongs to SeforimDbPathResolver, which
+    /// has to verify the file exists and fall back to probing, neither of which is a plain
+    /// get/set. It uses Get/Set below for the storage half.
+    /// </summary>
+    public static class AppSettingsRegistry
+    {
+        private const string AppKitveiHakodesh = "KitveiHakodesh";
+
+        /// <summary>
+        /// The automatic-update toggle is shared with the KleiKodesh Word add-in, whose
+        /// SettingsManager writes it under app name "KleiKodesh" — NOT "KitveiHakodesh".
+        /// One toggle governs both, so this deliberate mismatch must stay.
+        /// </summary>
+        private const string AppKleiKodesh = "KleiKodesh";
+
+        private static string SubKey(string app, string section) =>
+            $@"Software\VB and VBA Program Settings\{app}\{section}";
+
+        // ── Primitives ────────────────────────────────────────────────────────────────
+
+        /// <summary>Reads a value, returning <paramref name="fallback"/> when the key is
+        /// missing or unreadable. Never throws — a settings read must not take the app down.</summary>
+        public static string Get(string app, string section, string key, string fallback)
+        {
+            // No registry off Windows (portable build): every setting reads as its fallback.
+#if NET
+            if (!OperatingSystem.IsWindows()) return fallback;
+#endif
+            try
+            {
+                using var registryKey = UserProfile.Hive.OpenSubKey(SubKey(app, section));
+                return registryKey?.GetValue(key) as string ?? fallback;
+            }
+            catch
+            {
+                return fallback;
+            }
+        }
+
+        /// <summary>Writes a value, creating the key path if needed.</summary>
+        public static void Set(string app, string section, string key, string value)
+        {
+#if NET
+            if (!OperatingSystem.IsWindows()) return; // no registry off Windows: not persisted
+#endif
+            using var registryKey = UserProfile.Hive.CreateSubKey(SubKey(app, section));
+            registryKey?.SetValue(key, value ?? "");
+        }
+
+        // ── HebrewBooks ───────────────────────────────────────────────────────────────
+
+        public static string GetHebrewBooksLocalFolder() =>
+            Get(AppKitveiHakodesh, "HebrewBooks", "LocalFolder", "");
+
+        public static void SetHebrewBooksLocalFolder(string path) =>
+            Set(AppKitveiHakodesh, "HebrewBooks", "LocalFolder", path);
+
+        // ── Automatic update check (shared with the Word add-in) ──────────────────────
+
+        /// <summary>True when the user has turned the automatic update check OFF.</summary>
+        public static bool GetTurnOffUpdates() => string.Equals(
+            Get(AppKleiKodesh, "UpdateChecker", "TurnOffUpdates", "False"),
+            "True",
+            StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// Stores the exact "True"/"False" text bool.ToString() produces, because the add-in
+        /// reads it back with bool.TryParse. Any other casing or wording breaks that.
+        /// </summary>
+        public static void SetTurnOffUpdates(bool turnedOff) =>
+            Set(AppKleiKodesh, "UpdateChecker", "TurnOffUpdates", turnedOff ? "True" : "False");
+
+        // ── Automatic update of the library this app downloaded ───────────────────────
+
+        /// <summary>True when the user has turned OFF automatic updates of the downloaded library.</summary>
+        public static bool GetTurnOffLibraryUpdates() => string.Equals(
+            Get(AppKitveiHakodesh, "Database", "TurnOffLibraryUpdates", "False"),
+            "True",
+            StringComparison.OrdinalIgnoreCase);
+
+        public static void SetTurnOffLibraryUpdates(bool turnedOff) =>
+            Set(AppKitveiHakodesh, "Database", "TurnOffLibraryUpdates", turnedOff ? "True" : "False");
+
+        // ── Window state ──────────────────────────────────────────────────────────────
+
+        public static bool GetMainWindowMaximized() =>
+            Get(AppKitveiHakodesh, "MainWindow", "Maximized", "0") == "1";
+
+        public static void SetMainWindowMaximized(bool maximized) =>
+            Set(AppKitveiHakodesh, "MainWindow", "Maximized", maximized ? "1" : "0");
+
+
+        /// <summary>
+        /// Last bounds of a window.open popup, keyed by its window name (e.g. "hameshiv").
+        /// The size falls back to what the page requested; X/Y -1 means "not positioned
+        /// yet" (the host centres it).
+        /// </summary>
+        public static (int X, int Y, int Width, int Height) GetPopupBounds(string name, int width, int height) => (
+            ReadInt("Popup_" + name, "X", -1),
+            ReadInt("Popup_" + name, "Y", -1),
+            ReadInt("Popup_" + name, "W", width),
+            ReadInt("Popup_" + name, "H", height));
+
+        public static void SetPopupBounds(string name, int x, int y, int width, int height)
+        {
+            WriteInt("Popup_" + name, "X", x);
+            WriteInt("Popup_" + name, "Y", y);
+            WriteInt("Popup_" + name, "W", width);
+            WriteInt("Popup_" + name, "H", height);
+        }
+
+        // ── Appearance ────────────────────────────────────────────────────────────────
+        //
+        // These mirror the Vue theme so the NATIVE chrome (title bar, tab strip) can be
+        // painted correctly at startup, before the frontend has loaded and sent its first
+        // setTheme message. Core only stores and returns them; it never interprets a colour.
+
+        public static bool GetDarkMode() =>
+            Get(AppKitveiHakodesh, "Appearance", "DarkMode", "0") == "1";
+
+        public static void SetDarkMode(bool isDark) =>
+            Set(AppKitveiHakodesh, "Appearance", "DarkMode", isDark ? "1" : "0");
+
+        public static string GetChromeColor() => Get(AppKitveiHakodesh, "Appearance", "ChromeColor", "");
+        public static void SetChromeColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "ChromeColor", hex);
+
+        public static string GetAccentColor() => Get(AppKitveiHakodesh, "Appearance", "AccentColor", "");
+        public static void SetAccentColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "AccentColor", hex);
+
+        public static string GetBorderColor() => Get(AppKitveiHakodesh, "Appearance", "BorderColor", "");
+        public static void SetBorderColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "BorderColor", hex);
+
+        // Vue's UI language ("he" | "en"), so the native chrome starts in the right direction/texts.
+        public static string GetUiLanguage() => Get(AppKitveiHakodesh, "Appearance", "UiLanguage", "he");
+        public static void SetUiLanguage(string lang) => Set(AppKitveiHakodesh, "Appearance", "UiLanguage", lang);
+
+        // ── Service ───────────────────────────────────────────────────────────────────
+        // The one unasked "install the service?" prompt a host may raise, on the first launch
+        // that finds the product installed but its service not registered. Afterwards the
+        // settings page's row is the only way. Missing value = not shown yet (a full clean
+        // wipes it, so a clean reinstall asks once again).
+
+        public static bool GetServiceInstallPromptShown() =>
+            Get(AppKitveiHakodesh, "Service", "InstallPromptShown", "0") == "1";
+
+        public static void SetServiceInstallPromptShown() =>
+            Set(AppKitveiHakodesh, "Service", "InstallPromptShown", "1");
+
+        // ── Helpers ───────────────────────────────────────────────────────────────────
+
+        private static int ReadInt(string section, string key, int fallback) =>
+            int.TryParse(Get(AppKitveiHakodesh, section, key, ""),
+                         NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
+                ? parsed
+                : fallback;
+
+        private static void WriteInt(string section, string key, int value) =>
+            Set(AppKitveiHakodesh, section, key, value.ToString(CultureInfo.InvariantCulture));
+    }
+}

@@ -57,4 +57,16 @@
     <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8605;CS8625</NoWarn>
   </PropertyGroup>
 
+  <!-- ONE SQLite provider on BOTH legs. Microsoft.Data.Sqlite ships netstandard2.0 and
+       SQLitePCLRaw ships net461, so net48 resolves fine; Lib's old System.Data.SQLite +
+       Dapper are dropped (Dapper emits IL at runtime and cannot survive native AOT —
+       MIGRATION-PLAN rule 0d).
+
+       PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
+       SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
+       fails with a sharing violation. Matches the version KitveiHakodeshService already uses. -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+  </ItemGroup>
+
 </Project>
