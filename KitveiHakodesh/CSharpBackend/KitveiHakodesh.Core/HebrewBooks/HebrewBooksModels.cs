@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using MessagePack;
 
 namespace KitveiHakodesh.Core.HebrewBooks
 {
@@ -8,6 +9,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
     /// this machine, which is what <see cref="HasLocalFile"/> answers and why it is stamped
     /// per search rather than stored.
     /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
     public sealed class HebrewBook
     {
         public int Id { get; set; }
@@ -55,27 +57,26 @@ namespace KitveiHakodesh.Core.HebrewBooks
     /// Outcome of an acquire. Exactly one of <see cref="Path"/> and <see cref="Failure"/> is
     /// meaningful: a non-null Path means success, otherwise Failure says why not.
     /// <see cref="Detail"/> is diagnostic text for a log — never for a user.
+    ///
+    /// Settable properties rather than a private constructor and factories: this crosses the
+    /// wire, and a type the deserializer cannot construct is not a wire type. The factories
+    /// stay as the way CALLING code makes one, so the invariant still has a single home.
     /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
     public sealed class HebrewBookAcquireResult
     {
-        public string? Path { get; }
-        public HebrewBookAcquireFailure Failure { get; }
-        public string? Detail { get; }
+        public string? Path { get; set; }
+        public HebrewBookAcquireFailure Failure { get; set; }
+        public string? Detail { get; set; }
 
-        private HebrewBookAcquireResult(string? path, HebrewBookAcquireFailure failure, string? detail)
-        {
-            Path = path;
-            Failure = failure;
-            Detail = detail;
-        }
-
+        [IgnoreMember]
         public bool Succeeded => Path != null;
 
         public static HebrewBookAcquireResult Success(string path) =>
-            new(path, HebrewBookAcquireFailure.None, null);
+            new HebrewBookAcquireResult { Path = path, Failure = HebrewBookAcquireFailure.None };
 
         public static HebrewBookAcquireResult Failed(HebrewBookAcquireFailure failure, string? detail = null) =>
-            new(null, failure, detail);
+            new HebrewBookAcquireResult { Failure = failure, Detail = detail };
     }
 
     /// <summary>What happened to a request to delete a downloaded PDF.</summary>
@@ -98,20 +99,16 @@ namespace KitveiHakodesh.Core.HebrewBooks
 
     /// <summary>Bytes received so far and the total when upstream sent a Content-Length
     /// (<see cref="Total"/> is 0 when it did not say).</summary>
-    public readonly struct HebrewBookDownloadProgress
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class HebrewBookDownloadProgress
     {
-        public long Received { get; }
-        public long Total { get; }
-
-        public HebrewBookDownloadProgress(long received, long total)
-        {
-            Received = received;
-            Total = total;
-        }
+        public long Received { get; set; }
+        public long Total { get; set; }
     }
 
     /// <summary>What a catalog update run did. Returned rather than logged so the orchestrator
     /// can surface it (project rule 3).</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
     public sealed class HebrewBooksCatalogUpdateResult
     {
         /// <summary>False when the run did not happen at all — see <see cref="SkipReason"/>.</summary>
@@ -128,7 +125,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// <summary>Ids that could not be fetched at all (network / HTTP errors), as opposed to
         /// ids upstream reports as empty. A run with many of these covered less ground than
         /// <see cref="LastIdChecked"/> suggests.</summary>
-        public List<int> FetchFailures { get; } = new List<int>();
+        public List<int> FetchFailures { get; set; } = new List<int>();
 
         /// <summary>Set when the run stopped on an error rather than finishing its walk. The
         /// rows written before it are still in the catalog — the walk resumes past them next time.</summary>

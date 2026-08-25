@@ -78,6 +78,12 @@
          warnings and ran correctly. The reflection in this package lives in HtmlWeb and the
          object-encapsulator APIs, which nothing here touches and ILC trims away. -->
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
+    <!-- Core's models ARE the wire types: one shared set, serialized directly by both
+         transports, with no mirror types and no mapping layer. The version matches the
+         Service's. Its source generator emits a formatter per [MessagePackObject] type in
+         THIS compilation, which is why Core declares its own resolver (CoreMessagePackResolver)
+         rather than relying on the Service's — a generator cannot see across assemblies. -->
+    <PackageReference Include="MessagePack" Version="3.1.8" />
   </ItemGroup>
 
 </Project>

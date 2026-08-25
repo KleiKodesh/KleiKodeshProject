@@ -1,48 +1,54 @@
 using System.Collections.Generic;
+using MessagePack;
 
 namespace KitveiHakodesh.Core.Dictionary
 {
     /// <summary>
-    /// The shapes dictionary lookups return. Plain data, grouped in one file because they are
-    /// read as one contract; no serialization attributes — the transport decides the wire
-    /// format, Core never encodes one.
+    /// One sense of one headword. <see cref="Nikud"/> is the pointed spelling, stored per
+    /// SENSE rather than per word so homographs that differ only in pointing stay distinct.
+    /// <see cref="Source"/> names the lexicon it came from.
     /// </summary>
-
-    /// <summary>
-    /// One sense of one headword. <paramref name="Nikud"/> is the pointed spelling, stored
-    /// per SENSE rather than per word so homographs that differ only in pointing stay
-    /// distinct. <paramref name="Source"/> names the lexicon it came from.
-    /// </summary>
-    public sealed record DictionarySense(
-        string Headword,
-        string? Nikud,
-        string Text,
-        string? Source,
-        int? SourceId);
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class DictionarySense
+    {
+        public string Headword { get; set; } = "";
+        public string? Nikud { get; set; }
+        public string Text { get; set; } = "";
+        public string? Source { get; set; }
+        public int? SourceId { get; set; }
+    }
 
     /// <summary>A related word and the relation that connects it.</summary>
-    public sealed record DictionaryLink(string Kind, string Word);
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class DictionaryLink
+    {
+        public string Kind { get; set; } = "";
+        public string Word { get; set; } = "";
+    }
 
     /// <summary>
-    /// The result of an exact lookup. <paramref name="WordExists"/> separates "no such word"
-    /// from "the word is known but has no senses" — the caller shows different things for
-    /// those, and an empty row list alone cannot tell them apart.
+    /// The result of an exact lookup. <see cref="WordExists"/> separates "no such word" from
+    /// "the word is known but has no senses" — the caller shows different things for those,
+    /// and an empty row list alone cannot tell them apart.
     /// </summary>
-    public sealed record DictionaryExactResult(
-        List<DictionarySense> Senses,
-        bool WordExists);
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class DictionaryExactResult
+    {
+        public List<DictionarySense> Senses { get; set; } = new List<DictionarySense>();
+        public bool WordExists { get; set; }
+    }
 
     /// <summary>
     /// Which expansion of an abbreviation resolved, and its senses.
-    /// <see cref="None"/> when nothing did.
+    /// <see cref="MatchedCandidate"/> is null when none did.
     /// </summary>
-    public sealed record DictionaryAbbreviationMatch(
-        string? MatchedCandidate,
-        List<DictionarySense> Senses)
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class DictionaryAbbreviationMatch
     {
-        public static DictionaryAbbreviationMatch None { get; } =
-            new(null, new List<DictionarySense>());
+        public string? MatchedCandidate { get; set; }
+        public List<DictionarySense> Senses { get; set; } = new List<DictionarySense>();
 
+        [IgnoreMember]
         public bool Found => MatchedCandidate != null;
     }
 }

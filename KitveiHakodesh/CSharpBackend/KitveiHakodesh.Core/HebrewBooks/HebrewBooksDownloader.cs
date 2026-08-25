@@ -72,7 +72,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// <summary>Byte progress for an in-flight download, or null when none is running for
         /// this id.</summary>
         public HebrewBookDownloadProgress? Progress(string bookId) =>
-            _progress.TryGetValue(bookId, out var progress) ? progress : (HebrewBookDownloadProgress?)null;
+            _progress.TryGetValue(bookId, out var progress) ? progress : null;
 
         /// <summary>Aborts an in-flight download. Returns whether there was one to abort;
         /// calling it when nothing is running is not an error.</summary>
@@ -148,7 +148,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
                 }
 
                 long total = response.Content.Headers.ContentLength ?? 0;
-                _progress[bookId] = new HebrewBookDownloadProgress(0, total);
+                _progress[bookId] = new HebrewBookDownloadProgress { Received = 0, Total = total };
 
                 using var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false);
 
@@ -170,7 +170,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
                     CopyBufferBytes, useAsync: true))
                 {
                     await file.WriteAsync(signature, 0, signatureLength, downloadToken).ConfigureAwait(false);
-                    _progress[bookId] = new HebrewBookDownloadProgress(received, total);
+                    _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
 
                     byte[] buffer = new byte[CopyBufferBytes];
                     int read;
@@ -178,7 +178,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
                     {
                         await file.WriteAsync(buffer, 0, read, downloadToken).ConfigureAwait(false);
                         received += read;
-                        _progress[bookId] = new HebrewBookDownloadProgress(received, total);
+                        _progress[bookId] = new HebrewBookDownloadProgress { Received = received, Total = total };
                     }
                 }
 
