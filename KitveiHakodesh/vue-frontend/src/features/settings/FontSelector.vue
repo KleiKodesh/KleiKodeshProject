@@ -10,6 +10,12 @@ const props = defineProps<{
   modelValue: string
   fontType: 'sans-serif' | 'serif'
   hint?: string
+  /**
+   * Family this picker's setting falls back to, badged in the list. One per dropdown:
+   * the book text and the te'amim text have different defaults, and the header picker
+   * has none worth badging. Bare family name, no fallback chain.
+   */
+  defaultFont?: string
 }>()
 const emit = defineEmits<{ 'update:modelValue': [string]; toggle: [] }>()
 
@@ -114,6 +120,7 @@ defineExpose({ isOpen })
           @click="select(font)"
         >
           <span class="opt-name">{{ font }}</span>
+          <span v-if="font === defaultFont" class="opt-badge">ברירת מחדל</span>
           <span class="opt-preview" :style="{ fontFamily: `'${font}'` }">אבג דהו</span>
         </div>
       </div>
@@ -209,6 +216,21 @@ defineExpose({ isOpen })
   flex-shrink: 0;
   font-size: 12px;
   color: var(--text-secondary);
+}
+/* Marks the one family this picker defaults to — see the defaultFont prop. Pushed up
+   against the name (the preview keeps the far edge via the row's space-between). */
+.opt-badge {
+  flex-shrink: 0;
+  margin-inline-end: auto;
+  font-size: 10px;
+  line-height: 1;
+  padding: 2px 5px;
+  border-radius: 3px;
+  /* Solid accent, not --accent-bg: the selected row already uses --accent-bg as its
+     own background, and the default row is the one most likely to be selected — a
+     tinted badge would all but vanish exactly where it matters most. */
+  background: var(--accent-color);
+  color: var(--bg-primary);
 }
 .opt-preview {
   font-size: 13px;

@@ -482,6 +482,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                     :get-toc-path="getTocPath"
                     :selected-section-line-ids="selectedSectionLineIds"
                     :multi-select-line-ids="manualSelectionLineIds"
+                    :book-has-teamim="bookHasTeamim"
                     @scrolled="onLinesScrolled"
                     @line-selected="onLineSelected"
                     @ctrl-f="openContentSearch"

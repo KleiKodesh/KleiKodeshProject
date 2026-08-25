@@ -14,10 +14,12 @@ export function useSettings() {
     headerFont,
     textFont,
     fontSize,
+    fontWeight,
     linePadding,
     commentaryHeaderFont,
     commentaryTextFont,
     commentaryFontSize,
+    commentaryFontWeight,
     commentaryLinePadding,
     useSeparateCommentarySettings,
     appZoom,
@@ -25,11 +27,12 @@ export function useSettings() {
     resumeLastRead,
   } = storeToRefs(settings)
 
-  watch([useSeparateCommentarySettings, headerFont, textFont, fontSize, linePadding], () => {
+  watch([useSeparateCommentarySettings, headerFont, textFont, fontSize, fontWeight, linePadding], () => {
     if (!useSeparateCommentarySettings.value) {
       commentaryHeaderFont.value = headerFont.value
       commentaryTextFont.value = textFont.value
       commentaryFontSize.value = fontSize.value
+      commentaryFontWeight.value = fontWeight.value
       commentaryLinePadding.value = linePadding.value
     }
   })
@@ -68,10 +71,12 @@ export function useSettings() {
     headerFont,
     textFont,
     fontSize,
+    fontWeight,
     linePadding,
     commentaryHeaderFont,
     commentaryTextFont,
     commentaryFontSize,
+    commentaryFontWeight,
     commentaryLinePadding,
     useSeparateCommentarySettings,
     appZoom,

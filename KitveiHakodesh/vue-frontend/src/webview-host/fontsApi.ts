@@ -23,22 +23,41 @@ import { detectFontsByCanvas } from './fontsCanvasProbe'
  * loading row meanwhile), so a long-running session always sees the machine's current fonts —
  * installs and removals included — with no cache to invalidate.
  */
+/**
+ * Fonts the app ships itself (public/fonts/, declared @font-face in main.css).
+ *
+ * They are always offered, first and in this order, because they are guaranteed
+ * present — unlike the enumerated families, which depend on the machine. The OS
+ * enumerators cannot see them (DirectWrite reports installed fonts, and a web font
+ * is never installed), so listing them here is the only way they reach the picker.
+ *
+ * A name repeated by the enumerator is de-duplicated in favour of this entry, so a
+ * user who ALSO has the font installed system-wide still sees one row, at the top.
+ */
+export const BUNDLED_FONTS = ['Taamey Frank CLM', 'Frank Ruhl Libre', 'Heebo'] as const
+
+/** Bundled families first (order preserved), then everything the OS reported, minus duplicates. */
+function withBundledFirst(systemFonts: string[]): string[] {
+  const bundled = BUNDLED_FONTS as readonly string[]
+  return [...bundled, ...systemFonts.filter((f) => !bundled.includes(f))]
+}
+
 export async function detectAvailableFonts(): Promise<string[]> {
   if (typeof window.__webviewAction === 'function') {
     try {
       const result = await window.__webviewAction('getFonts')
       const fonts = (result as { fonts?: string[] }).fonts
-      if (Array.isArray(fonts) && fonts.length > 0) return fonts
+      if (Array.isArray(fonts) && fonts.length > 0) return withBundledFirst(fonts)
     } catch {
       // Host bridge unavailable — fall through to the canvas probe.
     }
   } else {
     try {
       const result = await serviceCall<{ fonts?: string[] }>('getFonts')
-      if (Array.isArray(result?.fonts) && result.fonts.length > 0) return result.fonts
+      if (Array.isArray(result?.fonts) && result.fonts.length > 0) return withBundledFirst(result.fonts)
     } catch {
       // Service unreachable — fall through to the canvas probe.
     }
   }
-  return detectFontsByCanvas()
+  return withBundledFirst(await detectFontsByCanvas())
 }

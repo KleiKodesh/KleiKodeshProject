@@ -1,5 +1,51 @@
 @import '../../theme/theme.css';
 
+/* ── Bundled fonts ──────────────────────────────────────────────────────────
+   Shipped in public/fonts/ so the reading defaults do not depend on what the
+   machine happens to have installed. Both are freely redistributable:
+   Taamey Frank CLM is GPL-2.0 WITH the font-embedding exception (that exception
+   is what keeps the app's own code clear of the GPL), Frank Ruhl Libre is OFL-1.1.
+   License texts ship beside the fonts.
+
+   Taamey Frank CLM is the reason this section exists: it is the only face here
+   that carries the cantillation marks (U+0591-05AF), which is what books flagged
+   hasTeamim need. Frank Ruhl Libre has NONE of them — verified against its cmap —
+   so it is a body font only and must never sit in the teamim fallback chain.
+
+   Subset to Hebrew + Latin with GPOS kept, so mark positioning still works. */
+@font-face {
+  font-family: 'Taamey Frank CLM';
+  src: url('/fonts/TaameyFrankCLM-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Taamey Frank CLM';
+  src: url('/fonts/TaameyFrankCLM-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+/* Variable fonts: one file covers the whole weight range, so the range is declared
+   rather than shipping a file per weight. */
+@font-face {
+  font-family: 'Frank Ruhl Libre';
+  src: url('/fonts/FrankRuhlLibre-var.woff2') format('woff2-variations');
+  font-weight: 300 900;
+  font-style: normal;
+  font-display: swap;
+}
+/* Headings. A sans face against the serif body, and bundled for the same reason the
+   others are: the previous default (Segoe UI) exists only on Windows. */
+@font-face {
+  font-family: 'Heebo';
+  src: url('/fonts/Heebo-var.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 * { user-select: none; }
@@ -301,7 +347,8 @@ h1::after {
   scrollbar-color: transparent transparent !important;
 }
 
-/* Thin scrollbars — TOC only (via .toc-thin-scroll class). Standard properties
+/* Thin scrollbars — opt-in via the .toc-thin-scroll class. Named for the TOC, which
+   was the first caller; the setup-wizard step cards use it too. Standard properties
    only — ::-webkit-scrollbar-* rules are dead since Chrome 121 when these are
    set, and would defeat the hidden-scrollbars tinting above for their element. */
 .toc-thin-scroll {

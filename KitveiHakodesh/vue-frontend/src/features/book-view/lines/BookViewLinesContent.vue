@@ -56,6 +56,12 @@ const props = defineProps<
     getTocPath?: (entry: TocEntry) => string
     selectedSectionLineIds?: number[] | null
     multiSelectLineIds?: number[] | null
+    /**
+     * This book's text carries cantillation marks. Switches the body font to the
+     * teamim family. Per-pane rather than a global attribute, so a split view showing
+     * a teamim book beside a plain one renders each in its own font.
+     */
+    bookHasTeamim?: boolean
   }
 >()
 
@@ -233,6 +239,7 @@ const { noteTooltip } = useNoteTooltip(scrollerEl)
 
 const {
   wordLinkTooltip,
+  closeWordLinkTooltip,
   keepOpen: keepWordLinkTooltipOpen,
   releaseOpen: releaseWordLinkTooltip,
   beginSelection: beginWordLinkTooltipSelection,
@@ -338,6 +345,7 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
       @pointer-enter="keepWordLinkTooltipOpen"
       @pointer-leave="releaseWordLinkTooltip"
       @select-start="beginWordLinkTooltipSelection"
+      @close="closeWordLinkTooltip"
     />
     <WordLinkTooltip
       v-if="noteTooltip"
@@ -351,6 +359,7 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
       tabindex="0"
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
+      :data-teamim="bookHasTeamim ? 'true' : 'false'"
       @scroll="onScroll"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
@@ -404,10 +413,16 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
   margin-inline: auto;
   font-family: var(--text-font);
   font-size: var(--font-size, 100%);
+  font-weight: var(--font-weight, 400);
   line-height: var(--line-height, 1.7);
   color: var(--text-primary);
   text-align: justify;
   position: relative;
+}
+/* Books whose text carries cantillation marks get their own body font — set on the
+   scroller so each pane in a split view follows its own book, not a global flag. */
+.scroller[data-teamim='true'] .line {
+  font-family: var(--teamim-text-font);
 }
 /* Exact line spacing (רווח מדוייק), opt-in from settings.
    `line-height` is normally a unitless multiplier, so every inline element
@@ -513,6 +528,9 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   opacity: 0.35;
   padding-block-end: 2px;
 }
+/* Headings stay heavier than the body at EVERY slider stop, instead of inheriting
+   its weight. 800 rather than bold(700): the weight slider tops out at 700, so a
+   700 pin would render headings identically to a maxed-out body. */
 .line :deep(h1),
 .line :deep(h2),
 .line :deep(h3),
@@ -520,6 +538,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line :deep(h5),
 .line :deep(h6) {
   font-family: var(--header-font);
+  font-weight: 800;
 }
 .line :deep(mark.search-match) {
   background: rgba(255, 165, 0, 0.4);

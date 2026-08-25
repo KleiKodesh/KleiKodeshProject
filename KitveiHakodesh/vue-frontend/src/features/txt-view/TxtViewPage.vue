@@ -423,6 +423,7 @@ async function retry() {
   direction: rtl;
   text-align: justify;
   font-family: var(--text-font);
+  font-weight: var(--font-weight, 400);
   line-height: var(--line-height, 1.7);
   color: var(--text-primary);
   background: var(--bg-primary);

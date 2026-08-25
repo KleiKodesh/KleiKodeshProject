@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useSettingsStore } from '@/stores/settingsStore'
+import { useSettingsStore, DEFAULT_HEADER_FONT_FAMILY, DEFAULT_TEXT_FONT_FAMILY, DEFAULT_TEAMIM_FONT_FAMILY } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettings } from './useSettingsPage'
 import SettingRow from './SettingRow.vue'
@@ -15,12 +15,15 @@ const {
   defaultAutoSyncCommentary,
   headerFont,
   textFont,
+  teamimTextFont,
   fontSize,
+  fontWeight,
   linePadding,
   fixedLineHeight,
   commentaryHeaderFont,
   commentaryTextFont,
   commentaryFontSize,
+  commentaryFontWeight,
   commentaryLinePadding,
   useSeparateCommentarySettings,
   linesContentMaxWidth,
@@ -97,10 +100,16 @@ const commentaryMaxWidthSlider = computed({
       ref="bookDisplayRef"
       v-model:header-font="headerFont"
       v-model:text-font="textFont"
+      v-model:teamim-text-font="teamimTextFont"
       v-model:font-size="fontSize"
+      v-model:font-weight="fontWeight"
       v-model:line-padding="linePadding"
       v-model:fixed-line-height="fixedLineHeight"
       show-fixed-line-height
+      show-teamim-font
+      :default-header-font="DEFAULT_HEADER_FONT_FAMILY"
+      :default-text-font="DEFAULT_TEXT_FONT_FAMILY"
+      :default-teamim-font="DEFAULT_TEAMIM_FONT_FAMILY"
       @close-other="commentaryDisplayRef?.closeDropdowns()"
     />
 
@@ -155,7 +164,10 @@ const commentaryMaxWidthSlider = computed({
       v-model:header-font="commentaryHeaderFont"
       v-model:text-font="commentaryTextFont"
       v-model:font-size="commentaryFontSize"
+      v-model:font-weight="commentaryFontWeight"
       v-model:line-padding="commentaryLinePadding"
+      :default-header-font="DEFAULT_HEADER_FONT_FAMILY"
+      :default-text-font="DEFAULT_TEXT_FONT_FAMILY"
       @close-other="bookDisplayRef?.closeDropdowns()"
     />
 
