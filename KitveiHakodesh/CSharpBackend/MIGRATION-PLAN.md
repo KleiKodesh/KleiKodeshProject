@@ -82,7 +82,17 @@ KitveiHakodesh.Core/
                                     IHostApplicationLifetime and direct references to
                                     FullTextSearchService + CatalogTocSearchService — ALL of
                                     which stay with the orchestrator (rule 3)
-    TextEncodingDetector.cs         [new] IsValidUtf8 + charset label (never decodes)
+    TextEncodingDetector.cs         [new] IsValidUtf8 + charset label + DECODE.
+                                    DEVIATION from "never decodes", deliberately: codepage
+                                    1255 needs CodePagesEncodingProvider registered on the
+                                    modern runtime or GetEncoding(1255) THROWS, and a trap
+                                    that only fires on one leg when a user opens one legacy
+                                    file should have exactly one home. Both existing callers
+                                    (Lib LocalFileHandler, Service HttpHostServer) already do
+                                    BOM-sniff + validate + fall back, so decoding here removes
+                                    a duplicate rather than adding a job.
+                                    Costs System.Text.Encoding.CodePages on the net10 leg
+                                    (data tables only — AOT-safe)
     RunningWordFinder.cs            [new] ROT detection (GetActiveObject)   [net48 leg]
     WordThesaurus.cs                (was WordThesaurusProvider) autonomous: no running
                                     Word -> empty result                    [net48 leg]
@@ -101,7 +111,9 @@ KitveiHakodesh.Core/
     OperatingSystemProbe.cs         OS version + bitness
     ProcessBitnessProbe.cs          process bitness + executable path
     FileLogger.cs                   (was AppLogger — `App*` banned here). Documented
-                                    exception to rule 4 — see rule 10 note
+                                    exception to rule 4 — see rule 10 note. INSTANCE, not
+                                    static: the path was a hardcoded %TEMP% const, and two
+                                    hosts writing one file interleaved is a worse log than two
     ShellRegistration.cs            HKCU\Software\Classes "Open With" handler;
                                     app values parameterized
                                     (no SqlPlaceholderRewriter — after slices 2 and 4 retire
@@ -1323,6 +1335,14 @@ FtsLib half.**
 - **Split** Lib `EnvironmentDiagnostics`: probes → `Core/Common/` (one file per question asked),
   report composition stays in Lib. The Word/Office probes benefit both orchestrators
   (dev has none today)
+  - Probes return TYPED data, not `Dictionary<string,string>` entries. The dictionary is the
+    REPORT's shape, and it also swallowed every failure into an `"error: …"` string, so a
+    caller could not tell "not installed" from "could not read the hive"
+  - **`CollectSqliteInterop` / `CollectLoadedSqliteModules` / `CollectAssemblyPaths` are NOT
+    ported.** All three diagnose `System.Data.SQLite` + `SQLite.Interop.dll` — the provider
+    Core drops entirely for `Microsoft.Data.Sqlite`. ~180 of the file's 403 lines exist to
+    debug a dependency that will not be there. They stay in Lib until slice 11 removes them
+    with the provider
 - Office (net48 leg): `WordThesaurusProvider` → `WordThesaurus`, **autonomous via
   `RunningWordFinder`** — no injected instance, empty result when Word is absent
   (`Marshal.GetActiveObject` on net48; `AotWordConverter.cs:36` shows the net10 P/Invoke).
