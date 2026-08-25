@@ -93,11 +93,27 @@ KitveiHakodesh.Core/
                                     a duplicate rather than adding a job.
                                     Costs System.Text.Encoding.CodePages on the net10 leg
                                     (data tables only — AOT-safe)
-    RunningWordFinder.cs            [new] ROT detection (GetActiveObject)   [net48 leg]
+    RunningWordFinder.cs            [new] host instance -> already-running (GetActiveObject)
+                                    -> newly started, and it REPORTS WHICH: releasing or
+                                    quitting the add-in's own Application is how a task pane
+                                    loses its Word, so the caller has to be able to tell.
+                                    FindRunning() never starts Word — the thesaurus must not
+                                    launch Word because someone looked up a synonym
+                                                                            [net48 leg]
     WordThesaurus.cs                (was WordThesaurusProvider) autonomous: no running
                                     Word -> empty result                    [net48 leg]
-    WordExporter.cs                                                         [net48 leg]
-    WordToPdfConverter.cs           (was WordConversionService)             [per-TFM]
+    WordExporter.cs                 SYNCHRONOUS and THROWING: it was Task.Run +
+                                    Debug.WriteLine, which is a no-op in Release, so an export
+                                    that failed told nobody — not the user, not the log
+                                                                            [net48 leg]
+    (NO WordToPdfConverter.cs)      Core REFERENCES DocConvertLib instead. That project is
+                                    already net48;net10 and IsAotCompatible, and already holds
+                                    both routes: AotWordConverter (manual COM/IDispatch,
+                                    net10-only behind #if) and the Office-free OoxmlHtmlConverter
+                                    on both legs — 1364 working lines. Copying them into Core
+                                    would create the second copy rule 0b exists to prevent.
+                                    Lib's PIA-based WordToPdfConverter (111 lines) belongs in
+                                    DocConvertLib's net48 leg, beside its sibling, NOT in Core
     HebrewFontsProvider.cs          (merges Lib FontsProvider) per-TFM:
                                     WPF (net48) / DirectWrite (net10)
     UpdateChecker.cs                from UpdateCheckerLib (~893 portable lines)
