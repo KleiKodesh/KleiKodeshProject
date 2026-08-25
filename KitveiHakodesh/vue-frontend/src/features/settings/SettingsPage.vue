@@ -12,7 +12,8 @@ import {
 import { useSettingsSearch } from './useSettingsSearch'
 import SettingsPageSideNav from './SettingsPageSideNav.vue'
 import SettingsPageThemeAndApplicationSection from './SettingsPageThemeAndApplicationSection.vue'
-import SettingsPageReadingAndBookDisplaySection from './SettingsPageReadingAndBookDisplaySection.vue'
+import SettingsPageBookAndCommentaryDisplaySection from './SettingsPageBookAndCommentaryDisplaySection.vue'
+import SettingsPageCensorDivineNamesSection from './SettingsPageCensorDivineNamesSection.vue'
 import SettingsPageCalendarSection from './SettingsPageCalendarSection.vue'
 import SettingsPageAdvancedSection from './SettingsPageAdvancedSection.vue'
 import SettingsPageResetSection from './SettingsPageResetSection.vue'
@@ -159,7 +160,8 @@ async function navigateToSection(sectionId: string) {
         </div>
 
         <SettingsPageThemeAndApplicationSection />
-        <SettingsPageReadingAndBookDisplaySection />
+        <SettingsPageBookAndCommentaryDisplaySection />
+        <SettingsPageCensorDivineNamesSection />
         <SettingsPageCalendarSection />
         <SettingsPageAdvancedSection />
         <SettingsPageResetSection />
