@@ -37,6 +37,14 @@ import type { LineItem } from './useBookViewLinesTable'
  */
 export const SEARCH_BAR_INSET_PX = 44
 
+/**
+ * Clearance left below a match that lands at the bottom edge. Bigger than the
+ * top gap on purpose: a match sitting flush on the bottom edge reads as cut off
+ * and leaves nowhere for the eye to continue, so it stops short of the edge with
+ * a line or so of the text that follows still showing.
+ */
+const BOTTOM_LANDING_CLEARANCE_PX = 48
+
 export interface ScrollToLineOptions {
   /**
    * Which search occurrence within the line to mark `.current` and centre.
@@ -138,13 +146,14 @@ export function useBookViewLinesNavigation(
       const relativeTop = markRect.top - scrollerRect.top
       const relativeBottom = markRect.bottom - scrollerRect.top
       const alreadyVisible =
-        relativeTop >= reserved + 4 && relativeBottom <= scrollerRect.height - 4
+        relativeTop >= reserved + 4 &&
+        relativeBottom <= scrollerRect.height - BOTTOM_LANDING_CLEARANCE_PX
       if (!alreadyVisible) {
         // Land the mark at the edge the reader is travelling toward: bottom when
         // stepping forward, top when stepping back. See `direction` above.
         scroller.scrollTop +=
           direction === 'forward'
-            ? relativeBottom - scrollerRect.height + SCROLL_LANDING_GAP_PX
+            ? relativeBottom - scrollerRect.height + BOTTOM_LANDING_CLEARANCE_PX
             : relativeTop - reserved - SCROLL_LANDING_GAP_PX
       }
       return true

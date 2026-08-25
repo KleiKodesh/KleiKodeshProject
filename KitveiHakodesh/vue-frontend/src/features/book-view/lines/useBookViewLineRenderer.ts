@@ -1,5 +1,5 @@
 import { computed } from 'vue'
-import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
+import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import { argbToCssColor, highlightColorToThemeColor } from '../lines/bookViewAnnotationColors'
@@ -25,6 +25,11 @@ interface LineRenderProps {
 }
 
 // Precompiled diacritic range check — faster than /[\u0591-\u05C7]/.test(ch) in tight loops.
+// This is the ANNOTATION reading of the range: user highlights and notes carry
+// offsets measured against DOM text stripped of the whole block, maqaf included,
+// so their walkers must skip exactly what that strip skipped. Search positions come
+// from stripHtmlForSearch, which keeps the maqaf as a space — the search walkers
+// below use isSearchIgnoredMark instead.
 export function isDiacriticChar(ch: string): boolean {
   const code = ch.charCodeAt(0)
   return code >= 0x0591 && code <= 0x05C7
@@ -86,7 +91,7 @@ function highlightMatches(
       // Bare & — treat as regular character.
     }
 
-    const isDiacritic = isDiacriticChar(ch)
+    const isDiacritic = isSearchIgnoredMark(ch)
     if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
       out.push('<mark class="search-match">')
       inMatch = true
@@ -199,7 +204,7 @@ export function highlightFromSnippet(
       }
     }
 
-    const isDiacritic = isDiacriticChar(ch)
+    const isDiacritic = isSearchIgnoredMark(ch)
 
     if (!isDiacritic) {
       if (inMatch && strippedPos >= matchEndPos) { out.push('</mark>'); inMatch = false }

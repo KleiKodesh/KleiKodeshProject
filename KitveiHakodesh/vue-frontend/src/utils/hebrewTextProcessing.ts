@@ -55,7 +55,7 @@ export function stripNikkudFromHtml(html: string): string {
   return html.replace(/(<[^>]*>)|([^<]+)/g, (_, tag: string, text: string) => {
     if (tag) return tag
     text = text.replace(/[\u0591-\u05AF\u05C0]/g, '')
-    text = text.replace(/[\u002D\u2012\u2013\u2014\u2015\u2212] /g, '')
+    text = text.replace(/[\u002D\u2012–—\u2015\u2212] /g, '')
     text = text.replace(/[\u05B0-\u05BD\u05C1\u05C2\u05C4\u05C5\u05C7]/g, '')
     text = text.replace(/[!?]/g, '.')
     // Replace standalone semicolons but not ones inside HTML entities like &nbsp;
@@ -64,9 +64,30 @@ export function stripNikkudFromHtml(html: string): string {
   })
 }
 
-/** Strip all Hebrew diacritics for search matching. */
+/**
+ * U+05BE MAQAF joins two words into one accented unit. It sits inside the
+ * Hebrew mark block but is punctuation, not a diacritic: dropping it would fuse
+ * the words it joins into a single token, so a two-word query could never match
+ * a maqaf-joined phrase. It becomes a space instead — the same separator the
+ * reader typed.
+ */
+export const MAQAF = '\u05BE'
+
+/**
+ * Every Hebrew mark that search discards outright: the U+0591–U+05C7 block
+ * minus the maqaf, which is a separator (see MAQAF) rather than a mark.
+ */
+const SEARCH_IGNORED_MARKS = /[\u0591-\u05BD\u05BF-\u05C7]/g
+
+/** True for a character search drops without advancing its position count. */
+export function isSearchIgnoredMark(ch: string): boolean {
+  const code = ch.charCodeAt(0)
+  return code >= 0x0591 && code <= 0x05C7 && code !== 0x05BE
+}
+
+/** Strip Hebrew diacritics for search matching, keeping the maqaf as a space. */
 export function removeDiacriticsForSearch(text: string): string {
-  return text.replace(/[\u0591-\u05C7]/g, '')
+  return text.replace(SEARCH_IGNORED_MARKS, '').replaceAll(MAQAF, ' ')
 }
 
 /**
@@ -109,8 +130,11 @@ export function stripHtmlForSearch(html: string): string {
       continue
     }
 
-    if (!/[\u0591-\u05C7]/.test(ch)) result += ch
+    // The maqaf survives as a space so it still occupies one position — the
+    // walkers that map positions back into the HTML count it the same way.
+    if (ch === MAQAF) result += ' '
+    else if (!isSearchIgnoredMark(ch)) result += ch
     i++
   }
-  return removeDiacriticsForSearch(result)
+  return result
 }
