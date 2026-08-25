@@ -85,6 +85,14 @@
     <Compile Remove="Common/WordExporter.cs" />
   </ItemGroup>
 
+  <!-- The GitHub releases API is JSON — somebody else's wire format, which rule 0e does not
+       ask us to pretend is MessagePack. net48 has no System.Text.Json in the framework; the
+       modern leg has it built in, and both use the SOURCE GENERATOR (GithubJsonContext) so the
+       AOT leg never needs the reflection path. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="System.Text.Json" Version="10.0.0" />
+  </ItemGroup>
+
   <!-- Codepage 1255 (Hebrew ANSI) is built into net48 but not into the modern runtime, where
        Encoding.GetEncoding(1255) throws without this provider. TextEncodingDetector registers
        it; without the package that registration would not compile. -->
