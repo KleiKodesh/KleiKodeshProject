@@ -6,13 +6,11 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZmanim, CITIES } from '@/features/hebrew-calendar/useZmanim'
-import { DIVINE_NAME_MODE_OPTIONS } from '@/utils/censorDivineNames'
 import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
 
 const settings = useSettingsStore()
-const { divineNameMode, newTabPage, resumeLastRead, defaultAutoSyncCommentary } =
-  storeToRefs(settings)
+const { resumeLastRead } = storeToRefs(settings)
 
 const bookViewStore = useBookViewStore()
 const { toolbarPosition } = storeToRefs(bookViewStore)
@@ -69,146 +67,61 @@ function pickCity(name: string) {
 </script>
 
 <template>
-  <div class="step-content">
-    <div class="step-header">
-      <h2 class="step-title">כמה הגדרות מהירות</h2>
-      <p class="step-desc">הגדרות אלו ישפיעו על חוויית הקריאה היומיומית שלך.</p>
+  <SettingRow
+    label="זכור מיקום אחרון בספר"
+    title="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+  >
+    <ToggleGroup
+      v-model="resumeLastRead"
+      :options="[
+        { label: 'כן', value: true },
+        { label: 'לא', value: false },
+      ]"
+    />
+  </SettingRow>
+  <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
+    <ToggleGroup
+      v-model="toolbarPosition"
+      :options="[
+        { label: 'למעלה', value: 'top' },
+        { label: 'למטה', value: 'bottom' },
+        { label: 'שמאל', value: 'left' },
+        { label: 'ימין', value: 'right' },
+      ]"
+      @update:model-value="bookViewStore.setToolbarPosition($event)"
+    />
+  </SettingRow>
+  <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
+    <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
+      <span class="select-display">{{ activeCity.name }}</span>
+      <component
+        :is="cityOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
+        class="select-chevron"
+      />
     </div>
-    <div class="step-scroll">
-      <div class="step-card">
-        <SettingRow label="כיסוי שם ה'" wrap>
-          <ToggleGroup v-model="divineNameMode" :options="[...DIVINE_NAME_MODE_OPTIONS]" />
-        </SettingRow>
-        <SettingRow
-          label="זכור מיקום אחרון בספר"
-          title="בפתיחת ספר מחדש, האפליקציה תחזור אוטומטית למקום שבו הפסקת לקרוא"
+    <Teleport to="body">
+      <div
+        v-if="cityOpen"
+        ref="cityDropdownRef"
+        class="city-dropdown"
+        :style="cityDropdownStyle"
+        @click.stop
+      >
+        <div
+          v-for="c in CITIES"
+          :key="c.name"
+          class="city-option"
+          :class="{ selected: activeCity.name === c.name }"
+          @click="pickCity(c.name)"
         >
-          <ToggleGroup
-            v-model="resumeLastRead"
-            :options="[
-              { label: 'כן', value: true },
-              { label: 'לא', value: false },
-            ]"
-          />
-        </SettingRow>
-        <SettingRow label="פתח טאב חדש אל" wrap>
-          <ToggleGroup
-            v-model="newTabPage"
-            :options="[
-              { label: 'דף הבית', value: 'homepage' },
-              { label: 'פתיחת ספר', value: 'openfile' },
-              { label: 'היברו בוקס', value: 'hebrewbooks' },
-              { label: 'חיפוש', value: 'search' },
-            ]"
-          />
-        </SettingRow>
-        <SettingRow label="מיקום סרגל הכלים בתצוגת ספר" wrap>
-          <ToggleGroup
-            v-model="toolbarPosition"
-            :options="[
-              { label: 'למעלה', value: 'top' },
-              { label: 'למטה', value: 'bottom' },
-              { label: 'שמאל', value: 'left' },
-              { label: 'ימין', value: 'right' },
-            ]"
-            @update:model-value="bookViewStore.setToolbarPosition($event)"
-          />
-        </SettingRow>
-        <SettingRow label="סנכרן מפרשים כברירת מחדל">
-          <ToggleGroup
-            v-model="defaultAutoSyncCommentary"
-            :options="[
-              { label: 'כן', value: true },
-              { label: 'לא', value: false },
-            ]"
-          />
-        </SettingRow>
-        <SettingRow label="עיר לזמני היום" hint="העיר שלפיה יחושבו זמני היום בלוח השנה">
-          <div ref="cityBoxRef" class="select-box" tabindex="0" @click="toggleCityDropdown">
-            <span class="select-display">{{ activeCity.name }}</span>
-            <component
-              :is="cityOpen ? IconChevronUp20Regular : IconChevronDown20Regular"
-              class="select-chevron"
-            />
-          </div>
-          <Teleport to="body">
-            <div
-              v-if="cityOpen"
-              ref="cityDropdownRef"
-              class="city-dropdown"
-              :style="cityDropdownStyle"
-              @click.stop
-            >
-              <div
-                v-for="c in CITIES"
-                :key="c.name"
-                class="city-option"
-                :class="{ selected: activeCity.name === c.name }"
-                @click="pickCity(c.name)"
-              >
-                {{ c.name }}
-              </div>
-            </div>
-          </Teleport>
-        </SettingRow>
+          {{ c.name }}
+        </div>
       </div>
-    </div>
-  </div>
+    </Teleport>
+  </SettingRow>
 </template>
 
 <style scoped>
-.step-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.step-header {
-  flex-shrink: 0;
-  max-width: 560px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 28px 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  box-sizing: border-box;
-}
-
-.step-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
-  animation: fade-up 0.25s ease both;
-}
-
-.step-desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  animation: fade-up 0.25s 0.05s ease both;
-}
-
-.step-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 16px 24px;
-}
-
-.step-card {
-  max-width: 560px;
-  margin: 0 auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px 20px;
-  animation: fade-up 0.25s 0.1s ease both;
-}
-
 .select-box {
   display: flex;
   align-items: center;
@@ -263,16 +176,5 @@ function pickCity(name: string) {
 }
 .city-option.selected {
   color: var(--accent-color);
-}
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 </style>

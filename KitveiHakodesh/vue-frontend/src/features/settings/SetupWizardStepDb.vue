@@ -59,104 +59,38 @@ function downloadOtzaria() {
 </script>
 
 <template>
-  <div class="step-content">
-    <div class="step-header">
-      <h2 class="step-title">בחירת מסד נתונים</h2>
-      <p class="step-desc">
-        כתבי הקודש צריכה את מסד הנתונים של אוצריא או של זית. אם אחת מהתוכנות כבר מותקנת, הפעל
-        אותה פעם אחת לסיום ההתקנה ואז בחר את הנתיב למסד הנתונים. ניתן לשנות את הנתיב בכל עת דרך
-        הגדרות האפליקציה.
-      </p>
+  <button class="db-pick-card" @click="downloadOtzaria">
+    <IconArrowDownload20Regular class="db-card-icon" />
+    <span class="db-card-path placeholder">הורד את אוצריא</span>
+  </button>
+  <button class="db-pick-card" @click="downloadZayit">
+    <IconArrowDownload20Regular class="db-card-icon" />
+    <span class="db-card-path placeholder">הורד את זית</span>
+  </button>
+  <button v-if="!isDev" class="db-pick-card" @click="pickDbPath">
+    <IconFolderOpen20Regular class="db-card-icon" />
+    <span class="db-card-path" :class="{ placeholder: !dbPath }">
+      {{ dbPath || 'בחר קובץ מסד נתונים' }}
+    </span>
+  </button>
+  <template v-else>
+    <div class="db-pick-card db-dev-row">
+      <IconFolderOpen20Regular class="db-card-icon" />
+      <input
+        v-model="devInput"
+        class="db-dev-input"
+        placeholder="נתיב מלא לקובץ seforim.db"
+        spellcheck="false"
+        @keydown.enter="applyDevPath"
+      />
+      <button class="db-dev-apply" @click="applyDevPath">אישור</button>
     </div>
-    <div class="step-scroll">
-      <div class="step-card">
-        <button class="db-pick-card" @click="downloadOtzaria">
-          <IconArrowDownload20Regular class="db-card-icon" />
-          <span class="db-card-path placeholder">הורד את אוצריא</span>
-        </button>
-        <button class="db-pick-card" @click="downloadZayit">
-          <IconArrowDownload20Regular class="db-card-icon" />
-          <span class="db-card-path placeholder">הורד את זית</span>
-        </button>
-        <button v-if="!isDev" class="db-pick-card" @click="pickDbPath">
-          <IconFolderOpen20Regular class="db-card-icon" />
-          <span class="db-card-path" :class="{ placeholder: !dbPath }">
-            {{ dbPath || 'בחר קובץ מסד נתונים' }}
-          </span>
-        </button>
-        <template v-else>
-          <div class="db-pick-card db-dev-row">
-            <IconFolderOpen20Regular class="db-card-icon" />
-            <input
-              v-model="devInput"
-              class="db-dev-input"
-              placeholder="נתיב מלא לקובץ seforim.db"
-              spellcheck="false"
-              @keydown.enter="applyDevPath"
-            />
-            <button class="db-dev-apply" @click="applyDevPath">אישור</button>
-          </div>
-          <p v-if="devError" class="db-dev-error">{{ devError }}</p>
-          <p v-if="dbPath && !devError" class="db-dev-ok">✓ {{ dbPath }}</p>
-        </template>
-      </div>
-    </div>
-  </div>
+    <p v-if="devError" class="db-dev-error">{{ devError }}</p>
+    <p v-if="dbPath && !devError" class="db-dev-ok">✓ {{ dbPath }}</p>
+  </template>
 </template>
 
 <style scoped>
-.step-content {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow: hidden;
-}
-
-.step-header {
-  flex-shrink: 0;
-  max-width: 560px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 28px 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  box-sizing: border-box;
-}
-
-.step-title {
-  margin: 0;
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1.2;
-  animation: fade-up 0.25s ease both;
-}
-
-.step-desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  animation: fade-up 0.25s 0.05s ease both;
-}
-
-.step-scroll {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 16px 24px;
-}
-
-.step-card {
-  max-width: 560px;
-  margin: 0 auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 16px 20px;
-  animation: fade-up 0.25s 0.1s ease both;
-}
-
 .db-pick-card {
   display: flex;
   align-items: center;
@@ -241,16 +175,5 @@ function downloadOtzaria() {
   color: var(--text-secondary);
   direction: ltr;
   text-align: left;
-}
-
-@keyframes fade-up {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 </style>
