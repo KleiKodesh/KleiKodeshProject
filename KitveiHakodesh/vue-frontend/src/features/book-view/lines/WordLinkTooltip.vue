@@ -129,7 +129,18 @@ function measureMinHeight(): number {
     parseFloat(styles.paddingBottom) +
     parseFloat(styles.borderTopWidth) +
     parseFloat(styles.borderBottomWidth)
-  return chrome + (header?.offsetHeight ?? 0)
+  if (!header) return chrome
+  // offsetHeight covers the header's own border and padding but NOT its margin, and a
+  // flex item's margin never collapses — so the margin is as irreducible as the rest.
+  // Omitting it under-reports the floor, which lets a placement be chosen for a room
+  // the panel cannot actually fit in, and it then overhangs by exactly that margin.
+  const headerStyles = getComputedStyle(header)
+  return (
+    chrome +
+    header.offsetHeight +
+    parseFloat(headerStyles.marginTop) +
+    parseFloat(headerStyles.marginBottom)
+  )
 }
 
 /**
@@ -208,7 +219,11 @@ function computePosition() {
   // cannot reach an edge — and clamping here is what used to drag it over the anchor.
   const top = placeAbove ? rect.top - MARGIN - constrainedHeight : rect.bottom + MARGIN
 
-  resolvedMaxHeight.value = room
+  // The SAME number `top` was derived from — not `room`. `height` was measured under
+  // the stylesheet's preferred cap, so shipping a larger inline cap would let the panel
+  // grow past the size the position was computed for: placed above, it grows downward
+  // from `top` and lands on the anchor. The two must be one value or they disagree.
+  resolvedMaxHeight.value = constrainedHeight
   resolvedTop.value = top
   resolvedLeft.value = clampLeft(rect.left + rect.width / 2 - width / 2, width, viewportW)
 }
@@ -238,9 +253,20 @@ function placeBeside(rect: DOMRect, height: number, viewportW: number, viewportH
   // the anchor and clamp it inside. Capped to the viewport first, since the panel
   // measured taller than the space is exactly the case that got us here.
   const available = viewportH - MARGIN * 2
-  const seated = Math.min(height, available)
-  resolvedMaxHeight.value = available
-  resolvedTop.value = Math.max(MARGIN, Math.min(rect.top + rect.height / 2 - seated / 2, viewportH - seated - MARGIN))
+  const seated = Math.max(minHeight.value, Math.min(height, available))
+  // The SAME number the position below is derived from — not `available`. A cap larger
+  // than the height that was positioned lets the panel grow past its own placement and
+  // overhang the bottom edge; this is the identical trap the vertical path had.
+  resolvedMaxHeight.value = seated
+  // Centred on the anchor, clamped inside the viewport. When the panel's own floor
+  // exceeds the viewport — a pane shorter than a single header line, where nothing can
+  // fit — the lower clamp would win and push it off the TOP, which is the worse of the
+  // two overflows because it takes the header and close button with it. Pin to the top
+  // edge instead so what spills is the tail of the text, which scrolls anyway.
+  resolvedTop.value =
+    seated > viewportH - MARGIN * 2
+      ? MARGIN
+      : Math.max(MARGIN, Math.min(rect.top + rect.height / 2 - seated / 2, viewportH - seated - MARGIN))
 
   // Horizontal: whichever flank has more room, sized to fit inside it so the panel
   // is pushed fully clear of the link rather than merely nudged off centre.
@@ -481,12 +507,13 @@ useEventListener(() => window, 'resize', () => emit('close'))
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  /* Roughly square: the panel is MAX_WIDTH (360px) wide, so capping the height near
-     that keeps a section preview comfortable to read without growing into a column
-     that dominates the screen. The vh term keeps it inside short viewports; whichever
-     is smaller wins. A full section is normally longer than this — it scrolls, and
-     the cited line is scrolled to, so the cap costs no context. */
-  max-height: min(380px, 60vh);
+  /* Wider than tall: the panel is MAX_WIDTH (360px) across, and a preview taller than
+     that reads as a column rather than a passage — it also covers more of the text the
+     citation came from, which is what the reader is comparing it against. The vh term
+     only binds on short viewports; on a tall screen the px term is what applies, so it
+     is the one that decides the shape. A full section is normally longer than this — it
+     scrolls, and the cited line is scrolled to, so the cap costs no context. */
+  max-height: min(260px, 45vh);
   min-height: 0;
 }
 
@@ -549,10 +576,17 @@ useEventListener(() => window, 'resize', () => emit('close'))
 
 /* Bridges the MARGIN gap between anchor and tooltip so the pointer never crosses
    dead space on its way in. Lives on the root, which does NOT scroll — an
-   overflow container would clip it. Sits on whichever edge faces the anchor. */
+   overflow container would clip it. Sits on whichever edge faces the anchor.
+
+   EXACTLY the gap, never more: the bridge is a pseudo-element of a panel with
+   pointer-events: auto, so any overshoot is panel surface lying over the link —
+   swallowing clicks meant for it, and on the above/below placements doing so across
+   the panel's whole width, which reaches neighbouring links on the same line. Kept
+   equal to the MARGIN constant in script; changing one means changing the other. */
 .word-link-tooltip::before {
   content: '';
   position: absolute;
+  --bridge-gap: 8px;
 }
 
 /* Above/below: the gap is vertical, so the bridge spans the panel's full width. */
@@ -560,7 +594,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
 .word-link-tooltip.is-below::before {
   left: 0;
   right: 0;
-  height: 10px;
+  height: var(--bridge-gap);
 }
 
 .word-link-tooltip.is-above::before {
@@ -579,7 +613,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
   top: 0;
   bottom: 0;
   height: auto;
-  width: 10px;
+  width: var(--bridge-gap);
 }
 
 /* `is-beside-<side>` names the panel edge the anchor sits off, so the bridge hangs
