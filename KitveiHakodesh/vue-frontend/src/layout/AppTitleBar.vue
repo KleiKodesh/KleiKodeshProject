@@ -348,9 +348,10 @@ useAppTitleBarShortcuts({
     </span>
 
     <div class="bar-end">
-      <!-- Dropped while this pane's rail is up, the way the hamburger and the split-view
-           toggle are: the rail carries home itself, and a control is never offered twice. -->
-      <button v-if="isTitleBarButtonVisible('home') && !settingsStore.getNavSidebarVisible(props.paneId)" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <!-- Stays put whether or not this pane's rail is up, unlike the hamburger and the
+           split-view toggle: those two are about the rail and the window, so the rail can
+           speak for them. Home is a destination, and the bar is where it belongs. -->
+      <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
            not between tabs (Ctrl+Tab still does that). Click steps once
            (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.

@@ -70,6 +70,12 @@ provide(PANE_NAVIGATION_KEY, {
   height: 100%;
   overflow: hidden;
   min-width: 0;
+  /* Named container so this pane's own chrome - the nav rail, which is a sibling of the
+     content and so cannot read the `app-shell` container declared below - can size itself
+     off THIS pane's width. In split view a pane is a fraction of the window, so the
+     viewport is the wrong thing to ask: a narrow pane in a wide window needs the compact
+     rail just as much as a narrow window does. */
+  container: app-pane / inline-size;
   /* The chrome surface flows continuously from the title bar down around the
      content panel's rounded corners — no separator line between them. */
   background: var(--bg-secondary);
