@@ -1,17 +1,14 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import type { Component, ComponentPublicInstance } from 'vue'
+import type { Component } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import {
-  IconChevronLeft20Regular,
   IconOpen28Regular,
   IconSplitVertical20Filled,
   IconSplitVertical20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { documentIcon } from '@/utils/documentIcons'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
 
 /**
@@ -24,10 +21,8 @@ import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
  * rail order, from useAppNavSidebarOverflow - which never includes the hide button, the
  * one control pinned to the rail's floor) and owns what every row DOES - `select` reports
  * the picked key back and the rail dispatches. This menu owns each key's FACE:
- * label, icon, shortcut, read off the same tables the rail's buttons read. The one row
- * with behaviour of its own is workspaces, which is no action at all: like its row in the
- * hamburger menu it opens the picker (WorkspaceSubmenu) beside this menu, and that must
- * be wired here because the picker hangs off the row element, which only this menu has.
+ * label, icon, shortcut, read off the same tables the rail's buttons read. Every row is
+ * an action - the menu never opens anything of its own.
  *
  * Deliberately simpler placement than WorkspaceSubmenu, its floating sibling: one host,
  * one possible side - the rail is docked to the window's physical right edge, so inward
@@ -60,17 +55,15 @@ const left = ref(0)
 /** Hidden for the first frame: `place()` has to measure the panel before it can place it. */
 const placed = ref(false)
 
-/** One collapsed button as a row. Only workspaces is not an action: it opens the picker. */
+/** One collapsed button as a row. */
 interface OverflowRow {
   key: string
   label: string
   icon: Component
   color?: string
   shortcut?: string
-  isWorkspaces?: boolean
 }
 
-const workspacesIcon = documentIcon('apps')
 const bookViewStore = useBookViewStore()
 
 const rows = computed<OverflowRow[]>(() => props.collapsedKeys.map(overflowRow))
@@ -78,15 +71,6 @@ const rows = computed<OverflowRow[]>(() => props.collapsedKeys.map(overflowRow))
 // The same face the rail's buttons wear - the split-view row is the one that changes
 // with state, so its label and icon read the store here just as the rail button's do.
 function overflowRow(key: string): OverflowRow {
-  if (key === 'workspaces') {
-    return {
-      key,
-      label: 'סביבות עבודה',
-      icon: workspacesIcon.icon24,
-      color: workspacesIcon.color || undefined,
-      isWorkspaces: true,
-    }
-  }
   if (key === 'split-view') {
     const enabled = bookViewStore.splitViewEnabled
     return {
@@ -106,67 +90,18 @@ function rowTitle(row: OverflowRow) {
   return row.shortcut ? `${row.label} (${row.shortcut})` : row.label
 }
 
-// ── The workspaces picker off its row ─────────────────────────────────────────
-const workspacesOpen = ref(false)
-const workspacesRowEl = ref<HTMLElement | null>(null)
-const workspacesSubmenu = ref<InstanceType<typeof WorkspaceSubmenu> | null>(null)
-/**
- * The picker is teleported, so this menu's own outside-click watcher sees clicks inside
- * it as landing outside - the `ignore` names the panel element the picker exposes, same
- * as AppTitleBarNavDropdown does for its workspaces row.
- */
-const workspacesPanelEl = computed<HTMLElement | null>(
-  () => workspacesSubmenu.value?.panelEl ?? null,
-)
-
-// The workspaces row is one branch of the v-for, so there is no static ref to name - the
-// element is picked out of the loop by a function ref.
-function setRowElement(row: OverflowRow, el: Element | ComponentPublicInstance | null) {
-  if (row.isWorkspaces) workspacesRowEl.value = el as HTMLElement | null
-}
-
-// A grow can hand the workspaces button back to the rail while this menu is still open -
-// the picker must not be left floating beside a row that no longer exists.
-//
-// `pre`, deliberately: this has to close the picker BEFORE the patch that removes the row
-// nulls the ref behind it. A post-flush watcher runs after that patch, leaving the picker
-// up for a flush with a null anchor - place() early-returns on one, so it would hang
-// frozen at its last coordinates beside a row already gone.
-watch(
-  () => props.collapsedKeys.includes('workspaces'),
-  (isCollapsed) => {
-    if (!isCollapsed) workspacesOpen.value = false
-  },
-  { flush: 'pre' },
-)
-
 // The anchor is passed as the toggle so the composable leaves a click on it to the
 // button's own @click, instead of closing on pointerdown and reopening on click.
 useDropdownClose(panelRef, () => close(), {
   toggleButton: computed(() => props.anchor),
-  ignore: [workspacesPanelEl],
   enabled: () => props.open,
 })
 
 function close() {
-  workspacesOpen.value = false
   emit('update:open', false)
 }
 
-/** Escape backs out one level at a time: the open picker first, then this menu. */
-function onEscape() {
-  if (workspacesOpen.value) {
-    workspacesOpen.value = false
-    return
-  }
-  close()
-}
-
 function onRowClick(row: OverflowRow) {
-  if (row.isWorkspaces) {
-    workspacesSubmenu.value?.toggle()
-    return
-  }
   close()
   emit('select', row.key)
 }
@@ -240,38 +175,22 @@ watch(
       tabindex="-1"
       role="menu"
       @click.stop
-      @keydown.escape.stop="onEscape()"
+      @keydown.escape.stop="close()"
     >
       <div
         v-for="row in rows"
         :key="row.key"
-        :ref="(el) => setRowElement(row, el)"
         class="menu-row"
-        :class="{ 'menu-row--open': row.isWorkspaces && workspacesOpen }"
         role="menuitem"
         :title="rowTitle(row)"
-        :aria-expanded="row.isWorkspaces ? workspacesOpen : undefined"
         @click="onRowClick(row)"
       >
         <span class="menu-icon">
           <component :is="row.icon" :style="row.color ? { color: row.color } : {}" />
         </span>
         <span class="menu-label">{{ row.label }}</span>
-        <!-- Points the way the picker opens: inward, off this menu's edge. -->
-        <span v-if="row.isWorkspaces" class="menu-submenu-chevron">
-          <IconChevronLeft20Regular />
-        </span>
-        <span v-else-if="row.shortcut" class="menu-shortcut">{{ row.shortcut }}</span>
+        <span v-if="row.shortcut" class="menu-shortcut">{{ row.shortcut }}</span>
       </div>
-      <!-- Inside the v-if subtree on purpose: closing this menu unmounts the picker too. -->
-      <WorkspaceSubmenu
-        ref="workspacesSubmenu"
-        v-model:open="workspacesOpen"
-        :anchor="workspacesRowEl"
-        :keep-clear-of="panelRef"
-        prefer="left"
-        @close="panelRef?.focus()"
-      />
     </div>
   </Teleport>
 </template>
@@ -315,11 +234,6 @@ watch(
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 
-/* Held while the picker is up, so the row keeps saying which panel is open. */
-.menu-row--open {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
-}
-
 .menu-icon {
   display: flex;
   align-items: center;
@@ -343,18 +257,5 @@ watch(
   white-space: nowrap;
   direction: ltr;
   margin-inline-start: auto;
-}
-
-.menu-submenu-chevron {
-  display: flex;
-  align-items: center;
-  color: var(--text-secondary);
-  margin-inline-start: auto;
-  flex-shrink: 0;
-}
-.menu-submenu-chevron svg {
-  width: 14px;
-  height: 14px;
-  color: inherit;
 }
 </style>

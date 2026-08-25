@@ -39,8 +39,9 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
 
 /**
  * Workspaces is deliberately NOT in the list above, and has no route at all: it is not a
- * destination but a picker, so both surfaces open `WorkspaceMenu` in place - a flyout off
- * the rail, a submenu in the dropdown. Adding it back here would give it a tab again.
+ * destination but a picker, so its button opens `WorkspaceMenu` in place. It lives in the
+ * title bar beside home and nowhere else - not on the rail, not in this menu. Adding it
+ * back here would give it a tab again.
  */
 
 /** Settings sits below a divider in both surfaces, so it is not part of the list above. */

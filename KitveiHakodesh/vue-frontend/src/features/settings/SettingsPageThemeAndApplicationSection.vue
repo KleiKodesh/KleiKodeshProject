@@ -31,6 +31,7 @@ const TITLE_BAR_BUTTONS = [
   { id: 'split-view',     label: 'תצוגה מפוצלת' },
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: 'בית' },
+  { id: 'workspaces',     label: 'סביבות עבודה' },
   { id: 'prev-tab',       label: 'חזור' },
   { id: 'next-tab',       label: 'קדימה' },
 ]
