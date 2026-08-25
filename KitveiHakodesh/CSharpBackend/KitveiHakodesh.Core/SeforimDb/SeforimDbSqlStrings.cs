@@ -433,6 +433,65 @@ namespace KitveiHakodesh.Core.SeforimDb
             " AND n.lineIndex <> m.lineIndex" +
             " WHERE m.id IN (" + InPlaceholders("p", count) + ")";
 
+        // ── Catalog index build (SeforimDbCatalogIndex) ───────────────────────────────
+        // The reads the Lucene catalog index is built from. Here rather than beside the
+        // indexer because SQL belongs to the DATABASE, not the feature (rule 9) — these read
+        // the same seforim.db as everything above.
+
+        /// <summary>Every line of one book, in reading order — the verse-marker scan.</summary>
+        internal const string CatalogIndexBookLines =
+            "SELECT lineIndex, content FROM line WHERE bookId = @b ORDER BY lineIndex";
+
+        internal const string CatalogIndexTocRowsForBook = @"
+            SELECT te.id, te.parentId, tt.text, l.lineIndex
+            FROM tocEntry te
+            JOIN tocText tt ON tt.id = te.textId
+            LEFT JOIN line l ON l.id = te.lineId
+            WHERE te.bookId = @b
+            ORDER BY te.id";
+
+        /// <summary>Same order the frontend loads categories in (level, then orderIndex when
+        /// the column exists) — the catalog tree-order computation depends on it. Distinct
+        /// from GetAllCategories above: different SELECT list, different reader.</summary>
+        internal static string CatalogIndexCategories(bool hasOrderIndex) => hasOrderIndex
+            ? "SELECT id, parentId, title FROM category ORDER BY level, orderIndex"
+            : "SELECT id, parentId, title FROM category ORDER BY level";
+
+        /// <summary>Distinct from GetAllBooks above: no hasTeamim, and the index consumes the
+        /// columns positionally in this order.</summary>
+        internal const string CatalogIndexBooks = @"
+            SELECT b.id, b.categoryId, b.title, group_concat(a.name, ', ') AS authors
+            FROM book b
+            LEFT JOIN book_author ba ON ba.bookId = b.id
+            LEFT JOIN author a ON a.id = ba.authorId
+            GROUP BY b.id
+            ORDER BY b.orderIndex";
+
+        /// <summary>Each book's first line. SQLite's MIN() aggregate guarantees the bare
+        /// columns come from the minimal row.</summary>
+        internal const string CatalogIndexFirstLines =
+            "SELECT bookId, id, MIN(lineIndex) FROM line GROUP BY bookId";
+
+        internal const string CatalogIndexAltStructures =
+            "SELECT id, bookId, title, heTitle FROM alt_toc_structure";
+
+        /// <summary>All TOC entries ordered by book, so the build materialises one book's tree
+        /// at a time instead of all of them at once.</summary>
+        internal const string CatalogIndexTocRowsAllBooks = @"
+            SELECT te.bookId, te.id, te.parentId, tt.text, l.lineIndex
+            FROM tocEntry te
+            JOIN tocText tt ON tt.id = te.textId
+            LEFT JOIN line l ON l.id = te.lineId
+            ORDER BY te.bookId, te.id";
+
+        /// <summary>All alt-TOC entries ordered by structure — one group per structure.</summary>
+        internal const string CatalogIndexAltTocRowsAllStructures = @"
+            SELECT ae.structureId, ae.id, ae.parentId, tt.text, l.lineIndex
+            FROM alt_toc_entry ae
+            JOIN tocText tt ON tt.id = ae.textId
+            LEFT JOIN line l ON l.id = ae.lineId
+            ORDER BY ae.structureId, ae.id";
+
         internal static string InPlaceholders(string prefix, int count)
         {
             var sb = new System.Text.StringBuilder();
