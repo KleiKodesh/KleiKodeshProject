@@ -75,7 +75,17 @@ function findSectionEnd(
 }
 
 /**
- * Load the full TOC section around a word-link target.
+ * The book's TOC, which the section resolution needs before it can ask for lines.
+ * Exposed separately so the caller can start it in parallel with its own fetches
+ * instead of paying for it in series — it depends on nothing but the book id.
+ */
+export function loadSectionTocEntries(bookId: number): Promise<TocEntry[]> {
+  return getAllTocEntries(bookId)
+}
+
+/**
+ * Load the full TOC section around a word-link target, given the book's already
+ * fetched TOC entries.
  *
  * Returns null whenever the section cannot be established or is too large, which
  * the caller must treat as "preview the single line instead" — never as an error.
@@ -83,8 +93,8 @@ function findSectionEnd(
 export async function loadWordLinkSection(
   bookId: number,
   lineIndex: number,
+  entries: TocEntry[],
 ): Promise<WordLinkSection | null> {
-  const entries = await getAllTocEntries(bookId)
   const positioned = positionedEntries(entries)
   if (!positioned.length) return null
 
