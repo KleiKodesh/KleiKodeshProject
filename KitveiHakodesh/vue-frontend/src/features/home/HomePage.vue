@@ -125,48 +125,50 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
 <template>
   <div class="home-page">
     <div ref="innerRef" class="home-inner">
-      <div ref="searchBarRef" class="home-search-bar-wrapper">
-        <div class="home-search-bar">
-          <input
-            ref="searchBarInputRef"
-            v-model="homeSearchQuery"
-            class="home-search-bar__field"
-            type="search"
-            :placeholder="searchBar.placeholder.value"
-            autocomplete="off"
-            @focus="searchBar.onFocus"
-            @input="onSearchInput"
-            @keydown="searchBar.onKeydown"
+      <div class="home-search-blanket">
+        <div ref="searchBarRef" class="home-search-bar-wrapper">
+          <div class="home-search-bar">
+            <input
+              ref="searchBarInputRef"
+              v-model="homeSearchQuery"
+              class="home-search-bar__field"
+              type="search"
+              :placeholder="searchBar.placeholder.value"
+              autocomplete="off"
+              @focus="searchBar.onFocus"
+              @input="onSearchInput"
+              @keydown="searchBar.onKeydown"
+            />
+            <button
+              class="home-search-bar__search-button"
+              tabindex="-1"
+              title="הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ"
+              @click="searchBar.submit"
+            >
+              <IconSearch20Regular />
+            </button>
+          </div>
+          <GlobalSearchDropdown
+            v-if="searchBar.isDropdownOpen.value"
+            ref="searchDropdownRef"
+            :catalog-results="catalogResults"
+            :catalog-toc-results="catalogTocResults"
+            :hebrew-books-results="hebrewBooksResults"
+            :file-results="fileResults"
+            :source-priority="sourcePriority"
+            :is-loading-catalog-toc="isLoadingCatalogToc"
+            :is-loading-hebrew-books="isLoadingHebrewBooks"
+            :is-loading-files="isLoadingFiles"
+            :anchor-top="searchBar.anchorTop.value"
+            :anchor-left="searchBar.anchorLeft.value"
+            :anchor-right="searchBar.anchorRight.value"
+            :max-height="searchBar.maxHeight.value"
+            @select-catalog-book="navigation.onSelectCatalogBook"
+            @select-catalog-toc="navigation.onSelectCatalogToc"
+            @select-hebrew-book="navigation.onSelectHebrewBook"
+            @select-file="navigation.onSelectFile"
           />
-          <button
-            class="home-search-bar__search-button"
-            tabindex="-1"
-            title="הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ"
-            @click="searchBar.submit"
-          >
-            <IconSearch20Regular />
-          </button>
         </div>
-        <GlobalSearchDropdown
-          v-if="searchBar.isDropdownOpen.value"
-          ref="searchDropdownRef"
-          :catalog-results="catalogResults"
-          :catalog-toc-results="catalogTocResults"
-          :hebrew-books-results="hebrewBooksResults"
-          :file-results="fileResults"
-          :source-priority="sourcePriority"
-          :is-loading-catalog-toc="isLoadingCatalogToc"
-          :is-loading-hebrew-books="isLoadingHebrewBooks"
-          :is-loading-files="isLoadingFiles"
-          :anchor-top="searchBar.anchorTop.value"
-          :anchor-left="searchBar.anchorLeft.value"
-          :anchor-right="searchBar.anchorRight.value"
-          :max-height="searchBar.maxHeight.value"
-          @select-catalog-book="navigation.onSelectCatalogBook"
-          @select-catalog-toc="navigation.onSelectCatalogToc"
-          @select-hebrew-book="navigation.onSelectHebrewBook"
-          @select-file="navigation.onSelectFile"
-        />
       </div>
       <div class="home-grid" :style="{ maxWidth: `${gridMaxWidth}px` }">
         <HomeTile
@@ -248,20 +250,27 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
 }
 
 /* Search bar — flows with the tiles (centered as a group when there's room),
-   but sticks to the top of the scroll area once the tiles scroll under it. */
-.home-search-bar-wrapper {
-  display: block;
+   but sticks to the top of the scroll area once the tiles scroll under it.
+   The blanket spans the scroll area's full width with an opaque page-colored
+   backdrop, so tiles scrolling underneath truly disappear instead of peeking
+   out around the sides of the 560px search pill. */
+.home-search-blanket {
   position: sticky;
   top: 0;
   z-index: 2;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  flex-shrink: 0;
+  margin-bottom: 20px;
+  background: var(--bg-primary);
+}
+
+.home-search-bar-wrapper {
+  display: block;
   width: 100%;
   max-width: 560px;
-  margin-bottom: 20px;
   padding: 16px 0 8px;
-  flex-shrink: 0;
-  /* Opaque backdrop so tiles scrolling underneath don't show through around
-     the rounded search pill. */
-  background: var(--bg-primary);
 }
 
 .home-search-bar {
