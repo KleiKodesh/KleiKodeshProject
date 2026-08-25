@@ -68,6 +68,23 @@
        PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
        SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
        fails with a sharing violation. Matches the version KitveiHakodeshService already uses. -->
+  <!-- The Word automation files use the Office PIA, which native AOT cannot load at all
+       (it is COM interop metadata resolved at runtime). They compile on the net48 leg only;
+       the modern leg reaches Word through DocConvertLib's manual COM/IDispatch code.
+       EmbedInteropTypes means no Interop assembly has to ship beside the app. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="Microsoft.Office.Interop.Word, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
+      <HintPath>../packages/Microsoft.Office.Interop.Word.15.0.4797.1003/lib/net20/Microsoft.Office.Interop.Word.dll</HintPath>
+      <EmbedInteropTypes>True</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+    <Compile Remove="Common/RunningWordFinder.cs" />
+    <Compile Remove="Common/WordThesaurus.cs" />
+    <Compile Remove="Common/WordExporter.cs" />
+  </ItemGroup>
+
   <!-- Codepage 1255 (Hebrew ANSI) is built into net48 but not into the modern runtime, where
        Encoding.GetEncoding(1255) throws without this provider. TextEncodingDetector registers
        it; without the package that registration would not compile. -->
