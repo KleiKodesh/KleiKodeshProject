@@ -38,8 +38,9 @@ diagnostics. Wire = MessagePack.
 No `using KitveiHakodeshService.*`, no `KitveiHakodeshLib` types, no transport types, no
 `WebBridge`, no HTTP, no WebView2.
 
-- **All config is injected** (`CoreOptions`) — Core reads **no environment variables** and
-  resolves no host state.
+- **Core finds its own files** via `Common/AppFileLocator` — there is no options object and
+  nothing is injected. It probes candidate roots in order and takes the first that exists,
+  falling back to `%LocalAppData%\KleiKodesh` last. Core reads **no environment variables**.
 - **No UI.** No `MessageBox`, no dialogs, no windows. Return data.
 - **Return data or throw** — never swallow an error into `Debug.WriteLine` (a no-op in
   Release). The orchestrator decides what the user sees.
