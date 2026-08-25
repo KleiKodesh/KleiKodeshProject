@@ -12,7 +12,6 @@ import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
 import AppNavSidebarOverflowMenu from './AppNavSidebarOverflowMenu.vue'
 import { useAppNavSidebarOverflow } from './useAppNavSidebarOverflow'
 import { documentIcon } from '@/utils/documentIcons'
-import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -42,18 +41,16 @@ const splitViewTitle = computed(() =>
   bookViewStore.splitViewEnabled ? 'סגור תצוגה מפוצלת (Ctrl+|)' : 'פתח תצוגה מפוצלת (Ctrl+|)',
 )
 
-// Which pane this rail belongs to - it closes its own, not both, and goes home in its own.
+// Which pane this rail belongs to - it closes its own rail, not both panes'.
 const paneId = inject<1 | 2>('paneId', 1)
-const pane = useAppShellPane(paneId)
 
-// Home is not one of APP_NAV_ITEMS: those are destinations opened in a new tab by label,
-// and home is not one - goHome() reuses the pane's existing home tab if it has one rather
-// than stacking up another. Same reason the title bar keeps its own home button. The icon
-// still comes from the shared table so it matches the rest of the column.
-const homeIcon = documentIcon('home').icon24
+// Home is deliberately NOT on the rail. It lives in the title bar, where it stays whether
+// or not the rail is up - unlike the hamburger and the split-view toggle, which the rail
+// takes over because they are about the rail and the window. Home is a destination; moving
+// it in here took it out of the one place it had always been.
 
-// Workspaces is not in APP_NAV_ITEMS either, and for a stronger reason than home: it is
-// not a destination at all - there is no page and no route. The rail's button opens the
+// Workspaces is not in APP_NAV_ITEMS, and for a stronger reason than home: it is not a
+// destination at all - there is no page and no route. The rail's button opens the
 // picker as a submenu beside it (WorkspaceSubmenu, the same panel the hamburger menu
 // opens off its own row), so switching workspaces never costs a tab.
 //
@@ -85,8 +82,7 @@ const overflowButtonEl = ref<HTMLElement | null>(null)
 // reports the picked key back. A key with no branch is a destination (settings included),
 // keyed by its label, which IS the routing key.
 function onOverflowRowSelect(key: string) {
-  if (key === 'home') pane.goHome()
-  else if (key === 'split-view') bookViewStore.toggleSplitView()
+  if (key === 'split-view') bookViewStore.toggleSplitView()
   else if (key === 'pop-out') togglePopOut()
   else navigateInNewTab(key)
 }
@@ -112,15 +108,6 @@ watch(
        full width and inset only at the top and bottom. -->
   <div class="nav-sidebar">
     <nav ref="navPanelEl" class="nav-panel">
-      <button
-        v-if="railButtonVisible('home')"
-        class="nav-btn"
-        tabindex="-1"
-        title="בית (Ctrl+G)"
-        @click="pane.goHome()"
-      >
-        <component :is="homeIcon" />
-      </button>
       <button
         v-for="item in visibleNavItems"
         :key="item.label"
@@ -238,7 +225,14 @@ watch(
    too big. The vertical gap between items is what is left of the 44px pitch. */
 .nav-sidebar {
   --nav-panel-width: 44px;
+  /* The VERTICAL inset, and the gap between buttons. Deliberately not shared with the
+     inline axis: it is half of the pitch the overflow arithmetic mirrors, so it must not
+     move when the rail goes compact. */
   --nav-panel-inset: 6px;
+  --nav-panel-inline-inset: 6px;
+  --nav-btn-width: 32px;
+  --nav-glyph-size: 24px;
+  --nav-glyph-size-sm: 20px;
   position: relative;
   flex-shrink: 0;
   /* The panel fills the strip's width - the inset is vertical only, so there is no side gap
@@ -277,7 +271,7 @@ watch(
   width: var(--nav-panel-width);
   display: flex;
   flex-direction: column;
-  padding: var(--nav-panel-inset);
+  padding: var(--nav-panel-inset) var(--nav-panel-inline-inset);
   gap: var(--nav-panel-inset);
   /* Inset at the top and bottom only, which is all the rounded corners need to read as
      corners. No side margin: the sheet runs the full width of its strip, flush to the
@@ -312,10 +306,13 @@ watch(
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 32px square: the glyph plus an even 4px inset, which is exactly the hover band in the
-     reference. Keeps the app's 4px radius - the band is a rounded square, not a
-     full-width stripe. */
-  width: 32px;
+  /* 32px square at full size: the glyph plus an even 4px inset, which is exactly the hover
+     band in the reference. Keeps the app's 4px radius - the band is a rounded square, not a
+     full-width stripe. The compact rail narrows it; see the container query at the end. */
+  width: var(--nav-btn-width);
+  /* Pinned at 32, never a var: this is the NAV_BUTTON_HEIGHT the overflow arithmetic
+     mirrors. The compact rail narrows and nothing else, so how many buttons fit is the
+     same answer at every width. */
   height: 32px;
   border-radius: 4px;
   flex-shrink: 0;
@@ -326,20 +323,43 @@ watch(
    button's own colour and the hover colour never reaches it; the colourful items set
    their colour inline, which still wins over this. */
 .nav-btn svg {
-  width: 24px;
-  height: 24px;
+  width: var(--nav-glyph-size);
+  height: var(--nav-glyph-size);
   color: inherit;
 }
 
 /* Glyphs Fluent only ships at 20 (the double chevron, the split-view pair) are drawn at
    20 rather than scaled up to the rail's 24. */
 .nav-btn-sm svg {
-  width: 20px;
-  height: 20px;
+  width: var(--nav-glyph-size-sm);
+  height: var(--nav-glyph-size-sm);
 }
 
 /* Held down while its submenu is up, so the rail says which button the panel belongs to. */
 .nav-btn--on {
   background: color-mix(in srgb, var(--text-primary) 10%, transparent);
+}
+
+/* The compact rail. A pane narrow enough that 44px of it is a real share of the reading
+   width gets the same rail drawn tighter: a 26px target on a 4px gutter, 36px overall, with
+   the glyphs dropped a size so they still sit in their target rather than filling it edge
+   to edge. Everything else - the order, the tooltips, the flyout - is unchanged.
+
+   `app-pane` is the PANE's width, not the window's (AppShell declares it): a pane in split
+   view is a fraction of the window, and a narrow pane inside a wide window wants the
+   compact rail just as much.
+
+   Only the inline axis moves. The button height, the vertical padding and the gap are what
+   useAppNavSidebarOverflow mirrors to decide how many buttons fit, so touching them here
+   would make the two disagree and hide a button behind a scrollbar that is deliberately
+   invisible. Narrower, never shorter. */
+@container app-pane (max-width: 480px) {
+  .nav-sidebar {
+    --nav-panel-width: 36px;
+    --nav-panel-inline-inset: 4px;
+    --nav-btn-width: 26px;
+    --nav-glyph-size: 20px;
+    --nav-glyph-size-sm: 18px;
+  }
 }
 </style>

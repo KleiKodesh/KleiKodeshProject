@@ -70,7 +70,6 @@ interface OverflowRow {
   isWorkspaces?: boolean
 }
 
-const homeIcon = documentIcon('home').icon24
 const workspacesIcon = documentIcon('apps')
 const bookViewStore = useBookViewStore()
 
@@ -79,7 +78,6 @@ const rows = computed<OverflowRow[]>(() => props.collapsedKeys.map(overflowRow))
 // The same face the rail's buttons wear - the split-view row is the one that changes
 // with state, so its label and icon read the store here just as the rail button's do.
 function overflowRow(key: string): OverflowRow {
-  if (key === 'home') return { key, label: 'בית', shortcut: 'Ctrl+G', icon: homeIcon }
   if (key === 'workspaces') {
     return {
       key,
