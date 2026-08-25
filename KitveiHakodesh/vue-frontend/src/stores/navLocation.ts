@@ -115,7 +115,6 @@ const NON_DOCUMENT_ROUTES = new Set<TabRoute>([
   '/settings',
   '/books',
   '/hebrewbooks',
-  '/workspaces',
   '/hebrew-calendar',
   '/dictionary',
   '/midot',

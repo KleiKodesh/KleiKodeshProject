@@ -58,7 +58,6 @@ export type TabRoute =
   | '/books'
   | '/book-view'
   | '/hebrewbooks'
-  | '/workspaces'
   | '/search'
   | '/hebrew-calendar'
   | '/dictionary'
@@ -355,7 +354,6 @@ export const useTabStore = defineStore('tabs', () => {
     '/settings',
     '/books',
     '/hebrewbooks',
-    '/workspaces',
     '/hebrew-calendar',
     '/dictionary',
     '/midot',
@@ -365,7 +363,6 @@ export const useTabStore = defineStore('tabs', () => {
     '/settings': 'הגדרות',
     '/books': 'קטלוג הספרים',
     '/hebrewbooks': 'היברו-בוקס',
-    '/workspaces': 'סביבות עבודה',
     '/hebrew-calendar': 'לוח שנה',
     '/dictionary': 'מילון',
     '/midot': 'מידות ושיעורים',
