@@ -134,15 +134,15 @@ namespace KitveiHakodesh.Core.Dictionary
         public DictionaryExactResult Exact(string term)
         {
             if (!IsAvailable || string.IsNullOrEmpty(term))
-                return new DictionaryExactResult(new List<DictionarySense>(), false);
+                return new DictionaryExactResult();
 
             var direct = QuerySenses(ExactSql, ("@term", term));
-            if (direct.Count > 0) return new DictionaryExactResult(direct, true);
+            if (direct.Count > 0) return new DictionaryExactResult { Senses = direct, WordExists = true };
 
             var viaRedirect = QuerySenses(RedirectSelect, ("@term", term), ("@kind", LinkKindVariant));
-            if (viaRedirect.Count > 0) return new DictionaryExactResult(viaRedirect, true);
+            if (viaRedirect.Count > 0) return new DictionaryExactResult { Senses = viaRedirect, WordExists = true };
 
-            return new DictionaryExactResult(new List<DictionarySense>(), WordExists(term));
+            return new DictionaryExactResult { WordExists = WordExists(term) };
         }
 
         /// <summary>Words starting with the term, excluding the exact match itself.</summary>
@@ -177,7 +177,7 @@ namespace KitveiHakodesh.Core.Dictionary
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
-                links.Add(new DictionaryLink(reader.GetString(0), reader.GetString(1)));
+                links.Add(new DictionaryLink { Kind = reader.GetString(0), Word = reader.GetString(1) });
 
             return links;
         }
@@ -227,21 +227,21 @@ namespace KitveiHakodesh.Core.Dictionary
         public DictionaryAbbreviationMatch AbbreviationSenses(IReadOnlyList<string>? candidates)
         {
             if (!IsAvailable || candidates == null || candidates.Count == 0)
-                return DictionaryAbbreviationMatch.None;
+                return new DictionaryAbbreviationMatch();
 
             foreach (string candidate in candidates)
             {
                 var rows = QuerySenses(ExactSql, ("@term", candidate));
-                if (rows.Count > 0) return new DictionaryAbbreviationMatch(candidate, rows);
+                if (rows.Count > 0) return new DictionaryAbbreviationMatch { MatchedCandidate = candidate, Senses = rows };
             }
 
             foreach (string candidate in candidates)
             {
                 var rows = QuerySenses(AbbreviationContainsSql, ("@contains", "%" + candidate + "%"));
-                if (rows.Count > 0) return new DictionaryAbbreviationMatch(candidate, rows);
+                if (rows.Count > 0) return new DictionaryAbbreviationMatch { MatchedCandidate = candidate, Senses = rows };
             }
 
-            return DictionaryAbbreviationMatch.None;
+            return new DictionaryAbbreviationMatch();
         }
 
         /// <summary>
@@ -338,12 +338,14 @@ namespace KitveiHakodesh.Core.Dictionary
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
-                senses.Add(new DictionarySense(
-                    Headword: reader.IsDBNull(0) ? "" : reader.GetString(0),
-                    Nikud: reader.IsDBNull(1) ? null : reader.GetString(1),
-                    Text: reader.IsDBNull(2) ? "" : reader.GetString(2),
-                    Source: reader.IsDBNull(3) ? null : reader.GetString(3),
-                    SourceId: reader.IsDBNull(4) ? null : reader.GetInt32(4)));
+                senses.Add(new DictionarySense
+                {
+                    Headword = reader.IsDBNull(0) ? "" : reader.GetString(0),
+                    Nikud = reader.IsDBNull(1) ? null : reader.GetString(1),
+                    Text = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    Source = reader.IsDBNull(3) ? null : reader.GetString(3),
+                    SourceId = reader.IsDBNull(4) ? (int?)null : reader.GetInt32(4),
+                });
             }
             return senses;
         }
