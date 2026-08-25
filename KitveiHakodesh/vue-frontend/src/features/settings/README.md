@@ -38,7 +38,9 @@ The section components are independent — each imports the stores it needs dire
 
 **FontDisplaySettings.vue** — font and size controls for main text or commentary.
 
-**FontSelector.vue** — font family dropdown. Loads installed Hebrew-capable fonts live on every open via `detectAvailableFonts()` from `src/webview-host/fontsApi.ts` (no cache; a loading row shows while the enumeration runs).
+**FontSelector.vue** — font family dropdown. Bundled fonts (Taamey Frank CLM, Frank Ruhl Libre, Heebo) sort first; the "ברירת מחדל" badge marks the ONE default belonging to that particular dropdown, passed in as `defaultFont`. Loads installed Hebrew-capable fonts live on every open via `detectAvailableFonts()` from `src/webview-host/fontsApi.ts` (no cache; a loading row shows while the enumeration runs).
+
+**FontPreviewBox.vue** — the live text sample shown above the font controls in the setup wizard's book and commentary steps. `position: sticky` at the top of the wizard card's scroller, so it stays visible while the controls scroll under it; the negative margins in its styles exist to cancel the step body's padding and reach the card's own edges. Sample text and font values are all props, so each step supplies its own.
 
 ## Composables
 
@@ -50,9 +52,21 @@ The section components are independent — each imports the stores it needs dire
 
 ## Setup wizard
 
-**SetupWizard.vue** — full-screen onboarding overlay shown when `settingsStore.setupDone` is false. Steps: welcome, database (hosted only), theme, general, book display. Completion sets `setupDone = true` in IDB.
+**SetupWizard.vue** — full-screen onboarding overlay shown when `settingsStore.setupDone` is false. Steps: welcome, database (hosted only), theme, general, book display, commentary display, shortcuts. Completion sets `setupDone = true` in IDB.
 
-**SetupWizardStepBookDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepGeneral.vue**, **SetupWizardStepTheme.vue** — individual wizard steps.
+SetupWizard.vue also calls `useSettings()` itself, to wire the commentary-mirror
+watcher for the duration of the flow. It must be registered there, not in the
+commentary step: steps unmount on every navigation (the Transition is keyed on the
+step), and the book fonts are chosen on the step BEFORE the commentary one — a watcher
+owned by that step would not be alive when the values it mirrors change.
+
+The wizard owns ONE card and only its body content changes between steps: the card's
+title, scroll area, and nav row (דלג / הקודם / הבא) are rendered once by SetupWizard.vue
+and hold their position across the step transition. Each step's heading text therefore
+lives in the `STEPS` table in SetupWizard.vue, not in the step component — the header is
+part of the frame that stays put.
+
+**SetupWizardStepBookDisplay.vue**, **SetupWizardStepCommentaryDisplay.vue**, **SetupWizardStepDb.vue**, **SetupWizardStepGeneral.vue**, **SetupWizardStepShortcuts.vue**, **SetupWizardStepTheme.vue** — the per-step body content, and nothing else: no card, no title, no nav. Multi-root templates by design.
 
 ## Adding a new settings section
 
