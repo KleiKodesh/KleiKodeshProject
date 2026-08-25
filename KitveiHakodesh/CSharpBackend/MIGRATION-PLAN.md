@@ -1364,6 +1364,41 @@ Dictionary, HebrewBooks, SeforimDb, Catalog (slice 6) and the Common toolkit (sl
 depend only on packages and on Core's own code. **Slice 5 is the one that waits for its
 FtsLib half.**
 
+### ⛔ Slice 6 NEEDS A DECISION BEFORE IT CAN BE WRITTEN
+
+Rule 11 says split `CatalogTocIndex.cs` (1644 lines) into `SeforimDbCatalogIndexer` and
+`SeforimDbCatalogSearcher`. Tracing the code first: **those two share more than a file.**
+
+- ONE `_lock`, ONE `FSDirectory` handle, ONE `DirectoryReader`. `BuildInPlace` takes the lock,
+  disposes the reader, publishes `_writer`, and opens a near-real-time reader off it
+  (`CatalogTocIndex.cs:433-440`).
+- The build then calls `RefreshNrtLocked()` on **every progress tick** (line 446), which exists
+  so the catalog stays SEARCHABLE while it is being rebuilt. That is the feature, not a detail.
+- `BuildInPlace` deliberately reuses the reader's directory handle (`_dir ??= FSDirectory.Open`,
+  line 421) because two `FSDirectory` instances on one folder contend for Lucene's write lock.
+
+So two classes means the indexer holds the searcher (or a third shared index-handle object) and
+reaches into its lock and reader on every tick. That is a REDESIGN of the NRT-during-build path,
+and lock-ordering mistakes there produce a Lucene write-lock deadlock or a disposed-reader crash
+— neither of which a build failure would catch.
+
+**Two options, pick one:**
+
+1. **One class, files named by job** — `SeforimDbCatalogIndexer.cs` + `SeforimDbCatalogSearcher.cs`
+   as `partial` halves of one `SeforimDbCatalogIndex`. The precedent is already in Core:
+   `SeforimDbQueries` is split across `SeforimDbConnection.cs` (finding/opening/probing) and
+   `SeforimDbQueries.cs` (the reads). Zero behaviour change; the shared lock stays private to one
+   type. Rule 11 is satisfied at the FILE level, not the type level.
+2. **Two classes plus a shared index handle** — a third type owning the lock, the directory and
+   the reader, which both depend on. Cleaner boundary, real redesign, needs the NRT-during-build
+   path re-verified by hand.
+
+Everything else in slice 6 is unaffected and mechanical: `CatalogTocTextRules` ->
+`SeforimDbCatalogTextNormalizer` (whole file), `CatalogAbbreviations.g.cs` ->
+`SeforimDbCatalogAbbreviations` (whole file, csv+json+generators collapsed in),
+`PipelineAnalyzer`/`PipelineTokenizer` -> `SeforimDbCatalogAnalyzer` (two nested classes lifted
+out), `CatalogTocHit` -> a models file, and the SQL to `SeforimDbSqlStrings`.
+
 ### Slice 7 — Reusable toolkit (`Common/`)
 - `UpdateCheckerLib` ~893 portable lines → `Core/Common/` (**remove the MessageBox at
   `DownloadManager.cs:270`** → throw). ~382 UI lines stay net48. `ServicePointManager` (2 uses)
