@@ -105,9 +105,12 @@ KitveiHakodesh.Core/
                                       of the query class, used to pick the SQL variant
                                       (`SeforimSql.GetAllCategories(hasOrder)`). Splitting
                                       it out would undo correct co-location)
-    SeforimDbModels.cs                27 attribute-free model types in ONE file —
+    SeforimDbModels.cs                29 MessagePack-annotated row types in ONE file —
                                       BookRow, CategoryRow, LineRow, TocEntryRow, …
-                                      (~150 lines; SPLIT by domain if it passes ~400)
+                                      (attribute-free was the PRE-rule-0e plan; section 5
+                                      supersedes it. The *Args and {Rows} envelopes that sat
+                                      beside them stay in the Service.)
+                                      (~210 lines; SPLIT by domain if it passes ~400)
   SeforimDbFullTextSearch/            (was Search/) FtsLib owns generic full-text search;
                                       everything here is specific to the seforim DB, and
                                       the name must say so. "Search" alone named none of
