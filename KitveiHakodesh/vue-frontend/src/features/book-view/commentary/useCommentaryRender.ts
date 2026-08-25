@@ -1,9 +1,9 @@
 import { computed, watch } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch } from '@/utils/hebrewTextProcessing'
+import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, isDiacriticChar } from '../lines/useBookViewLineRenderer'
+import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark } from '../lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors, wordLinkAnchorsSig } from '../lines/wordLinkAnchors'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import type { Highlight } from '../lines/useBookViewHighlights'
@@ -118,7 +118,7 @@ export function useCommentaryRender(
         }
       }
 
-      const isDiacritic = isDiacriticChar(ch)
+      const isDiacritic = isSearchIgnoredMark(ch)
       if (!isDiacritic && matchStarts.has(strippedPos) && !inMatch) {
         out.push('<mark class="search-match">')
         inMatch = true
