@@ -23,6 +23,7 @@ const AppTitleBarNavDropdown = defineAsyncComponent(() => import('./AppTitleBarN
 const AddressBar = defineAsyncComponent(() => import('./AddressBar.vue'))
 import AppTitleBarTocBreadcrumb from './AppTitleBarTocBreadcrumb.vue'
 import AppTitleBarHistoryButton from './AppTitleBarHistoryButton.vue'
+import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
 import AppTitleBarBreadcrumbChevronDropdown from './AppTitleBarBreadcrumbChevronDropdown.vue'
 import { useAppTitleBarTocBreadcrumb } from './useAppTitleBarTocBreadcrumb'
 import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
@@ -30,6 +31,7 @@ import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
+import { documentIcon } from '@/utils/documentIcons'
 
 const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 
@@ -37,6 +39,25 @@ const pane = useAppShellPane(props.paneId)
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
 const pdfOcrStore = usePdfOcrStore()
+
+// ---- The workspace picker -----------------------------------------------------
+//
+// This is where workspaces lives now, and the only place: not on the nav rail, not in its
+// overflow flyout, not in the hamburger menu. It is not a destination - there is no page
+// and no route - so the button opens the picker in place (WorkspaceSubmenu) rather than a
+// tab, which is why it sits beside home rather than among the menu's destinations.
+//
+// Its glyph is drawn in the bar's own colour, deliberately not the colourful one the icon
+// table hands out: every other button in this bar is monochrome, and one coloured icon in
+// the row read as a badge rather than as a control.
+//
+// `prefer="right"`: the document is RTL, so `.bar-end` sits at the pane's physical LEFT -
+// the panel opens rightward, inward across the pane, instead of off the window's edge.
+const workspacesIcon = documentIcon('apps')
+const workspacesOpen = ref(false)
+const workspacesButtonEl = ref<HTMLElement | null>(null)
+const workspacesSubmenu = ref<InstanceType<typeof WorkspaceSubmenu> | null>(null)
+
 const { titleBarVisible } = useUiChromeVisibility(props.paneId)
 
 const isSplitViewAvailable = useSplitViewAvailable()
@@ -352,6 +373,18 @@ useAppTitleBarShortcuts({
            split-view toggle: those two are about the rail and the window, so the rail can
            speak for them. Home is a destination, and the bar is where it belongs. -->
       <button v-if="isTitleBarButtonVisible('home')" class="bar-btn" tabindex="-1" title="בית (Ctrl+G)" @click.stop="pane.goHome()"><IconHome20Regular /></button>
+      <button
+        v-if="isTitleBarButtonVisible('workspaces')"
+        ref="workspacesButtonEl"
+        class="bar-btn"
+        :class="{ active: workspacesOpen }"
+        tabindex="-1"
+        title="סביבות עבודה"
+        :aria-expanded="workspacesOpen"
+        @click.stop="workspacesSubmenu?.toggle()"
+      >
+        <component :is="workspacesIcon.icon24" />
+      </button>
       <!-- Back / Forward through the ACTIVE TAB's own history, like a browser —
            not between tabs (Ctrl+Tab still does that). Click steps once
            (Alt+ArrowRight / Alt+ArrowLeft), press-and-hold opens the full list.
@@ -377,6 +410,16 @@ useAppTitleBarShortcuts({
     :toggle-button-el="navBtnRef"
     @close="navDropdownOpen = false"
     @click.stop
+  />
+
+  <!-- Outside the header for the same reason as the dropdown: it must survive the header
+       being hidden. No `keep-clear-of` - the bar is a strip along the top, not a surface
+       the panel could sit beside, and it hangs down from the button rather than over it. -->
+  <WorkspaceSubmenu
+    ref="workspacesSubmenu"
+    v-model:open="workspacesOpen"
+    :anchor="workspacesButtonEl"
+    prefer="right"
   />
   </div>
 </template>

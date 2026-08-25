@@ -6,11 +6,8 @@ import { useListKeys } from '@/composables/useListKeyNav'
 import {
   IconOpen28Regular,
   IconChevronDoubleLeft20Regular,
-  IconChevronLeft20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
-import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
-import { documentIcon } from '@/utils/documentIcons'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { showPopOutButton } from '@/webview-host/bridge'
@@ -34,38 +31,18 @@ const settingsStore = useSettingsStore()
 // cannot be reached at all (AppTitleBar drops the hamburger and Ctrl+M), and closing it
 // again is the rail's own bottom button.
 //
-// Workspaces is the one of them that sits ABOVE the divider, grouped with the
-// destinations - like on the rail, it is about what you are working on, not about the
-// window - though it is NOT a destination itself: its row opens a submenu beside the menu
-// rather than opening a tab. `prefer="left"`: this menu hangs off the hamburger at the
-// pane's physical right edge (RTL), so the only side with room is inward.
-type MenuRow = 'workspaces' | 'settings' | 'navSidebar' | 'popOut'
+// Workspaces is deliberately not among them any more: it is a picker, not a destination,
+// and it lives in the title bar beside home - one place, not three.
+type MenuRow = 'settings' | 'navSidebar' | 'popOut'
 
 const menuRows: MenuRow[] = [
-  'workspaces',
   'settings',
   'navSidebar',
   ...(showPopOutButton ? ['popOut' as const] : []),
 ]
 
-const workspacesOpen = ref(false)
-const workspacesIcon = documentIcon('apps')
-const workspacesRowEl = ref<HTMLElement | null>(null)
-const workspacesSubmenu = ref<InstanceType<typeof WorkspaceSubmenu> | null>(null)
-/**
- * The submenu is teleported to the body, so to this menu's outside-click watcher every
- * click inside it lands outside - renaming a workspace would drop the whole menu out from
- * under the panel being typed into. Hence the `ignore`, which names the teleported element
- * the submenu exposes rather than the component that rendered it - the component's root is
- * a Teleport and has no element of its own.
- */
-const workspacesPanelEl = computed<HTMLElement | null>(
-  () => workspacesSubmenu.value?.panelEl ?? null,
-)
-
 useDropdownClose(menuRef, () => emit('close'), {
   toggleButton: computed(() => props.toggleButtonEl ?? null),
-  ignore: [workspacesPanelEl],
 })
 
 function menuRowIndex(row: MenuRow) {
@@ -84,22 +61,15 @@ function activateIndex(index: number) {
     return
   }
   const row = menuRows[index - APP_NAV_ITEMS.length]
-  if (row === 'workspaces') workspacesSubmenu.value?.toggle()
-  else if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
+  if (row === 'settings') onTap(APP_NAV_SETTINGS_ITEM.label)
   else if (row === 'navSidebar') onShowNavSidebar()
   else if (row === 'popOut') onPopOut()
 }
 
-// Close on Escape - the open submenu first, then the menu itself, so Escape backs out one
-// level at a time rather than dropping the whole thing from inside a rename box.
 useEventListener(menuRef, 'keydown', (e: KeyboardEvent) => {
   if (e.code === 'Escape') {
     e.preventDefault()
     e.stopPropagation()
-    if (workspacesOpen.value) {
-      workspacesOpen.value = false
-      return
-    }
     emit('close')
   }
 })
@@ -143,30 +113,6 @@ function onPopOut() {
       <span class="nav-label">{{ item.label }}</span>
       <span class="nav-shortcut">{{ item.shortcut }}</span>
     </button>
-    <!-- Grouped with the destinations, though not one: this row opens the workspace
-         picker beside the menu rather than a tab. -->
-    <button
-      ref="workspacesRowEl"
-      class="nav-row"
-      :class="{
-        'nav-row--focused': focusedIndex === menuRowIndex('workspaces'),
-        'nav-row--open': workspacesOpen,
-      }"
-      data-nav-item
-      title="סביבות עבודה"
-      :aria-expanded="workspacesOpen"
-      @click="workspacesSubmenu?.toggle()"
-    >
-      <span class="nav-icon">
-        <component
-          :is="workspacesIcon.icon24"
-          :style="workspacesIcon.color ? { color: workspacesIcon.color } : {}"
-        />
-      </span>
-      <span class="nav-label">סביבות עבודה</span>
-      <!-- Points the way the panel opens: inward, off this menu's edge. -->
-      <span class="nav-submenu-chevron"><IconChevronLeft20Regular /></span>
-    </button>
     <hr class="nav-divider" />
     <button
       class="nav-row"
@@ -200,17 +146,6 @@ function onPopOut() {
       <span class="nav-icon"><IconOpen28Regular /></span>
       <span class="nav-label">חלון עצמאי / חלונית</span>
     </button>
-    <!-- The submenu takes the focus when it opens, so that Escape has somewhere to land.
-         Taking it back on close is what keeps the arrow keys working afterwards - they are
-         bound to this menu's root, which would otherwise be left with nothing focused. -->
-    <WorkspaceSubmenu
-      ref="workspacesSubmenu"
-      v-model:open="workspacesOpen"
-      :anchor="workspacesRowEl"
-      :keep-clear-of="menuRef"
-      prefer="left"
-      @close="menuRef?.focus()"
-    />
   </div>
 </template>
 
@@ -287,24 +222,5 @@ function onPopOut() {
   border: none;
   border-top: 1px solid var(--border-color);
   margin: 0;
-}
-
-.nav-submenu-chevron {
-  display: flex;
-  align-items: center;
-  color: var(--text-secondary);
-  margin-inline-start: auto;
-  flex-shrink: 0;
-}
-.nav-submenu-chevron svg {
-  width: 14px;
-  height: 14px;
-  color: inherit;
-}
-
-/* Held while its submenu is up, so the row keeps saying which panel is open even after
-   the keyboard focus has moved on. */
-.nav-row--open {
-  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 </style>

@@ -8,10 +8,8 @@ import {
   IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
 import { APP_NAV_SETTINGS_ITEM } from './appNavItems'
-import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
 import AppNavSidebarOverflowMenu from './AppNavSidebarOverflowMenu.vue'
 import { useAppNavSidebarOverflow } from './useAppNavSidebarOverflow'
-import { documentIcon } from '@/utils/documentIcons'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -44,25 +42,14 @@ const splitViewTitle = computed(() =>
 // Which pane this rail belongs to - it closes its own rail, not both panes'.
 const paneId = inject<1 | 2>('paneId', 1)
 
-// Home is deliberately NOT on the rail. It lives in the title bar, where it stays whether
-// or not the rail is up - unlike the hamburger and the split-view toggle, which the rail
-// takes over because they are about the rail and the window. Home is a destination; moving
-// it in here took it out of the one place it had always been.
+// Home and workspaces are both deliberately NOT on the rail: they live in the title bar,
+// side by side, and only there. The hamburger and the split-view toggle move in here
+// while the rail is up because they are about the rail and the window, so the rail can
+// speak for them - but home is a destination and workspaces is a picker, and each had one
+// place already. What is left on the rail is the destinations and its own controls.
 
-// Workspaces is not in APP_NAV_ITEMS, and for a stronger reason than home: it is not a
-// destination at all - there is no page and no route. The rail's button opens the
-// picker as a submenu beside it (WorkspaceSubmenu, the same panel the hamburger menu
-// opens off its own row), so switching workspaces never costs a tab.
-//
-// It sits with the destinations rather than with the controls at the bottom, because it
-// is about what you are working on, not about the rail or the window. `prefer="left"`:
-// the rail is docked to the window's physical right edge, so the panel opens inward.
-const workspacesIcon = documentIcon('apps')
-const workspacesOpen = ref(false)
-const workspacesButtonEl = ref<HTMLElement | null>(null)
-/** The rail's own sheet - the surface the submenus must open beside rather than over. */
+/** The rail's own sheet - the surface the overflow flyout must open beside, never over. */
 const navPanelEl = ref<HTMLElement | null>(null)
-const workspacesSubmenu = ref<InstanceType<typeof WorkspaceSubmenu> | null>(null)
 
 // ── Vertical overflow ─────────────────────────────────────────────────────────
 //
@@ -92,15 +79,6 @@ function onOverflowRowSelect(key: string) {
 watch(hasNavOverflow, (has) => {
   if (!has) overflowOpen.value = false
 })
-// Same for the workspaces button when it collapses INTO the flyout: the rail's copy
-// unmounts, and the picker must not be left hanging beside where it was. The flyout's
-// own workspaces row runs its own picker.
-watch(
-  () => railButtonVisible('workspaces'),
-  (visible) => {
-    if (!visible) workspacesOpen.value = false
-  },
-)
 </script>
 
 <template>
@@ -117,22 +95,6 @@ watch(
         @click="navigateInNewTab(item.label)"
       >
         <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
-      </button>
-      <!-- Not a destination - it opens the picker beside the rail instead of a tab. -->
-      <button
-        v-if="railButtonVisible('workspaces')"
-        ref="workspacesButtonEl"
-        class="nav-btn"
-        :class="{ 'nav-btn--on': workspacesOpen }"
-        tabindex="-1"
-        title="סביבות עבודה"
-        :aria-expanded="workspacesOpen"
-        @click="workspacesSubmenu?.toggle()"
-      >
-        <component
-          :is="workspacesIcon.icon24"
-          :style="workspacesIcon.color ? { color: workspacesIcon.color } : {}"
-        />
       </button>
       <!-- Space is what separates the destinations from the rail's own controls - a rule
            here would cut the one surface into two. A real element rather than an auto
@@ -195,15 +157,8 @@ watch(
         <IconChevronDoubleRight20Regular />
       </button>
     </nav>
-    <!-- `keep-clear-of` is the rail itself: the panels open beside it, never over it, even
+    <!-- `keep-clear-of` is the rail itself: the flyout opens beside it, never over it, even
          in a window too narrow for both - there the panel narrows instead. -->
-    <WorkspaceSubmenu
-      ref="workspacesSubmenu"
-      v-model:open="workspacesOpen"
-      :anchor="workspacesButtonEl"
-      :keep-clear-of="navPanelEl"
-      prefer="left"
-    />
     <AppNavSidebarOverflowMenu
       v-model:open="overflowOpen"
       :anchor="overflowButtonEl"

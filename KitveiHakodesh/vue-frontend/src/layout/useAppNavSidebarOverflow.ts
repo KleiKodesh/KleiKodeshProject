@@ -23,8 +23,8 @@ const NAV_PANEL_VERTICAL_CHROME = 2 * 6 + 2 * 1
  *
  * A rail too short for all its buttons does not scroll them away invisibly (its scrollbar
  * is hidden): the tail that no longer fits collapses into a "more" button. The rail is one
- * flat column (the destinations, workspaces, then its own controls), and whatever the
- * height cuts off, from the bottom up, moves into the flyout in that same order. The
+ * flat column (the destinations, then its own controls), and whatever the height cuts
+ * off, from the bottom up, moves into the flyout in that same order. The
  * one button that never collapses is hide-rail: it is the ONLY way to close the rail, so
  * it keeps the floor, with the more button directly above it standing in for the tail.
  *
@@ -64,7 +64,6 @@ export function useAppNavSidebarOverflow(
   // routing key; the buttons that are not destinations get names of their own.
   const railButtonKeys = computed<string[]>(() => [
     ...APP_NAV_ITEMS.map((item) => item.label),
-    'workspaces',
     ...(isSplitViewButtonVisible.value ? ['split-view'] : []),
     ...(showPopOutButton ? ['pop-out'] : []),
     APP_NAV_SETTINGS_ITEM.label,
