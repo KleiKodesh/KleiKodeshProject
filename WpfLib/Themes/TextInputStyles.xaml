@@ -1,5 +1,6 @@
 ﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:themes="clr-namespace:WpfLib.Themes"
+                    xmlns:ap="clr-namespace:WpfLib.AttachedProperties"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <ResourceDictionary.MergedDictionaries>
         <themes:SharedResourceDictionary Source="/WpfLib;component/themes/brushes.xaml"/>
@@ -39,11 +40,30 @@
                             BorderBrush="{TemplateBinding BorderBrush}"
                             BorderThickness="{TemplateBinding BorderThickness}"
                             CornerRadius="4">
-                        <ScrollViewer x:Name="PART_ContentHost"
-                                      Margin="{TemplateBinding Padding}"
-                                      VerticalAlignment="Center"/>
+                        <Grid>
+                            <!--
+                                Placeholder - shown only while the box is empty.
+                                Behind the content host and never hit testable,
+                                so a click still lands in the text.
+                            -->
+                            <TextBlock x:Name="Placeholder"
+                                       Text="{TemplateBinding ap:Placeholder.Text}"
+                                       Foreground="#99808080"
+                                       Margin="{TemplateBinding Padding}"
+                                       FontSize="{TemplateBinding FontSize}"
+                                       FontFamily="{TemplateBinding FontFamily}"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       Visibility="Collapsed"/>
+                            <ScrollViewer x:Name="PART_ContentHost"
+                                          Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                        </Grid>
                     </Border>
                     <ControlTemplate.Triggers>
+                        <Trigger Property="Text" Value="">
+                            <Setter TargetName="Placeholder" Property="Visibility" Value="Visible"/>
+                        </Trigger>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="Bd" Property="BorderBrush" Value="#80808080"/>
                         </Trigger>
