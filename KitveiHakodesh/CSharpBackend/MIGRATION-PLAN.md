@@ -116,12 +116,7 @@ KitveiHakodesh.Core/
                                     DocConvertLib's net48 leg, beside its sibling, NOT in Core
     HebrewFontsProvider.cs          (merges Lib FontsProvider) per-TFM:
                                     WPF (net48) / DirectWrite (net10)
-    UpdateChecker.cs                from UpdateCheckerLib (~893 portable lines)
-    UpdateDownloader.cs             (was DownloadManager) MessageBox REMOVED -> throws
-                                    UpdateDownloadFailedException, declared here.
-                                    NOTE: UpdateCheckerLib/UpdateException.cs (84 lines)
-                                    must be READ and split into specific types (rule 10)
-    GithubRelease.cs                response model
+    (the updater is NOT in Common/ — see Updates/ below)
     WordInstallProbe.cs             bitness, version, path, install type, winword PE bitness
     DotNetRuntimeProbe.cs           CLR version, runtime directory
     OperatingSystemProbe.cs         OS version + bitness
@@ -135,6 +130,33 @@ KitveiHakodesh.Core/
                                     (no SqlPlaceholderRewriter — after slices 2 and 4 retire
                                     __webviewQuery/__webviewDictQuery its only caller is
                                     UserAnnotationStore, so the '?'->@p0 rewrite lives there)
+
+  Updates/                            --- app-specific --- CORRECTION to the original map,
+                                      which put these in Common/. They cannot go there:
+                                      Common's own rule is that nothing in it knows the app
+                                      exists, and this code knows the GitHub REPOSITORY, the
+                                      installer's FILE NAME and the registry key the installer
+                                      stamps. Sibling of Settings/, which is app-specific for
+                                      the same reason
+    GithubRelease.cs                  response model + a SOURCE-GENERATED JsonSerializerContext.
+                                      JSON is correct here and rule 0e is not violated: this is
+                                      GitHub's wire format, not one of ours. The generator is
+                                      what makes it survive AOT
+    UpdateChecker.cs                  is-installed gate, version compare, release query, asset
+                                      resolution. Declares UpdateCheckFailedException
+    UpdateDownloader.cs               (was DownloadManager) atomic .partial download, size
+                                      verification, cross-process mutex, ReadyVersion, launch.
+                                      Declares UpdateDownloadFailedException AND
+                                      UpdateLaunchFailedException — two different answers: a
+                                      failed download is worth retrying later, a failed LAUNCH
+                                      points at the file (and the corrupt-exe case deletes it)
+                                      The MessageBox at DownloadManager.cs:270 is GONE
+
+  UpdateCheckerLib/UpdateException.cs — READ (rule 10). It was already two types, so the split
+  was not the work; the work was that BOTH built a Hebrew sentence for the user inside
+  `ToUserMessage()`. Core's versions carry the facts as fields (URL, received/expected bytes,
+  native error code) and the host writes the words (rule 3). ~382 UI lines
+  (DownloadProgressForm, DownloadProgressWindow, UpdateNotificationForm) stay net48, in the host
 
   Settings/                           --- app-specific ---
     AppSettingsRegistry.cs            HKCU\Software\VB and VBA Program Settings\...
