@@ -38,6 +38,8 @@ const navToggleRef = ref<HTMLElement | null>(null)
 const navPanelRef = ref<HTMLElement | null>(null)
 const navEntries = ref<{ id: string; label: string }[]>([])
 
+const searchInputRef = ref<HTMLInputElement | null>(null)
+
 const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value = false }, {
   toggleButton: navToggleRef,
 })
@@ -71,7 +73,32 @@ watch(searchQuery, (query) => {
   setSettingsScrollTop(0)
 })
 
+// The caret starts in the search box, at the END of a restored query rather than
+// selecting it, so the next keystroke refines the filter instead of wiping it.
+//
+// preventScroll, because the toolbar is sticky: scrolling the input into view can
+// only move the body away from the offset restored below, and the scroll event it
+// fires would land before restoringScroll is raised — writing that position back
+// over the saved one.
+//
+// The hasFocus dance mirrors HomePage: on a cold start into a restored settings
+// tab the host may not hold OS focus yet, and focus() on an element whose window
+// lacks it silently doesn't stick.
+function focusSearchInput() {
+  const input = searchInputRef.value
+  if (!input) return
+  const caretPosition = searchQuery.value.length
+  const focusAtEndOfQuery = () => {
+    input.focus({ preventScroll: true })
+    input.setSelectionRange(caretPosition, caretPosition)
+  }
+  if (document.hasFocus()) focusAtEndOfQuery()
+  else useEventListener(window, 'focus', focusAtEndOfQuery, { once: true })
+}
+
 onMounted(() => {
+  focusSearchInput()
+
   nextTick(() => {
     navEntries.value = getSectionNavEntries()
     sideNavEntries.value = getSectionNavEntries()
@@ -149,6 +176,7 @@ async function navigateToSection(sectionId: string) {
               </div>
             </div>
             <input
+              ref="searchInputRef"
               v-model="searchQuery"
               class="search-input"
               type="search"
