@@ -56,7 +56,6 @@ const KEYS = {
   SETTINGS_NEW_TAB_PAGE: 'app.newTabPage',
   SETTINGS_SHOW_CLOCK: 'app.showClock',
   SETTINGS_SETUP_DONE: 'app.setupDone',
-  SETTINGS_COMPACT_MODE: 'app.compactMode',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
   // One per pane: a pane is a whole shell with its own tabs and its own chrome, so its
   // rail is its own state and its own stored value. Pane 1 keeps the original key so an
@@ -151,7 +150,6 @@ const DEFAULTS = {
   linesContentMaxWidth: 0,
   commentaryMaxWidth: 0,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
-  compactMode: true,
   // Scrollbars completely hidden except while scrolling. The DOM effect (root
   // class + per-element scroll activity tracking) is owned by
   // useUiChromeVisibility, not this store.
@@ -235,7 +233,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const linesContentMaxWidth = ref(DEFAULTS.linesContentMaxWidth)
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
-  const compactMode = ref(DEFAULTS.compactMode)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
   // Per-pane rail visibility. Each pane owns its own: toggling one never moves the other,
   // and each persists separately, like every other per-pane value.
@@ -310,7 +307,6 @@ export const useSettingsStore = defineStore('settings', () => {
     const effectiveCommentaryMaxWidth = useSeparateCommentarySettings.value ? commentaryMaxWidth.value : linesContentMaxWidth.value
     style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
-    document.documentElement.setAttribute('data-density', compactMode.value ? 'compact' : 'normal')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
   }
@@ -394,7 +390,6 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, linesContentMaxWidth)
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
-    loadSetting(KEYS.SETTINGS_COMPACT_MODE, compactMode)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
     const navSidebar1 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR)
     if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
@@ -450,7 +445,6 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(linesContentMaxWidth, KEYS.SETTINGS_LINES_CONTENT_MAX_WIDTH, applyCSSVariables)
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
-  persistSetting(compactMode, KEYS.SETTINGS_COMPACT_MODE, applyCSSVariables)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
   // Watched deeply because the two panes share one object; each writes its own key.
   watch(
@@ -593,7 +587,6 @@ export const useSettingsStore = defineStore('settings', () => {
     linesContentMaxWidth.value = DEFAULTS.linesContentMaxWidth
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
-    compactMode.value = DEFAULTS.compactMode
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
     navSidebarVisibleByPane.value = {
       1: DEFAULTS.navSidebarVisible,
@@ -629,7 +622,6 @@ export const useSettingsStore = defineStore('settings', () => {
     linesContentMaxWidth,
     commentaryMaxWidth,
     titleBarHiddenButtons,
-    compactMode,
     scrollbarsHidden,
     navSidebarVisibleByPane,
     getNavSidebarVisible,

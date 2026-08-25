@@ -469,7 +469,7 @@ function getTabIcon(route: string): FileIconInfo {
   align-items: center;
   gap: 8px;
   width: 100%;
-  /* Row height tracks the title bar's density mode (32px compact / 40px normal). */
+  /* Row height matches the title bar (32px). */
   height: var(--title-bar-height);
   padding: 0 12px;
   text-align: right;
