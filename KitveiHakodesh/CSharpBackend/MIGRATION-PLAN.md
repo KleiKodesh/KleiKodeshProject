@@ -1152,6 +1152,35 @@ Pure backend merge, **zero frontend change** (raw SQL stays by design).
 
 ### Slice 4b — FtsLib boundary: stop the library reading the corpus
 
+**REVISED 2026-08-25 — GRADUAL SEAM, NOT A REWRITE (user decision).** Do not refactor FtsLib
+totally. Create the separation cleanly INSIDE it, so the engine works with its internal
+reader OR through Core — both routes live at once. The apps that use FtsLib as-is keep
+working unchanged while Core is built; callers move over one at a time.
+
+**Step 1 — the seam. DONE (both legs build; Service, FtsLibTest, FtsLibTest.Net10 and
+KitveiHakodeshLib rebuild with ZERO call-site changes):**
+- `IFtsCorpus` (public, `FtsLib/IFtsCorpus.cs` + net48 twin): CountDocuments / CountDocumentsUpTo,
+  GetDocumentText, ReadDocuments / ReadDocumentsAfter, FetchDocuments, FetchNeighbourText.
+  Every engine entry point takes a **`Func<IFtsCorpus>` FACTORY, never an instance** — a search
+  returns a LAZY sequence, so the corpus must outlive the call and the engine's `using` sits
+  inside the iterator; and searches run on arbitrary threads while a build runs on another, so
+  one connection per operation is correctness, not style
+- `ZayitDb : IFtsCorpus`, implemented EXPLICITLY so the generic names stay off its own surface
+- The three pipelines take the factory instead of `dbPath`; `SeforimIndex` gains
+  `(indexPath, Func<IFtsCorpus>)`, and the old `(indexPath, dbPath)` ctor forwards through the
+  built-in reader — behaviour identical
+
+**Step 2 — per caller, in its own slice:** Lib and the Service construct `SeforimIndex` with a
+Core-backed corpus (Core implements `IFtsCorpus` over `SeforimDbQueries`). Slice 5 does this.
+
+**Step 3 — cleanup, ONLY when no caller uses the legacy ctor:** everything below this note —
+deleting the 7 `SeforimDb/` files, folding `ZayitDb` into `SeforimDbQueries`, the 27-file test
+split — is step-3 work and moves to slice 11 territory. Measured while cutting the seam:
+`FindByPhrase`, `FindByBookAndPhrase`, `FindBooks`, `GetLineInfo` already have **zero callers**
+anywhere (production or test) and can go first.
+
+--- original full-inversion plan below, kept as the step-3 spec ---
+
 **The violation.** `FtsLib/SeforimDb/` holds 7 corpus-specific files inside what is supposed
 to be a generic engine — and every one of them is **duplicated** in `FtsLib.Net48/SeforimDb/`:
 
@@ -1350,19 +1379,14 @@ what remains is transport belonging in Lib.
 - **Working constraint:** 1484 Hebrew occurrences across 6 files. Pure file moves plus
   surgical namespace-line edits only — never read-and-rewrite
 
-### ⛔ Slice 5 CANNOT be written before slice 4b — ORDERING CONSTRAINT
+### ✅ Slice 5 UNBLOCKED — the FtsLib corpus seam is in (2026-08-25)
 
-Core's `SeforimDbFtsIndexer` / `SeforimDbFtsSearcher` are the seforim FACADE over the engine,
-and the facade does not exist to move yet: today `FtsLib.SeforimDb.SeforimIndex` is constructed
-as `SeforimIndex(indexPath, dbPath)` and reads the corpus ITSELF, through
-`FtsLib/SeforimDb/IndexingPipeline.cs` and `ZayitDb.cs`. There is no generic writer API in
-`FtsLib/Indexing/` for Core to feed lines into.
-
-So writing Core's FTS classes means either doing 4b first, or inventing an FtsLib API that does
-not exist and hoping 4b lands on the same shape. Every OTHER Core stage is standalone —
-Dictionary, HebrewBooks, SeforimDb, Catalog (slice 6) and the Common toolkit (slice 7) all
-depend only on packages and on Core's own code. **Slice 5 is the one that waits for its
-FtsLib half.**
+The ordering constraint that stood here is resolved by slice 4b step 1 (see its revision
+note): FtsLib now takes its documents through `IFtsCorpus`, and `SeforimIndex` gained a
+second constructor `(indexPath, Func<IFtsCorpus>)`. Core's `SeforimDbFtsIndexer` /
+`SeforimDbFtsSearcher` get written against that seam — implement `IFtsCorpus` over
+`SeforimDbQueries`, hand the factory in, and the engine reads nothing. Every existing
+caller still uses `(indexPath, dbPath)` unchanged.
 
 ### ⛔ Slice 6 NEEDS A DECISION BEFORE IT CAN BE WRITTEN
 

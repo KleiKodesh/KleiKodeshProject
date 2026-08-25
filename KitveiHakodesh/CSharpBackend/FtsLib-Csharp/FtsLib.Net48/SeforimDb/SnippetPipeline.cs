@@ -1,3 +1,4 @@
+using System;
 using FtsLib.Indexing;
 using FtsLib.Search;
 using FtsLib.Snippets;
@@ -148,15 +149,15 @@ namespace FtsLib.SeforimDb
         internal static SnippetResult GenerateFromDb(
             int                   lineId,
             IReadOnlyList<string> queryTerms,
-            string                dbPath,
+            Func<IFtsCorpus>      openCorpus,
             int                   contextWords = DefaultContextWords)
         {
             if (queryTerms == null || queryTerms.Count == 0)
                 return SnippetResult.NoMatch;
 
-            using (var db = new ZayitDb(dbPath))
+            using (var corpus = openCorpus())
             {
-                string content = db.GetLineContent(lineId);
+                string content = corpus.GetDocumentText(lineId);
                 if (content == null) return SnippetResult.NoMatch;
                 return Generate(content, queryTerms, contextWords);
             }

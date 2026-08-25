@@ -3,10 +3,11 @@ using System;
 using System.Collections.Generic;
 using System.Data.SQLite;
 using System.IO;
+using System.Threading;
 
 namespace FtsLib.SeforimDb
 {
-    internal sealed class ZayitDb : IDisposable
+    internal sealed class ZayitDb : IDisposable, IFtsCorpus
     {
         private readonly SQLiteConnection _connection;
         private readonly string _dbPath;
@@ -502,6 +503,33 @@ namespace FtsLib.SeforimDb
         }
 
         // ── Lifecycle ─────────────────────────────────────────────────
+
+        // ── IFtsCorpus ────────────────────────────────────────────────────────────────
+        //
+        // The engine's caller-supplied corpus contract, implemented EXPLICITLY so the generic
+        // names do not appear on this class's own surface — there is one operation per concept
+        // here, not two names for it. Everything below forwards; nothing new happens.
+        //
+        // This is what lets the seforim reader and a caller's own data access serve the engine
+        // interchangeably while both routes are live (see IFtsCorpus).
+
+        long IFtsCorpus.CountDocuments() => CountLines();
+
+        long IFtsCorpus.CountDocumentsUpTo(int upToId) => CountLinesUpTo(upToId);
+
+        string IFtsCorpus.GetDocumentText(int id) => GetLineContent(id);
+
+        IEnumerable<(int Id, string Text)> IFtsCorpus.ReadDocuments(int limit, CancellationToken ct) =>
+            ReadLines(limit, ct);
+
+        IEnumerable<(int Id, string Text)> IFtsCorpus.ReadDocumentsAfter(int afterId, int limit, CancellationToken ct) =>
+            ReadLinesFrom(afterId, limit, ct);
+
+        IEnumerable<(int Id, string Text, string Title)> IFtsCorpus.FetchDocuments(IEnumerable<int> ids) =>
+            FetchSearchResultsStreaming(ids);
+
+        IDictionary<int, (string Previous, string Next)> IFtsCorpus.FetchNeighbourText(
+            IReadOnlyList<int> ids, int radius) => FetchNeighborContext(ids, radius);
 
         public void Dispose()
         {
