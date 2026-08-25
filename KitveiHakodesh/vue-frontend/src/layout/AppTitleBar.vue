@@ -50,9 +50,6 @@ const pdfOcrStore = usePdfOcrStore()
 // Its glyph is drawn in the bar's own colour, deliberately not the colourful one the icon
 // table hands out: every other button in this bar is monochrome, and one coloured icon in
 // the row read as a badge rather than as a control.
-//
-// `prefer="right"`: the document is RTL, so `.bar-end` sits at the pane's physical LEFT -
-// the panel opens rightward, inward across the pane, instead of off the window's edge.
 const workspacesIcon = documentIcon('apps')
 const workspacesOpen = ref(false)
 const workspacesButtonEl = ref<HTMLElement | null>(null)
@@ -413,13 +410,11 @@ useAppTitleBarShortcuts({
   />
 
   <!-- Outside the header for the same reason as the dropdown: it must survive the header
-       being hidden. No `keep-clear-of` - the bar is a strip along the top, not a surface
-       the panel could sit beside, and it hangs down from the button rather than over it. -->
+       being hidden. It hangs straight down from the button, right edges aligned. -->
   <WorkspaceSubmenu
     ref="workspacesSubmenu"
     v-model:open="workspacesOpen"
     :anchor="workspacesButtonEl"
-    prefer="right"
   />
   </div>
 </template>

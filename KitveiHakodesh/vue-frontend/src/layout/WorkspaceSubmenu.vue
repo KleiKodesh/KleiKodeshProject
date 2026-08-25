@@ -5,70 +5,42 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import WorkspaceMenu from './WorkspaceMenu.vue'
 
 /**
- * `WorkspaceMenu` as a real submenu: a panel that flies out sideways from whatever row or
- * button opened it.
+ * `WorkspaceMenu` as a dropdown: a panel that hangs straight DOWN from the button that
+ * opened it, the way every other dropdown off this title bar does.
  *
- * Both surfaces that offer workspaces render THIS, so the anchoring, the clamping, the
- * hover behaviour and the dismissal are written once. The caller owns only `open` and the
- * anchor element - which side the panel prefers to open toward is the caller's too, since
- * the rail opens inward off the window's edge while a menu row opens along its own menu.
+ * It used to fly out sideways, because it used to hang off a row in the hamburger menu and
+ * a button on the nav rail - both of which own the edge they are docked to, leaving down as
+ * the one direction with nothing below it. Workspaces lives in the title bar now, where the
+ * whole page is below the button and sideways is the wrong answer.
  *
- * It **opens on hover**, like any submenu; the click is there for touch, where there is no
- * hover to open on. The anchor's hover listeners are attached from in here rather than by
- * each caller - see the hover section below for the two timers that make it usable.
+ * It **opens on hover**; the click is there for touch, where there is no hover to open on.
+ * The anchor's hover listeners are attached from in here rather than by the caller - see
+ * the hover section below for the two timers that make it usable.
  *
  * Teleported to the body and `position: fixed`, like every other floating panel here
- * (AppTitleBarBreadcrumbChevronDropdown): the rail and the hamburger menu are both scroll
- * boxes with their own stacking contexts, and a panel positioned inside either one gets
- * clipped by it. Fixed to the viewport is also what lets it be clamped to the viewport.
+ * (AppTitleBarBreadcrumbChevronDropdown): the title bar clips its own overflow, and a panel
+ * positioned inside it would be cut off at the bar's own height. Fixed to the viewport is
+ * also what lets it be clamped to the viewport.
  *
  * Clamping is the point of the measure-then-place pass in `place()`. In a task pane a few
  * hundred pixels wide - or a short one - the panel would otherwise hang off the edge with
  * the create box past the bottom, which is exactly where it is least recoverable. So it
- * flips to the other side of the anchor when the preferred side has no room, gives up the
- * flip if neither side fits and simply sits against the roomier edge, and takes a
+ * flips ABOVE the button when there is more room up there than down, and takes a
  * `max-height` from whatever vertical space is actually left, letting its list scroll
  * inside that. It never leaves the viewport, at any size.
  */
-const props = withDefaults(
-  defineProps<{
-    open: boolean
-    /** The row or button the panel hangs off. */
-    anchor: HTMLElement | null
-    /**
-     * Which physical side of the anchor to try first. The panel flips to the other side
-     * when that one does not fit. RTL: 'left' is inward from a right-docked rail.
-     */
-    prefer?: 'left' | 'right'
-    /**
-     * A surface the panel must never cover - the rail or the menu it belongs to. The panel
-     * sits beside it, and in a window too narrow for both it gives up its own width rather
-     * than the ground it was told to keep clear.
-     */
-    keepClearOf?: HTMLElement | null
-  }>(),
-  { prefer: 'left', keepClearOf: null },
-)
+const props = defineProps<{
+  open: boolean
+  /** The button the panel hangs below. */
+  anchor: HTMLElement | null
+}>()
 
 const emit = defineEmits<{ 'update:open': [boolean]; close: [] }>()
 
 /** Breathing room kept between the panel and the viewport edges. */
 const VIEWPORT_MARGIN = 8
-/** Gap between the anchor and the panel. */
-const ANCHOR_GAP = 2
-/**
- * Gap left between the panel and the surface it must keep clear.
- *
- * Bigger than ANCHOR_GAP on purpose: this one separates two floating sheets, each with its
- * own frame and shadow, and touching frames read as one wider panel with a seam down it.
- */
-const KEEP_CLEAR_GAP = 6
-/**
- * The narrowest band worth keeping clear for. Squeezed below this, the panel overlays the
- * surface instead - the rename and create rows need roughly this much to be workable, and
- * a panel nobody can use defeats the point of staying out of the way.
- */
-const MIN_USABLE_WIDTH = 160
+/** Gap between the button and the panel hanging below it - 3px, as .nav-dropdown uses. */
+const ANCHOR_GAP = 3
 
 const panelRef = ref<HTMLElement | null>(null)
 const top = ref(0)
@@ -179,11 +151,7 @@ useEventListener(
 
 onBeforeUnmount(clearHoverTimers)
 
-// `panelEl` is exposed because the panel is teleported: a host menu with its own
-// outside-click watcher sees clicks inside this panel as landing outside itself, and needs
-// the real element to add to its `ignore` list. `$el` cannot serve - the root here is a
-// Teleport, which has no element of its own.
-defineExpose({ toggle, panelEl: panelRef })
+defineExpose({ toggle })
 
 function close() {
   // A close from any source settles the hover question too: without this, a grace-period
@@ -226,71 +194,32 @@ function place() {
   const vw = window.innerWidth
   const vh = window.innerHeight
 
-  // ── Horizontal ──
+  // ── Horizontal: right edges aligned, then clamped ──
   //
-  // The band the panel is allowed to occupy. Normally the viewport less its margins; with
-  // `keepClearOf` it is also cut back to one side of that surface, so the panel sits BESIDE
-  // the rail or menu it belongs to and never over it. Which side: whichever the anchor is
-  // on, since the anchor lives in the surface being kept clear.
-  let bandStart = VIEWPORT_MARGIN
-  let bandEnd = vw - VIEWPORT_MARGIN
-  const clear = props.keepClearOf?.getBoundingClientRect()
-  if (clear && clear.width > 0) {
-    // `>=`, not `>`, and that matters: a menu ROW is the full width of its menu, so the two
-    // centres are equal and the tie has to fall to the first branch. The other branch would
-    // leave a sliver between the menu's far edge and the viewport margin - on the wrong
-    // side of a menu already docked to that edge.
-    const anchorCentre = (a.left + a.right) / 2
-    if (anchorCentre >= (clear.left + clear.right) / 2) {
-      bandEnd = Math.min(bandEnd, clear.left - KEEP_CLEAR_GAP)
-    } else {
-      bandStart = Math.max(bandStart, clear.right + KEEP_CLEAR_GAP)
-    }
-    // Keeping clear is worth a narrower panel, but not a useless one. In the VSTO task
-    // pane (~240px wide) the hamburger menu spans most of the window, and the band beside
-    // it comes out ~56px - a sliver nobody registers as a panel at all, which read as
-    // "hover does nothing". Below a usable width, overlaying the surface beats being
-    // invisible beside it, so the band falls back to the whole viewport.
-    if (bandEnd - bandStart < MIN_USABLE_WIDTH) {
-      bandStart = VIEWPORT_MARGIN
-      bandEnd = vw - VIEWPORT_MARGIN
-    }
-  }
-
-  // A window too narrow for both is the case this is all for: the panel gives up its own
-  // width rather than the ground it was told to keep clear, so the rail stays fully
-  // visible and the panel scrolls inside what is left.
-  const bandWidth = Math.max(0, bandEnd - bandStart)
-  const fittedWidth = Math.min(width, bandWidth)
+  // The document is RTL, so the panel's RIGHT edge lines up with the button's - the same
+  // edge `.nav-dropdown` pins itself to off the hamburger. Clamping then slides it back
+  // inside the viewport, which is what happens for a button close to the left edge in a
+  // narrow pane: the panel gives up the alignment rather than the screen.
+  const fittedWidth = Math.min(width, vw - 2 * VIEWPORT_MARGIN)
   panel.style.maxWidth = fittedWidth < width ? `${fittedWidth}px` : ''
+  left.value = Math.max(
+    VIEWPORT_MARGIN,
+    Math.min(a.right - fittedWidth, vw - fittedWidth - VIEWPORT_MARGIN),
+  )
 
-  const roomLeft = a.left - bandStart
-  const roomRight = bandEnd - a.right
-  const need = fittedWidth + ANCHOR_GAP
-  const preferLeft = props.prefer === 'left'
-  const fitsPreferred = (preferLeft ? roomLeft : roomRight) >= need
-  const fitsOther = (preferLeft ? roomRight : roomLeft) >= need
-
-  if (fitsPreferred || !fitsOther) {
-    // Preferred side, or neither fits and we stay put rather than flipping for nothing.
-    left.value = preferLeft ? a.left - fittedWidth - ANCHOR_GAP : a.right + ANCHOR_GAP
-  } else {
-    left.value = preferLeft ? a.right + ANCHOR_GAP : a.left - fittedWidth - ANCHOR_GAP
-  }
-  // The final word regardless of which side won: the panel starts no further out than the
-  // band allows, so it stays on screen AND off the surface it must keep clear.
-  left.value = Math.max(bandStart, Math.min(left.value, bandEnd - fittedWidth))
-
-  // ── Vertical: aligned to the anchor's top, lifted to fit, then capped ──
+  // ── Vertical: under the button, flipped above only when that is roomier ──
   //
   // Re-measured, because the width cap above may have narrowed the panel and rewrapped its
   // rows. The height taken before that would be the height of a wider panel.
   const height = panel.offsetHeight
-  const available = vh - 2 * VIEWPORT_MARGIN
-  // A panel taller than the viewport gets capped and scrolls its list; one that merely
-  // hangs off the bottom is lifted until it fits. An empty string removes the cap, which is
-  // how a panel clamped by an earlier pass expands again once a resize gives the room back.
-  const cap = height > available ? `${available}px` : ''
+  const roomBelow = vh - VIEWPORT_MARGIN - (a.bottom + ANCHOR_GAP)
+  const roomAbove = a.top - ANCHOR_GAP - VIEWPORT_MARGIN
+  // Down is the default and stays the default while the panel fits: a dropdown that jumped
+  // above its button the moment the list grew by a row would move under the reader's hand.
+  // It only flips when down cannot hold it AND up genuinely holds more.
+  const openAbove = height > roomBelow && roomAbove > roomBelow
+  const room = Math.max(0, openAbove ? roomAbove : roomBelow)
+
   // Unconditional, because the measure above already took any cap off - this is the write
   // that puts the right one back, not an extra one.
   //
@@ -302,59 +231,30 @@ function place() {
   //
   // That symmetry is the invariant: an `await` between the clear and this restore would
   // split them across frames and bring the loop straight back. `place()` stays synchronous.
-  panel.style.maxHeight = cap
+  panel.style.maxHeight = height > room ? `${room}px` : ''
 
-  const effectiveHeight = Math.min(height, available)
-  top.value = Math.max(
-    VIEWPORT_MARGIN,
-    Math.min(a.top, vh - effectiveHeight - VIEWPORT_MARGIN),
-  )
+  const effectiveHeight = Math.min(height, room)
+  top.value = openAbove ? a.top - ANCHOR_GAP - effectiveHeight : a.bottom + ANCHOR_GAP
 
   placed.value = true
 }
 
-/**
- * Whether the anchor is still visible inside the surface it belongs to.
- *
- * The dropdown is itself a scroll box with a `max-height`, so in a short window its rows
- * can scroll out of view. A panel that merely re-placed would follow its row up past the
- * menu's top edge and hang there beside a row nobody can see - so it closes instead.
- * Only meaningful with `keepClearOf`; a rail that spans the whole window never clips.
- */
-function anchorIsVisible(): boolean {
-  const clear = props.keepClearOf?.getBoundingClientRect()
-  const a = props.anchor?.getBoundingClientRect()
-  if (!clear || !a) return true
-  return a.bottom > clear.top && a.top < clear.bottom
-}
-
-// Re-place on anything that moves the anchor or changes the room around it. Capture-phase
-// scroll: scrolls on inner containers don't bubble, and the anchor may sit in one.
+// Re-place on anything that moves the button or changes the room around it. Capture-phase
+// scroll: scrolls on inner containers don't bubble, and a scroll anywhere can shift the
+// title bar (the chrome hides and shows with it).
+//
+// Both only ever re-place, never close. The button is still the one the reader pressed, and
+// a window that got smaller is exactly when the clamping above earns its keep - closing
+// would take the panel away mid-drag. The sideways version DID close on a scroll that took
+// its anchor out of the menu it was docked to; a title-bar button has no such container to
+// scroll out of.
 function followAnchor() {
   if (!props.open) return
   place()
 }
 
-// A resize only ever re-places: the anchor is still the row the reader picked, and a
-// window that got smaller is exactly when the clamping above earns its keep. Closing here
-// would take the panel away mid-drag.
 useEventListener(window, 'resize', followAnchor)
-
-// A scroll can take the anchor out of its own container, though, and a panel left beside a
-// row nobody can see is worse than no panel - so that one closes rather than following.
-useEventListener(
-  window,
-  'scroll',
-  () => {
-    if (!props.open) return
-    if (!anchorIsVisible()) {
-      close()
-      return
-    }
-    place()
-  },
-  true,
-)
+useEventListener(window, 'scroll', followAnchor, true)
 
 // The panel's own height changes as rows are added, deleted, or swapped for a rename box
 // or a delete confirmation - each of which can push it past the bottom of a short window.
@@ -373,10 +273,10 @@ watch(
     place()
     const panel = panelRef.value
     if (!panel) return
-    // Focus the panel so Escape has somewhere to land. Without this the rail has no
-    // keyboard dismissal at all: its buttons are `tabindex="-1"`, so after opening one the
-    // focus is still on a button in a different DOM tree from this teleported panel, and
-    // an Escape keydown there never passes through it.
+    // Focus the panel so Escape has somewhere to land. Without this there is no keyboard
+    // dismissal at all: the title bar's buttons are `tabindex="-1"`, so after opening one
+    // the focus is still on a button in a different DOM tree from this teleported panel,
+    // and an Escape keydown there never passes through it.
     //
     // Not on a hover-open, though - the pointer merely passing over a button must not take
     // the focus away from whatever the reader was typing in.
