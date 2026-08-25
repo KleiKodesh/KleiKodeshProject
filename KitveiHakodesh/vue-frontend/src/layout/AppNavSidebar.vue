@@ -1,19 +1,23 @@
 <script setup lang="ts">
-import { computed, inject } from 'vue'
+import { computed, inject, ref, watch } from 'vue'
 import {
   IconChevronDoubleRight20Regular,
+  IconMoreHorizontal24Regular,
   IconOpen28Regular,
   IconSplitVertical20Regular,
   IconSplitVertical20Filled,
 } from '@iconify-prerendered/vue-fluent'
-import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import { APP_NAV_SETTINGS_ITEM } from './appNavItems'
+import WorkspaceSubmenu from './WorkspaceSubmenu.vue'
+import AppNavSidebarOverflowMenu from './AppNavSidebarOverflowMenu.vue'
+import { useAppNavSidebarOverflow } from './useAppNavSidebarOverflow'
 import { documentIcon } from '@/utils/documentIcons'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { showPopOutButton, togglePopOut } from '@/webview-host/bridge'
+import { togglePopOut } from '@/webview-host/bridge'
 
 // The nav dropdown's items, always on. Same list, same order, same actions - the only
 // difference is that a row here is its icon alone with the label as its tooltip, because
@@ -47,14 +51,69 @@ const pane = useAppShellPane(paneId)
 // than stacking up another. Same reason the title bar keeps its own home button. The icon
 // still comes from the shared table so it matches the rest of the column.
 const homeIcon = documentIcon('home').icon24
+
+// Workspaces is not in APP_NAV_ITEMS either, and for a stronger reason than home: it is
+// not a destination at all - there is no page and no route. The rail's button opens the
+// picker as a submenu beside it (WorkspaceSubmenu, the same panel the hamburger menu
+// opens off its own row), so switching workspaces never costs a tab.
+//
+// It sits with the destinations rather than with the controls at the bottom, because it
+// is about what you are working on, not about the rail or the window. `prefer="left"`:
+// the rail is docked to the window's physical right edge, so the panel opens inward.
+const workspacesIcon = documentIcon('apps')
+const workspacesOpen = ref(false)
+const workspacesButtonEl = ref<HTMLElement | null>(null)
+/** The rail's own sheet - the surface the submenus must open beside rather than over. */
+const navPanelEl = ref<HTMLElement | null>(null)
+const workspacesSubmenu = ref<InstanceType<typeof WorkspaceSubmenu> | null>(null)
+
+// ── Vertical overflow ─────────────────────────────────────────────────────────
+//
+// Buttons a too-short rail cannot fit collapse, bottom-up, into a "more" button whose
+// flyout lists them with their labels. The one exception is the hide button, which keeps
+// the rail's floor - it is the only way to close the rail, and a control that vanished
+// exactly when the rail got cramped would trap it open. The composable owns the fit
+// arithmetic and the flat key list; what stays here is the flyout's state and what each
+// collapsed row does when picked.
+const { hasNavOverflow, railButtonVisible, visibleNavItems, overflowedRailKeys } =
+  useAppNavSidebarOverflow(navPanelEl, isSplitViewButtonVisible)
+
+const overflowOpen = ref(false)
+const overflowButtonEl = ref<HTMLElement | null>(null)
+
+// Every collapsed row's action lives here, not in the flyout - it renders the rows and
+// reports the picked key back. A key with no branch is a destination (settings included),
+// keyed by its label, which IS the routing key.
+function onOverflowRowSelect(key: string) {
+  if (key === 'home') pane.goHome()
+  else if (key === 'split-view') bookViewStore.toggleSplitView()
+  else if (key === 'pop-out') togglePopOut()
+  else navigateInNewTab(key)
+}
+
+// A resize that gives the room back unmounts the more button - its flyout must not be
+// left floating beside a button that no longer exists.
+watch(hasNavOverflow, (has) => {
+  if (!has) overflowOpen.value = false
+})
+// Same for the workspaces button when it collapses INTO the flyout: the rail's copy
+// unmounts, and the picker must not be left hanging beside where it was. The flyout's
+// own workspaces row runs its own picker.
+watch(
+  () => railButtonVisible('workspaces'),
+  (visible) => {
+    if (!visible) workspacesOpen.value = false
+  },
+)
 </script>
 
 <template>
   <!-- The strip holds the width in the layout; the panel inside it is the docked sheet,
        full width and inset only at the top and bottom. -->
   <div class="nav-sidebar">
-    <nav class="nav-panel">
+    <nav ref="navPanelEl" class="nav-panel">
       <button
+        v-if="railButtonVisible('home')"
         class="nav-btn"
         tabindex="-1"
         title="בית (Ctrl+G)"
@@ -63,7 +122,7 @@ const homeIcon = documentIcon('home').icon24
         <component :is="homeIcon" />
       </button>
       <button
-        v-for="item in APP_NAV_ITEMS"
+        v-for="item in visibleNavItems"
         :key="item.label"
         class="nav-btn"
         tabindex="-1"
@@ -72,51 +131,99 @@ const homeIcon = documentIcon('home').icon24
       >
         <component :is="item.icon" :style="item.color ? { color: item.color } : {}" />
       </button>
-      <!-- Second group, pinned to the far end: settings and the rail's own controls, which
-           are not destinations. Space is what separates the two groups - a rule here would
-           cut the one surface into two. -->
-      <div class="nav-group-end">
-        <button
-          v-if="isSplitViewButtonVisible"
-          class="nav-btn nav-btn-sm"
-          tabindex="-1"
-          :title="splitViewTitle"
-          @click="bookViewStore.toggleSplitView()"
-        >
-          <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
-          <IconSplitVertical20Regular v-else />
-        </button>
-        <button
-          v-if="showPopOutButton"
-          class="nav-btn"
-          tabindex="-1"
-          title="פתח בחלון עצמאי או החזר לחלונית"
-          @click="togglePopOut()"
-        >
-          <IconOpen28Regular />
-        </button>
-        <!-- Settings is always the last item before the rail's own collapse control - it is
-             the floor of the rail, everything else stacks above it. -->
-        <button
-          class="nav-btn"
-          tabindex="-1"
-          :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})`"
-          @click="navigateInNewTab(APP_NAV_SETTINGS_ITEM.label)"
-        >
-          <component :is="APP_NAV_SETTINGS_ITEM.icon" />
-        </button>
-        <!-- The ONLY way to close the rail - the menu row that opened it is gone while the
-             rail is up (AppTitleBar drops the hamburger and Ctrl+M). -->
-        <button
-          class="nav-btn nav-btn-sm"
-          tabindex="-1"
-          title="הסתר סרגל צד"
-          @click="settingsStore.setNavSidebarVisible(paneId, false)"
-        >
-          <IconChevronDoubleRight20Regular />
-        </button>
-      </div>
+      <!-- Not a destination - it opens the picker beside the rail instead of a tab. -->
+      <button
+        v-if="railButtonVisible('workspaces')"
+        ref="workspacesButtonEl"
+        class="nav-btn"
+        :class="{ 'nav-btn--on': workspacesOpen }"
+        tabindex="-1"
+        title="סביבות עבודה"
+        :aria-expanded="workspacesOpen"
+        @click="workspacesSubmenu?.toggle()"
+      >
+        <component
+          :is="workspacesIcon.icon24"
+          :style="workspacesIcon.color ? { color: workspacesIcon.color } : {}"
+        />
+      </button>
+      <!-- Space is what separates the destinations from the rail's own controls - a rule
+           here would cut the one surface into two. A real element rather than an auto
+           margin, and every button below it on the same 38px pitch as those above: the
+           overflow arithmetic (useAppNavSidebarOverflow) counts every child on one pitch,
+           and even at zero height this spacer costs the one extra flex gap it budgets. -->
+      <div class="nav-spacer" />
+      <button
+        v-if="railButtonVisible('split-view')"
+        class="nav-btn nav-btn-sm"
+        tabindex="-1"
+        :title="splitViewTitle"
+        @click="bookViewStore.toggleSplitView()"
+      >
+        <IconSplitVertical20Filled v-if="bookViewStore.splitViewEnabled" />
+        <IconSplitVertical20Regular v-else />
+      </button>
+      <button
+        v-if="railButtonVisible('pop-out')"
+        class="nav-btn"
+        tabindex="-1"
+        title="פתח בחלון עצמאי או החזר לחלונית"
+        @click="togglePopOut()"
+      >
+        <IconOpen28Regular />
+      </button>
+      <button
+        v-if="railButtonVisible(APP_NAV_SETTINGS_ITEM.label)"
+        class="nav-btn"
+        tabindex="-1"
+        :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})`"
+        @click="navigateInNewTab(APP_NAV_SETTINGS_ITEM.label)"
+      >
+        <component :is="APP_NAV_SETTINGS_ITEM.icon" />
+      </button>
+      <!-- Stands in for the collapsed tail above it, directly over the hide button. Only
+           rendered while something has overflowed. -->
+      <button
+        v-if="hasNavOverflow"
+        ref="overflowButtonEl"
+        class="nav-btn"
+        :class="{ 'nav-btn--on': overflowOpen }"
+        tabindex="-1"
+        title="פריטים נוספים"
+        :aria-expanded="overflowOpen"
+        @click="overflowOpen = !overflowOpen"
+      >
+        <IconMoreHorizontal24Regular />
+      </button>
+      <!-- Never collapses, and keeps the floor: this is the ONLY way to close the rail -
+           the menu row that opened it is gone while the rail is up (AppTitleBar drops the
+           hamburger and Ctrl+M) - so a rail short enough to fold it away would be a rail
+           nobody could close. -->
+      <button
+        class="nav-btn nav-btn-sm"
+        tabindex="-1"
+        title="הסתר סרגל צד"
+        @click="settingsStore.setNavSidebarVisible(paneId, false)"
+      >
+        <IconChevronDoubleRight20Regular />
+      </button>
     </nav>
+    <!-- `keep-clear-of` is the rail itself: the panels open beside it, never over it, even
+         in a window too narrow for both - there the panel narrows instead. -->
+    <WorkspaceSubmenu
+      ref="workspacesSubmenu"
+      v-model:open="workspacesOpen"
+      :anchor="workspacesButtonEl"
+      :keep-clear-of="navPanelEl"
+      prefer="left"
+    />
+    <AppNavSidebarOverflowMenu
+      v-model:open="overflowOpen"
+      :anchor="overflowButtonEl"
+      :keep-clear-of="navPanelEl"
+      :collapsed-keys="overflowedRailKeys"
+      @select="onOverflowRowSelect"
+    />
   </div>
 </template>
 
@@ -154,7 +261,10 @@ const homeIcon = documentIcon('home').icon24
 
    Icons only, and it stays that way: the labels live in the tooltips, and the panel does
    not widen on hover. A width that changed under the pointer moved every icon the moment
-   you went to click one. */
+   you went to click one.
+
+   The 32px button and this 6px gap are mirrored as constants in useAppNavSidebarOverflow -
+   change either here, change it there. */
 .nav-panel {
   position: absolute;
   /* PHYSICAL top/bottom/right, deliberately, not the logical inset-* properties: the
@@ -190,10 +300,12 @@ const homeIcon = documentIcon('home').icon24
   display: none;
 }
 
-.nav-group-end {
-  display: flex;
-  flex-direction: column;
-  margin-top: auto;
+/* The empty stretch between the destinations and the controls. It takes whatever height is
+   spare, so when the rail is short it is exactly zero and the column is packed - which is
+   precisely when the overflow collapse starts. */
+.nav-spacer {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .nav-btn {
@@ -224,5 +336,10 @@ const homeIcon = documentIcon('home').icon24
 .nav-btn-sm svg {
   width: 20px;
   height: 20px;
+}
+
+/* Held down while its submenu is up, so the rail says which button the panel belongs to. */
+.nav-btn--on {
+  background: color-mix(in srgb, var(--text-primary) 10%, transparent);
 }
 </style>
