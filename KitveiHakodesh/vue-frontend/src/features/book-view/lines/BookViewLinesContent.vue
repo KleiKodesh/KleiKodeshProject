@@ -157,6 +157,7 @@ const { getWordLinkAnchorsForLine, loadWordLinkAnchorsForLines } = useWordLinkAn
 )
 
 const { lineContent } = useBookViewLineRenderer(settingsStore, diacriticsState, () => ({
+  activeVersionId: props.activeVersionId,
   searchQuery: props.searchQuery,
   searchHighlightLineIndex: props.searchHighlightLineIndex,
   searchHighlightQuery: props.searchHighlightQuery,

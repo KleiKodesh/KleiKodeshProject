@@ -64,6 +64,12 @@ export interface BookViewLinesScrollProps {
    * time like the panels above. null = the book's merged text.
    */
   versionPersistState?: () => string | null
+  /**
+   * The alternate version being rendered, or null for the merged text. Part of the
+   * line renderer's cache key — a swap changes a line's text while its index and id
+   * stay the same, which the cache would otherwise read as "nothing to re-render".
+   */
+  activeVersionId?: number | null
   selectedLineId?: number | null
   searchBarVisible?: boolean
 }

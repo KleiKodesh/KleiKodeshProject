@@ -471,6 +471,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                     :commentary-persist-state="commentaryPersistState"
                     :toc-persist-state="tocPersistState"
                     :version-persist-state="versionPersistState"
+                    :active-version-id="activeVersionId"
                     :initial-line-index="initialLineIndex"
                     :initial-scroll-index="initialScrollTop"
                     :initial-scroll-offset="initialScrollOffset"
