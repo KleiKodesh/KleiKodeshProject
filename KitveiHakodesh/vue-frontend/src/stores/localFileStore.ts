@@ -100,8 +100,9 @@ export const useLocalFileStore = defineStore('localFile', () => {
     if (t) { clearInterval(t); _hbProgressTimers.delete(tabId) }
   }
 
-  /** Poll the service's live download progress and update the tab's loading text (keeps the
-   *  spinner ring; only the sub-text changes). No-op in hosted mode (getHbDownloadProgress → null). */
+  /** Poll the live download progress and update the tab's loading text (keeps the spinner ring;
+   *  only the sub-text changes). Works in both modes — the service streams the PDF in dev, C#
+   *  streams it over HttpClient when hosted, and both report real bytes. */
   function startHbProgressPoll(tabId: string, bookId: string) {
     stopHbProgressPoll(tabId)
     const fmtMb = (b: number) => (b / (1024 * 1024)).toFixed(1)
@@ -215,7 +216,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
       )
     }
     if (msg.event === 'hbPdfCancelled') {
-      cancelHbDownload(msg.tabId as string, !!(msg.notFound as boolean), !!(msg.noInternet as boolean))
+      cancelHbDownload(
+        msg.tabId as string,
+        !!(msg.notFound as boolean),
+        !!(msg.noInternet as boolean),
+        !!(msg.cancelled as boolean),
+      )
     }
   })
 
@@ -401,9 +407,12 @@ export const useLocalFileStore = defineStore('localFile', () => {
   }
 
   /** Called on hbPdfCancelled — closes the tab. Shows an error if the book was not found. */
-  function cancelHbDownload(tabId: string, notFound = false, noInternet = false) {
+  function cancelHbDownload(tabId: string, notFound = false, noInternet = false, cancelled = false) {
     stopHbProgressPoll(tabId)
     _converting.delete(tabId)
+    // The user pressed ביטול. cancelConversion already reset this tab to home before asking the
+    // backend to abort, so the abort's own event must not then close that tab out from under them.
+    if (cancelled) return
     if (noInternet || notFound) {
       // Navigate back to the HebrewBooks page so the user sees the error banner
       // rather than losing the tab entirely.

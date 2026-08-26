@@ -630,8 +630,9 @@ namespace KitveiHakodeshLib
                     // Unsubscribing _hb's was a silent no-op that left the handler attached.
                     _webView.CoreWebView2.DownloadStarting -= OnDownloadStarting;
                     _webView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
-                    // OnNavigationCompleted self-unsubscribes on first fire, but only on the
-                    // happy path — a navigation that never completes leaves it attached.
+                    // OnNavigationCompleted stays subscribed for the WebView2's whole lifetime —
+                    // it is what restores the app shell when a navigation off it fails — so this
+                    // is the only place it comes off.
                     _webView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
                 }
 
