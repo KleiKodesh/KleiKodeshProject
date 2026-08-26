@@ -484,12 +484,15 @@ useAppTitleBarShortcuts({
   overflow: hidden;
   height: 24px;
   margin-inline: 6px;
-  /* Extra room on the PHYSICAL left for the absolutely-positioned
-     .bar-title-expand, so a long centered title clips before it reaches the
-     chevron instead of sliding underneath it. Physical (padding-left) to match
-     the chevron's own physical anchoring ? see .bar-title-expand. */
-  padding-inline: 6px;
-  padding-left: 20px;
+  /* 6px of inset all round, plus room for the absolutely-positioned
+     .bar-title-expand so a long title clips before it slides underneath.
+     Reserved on BOTH sides even though the chevron only occupies one: this box
+     CENTERS its content, so a one-sided reservation moves the content box off
+     the border box's axis and the title sits visibly off-centre. Symmetric
+     padding keeps the two concentric, which is what centering assumes, and it
+     costs nothing in practice - the squeeze rule below hands the whole strip
+     back to the breadcrumb the moment it has anything to clip. */
+  padding-inline: 20px;
   position: relative;
   font-weight: 400;
   font-size: 0.82rem;
@@ -538,7 +541,7 @@ useAppTitleBarShortcuts({
 /* No chevron ? no reserved strip. Handing the 20px back is the point of hiding
    it: the breadcrumb gets the room instead of a blank gap where the mark was. */
 .bar-title.is-cramped {
-  padding-left: 6px;
+  padding-inline: 6px;
 }
 /* Search mode swaps in the editable AddressBar, occupying the same box. */
 .bar-search {
