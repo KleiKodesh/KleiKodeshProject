@@ -13,7 +13,7 @@
  */
 import { ref, computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import IconBranchingArrows from '@/components/IconBranchingArrows.vue'
+import IconManuscript from '@/components/IconManuscript.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import type { BookVersionRow } from '@/webview-host/queries.types'
@@ -81,7 +81,7 @@ function onSelect(versionId: number | null) {
       :title="buttonTitle"
       @click="toggleOpen"
     >
-      <IconBranchingArrows />
+      <IconManuscript />
     </button>
 
     <div v-if="isOpen" ref="dropdownRef" class="versions-dropdown" :class="dropdownPositionClass">
