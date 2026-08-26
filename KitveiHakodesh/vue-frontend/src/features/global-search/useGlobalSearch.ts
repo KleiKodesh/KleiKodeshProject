@@ -1,14 +1,21 @@
 /**
  * Unified quick search across three sources, shared by the home page's hero
  * search bar and the title bar's AddressBar:
- *   1. Book catalog — title-only, instant (in-memory inverted index).
- *      When the title search finds nothing, falls back to the TOC heuristics
- *      (debounced) exactly like the catalog page: "בראשית פרק ד" splits into
- *      book="בראשית" and toc="פרק ד" and searches the TOC entries of the
- *      matching books. When the title search DID find books but the query
- *      contains a structural TOC keyword ("משנה תורה הלכות שבת"), the TOC
- *      results are additionally shown below the book results. Results share
- *      the catalog page's IDB LRU cache.
+ *   1. Book catalog — the Lucene catalog TOC index, via `catalogTocSearch`.
+ *      The SAME engine and the SAME single call the catalog page makes (see
+ *      useBookCatalogSearch): book-title docs and full-TOC-path docs are
+ *      searched together and come back ranked. Level-0 hits become the book
+ *      results, level 1+ the TOC results shown below them.
+ *      Debounced at CATALOG_DEBOUNCE_MS — shorter than the other two sources.
+ *
+ *      This used to be an instant in-memory inverted-index match over titles,
+ *      with a TOC-heuristics fallback. That index applied only a two-rule
+ *      frontend normalizer, so it could not resolve the abbreviations the
+ *      backend expands (ט"ז → its full title) — the same query answered
+ *      differently here and on the catalog page. Routing both through one
+ *      engine is what keeps them consistent; do not reintroduce a parallel
+ *      frontend matcher. The old pieces are still exported from
+ *      bookCatalogSearch / bookCatalogSearchTocHeuristics if ever needed.
  *   2. Document Locator (file system) — async; hosted via C#, dev via the service
  *   3. HebrewBooks  — async; hosted via C#, dev via the service
  *
@@ -31,25 +38,11 @@
 
 import { ref, watch } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { normalize } from '@/utils/normalizeText'
-import { normalizeBookPath } from '@/features/book-catalog/bookCatalogSearchNormalizer'
-import { filterBooksByWords } from '@/features/book-catalog/bookCatalogSearch'
-import {
-  runTocHeuristics,
-  runTocKeywordHeuristics,
-  splitQueryAtTocKeyword,
-} from '@/features/book-catalog/bookCatalogSearchTocHeuristics'
-import { isTocKeyword } from '@/features/book-catalog/bookCatalogTocKeywords'
-import {
-  getCatalogTocCache,
-  setCatalogTocCache,
-} from '@/features/book-catalog/bookCatalogTocSearchCache'
 import { searchHbCatalog, type HebrewBook } from '@/features/hebrewbooks/hebrewBooksCatalog'
 import { normalizeAddinQuery, queryTargetsAddins } from '@/features/local-file-search/otzariaAddins'
-import { fileSystemSearch } from '@/webview-host/bridge'
+import { catalogTocSearch, fileSystemSearch } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useSettingsStore } from '@/stores/settingsStore'
-import { dbReady } from '@/webview-host/seforimDb'
 import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 
@@ -77,11 +70,33 @@ export type GlobalSearchResult = CatalogSearchResult | HebrewBooksSearchResult |
 
 export type SearchSourcePriority = 'catalog' | 'hebrewbooks' | 'files'
 
+/** One `catalogTocSearch` hit on the wire (serviceClient camelCases the msgpack keys).
+ *  Mirrors the shape in useBookCatalogSearch — both read the same index. */
+interface CatalogTocServiceHit {
+  bookId: number
+  /** -1 = no resolved line. */
+  lineIndex: number
+  /** Display path: book title, then " / "-joined TOC segments. */
+  fullTocPath: string
+  /** 0 = book-title hit, 1+ = TOC depth. */
+  level: number
+  treeOrder: number
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MIN_QUERY_LENGTH = 2
 const DEBOUNCE_MS = 300
+/** Catalog search debounce. Shorter than DEBOUNCE_MS: the catalog index is local
+ *  and fast, so it can keep up far closer to the typing rate than HB/file search. */
+const CATALOG_DEBOUNCE_MS = 105
 const MAX_RESULTS_PER_SOURCE = 50
+
+/** Poll interval while the service is still building the catalog TOC index
+ *  (first start after a seforim-DB change) — search stays in its loading state. */
+const INDEX_NOT_READY_RETRY_MS = 1200
+/** Re-issue delay when a request was cancelled server-side by a newer one. */
+const SUPERSEDED_RETRY_MS = 150
 
 // Prefixes that shift which source appears first in the dropdown.
 // Matched against the beginning of the normalized query (after stripping spaces).
@@ -144,14 +159,6 @@ function parseQueryPrefix(rawQuery: string): ParsedQuery {
   return { priority: 'catalog', effectiveQuery: trimmed }
 }
 
-// ─── Query normalization ──────────────────────────────────────────────────────
-
-function toQueryWords(rawQuery: string): string[] {
-  return normalizeBookPath(normalize(rawQuery.trim()))
-    .split(/\s+/)
-    .filter((word) => word.length > 0)
-}
-
 // ─── Composable ───────────────────────────────────────────────────────────────
 
 export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
@@ -204,120 +211,168 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   // Track async generation so stale responses are discarded
   let asyncGeneration = 0
-  // Separate counter for the TOC heuristics fallback — the HB/files watcher
-  // increments asyncGeneration on the same debounced query, so sharing one
-  // counter would make each watcher cancel the other.
-  let tocGeneration = 0
+  // Separate counter for the catalog search — the HB/files watcher increments
+  // asyncGeneration on its own debounced query, so sharing one counter would
+  // make each watcher cancel the other.
+  let catalogGeneration = 0
+  // The effective query whose catalog results are currently applied (null when
+  // the results are cleared). refDebounced writes debouncedCatalogQuery with a
+  // plain assignment, so re-typing the SAME text within the debounce window is
+  // a no-op write that fires no watcher. Without this, clearing on a
+  // sub-minimum query and then restoring the previous text would leave the
+  // catalog section permanently empty. Compared against, not watched.
+  let appliedCatalogQuery: string | null = null
 
   const debouncedQuery = refDebounced(searchQuery, DEBOUNCE_MS)
+  const debouncedCatalogQuery = refDebounced(searchQuery, CATALOG_DEBOUNCE_MS)
+
+  /**
+   * Split one ranked `catalogTocSearch` response into the dropdown's two refs.
+   * Level 0 docs are book-title hits, level 1+ are TOC-path hits; the index's
+   * own order is preserved within each, so book hits still lead.
+   * Hits whose book is not in the loaded catalog (e.g. a stale index row) drop.
+   */
+  function applyCatalogHits(hits: CatalogTocServiceHit[]): void {
+    const bookById = new Map(booksDataStore.allBooks.map((b) => [b.id, b]))
+    const books: CatalogSearchResult[] = []
+    const tocItems: TocFsItem[] = []
+
+    for (const hit of hits) {
+      const book = bookById.get(hit.bookId)
+      if (!book) continue
+      if (hit.level === 0) {
+        if (books.length < MAX_RESULTS_PER_SOURCE) books.push({ source: 'catalog', book })
+      } else if (tocItems.length < MAX_RESULTS_PER_SOURCE) {
+        // fullTocPath is "<book title> / <toc path>" — the UI prepends the book
+        // title itself, so show only the TOC part. Navigation is line-based.
+        const titlePrefix = `${book.title} / `
+        const tocPath = hit.fullTocPath.startsWith(titlePrefix)
+          ? hit.fullTocPath.slice(titlePrefix.length)
+          : hit.fullTocPath
+        tocItems.push({
+          uid: `toc-${hit.bookId}-${hit.treeOrder}`,
+          kind: 'toc',
+          book,
+          tocEntryId: 0,
+          tocLineIndex: hit.lineIndex >= 0 ? hit.lineIndex : null,
+          tocTitle: tocPath.split(' / ').pop() ?? tocPath,
+          tocPath,
+        })
+      }
+      if (books.length >= MAX_RESULTS_PER_SOURCE && tocItems.length >= MAX_RESULTS_PER_SOURCE) break
+    }
+
+    setCatalog(books)
+    setCatalogToc(tocItems)
+  }
 
   // ── Catalog search — instant on every keystroke ───────────────────────────
+
+  // ── Catalog search — debounced, via the Lucene catalog TOC index ──────────
+  //
+  // The SAME engine the catalog page uses (useBookCatalogSearch): one
+  // `catalogTocSearch` call answers the whole query. Book-title docs (level 0)
+  // and TOC-path docs (level 1+) come back together, ranked by the index, and
+  // are split into the two result refs the dropdown renders.
+  //
+  // This replaced an in-memory inverted-index match. That index knew nothing of
+  // the abbreviation map the backend applies (ט"ז → its full title), so the
+  // address bar and the catalog page answered the same query differently. The
+  // backend expands abbreviations BEFORE stripping punctuation, which a
+  // frontend normalizer cannot reproduce without duplicating the map.
 
   watch(
     searchQuery,
     (rawQuery) => {
+      // Priority prefixes drive section ordering and must stay instant — only
+      // the catalog results themselves are debounced.
       const { priority, effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
       sourcePriority.value = priority
 
-      // Cancel any in-flight TOC heuristics — the query has changed
-      tocGeneration++
+      // Instant clear so an emptied/too-short input doesn't keep showing stale
+      // results for the debounce interval.
+      if (effectiveQuery.length < MIN_QUERY_LENGTH) {
+        catalogGeneration++
+        appliedCatalogQuery = null
+        setCatalog([])
+        setCatalogToc([])
+        isLoadingCatalogToc.value = false
+        return
+      }
 
-      if (effectiveQuery.length < MIN_QUERY_LENGTH || !dbReady.value) {
-        setCatalog([])
-        setCatalogToc([])
-        isLoadingCatalogToc.value = false
-        return
-      }
-      const words = toQueryWords(effectiveQuery)
-      if (!words.length) {
-        setCatalog([])
-        setCatalogToc([])
-        isLoadingCatalogToc.value = false
-        return
-      }
-      const matched = filterBooksByWords(booksDataStore.allBooks, words)
-      setCatalog(matched.slice(0, MAX_RESULTS_PER_SOURCE).map((book) => ({
-        source: 'catalog' as const,
-        book,
-      })))
-      // Title search found books — the TOC fallback doesn't apply
-      if (matched.length > 0) {
-        setCatalogToc([])
-        isLoadingCatalogToc.value = false
+      // Back above the minimum. If the debounced ref already holds this exact
+      // query, its next write is a no-op and the search watcher will not fire —
+      // so run it here instead. (Typing "ab", then one char, then "ab" again
+      // within the debounce window.)
+      if (
+        appliedCatalogQuery === null &&
+        parseQueryPrefix(debouncedCatalogQuery.value ?? '').effectiveQuery === effectiveQuery
+      ) {
+        void runCatalogSearch(effectiveQuery)
       }
     },
     { immediate: true },
   )
 
-  // ── Catalog TOC heuristics — debounced, two triggers ────────────────────────
-  //
-  // a) Fallback: the title search found nothing — same flow as
-  //    useBookCatalogSearch Phase 2 (longest book-matching prefix split).
-  // b) Keyword (additive): the title search DID find books but the query
-  //    contains a structural TOC keyword — TOC results are shown below the
-  //    book results in the dropdown's catalog section.
-  //
-  // Both check the shared IDB result cache first, otherwise run the heuristics
-  // pipeline against the DB. A generation counter discards stale responses;
-  // the instant watcher above bumps it on every keystroke.
+  /**
+   * Run one catalog search and apply its results, unless a newer search has
+   * started (generation bump) while this one was in flight.
+   */
+  async function runCatalogSearch(effectiveQuery: string): Promise<void> {
+    const generation = ++catalogGeneration
+
+    isLoadingCatalogToc.value = true
+    try {
+      // Retry while the index is still building — a newer search supersedes the loop.
+      for (;;) {
+        const res = await catalogTocSearch(effectiveQuery)
+        if (generation !== catalogGeneration) return
+        // A hard failure (index missing or unreadable) is terminal — retrying it
+        // would poll forever and hold the spinner on for the life of the query.
+        if (res.error) {
+          setCatalog([])
+          setCatalogToc([])
+          appliedCatalogQuery = effectiveQuery
+          break
+        }
+        if (res.ready && !res.superseded) {
+          applyCatalogHits(res.results ?? [])
+          appliedCatalogQuery = effectiveQuery
+          break
+        }
+        // superseded (requests raced on the pipe) → re-issue promptly; not-ready
+        // (index still building) → poll slowly.
+        await new Promise((resolve) =>
+          setTimeout(resolve, res.superseded ? SUPERSEDED_RETRY_MS : INDEX_NOT_READY_RETRY_MS),
+        )
+        if (generation !== catalogGeneration) return
+      }
+    } catch {
+      if (generation === catalogGeneration) {
+        setCatalog([])
+        setCatalogToc([])
+        appliedCatalogQuery = effectiveQuery
+      }
+    } finally {
+      if (generation === catalogGeneration) isLoadingCatalogToc.value = false
+    }
+  }
 
   watch(
-    debouncedQuery,
-    async (rawQuery) => {
-      const generation = ++tocGeneration
+    debouncedCatalogQuery,
+    (rawQuery) => {
       const { effectiveQuery } = parseQueryPrefix(rawQuery ?? '')
 
-      if (effectiveQuery.length < MIN_QUERY_LENGTH || !dbReady.value) return
-      const words = toQueryWords(effectiveQuery)
-      if (!words.length) return
-
-      const filterBooks = (bookWords: string[]) =>
-        filterBooksByWords(booksDataStore.allBooks, bookWords)
-
-      // Keyword trigger only applies when the title search found books AND the
-      // query has a keyword split; pure book queries are done — Phase 1
-      // already rendered them (and the instant watcher cleared old TOC items).
-      const isKeywordTrigger = filterBooks(words).length > 0
-      if (
-        isKeywordTrigger &&
-        !splitQueryAtTocKeyword(words, isTocKeyword, (ws) => filterBooks(ws).length > 0)
-      ) {
-        return
-      }
-
-      // Check the shared disk cache before hitting the DB
-      const normalizedQuery = words.join(' ')
-      const cached = await getCatalogTocCache(normalizedQuery)
-      if (generation !== tocGeneration) return
-      if (cached) {
-        setCatalogToc(cached.items.slice(0, MAX_RESULTS_PER_SOURCE))
+      if (effectiveQuery.length < MIN_QUERY_LENGTH) {
+        catalogGeneration++
+        appliedCatalogQuery = null
+        setCatalog([])
+        setCatalogToc([])
         isLoadingCatalogToc.value = false
         return
       }
 
-      isLoadingCatalogToc.value = true
-
-      try {
-        const { items } = isKeywordTrigger
-          ? await runTocKeywordHeuristics(
-              words,
-              filterBooks,
-              isTocKeyword,
-              () => generation !== tocGeneration,
-            )
-          : await runTocHeuristics(words, filterBooks, () => generation !== tocGeneration)
-
-        if (generation !== tocGeneration) return
-
-        setCatalogToc(items.slice(0, MAX_RESULTS_PER_SOURCE))
-
-        // Persist the full result set to the shared cache (fire-and-forget)
-        if (items.length > 0) setCatalogTocCache(normalizedQuery, items)
-      } catch {
-        if (generation === tocGeneration) setCatalogToc([])
-      } finally {
-        if (generation === tocGeneration) isLoadingCatalogToc.value = false
-      }
+      void runCatalogSearch(effectiveQuery)
     },
     { immediate: true },
   )
@@ -385,7 +440,8 @@ export function useGlobalSearch(searchQuery: ReturnType<typeof ref<string>>) {
 
   function clearResults() {
     asyncGeneration++
-    tocGeneration++
+    catalogGeneration++
+    appliedCatalogQuery = null
     pendingCatalog = null
     pendingCatalogToc = null
     pendingHebrewBooks = null
