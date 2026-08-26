@@ -170,12 +170,21 @@ const RECENTS_TITLE = 'חיפושים אחרונים'
  * the two this click really was.
  *
  * A keyboard press (Tab to the button, then Enter/Space) fires click with NO preceding
- * pointerdown, so the flag would still hold whatever the last mouse press left — which
- * made the list impossible to close from the keyboard. `event.detail === 0` marks those
- * synthesised clicks; there the live `open` state is the truth. The flag is cleared
- * after every use so it can never leak into the next press.
+ * pointerdown — `event.detail === 0` marks those synthesised clicks. Reading the live
+ * `open` state is no good there either: moving focus to the chevron blurs the field, and
+ * that blur closes the list before the click ever lands.
+ *
+ * So the keyboard path records the state on KEYDOWN, which fires on every activation and
+ * always before the blur-close and the synthesised click. Focus alone will not do: when
+ * the button already has focus, pressing it again fires no focus event and the recorded
+ * state would be a stale one.
+ *
+ * Keyboard activation also leaves focus on the chevron rather than pulling it back to
+ * the field, so the button stays where the user left it. Both flags are cleared after
+ * every use so neither leaks into the next press.
  */
 let wasOpenOnPress = false
+let wasOpenOnKeydown = false
 // The listbox renders on open AND non-empty, so aria-expanded must track both or it
 // advertises a list that is not in the DOM.
 const recentsListVisible = computed(() => recents.open.value && recents.suggestions.value.length > 0)
@@ -183,16 +192,23 @@ const recentsListVisible = computed(() => recents.open.value && recents.suggesti
 function onChevronPress() {
   wasOpenOnPress = recents.open.value
 }
+function onChevronKeydown(event: KeyboardEvent) {
+  // The two keys that synthesise a click on a button.
+  if (event.key === 'Enter' || event.key === ' ') wasOpenOnKeydown = recents.open.value
+}
 function toggleRecents(event: MouseEvent) {
   const fromKeyboard = event.detail === 0
-  const wasOpen = fromKeyboard ? recents.open.value : wasOpenOnPress
+  const wasOpen = fromKeyboard ? wasOpenOnKeydown : wasOpenOnPress
   wasOpenOnPress = false
+  wasOpenOnKeydown = false
   if (wasOpen) {
     recents.onBlur()
     return
   }
   recents.onFocus()
-  inputRef.value?.focus()
+  // A mouse press never moves focus here (mousedown is prevented), so the caret belongs
+  // back in the field; a keyboard user is ON the button and must stay there.
+  if (!fromKeyboard) inputRef.value?.focus()
 }
 
 const MODE_ICONS: Record<SearchMode, Component> = {
@@ -283,6 +299,7 @@ defineExpose({ focus: focusInput })
           :class="{ active: recentsListVisible }"
           :title="RECENTS_TITLE"
           @pointerdown="onChevronPress"
+          @keydown="onChevronKeydown"
           @mousedown.prevent
           @click="toggleRecents"
         >
