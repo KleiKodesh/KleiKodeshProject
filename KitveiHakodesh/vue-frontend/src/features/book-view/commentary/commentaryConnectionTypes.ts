@@ -58,7 +58,7 @@ export function normalizeConnectionTypeName(dbName: string): CommentaryConnectio
 }
 
 export const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, string> = {
-  SOURCE: 'מקור',
+  SOURCE: 'מקושרים',
   TARGUM: 'תרגומים',
   COMMENTARY: 'מפרשים',
   EIN_MISHPAT: 'עין משפט',
@@ -68,7 +68,7 @@ export const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, st
 
 // Reverse mapping: Hebrew label → connection type
 export const SECTION_LABEL_TO_CONNECTION_TYPE: Record<string, CommentaryConnectionType> = {
-  מקור: 'SOURCE',
+  מקושרים: 'SOURCE',
   תרגומים: 'TARGUM',
   מפרשים: 'COMMENTARY',
   'עין משפט': 'EIN_MISHPAT',

@@ -34,7 +34,7 @@ DB names map to canonical types as follows:
 
 | DB name | Canonical | Section label |
 |---|---|---|
-| `SOURCE` | `SOURCE` | מקור |
+| `SOURCE` | `SOURCE` | מקושרים |
 | `MESORAH_HASHAS` | `REFERENCE` | ציונים |
 | `TARGUM` | `TARGUM` | תרגומים |
 | `COMMENTARY` | `COMMENTARY` | מפרשים |
