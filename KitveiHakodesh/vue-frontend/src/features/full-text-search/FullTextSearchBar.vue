@@ -10,9 +10,9 @@ import {
   IconCheckmark20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
-import AutofillDropdown from '@/components/common/AutofillDropdown.vue'
+import RecentSearchesDropdown from '@/components/common/RecentSearchesDropdown.vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useAutofill } from '@/composables/useAutofill'
+import { useRecentSearches } from '@/composables/useRecentSearches'
 import type { FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 const props = defineProps<{
@@ -40,11 +40,11 @@ const emit = defineEmits<{
 const filterBtnRef = ref<HTMLElement | null>(null)
 const advancedBtnRef = ref<HTMLElement | null>(null)
 
-// App-owned "recent searches" autofill (works in WebView2, unlike the browser's
-// native form autofill). af.query IS the input's model. Committing a suggestion
+// The app's own recent-searches list (works in WebView2, unlike the browser's native
+// form autofill). recents.query IS the input's model. Committing a suggestion
 // (click / Enter) runs the search immediately.
-const af = useAutofill({ key: 'fts-search', onSelect: () => handleSearch() })
-const localQuery = af.query
+const recents = useRecentSearches({ key: 'fts-search', onSelect: () => handleSearch() })
+const localQuery = recents.query
 localQuery.value = props.searchQuery
 
 // ── Sort dropdown ─────────────────────────────────────────────────────────────
@@ -110,26 +110,26 @@ watch(localQuery, (v) => (v ? pauseTyping() : resumeTyping()))
 
 function handleSearch() {
   if (localQuery.value.trim()) {
-    af.record() // commit the query to recent-searches history
+    recents.record() // commit the query to recent-searches history
     emit('search', localQuery.value)
   }
 }
 function handleClear() {
   localQuery.value = ''
   emit('clear')
-  af.inputEl.value?.focus()
+  recents.inputEl.value?.focus()
 }
 
-// Autofill navigation runs first; if it consumed the key (accepted a suggestion,
+// Recent-searches navigation runs first; if it consumed the key (accepted a suggestion,
 // or closed the dropdown on Esc) it preventDefaults and we don't act.
 function onInputKeydown(e: KeyboardEvent) {
-  af.onKeydown(e)
+  recents.onKeydown(e)
   if (e.defaultPrevented) return
   if (e.key === 'Enter') handleSearch()
   else if (e.key === 'Escape') handleClear()
 }
 
-defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
+defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
 </script>
 
 <template>
@@ -155,7 +155,7 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
       </button>
     </template>
     <input
-      :ref="af.setInput"
+      :ref="recents.setInput"
       v-model="localQuery"
       type="text"
       class="search-input"
@@ -163,12 +163,12 @@ defineExpose({ focus: af.focus, filterBtnRef, advancedBtnRef })
       :disabled="disabled"
       spellcheck="true"
       autocomplete="off"
-      @focus="af.onFocus"
-      @input="af.onInput"
-      @blur="af.onBlur"
+      @focus="recents.onFocus"
+      @input="recents.onInput"
+      @blur="recents.onBlur"
       @keydown="onInputKeydown"
     />
-    <AutofillDropdown :controller="af" />
+    <RecentSearchesDropdown :controller="recents" />
     <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
       {{ resultCount.toLocaleString() }}
       <template v-if="!isSearching && resultCount < totalResultCount">

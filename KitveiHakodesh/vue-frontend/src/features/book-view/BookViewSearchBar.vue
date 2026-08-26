@@ -10,6 +10,8 @@ import {
   IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useRecentSearches } from '@/composables/useRecentSearches'
+import BookViewSearchRecentsDropdown from './BookViewSearchRecentsDropdown.vue'
 import { searchModeForSlot, slotForSearchMode } from './bookViewTypes'
 import type { CommentarySlot, SearchMode } from './bookViewTypes'
 
@@ -34,8 +36,31 @@ const emit = defineEmits<{
 }>()
 
 const inputRef = ref<HTMLInputElement | null>(null)
-const inputValue = ref(props.query ?? '')
 const searchMode = ref<SearchMode>(props.mode)
+
+/**
+ * Recent queries, through the same pair the full-text-search bar uses: the
+ * `useRecentSearches` controller and the <RecentSearchesDropdown> popup. Its own storage
+ * key, so it is its own list — searching inside a book and searching the whole library
+ * are different intents.
+ *
+ * The key is a constant rather than anything per-tab, which is what makes the history
+ * global: every book-view bar in the app builds a controller over this one key, so a
+ * phrase searched in one book is offered in the next. Ten entries, LRU, persisted.
+ *
+ * `recents.query` IS the input's model, so `inputValue` keeps its old meaning and the
+ * watchers below are unchanged.
+ */
+const recents = useRecentSearches({ key: 'book-view-search', max: 10 })
+const inputValue = recents.query
+inputValue.value = props.query ?? ''
+
+// One element, two owners: `inputRef` drives focusInput below, and the recents
+// controller needs the same node for its own focus and outside-click handling.
+function setInputEl(el: unknown) {
+  inputRef.value = el instanceof HTMLInputElement ? el : null
+  recents.setInput(el as Parameters<typeof recents.setInput>[0])
+}
 
 /**
  * Focus the field, and with `selectAll` also select what is in it so the next keystroke
@@ -85,7 +110,7 @@ const placeholder = computed(() =>
 
 const matchLabel = computed(() => {
   if (!inputValue.value) return ''
-  if (props.matchCount === 0) return 'לא נמצא'
+  if (props.matchCount === 0) return '0 / 0'
   if (props.matchCount > 0) return `${props.currentMatch + 1} / ${props.matchCount}`
   return ''
 })
@@ -102,8 +127,72 @@ function onInput(event: Event) {
 }
 
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Enter') event.shiftKey ? emit('prev') : emit('next')
-  else if (event.key === 'Escape') onClose()
+  // Recents first: while the list is open it owns the arrows, Enter (accept the
+  // highlighted suggestion) and Escape (close the list), calling preventDefault on those
+  // so the bar's own Enter/Escape below don't also fire on the same press.
+  const acceptingSuggestion =
+    event.key === 'Enter' && recents.open.value && recents.activeIndex.value >= 0
+  recents.onKeydown(event)
+  if (event.defaultPrevented) {
+    // Accepting a suggestion is still an Enter, so it counts as running that query:
+    // re-record it to move it back to the front of the list. Without this the entry
+    // the user just chose keeps sinking while newer ones stay above it.
+    if (acceptingSuggestion) recents.record()
+    return
+  }
+
+  if (event.key === 'Enter') {
+    // Enter is this bar's only submit — there is no search button — so it is the one
+    // place a query is worth recording. Per keystroke would instead fill the list with
+    // the prefixes of a single search.
+    recents.record()
+    event.shiftKey ? emit('prev') : emit('next')
+  } else if (event.key === 'Escape') onClose()
+}
+
+// Unique per bar: split view mounts two, and duplicate DOM ids would cross-wire
+// each field's aria-controls to the other pane's listbox.
+const listboxId = `book-view-recents-${Math.random().toString(36).slice(2)}`
+
+const RECENTS_TITLE = 'חיפושים אחרונים'
+
+/**
+ * The recents chevron — the ONLY thing that opens the list here. Focus and typing
+ * deliberately do not (unlike the search page): this bar sits over the text the reader
+ * is in, so the list appears when asked for and never on its own.
+ *
+ * `onFocus` is the composable's open-the-list entry point; nothing is wired to the
+ * field's own focus event, so calling it here opens the list and nothing else does.
+ *
+ * The guard: the popup dismisses itself on any outside click and the chevron IS outside
+ * it, so that dismiss lands before this handler and the click would reopen what the user
+ * meant to close. Reading `open` on pointerdown, before the popup reacts, says which of
+ * the two this click really was.
+ *
+ * A keyboard press (Tab to the button, then Enter/Space) fires click with NO preceding
+ * pointerdown, so the flag would still hold whatever the last mouse press left — which
+ * made the list impossible to close from the keyboard. `event.detail === 0` marks those
+ * synthesised clicks; there the live `open` state is the truth. The flag is cleared
+ * after every use so it can never leak into the next press.
+ */
+let wasOpenOnPress = false
+// The listbox renders on open AND non-empty, so aria-expanded must track both or it
+// advertises a list that is not in the DOM.
+const recentsListVisible = computed(() => recents.open.value && recents.suggestions.value.length > 0)
+
+function onChevronPress() {
+  wasOpenOnPress = recents.open.value
+}
+function toggleRecents(event: MouseEvent) {
+  const fromKeyboard = event.detail === 0
+  const wasOpen = fromKeyboard ? recents.open.value : wasOpenOnPress
+  wasOpenOnPress = false
+  if (wasOpen) {
+    recents.onBlur()
+    return
+  }
+  recents.onFocus()
+  inputRef.value?.focus()
 }
 
 const MODE_ICONS: Record<SearchMode, Component> = {
@@ -167,7 +256,7 @@ defineExpose({ focus: focusInput })
              openSearch, which would re-target the bar and select-all over a query the
              user is still typing. -->
         <input
-          ref="inputRef"
+          :ref="setInputEl"
           data-ctrlf-enabled
           :value="inputValue"
           type="search"
@@ -175,12 +264,43 @@ defineExpose({ focus: focusInput })
           :placeholder="placeholder"
           spellcheck="true"
           autocomplete="off"
+          role="combobox"
+          aria-autocomplete="list"
+          :aria-expanded="recentsListVisible"
+          :aria-controls="listboxId"
           @input="onInput"
+          @blur="recents.onBlur"
           @keydown="onKeydown"
         />
         <span class="match-count" :class="{ 'no-match': props.matchCount === 0 }">{{ matchLabel }}</span>
+        <!-- Recents chevron, and the only way to open the list. Shown only while the
+             field is empty (with a query typed the reader is searching, not browsing
+             what they searched before) AND there is history to show, so it is never a
+             live-looking button that does nothing. -->
+        <button
+          v-if="!inputValue && recents.suggestions.value.length"
+          class="recents-btn"
+          :class="{ active: recentsListVisible }"
+          :title="RECENTS_TITLE"
+          @pointerdown="onChevronPress"
+          @mousedown.prevent
+          @click="toggleRecents"
+        >
+          <IconChevronDown20Regular />
+        </button>
+        <!-- Recent searches, as a combobox listbox belonging to the field: sized to
+             the input and styled like the mode menu, not the search page's floating
+             bubble. Rows carry an × to drop a single query. -->
+        <BookViewSearchRecentsDropdown
+          :controller="recents"
+          :open-up="isBottomAnchored"
+          :listbox-id="listboxId"
+        />
       </div>
 
+      <!-- Leading separator appears only with the mode toggle it introduces: the toggle
+           is its own group (where the search runs). -->
+      <span v-if="props.commentaryVisible" class="sep" />
       <div v-if="props.commentaryVisible" class="mode-dropdown">
         <button
           ref="modeBtnRef"
@@ -204,7 +324,9 @@ defineExpose({ focus: focusInput })
           </button>
         </div>
       </div>
-      <span v-if="props.commentaryVisible" class="sep" />
+      <!-- Always shown: this divides the field (and the mode toggle, when present) from
+           the match navigation, which is never hidden. -->
+      <span class="sep" />
 
       <button class="nav-btn" :disabled="props.matchCount === 0" @click="emit('prev')">
         <IconChevronUp20Regular />
@@ -217,6 +339,7 @@ defineExpose({ focus: focusInput })
       <button class="close-btn" @click="onClose"><IconDismiss20Regular /></button>
 
       <slot name="panel" />
+
     </div>
   </Transition>
 </template>
@@ -235,7 +358,9 @@ defineExpose({ focus: focusInput })
   align-items: center;
   gap: 2px;
   width: fit-content;
-  padding: 1px 3px;
+  /* Asymmetric like the reference widget (0 4px 0 9px): more room where the field
+     starts, less where the buttons end. */
+  padding: 2px 4px 2px 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
@@ -248,6 +373,16 @@ defineExpose({ focus: focusInput })
   align-items: center;
   padding: 1px 6px;
   gap: 4px;
+  /* The global .search-inner is a tinted, bordered 999px pill — right for a search
+     PAGE, wrong here. This is a find-in-page widget: VS Code's (and Chrome's) put the
+     field straight into the widget with no inner container, and a pill inside the
+     bar's own border reads as a box in a box. Strip it back to the bare field. */
+  height: 24px;
+  background: none;
+  border: none;
+  border-radius: 0;
+  /* Positioning context for the recents listbox, which is sized to this field. */
+  position: relative;
 }
 
 .search-input {
@@ -259,6 +394,9 @@ defineExpose({ focus: focusInput })
   color: var(--text-primary);
   cursor: text;
   direction: rtl;
+  /* Pinned, like the reference widget's 25px input row: without it the bar's height is
+     whatever the glyphs happen to be, and it drifts between fonts and zoom levels. */
+  height: 24px;
 }
 
 .search-input::placeholder { color: var(--text-secondary); }
@@ -327,6 +465,21 @@ defineExpose({ focus: focusInput })
 }
 .mode-btn svg { width: 16px; height: 16px; }
 .mode-btn.active { color: var(--accent-color); }
+
+/* Sits inside the input group, so it reads as part of the field rather than as
+   another toolbar button. */
+.recents-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+.recents-btn svg { width: 14px; height: 14px; }
+.recents-btn.active { color: var(--accent-color); }
 
 .mode-dropdown { position: relative; }
 
