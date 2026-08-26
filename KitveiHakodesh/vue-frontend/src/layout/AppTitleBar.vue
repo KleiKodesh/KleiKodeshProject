@@ -566,43 +566,97 @@ useAppTitleBarShortcuts({
 
 /* ---- The one-time discoverability hint --------------------------------------
    The chevron is deliberately faint at rest, which is right once you know what the
-   box is and useless before then. While the hint is live it travels: it slides in
-   along its own axis, overshoots, and settles back - the movement a thing makes
-   when it drops into a slot, which reads as "this opens" far better than a mark
-   that merely brightens in place.
+   box is and useless before then. While the hint is live it travels: it slides down
+   into its slot, overshoots, rebounds, and settles - the movement a thing makes when
+   it drops into place, which says "this opens" far better than brightening does.
 
    The chevron points DOWN, so the track is vertical and the slide runs the way the
    mark itself points - the motion and the symbol say the same thing.
 
-   Travel is capped at 5px each way. The mark is 12px in a 24px box, centred by the
-   parent's align-items, so it has exactly 6px of clearance before .bar-title's
-   overflow: hidden starts shearing it. 5px keeps a pixel in hand at both extremes.
+   THREE RUNS, NOT INFINITE. Total motion is 3 x 900ms = 2.7s, deliberately under
+   the five seconds at which WCAG 2.2 SC 2.2.2 (Pause, Stop, Hide, level A) starts
+   requiring a pause control for motion that auto-starts alongside other content.
+   That budget is CUMULATIVE, not per-cycle, so looping forever with a long quiet
+   gap between runs would not have helped - it would have failed the criterion and
+   been more intrusive besides. A hint cannot claim the "essential" exemption
+   either: what it conveys is available statically, from the chevron just sitting
+   there.
 
-   Bounded by the hint, not by a count: it runs until the reader opens the box, which
-   is the behaviour being taught. A fixed number of runs would stop teaching while the
-   lesson was still unlearned. The long tail on the keyframes is the rest between
-   runs - without it a loop this short reads as a jitter rather than a gesture. */
-@keyframes bar-title-expand-hint {
-  /* Off the top of its slot, invisible - the start of the travel, not a flicker. */
-  0%       { opacity: 0;    transform: translateY(-5px); }
-  /* Sliding in, now visible. */
-  15%      { opacity: 1;    transform: translateY(-3px); }
-  /* Overshoots PAST the resting place: the bounce is an overshoot and a recovery, */
-  /* so the mark has to pass its mark to have something to come back from. */
-  30%      { opacity: 1;    transform: translateY(3px); }
-  /* Recovers, with a smaller counter-overshoot - each rebound loses energy. */
-  40%      { opacity: 1;    transform: translateY(-1.5px); }
-  /* Settled, at rest in its slot. */
-  48%      { opacity: 1;    transform: translateY(0); }
-  /* Holds there, then fades for the next run. The hold is most of the cycle. */
-  88%      { opacity: 1;    transform: translateY(0); }
-  100%     { opacity: 0;    transform: translateY(-5px); }
+   Losing the loop costs nothing real. The hint is armed by a persisted flag, so a
+   reader who misses all three runs is shown them again next launch, and every
+   launch after, until they open the box once. It stops because it worked, not
+   because a timer ran out mid-lesson.
+
+   WHY linear() AND NOT cubic-bezier. The obvious choice is easeOutBack
+   (cubic-bezier(0.34, 1.56, 0.64, 1)), whose y passes 1 so the mark travels beyond
+   its resting place and comes back. At this size it does nothing: a bezier of that
+   shape peaks about 10% past the target, and 10% of the 6px this mark has to move
+   is half a pixel. Back-out curves need roughly 20-30px of travel to read as a
+   bounce at all, and a 12px icon centred in a 24px box can never have that - the
+   clearance to .bar-title's overflow: hidden is 6px, full stop.
+
+   linear() is not held to a single ~10% overshoot. It samples a spring as explicit
+   stops, so the peak is whatever the spring says: here about 1.45, which on 6px of
+   travel is a 2.7px overshoot DOWNWARD - past the resting point toward the bottom
+   edge, not further up - which is visible on a 12px mark and still inside the 6px
+   clearance below it. The -6px start sits flush against the top clearance with
+   nothing to spare, so this travel cannot be increased without clipping the first
+   frame. It also carries the small SECOND rebound below, which a cubic-bezier
+   cannot express at any amplitude: one overshoot is that curve's mathematical
+   ceiling. Chrome/Edge 113+, Firefox 112+, Safari 17.2+, and this app ships on
+   WebView2, so the @supports fallback below is a formality rather than a real
+   branch - but a formality worth keeping, since it degrades to a real curve. */
+/* Two animations, not one: the transform and the opacity need DIFFERENT timing
+   functions, and a shared keyframe list cannot give them that. A single set of
+   stops would also mean the opacity stop at the fade-in splits the travel in two,
+   restarting the spring halfway and playing a truncated bounce twice. Split, each
+   property gets its own curve over its own stops. */
+@keyframes bar-title-expand-hint-move {
+  /* Above the slot; the travel is done by the halfway mark. The rest of the cycle
+     holds at the resting position, and that hold is what separates the three runs:
+     back-to-back springs would blur into one long wobble instead of reading as
+     three deliberate nudges. Spacing them this way keeps each bounce quick, where
+     simply lengthening the cycle would have stretched the spring into slow motion. */
+  from    { transform: translateY(-6px); }
+  50%, to  { transform: translateY(0); }
+}
+@keyframes bar-title-expand-hint-fade {
+  /* Fades in over the first sixth so a run begins as an arrival, not a blink, then
+     sits at the resting opacity for the hold. The shorthand adds `backwards` so the
+     element takes this 0 BEFORE the first frame - without it the base 0.45 paints
+     for a frame first and the run opens on the blink this fade exists to avoid. */
+  from { opacity: 0; }
+  18%  { opacity: 1; }
+  50%, to { opacity: 0.45; }
 }
 .bar-title-expand.is-hinting {
-  /* linear, NOT ease-in-out: the keyframes above already carry the easing in their
-     spacing (fast slide, sharp overshoot, decaying rebound, long hold). Adding a
-     curve on top would soften exactly the snap the bounce depends on. */
-  animation: bar-title-expand-hint 2.4s linear infinite;
+  /* Fallback for anything without linear(): a real back-out curve, which at this
+     size lands as a plain slide with no perceptible bounce. Correct, just quieter. */
+  animation:
+    bar-title-expand-hint-move 900ms cubic-bezier(0.34, 1.56, 0.64, 1) 3,
+    bar-title-expand-hint-fade 900ms ease-out 3 backwards;
+}
+@supports (animation-timing-function: linear(0, 1)) {
+  .bar-title-expand.is-hinting {
+    /* A spring sampled as stops: overshoots to ~1.45, rebounds to ~0.91, settles.
+       Generated from spring parameters rather than hand-tuned - do not nudge these
+       individually, regenerate the set if the motion needs to change.
+
+       TWO values, comma-separated, because the shorthand above declares two
+       animations and this longhand is matched against them in order. A single value
+       would apply the spring to the opacity fade as well, overshooting it past full
+       and clipping - which is exactly the spatial-vs-effects distinction that says
+       position may bounce and opacity may not. The fade keeps its ease-out. */
+    animation-timing-function:
+      linear(
+        0, 0.0632, 0.2278, 0.4471, 0.6784, 0.8944, 1.0759, 1.2124,
+        1.3018, 1.3479, 1.4165, 1.4499, 1.4486, 1.4165, 1.36, 1.2866,
+        1.2043, 1.1201, 1.0399, 0.9679, 0.9337, 0.9186, 0.9145, 0.9204,
+        0.9344, 0.9544, 0.9781, 1.0032, 1.0142, 1.0192, 1.0182, 1.0122,
+        1.0031, 0.9976, 0.9952, 0.9955, 0.9978, 1.0009, 1.0018, 1
+      ),
+      ease-out;
+  }
 }
 /* Hover already brightens the chevron, and a mark sliding around under the cursor
    reads as a glitch. The reader is on the box at that point - the hint has served its
@@ -610,15 +664,33 @@ useAppTitleBarShortcuts({
 .bar-title:hover .bar-title-expand.is-hinting {
   animation: none;
 }
+/* Declared at top level, NOT inside the @media below. Vue's scoped-style compiler
+   rewrites @keyframes names to add the scope id and rewrites the animation-name
+   references to match; doing that reliably for a keyframes rule nested inside an
+   at-rule is not something to bet on, and if the name and the reference disagree the
+   animation resolves to nothing. The failure would be silent and would land on
+   exactly the readers this rule exists to serve. An unused keyframes rule is inert,
+   so hoisting it costs nothing. */
+@keyframes bar-title-expand-hint-reduced {
+  from, to { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
 @media (prefers-reduced-motion: reduce) {
   .bar-title-expand.is-hinting {
-    /* No travel at all for a reader who asked for no motion. Full opacity still
-       singles the mark out, which is the point the movement was making. */
-    animation: none;
-    opacity: 1;
+    /* A REPLACEMENT, not a removal. Dropping to `animation: none` would leave the
+       one group that cannot fall back on having noticed the movement with no hint at
+       all. So the mark still calls attention to itself - it just brightens in place.
+
+       Opacity only, no transform: WCAG 2.3.3 excludes colour and opacity changes
+       from what counts as motion animation, so this is a genuine substitute rather
+       than a smaller dose of the same thing. Same three runs, same duration.
+
+       One animation where the rule above declares two: `animation` is a shorthand,
+       so naming a single one resets the whole list and cancels the move. */
+    animation: bar-title-expand-hint-reduced 900ms ease-in-out 3;
   }
 }
-/* No chevron ? no reserved strip. Handing the 20px back is the point of hiding
+/* No chevron ? no reserved strip. Handing that 14px back is the point of hiding
    it: the breadcrumb gets the room instead of a blank gap where the mark was. */
 .bar-title.is-cramped {
   padding-inline: 6px;
