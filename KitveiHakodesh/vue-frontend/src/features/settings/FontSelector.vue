@@ -16,13 +16,6 @@ const props = defineProps<{
    * has none worth badging. Bare family name, no fallback chain.
    */
   defaultFont?: string
-  /**
-   * Offer ONLY families that draw the cantillation marks. The te'amim picker sets this:
-   * its whole purpose is choosing a face for books that carry the marks, and a family
-   * without them renders those books with the marks dropped -- so listing one would be
-   * offering a broken result.
-   */
-  teamimOnly?: boolean
 }>()
 const emit = defineEmits<{ 'update:modelValue': [string]; toggle: [] }>()
 
@@ -82,9 +75,8 @@ async function loadFonts() {
   isLoading.value = true
   availableFonts.value = []
   try {
-    const { fonts, teamimFonts } = await detectAvailableFonts()
-    const offered = props.teamimOnly ? teamimFonts : fonts
-    if (generation === loadGeneration) availableFonts.value = offered
+    const fonts = await detectAvailableFonts()
+    if (generation === loadGeneration) availableFonts.value = fonts
   } finally {
     if (generation === loadGeneration) isLoading.value = false
   }

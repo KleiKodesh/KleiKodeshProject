@@ -225,17 +225,12 @@ public sealed class Dispatcher(
                 // native-AOT with no WPF, so HebrewFontsProvider goes to DirectWrite (the API WPF
                 // wraps) and applies the SAME test: does the family have a glyph for א? Returns
                 // an empty list rather than failing if DirectWrite is unavailable, and the
-                // frontend falls back to its canvas probe. The same walk reports which of
-                // those families also draw the te'amim, for the te'amim-only picker.
+                // frontend falls back to its canvas probe.
                 case "getFonts":
-                {
-                    var lists = LocalFiles.HebrewFontsProvider.GetFontLists();
                     return RpcResponse.Ok(MsgPack.Ser(new FontsResult
                     {
-                        Fonts = lists.Fonts,
-                        TeamimFonts = lists.TeamimFonts,
+                        Fonts = LocalFiles.HebrewFontsProvider.GetHebrewFonts(),
                     }));
-                }
 
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
                 // hosted app's "exportToWord" bridge action (WordExporter.ExportCore). Word

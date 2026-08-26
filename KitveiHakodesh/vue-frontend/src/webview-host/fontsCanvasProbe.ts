@@ -8,11 +8,6 @@
  * anything installed but unlisted stays invisible. Treat the list as best-effort coverage of
  * the fonts users of this app are likely to have, not as an inventory of the machine.
  *
- * A SECOND limitation matters for the te'amim picker: width measurement says whether a family
- * resolved, never what its cmap covers, so this file cannot report which fonts draw the
- * cantillation marks. fontsApi falls back to the bundled faces for that list rather than
- * guessing at the machine's.
- *
  * How the probe works: render the Hebrew alphabet at 72px in `'<font>', <base>` and compare the
  * measured width against the same text in `<base>` alone. If the width differs, the browser
  * resolved <font> rather than falling through to <base>, so the font is installed. Three
