@@ -33,8 +33,19 @@ import { detectFontsByCanvas } from './fontsCanvasProbe'
  *
  * A name repeated by the enumerator is de-duplicated in favour of this entry, so a
  * user who ALSO has the font installed system-wide still sees one row, at the top.
+ *
+ * Ordered te'amim-capable families first, then Heebo. Every family above Heebo draws
+ * the cantillation marks, so anything a reader picks from the head of this list is
+ * safe for a hasTeamim book; Heebo trails because it is a headings sans with none.
  */
-export const BUNDLED_FONTS = ['Taamey Frank CLM', 'Frank Ruhl Libre', 'Heebo'] as const
+export const BUNDLED_FONTS = [
+  'Taamey Frank CLM',
+  'Hadasim CLM',
+  'Simple CLM',
+  'Stam Ashkenaz CLM',
+  'Stam Sefarad CLM',
+  'Heebo',
+] as const
 
 /** Bundled families first (order preserved), then everything the OS reported, minus duplicates. */
 function withBundledFirst(systemFonts: string[]): string[] {
