@@ -133,13 +133,15 @@ const DEFAULTS = {
   fixedLineHeight: false,
   commentaryHeaderFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
   commentaryTextFont: "'Taamey Frank CLM', David, serif",
-  // Tracks fontSize: while useSeparateCommentarySettings is off the commentary mirrors the
-  // main text, so a different default here would visibly shrink the commentary the moment
-  // the user first turns separate settings ON, with no action of their own.
-  commentaryFontSize: 120,
+  // Deliberately smaller than the main text's 120%. The commentary is the supporting
+  // column, and separate settings are ON by default, so this size is what a reader
+  // actually sees rather than a value that only takes effect once they opt in.
+  commentaryFontSize: 100,
   commentaryFontWeight: 400,
   commentaryLinePadding: 1.6,
-  useSeparateCommentarySettings: false,
+  // ON by default: the commentary wants its own size and measure, not the main text's.
+  // Turning this OFF collapses every commentary* value above onto the main-text one.
+  useSeparateCommentarySettings: true,
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
@@ -166,8 +168,10 @@ const DEFAULTS = {
   copyWithNotes: false,
   copyAsSourceWithQuotation: false,
   hebrewBooksLocalFolder: '',
-  linesContentMaxWidth: 0,
-  commentaryMaxWidth: 0,
+  // Measure cap in px; 0 means unlimited. 900 keeps a comfortable line length on a wide
+  // window, where full-bleed text would otherwise run too far for the eye to track back.
+  linesContentMaxWidth: 900,
+  commentaryMaxWidth: 900,
   titleBarHiddenButtons: ['theme-toggle'] as string[],
   // Scrollbars completely hidden except while scrolling. The DOM effect (root
   // class + per-element scroll activity tracking) is owned by
