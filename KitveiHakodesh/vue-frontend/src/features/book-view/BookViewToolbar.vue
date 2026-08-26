@@ -17,6 +17,7 @@ import {
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
+import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBookViewStore } from '@/stores/bookViewStore'
@@ -24,6 +25,7 @@ import { ZOOM_CONFIG } from '@/composables/useZoom'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { LineItem } from './lines/useBookViewLinesTable'
+import type { BookVersionRow } from '@/webview-host/queries.types'
 
 const props = defineProps<{
   searchVisible: boolean
@@ -38,6 +40,9 @@ const props = defineProps<{
   bookHasTeamim: boolean
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
+  // The book's alternate versions. Empty for most books, which hides the control.
+  versions: BookVersionRow[]
+  activeVersionId: number | null
   currentScrollLineIndex: number
   lines: LineItem[]
   onRelatedBooksOpen?: () => void
@@ -48,7 +53,7 @@ const props = defineProps<{
   // buttons are hidden entirely rather than offering a mode that cannot apply.
   canUseSidePanel?: boolean
 }>()
-defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: [] }>()
+defineEmits<{ toggleBottomCommentary: []; toggleSideCommentary: []; toggleSideLeftCommentary: []; toggleSearch: []; toggleToc: []; exportToWord: []; navigateToNextSection: []; navigateToPreviousSection: []; selectVersion: [versionId: number | null] }>()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
@@ -200,6 +205,16 @@ defineExpose({ tocBtnRef })
       :current-scroll-line-index="currentScrollLineIndex"
       :lines="lines"
       :on-open="onRelatedBooksOpen"
+    />
+    <!--
+      Only for the minority of books that carry alternate versions. Absent rather
+      than disabled: a book with one text has no choice to offer.
+    -->
+    <BookViewVersionsDropdown
+      v-if="versions.length > 0"
+      :versions="versions"
+      :active-version-id="activeVersionId"
+      @select="$emit('selectVersion', $event)"
     />
     <!--
       RTL: first child sits physically right. The three buttons run right → bottom

@@ -526,7 +526,13 @@ public sealed class Dispatcher(
                 case "getLinesPaged":
                 {
                     var a = MsgPack.De<LinesPagedArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset) }));
+                    return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset, a.VersionId) }));
+                }
+
+                case "getBookVersions":
+                {
+                    var a = MsgPack.De<BookVersionsArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BookVersionsResult { Rows = seforim.GetBookVersions(a.BookId) }));
                 }
 
                 // ── Seforim DB — TOC ───────────────────────────────────────────

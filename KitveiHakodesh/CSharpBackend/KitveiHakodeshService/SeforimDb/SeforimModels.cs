@@ -67,7 +67,31 @@ public sealed class LinesPagedArgs
     public int BookId { get; set; }
     public int Limit { get; set; }
     public int Offset { get; set; }
+    /// <summary>Read the page through this version's overlay. 0 = the merged text.</summary>
+    public int VersionId { get; set; }
 }
+
+// ── Versions ────────────────────────────────────────────────────────────────
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookVersionsArgs { public int BookId { get; set; } }
+
+/// <summary>One alternate version of a book — an overlay over the same line ids.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookVersionRow
+{
+    public int Id { get; set; }
+    /// <summary>The upstream key, usually English. Stable; used for persistence.</summary>
+    public string VersionTitle { get; set; } = "";
+    /// <summary>Display name. Often absent, in which case the caller shows VersionTitle.</summary>
+    public string? HeVersionTitle { get; set; }
+    public string? VersionSource { get; set; }
+    public string? VersionNotes { get; set; }
+    public string? HeVersionNotes { get; set; }
+}
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookVersionsResult { public List<BookVersionRow> Rows { get; set; } = new(); }
 
 /// <summary>A streamed line row — matches { id, lineIndex, content } in fetchRange().</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

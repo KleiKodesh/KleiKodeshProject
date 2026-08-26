@@ -28,6 +28,16 @@ export interface LastReadState {
   /** The TOC side panel, so reopening a book restores the panel too. */
   toc?: import('@/features/book-view/bookViewTypes').TocPersistState
   /**
+   * The alternate version the book was last read in, by `book_version.versionTitle`.
+   * Absent or null = the book's own merged text.
+   *
+   * The TITLE, not the row id: ids are local to whichever seforim DB is open and a
+   * library update can renumber them, which would silently restore a DIFFERENT text
+   * under the same number. The title is the upstream key and survives that. A title
+   * that no longer resolves simply falls back to the merged text.
+   */
+  versionTitle?: string | null
+  /**
    * When this position was last written. The on-disk cap evicts by it — without a
    * timestamp the only order available is the key cursor's (lexicographic by book id),
    * which would drop whichever books happen to sort lowest, not the stale ones.

@@ -51,6 +51,7 @@ const {
   panels, anyCommentaryVisible, openCommentarySlots, commentaryPersistState, tocPersistState,
   tabId, bookId, lines, prioritise, hasCommentaries, hasRelatedBooks, hasToc,
   bookHasTeamim,
+  versions, activeVersionId, selectVersion, versionPersistState,
   filterGroups, staticFilterGroups, commentaryLoading, commentaryLoadError, requestContentPriority,
   tocEntries, tocSearchTree, selectedAltTocSection, tocLoading, tocError,
   altTocLabelMap, selectedSectionLineIds, manualSelectionLineIds,
@@ -135,6 +136,8 @@ const toolbarProps = computed(() => ({
   bookHasTeamim: bookHasTeamim.value,
   filterGroups: staticFilterGroups.value,
   relatedBooksLoaded: staticFilterGroupsLoaded.value,
+  versions: versions.value,
+  activeVersionId: activeVersionId.value,
   currentScrollLineIndex: currentScrollLineIndex.value,
   lines: lines.value,
   onRelatedBooksOpen: ensureStaticFilterGroupsLoaded,
@@ -364,6 +367,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
+      @select-version="selectVersion"
     />
     <!-- Middle row: side toolbar + main area (RTL: first child = physical right) -->
     <div class="body-row">
@@ -380,6 +384,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
         @export-to-word="onExportToWord"
         @navigate-to-next-section="navigateToAdjacentTocSection('next')"
         @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
+        @select-version="selectVersion"
       />
 
       <!--
@@ -465,6 +470,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
                     :commentary-visible="anyCommentaryVisible"
                     :commentary-persist-state="commentaryPersistState"
                     :toc-persist-state="tocPersistState"
+                    :version-persist-state="versionPersistState"
                     :initial-line-index="initialLineIndex"
                     :initial-scroll-index="initialScrollTop"
                     :initial-scroll-offset="initialScrollOffset"
@@ -607,6 +613,7 @@ watch(() => bookViewStore.toggleTocPanelSignal, (signal) => { if (signal.paneId 
       @export-to-word="onExportToWord"
       @navigate-to-next-section="navigateToAdjacentTocSection('next')"
       @navigate-to-previous-section="navigateToAdjacentTocSection('previous')"
+      @select-version="selectVersion"
     />
   </div>
 </template>

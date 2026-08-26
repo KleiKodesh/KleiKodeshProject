@@ -111,14 +111,59 @@ public sealed partial class SeforimDbService
         return book;
     }
 
-    public List<LineRow> GetLinesPaged(int bookId, int limit, int offset)
+    /// <summary>
+    /// Whether this DB carries alternate versions at all. Cached like
+    /// <see cref="_hasLinkAnchorTable"/>: the tables arrived in a later seforim-DB
+    /// schema, and an older library simply has no versions to offer.
+    /// </summary>
+    private bool? _hasBookVersionTables;
+
+    /// <summary>
+    /// The alternate versions of a book that carry text, best edition first.
+    /// Empty when the DB predates versions or the book has none — the caller shows
+    /// no version control at all rather than an empty menu.
+    /// </summary>
+    public List<BookVersionRow> GetBookVersions(int bookId)
+    {
+        var list = new List<BookVersionRow>();
+        Run(() =>
+        {
+            using var conn = Open();
+            _hasBookVersionTables ??= TableExists(conn, "book_version") && TableExists(conn, "version_line");
+            if (!_hasBookVersionTables.Value) return;
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimSql.GetBookVersions;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new BookVersionRow
+                {
+                    Id = r.GetInt32(0),
+                    VersionTitle = r.IsDBNull(1) ? "" : r.GetString(1),
+                    HeVersionTitle = r.IsDBNull(2) ? null : r.GetString(2),
+                    VersionSource = r.IsDBNull(3) ? null : r.GetString(3),
+                    VersionNotes = r.IsDBNull(4) ? null : r.GetString(4),
+                    HeVersionNotes = r.IsDBNull(5) ? null : r.GetString(5),
+                });
+            }
+        }, "getBookVersions");
+        return list;
+    }
+
+    /// <summary>
+    /// A page of lines. With <paramref name="versionId"/> set, the text is read through
+    /// that version's overlay; otherwise it is the book's merged text.
+    /// </summary>
+    public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0)
     {
         var list = new List<LineRow>();
         Run(() =>
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetLinesPaged;
+            cmd.CommandText = versionId > 0 ? SeforimSql.GetVersionLinesPaged : SeforimSql.GetLinesPaged;
+            if (versionId > 0) cmd.Parameters.AddWithValue("@versionId", versionId);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@limit", limit);
             cmd.Parameters.AddWithValue("@offset", offset);

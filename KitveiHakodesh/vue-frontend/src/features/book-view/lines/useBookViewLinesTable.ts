@@ -1,5 +1,6 @@
 import { onScopeDispose, ref, watch } from 'vue'
-import { getBookById, getLinesPaged } from '@/webview-host/seforimApi'
+import { getBookById, getBookVersions, getLinesPaged } from '@/webview-host/seforimApi'
+import type { BookVersionRow } from '@/webview-host/queries.types'
 
 export interface LineItem {
   id: number
@@ -37,6 +38,21 @@ export function useLines(bookId: () => number | undefined) {
   const hasCommentaries = ref(true)
   const hasRelatedBooks = ref(true)
   const hasTeamim = ref(false)
+
+  // ── Alternate versions ──────────────────────────────────────────────────────
+  //
+  // A version is an OVERLAY over the same line ids, not a separate book: only the
+  // text of each line changes. Line ids, lineIndex, totalLines, the TOC, links and
+  // highlights all stay valid, so switching re-fetches the text in place and leaves
+  // the reader where they were.
+  //
+  // Unlike hasCommentaries/hasRelatedBooks this starts EMPTY and fails CLOSED. Those
+  // two gate controls that are almost always present, so they start open to avoid a
+  // visible pop-in; versions exist for a small minority of books, so showing the
+  // control by default would flash it onto the toolbar of every book that has none.
+  const versions = ref<BookVersionRow[]>([])
+  // null = the book's own merged text. Otherwise a book_version.id.
+  const activeVersionId = ref<number | null>(null)
 
   // Queue of backfill ranges: [offset, limit] pairs.
   let fetchQueue: Array<{ offset: number; limit: number }> = []
@@ -104,25 +120,52 @@ export function useLines(bookId: () => number | undefined) {
   }
 
   async function fetchRange(bookIdAtStart: number, offset: number, limit: number): Promise<boolean> {
+    // Captured with the book id: a version swap keeps currentBookId the same, so the
+    // book guard alone would let a chunk fetched under the OLD version write its text
+    // into the new one — the two versions differ line for line, which would show as a
+    // page of mixed text that reads as a single version.
+    const versionAtStart = activeVersionId.value
     try {
-      const rows = await getLinesPaged(bookIdAtStart, limit, offset)
+      const rows = await getLinesPaged(bookIdAtStart, limit, offset, versionAtStart ?? 0)
       if (currentBookId !== bookIdAtStart) return false
+      if (activeVersionId.value !== versionAtStart) {
+        // Fetched under the version we just switched away from. The rows are discarded,
+        // but the slots MUST be released: setVersion cleared slotState and re-queued the
+        // book, so this range was re-marked SLOT_PENDING by the new pass. Returning
+        // without releasing leaves it marked-but-empty forever — nothing retries a
+        // pending slot — and that region keeps showing the previous version's text.
+        markRange(offset, limit, SLOT_UNFETCHED)
+        // Released slots need an owner: the worker already shifted this range off the
+        // queue, so without re-queuing it nothing would ever come back for it.
+        fetchQueue.push({ offset, limit })
+        spawnWorkers()
+        return false
+      }
       writeRows(rows)
       return true
     } catch {
       // DB error — release the slots so a later prioritise/backfill can retry.
-      if (currentBookId === bookIdAtStart) markRange(offset, limit, SLOT_UNFETCHED)
+      if (currentBookId === bookIdAtStart && activeVersionId.value === versionAtStart) {
+        markRange(offset, limit, SLOT_UNFETCHED)
+      }
       return false
     }
   }
 
   // A single worker: pulls ranges off the shared queue and fetches them until
   // the queue is empty or the book changes. Multiple workers run concurrently.
-  async function runWorker(bookIdAtStart: number) {
+  //
+  // Fenced by version as well as book. A version swap leaves the book id alone but
+  // replaces the queue, so a worker started under the old version would otherwise
+  // keep draining the NEW queue, mark each range fetched, and then have every result
+  // thrown away by fetchRange's version guard — leaving those slots permanently
+  // marked as loaded and the old text on screen for good.
+  async function runWorker(bookIdAtStart: number, versionAtStart: number | null) {
     activeWorkers++
     try {
       while (fetchQueue.length > 0) {
-        if (currentBookId !== bookIdAtStart || backfillHeld) break
+        if (currentBookId !== bookIdAtStart || activeVersionId.value !== versionAtStart) break
+        if (backfillHeld) break
         const range = fetchQueue.shift()!
         // Skip ranges whose every slot was already fetched out-of-band.
         if (rangeFullyPending(range.offset, range.limit)) continue
@@ -131,6 +174,12 @@ export function useLines(bookId: () => number | undefined) {
       }
     } finally {
       activeWorkers--
+      // A worker that stopped on the version fence leaves the ranges it had not
+      // reached still queued, while spawnWorkers() — which ran during the swap, when
+      // the pool was still at its cap — had no slot to start a replacement in. Without
+      // this the queue stalls with the pool half empty and the tail of the book never
+      // refills. Guarded on the fence so a genuinely finished book does not respawn.
+      if (currentBookId != null && fetchQueue.length > 0) spawnWorkers()
     }
   }
 
@@ -138,8 +187,9 @@ export function useLines(bookId: () => number | undefined) {
   function spawnWorkers() {
     const id = currentBookId
     if (id == null || backfillHeld) return
+    const version = activeVersionId.value
     while (activeWorkers < CONCURRENT_CHUNKS && fetchQueue.length > 0) {
-      void runWorker(id)
+      void runWorker(id, version)
     }
   }
 
@@ -191,12 +241,79 @@ export function useLines(bookId: () => number | undefined) {
     void fetchRange(id, offset, CHUNK_SIZE)
   }
 
+  /**
+   * Switch the text to an alternate version (or back to the merged text with null).
+   *
+   * Re-fetches every line's CONTENT while keeping the line skeleton — ids, lineIndex
+   * and the array's length — exactly as it is. That is what lets the reader stay put:
+   * the TOC, commentary anchors, highlights and the scroll position all key off line
+   * ids and indices, none of which a version changes.
+   *
+   * Content is blanked rather than the array emptied, for the same reason. Dropping to
+   * [] would collapse the virtualiser's total height to zero and lose the scroll
+   * position before the first chunk arrived; placeholders keep the document its full
+   * height and simply re-fill in place, exactly as an unfetched region does.
+   *
+   * `visibleLineIndex` is where the reader is actually looking. It matters on a long
+   * book: refilling from line 0 would leave someone mid-tractate watching blank lines
+   * until the backfill crawled all the way down to them.
+   */
+  function setVersion(versionId: number | null, visibleLineIndex = 0) {
+    if (activeVersionId.value === versionId) return
+    const id = currentBookId
+    // Set BEFORE clearing the queue: workers and in-flight fetches fence on this
+    // value, so they must see the new version the moment the old queue is dropped.
+    activeVersionId.value = versionId
+    if (id == null) return
+
+    // Live workers are NOT reset to zero here — they decrement on their own way out,
+    // and zeroing the count while they run would drive it negative and let spawnWorkers
+    // exceed the concurrency cap for the rest of the book. They exit on their next
+    // iteration via the version fence in runWorker.
+    fetchQueue = []
+    slotState = new Uint8Array(0)
+
+    const total = lines.value.length
+    lines.value = lines.value.map((line) => ({ ...line, content: null }))
+    ensureSlotCapacity(slotOf(Math.max(total - 1, 0)) + 1)
+
+    // The reader's own window first, so the new text appears where they are looking.
+    const visibleOffset = Math.floor(visibleLineIndex / CHUNK_SIZE) * CHUNK_SIZE
+    markRange(visibleOffset, CHUNK_SIZE, SLOT_PENDING)
+    void fetchRange(id, visibleOffset, CHUNK_SIZE)
+    if (visibleOffset !== 0) {
+      markRange(0, CHUNK_SIZE, SLOT_PENDING)
+      void fetchRange(id, 0, CHUNK_SIZE)
+    }
+
+    queueBackfill(total)
+    spawnWorkers()
+  }
+
+  /** Queue everything past the first chunk as BACKFILL_CHUNK_SIZE-aligned ranges. */
+  function queueBackfill(totalLines: number) {
+    for (let offset = CHUNK_SIZE; offset < totalLines; ) {
+      // Align the first backfill range so subsequent ranges start on
+      // BACKFILL_CHUNK_SIZE boundaries.
+      const limit = Math.min(
+        BACKFILL_CHUNK_SIZE - (offset % BACKFILL_CHUNK_SIZE),
+        totalLines - offset,
+      )
+      fetchQueue.push({ offset, limit })
+      offset += limit
+    }
+  }
+
   async function load(id: number) {
     currentBookId = id
     lines.value = []
     fetchQueue = []
     activeWorkers = 0
     slotState = new Uint8Array(0)
+    // A new book's versions are its own; carrying the previous book's selection over
+    // would read its text through an id belonging to a different book entirely.
+    versions.value = []
+    activeVersionId.value = null
 
     let metadataFailed = false
     const metadataPromise = getBookById(id).catch(() => {
@@ -237,17 +354,18 @@ export function useLines(bookId: () => number | undefined) {
     // Queue the rest of the book as large backfill ranges (needed for in-book
     // search and instant scrolling) and fill up to CONCURRENT_CHUNKS workers.
     ensureSlotCapacity(slotOf(Math.max(totalLines - 1, 0)) + 1)
-    for (let offset = CHUNK_SIZE; offset < totalLines; ) {
-      // Align the first backfill range so subsequent ranges start on
-      // BACKFILL_CHUNK_SIZE boundaries.
-      const limit = Math.min(
-        BACKFILL_CHUNK_SIZE - (offset % BACKFILL_CHUNK_SIZE),
-        totalLines - offset,
-      )
-      fetchQueue.push({ offset, limit })
-      offset += limit
-    }
+    queueBackfill(totalLines)
     spawnWorkers()
+
+    // Versions are toolbar-only and most books have none, so this trails the text
+    // rather than gating first paint. Failure leaves the list empty and simply hides
+    // the control — nothing about reading the book depends on it.
+    try {
+      const rows = await getBookVersions(id)
+      if (currentBookId === id) versions.value = rows
+    } catch {
+      if (currentBookId === id) versions.value = []
+    }
   }
 
   watch(
@@ -258,5 +376,9 @@ export function useLines(bookId: () => number | undefined) {
     { immediate: true },
   )
 
-  return { lines, prioritise, prefetch, holdBackfill, releaseBackfill, hasCommentaries, hasRelatedBooks, hasTeamim }
+  return {
+    lines, prioritise, prefetch, holdBackfill, releaseBackfill,
+    hasCommentaries, hasRelatedBooks, hasTeamim,
+    versions, activeVersionId, setVersion,
+  }
 }
