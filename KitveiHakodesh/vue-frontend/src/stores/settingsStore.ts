@@ -58,6 +58,7 @@ const KEYS = {
   SETTINGS_NEW_TAB_PAGE: 'app.newTabPage',
   SETTINGS_SHOW_CLOCK: 'app.showClock',
   SETTINGS_SETUP_DONE: 'app.setupDone',
+  SETTINGS_ADDRESS_BAR_HINT_DONE: 'app.addressBarHintDone',
   SETTINGS_SCROLLBARS_HIDDEN: 'app.scrollbarsHidden',
   // One per pane: a pane is a whole shell with its own tabs and its own chrome, so its
   // rail is its own state and its own stored value. Pane 1 keeps the original key so an
@@ -256,6 +257,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
+  const addressBarHintDone = ref(false)
   const searchContextMarginWords = ref(DEFAULTS.searchContextMarginWords)
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
   const searchRequireOrdered = ref(DEFAULTS.searchRequireOrdered)
@@ -382,6 +384,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
+    loadSetting(KEYS.SETTINGS_ADDRESS_BAR_HINT_DONE, addressBarHintDone)
     loadSetting(KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN, searchContextMarginWords)
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
     loadSetting(KEYS.SETTINGS_SEARCH_REQUIRE_ORDERED, searchRequireOrdered)
@@ -583,6 +586,16 @@ export const useSettingsStore = defineStore('settings', () => {
   }
 
   /**
+   * The title bar has taught the reader that its box opens. Called the first time
+   * they click into it, and never unset - the hint has done its job for good.
+   */
+  function completeAddressBarHint() {
+    if (addressBarHintDone.value) return
+    addressBarHintDone.value = true
+    lsSet(KEYS.SETTINGS_ADDRESS_BAR_HINT_DONE, true)
+  }
+
+  /**
    * Back to defaults, in memory and on disk. Returns a promise that resolves once
    * localStorage has actually been cleared — the clear has to wait for the persist
    * watchers to flush, so a caller that reloads the page immediately should await this
@@ -611,6 +624,10 @@ export const useSettingsStore = defineStore('settings', () => {
     newTabPage.value = DEFAULTS.newTabPage
     pdfPageFilters.value = DEFAULTS.pdfPageFilters
     resumeLastRead.value = DEFAULTS.resumeLastRead
+    // Reset re-teaches the address bar: the key is not in PRESERVE_KEYS, so it is
+    // cleared from disk, and the ref has to follow or the hint stays retired for the
+    // life of the process. (Callers reload today, which would hide the mismatch.)
+    addressBarHintDone.value = false
     showClock.value = DEFAULTS.showClock
     defaultAutoSyncCommentary.value = DEFAULTS.defaultAutoSyncCommentary
     searchContextMarginWords.value = DEFAULTS.searchContextMarginWords
@@ -653,7 +670,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding,
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
-    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
+    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
     copyJoinLines,
@@ -672,7 +689,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showFrequentFolders,
     fileSearchSortOrder,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
-    togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer,
+    togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer, completeAddressBarHint,
   }
 })
   function normalizeNewTabPage(value: LegacyNewTabPage | null): NewTabPage | null {
