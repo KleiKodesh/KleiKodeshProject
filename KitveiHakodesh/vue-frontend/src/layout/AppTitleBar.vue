@@ -158,7 +158,7 @@ function toggleNavDropdown() {
 // ?? Expand-chevron squeeze rule ?????????????????????????????????????????????
 // The chevron is a decoration; the breadcrumb is the content. When the bar runs
 // out of room the breadcrumb starts clipping, and at that point the chevron's
-// reserved trailing strip is width the breadcrumb could have used ? so it goes,
+// reserved strip is width the breadcrumb could have used ? so it goes,
 // and .bar-title drops the padding that held its place (.is-cramped).
 //
 // Measured, not guessed at from a width breakpoint: how much room a breadcrumb
@@ -205,7 +205,7 @@ function measureTitleCramped() {
 // the labels' widths are only known once Vue has patched them in.
 //
 // border-box, not the default content-box: toggling .is-cramped rewrites
-// padding-inline-end, which moves the CONTENT box while the border box holds
+// padding-left, which moves the CONTENT box while the border box holds
 // still. Observing the content box would make this callback re-trigger itself on
 // its own padding write ? a self-inflicted notification storm ("ResizeObserver
 // loop completed with undelivered notifications") for a size change nothing
@@ -484,12 +484,12 @@ useAppTitleBarShortcuts({
   overflow: hidden;
   height: 24px;
   margin-inline: 6px;
-  /* Extra room on the PHYSICAL right for the absolutely-positioned
+  /* Extra room on the PHYSICAL left for the absolutely-positioned
      .bar-title-expand, so a long centered title clips before it reaches the
-     chevron instead of sliding underneath it. Physical (padding-right) to match
+     chevron instead of sliding underneath it. Physical (padding-left) to match
      the chevron's own physical anchoring ? see .bar-title-expand. */
   padding-inline: 6px;
-  padding-right: 20px;
+  padding-left: 20px;
   position: relative;
   font-weight: 400;
   font-size: 0.82rem;
@@ -506,7 +506,7 @@ useAppTitleBarShortcuts({
 .bar-title:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
-/* Pinned to the trailing edge rather than left in the flow, because .bar-title
+/* Pinned to the box's own edge rather than left in the flow, because .bar-title
    CENTERS its content ? in the flow the chevron would drift with the title's
    width and sit wherever the text happened to end. Absolute keeps it on the box's
    own edge, and out of the flow it cannot squeeze the title's available width.
@@ -514,13 +514,18 @@ useAppTitleBarShortcuts({
    competing with the title, and .bar-title already carries the click. */
 .bar-title-expand {
   position: absolute;
-  /* Physical right, NOT inset-inline-end. This box is dir="rtl", so the logical
-     end edge is the LEFT one ? but the editable AddressBar that replaces this
-     box in search mode is not RTL, and puts its trailing search button on the
-     physical right. Anchoring logically would jump the affordance across the bar
-     on a swap that is supposed to be seamless. The chevron is chrome on the box,
-     not part of the RTL text flow, so it follows the box. */
-  right: 4px;
+  /* Physical left, NOT inset-inline-start. Two reasons, and the second is the
+     one that bites if this is ever "simplified" to a logical property:
+     - The chevron is chrome on the box, not part of the RTL text flow, so it
+       belongs to a physical edge rather than to wherever the text starts.
+     - It has to stay on the same side as the trailing search button of the
+       editable AddressBar that replaces this box in search mode, or the
+       affordance jumps across the bar on a swap meant to be seamless. That
+       button sits on the physical LEFT: .address-bar sets no direction, so it
+       inherits RTL from the shell and its last flex child lands left.
+     This box is dir="rtl", so inset-inline-start would resolve to the RIGHT
+     and break the second point. */
+  left: 4px;
   width: 12px;
   height: 12px;
   color: var(--text-secondary);
@@ -533,7 +538,7 @@ useAppTitleBarShortcuts({
 /* No chevron ? no reserved strip. Handing the 20px back is the point of hiding
    it: the breadcrumb gets the room instead of a blank gap where the mark was. */
 .bar-title.is-cramped {
-  padding-right: 6px;
+  padding-left: 6px;
 }
 /* Search mode swaps in the editable AddressBar, occupying the same box. */
 .bar-search {
