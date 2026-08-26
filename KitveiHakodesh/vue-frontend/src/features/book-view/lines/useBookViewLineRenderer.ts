@@ -12,6 +12,8 @@ import type { Note } from '../lines/useBookViewNotes'
 type SettingsStore = ReturnType<typeof useSettingsStore>
 
 interface LineRenderProps {
+  /** The alternate version being rendered, or null/undefined for the merged text. */
+  activeVersionId?: number | null
   searchQuery?: string
   currentMatchLineIndex?: number
   currentMatchOccurrence?: number
@@ -436,7 +438,11 @@ export function useBookViewLineRenderer(
 
   function getGlobalKey(): string {
     const p = getProps()
-    return `${diacriticsState.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
+    // activeVersionId is in the key because renderCache is keyed by lineIndex alone,
+    // and a version swap changes a line's TEXT while keeping its index and its id.
+    // Without it every visible line returns the previous version's cached HTML and the
+    // reader sees no change at all — the swap looks like it silently did nothing.
+    return `${p.activeVersionId ?? 0}|${diacriticsState.value}|${settings.censorCacheKey}|${p.searchQuery ?? ''}|${p.searchHighlightLineIndex ?? -1}|${p.searchHighlightQuery ?? ''}|${p.searchHighlightSnippet ?? ''}|${p.searchHighlightTerms?.join(',') ?? ''}`
   }
 
   function getAnnotationKey(lineId: number): string {
