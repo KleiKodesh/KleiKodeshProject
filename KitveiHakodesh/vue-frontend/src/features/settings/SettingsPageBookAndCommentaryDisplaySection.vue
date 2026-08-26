@@ -25,7 +25,6 @@ const {
   commentaryFontSize,
   commentaryFontWeight,
   commentaryLinePadding,
-  useSeparateCommentarySettings,
   linesContentMaxWidth,
   commentaryMaxWidth,
 } = storeToRefs(settings)
@@ -146,18 +145,7 @@ const commentaryMaxWidthSlider = computed({
       />
     </SettingRow>
 
-    <SettingRow id="nav-commentary-settings-mode" data-nav-label="הגדרות נפרדות לפירושים" hint="'זהה לתצוגת ספר' מחיל על הפירושים את הגדרות הספר">
-      <ToggleGroup
-        v-model="useSeparateCommentarySettings"
-        :options="[
-          { label: 'זהה לתצוגת ספר', value: false },
-          { label: 'הגדרות נפרדות', value: true },
-        ]"
-      />
-    </SettingRow>
-
     <FontDisplaySettings
-      v-if="useSeparateCommentarySettings"
       id="nav-commentary-font-display"
       data-nav-label="גופן פירושים"
       ref="commentaryDisplayRef"
@@ -172,7 +160,6 @@ const commentaryMaxWidthSlider = computed({
     />
 
     <SliderSetting
-      v-if="useSeparateCommentarySettings"
       id="nav-commentary-max-width"
       data-nav-label="רוחב מקסימלי פירושים"
       label="רוחב מקסימלי לעמודת הפירושים"

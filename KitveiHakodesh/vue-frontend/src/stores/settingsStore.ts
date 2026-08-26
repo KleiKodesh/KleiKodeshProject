@@ -30,7 +30,6 @@ const KEYS = {
   SETTINGS_COMMENTARY_FONT_WEIGHT: 'commentary.fontWeight',
   SETTINGS_COMMENTARY_LINE_PADDING: 'commentary.linePadding',
   SETTINGS_COMMENTARY_MAX_WIDTH: 'commentary.maxWidth',
-  SETTINGS_SEPARATE_COMMENTARY: 'commentary.useSeparateSettings',
   SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY: 'commentary.defaultAutoSync',
 
   // Divine-name censoring
@@ -139,9 +138,6 @@ const DEFAULTS = {
   commentaryFontSize: 100,
   commentaryFontWeight: 400,
   commentaryLinePadding: 1.6,
-  // ON by default: the commentary wants its own size and measure, not the main text's.
-  // Turning this OFF collapses every commentary* value above onto the main-text one.
-  useSeparateCommentarySettings: true,
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
@@ -251,7 +247,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryFontSize = ref(DEFAULTS.commentaryFontSize)
   const commentaryFontWeight = ref(DEFAULTS.commentaryFontWeight)
   const commentaryLinePadding = ref(DEFAULTS.commentaryLinePadding)
-  const useSeparateCommentarySettings = ref(DEFAULTS.useSeparateCommentarySettings)
   const appZoom = ref(DEFAULTS.appZoom)
   const dictionaryZoom = ref(DEFAULTS.dictionaryZoom)
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
@@ -340,20 +335,13 @@ export const useSettingsStore = defineStore('settings', () => {
       .filter((id) => Number.isFinite(id))
       .map((id) => `.word-link-marker[data-wl^="${id}:"] { display: none; }`)
       .join('\n')
-    // When not using separate commentary settings, mirror the book settings.
-    const effectiveCommentaryHeaderFont = useSeparateCommentarySettings.value ? commentaryHeaderFont.value : headerFont.value
-    const effectiveCommentaryTextFont = useSeparateCommentarySettings.value ? commentaryTextFont.value : textFont.value
-    const effectiveCommentaryFontSize = useSeparateCommentarySettings.value ? commentaryFontSize.value : fontSize.value
-    const effectiveCommentaryFontWeight = useSeparateCommentarySettings.value ? commentaryFontWeight.value : fontWeight.value
-    const effectiveCommentaryLinePadding = useSeparateCommentarySettings.value ? commentaryLinePadding.value : linePadding.value
-    style.setProperty('--commentary-header-font', effectiveCommentaryHeaderFont)
-    style.setProperty('--commentary-text-font', effectiveCommentaryTextFont)
-    style.setProperty('--commentary-font-size', `${effectiveCommentaryFontSize}%`)
-    style.setProperty('--commentary-font-weight', effectiveCommentaryFontWeight.toString())
-    style.setProperty('--commentary-line-height', effectiveCommentaryLinePadding.toString())
+    style.setProperty('--commentary-header-font', commentaryHeaderFont.value)
+    style.setProperty('--commentary-text-font', commentaryTextFont.value)
+    style.setProperty('--commentary-font-size', `${commentaryFontSize.value}%`)
+    style.setProperty('--commentary-font-weight', commentaryFontWeight.value.toString())
+    style.setProperty('--commentary-line-height', commentaryLinePadding.value.toString())
     style.setProperty('--lines-content-max-width', linesContentMaxWidth.value > 0 ? `${linesContentMaxWidth.value}px` : 'none')
-    const effectiveCommentaryMaxWidth = useSeparateCommentarySettings.value ? commentaryMaxWidth.value : linesContentMaxWidth.value
-    style.setProperty('--commentary-max-width', effectiveCommentaryMaxWidth > 0 ? `${effectiveCommentaryMaxWidth}px` : 'none')
+    style.setProperty('--commentary-max-width', commentaryMaxWidth.value > 0 ? `${commentaryMaxWidth.value}px` : 'none')
     document.documentElement.setAttribute('data-pdf-filters', pdfPageFilters.value ? 'true' : 'false')
     const app = document.getElementById('app')
     if (app) app.style.zoom = appZoom.value.toString()
@@ -384,7 +372,6 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_SIZE, commentaryFontSize)
     loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_WEIGHT, commentaryFontWeight)
     loadSetting(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, commentaryLinePadding)
-    loadSetting(KEYS.SETTINGS_SEPARATE_COMMENTARY, useSeparateCommentarySettings)
     loadSetting(KEYS.SETTINGS_APP_ZOOM, appZoom)
     loadSetting(KEYS.SETTINGS_DICTIONARY_ZOOM, dictionaryZoom)
     const storedNewTabPage = normalizeNewTabPage(lsGet<LegacyNewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE))
@@ -471,7 +458,6 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryFontSize, KEYS.SETTINGS_COMMENTARY_FONT_SIZE, applyCSSVariables)
   persistSetting(commentaryFontWeight, KEYS.SETTINGS_COMMENTARY_FONT_WEIGHT, applyCSSVariables)
   persistSetting(commentaryLinePadding, KEYS.SETTINGS_COMMENTARY_LINE_PADDING, applyCSSVariables)
-  persistSetting(useSeparateCommentarySettings, KEYS.SETTINGS_SEPARATE_COMMENTARY, applyCSSVariables)
   persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
   persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
@@ -620,7 +606,6 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryFontSize.value = DEFAULTS.commentaryFontSize
     commentaryFontWeight.value = DEFAULTS.commentaryFontWeight
     commentaryLinePadding.value = DEFAULTS.commentaryLinePadding
-    useSeparateCommentarySettings.value = DEFAULTS.useSeparateCommentarySettings
     appZoom.value = DEFAULTS.appZoom
     dictionaryZoom.value = DEFAULTS.dictionaryZoom
     newTabPage.value = DEFAULTS.newTabPage
@@ -666,7 +651,7 @@ export const useSettingsStore = defineStore('settings', () => {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
     diacriticsState, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding,
-    useSeparateCommentarySettings, appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
+    appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,

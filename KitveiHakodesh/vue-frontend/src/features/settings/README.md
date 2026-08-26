@@ -12,7 +12,7 @@ The section components are independent — each imports the stores it needs dire
 
 **SettingsPageThemeAndApplicationSection.vue** — theme picker, dark mode toggle, PDF filter toggle, app zoom, toolbar position, new-tab destination, and title bar button visibility chips.
 
-**SettingsPageBookAndCommentaryDisplaySection.vue** — book display (resume last read, toolbar position, fonts/sizes/padding, max content width) and commentary display (sync default, separate-settings overrides). Calls `useSettings()` to wire the commentary-mirror watcher.
+**SettingsPageBookAndCommentaryDisplaySection.vue** — book display (resume last read, toolbar position, fonts/sizes/padding, max content width) and commentary display (sync default, fonts/sizes/padding, max width). The commentary always carries its own values -- there is no "same as book" mode.
 
 **SettingsPageCensorDivineNamesSection.vue** — divine name censoring: main-mode toggle plus the conditional Elokim and hyphenated-names rows.
 
@@ -44,7 +44,7 @@ The section components are independent — each imports the stores it needs dire
 
 ## Composables
 
-**useSettingsPage.ts** — wires the commentary-mirror watcher (syncs commentary font settings to book settings when `useSeparateCommentarySettings` is false) and exposes the scoped reset actions (`resetSettings`, `resetSearchIndex`, `resetDocumentLocatorIndex`). The *full* app reset is not here — it is `resetEverything()` in `appResetState.ts`, which `SettingsPageResetSection` calls directly.
+**useSettingsPage.ts** — exposes the scoped reset actions (`resetSettings`, `resetSearchIndex`, `resetDocumentLocatorIndex`). The *full* app reset is not here — it is `resetEverything()` in `appResetState.ts`, which `SettingsPageResetSection` calls directly.
 
 **useSettingsSearch.ts** — DOM-walker search. Accepts a ref to the scroll container, watches `searchQuery`, walks every `[data-section]` element and toggles `data-section-hidden` on non-matching sections. Also exposes `getSectionNavEntries()` and `getSectionNavTree()` for the sidebar and drawer nav.
 
