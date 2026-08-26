@@ -1,18 +1,20 @@
 @import '../../theme/theme.css';
 
-/* ── Bundled fonts ──────────────────────────────────────────────────────────
+/* ── Bundled fonts ──────────────────────────────────────────
    Shipped in public/fonts/ so the reading defaults do not depend on what the
-   machine happens to have installed. Both are freely redistributable:
-   Taamey Frank CLM is GPL-2.0 WITH the font-embedding exception (that exception
-   is what keeps the app's own code clear of the GPL), Frank Ruhl Libre is OFL-1.1.
-   License texts ship beside the fonts.
+   machine happens to have installed.
 
-   Taamey Frank CLM is the reason this section exists: it is the only face here
-   that carries the cantillation marks (U+0591-05AF), which is what books flagged
-   hasTeamim need. Frank Ruhl Libre has NONE of them — verified against its cmap —
-   so it is a body font only and must never sit in the teamim fallback chain.
+   Every Hebrew face here carries the cantillation marks (U+0591-05AF) that books
+   flagged hasTeamim need — verified against each cmap, 31/31 marks. That is the
+   bar for being bundled at all: a body face without te'amim renders such books
+   broken, so there is no longer one that lacks them. Heebo is the single
+   exception and is headings-only, never a body or teamim font.
 
-   Subset to Hebrew + Latin with GPOS kept, so mark positioning still works. */
+   Licensing decides which Culmus families ship. These four carry GPL-2.0 WITH
+   the font-embedding exception, which is what keeps the app's own code clear of
+   the GPL. Frank Ruehl CLM, Nachlieli CLM, Miriam Mono CLM and Drugulin CLM have
+   te'amim too but are plain GPL-2.0 with NO exception — do not add them. See
+   LICENSE-CulmusCLM.txt. */
 @font-face {
   font-family: 'Taamey Frank CLM';
   src: url('/fonts/TaameyFrankCLM-Regular.woff2') format('woff2');
@@ -27,17 +29,83 @@
   font-style: normal;
   font-display: swap;
 }
-/* Variable fonts: one file covers the whole weight range, so the range is declared
-   rather than shipping a file per weight. */
+/* The oblique faces are declared so the browser picks the real drawn slant instead
+   of shearing the upright face itself. */
 @font-face {
-  font-family: 'Frank Ruhl Libre';
-  src: url('/fonts/FrankRuhlLibre-var.woff2') format('woff2-variations');
-  font-weight: 300 900;
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-Regular.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
-/* Headings. A sans face against the serif body, and bundled for the same reason the
-   others are: the previous default (Segoe UI) exists only on Windows. */
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-RegularOblique.woff2') format('woff2');
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Hadasim CLM';
+  src: url('/fonts/HadasimCLM-BoldOblique.woff2') format('woff2');
+  font-weight: 700;
+  font-style: oblique;
+  font-display: swap;
+}
+/* Simple CLM ships a full Latin set, which is why it is the largest of the four. */
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-Medium.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-MediumOblique.woff2') format('woff2');
+  font-weight: 400;
+  font-style: oblique;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Simple CLM';
+  src: url('/fonts/SimpleCLM-BoldOblique.woff2') format('woff2');
+  font-weight: 700;
+  font-style: oblique;
+  font-display: swap;
+}
+/* Scribal faces — one weight each, as the script has no bold form. */
+@font-face {
+  font-family: 'Stam Ashkenaz CLM';
+  src: url('/fonts/StamAshkenazCLM.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Stam Sefarad CLM';
+  src: url('/fonts/StamSefaradCLM.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+/* Headings. A sans face against the serif body, bundled because the previous
+   default (Segoe UI) exists only on Windows. OFL-1.1. Variable: one file covers
+   the whole weight range, so the range is declared rather than a file per weight. */
 @font-face {
   font-family: 'Heebo';
   src: url('/fonts/Heebo-var.woff2') format('woff2-variations');

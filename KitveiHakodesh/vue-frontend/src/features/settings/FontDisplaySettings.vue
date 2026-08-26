@@ -39,7 +39,7 @@ const props = defineProps<{
  * Names for the weights the slider stops on — the number alone reads as arbitrary.
  * Falls back to the bare number for a step this map does not cover.
  *
- * The range stops at 700: Frank Ruhl Libre and Heebo are variable and keep thickening
+ * The range stops at 700: Heebo is variable and keeps thickening
  * past it, but Taamey Frank CLM ships as two STATIC faces (regular + bold), so a
  * te'amim book only ever renders two of these steps — 300-500 all look regular and
  * 600-700 both look bold. Offering 800/900 would add steps nothing distinguishes.

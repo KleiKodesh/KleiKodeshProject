@@ -1,0 +1,39 @@
+Culmus Project fonts bundled here
+=================================
+
+  Hadasim CLM        Regular, Bold, RegularOblique, BoldOblique
+  Simple CLM         Medium, Bold, MediumOblique, BoldOblique
+  Stam Ashkenaz CLM
+  Stam Sefarad CLM
+
+Copyright 2002-2023 Yoram Gnat <yoram.gnat@gmail.com>.
+OpenType feature work copyright 2023 Maxim Iorsh <iorsh@users.sourceforge.net>.
+Latin glyphs derive from Liberation Serif, digitized data (c) 2007 Ascender
+Corporation.
+
+Licensed under the GNU General Public License version 2 -- see GNU-GPL-2.0.txt
+-- WITH the font embedding exception reproduced below.
+
+That exception is the reason these four families are bundled and four other
+Culmus families are not. Frank Ruehl CLM, Nachlieli CLM, Miriam Mono CLM and
+Drugulin CLM are plain GPL-2.0 with NO exception, so shipping them would put
+this application's own source under the GPL. Do not add them here. Verified
+2026-08-26 against each font's name table, Debian's per-file copyright, and
+Fedora's package licensing.
+
+In the four families bundled here the exception is carried in the name table's
+copyright record (nameID 0); their license-description record (nameID 13) is
+empty. Taamey Frank CLM carries it in both. Absence from nameID 13 alone is
+therefore NOT evidence a Culmus font lacks the exception -- read nameID 0 too.
+
+Font embedding exception (verbatim, from nameID 0 of the bundled fonts)
+-----------------------------------------------------------------------
+
+  As a special exception, if you create a document which uses this font, and
+  embed this font or unaltered portions of this font into the document, this
+  font does not by itself cause the resulting document to be covered by the
+  GNU General Public License. This exception does not however invalidate any
+  other reasons why the document might be covered by the GNU General Public
+  License. If you modify this font, you may extend this exception to your
+  version of the font, but you are not obligated to do so. If you do not wish
+  to do so, delete this exception statement from your version.

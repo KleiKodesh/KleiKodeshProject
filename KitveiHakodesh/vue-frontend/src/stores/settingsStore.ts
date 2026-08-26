@@ -111,19 +111,20 @@ const DEFAULTS = {
   // Bundled, so headings match across machines; the Segoe faces are Windows-only and
   // now trail as fallbacks for a build with the font files stripped.
   headerFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
-  // Bundled, so this resolves on every machine; OS FrankRuehl only if the file is missing.
-  textFont: "'Frank Ruhl Libre', FrankRuehl, serif",
-  // Body font for books whose text carries cantillation marks (the hasTeamim
-  // column). Not every Hebrew face draws te'amim legibly, so those books get
-  // their own family while sharing the main size and line spacing.
-  // Taamey Frank CLM is BUNDLED (public/fonts/) and is the only face here that carries
-  // the cantillation marks, so it always resolves. David follows as the Windows-bundled
-  // fallback for a build with the font files stripped. Frank Ruhl Libre is deliberately
-  // NOT in this chain: its cmap has zero glyphs in U+0591-05AF, so it cannot draw te'amim.
+  // Bundled, so this resolves on every machine; OS David only if the file is missing.
+  // Same family as teamimTextFont on purpose: it draws te'amim, so a book that turns
+  // out to carry them needs no second face to look right.
+  textFont: "'Taamey Frank CLM', David, serif",
+  // Body font for books whose text carries cantillation marks (the hasTeamim column).
+  // Kept as its own setting so a reader can give those books a different face, even
+  // though it now matches textFont by default; both are Taamey Frank CLM, BUNDLED in
+  // public/fonts/. David follows as the Windows fallback for a build with the font
+  // files stripped -- it draws only 1 of the 31 marks, so it is a last resort.
   teamimTextFont: "'Taamey Frank CLM', David, serif",
   fontSize: 120,
-  // 400 = CSS `normal`. All three bundled fonts are variable, so any value on the
-  // slider is a real weight rather than the browser faking one from two static faces.
+  // 400 = CSS `normal`. Heebo is variable so every slider value is a real weight; the
+  // CLM faces ship regular and bold only, so in between the browser picks the nearer
+  // of the two rather than drawing a true intermediate weight.
   fontWeight: 400,
   linePadding: 1.6,
   // Off by default: with an absolute line box, a word larger than the body text
@@ -131,7 +132,7 @@ const DEFAULTS = {
   // spacing at the cost of a possible overlap — is the user's to opt into.
   fixedLineHeight: false,
   commentaryHeaderFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
-  commentaryTextFont: "'Frank Ruhl Libre', FrankRuehl, serif",
+  commentaryTextFont: "'Taamey Frank CLM', David, serif",
   // Tracks fontSize: while useSeparateCommentarySettings is off the commentary mirrors the
   // main text, so a different default here would visibly shrink the commentary the moment
   // the user first turns separate settings ON, with no action of their own.
@@ -211,8 +212,8 @@ function clearPersistedSettings(): void {
 }
 
 /**
- * First family of a font-stack default, e.g. "'Frank Ruhl Libre', FrankRuehl, serif"
- * → "Frank Ruhl Libre". The font picker badges a row by bare family name, while the
+ * First family of a font-stack default, e.g. "'Taamey Frank CLM', David, serif"
+ * → "Taamey Frank CLM". The font picker badges a row by bare family name, while the
  * defaults are full fallback chains — this is the one place that bridges the two, so
  * the badge cannot drift from the default it claims to mark.
  */
