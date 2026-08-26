@@ -93,6 +93,21 @@ export interface LineRow {
   content: string
 }
 
+/**
+ * One alternate version of a book — an overlay of replacement text over the SAME
+ * line ids, so the TOC, links and highlights stay valid when the reader swaps to it.
+ */
+export interface BookVersionRow {
+  id: number
+  /** The upstream key, usually English. Stable — this is what persistence stores. */
+  versionTitle: string
+  /** Display name. Often absent, in which case the UI falls back to versionTitle. */
+  heVersionTitle: string | null
+  versionSource: string | null
+  versionNotes: string | null
+  heVersionNotes: string | null
+}
+
 /** Reverse source/targum lookup — which lines point AT the given ones. */
 export interface ReverseLineRow {
   sourceBookId: number

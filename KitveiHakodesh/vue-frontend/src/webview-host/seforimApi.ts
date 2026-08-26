@@ -13,7 +13,7 @@ import { serviceCall } from './serviceClient'
 import { SQL } from './queries.sql'
 import type {
   BookRow, CategoryRow, BookInfo, TocEntry, AltTocStructure,
-  LineRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
+  LineRow, BookVersionRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
 /** True when the C# seforim bridge is present (hosted). Dev falls to the service. */
@@ -39,10 +39,55 @@ export async function getBookById(id: number): Promise<BookInfo | undefined> {
   return (await query<BookInfo>(SQL.GET_BOOK_BY_ID, [id]))[0]
 }
 
-export async function getLinesPaged(bookId: number, limit: number, offset: number): Promise<LineRow[]> {
+/**
+ * A page of lines. `versionId` reads the page through an alternate version's overlay;
+ * omit it (or pass 0) for the book's merged text.
+ */
+export async function getLinesPaged(
+  bookId: number, limit: number, offset: number, versionId = 0,
+): Promise<LineRow[]> {
   if (!isDbHosted())
-    return (await serviceCall<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset })).rows
+    return (await serviceCall<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset, versionId })).rows
+  if (versionId > 0) return query<LineRow>(SQL.GET_VERSION_LINES_PAGED, [versionId, bookId, limit, offset])
   return query<LineRow>(SQL.GET_LINES_PAGED, [bookId, limit, offset])
+}
+
+// ── Versions (book_version / version_line, later schemas only) ────────────────
+
+// Whether the open DB carries alternate versions. null = not probed yet. Once false,
+// callers get [] without touching the DB again — same lifecycle as _hasLinkAnchors.
+let _hasBookVersions: boolean | null = null
+
+/**
+ * A book's alternate versions that carry text, best edition first.
+ *
+ * A version is an overlay over the same line ids, not a separate book — so switching
+ * to one keeps the TOC, links, highlights and scroll position valid.
+ *
+ * [] means "none to offer", including on DBs that predate the feature; the toolbar
+ * shows no version control at all in that case.
+ */
+export async function getBookVersions(bookId: number): Promise<BookVersionRow[]> {
+  if (_hasBookVersions === false || bookId <= 0) return []
+  if (!isDbHosted())
+    return (await serviceCall<{ rows: BookVersionRow[] }>('getBookVersions', { bookId })).rows
+  if (_hasBookVersions == null) {
+    try {
+      const rows = await query<{ n: number }>(SQL.HAS_BOOK_VERSION_TABLES)
+      // Both tables or neither — an overlay needs version_line as much as book_version.
+      _hasBookVersions = (rows[0]?.n ?? 0) === 2
+    } catch {
+      return [] // DB not ready — leave unknown so the next call re-probes
+    }
+    if (!_hasBookVersions) return []
+  }
+  try {
+    return await query<BookVersionRow>(SQL.GET_BOOK_VERSIONS, [bookId])
+  } catch {
+    // DB swapped under us (user picked a different seforim DB without a reload) — re-probe.
+    _hasBookVersions = null
+    return []
+  }
 }
 
 // ── TOC ─────────────────────────────────────────────────────────────────────

@@ -59,6 +59,11 @@ export interface BookViewLinesScrollProps {
   commentaryPersistState?: () => CommentaryPanelLiveStates
   /** The TOC panel's state, read at save time like the commentary panels'. */
   tocPersistState?: () => TocPersistState
+  /**
+   * The alternate version the text is being read in, by versionTitle — read at save
+   * time like the panels above. null = the book's merged text.
+   */
+  versionPersistState?: () => string | null
   selectedLineId?: number | null
   searchBarVisible?: boolean
 }
@@ -403,6 +408,7 @@ export function useBookViewLinesScroll(
 
     const commentaryPanels = commentaryPanelsForSave()
     const toc = props.tocPersistState?.()
+    const versionTitle = props.versionPersistState?.() ?? null
 
     tabStore.setBookViewState(tabId, bookId, {
       ...position,
@@ -411,6 +417,7 @@ export function useBookViewLinesScroll(
       autoSelectTopLine: autoSelectTopLine.value,
       commentaryPanels,
       toc,
+      versionTitle,
     })
     tabStore.setLastReadPos(bookId, {
       ...position,
@@ -420,6 +427,7 @@ export function useBookViewLinesScroll(
       zoom: zoom.value,
       commentaryPanels,
       toc,
+      versionTitle,
     })
   }
 

@@ -144,7 +144,11 @@ export function useBookView(
     loading: tocLoading, error: tocError, tocLoaded,
   } = useToc(() => bookId, () => bookTitle)
 
-  const { lines, prioritise, prefetch, holdBackfill, releaseBackfill, hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim } = useLines(() => bookId)
+  const {
+    lines, prioritise, prefetch, holdBackfill, releaseBackfill,
+    hasCommentaries, hasRelatedBooks, hasTeamim: bookHasTeamim,
+    versions, activeVersionId, setVersion,
+  } = useLines(() => bookId)
 
   // Warm up the connection type ID table immediately — single tiny query that must
   // resolve before any line-tap commentary load fires its reverse queries.
@@ -583,7 +587,7 @@ export function useBookView(
 
   const {
     initialLineIndex, initialScrollTop, initialScrollOffset,
-    scrollStateReady, idbResolved, restore: restoreSession,
+    scrollStateReady, idbResolved, restoredVersionTitle, restore: restoreSession,
   } = useBookViewSessionRestore(
     tabId, bookId, openTocLineIndex,
     panels,
@@ -595,10 +599,47 @@ export function useBookView(
     },
   )
 
+  // ── Alternate versions ──────────────────────────────────────────────────────
+  //
+  // Persistence stores the version's TITLE, and the list to resolve it against loads
+  // asynchronously after the text — so the saved title is applied by a watcher on the
+  // list rather than at restore time, whichever of the two lands second.
+  //
+  // Once only: a `versions` list that arrives after the reader has already picked a
+  // version (or deliberately gone back to the merged text) must not overwrite that.
+  let versionRestoreDone = false
+
+  watch(versions, (list) => {
+    if (versionRestoreDone || list.length === 0) return
+    versionRestoreDone = true
+    const title = restoredVersionTitle.value
+    if (title == null) return
+    // A title that no longer resolves — the library changed underneath the saved
+    // state — leaves the book in its merged text rather than guessing at a substitute.
+    const match = list.find((v) => v.versionTitle === title)
+    if (match) setVersion(match.id, currentScrollLineIndex.value)
+  }, { immediate: true })
+
+  /** The active version's title, for persistence. null = the merged text. */
+  function versionPersistState(): string | null {
+    return versions.value.find((v) => v.id === activeVersionId.value)?.versionTitle ?? null
+  }
+
+  /** Toolbar handler — switch the text to a version, or back to the merged text. */
+  function selectVersion(versionId: number | null) {
+    // The reader's own choice from here on; a late-arriving list must not override it.
+    versionRestoreDone = true
+    // Refill from where they are reading, not from line 0 — on a long book the two are
+    // thousands of lines apart, and only the visible window is worth waiting for.
+    setVersion(versionId, currentScrollLineIndex.value)
+  }
+
   watch(() => bookId, () => {
     selectedLineId.value = null
     commentaryLineId.value = null
     clearManualSelection()
+    // A new book brings its own versions and its own saved title.
+    versionRestoreDone = false
     groups.value = []
   })
 
@@ -690,6 +731,8 @@ export function useBookView(
     searchHighlightLineIndex, searchHighlightQuery, searchHighlightSnippet, searchHighlightTerms,
     // book metadata
     bookHasTeamim,
+    // alternate versions (empty for most books — the toolbar control hides)
+    versions, activeVersionId, selectVersion, versionPersistState,
     // UI state
     selectedLineId,
     searchMode: searchPanel.searchMode,

@@ -71,6 +71,8 @@ export function useBookViewSessionRestore(
   const initialScrollOffset = ref<number>(0)
   const scrollStateReady = ref(true)
   const idbResolved = ref(false)
+  /** The saved version's title, or null for the merged text. Applied by useBookView. */
+  const restoredVersionTitle = ref<string | null>(null)
 
   /** Resolved per-panel saved state, filled by _applyRestoreData. */
   let _restoredPanels: CommentaryPanelPersistStates = {}
@@ -104,6 +106,11 @@ export function useBookViewSessionRestore(
     // fallback reopening a book restored their zoom but reset the text's.
     const restoredZoom = bookSaved?.zoom ?? (useLastRead ? lastRead?.zoom : undefined)
     if (restoredZoom != null) bookViewStore.setLinesZoom(tabId, bookId!, restoredZoom)
+
+    // The alternate version, by title. Only recorded here — the version list it has
+    // to be matched against loads asynchronously and may arrive either side of this,
+    // so useBookView applies it once both are in hand.
+    restoredVersionTitle.value = bookSaved?.versionTitle ?? (useLastRead ? lastRead?.versionTitle ?? null : null)
     // autoSelectTopLine is deliberately NOT restored here. It is a single app-wide
     // preference (one ref, persisted in localStorage, toggled from the toolbar) — there is
     // no per-tab storage for it, so writing a per-(tab, book) snapshot into it does not
@@ -221,5 +228,5 @@ export function useBookViewSessionRestore(
     }
   }
 
-  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restore }
+  return { initialLineIndex, initialScrollTop, initialScrollOffset, scrollStateReady, idbResolved, restoredVersionTitle, restore }
 }

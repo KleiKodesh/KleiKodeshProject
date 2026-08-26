@@ -295,6 +295,45 @@ export const SQL = {
     LIMIT ? OFFSET ?
   `,
 
+  // ── Versions (book_version / version_line, later schemas only) ───────────────
+
+  /** Guard GET_BOOK_VERSIONS / GET_VERSION_LINES_PAGED behind this probe. */
+  HAS_BOOK_VERSION_TABLES: `
+    SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table' AND name IN ('book_version', 'version_line')
+  `,
+
+  /**
+   * A book's alternate versions that actually carry text, best edition first.
+   * hasContent = 0 rows are metadata-only (provenance/licence) with no version_line
+   * rows behind them — opening one would show a blank book.
+   */
+  GET_BOOK_VERSIONS: `
+    SELECT id, versionTitle, heVersionTitle, versionSource, versionNotes, heVersionNotes
+    FROM book_version
+    WHERE bookId = ? AND hasContent = 1
+    ORDER BY priority DESC, versionTitle
+  `,
+
+  /**
+   * A page of lines as one version reads them. A version is an OVERLAY over the SAME
+   * line ids, so ids, lineIndex, the TOC and links stay valid when the text swaps.
+   *
+   * Structural lines (heRef IS NULL) keep the base text — a version supplies body text,
+   * not scaffolding. Body lines a partial version doesn't cover come back EMPTY rather
+   * than falling back to line.content, which would interleave two versions in one page
+   * and read as a single text. Partial versions are real: some cover 31 of 1584 lines.
+   */
+  GET_VERSION_LINES_PAGED: `
+    SELECT l.id, l.lineIndex,
+           CASE WHEN l.heRef IS NULL THEN l.content
+                ELSE COALESCE(vl.content, '') END AS content
+    FROM line l
+    LEFT JOIN version_line vl ON vl.versionId = ? AND vl.lineId = l.id
+    WHERE l.bookId = ?
+    ORDER BY l.lineIndex
+    LIMIT ? OFFSET ?
+  `,
+
   // ── Links ────────────────────────────────────────────────────────────────────
 
   /** Combined links and lines data for commentary loader (single query) */

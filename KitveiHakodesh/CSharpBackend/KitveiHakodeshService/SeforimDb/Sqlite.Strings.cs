@@ -45,6 +45,45 @@ internal static class SeforimSql
         ORDER BY lineIndex
         LIMIT @limit OFFSET @offset";
 
+    /// <summary>
+    /// A page of lines as a specific version reads them.
+    ///
+    /// A version is an OVERLAY, not a separate book: version_line carries replacement
+    /// content keyed by the SAME line ids, so ids, lineIndex, the TOC, links and
+    /// highlights all stay valid when the text swaps underneath them.
+    ///
+    /// Structural lines (heRef IS NULL — headings and titles) keep the base text: a
+    /// version supplies body text, not the book's scaffolding. Body lines a partial
+    /// version does not cover come back EMPTY rather than falling back to line.content,
+    /// which would silently interleave two different versions in one page and read as
+    /// a single text. Partial versions are real here — some cover 31 of 1584 lines.
+    /// </summary>
+    public const string GetVersionLinesPaged = @"
+        SELECT l.id, l.lineIndex,
+               CASE WHEN l.heRef IS NULL THEN l.content
+                    ELSE COALESCE(vl.content, '') END AS content
+        FROM line l
+        LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
+        WHERE l.bookId = @bookId
+        ORDER BY l.lineIndex
+        LIMIT @limit OFFSET @offset";
+
+    // ── Versions ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The alternate versions of a book that actually carry text.
+    ///
+    /// hasContent = 0 rows are metadata-only records (edition provenance and licence)
+    /// with no version_line rows behind them — most version rows in the shipped DB are
+    /// these, and offering one would open a blank book. Ordered by the publisher's
+    /// priority, then title, so the best-regarded edition heads the list.
+    /// </summary>
+    public const string GetBookVersions = @"
+        SELECT id, versionTitle, heVersionTitle, versionSource, versionNotes, heVersionNotes
+        FROM book_version
+        WHERE bookId = @bookId AND hasContent = 1
+        ORDER BY priority DESC, versionTitle";
+
     // ── TOC ───────────────────────────────────────────────────────────────────
 
     /// <summary>All TOC entries for a book, flat — the frontend builds the tree in memory.</summary>

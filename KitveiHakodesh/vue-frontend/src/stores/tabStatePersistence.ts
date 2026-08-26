@@ -38,6 +38,12 @@ export interface BookState {
   commentaryPanels?: import('@/features/book-view/bookViewTypes').CommentaryPanelPersistStates
   /** The TOC side panel, which survives tab switches the same way the panels do. */
   toc?: import('@/features/book-view/bookViewTypes').TocPersistState
+  /**
+   * The alternate version this tab is reading, by `book_version.versionTitle`.
+   * Absent or null = the book's merged text. Stored by title rather than row id for
+   * the reason given on `LastReadState.versionTitle`.
+   */
+  versionTitle?: string | null
 }
 
 /**
