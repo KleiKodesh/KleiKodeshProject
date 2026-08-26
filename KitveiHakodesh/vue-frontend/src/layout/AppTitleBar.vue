@@ -359,7 +359,7 @@ useAppTitleBarShortcuts({
       v-else
       ref="barTitleRef"
       class="bar-title"
-      :class="{ 'is-cramped': isTitleCramped, 'is-hinting': isExpandHintLive }"
+      :class="{ 'is-cramped': isTitleCramped }"
       dir="rtl"
       :title="barTitle"
     >
@@ -530,11 +530,6 @@ useAppTitleBarShortcuts({
   background: color-mix(in srgb, var(--text-primary) 3%, transparent);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  /* Also the landing for the hint sweep below: cancelling an animation drops the
-     animated value instantly, and on a full-width accent wash that snap reads as a
-     glitch. With this the box eases back to whatever state it lands in. Short enough
-     to be invisible on an ordinary hover. */
-  transition: background 180ms ease, border-color 180ms ease;
 }
 .bar-title:hover {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
@@ -570,104 +565,57 @@ useAppTitleBarShortcuts({
 }
 
 /* ---- The one-time discoverability hint --------------------------------------
-   The resting box looks like a label. This is the one time it says otherwise, so it
-   says it with the whole box rather than with the 12px mark in the corner.
+   The chevron is deliberately faint at rest, which is right once you know what the
+   box is and useless before then. While the hint is live it travels: it slides in
+   along its own axis, overshoots, and settles back - the movement a thing makes
+   when it drops into a slot, which reads as "this opens" far better than a mark
+   that merely brightens in place.
 
-   That was the first version's mistake, and no amount of easing fixed it: a chevron
-   centred in a 24px box with overflow: hidden has 6px of vertical room, which caps
-   any drop at a nudge. The box itself is flex: 1 1 auto and spans the title bar - it
-   has room to make a gesture, and it is also the thing being advertised. Announce the
-   target, not the marker.
+   The chevron points DOWN, so the track is vertical and the slide runs the way the
+   mark itself points - the motion and the symbol say the same thing.
 
-   Modelled on .line.flash-open (BookViewLinesContent.vue), which is this app's
-   existing "here I am": a slow swell, a long hold, and a graceful fade. Same easing
-   and the same swell-hold-fade shape, so this reads as the same application speaking;
-   2.4s against that one's 3.5s, because this runs twice and has a five-second budget
-   to stay inside. An announcement that takes its time reads as confident where a fast
-   one reads as a twitch.
+   Travel is capped at 5px each way. The mark is 12px in a 24px box, centred by the
+   parent's align-items, so it has exactly 6px of clearance before .bar-title's
+   overflow: hidden starts shearing it. 5px keeps a pixel in hand at both extremes.
 
-   TWO RUNS. Motion totals 2 x 2.4s = 4.8s, just inside the five seconds at which
-   WCAG 2.2 SC 2.2.2 (Pause, Stop, Hide, level A) starts requiring a pause control
-   for motion that auto-starts alongside other content. That budget is CUMULATIVE,
-   not per-cycle, so an infinite loop with quiet gaps would not have qualified. A
-   hint cannot claim the criterion's "essential" exemption either: what it conveys is
-   available statically, from the chevron simply sitting there.
-
-   Bounding it costs nothing. The hint is armed by a persisted flag, so a reader who
-   misses both runs sees them again next launch, and every launch after, until they
-   open the box once. It stops because it worked, not because a timer ran out. */
-
-/* The box: an accent wash swells up, holds, and fades - the same swell-hold-fade
-   shape as .line.flash-open. Backed by --accent-color rather than the flash's fixed
-   orange, so the announcement is in whatever colour the reader's theme speaks. */
-@keyframes bar-title-hint-sweep {
-  0%   { background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-         border-color: var(--border-color); }
-  18%  { background: color-mix(in srgb, var(--accent-color) 16%, transparent);
-         border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color)); }
-  55%  { background: color-mix(in srgb, var(--accent-color) 16%, transparent);
-         border-color: color-mix(in srgb, var(--accent-color) 55%, var(--border-color)); }
-  78%  { background: color-mix(in srgb, var(--accent-color) 7%, transparent);
-         border-color: color-mix(in srgb, var(--accent-color) 25%, var(--border-color)); }
-  100% { background: color-mix(in srgb, var(--text-primary) 3%, transparent);
-         border-color: var(--border-color); }
-}
-.bar-title.is-hinting {
-  animation: bar-title-hint-sweep 2.4s cubic-bezier(0.33, 0, 0.2, 1) 2;
-}
-
-/* The chevron rides the same swell: it lifts, drops back, and brightens with the
-   wash, so the mark and the box read as one gesture rather than two things happening
-   at once.
-
-   TWO ANIMATIONS, not one keyframe list. A timing function applies between each pair
-   of stops and to every property in them alike, so a single list would put the
-   transform's curve on the opacity as well - and an overshooting curve on opacity
-   drives it past full on the way in and BELOW its resting value on the way out, so
-   the chevron would sag almost to nothing and spring back. Split, each property gets
-   a curve that suits it: position may overshoot, opacity may not. That is the same
-   spatial-vs-effects split Material draws, and the reason its effects tokens are
-   critically damped while its spatial ones are not.
-
-   No spring on the lift either. The box is carrying the announcement now, so the
-   mark only has to move with it; a bounce on a 3px travel would be a twitch competing
-   with the wash rather than adding to it. An ease-out lift and a decelerating return
-   is the whole of it. */
-@keyframes bar-title-expand-hint-move {
-  0%   { transform: translateY(0); }
-  10%  { transform: translateY(-3px); }
-  24%  { transform: translateY(0); }
-  100% { transform: translateY(0); }
-}
-@keyframes bar-title-expand-hint-fade {
-  0%   { opacity: 0.45; }
-  18%  { opacity: 1; }
-  55%  { opacity: 1; }
-  100% { opacity: 0.45; }
+   Bounded by the hint, not by a count: it runs until the reader opens the box, which
+   is the behaviour being taught. A fixed number of runs would stop teaching while the
+   lesson was still unlearned. The long tail on the keyframes is the rest between
+   runs - without it a loop this short reads as a jitter rather than a gesture. */
+@keyframes bar-title-expand-hint {
+  /* Off the top of its slot, invisible - the start of the travel, not a flicker. */
+  0%       { opacity: 0;    transform: translateY(-5px); }
+  /* Sliding in, now visible. */
+  15%      { opacity: 1;    transform: translateY(-3px); }
+  /* Overshoots PAST the resting place: the bounce is an overshoot and a recovery, */
+  /* so the mark has to pass its mark to have something to come back from. */
+  30%      { opacity: 1;    transform: translateY(3px); }
+  /* Recovers, with a smaller counter-overshoot - each rebound loses energy. */
+  40%      { opacity: 1;    transform: translateY(-1.5px); }
+  /* Settled, at rest in its slot. */
+  48%      { opacity: 1;    transform: translateY(0); }
+  /* Holds there, then fades for the next run. The hold is most of the cycle. */
+  88%      { opacity: 1;    transform: translateY(0); }
+  100%     { opacity: 0;    transform: translateY(-5px); }
 }
 .bar-title-expand.is-hinting {
-  animation:
-    bar-title-expand-hint-move 2.4s cubic-bezier(0.33, 0, 0.2, 1) 2,
-    bar-title-expand-hint-fade 2.4s cubic-bezier(0.33, 0, 0.2, 1) 2;
+  /* linear, NOT ease-in-out: the keyframes above already carry the easing in their
+     spacing (fast slide, sharp overshoot, decaying rebound, long hold). Adding a
+     curve on top would soften exactly the snap the bounce depends on. */
+  animation: bar-title-expand-hint 2.4s linear infinite;
 }
-/* The reader is on the box; the hint has served its purpose. Both halves stop, and
-   the box hands itself back to the ordinary hover state. */
-.bar-title:hover.is-hinting,
+/* Hover already brightens the chevron, and a mark sliding around under the cursor
+   reads as a glitch. The reader is on the box at that point - the hint has served its
+   purpose, so it stops and hands the element back to the plain hover state. */
 .bar-title:hover .bar-title-expand.is-hinting {
   animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
-  /* A REPLACEMENT, not a removal. The wash still swells and fades: it changes only
-     colour, which is not the moving content SC 2.2.2 is written about, so the box can
-     still announce itself to a reader who asked for less motion. Only the chevron's
-     travel goes, since that is the part that actually moves. Dropping both would
-     leave the one group who cannot fall back on having noticed the movement with no
-     hint at all. */
   .bar-title-expand.is-hinting {
-    /* Keep the fade, drop the travel. Naming one animation resets the whole list, so
-       the move is cancelled by omission and the chevron brightens and dims with the
-       wash instead of being pinned bright for the hint's whole armed life. */
-    animation: bar-title-expand-hint-fade 2.4s cubic-bezier(0.33, 0, 0.2, 1) 2;
+    /* No travel at all for a reader who asked for no motion. Full opacity still
+       singles the mark out, which is the point the movement was making. */
+    animation: none;
+    opacity: 1;
   }
 }
 /* No chevron ? no reserved strip. Handing that 14px back is the point of hiding
