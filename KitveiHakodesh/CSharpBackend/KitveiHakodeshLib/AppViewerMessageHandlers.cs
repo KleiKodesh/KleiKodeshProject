@@ -233,8 +233,8 @@ namespace KitveiHakodeshLib
             // WebMessageReceived fires on the UI thread, and a cold enumeration walks the
             // cmap of every system typeface — around a second on a font-heavy machine.
             // Task.Run keeps the window responsive; Reply marshals itself back.
-            var lists = await Task.Run(() => FontsProvider.GetFontLists());
-            _bridge.Reply(id, new { fonts = lists.Fonts, teamimFonts = lists.TeamimFonts });
+            var fonts = await Task.Run(() => FontsProvider.GetHebrewFonts());
+            _bridge.Reply(id, new { fonts });
         }
 
         private void HandleAppReady(string id)
