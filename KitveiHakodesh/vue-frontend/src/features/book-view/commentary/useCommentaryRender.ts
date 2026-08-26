@@ -28,12 +28,9 @@ export function useCommentaryRender(
   const settingsStore = useSettingsStore()
 
   const diacriticsState = computed(() => settingsStore.diacriticsState)
-  const commentaryFontPx = computed(() => {
-    const effectiveFontSize = settingsStore.useSeparateCommentarySettings
-      ? settingsStore.commentaryFontSize
-      : settingsStore.fontSize
-    return (getCommentaryZoom() / 100) * (effectiveFontSize / 100) * 15
-  })
+  const commentaryFontPx = computed(
+    () => (getCommentaryZoom() / 100) * (settingsStore.commentaryFontSize / 100) * 15,
+  )
 
   // Two-tier cache — same pattern as useBookViewLineRenderer:
   //   globalCacheKey  — diacritics, censor, searchQuery; wipes all on change.

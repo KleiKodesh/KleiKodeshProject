@@ -21,21 +21,10 @@ export function useSettings() {
     commentaryFontSize,
     commentaryFontWeight,
     commentaryLinePadding,
-    useSeparateCommentarySettings,
     appZoom,
     newTabPage,
     resumeLastRead,
   } = storeToRefs(settings)
-
-  watch([useSeparateCommentarySettings, headerFont, textFont, fontSize, fontWeight, linePadding], () => {
-    if (!useSeparateCommentarySettings.value) {
-      commentaryHeaderFont.value = headerFont.value
-      commentaryTextFont.value = textFont.value
-      commentaryFontSize.value = fontSize.value
-      commentaryFontWeight.value = fontWeight.value
-      commentaryLinePadding.value = linePadding.value
-    }
-  })
 
   async function resetSearchIndexAction() {
     await searchCache.clear()
@@ -78,7 +67,6 @@ export function useSettings() {
     commentaryFontSize,
     commentaryFontWeight,
     commentaryLinePadding,
-    useSeparateCommentarySettings,
     appZoom,
     newTabPage,
     resumeLastRead,
