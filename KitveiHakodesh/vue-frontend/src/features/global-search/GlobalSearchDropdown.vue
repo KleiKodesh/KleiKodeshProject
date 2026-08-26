@@ -389,7 +389,9 @@ function getTabIcon(route: string): FileIconInfo {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
-  z-index: 1000;
+  /* Above the book-view search bar (9999), which is anchored inside the pane:
+     the address bar overlays the title bar, so its dropdown covers the pane. */
+  z-index: 10000;
 }
 
 /* ── Merged (address-bar) mode ────────────────────────────────────────────────
