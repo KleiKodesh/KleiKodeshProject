@@ -29,7 +29,8 @@ const settingsStore = useSettingsStore()
 //
 // The sidebar row only ever offers to OPEN the sidebar: while the sidebar is up this menu
 // cannot be reached at all (AppTitleBar drops the hamburger and Ctrl+M), and closing it
-// again is the rail's own bottom button.
+// again is the rail's own bottom button - or Ctrl+Shift+M, which toggles both ways because
+// it returns before toggleNavDropdown's rail-open guard.
 //
 // Workspaces is deliberately not among them any more: it is a picker, not a destination,
 // and it lives in the title bar beside home - one place, not three.
@@ -129,11 +130,12 @@ function onPopOut() {
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('navSidebar') }"
       data-nav-item
-      title="הצג סרגל צד"
+      title="הצג סרגל צד (Ctrl+Shift+M)"
       @click="onShowNavSidebar"
     >
       <span class="nav-icon"><IconChevronDoubleLeft20Regular /></span>
       <span class="nav-label">סרגל צד</span>
+      <span class="nav-shortcut">Ctrl+Shift+M</span>
     </button>
     <button
       v-if="showPopOutButton"
