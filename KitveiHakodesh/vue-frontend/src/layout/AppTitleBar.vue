@@ -30,6 +30,7 @@ import { useAppTitleBarShortcuts } from './useAppTitleBarShortcuts'
 import { useSplitViewAvailable } from './useSplitViewAvailable'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useTabStore } from '@/stores/tabStore'
 import { usePdfOcrStore } from '@/stores/pdfOcrStore'
 import { documentIcon } from '@/utils/documentIcons'
 
@@ -38,6 +39,7 @@ const props = withDefaults(defineProps<{ paneId?: 1 | 2 }>(), { paneId: 1 })
 const pane = useAppShellPane(props.paneId)
 const bookViewStore = useBookViewStore()
 const settingsStore = useSettingsStore()
+const tabStore = useTabStore()
 const pdfOcrStore = usePdfOcrStore()
 
 // ---- The workspace picker -----------------------------------------------------
@@ -136,6 +138,9 @@ function enterSearchMode() {
   // (Ctrl+H may have hidden it).
   titleBarVisible.value = true
   searchMode.value = true
+  // Opening the box IS the lesson, so this is where the hint retires - whether the
+  // reader got here by clicking, by Ctrl+E, or from the tab strip.
+  settingsStore.completeAddressBarHint()
 }
 
 function onTitleBarClick() {
@@ -212,6 +217,25 @@ function measureTitleCramped() {
 // outside this component made. The border box only moves when the BAR really
 // resizes, which is the only thing worth re-measuring for.
 useResizeObserver(barTitleRef, measureTitleCramped, { box: 'border-box' })
+
+// ---- Discoverability hint -----------------------------------------------------
+//
+// The resting box looks like a label, so nothing about it says it opens. The chevron
+// says so quietly; this makes it say so once, loudly, at the only moment the box has
+// something worth opening for - the first time there is a recent location behind it.
+//
+// It runs until the reader opens the box, then stops for good
+// (settingsStore.addressBarHintDone). Clicking is the whole lesson, so performing it
+// IS the dismissal - there is nothing else to teach afterwards.
+//
+// Gated on the chevron actually being rendered: .is-cramped removes it, and animating
+// an element that is not there would show nothing while the hint counted as spent.
+const isExpandHintLive = computed(
+  () =>
+    !settingsStore.addressBarHintDone &&
+    !isTitleCramped.value &&
+    tabStore.recentLocations.length > 0,
+)
 
 // Watch the rendered LABELS, not the entry objects. The measurement depends on
 // the text that reaches the DOM and nothing else, so the sources are the title
@@ -362,7 +386,8 @@ useAppTitleBarShortcuts({
       <!-- Expand affordance: the resting box is a collapsed address bar, and this
            says so. Gone in search mode ? .bar-search replaces this whole span, so
            the mark disappears exactly when the field is expanded. -->
-      <IconChevronDoubleDown16Regular v-if="!isTitleCramped" class="bar-title-expand" />
+      <IconChevronDoubleDown16Regular v-if="!isTitleCramped" class="bar-title-expand"
+        :class="{ 'is-hinting': isExpandHintLive }" />
     </span>
 
     <div class="bar-end">
@@ -537,6 +562,61 @@ useAppTitleBarShortcuts({
 }
 .bar-title:hover .bar-title-expand {
   opacity: 0.75;
+}
+
+/* ---- The one-time discoverability hint --------------------------------------
+   The chevron is deliberately faint at rest, which is right once you know what the
+   box is and useless before then. While the hint is live it travels: it slides in
+   along its own axis, overshoots, and settles back - the movement a thing makes
+   when it drops into a slot, which reads as "this opens" far better than a mark
+   that merely brightens in place.
+
+   The chevron points DOWN, so the track is vertical and the slide runs the way the
+   mark itself points - the motion and the symbol say the same thing.
+
+   Travel is capped at 5px each way. The mark is 12px in a 24px box, centred by the
+   parent's align-items, so it has exactly 6px of clearance before .bar-title's
+   overflow: hidden starts shearing it. 5px keeps a pixel in hand at both extremes.
+
+   Bounded by the hint, not by a count: it runs until the reader opens the box, which
+   is the behaviour being taught. A fixed number of runs would stop teaching while the
+   lesson was still unlearned. The long tail on the keyframes is the rest between
+   runs - without it a loop this short reads as a jitter rather than a gesture. */
+@keyframes bar-title-expand-hint {
+  /* Off the top of its slot, invisible - the start of the travel, not a flicker. */
+  0%       { opacity: 0;    transform: translateY(-5px); }
+  /* Sliding in, now visible. */
+  15%      { opacity: 1;    transform: translateY(-3px); }
+  /* Overshoots PAST the resting place: the bounce is an overshoot and a recovery, */
+  /* so the mark has to pass its mark to have something to come back from. */
+  30%      { opacity: 1;    transform: translateY(3px); }
+  /* Recovers, with a smaller counter-overshoot - each rebound loses energy. */
+  40%      { opacity: 1;    transform: translateY(-1.5px); }
+  /* Settled, at rest in its slot. */
+  48%      { opacity: 1;    transform: translateY(0); }
+  /* Holds there, then fades for the next run. The hold is most of the cycle. */
+  88%      { opacity: 1;    transform: translateY(0); }
+  100%     { opacity: 0;    transform: translateY(-5px); }
+}
+.bar-title-expand.is-hinting {
+  /* linear, NOT ease-in-out: the keyframes above already carry the easing in their
+     spacing (fast slide, sharp overshoot, decaying rebound, long hold). Adding a
+     curve on top would soften exactly the snap the bounce depends on. */
+  animation: bar-title-expand-hint 2.4s linear infinite;
+}
+/* Hover already brightens the chevron, and a mark sliding around under the cursor
+   reads as a glitch. The reader is on the box at that point - the hint has served its
+   purpose, so it stops and hands the element back to the plain hover state. */
+.bar-title:hover .bar-title-expand.is-hinting {
+  animation: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-title-expand.is-hinting {
+    /* No travel at all for a reader who asked for no motion. Full opacity still
+       singles the mark out, which is the point the movement was making. */
+    animation: none;
+    opacity: 1;
+  }
 }
 /* No chevron ? no reserved strip. Handing the 20px back is the point of hiding
    it: the breadcrumb gets the room instead of a blank gap where the mark was. */
