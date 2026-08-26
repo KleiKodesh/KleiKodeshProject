@@ -387,6 +387,10 @@ export function togglePopOut(): void {
   action('TogglePopOut').catch(() => {})
 }
 
+/** Ceiling for a single hosted reset step. Generous: the FTS wipe legitimately blocks
+ *  until an in-flight index merge drains, which is slow but finite. */
+const RESET_STEP_TIMEOUT_MS = 30_000
+
 /**
  * Full app reset — deletes the FTS index, resets C# settings, then reloads.
  * Called by resetEverything() in features/settings/appResetState.ts, which wipes
@@ -408,12 +412,44 @@ export async function resetHostApp(): Promise<void> {
     window.location.reload()
     return
   }
-  await action('DeleteFtsIndex').catch(() => {})
+  // DeleteFtsIndex now replies only once the wipe has actually run on the C# actor thread,
+  // so this await is what keeps the reload from racing the delete. It waits on a StopAll()
+  // that has no timeout by design (it must not return while a merge is still writing), which
+  // is why it gets a ceiling here: a reset that hangs forever behind the `resetting` flag
+  // strands the user on a dead page with no way out, which is worse than reloading with a
+  // stale index that the next boot's stamp check rebuilds anyway.
+  await withTimeout(action('DeleteFtsIndex'), RESET_STEP_TIMEOUT_MS)
   // Hosted mode used to skip the file-search index that dev resets, so the same button
   // wiped a different set of indexes depending on which mode the app ran in.
-  await action('ResetDocumentLocatorIndex').catch(() => {})
-  await action('resetSettings').catch(() => {})
-  action('reload').catch(() => window.location.reload())
+  // This one replies as soon as the rebuild is queued, so it does not need a long ceiling.
+  await withTimeout(action('ResetDocumentLocatorIndex'), RESET_STEP_TIMEOUT_MS)
+  await withTimeout(action('resetSettings'), RESET_STEP_TIMEOUT_MS)
+  // clearBrowsingData is set ONLY here. The same action is sent by seforimDb.onDbReady after
+  // a DB-path change, where clearing would wipe tabs and last-read positions the user never
+  // asked to lose. Safe on this path: resetEverything() has already dropped that storage.
+  action('reload', { clearBrowsingData: true }).catch(() => window.location.reload())
+}
+
+/**
+ * Resolve when `p` settles or the timeout elapses, whichever comes first — never rejects.
+ *
+ * Every step of the reset is best-effort by design: the reload at the end is what the user
+ * actually needs, and no individual failure should be able to prevent it.
+ */
+function withTimeout(p: Promise<unknown>, ms: number): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms)
+    p.then(
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+      () => {
+        clearTimeout(timer)
+        resolve()
+      },
+    )
+  })
 }
 
 /**
@@ -816,20 +852,26 @@ export function triggerHbDownload(
 }
 
 /**
- * Poll the live byte progress of an in-flight HebrewBooks download (dev only — the download runs
- * in the service, streamed). Returns { active, received, total } where total 0 means the server
- * sent no Content-Length (show MB, not %), or null when nothing is downloading / in hosted mode
- * (the WebView2 download has its own native dialog).
+ * Poll the live byte progress of an in-flight HebrewBooks download. Returns { active, received,
+ * total } where total 0 means the server sent no Content-Length (show MB, not %), or null when
+ * nothing is downloading. Both modes stream the PDF themselves — the service in dev, C# over
+ * HttpClient when hosted — so both can report real bytes.
  */
 export async function getHbDownloadProgress(
   bookId: string,
 ): Promise<{ active: boolean; received: number; total: number } | null> {
-  if (typeof window.__webviewAction === 'function') return null
+  if (!bookId) return null
   try {
-    const r = await serviceCall<{ active?: boolean; received?: number; total?: number }>(
-      'hbDownloadProgress',
-      { bookId },
-    )
+    const r =
+      typeof window.__webviewAction === 'function'
+        ? await action<{ active?: boolean; received?: number; total?: number }>(
+            'hbDownloadProgress',
+            { bookId },
+          )
+        : await serviceCall<{ active?: boolean; received?: number; total?: number }>(
+            'hbDownloadProgress',
+            { bookId },
+          )
     if (!r) return null
     return { active: !!r.active, received: r.received || 0, total: r.total || 0 }
   } catch {
@@ -838,12 +880,15 @@ export async function getHbDownloadProgress(
 }
 
 /**
- * Abort an in-flight HebrewBooks download (the ביטול button). Dev only — trips the service's
- * per-book cancellation so the streamed download stops and its partial file is cleaned up.
- * Fire-and-forget. Hosted mode uses the WebView2 download's own cancel, so this is a no-op there.
+ * Abort an in-flight HebrewBooks download (the ביטול button) — trips the per-book cancellation
+ * so the streamed copy stops and its partial file is cleaned up, in both modes. Fire-and-forget.
  */
 export function cancelHbDownload(bookId: string): void {
-  if (typeof window.__webviewAction === 'function' || !bookId) return
+  if (!bookId) return
+  if (typeof window.__webviewAction === 'function') {
+    action('cancelHbDownload', { bookId }).catch(() => {})
+    return
+  }
   serviceCallVoid('cancelHbDownload', { bookId })
 }
 

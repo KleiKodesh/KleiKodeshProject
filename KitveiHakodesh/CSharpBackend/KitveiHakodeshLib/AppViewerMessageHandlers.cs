@@ -54,7 +54,17 @@ namespace KitveiHakodeshLib
                         case "getTurnOffUpdates": _db.HandleGetTurnOffUpdates(id); break;
                         case "setTurnOffUpdates": _db.HandleSetTurnOffUpdates(root, id); break;
                         case "resetSettings": _db.HandleResetSettings(id); break;
-                        case "reload": _bridge.Reply(id, new { }); await HandleReload(); break;
+                        // Replies before reloading on purpose, unlike DeleteFtsIndex: the caller
+                        // cannot meaningfully await a navigation that destroys the page making the
+                        // call, so the reply exists only to settle the promise. Both frontend
+                        // callers ignore it for that reason.
+                        // clearBrowsingData is opt-in — see HandleReload; only the app reset sets it.
+                        case "reload":
+                            _bridge.Reply(id, new { });
+                            await HandleReload(
+                                root.TryGetProperty("clearBrowsingData", out var cbd) &&
+                                cbd.ValueKind == JsonValueKind.True);
+                            break;
                         case "pickFile": _localFile.HandlePickFile(root, id, this); break;
                         case "pickFolder": _localFile.HandlePickFolder(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
@@ -68,6 +78,8 @@ namespace KitveiHakodeshLib
                         case "deleteHbLocalFile": _hb.HandleDeleteHbLocalFile(root, id); break;
                         case "checkHbLocalFiles": _hb.HandleCheckHbLocalFiles(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
+                        case "hbDownloadProgress": _hb.HandleHbDownloadProgress(root, id); break;
+                        case "cancelHbDownload": _hb.HandleCancelHbDownload(root, id); break;
                         case "hbSearch": HandleHebrewBooksSearch(root, id); break;
                         case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
                         case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
