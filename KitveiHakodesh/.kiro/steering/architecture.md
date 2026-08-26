@@ -140,6 +140,7 @@ Pane-scoped — these fire only when `isThisPaneFocused` (i.e. always when split
 | `Ctrl+N` / `Ctrl+G` | new tab / go home |
 | `Ctrl+H` | toggle title bar visibility |
 | `Ctrl+L` / `Ctrl+M` | toggle dark mode / open nav dropdown |
+| `Ctrl+Shift+M` | toggle this pane's nav rail — the same menu docked. Unlike plain `Ctrl+M`, it stays live while the rail is up (it returns before `toggleNavDropdown`'s rail-open guard), so it closes the rail as well as opens it |
 | `F1` | settings in a new tab |
 | `Alt+ArrowRight` / `Alt+ArrowLeft` | back / forward through the active tab's own history (RTL: back is the RIGHT arrow, matching the title-bar button icons; `Ctrl`+arrows belong to the book view's section navigation) |
 | `Ctrl+1`…`Ctrl+9` | open a nav destination in a new tab (ספרים, חיפוש, היברו-בוקס, פתח קובץ, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, סביבות עבודה) |

@@ -213,6 +213,14 @@ export function useAppTitleBarShortcuts(options: {
         themeStore.toggleDarkMode()
         return true
       case 'KeyM':
+        // Ctrl+M opens the nav menu as a dropdown, Ctrl+Shift+M docks the same menu
+        // as this pane's rail — one family, since they are two presentations of one
+        // menu. Pane-scoped because each pane owns its own rail, like every other
+        // per-pane chrome toggle.
+        if (e.shiftKey) {
+          settingsStore.setNavSidebarVisible(paneId, !settingsStore.getNavSidebarVisible(paneId))
+          return true
+        }
         options.toggleNavDropdown()
         return true
       default:

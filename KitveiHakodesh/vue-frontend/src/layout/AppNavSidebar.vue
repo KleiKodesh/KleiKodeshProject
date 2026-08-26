@@ -144,14 +144,16 @@ watch(hasNavOverflow, (has) => {
       >
         <IconMoreHorizontal24Regular />
       </button>
-      <!-- Never collapses, and keeps the floor: this is the ONLY way to close the rail -
-           the menu row that opened it is gone while the rail is up (AppTitleBar drops the
-           hamburger and Ctrl+M) - so a rail short enough to fold it away would be a rail
-           nobody could close. -->
+      <!-- Never collapses, and keeps the floor: this is the only POINTER way to close the
+           rail - the menu row that opened it is gone while the rail is up (AppTitleBar
+           drops the hamburger and Ctrl+M) - so a rail short enough to fold it away would
+           be a rail no mouse could close. Ctrl+Shift+M closes it from the keyboard; that
+           branch runs before toggleNavDropdown's rail-open guard, so unlike plain Ctrl+M
+           it stays live while the rail is up. -->
       <button
         class="nav-btn nav-btn-sm"
         tabindex="-1"
-        title="הסתר סרגל צד"
+        title="הסתר סרגל צד (Ctrl+Shift+M)"
         @click="settingsStore.setNavSidebarVisible(paneId, false)"
       >
         <IconChevronDoubleRight20Regular />
