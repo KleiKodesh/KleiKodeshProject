@@ -1,9 +1,13 @@
 /**
- * useAutofill — a reusable, app-owned reimplementation of the browser's native
- * single-field autocomplete ("recent inputs") that works everywhere the app runs,
- * including the WebView2 host (which disables Chrome's built-in form autofill).
+ * useRecentSearches — the app's own recent-searches list for a search input: the
+ * popup of previously-run queries that drops under the field.
  *
- * Behaves like Chrome's autofill:
+ * NOT the browser's form autofill, and not a native <datalist>. Both are unavailable
+ * here — the WebView2 host disables Chrome's built-in autofill — so this is a full
+ * app-owned reimplementation, and it is what every search bar in the app uses to show
+ * recent searches. Pair it with <RecentSearchesDropdown>, which draws the popup.
+ *
+ * Behaves like the browser's own recent-inputs dropdown:
  *   - focusing an empty field shows the full recent history
  *   - typing filters to case-insensitive PREFIX matches
  *   - ArrowDown/ArrowUp move a highlight (wrapping); nothing is preselected
@@ -12,14 +16,16 @@
  *   - Shift+Delete removes the highlighted item from history
  *   - history is deduped, newest-first, capped, and persisted to localStorage
  *
- * Pair with <AutofillDropdown :controller="af" /> for the popup UI.
- *
  * Usage:
- *   const af = useAutofill({ key: 'fts-search' })
- *   // <input :ref="af.setInput" v-model="af.query"
- *   //   @focus="af.onFocus" @input="af.onInput"
- *   //   @keydown="af.onKeydown" @blur="af.onBlur" />
- *   // commit an entry when the value is "submitted": af.record()
+ *   const recents = useRecentSearches({ key: 'fts-search' })
+ *   // <input :ref="recents.setInput" v-model="recents.query"
+ *   //   @focus="recents.onFocus" @input="recents.onInput"
+ *   //   @keydown="recents.onKeydown" @blur="recents.onBlur" />
+ *   // <RecentSearchesDropdown :controller="recents" />
+ *   // commit an entry when the value is "submitted": recents.record()
+ *
+ * Inputs sharing a `key` share one stored list — that is how several instances of the
+ * same bar (one per tab or pane) end up offering a single history.
  */
 import { ref, computed, readonly, nextTick, type Ref, type ComponentPublicInstance } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
@@ -27,10 +33,10 @@ import { lsGet, lsSet } from '@/utils/persistence'
 /** What a Vue template `:ref` callback receives. */
 type TemplateRefTarget = Element | ComponentPublicInstance | null
 
-const LS_PREFIX = 'autofill.'
+const LS_PREFIX = 'recent-searches.'
 const DEFAULT_MAX = 15
 
-export interface UseAutofillOptions {
+export interface UseRecentSearchesOptions {
   /** Storage namespace — history is keyed by this, so inputs sharing a key share history. */
   key: string
   /** Max entries kept (default 15). */
@@ -43,7 +49,7 @@ export interface UseAutofillOptions {
   onSelect?: (value: string) => void
 }
 
-export interface AutofillController {
+export interface RecentSearchesController {
   /** Bind with v-model on the input. */
   query: Ref<string>
   /** The visible, filtered suggestion list (empty ⇒ dropdown hidden). */
@@ -85,7 +91,7 @@ export interface AutofillController {
   record: (value?: string) => void
 }
 
-export function useAutofill(opts: UseAutofillOptions): AutofillController {
+export function useRecentSearches(opts: UseRecentSearchesOptions): RecentSearchesController {
   const max = opts.max ?? DEFAULT_MAX
   const lsKey = LS_PREFIX + opts.key
 

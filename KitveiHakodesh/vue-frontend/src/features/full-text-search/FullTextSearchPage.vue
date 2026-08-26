@@ -349,7 +349,7 @@ onMounted(async () => {
   if (saved?.searchSortOrder) sortOrder.value = saved.searchSortOrder
 
   // Silent focus: place the cursor in the search field on restore without popping the
-  // autofill bubble. The restored query is often a prefix of a longer recent search, so a
+  // recent-searches popup. The restored query is often a prefix of a longer recent search, so a
   // non-silent focus would open the suggestion dropdown unbidden the moment the tab restores.
   // selectAll: the restored term is one the user has already searched, so the likely next
   // move is a NEW search — pre-selecting it means typing replaces it instead of appending.

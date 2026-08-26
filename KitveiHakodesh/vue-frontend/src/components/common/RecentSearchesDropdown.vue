@@ -1,26 +1,30 @@
 <script setup lang="ts">
 /**
- * Popup UI for useAutofill — styled like the browser's native single-field
- * autocomplete bubble: a rounded, soft-shadowed Fluent surface with a connector
- * notch pointing at the field, medium rows, a filled active row, and the
- * un-typed completion of each match shown in bold.
+ * The recent-searches popup: the list of previously-run queries that drops under a
+ * search input. Draws what `useRecentSearches` holds — this component owns no state.
+ *
+ * This is the app's own dropdown, not a native <datalist> and not browser autofill
+ * (see useRecentSearches for why neither is available here). Styled as a rounded,
+ * soft-shadowed Fluent surface with a connector notch pointing at the field, a header
+ * with a close button, medium rows, a filled active row, and the un-typed completion
+ * of each match in bold.
  *
  * Teleported to <body> and fixed-positioned so it escapes any overflow/stacking
  * context. Flips above the input when there isn't room below (e.g. the FTS bar
  * is docked at the bottom of the page); the notch flips to keep facing the field.
  *
- * <AutofillDropdown :controller="af" />
+ * <RecentSearchesDropdown :controller="recents" />
  */
 import { computed, watch, nextTick, ref } from 'vue'
 import { useElementBounding, useWindowSize, onClickOutside } from '@vueuse/core'
 import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
 import { IconDismiss12Regular } from '@iconify-prerendered/vue-fluent'
-import type { AutofillController } from '@/composables/useAutofill'
+import type { RecentSearchesController } from '@/composables/useRecentSearches'
 
-const props = defineProps<{ controller: AutofillController }>()
-const af = props.controller
+const props = defineProps<{ controller: RecentSearchesController }>()
+const recents = props.controller
 
-const inputElRef = computed(() => af.inputEl.value)
+const inputElRef = computed(() => recents.inputEl.value)
 const { top, left, width, height } = useElementBounding(inputElRef)
 const { width: winW, height: winH } = useWindowSize()
 
@@ -57,7 +61,7 @@ const style = computed(() => {
 })
 
 // Bold the un-typed completion: prefix (what you typed) normal, remainder bold.
-const typedLen = computed(() => af.query.value.trim().length)
+const typedLen = computed(() => recents.query.value.trim().length)
 function head(item: string) {
   return typedLen.value ? item.slice(0, typedLen.value) : item
 }
@@ -65,19 +69,19 @@ function tail(item: string) {
   return typedLen.value ? item.slice(typedLen.value) : ''
 }
 
-onClickOutside(bubbleRef, () => af.onBlur(), { ignore: [inputElRef] })
+onClickOutside(bubbleRef, () => recents.onBlur(), { ignore: [inputElRef] })
 
 // Pressing the native chrome (tab strip / title bar) produces no DOM event, so the
 // outside-click handler above cannot see it — the host pushes it to us instead.
-onNativeChromePressed(() => af.onBlur())
+onNativeChromePressed(() => recents.onBlur())
 
 watch(
-  () => af.activeIndex.value,
+  () => recents.activeIndex.value,
   async (i) => {
     if (i < 0) return
     await nextTick()
     listRef.value
-      ?.querySelectorAll<HTMLElement>('.autofill-item')[i]
+      ?.querySelectorAll<HTMLElement>('.recents-item')[i]
       ?.scrollIntoView({ block: 'nearest' })
   },
 )
@@ -86,47 +90,47 @@ watch(
 <template>
   <Teleport to="body">
     <div
-      v-if="af.open.value && af.suggestions.value.length"
+      v-if="recents.open.value && recents.suggestions.value.length"
       ref="bubbleRef"
-      class="autofill-bubble"
+      class="recents-bubble"
       :class="openUp ? 'up' : 'down'"
       :style="style"
     >
-      <div class="autofill-header">
-        <span class="autofill-title">חיפושים אחרונים</span>
+      <div class="recents-header">
+        <span class="recents-title">חיפושים אחרונים</span>
         <button
-          class="autofill-close"
+          class="recents-close"
           type="button"
           tabindex="-1"
           title="סגור"
           aria-label="סגור"
           @mousedown.prevent.stop
-          @click.stop="af.onBlur()"
+          @click.stop="recents.onBlur()"
         >
           <IconDismiss12Regular />
         </button>
       </div>
-      <ul ref="listRef" class="autofill-list" :style="{ maxHeight: `${listMaxHeight}px` }" role="listbox">
+      <ul ref="listRef" class="recents-list" :style="{ maxHeight: `${listMaxHeight}px` }" role="listbox">
         <li
-          v-for="(item, i) in af.suggestions.value"
+          v-for="(item, i) in recents.suggestions.value"
           :key="item"
-          class="autofill-item"
-          :class="{ active: i === af.activeIndex.value }"
+          class="recents-item"
+          :class="{ active: i === recents.activeIndex.value }"
           role="option"
-          :aria-selected="i === af.activeIndex.value"
-          @mousedown.prevent="af.commit(item)"
-          @mouseenter="af.setActive(i)"
+          :aria-selected="i === recents.activeIndex.value"
+          @mousedown.prevent="recents.commit(item)"
+          @mouseenter="recents.setActive(i)"
         >
           <span class="af-head">{{ head(item) }}</span><span class="af-tail">{{ tail(item) }}</span>
         </li>
       </ul>
-      <span class="autofill-notch" aria-hidden="true" />
+      <span class="recents-notch" aria-hidden="true" />
     </div>
   </Teleport>
 </template>
 
 <style scoped>
-.autofill-bubble {
+.recents-bubble {
   z-index: 10000;
   width: max-content; /* size to the longest suggestion, capped by inline max-width */
   min-width: 200px;
@@ -143,7 +147,7 @@ watch(
     0 2px 8px rgba(0, 0, 0, 0.2);
   direction: rtl;
 }
-.autofill-list {
+.recents-list {
   margin: 0;
   padding: 0;
   list-style: none;
@@ -156,7 +160,7 @@ watch(
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text-secondary) 30%, transparent) transparent;
 }
-.autofill-item {
+.recents-item {
   display: block;
   height: 26px;
   line-height: 26px;
@@ -169,10 +173,10 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.autofill-item + .autofill-item {
+.recents-item + .recents-item {
   margin-top: 1px;
 }
-.autofill-item.active {
+.recents-item.active {
   background: color-mix(in srgb, var(--text-primary) 12%, transparent);
 }
 .af-head {
@@ -184,7 +188,7 @@ watch(
 
 /* Header — a title on the leading (RTL: right) side and a close button on the
    trailing side, with a separator line beneath it before the list. */
-.autofill-header {
+.recents-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -196,7 +200,7 @@ watch(
   margin-bottom: 5px;
   border-bottom: 1px solid var(--border-color);
 }
-.autofill-title {
+.recents-title {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -204,7 +208,7 @@ watch(
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.autofill-close {
+.recents-close {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -218,28 +222,28 @@ watch(
   cursor: pointer;
   opacity: 0.7;
 }
-.autofill-close:hover {
+.recents-close:hover {
   opacity: 1;
   background: color-mix(in srgb, var(--text-primary) 12%, transparent);
   color: var(--text-primary);
 }
-.autofill-close svg {
+.recents-close svg {
   width: 12px;
   height: 12px;
 }
 
 /* Reserve room on the notch side so no row ever sits under the notch's
    inner half (which paints bubble-bg and would otherwise cover the row). */
-.autofill-bubble.up {
+.recents-bubble.up {
   padding-bottom: 13px;
 }
-.autofill-bubble.down {
+.recents-bubble.down {
   padding-top: 13px;
 }
 
 /* Connector notch — a rotated square that reads as a triangle, with the two
    outward-facing edges bordered to blend into the bubble outline. */
-.autofill-notch {
+.recents-notch {
   position: absolute;
   z-index: 1; /* paint above the list */
   width: 12px;
@@ -248,12 +252,12 @@ watch(
   background: var(--bg-secondary);
   transform: rotate(45deg);
 }
-.autofill-bubble.up .autofill-notch {
+.recents-bubble.up .recents-notch {
   bottom: -6px;
   border-right: 1px solid var(--border-color);
   border-bottom: 1px solid var(--border-color);
 }
-.autofill-bubble.down .autofill-notch {
+.recents-bubble.down .recents-notch {
   top: -6px;
   border-left: 1px solid var(--border-color);
   border-top: 1px solid var(--border-color);
