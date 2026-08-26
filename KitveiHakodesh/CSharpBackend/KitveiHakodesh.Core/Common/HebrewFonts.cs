@@ -8,6 +8,10 @@ namespace KitveiHakodesh.Core.Common
     /// <summary>
     /// Enumerates system font families that can render Hebrew, through DirectWrite.
     ///
+    /// It also reports which of those families draw the TE'AMIM (cantillation marks), read from
+    /// the same cmap walk. Hebrew coverage and te'amim coverage are separate questions: most
+    /// Hebrew fonts draw no marks at all, so the te'amim picker needs the narrower list.
+    ///
     /// THE ONE COPY. This replaces three identical implementations — KitveiHakodeshLib's
     /// FontsProvider, the service's HebrewFontsProvider and WpfLib's FontsProvider — which
     /// differed only in the factory import and in which subset of the surface each exposed.
@@ -52,6 +56,15 @@ namespace KitveiHakodesh.Core.Common
         // The Hebrew probe character — א (U+05D0).
         private const uint HebrewAlef = 0x05D0;
 
+        // The te'amim probe character - ETNAHTA (U+0591), first of the cantillation block.
+        // A font either draws the te'amim or it does not: measured over all 142 Hebrew-capable
+        // font files on a dev box, every family mapping this one maps essentially the whole
+        // U+0591-05AF range (30 or 31 of the 31 marks), and every family missing it maps at
+        // most a single mark. U+05AB is the one to
+        // AVOID probing - David CLM and Miriam CLM carry that glyph ALONE, so testing it
+        // reports six te'amim-less families as capable.
+        private const uint TeamimEtnahta = 0x0591;
+
         // IDWriteFactory: 0-2 = IUnknown, then GetSystemFontCollection at slot 3.
         private const int SlotGetSystemFontCollection = 3;
 
@@ -95,17 +108,21 @@ namespace KitveiHakodesh.Core.Common
             ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(obj, SlotRelease))(obj);
         }
 
-        /// <summary>One system font family: the name to bind to FontFamily, and whether it can
-        /// render Hebrew.</summary>
+        /// <summary>One system font family: the name to bind to FontFamily, whether it can render
+        /// Hebrew, and whether it draws the te'amim.</summary>
         public sealed class FontFamilyInfo
         {
             public string Name { get; }
             public bool HasHebrew { get; }
+            /// <summary>Whether the family also draws the cantillation marks. A separate question
+            /// from HasHebrew: most Hebrew families draw no marks at all.</summary>
+            public bool HasTeamim { get; }
 
-            public FontFamilyInfo(string name, bool hasHebrew)
+            public FontFamilyInfo(string name, bool hasHebrew, bool hasTeamim)
             {
                 Name = name;
                 HasHebrew = hasHebrew;
+                HasTeamim = hasTeamim;
             }
 
             public override string ToString() => Name;
@@ -126,6 +143,22 @@ namespace KitveiHakodesh.Core.Common
             try
             {
                 return Enumerate(hebrewOnly: true)
+                    .Select(f => f.Name)
+                    .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+            }
+            catch { return new string[0]; }
+        }
+
+        /// <summary>Names of every system font family whose cmap covers the cantillation marks,
+        /// sorted alphabetically - the list the te'amim font picker offers. A strict subset of
+        /// GetHebrewFonts. Never throws.</summary>
+        public static string[] GetTeamimFonts()
+        {
+            try
+            {
+                return Enumerate(hebrewOnly: true)
+                    .Where(f => f.HasTeamim)
                     .Select(f => f.Name)
                     .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
@@ -182,7 +215,8 @@ namespace KitveiHakodesh.Core.Common
                     (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)Vtbl(collection, SlotGetFontFamily);
                 if (getFamily(collection, index, &family) < 0 || family == 0) return false;
 
-                return FamilyHasHebrew(family);
+                FamilyCoverage(family, out bool hasHebrew, out _);
+                return hasHebrew;
             }
             finally
             {
@@ -223,12 +257,12 @@ namespace KitveiHakodesh.Core.Common
                         // Test for Hebrew first when that is all the caller wants: reading the
                         // localized name is its own set of COM round-trips, and skipping it for
                         // the non-Hebrew majority is most of this path's cost.
-                        bool hasHebrew = FamilyHasHebrew(family);
+                        FamilyCoverage(family, out bool hasHebrew, out bool hasTeamim);
                         if (hebrewOnly && !hasHebrew) continue;
 
                         string? name = ReadFamilyName(family);
                         if (!string.IsNullOrWhiteSpace(name))
-                            families.Add(new FontFamilyInfo(name!, hasHebrew));
+                            families.Add(new FontFamilyInfo(name!, hasHebrew, hasTeamim));
                     }
                     finally { Release(family); }
                 }
@@ -240,7 +274,7 @@ namespace KitveiHakodesh.Core.Common
                 // Hebrew first, then alphabetical — the Hebrew-first picker order.
                 return families
                     .GroupBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
-                    .Select(g => new FontFamilyInfo(g.Key, g.Any(f => f.HasHebrew)))
+                    .Select(g => new FontFamilyInfo(g.Key, g.Any(f => f.HasHebrew), g.Any(f => f.HasTeamim)))
                     .OrderBy(f => f.HasHebrew ? 0 : 1)
                     .ThenBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
                     .ToArray();
@@ -252,12 +286,16 @@ namespace KitveiHakodesh.Core.Common
             }
         }
 
-        /// <summary>True when ANY face in the family maps א to a real glyph, by reading the face's
-        /// OWN 'cmap' table. The two easier-looking APIs both give WRONG answers here (verified):
-        /// IDWriteFont::HasCharacter and IDWriteFontFace::GetGlyphIndices consult system font
-        /// LINKING, so they report Hebrew-less coding fonts (Cascadia) as Hebrew-capable.</summary>
-        private static unsafe bool FamilyHasHebrew(nint family)
+        /// <summary>What this family can draw, ORed across its faces - ANY face that maps the
+        /// character counts, which is what the reader gets once the name resolves to a typeface.
+        /// Reads each face's OWN cmap table. The two easier-looking APIs both give WRONG answers
+        /// here (verified): IDWriteFont::HasCharacter and IDWriteFontFace::GetGlyphIndices consult
+        /// system font LINKING, so they report Hebrew-less coding fonts (Cascadia) as capable.</summary>
+        private static unsafe void FamilyCoverage(nint family, out bool hasHebrew, out bool hasTeamim)
         {
+            hasHebrew = false;
+            hasTeamim = false;
+
             uint fontCount = ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(family, SlotGetFontCount))(family);
             var getFont = (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)Vtbl(family, SlotGetFont);
 
@@ -270,7 +308,8 @@ namespace KitveiHakodesh.Core.Common
                 {
                     var createFace = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Vtbl(font, SlotCreateFontFace);
                     if (createFace(font, &face) < 0 || face == 0) continue;
-                    if (FaceCmapHasHebrew(face)) return true;
+                    FaceCmapCoverage(face, ref hasHebrew, ref hasTeamim);
+                    if (hasHebrew && hasTeamim) return;
                 }
                 finally
                 {
@@ -278,12 +317,13 @@ namespace KitveiHakodesh.Core.Common
                     Release(font);
                 }
             }
-            return false;
         }
 
-        /// <summary>True when this face's 'cmap' maps א. Supports the two formats that matter for
-        /// Unicode text: format 4 (BMP segment mapping) and format 12 (full-range groups).</summary>
-        private static unsafe bool FaceCmapHasHebrew(nint face)
+        /// <summary>ORs this face's coverage into the flags by walking its cmap ONCE and testing
+        /// both probe characters per segment - the walk is the expensive part, not the comparison.
+        /// Supports the two formats that matter for Unicode text: format 4 (BMP segment mapping)
+        /// and format 12 (full-range groups).</summary>
+        private static unsafe void FaceCmapCoverage(nint face, ref bool hasHebrew, ref bool hasTeamim)
         {
             var tryGetTable = (delegate* unmanaged[Stdcall]<nint, uint, void**, uint*, void**, int*, int>)
                 Vtbl(face, SlotTryGetFontTable);
@@ -294,19 +334,19 @@ namespace KitveiHakodesh.Core.Common
             void* context = null;
             int exists = 0;
             if (tryGetTable(face, TagCmap, &table, &size, &context, &exists) < 0 || exists == 0 || table == null)
-                return false;
+                return;
 
             try
             {
                 var p = (byte*)table;
-                if (size < 4) return false;
+                if (size < 4) return;
                 ushort numTables = ReadU16(p, 2);
 
                 for (int i = 0; i < numTables; i++)
                 {
                     int rec = 4 + 8 * i;
                     if (rec + 8 > size) break;
-                    // All offsets come from the font file, so bounds math is done in long —
+                    // All offsets come from the font file, so bounds math is done in long -
                     // uint/int arithmetic could wrap on a corrupt font, pass the check, and
                     // read outside the memory-mapped table (an uncatchable access violation).
                     uint subOffset = ReadU32(p, rec + 4);
@@ -325,7 +365,9 @@ namespace KitveiHakodesh.Core.Common
                         {
                             ushort end = ReadU16(p, (int)(endBase + 2 * s));
                             ushort start = ReadU16(p, (int)(startBase + 2 * s));
-                            if (start <= HebrewAlef && HebrewAlef <= end) return true;
+                            if (start <= HebrewAlef && HebrewAlef <= end) hasHebrew = true;
+                            if (start <= TeamimEtnahta && TeamimEtnahta <= end) hasTeamim = true;
+                            if (hasHebrew && hasTeamim) return;
                         }
                     }
                     else if (format == 12)
@@ -338,11 +380,12 @@ namespace KitveiHakodesh.Core.Common
                             if (gr + 12 > size) break;
                             uint start = ReadU32(p, (int)gr);
                             uint end = ReadU32(p, (int)gr + 4);
-                            if (start <= HebrewAlef && HebrewAlef <= end) return true;
+                            if (start <= HebrewAlef && HebrewAlef <= end) hasHebrew = true;
+                            if (start <= TeamimEtnahta && TeamimEtnahta <= end) hasTeamim = true;
+                            if (hasHebrew && hasTeamim) return;
                         }
                     }
                 }
-                return false;
             }
             finally { releaseTable(face, context); }
         }

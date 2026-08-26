@@ -125,6 +125,7 @@ function onTeamimToggle() {
       hint="הגופן שישמש לגוף הטקסט בספרים שהטקסט שלהם מנוקד בטעמי המקרא"
       :model-value="teamimTextFont ?? ''"
       font-type="serif"
+      teamim-only
       :default-font="defaultTeamimFont"
       @update:model-value="emit('update:teamimTextFont', $event)"
       @toggle="onTeamimToggle"

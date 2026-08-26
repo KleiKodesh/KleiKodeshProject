@@ -7,6 +7,10 @@ namespace KitveiHakodeshService.LocalFiles;
 /// the approach NativeFolderPicker and DocConvertLib's AotWordConverter already use (this service
 /// is native-AOT and has no WPF).
 ///
+/// It also reports which of those families draw the TE'AMIM (cantillation marks), read from the
+/// same cmap walk. Hebrew coverage and te'amim coverage are separate questions: most Hebrew fonts
+/// draw no marks at all, so the te'amim picker needs the narrower list.
+///
 /// TWIN FILE — the hosted app's KitveiHakodeshLib Helpers/FontsProvider.cs is the net48 leg of
 /// this implementation and must stay in sync; the two merge into KitveiHakodesh.Core Common/Fonts
 /// per MIGRATION-PLAN.md. The only intended difference is the factory import: LibraryImport here,
@@ -17,6 +21,9 @@ namespace KitveiHakodeshService.LocalFiles;
 /// WpfLib/Helpers/FontsProvider.cs is a THIRD copy of the net48 leg, serving the rest of the
 /// solution (FontsHelper, the RegexFindLib font picker). Fix any enumeration or cmap bug in all
 /// three; all three collapse into Core at migration time.
+/// It has NO te'amim probe, deliberately: its pickers choose UI fonts, not a face for
+/// cantillated text. Enumeration and cmap BUGS still belong in all three; the te'amim
+/// surface is an intended divergence.
 ///
 /// Parity with the hosted list is the goal, and the test is the same one: does the family map
 /// א (U+05D0)? Measured on a dev box this returns all 79 families WPF reports, plus 2 (Cascadia
@@ -44,6 +51,14 @@ public static partial class HebrewFontsProvider
 
     // The Hebrew probe character — א (U+05D0), the same codepoint the hosted WPF provider tests.
     private const uint HebrewAlef = 0x05D0;
+    // The te'amim probe character - ETNAHTA (U+0591), first of the cantillation block.
+    // A font either draws the te'amim or it does not: measured over all 142 Hebrew-capable
+    // font files on a dev box, every family mapping this one maps essentially the whole
+    // U+0591-05AF range (30 or 31 of the 31 marks), and every family missing it maps at
+    // most a single mark. U+05AB is the one to
+    // AVOID probing - David CLM and Miriam CLM carry that glyph ALONE, so testing it
+    // reports six te'amim-less families as capable.
+    private const uint TeamimEtnahta = 0x0591;
 
     // IDWriteFactory: 0-2 = IUnknown, then GetSystemFontCollection at slot 3.
     private const int SlotGetSystemFontCollection = 3;
@@ -91,34 +106,53 @@ public static partial class HebrewFontsProvider
     // removed under it, so every call enumerates fresh (checkForUpdates below re-scans) —
     // no cache to hold memory or go stale. The picker shows a loading row for the ~1s an
     // enumeration takes, and it only runs when someone opens the font dropdown.
-    /// <summary>Names of every system font family that has a glyph for א, sorted alphabetically.
-    /// Returns an empty array if DirectWrite is unavailable — the caller falls back to the
-    /// frontend's canvas probe. Never throws.</summary>
-    public static string[] GetHebrewFonts()
+    /// <summary>The picker's two lists, from ONE enumeration. Fonts is every family that can
+    /// render Hebrew; TeamimFonts is the subset whose cmap also covers the cantillation marks,
+    /// which is what the te'amim font dropdown offers.</summary>
+    public sealed class FontLists
     {
-        try { return Enumerate(); }
-        catch { return []; }
+        public string[] Fonts { get; }
+        public string[] TeamimFonts { get; }
+
+        public FontLists(string[] fonts, string[] teamimFonts)
+        {
+            Fonts = fonts;
+            TeamimFonts = teamimFonts;
+        }
     }
 
-    private static unsafe string[] Enumerate()
+    /// <summary>Both lists in one pass. Asking for them separately would walk the cmap of every
+    /// system typeface twice to learn what a single walk already knows. Returns empty lists if
+    /// DirectWrite is unavailable - the caller falls back to the frontend's canvas probe.
+    /// Never throws.</summary>
+    public static FontLists GetFontLists()
+    {
+        try { return Enumerate(); }
+        catch { return new FontLists(new string[0], new string[0]); }
+    }
+
+
+    private static unsafe FontLists Enumerate()
     {
         if (DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED, in IID_IDWriteFactory, out nint factory) < 0
             || factory == 0)
-            return [];
+            return new FontLists(new string[0], new string[0]);
 
         nint collection = 0;
         try
         {
             var getCollection =
                 (delegate* unmanaged[Stdcall]<nint, nint*, int, int>)Vtbl(factory, SlotGetSystemFontCollection);
-            // checkForUpdates: 1 — re-scan installed fonts NOW rather than trusting a
+            // checkForUpdates: 1 - re-scan installed fonts NOW rather than trusting a
             // collection cached before the user's font install/remove.
-            if (getCollection(factory, &collection, 1) < 0 || collection == 0) return [];
+            if (getCollection(factory, &collection, 1) < 0 || collection == 0)
+                return new FontLists(new string[0], new string[0]);
 
             uint familyCount =
                 ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(collection, SlotGetFontFamilyCount))(collection);
 
             var names = new List<string>((int)familyCount);
+            var teamimNames = new List<string>();
             var getFamily =
                 (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)Vtbl(collection, SlotGetFontFamily);
 
@@ -128,18 +162,21 @@ public static partial class HebrewFontsProvider
                 if (getFamily(collection, i, &family) < 0 || family == 0) continue;
                 try
                 {
-                    if (!FamilyHasHebrew(family)) continue;
+                    // Coverage first, name second: reading the localized name is its own set of
+                    // COM round-trips, and skipping it for the non-Hebrew majority is most of
+                    // this path's cost.
+                    FamilyCoverage(family, out bool hasHebrew, out bool hasTeamim);
+                    if (!hasHebrew) continue;
+
                     string? name = ReadFamilyName(family);
-                    if (!string.IsNullOrWhiteSpace(name)) names.Add(name!);
+                    if (string.IsNullOrWhiteSpace(name)) continue;
+                    names.Add(name!);
+                    if (hasTeamim) teamimNames.Add(name!);
                 }
                 finally { Release(family); }
             }
 
-            // Distinct: two families can share a localized name (e.g. differing only by a
-            // face DirectWrite splits out) and the dropdown must not show duplicates.
-            return names.Distinct(StringComparer.OrdinalIgnoreCase)
-                        .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
-                        .ToArray();
+            return new FontLists(Normalize(names), Normalize(teamimNames));
         }
         finally
         {
@@ -148,23 +185,23 @@ public static partial class HebrewFontsProvider
         }
     }
 
-    /// <summary>True when ANY face in the family maps א to a real glyph. Checking every face rather
-    /// than just the first mirrors the hosted provider, which tests all of
-    /// FontFamily.GetTypefaces().
-    ///
-    /// Reads the face's OWN 'cmap' table via TryGetFontTable and looks U+05D0 up in it.
-    ///
-    /// The two easier-looking APIs both give WRONG answers here, verified on this machine:
-    ///   IDWriteFont::HasCharacter consults system font LINKING, so it reports Cascadia
-    ///   Code/Mono — coding fonts with no Hebrew at all — as Hebrew-capable.
-    ///   IDWriteFontFace::GetGlyphIndices returns a nonzero glyph (1674) for א on some Cascadia
-    ///   variable-font instances for the same reason, even though CascadiaCode.ttf's cmap has no
-    ///   U+05D0 (confirmed by parsing the file directly, and WPF finds Hebrew in none of the same
-    ///   30 faces).
-    /// Parsing the cmap is what WPF's CharacterToGlyphMap effectively does, so it agrees with the
-    /// hosted provider exactly — which is the whole point of this class.</summary>
-    private static unsafe bool FamilyHasHebrew(nint family)
+    /// <summary>Distinct + alphabetical. Two families can share a localized name (differing only
+    /// by a face DirectWrite splits out) and the dropdown must not show duplicates.</summary>
+    private static string[] Normalize(List<string> names)
+        => names.Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
+    /// <summary>What this family can draw, ORed across its faces - ANY face that maps the
+    /// character counts, which is what the reader gets once the name resolves to a typeface.
+    /// Reads each face's OWN cmap table. The two easier-looking APIs both give WRONG answers
+    /// here (verified): IDWriteFont::HasCharacter and IDWriteFontFace::GetGlyphIndices consult
+    /// system font LINKING, so they report Hebrew-less coding fonts (Cascadia) as capable.</summary>
+    private static unsafe void FamilyCoverage(nint family, out bool hasHebrew, out bool hasTeamim)
     {
+        hasHebrew = false;
+        hasTeamim = false;
+
         uint fontCount = ((delegate* unmanaged[Stdcall]<nint, uint>)Vtbl(family, SlotGetFontCount))(family);
         var getFont = (delegate* unmanaged[Stdcall]<nint, uint, nint*, int>)Vtbl(family, SlotGetFont);
 
@@ -177,7 +214,8 @@ public static partial class HebrewFontsProvider
             {
                 var createFace = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Vtbl(font, SlotCreateFontFace);
                 if (createFace(font, &face) < 0 || face == 0) continue;
-                if (FaceCmapHasHebrew(face)) return true;
+                FaceCmapCoverage(face, ref hasHebrew, ref hasTeamim);
+                if (hasHebrew && hasTeamim) return;
             }
             finally
             {
@@ -185,12 +223,13 @@ public static partial class HebrewFontsProvider
                 Release(font);
             }
         }
-        return false;
     }
 
-    /// <summary>True when this face's 'cmap' maps א. Supports the two formats that matter for
-    /// Unicode text: format 4 (BMP segment mapping) and format 12 (full-range groups).</summary>
-    private static unsafe bool FaceCmapHasHebrew(nint face)
+    /// <summary>ORs this face's coverage into the flags by walking its cmap ONCE and testing
+    /// both probe characters per segment - the walk is the expensive part, not the comparison.
+    /// Supports the two formats that matter for Unicode text: format 4 (BMP segment mapping)
+    /// and format 12 (full-range groups).</summary>
+    private static unsafe void FaceCmapCoverage(nint face, ref bool hasHebrew, ref bool hasTeamim)
     {
         var tryGetTable = (delegate* unmanaged[Stdcall]<nint, uint, void**, uint*, void**, int*, int>)
             Vtbl(face, SlotTryGetFontTable);
@@ -201,19 +240,19 @@ public static partial class HebrewFontsProvider
         void* context = null;
         int exists = 0;
         if (tryGetTable(face, TagCmap, &table, &size, &context, &exists) < 0 || exists == 0 || table == null)
-            return false;
+            return;
 
         try
         {
             var p = (byte*)table;
-            if (size < 4) return false;
+            if (size < 4) return;
             ushort numTables = ReadU16(p, 2);
 
             for (int i = 0; i < numTables; i++)
             {
                 int rec = 4 + 8 * i;
                 if (rec + 8 > size) break;
-                // All offsets come from the font file, so bounds math is done in long —
+                // All offsets come from the font file, so bounds math is done in long -
                 // uint/int arithmetic could wrap on a corrupt font, pass the check, and
                 // read outside the memory-mapped table (an uncatchable access violation).
                 uint subOffset = ReadU32(p, rec + 4);
@@ -232,7 +271,9 @@ public static partial class HebrewFontsProvider
                     {
                         ushort end = ReadU16(p, (int)(endBase + 2 * s));
                         ushort start = ReadU16(p, (int)(startBase + 2 * s));
-                        if (start <= HebrewAlef && HebrewAlef <= end) return true;
+                        if (start <= HebrewAlef && HebrewAlef <= end) hasHebrew = true;
+                        if (start <= TeamimEtnahta && TeamimEtnahta <= end) hasTeamim = true;
+                        if (hasHebrew && hasTeamim) return;
                     }
                 }
                 else if (format == 12)
@@ -245,11 +286,12 @@ public static partial class HebrewFontsProvider
                         if (gr + 12 > size) break;
                         uint start = ReadU32(p, (int)gr);
                         uint end = ReadU32(p, (int)gr + 4);
-                        if (start <= HebrewAlef && HebrewAlef <= end) return true;
+                        if (start <= HebrewAlef && HebrewAlef <= end) hasHebrew = true;
+                        if (start <= TeamimEtnahta && TeamimEtnahta <= end) hasTeamim = true;
+                        if (hasHebrew && hasTeamim) return;
                     }
                 }
             }
-            return false;
         }
         finally { releaseTable(face, context); }
     }

@@ -129,6 +129,11 @@ public sealed class OpenInDefaultAppResult
 public sealed class FontsResult
 {
     public string[] Fonts { get; set; } = [];
+
+    /// <summary>The subset of <see cref="Fonts"/> whose cmap also covers the cantillation marks.
+    /// The te'amim font picker offers only these: a family without them renders a hasTeamim book
+    /// with the marks dropped or tofu-boxed, so offering it is offering a broken result.</summary>
+    public string[] TeamimFonts { get; set; } = [];
 }
 
 /// <summary>Args for <c>exportToWord</c> — the assembled document HTML and the book title used
