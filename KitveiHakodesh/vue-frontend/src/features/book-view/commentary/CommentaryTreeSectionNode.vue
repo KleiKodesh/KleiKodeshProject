@@ -151,7 +151,8 @@ function navigateToFirstBook() {
    Depth reads from weight/size/colour, not indentation, so the title keeps the
    full panel width. Only 700/600/400 are used — the renderer snaps in-between
    weights (500-600 render alike, 650-700 alike), so size and colour carry the
-   finer steps. Books stay the lightest thing in the tree. */
+   finer steps. Rungs differ on two axes at once (weight AND size AND colour
+   here), and 11px is the floor. Books stay the lightest thing in the tree. */
 .section-row[data-rung="0"] .section-title {
   font-size: 12.5px;
   font-weight: 700;
@@ -161,7 +162,7 @@ function navigateToFirstBook() {
 .section-row[data-rung="1"] .section-title {
   font-size: 11.5px;
   font-weight: 600;
-  color: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary));
+  color: color-mix(in srgb, var(--text-primary) 36%, var(--text-secondary));
 }
 
 .section-row.expanded {
