@@ -2,6 +2,13 @@
 // It runs entirely inside the iframe's document context so all coordinates
 // are in the same space — no cross-frame translation needed.
 // It communicates back to the parent via postMessage.
+//
+// Coordinate space: everything (mouse points, span/canvas positions, the
+// selection div) lives in #viewerContainer PADDING-BOX content coordinates.
+// getBoundingClientRect() gives the border-box origin, but the viewer is RTL
+// so its vertical scrollbar sits on the LEFT — clientLeft includes that
+// scrollbar width, and skipping it drew the selection rect shifted right of
+// the cursor. Always subtract clientLeft/clientTop after the rect origin.
 
 export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
 (function() {
@@ -10,8 +17,8 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   const tool = {
     isActive: false,
     isDrawing: false,
-    centerX: 0,
-    centerY: 0,
+    startX: 0,
+    startY: 0,
     selectionDiv: null,
     crosshairDiv: null,
     langFile: 'heb',
@@ -45,22 +52,38 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   \`;
   document.head.appendChild(style);
 
+  // ── Coordinate space ─────────────────────────────────────────────────────
+
+  // Origin of the container's padding box in viewport coordinates, which is
+  // what an absolutely-positioned child's left/top are measured from.
+  function paddingBoxOrigin(container) {
+    const cr = container.getBoundingClientRect();
+    return {
+      x: cr.left + container.clientLeft - container.scrollLeft,
+      y: cr.top  + container.clientTop  - container.scrollTop,
+    };
+  }
+
+  // Viewport point → container content coordinates.
+  function toContentCoords(container, clientX, clientY) {
+    const origin = paddingBoxOrigin(container);
+    return { x: clientX - origin.x, y: clientY - origin.y };
+  }
+
   // ── Text layer hit test ──────────────────────────────────────────────────
 
   function extractText(rect) {
     const container = document.getElementById('viewerContainer');
     if (!container) return null;
-    const containerRect = container.getBoundingClientRect();
-    const scrollLeft = container.scrollLeft;
-    const scrollTop = container.scrollTop;
+    const origin = paddingBoxOrigin(container);
     const words = [];
 
     for (const span of container.querySelectorAll('.textLayer span')) {
       const text = span.textContent;
       if (!text || !text.trim()) continue;
       const sr = span.getBoundingClientRect();
-      const left = sr.left - containerRect.left + scrollLeft;
-      const top = sr.top - containerRect.top + scrollTop;
+      const left = sr.left - origin.x;
+      const top = sr.top - origin.y;
       const cx = left + sr.width / 2;
       const cy = top + sr.height / 2;
       if (cx >= rect.left && cx <= rect.left + rect.width &&
@@ -79,14 +102,12 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
   function captureCanvas(rect) {
     const container = document.getElementById('viewerContainer');
     if (!container) return null;
-    const containerRect = container.getBoundingClientRect();
-    const scrollLeft = container.scrollLeft;
-    const scrollTop = container.scrollTop;
+    const origin = paddingBoxOrigin(container);
 
     for (const canvas of container.querySelectorAll('.canvasWrapper canvas')) {
       const cr = canvas.getBoundingClientRect();
-      const cl = cr.left - containerRect.left + scrollLeft;
-      const ct = cr.top  - containerRect.top  + scrollTop;
+      const cl = cr.left - origin.x;
+      const ct = cr.top  - origin.y;
 
       const intersects = !(
         rect.left + rect.width  < cl ||
@@ -124,35 +145,35 @@ export const PDF_OCR_INJECTED_SCRIPT = /* js */ `
     e.preventDefault();
     tool.isDrawing = true;
     const container = document.getElementById('viewerContainer');
-    const cr = container.getBoundingClientRect();
-    // Use centerX/centerY like the old version
-    tool.centerX = e.clientX - cr.left + container.scrollLeft;
-    tool.centerY = e.clientY - cr.top  + container.scrollTop;
+    const start = toContentCoords(container, e.clientX, e.clientY);
+    tool.startX = start.x;
+    tool.startY = start.y;
 
     tool.selectionDiv = document.createElement('div');
     tool.selectionDiv.className = 'kitvei-hakodesh-ocr-rect';
-    tool.selectionDiv.style.left   = tool.centerX + 'px';
-    tool.selectionDiv.style.top    = tool.centerY + 'px';
+    tool.selectionDiv.style.left   = tool.startX + 'px';
+    tool.selectionDiv.style.top    = tool.startY + 'px';
     tool.selectionDiv.style.width  = '0px';
     tool.selectionDiv.style.height = '0px';
     container.appendChild(tool.selectionDiv);
 
-    // Switch to default cursor — cursor now tracks the bottom-right corner
+    // Switch to default cursor — the rect is anchored at the start point and
+    // the cursor drags the opposite corner, in any direction.
     container.classList.add('kitvei-hakodesh-ocr-drawing');
   }
 
   function onMouseMove(e) {
     if (!tool.isDrawing || !tool.selectionDiv) return;
     const container = document.getElementById('viewerContainer');
-    const cr = container.getBoundingClientRect();
-    const currentX = e.clientX - cr.left + container.scrollLeft;
-    const currentY = e.clientY - cr.top  + container.scrollTop;
+    const current = toContentCoords(container, e.clientX, e.clientY);
+    const currentX = current.x;
+    const currentY = current.y;
 
     // Calculate rectangle from start point to current point (traditional drag)
-    const width = Math.abs(currentX - tool.centerX);
-    const height = Math.abs(currentY - tool.centerY);
-    const left = Math.min(currentX, tool.centerX);
-    const top = Math.min(currentY, tool.centerY);
+    const width = Math.abs(currentX - tool.startX);
+    const height = Math.abs(currentY - tool.startY);
+    const left = Math.min(currentX, tool.startX);
+    const top = Math.min(currentY, tool.startY);
 
     tool.selectionDiv.style.left   = left   + 'px';
     tool.selectionDiv.style.top    = top    + 'px';
