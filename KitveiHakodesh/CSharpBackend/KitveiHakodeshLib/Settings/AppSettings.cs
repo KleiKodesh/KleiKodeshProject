@@ -36,12 +36,31 @@ namespace KitveiHakodeshLib.Settings
 
         public static string LoadDbPath()
         {
-            return Interaction.GetSetting("KitveiHakodesh", "Database", "Path", ResolveDefaultDbPath());
+            // An EMPTY stored value means "no choice" and must fall back to the probe, same as
+            // a missing one. GetSetting only substitutes its default when the value is absent,
+            // so a cleared setting comes back as "" and would otherwise be handed to callers as
+            // a database path — which is how ClearDbPath leaves it.
+            string saved = Interaction.GetSetting("KitveiHakodesh", "Database", "Path", "");
+            return string.IsNullOrWhiteSpace(saved) ? ResolveDefaultDbPath() : saved;
         }
 
         public static void SaveDbPath(string path)
         {
             Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", path);
+        }
+
+        /// <summary>
+        /// Forgets the user's explicit database choice, so LoadDbPath falls back to
+        /// ResolveDefaultDbPath and the Otzaria-first probe decides again.
+        ///
+        /// Resetting must CLEAR this rather than save the probed path back: a stored value
+        /// reads as a deliberate choice everywhere else (the resolver returns it without
+        /// probing, and the settings UI shows the path as custom), so writing the default
+        /// into it pins whichever library happened to win today and stops any later probe.
+        /// </summary>
+        public static void ClearDbPath()
+        {
+            Interaction.SaveSetting("KitveiHakodesh", "Database", "Path", "");
         }
 
         public static void SaveMainWindowMaximized(bool isMaximized)
