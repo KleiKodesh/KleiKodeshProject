@@ -41,7 +41,23 @@ namespace KitveiHakodeshLib.Search
         // The mutex name encodes the index path so two instances pointing at different
         // index directories do not block each other.
         private static Mutex _buildMutex;
-        private static bool  _buildMutexOwned;
+        // Whether a builder IN THIS PROCESS holds the lock, as a count rather than a bool.
+        //
+        // This state is static while FtsIndexState is per-SearchHandler, and one process can
+        // host several AppViewers (the VSTO pane plus a popped-out window). The old bool
+        // short-circuited — "already ours, return true" — so a second local builder was told
+        // it held a lock it had never acquired, and whichever build finished first released
+        // the real OS mutex while the other was still writing, letting another PROCESS start
+        // building the same directory.
+        //
+        // What actually happens now: a mutex is owned by a THREAD, and each builder waits on
+        // its own pool thread, so a second local builder's WaitOne(0) simply FAILS while the
+        // first holds it — it declines and marks itself idle. That is the correct outcome, and
+        // it means the count never exceeds 1 in practice. It stays a count because it keeps
+        // acquire and release symmetric per caller and cannot get stuck true the way the bool
+        // could; in-process exclusion is the index write lock's job either way.
+        private static int _buildLockHolders;
+        private static bool BuildMutexOwned => _buildLockHolders > 0;
         private static readonly object _mutexLock = new object();
 
         private static string BuildMutexName
@@ -67,27 +83,39 @@ namespace KitveiHakodeshLib.Search
         {
             lock (_mutexLock)
             {
-                if (_buildMutexOwned) return true; // already ours
-
                 try
                 {
                     if (_buildMutex == null)
                         _buildMutex = new Mutex(false, BuildMutexName);
 
+                    // Always waited, never short-circuited on "we already hold it". Ownership
+                    // is per THREAD, so a second local builder on its own pool thread is
+                    // refused here and declines — where the old short-circuit handed it a
+                    // lock it did not own, whose first release then freed the mutex
+                    // system-wide while the other builder was still writing.
                     bool acquired = _buildMutex.WaitOne(0); // non-blocking
-                    _buildMutexOwned = acquired;
+                    if (acquired) _buildLockHolders++;
                     return acquired;
                 }
                 catch (AbandonedMutexException)
                 {
-                    // Previous owner crashed — we now own it.
-                    _buildMutexOwned = true;
+                    // Previous owner crashed — WaitOne took ownership before throwing.
+                    _buildLockHolders++;
                     return true;
                 }
                 catch (Exception ex)
                 {
+                    // Fail CLOSED. This used to return true "so a mutex error doesn't block
+                    // the build", but the errors that actually land here are ownership and
+                    // name-collision failures — cases where we demonstrably do NOT hold the
+                    // lock. Claiming it anyway let two processes build one index directory,
+                    // and made the build's finally call ReleaseMutex on a mutex it never
+                    // acquired. Declining costs one skipped build: the caller watches the
+                    // other builder instead, and the next OnDbReady retries.
                     Console.WriteLine("[FtsIndexState] TryAcquireBuildLock failed: " + ex.Message);
-                    return true; // fail open — don't block the build on mutex errors
+                    try { _buildMutex?.Dispose(); } catch { }
+                    _buildMutex = null;
+                    return false;
                 }
             }
         }
@@ -99,19 +127,44 @@ namespace KitveiHakodeshLib.Search
         {
             lock (_mutexLock)
             {
-                if (!_buildMutexOwned) return;
+                if (!BuildMutexOwned) return;
                 try
                 {
                     _buildMutex?.ReleaseMutex();
                 }
                 catch (Exception ex)
                 {
+                    // A throw here means this thread is not the OS-recorded owner, so the
+                    // mutex is STILL HELD by this process and the handle is now untrustworthy.
+                    // Dropping only the flag (what this used to do) left the OS owning a lock
+                    // nobody would ever release, and every later check re-entered it
+                    // recursively and reported "nobody is building". Discarding the handle
+                    // makes the next acquire open a fresh one and see the real state; the
+                    // stale OS ownership dies with the process. Callers must acquire and
+                    // release on the SAME thread — see FtsIndexBuilder.RunBuild.
                     Console.WriteLine("[FtsIndexState] ReleaseBuildLock failed: " + ex.Message);
+                    try { _buildMutex?.Dispose(); } catch { }
+                    _buildMutex = null;
                 }
                 finally
                 {
-                    _buildMutexOwned = false;
+                    if (_buildLockHolders > 0) _buildLockHolders--;
                 }
+            }
+        }
+
+        /// <summary>Releases a probe acquisition taken by IsAnotherProcessBuilding on THIS
+        /// thread. Must be called from the same thread that acquired, and under _mutexLock.
+        /// A failure means the handle can no longer be reasoned about, so it is discarded:
+        /// the next acquire opens a fresh one and observes the true system-wide state.</summary>
+        private static void ReleaseProbe()
+        {
+            try { _buildMutex.ReleaseMutex(); }
+            catch (Exception ex)
+            {
+                Console.WriteLine("[FtsIndexState] build-lock probe release failed: " + ex.Message);
+                try { _buildMutex?.Dispose(); } catch { }
+                _buildMutex = null;
             }
         }
 
@@ -123,8 +176,14 @@ namespace KitveiHakodeshLib.Search
         {
             lock (_mutexLock)
             {
-                if (_buildMutexOwned) return false; // we own it — no other process
+                if (BuildMutexOwned) return false; // a builder here holds it — not another process
 
+                // Probing by acquire-then-release must happen on ONE thread: the acquire
+                // makes this thread the OS owner, and only that thread may release. Both
+                // halves are inside this lock and this method, so they always pair. If a
+                // release ever fails anyway, the handle is discarded rather than left
+                // half-held — a leaked recursive acquisition is what previously made this
+                // method answer "nobody is building" for the rest of the process lifetime.
                 try
                 {
                     if (_buildMutex == null)
@@ -134,21 +193,26 @@ namespace KitveiHakodeshLib.Search
                     if (acquired)
                     {
                         // We got it — release immediately, nobody else is building.
-                        _buildMutex.ReleaseMutex();
+                        ReleaseProbe();
                         return false;
                     }
                     return true;
                 }
                 catch (AbandonedMutexException)
                 {
-                    // Previous owner crashed — mutex is now ours; release it.
-                    try { _buildMutex?.ReleaseMutex(); } catch { }
+                    // Previous owner crashed — WaitOne took ownership before throwing, so
+                    // this thread now holds it and must release it here.
+                    ReleaseProbe();
                     return false;
                 }
                 catch (Exception ex)
                 {
+                    // Cannot tell — assume nobody is building (the index write lock is the
+                    // real correctness backstop) and drop the unusable handle.
                     Console.WriteLine("[FtsIndexState] IsAnotherProcessBuilding check failed: " + ex.Message);
-                    return false; // fail open
+                    try { _buildMutex?.Dispose(); } catch { }
+                    _buildMutex = null;
+                    return false;
                 }
             }
         }
@@ -172,6 +236,20 @@ namespace KitveiHakodeshLib.Search
         internal bool IsIndexing
         {
             get { lock (_lock) { return _state == State.Building || _indexingCts != null; } }
+        }
+
+        /// <summary>
+        /// Both flags from ONE lock acquisition. Reading IsReady and IsIndexing separately
+        /// can straddle a transition and observe "not ready, not indexing" — the state the
+        /// UI reads as "nothing is happening" — for a build that is merely between phases.
+        /// </summary>
+        internal void GetStatus(out bool ready, out bool indexing)
+        {
+            lock (_lock)
+            {
+                ready    = _state == State.Ready;
+                indexing = _state == State.Building || _indexingCts != null;
+            }
         }
 
         /// <summary>
@@ -262,12 +340,25 @@ namespace KitveiHakodeshLib.Search
         }
 
         /// <summary>
-        /// Marks the index as Ready without going through a build.
-        /// Used by the actor thread when the index is already complete on disk.
+        /// Marks the index as Ready without waiting for the build to finish — the index is
+        /// already complete on disk, or a build has flushed its first searchable segment.
+        ///
+        /// <paramref name="cts"/> is the caller's build session, and is REQUIRED for the
+        /// same reason TryMarkReady/TryMarkIdle take one: a build cancelled by StopAll keeps
+        /// running until it notices, and its progress callbacks used to be able to force
+        /// Ready over an index that a reset had just wiped — leaving search convinced a
+        /// deleted corpus was queryable. Pass null only from the actor thread, which owns
+        /// the lifecycle and has no build session to be stale against.
         /// </summary>
-        internal void MarkReadyDirect()
+        /// <returns>True if the state is now Ready; false when this build is stale.</returns>
+        internal bool MarkReadyDirect(CancellationTokenSource cts)
         {
-            lock (_lock) { _state = State.Ready; }
+            lock (_lock)
+            {
+                if (cts != null && _indexingCts != cts) return false;
+                _state = State.Ready;
+                return true;
+            }
         }
 
         // ── StopAll ───────────────────────────────────────────────────────────────

@@ -128,7 +128,39 @@ namespace KitveiHakodeshLib.Search
             // here, and this is on the critical path to marking search "ready" — time it
             // so a slow startup can be attributed (see FtsLib.log / console).
             var openSw = System.Diagnostics.Stopwatch.StartNew();
-            var seforimIndex = new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath);
+            SeforimIndex seforimIndex;
+            try
+            {
+                seforimIndex = new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath);
+            }
+            catch (Exception ex)
+            {
+                // Reachable when a previous wipe failed (a write.lock handle still open) and
+                // left orphan segment files behind. Unguarded, the throw abandoned the rest
+                // of this action — no SetDatabase, no build started, no event pushed — and
+                // nothing ever re-queued, so search stayed "not ready" until the app was
+                // restarted. A corrupt-on-open index is exactly what a clean wipe fixes, so
+                // wipe and try once more before giving up.
+                Console.WriteLine("[SearchHandler] SeforimIndex open failed (" + ex.Message
+                    + ") — wiping the index directory and retrying once");
+                FtsIndexState.DeleteFtsIndex();
+                try
+                {
+                    seforimIndex = new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath);
+                }
+                catch (Exception retryEx)
+                {
+                    // Still failing: tell the frontend instead of leaving it on a silent
+                    // spinner. The next OnDbReady (DB switch, reload) retries from scratch.
+                    Console.WriteLine("[SearchHandler] SeforimIndex open failed again: " + retryEx);
+                    _bridge.PushEvent(new
+                    {
+                        @event = "ftsIndexInvalidated",
+                        reason = "index could not be opened: " + retryEx.Message,
+                    });
+                    return;
+                }
+            }
             openSw.Stop();
             Console.WriteLine($"[SearchHandler] SeforimIndex opened in {openSw.ElapsedMilliseconds} ms");
             FtsLib.Indexing.FtsLog.Write("SearchHandler.ExecuteOnDbReady",
@@ -195,7 +227,9 @@ namespace KitveiHakodeshLib.Search
                 }
 
                 Console.WriteLine("[SearchHandler] FTS index complete and up-to-date, marking ready");
-                _indexState.MarkReadyDirect();
+                // null: this is the actor thread stating a fact about the index on disk, not
+                // a build session that a reset could have superseded.
+                _indexState.MarkReadyDirect(null);
                 _builder.PushCurrentProgress();
                 return;
             }
@@ -503,8 +537,9 @@ namespace KitveiHakodeshLib.Search
 
         public void HandleGetProgress(string id)
         {
-            bool ready    = _indexState.IsReady;
-            bool indexing = _indexState.IsIndexing;
+            // One snapshot, not two reads — see FtsIndexState.GetStatus.
+            bool ready, indexing;
+            _indexState.GetStatus(out ready, out indexing);
 
             // If this instance is not building but another process is, read the
             // progress file so the frontend gets real percentage data on mount.

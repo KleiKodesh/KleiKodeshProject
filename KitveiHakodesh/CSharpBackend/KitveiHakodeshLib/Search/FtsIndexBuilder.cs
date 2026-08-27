@@ -31,13 +31,6 @@ namespace KitveiHakodeshLib.Search
             if (!_state.TryStartBuilding(out cts))
                 return;
 
-            if (!FtsIndexState.TryAcquireBuildLock())
-            {
-                Console.WriteLine("[FtsIndexBuilder] Could not acquire build lock — another process may be building");
-                _state.TryMarkIdle(cts);
-                return;
-            }
-
             SeforimIndex index = _state.GetIndex();
             Task task = Task.Run(() => RunBuild(cts, index));
             _state.SetIndexingTask(task);
@@ -45,6 +38,24 @@ namespace KitveiHakodeshLib.Search
 
         private void RunBuild(CancellationTokenSource cts, SeforimIndex index)
         {
+            // The cross-process lock is taken HERE, not by StartIndexing, because a Windows
+            // mutex is owned by a THREAD: only the thread that waited on it may release it.
+            // Acquiring on the actor thread and releasing in this task's finally (on a pool
+            // thread) made every ReleaseMutex throw into a swallowed catch, while the owned
+            // flag was cleared anyway — so after the very first build the flag said "not
+            // owned" while the OS still recorded the actor thread as owner. From then on
+            // IsAnotherProcessBuilding took its not-owned branch, re-entered the mutex
+            // recursively (mutexes are re-entrant for their owner) and reported "nobody is
+            // building" forever, leaking one un-released acquisition per call. Two app
+            // instances would then build the same index directory at once — the exact thing
+            // this lock exists to prevent. Task.Run bodies with no await stay on one thread,
+            // so acquiring and releasing in this method keeps both on the same thread.
+            if (!FtsIndexState.TryAcquireBuildLock())
+            {
+                Console.WriteLine("[FtsIndexBuilder] Could not acquire build lock — another process may be building");
+                _state.TryMarkIdle(cts);
+                return;
+            }
             try
             {
                 RunBuildCore(cts, index);
@@ -88,7 +99,7 @@ namespace KitveiHakodeshLib.Search
             bool partialReadyPushed = resumeOffset > 0 && FtsIndexState.ValidateFtsIndex() == null;
             if (partialReadyPushed)
             {
-                _state.MarkReadyDirect();
+                _state.MarkReadyDirect(cts);
             }
 
             var  segmentMarkers = new System.Collections.Generic.List<double>();
@@ -119,7 +130,7 @@ namespace KitveiHakodeshLib.Search
                         if (!partialReadyPushed && FtsIndexState.ValidateFtsIndex() == null)
                         {
                             partialReadyPushed = true;
-                            _state.MarkReadyDirect();
+                            _state.MarkReadyDirect(cts);
                         }
 
                         PushProgress(partialReadyPushed, true, lastPct, (int)totalIndexed, (int)totalLines, "", segmentMarkers);
@@ -135,7 +146,7 @@ namespace KitveiHakodeshLib.Search
                     if (!partialReadyPushed && FtsIndexState.ValidateFtsIndex() == null)
                     {
                         partialReadyPushed = true;
-                        _state.MarkReadyDirect();
+                        _state.MarkReadyDirect(cts);
                     }
                 // Background processing mode (lowest CPU + very-low I/O priority): the FTS
                 // build is the long, heavy one, and this stops it contending with the UI,

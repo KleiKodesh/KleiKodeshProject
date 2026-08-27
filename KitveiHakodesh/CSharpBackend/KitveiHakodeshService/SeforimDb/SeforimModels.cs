@@ -444,6 +444,10 @@ public sealed class FtsIndexStatus
     public int TotalChunks { get; set; }
     /// <summary>True when no seforim DB exists at the resolved path — nothing to index.</summary>
     public bool DbMissing { get; set; }
+    /// <summary>True when the build ended without a searchable index and nothing will retry
+    /// it. TERMINAL, like IsReady and DbMissing: without it a failed build reported
+    /// "not ready, not indexing" forever and every progress stream waited on it.</summary>
+    public bool Failed { get; set; }
 }
 
 // ── Streaming FTS (ftsSearchStream) — the service PUSHES result frames continuously

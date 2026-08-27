@@ -229,6 +229,17 @@ namespace FtsLib.Indexing
             // to drain, so no source file is deleted while a reader has it open.
             // New searches queue behind the pending writer and resume within
             // milliseconds once the commit finishes.
+            // Leave background processing mode for the commit, if this thread is in it. The
+            // commit is short but it is real filesystem I/O (two MoveReplace calls, up to
+            // 4x4 deletes, a WAL append) performed while holding the EXCLUSIVE lock that
+            // every search blocks on. Windows boosts a starved thread's CPU priority but
+            // never lifts its I/O demotion, and a ReaderWriterLockSlim is invisible to the
+            // OS so there is no priority inheritance: throttled I/O in here would stall
+            // every waiting search for as long as the disk stays busy, and could even trip
+            // the 60s read-lock backstop into a search error. The long k-way merge write
+            // above stays throttled — that is the part worth yielding.
+            using (BackgroundPriorityScope.Suspend())
+            {
             FtsLog.Write("SegmentMerger",
                 "COMMIT: acquiring write lock (waits for active search leases)");
             _store.SearchMergeLock.EnterWriteLock();
@@ -301,6 +312,7 @@ namespace FtsLib.Indexing
                 _store.SearchMergeLock.ExitWriteLock();
                 FtsLog.Write("SegmentMerger", "COMMIT: write lock released");
             }
+            } // end background-priority suspension
 
             // Log final state
             int totalSegs = _store.Live.TotalLiveSegs();

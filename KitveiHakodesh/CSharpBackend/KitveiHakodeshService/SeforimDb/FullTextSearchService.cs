@@ -35,7 +35,12 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     private readonly object _lock = new();
     private SeforimIndex? _index;
     private Task? _buildTask;
-    private CancellationTokenSource? _buildCts;   // cancels the background build (for reset)
+    /// <summary>Cancels the background build. INVARIANT: only ResetIndex and Shutdown may
+    /// cancel this, and ResetIndex must bump <see cref="_buildGeneration"/> first. A
+    /// canceller that skips the bump lets the dying build's finally clear _isIndexing
+    /// without setting _buildFailed, and subscribers are then stuck on a state that is
+    /// neither ready, indexing, nor terminal — the hole _buildFailed was added to close.</summary>
+    private CancellationTokenSource? _buildCts;
 
     private volatile bool _isReady;
     private volatile bool _isIndexing;
@@ -43,6 +48,51 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     private double _pct;   // progress % — plain double (atomic enough for status reads)
     private volatile int _processed;
     private volatile int _total;
+
+    /// <summary>
+    /// Identifies the build generation that currently owns the status fields. Bumped by
+    /// every reset, so a build cancelled by that reset can be recognised as STALE.
+    ///
+    /// This is what makes a zombie build harmless. DoReset waits only 30s for the old
+    /// build to unwind; past that it deletes the directory anyway (documented, and the
+    /// right call — a build wedged on a merge must not block the reset forever). But the
+    /// zombie is still running, and its progress callbacks re-marked _isReady while its
+    /// finally cleared _isIndexing — over the NEW build's state. The reset then looked
+    /// finished while the index was a half-deleted directory, so EnsureIndexing early-
+    /// returned on _isReady and searched a corpus that was not there. Background-priority
+    /// builds made the 30s timeout easier to hit, but the hole predates them.
+    ///
+    /// Every write from build-owned code goes through IsCurrentBuild(myGeneration) first.
+    /// </summary>
+    private volatile int _buildGeneration;
+
+    /// <summary>True when <paramref name="generation"/> still owns the status fields —
+    /// i.e. no reset has superseded that build.</summary>
+    private bool IsCurrentBuild(int generation) => _buildGeneration == generation;
+
+    /// <summary>
+    /// Set when a build ended without producing a searchable index and without being
+    /// cancelled — it threw, or it processed nothing. This is a TERMINAL state and it has
+    /// to be one: ready+idle was the only terminal condition the progress stream knew, so a
+    /// failed build left every subscriber blocked forever on a state that is neither ready
+    /// nor indexing. The stream stayed open (one leaked connection per page load), the UI
+    /// sat at 0% with no error, and because the once-per-process latch was still armed
+    /// nothing ever retried. Cleared when a build starts or a reset is requested.
+    /// </summary>
+    private volatile bool _buildFailed;
+
+    /// <summary>
+    /// Set once <see cref="Shutdown"/> begins, so nothing starts a NEW build afterwards.
+    /// Without it a reset draining concurrently with shutdown could null out _buildTask,
+    /// let Shutdown see "no build to wait for" and return, and then start a fresh build
+    /// from its own finally — leaving the process to exit mid-merge, which is exactly the
+    /// abrupt kill Shutdown exists to avoid.
+    /// </summary>
+    private volatile bool _shuttingDown;
+
+    /// <summary>True from the moment a reset is accepted until its wipe-and-rebuild has been
+    /// handed off. Guards against a second reset stacking on the first — see ResetIndex.</summary>
+    private bool _resetInFlight;
 
     private static string ResolveIndexPath()
     {
@@ -76,10 +126,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     /// </summary>
     public void EnsureIndexing()
     {
-        if (!HasDb || _isReady) return;
+        if (!HasDb || _isReady || _shuttingDown) return;
         lock (_lock)
         {
-            if (_isReady) return;
+            if (_isReady || _shuttingDown) return;
 
             // An explicitly-provided index is used as-is — never built into. Re-check
             // cheaply each call so it flips ready once the external index has segments.
@@ -154,9 +204,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
             _buildStarted = true;
             _isIndexing = true;
+            _buildFailed = false;   // a fresh attempt clears the terminal failure state
             _buildCts = new CancellationTokenSource();
             var token = _buildCts.Token;
-            _buildTask = Task.Run(() => RunBuild(token));
+            // Captured under _lock so the build carries the generation it was born into;
+            // a later reset bumps the counter and every write this build attempts is
+            // then recognised as stale. See _buildGeneration.
+            int generation = _buildGeneration;
+            _buildTask = Task.Run(() => RunBuild(token, generation));
         }
     }
 
@@ -167,7 +222,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         catch { return null; }
     }
 
-    private void RunBuild(CancellationToken ct)
+    private void RunBuild(CancellationToken ct, int generation)
     {
         try
         {
@@ -188,10 +243,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             index.GetResumeState(out _, out long cachedTotal, out long cachedOffset);
             long total = cachedTotal > 0 ? cachedTotal : SafeCountLines(index);
             long resumeOffset = cachedOffset;
-            _total = (int)Math.Min(total, int.MaxValue);
+            if (IsCurrentBuild(generation)) _total = (int)Math.Min(total, int.MaxValue);
 
             // Existing segments (resume) are already searchable.
-            if (SegmentsExist()) _isReady = true;
+            if (IsCurrentBuild(generation) && SegmentsExist()) _isReady = true;
 
             logger.LogInformation("FTS build starting — index={Index} total≈{Total}", _indexPath, total);
 
@@ -212,6 +267,9 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                         limit: 0,
                         onProgress: sessionCount =>
                         {
+                            // A reset that gave up waiting for this build leaves it running;
+                            // its progress must not be written over the new build's state.
+                            if (!IsCurrentBuild(generation)) return;
                             if (total > 0 && sessionCount % 5000 == 0)
                             {
                                 long indexed = resumeOffset + sessionCount;
@@ -223,6 +281,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                         },
                         onFlush: () =>
                         {
+                            if (!IsCurrentBuild(generation)) return; // see onProgress
                             if (!_isReady && SegmentsExist()) _isReady = true;
                             NotifyProgress();
                         },
@@ -249,6 +308,18 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
             if (ok)
             {
+                // A superseded build must not claim completion: writing fts.ver here would
+                // stamp the NEW build's directory as a finished index of the old build's
+                // content, and EnsureIndexing would then skip the rebuild entirely on the
+                // next start. Its segments are already gone (the reset deleted them), so
+                // there is nothing of this build left to record.
+                if (!IsCurrentBuild(generation))
+                {
+                    logger.LogInformation(
+                        "FTS build finished after a reset superseded it — discarding its result");
+                    return;
+                }
+
                 // Record the source-DB change stamp so any later DB change (switch,
                 // edit, or replacement) invalidates this index on the next start.
                 File.WriteAllText(Path.Combine(_indexPath, "fts.ver"),
@@ -257,6 +328,15 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                 _pct = 100.0;
                 _isReady = true;
                 logger.LogInformation("FTS build complete — {Index}", _indexPath);
+            }
+            else if (IsCurrentBuild(generation) && !_isReady)
+            {
+                // BuildIndex returned false with nothing searchable: an empty corpus, or a
+                // session that only replayed WAL recovery. No stamp is written and the latch
+                // stays armed, so nothing here will retry — terminal, not "still working".
+                logger.LogInformation(
+                    "FTS build processed no lines and produced no searchable index — reporting terminal");
+                _buildFailed = true;
             }
         }
         catch (OperationCanceledException)
@@ -271,16 +351,29 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // abandoning the index permanently and leaving every restart to re-resume a
             // never-finishing build.
             logger.LogWarning(ex, "FTS index write-lock still held after retries — will resume later");
-            lock (_lock) { _buildStarted = false; }
+            // Only if this build still owns the state: re-arming a latch that a concurrent
+            // reset is holding on purpose would let a search's EnsureIndexing start a build
+            // into the directory that reset is still deleting.
+            lock (_lock) { if (IsCurrentBuild(generation)) _buildStarted = false; }
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "FTS index build failed");
+            // Terminal, unless a segment already made the index searchable: nothing retries
+            // (the latch stays armed), so subscribers must be told this is the end rather
+            // than waiting for progress that will never come. See _buildFailed.
+            if (IsCurrentBuild(generation) && !_isReady) _buildFailed = true;
         }
         finally
         {
-            _isIndexing = false;
-            NotifyProgress();   // terminal (or failed) state — wake subscribers so streams close
+            // A superseded build must not clear _isIndexing — that flag now belongs to the
+            // rebuild the reset started, and clearing it made the progress stream hit its
+            // terminal state (idle) and close while that rebuild was still running.
+            if (IsCurrentBuild(generation))
+            {
+                _isIndexing = false;
+                NotifyProgress();   // terminal (or failed) state — wake subscribers so streams close
+            }
         }
     }
 
@@ -321,6 +414,23 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
 
+        // One reset at a time. A second DoReset running concurrently would cancel the
+        // rebuild the first one just started, and the two finallys would race to null
+        // _buildTask/_buildCts — leaving a live build that no later reset or shutdown could
+        // cancel, to be hard-killed mid-merge at process exit. Reachable without any user
+        // action: the DB-change watcher calls RebuildIfDbChanged on every settle, and a DB
+        // written in bursts settles repeatedly. Dropping the extra request is right because
+        // the reset already in flight ends in a full rebuild from the current DB.
+        lock (_lock)
+        {
+            if (_resetInFlight)
+            {
+                logger.LogInformation("FTS reset already in progress — ignoring the duplicate request");
+                return;
+            }
+            _resetInFlight = true;
+        }
+
         // Report "indexing, 0%" from the moment the reset is REQUESTED, not from whenever the
         // background wipe finishes draining. The flags used to stay ready+idle until DoReset's
         // final step, and ready+idle is a progress stream's TERMINAL state — so a stream opened
@@ -332,9 +442,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         // into the directory the wipe is about to delete; DoReset re-arms it at the end.
         lock (_lock)
         {
+            // Supersede the running build FIRST: from here its callbacks and its finally
+            // are recognised as stale and stop writing these fields, so the state set
+            // below cannot be clobbered by a build that outlives DoReset's 30s wait.
+            _buildGeneration++;
             _isReady = false;
             _isIndexing = true;
             _buildStarted = true;
+            _buildFailed = false;   // a reset is a fresh attempt, not the old failure
             _pct = 0; _processed = 0; _total = 0;
         }
         NotifyProgress();
@@ -359,7 +474,31 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                 _buildCts?.Cancel();
                 build = _buildTask;
             }
-            try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancellation / aggregate */ }
+            // The build MUST be gone before the directory is deleted, and the wait therefore
+            // escalates instead of expiring. Deleting under a live build is not merely untidy:
+            // Directory.Delete removes write.lock itself, so the zombie's OS lock stops
+            // excluding anything and the rebuild happily takes a FRESH lock on the same
+            // directory — two writers, interleaved segment writes, a corrupt index. (The
+            // 30s cap that used to sit here is what made that reachable; a build wedged on a
+            // long merge simply outlived it.)
+            //
+            // A cancelled build unwinds in seconds: BuildIndex observes the token between
+            // lines and IndexWriter.Dispose drains the flush+merge pipeline. Waiting the
+            // whole time is safe — this already runs on a background task, so no caller is
+            // blocked — and 30s is generous enough that reaching the second stage means
+            // something is genuinely wedged, which is worth saying out loud rather than
+            // silently corrupting the index.
+            if (build != null)
+            {
+                if (!build.Wait(TimeSpan.FromSeconds(30)))
+                    logger.LogWarning(
+                        "FTS reset: the cancelled build has not unwound after 30s (likely a long merge) — "
+                        + "still waiting; the index directory cannot be deleted while it writes");
+                // Unconditional: returns at once when the wait above already completed, and
+                // surfaces a build that ended in a fault rather than by cancellation.
+                try { build.Wait(); }
+                catch (Exception ex) { logger.LogInformation(ex, "FTS reset: prior build ended with an exception"); }
+            }
 
             // 2) Cancel in-flight search sessions so nothing keeps reading the old segments, then WAIT
             //    for them to unwind. Cancelling is not releasing: a search that is mid-fetch still
@@ -388,15 +527,18 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             lock (_lock)
             {
                 _index = null; // drop the SegmentStore so it holds no file references
-                // Re-assert the flags the dying build may have flipped on its way out: its
-                // progress callback re-marks ready whenever segments exist, its finally
-                // clears _isIndexing, and its write-lock-retry catch re-arms _buildStarted.
-                // A stale "ready" or "idle" snapshot would claim the reset is over while the
-                // directory is mid-wipe, and an open latch would let a concurrent
-                // EnsureIndexing (every search and status call) build into it.
+                // Step 1 guarantees no build is running by now, and the generation bump in
+                // ResetIndex stopped a superseded one from writing these fields at all.
+                // This re-asserts against the narrow case of a build that had already
+                // passed its IsCurrentBuild check when the bump landed.
                 _isReady = false;
                 _isIndexing = true;
                 _buildStarted = true;
+                // _buildFailed too: it is TERMINAL, so a superseded build that set it inside
+                // this window would make the rebuild's very first status snapshot terminal
+                // and close every progress stream immediately — no rebuild progress shown at
+                // all, the mirror image of the bug the early flag-setting fixed.
+                _buildFailed = false;
             }
             try
             {
@@ -413,14 +555,32 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // on "indexing" forever with nothing running.
             lock (_lock)
             {
-                _isIndexing = false;
+                // _isIndexing deliberately stays TRUE across the handoff below. Clearing it
+                // here published "not ready, not indexing" — which no longer just looked
+                // idle, it is now the Failed-adjacent state a status reader can act on — for
+                // the whole window until EnsureIndexing starts the rebuild (which opens
+                // SQLite and stamps the DB first). It also made IsBusy false, so the idle
+                // memory trimmer could fire between the wipe and the rebuild.
                 _buildStarted = false;
                 _pct = 0; _processed = 0; _total = 0;
                 _buildTask = null;
                 _buildCts = null;
+                // Released HERE, before the rebuild is started — not after it. The wipe is
+                // already done, so nothing is left for another reset to race. Holding the
+                // flag across EnsureIndexing instead made RebuildIfDbChanged DROP a real DB
+                // change that landed in that window: it would defer to "the reset already in
+                // flight", while that reset had already stamped and started building from the
+                // PREVIOUS database, so the new one waited for the next watcher settle.
+                _resetInFlight = false;
             }
             logger.LogInformation("FTS index reset — rebuilding from scratch");
             EnsureIndexing();
+            lock (_lock)
+            {
+                // EnsureIndexing either started a build (it set _isIndexing itself) or found
+                // nothing to do. Only in the latter case is "not indexing" the truth.
+                if (_buildTask == null) _isIndexing = false;
+            }
             NotifyProgress();
         }
     }
@@ -437,6 +597,16 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         Task? build;
         lock (_lock)
         {
+            // Before anything else: no new build may start from here on. A reset draining
+            // concurrently nulls _buildTask in its finally and then calls EnsureIndexing —
+            // without this flag that call could start a build after Shutdown had already
+            // decided there was nothing to wait for, and the process would exit mid-merge.
+            _shuttingDown = true;
+            // Also released here as a backstop: DoReset's finally is the normal owner, but if
+            // ResetIndex's Task.Run were never scheduled (a saturated pool at shutdown) the
+            // flag would stay true with no DoReset to clear it, and every later reset in this
+            // process would be silently dropped as a duplicate.
+            _resetInFlight = false;
             _buildCts?.Cancel();
             build = _buildTask;
         }
@@ -779,6 +949,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         ProcessedChunks = _processed,
         TotalChunks = _total,
         DbMissing = !HasDb,
+        Failed = _buildFailed,
     };
 
     /// <summary>Push the current status immediately, then a fresh snapshot on every
@@ -798,7 +969,9 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             var last = Snapshot();
             await emit(last);
             // Terminal: nothing left to report — ready and not building, or no DB at all.
-            while (!((last.IsReady && !last.IsIndexing) || last.DbMissing))
+            // Failed is terminal too — see FtsIndexStatus.Failed. Leaving it out is what let
+            // a thrown build hold every subscriber open on a state nothing would ever change.
+            while (!((last.IsReady && !last.IsIndexing) || last.DbMissing || last.Failed))
             {
                 await ch.Reader.ReadAsync(ct);
                 last = Snapshot();
@@ -807,6 +980,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         }
         catch (OperationCanceledException) { /* client left */ }
         catch (IOException) { /* client disconnected mid-stream */ }
+        catch (Exception ex)
+        {
+            // A frame write can also fail as ObjectDisposedException (connection torn down
+            // under us) or from serialization. Those are this subscriber's problem, not the
+            // dispatcher's: letting them escape pushes an exception into the connection
+            // handler for what is only a dead progress stream.
+            logger.LogDebug(ex, "FTS progress stream ended on an unexpected error");
+        }
         finally
         {
             lock (_progressSubs) _progressSubs.Remove(ch);
