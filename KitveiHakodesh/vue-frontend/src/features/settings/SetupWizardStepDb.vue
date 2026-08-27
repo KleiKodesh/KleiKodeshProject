@@ -36,9 +36,17 @@ async function applyDevPath() {
   if (!p) return
   devError.value = ''
   try {
+    // Asked BEFORE the switch, because in dev nothing sets window.__webviewDbPath —
+    // only C# injects it — so onDbReady's own comparison would see no previous path
+    // and skip the wipe. The service is the authority on the path in use.
+    const previous = (await getDbPathInfo())?.path ?? ''
     await setDbPathDev(p)
     dbPath.value = p
-    onDbReady(p)
+    if (previous && previous !== p) {
+      const { clearStaleBookData } = await import('@/webview-host/dbSwitchCleanup')
+      await clearStaleBookData()
+    }
+    await onDbReady(p)
   } catch (err) {
     devError.value = err instanceof Error && /not found/i.test(err.message)
       ? 'הקובץ לא נמצא בנתיב שצוין'

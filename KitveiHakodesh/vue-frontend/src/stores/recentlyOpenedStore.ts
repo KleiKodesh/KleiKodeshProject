@@ -93,6 +93,7 @@ async function idbLoadList(): Promise<RecentlyOpenedEntry[]> {
 }
 
 async function idbSaveList(list: RecentlyOpenedEntry[]): Promise<void> {
+  if (_dropped) return
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const req = db
@@ -104,15 +105,44 @@ async function idbSaveList(list: RecentlyOpenedEntry[]): Promise<void> {
   })
 }
 
+/**
+ * Refuses further writes once dropped. This database is opened here rather than
+ * through the storage driver, so the driver's own write barrier cannot cover it —
+ * without this, a `trackNavigation` landing between the delete and the reload
+ * recreates the database and restores the whole old list.
+ */
+let _dropped = false
+
 export function dropRecentlyOpenedDb(): Promise<void> {
   _db?.close()
   _db = null
+  _dropped = true
+  // The in-memory list goes too, so nothing is left to write back even if a caller
+  // reads it. Declared below; safe because both are module state read at call time.
+  _cache = null
+  _loadPromise = null
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(RECENTLY_OPENED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
     req.onblocked = () => resolve()
   })
+}
+
+/**
+ * Drop only the entries pointing at books of the seforim DB, keeping the local-file,
+ * HebrewBooks and addin tiles (including their pins) — those are identified by path
+ * or HB id, which mean the same thing whichever library is open.
+ *
+ * Used when the reader switches library; the whole-database drop above is for a full
+ * app reset, where everything goes.
+ */
+export async function pruneSeforimBookEntries(): Promise<void> {
+  const list = await ensureLoaded()
+  const kept = list.filter((entry) => !entry.key.startsWith('book:'))
+  if (kept.length === list.length) return
+  _cache = kept
+  await idbSaveList(kept)
 }
 
 // ── Stable key derivation ─────────────────────────────────────────────────────
