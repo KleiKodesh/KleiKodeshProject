@@ -397,31 +397,42 @@ const RESET_STEP_TIMEOUT_MS = 30_000
  * the local databases first — do not call this directly.
  */
 export async function resetHostApp(): Promise<void> {
-  // The catalog TOC index lives only in the KitveiHakodesh service — there is no hosted
-  // equivalent, and serviceCall reaches the service in both modes — so it is reset the
-  // same way either side of the branch below.
-  await resetCatalogTocIndex()
+  // The catalog TOC index is reset the same way in both modes now that the hosted app has its
+  // own handler for it. It used to be an unguarded serviceCall sitting above this branch, on
+  // the claim that "serviceCall reaches the service in both modes" — it does not: serviceClient
+  // discovers the service through the DEV SERVER's /khs-endpoint route, which does not exist in
+  // the hosted app. Discovery then retries the full 82 attempts before giving up (backoff caps
+  // at 1s, so ~77s), and postRpc re-enters discovery on each of its own 6 attempts — minutes,
+  // not seconds. As the first awaited step here, that one line stalled the entire reset and
+  // then failed, with nothing shown — the "reset does nothing" report.
+  await withTimeout(resetCatalogTocIndex(), RESET_STEP_TIMEOUT_MS)
+
   if (typeof window.__webviewAction !== 'function') {
-    // Dev: the C# host doesn't exist, so reset the indexes through the service, then
-    // reload. Browser storage is NOT touched here — resetEverything() has already wiped
-    // every database and the whole kitvei-hakodesh.* localStorage namespace before
-    // calling this. A raw localStorage.clear() used to sit here, which both duplicated
-    // that work and reached outside the app's namespace.
+    // Dev: the C# host doesn't exist, so reset the indexes through the service, then reload.
+    // Browser storage is NOT touched here — resetEverything() has already wiped every database
+    // and the whole kitvei-hakodesh.* localStorage namespace before calling this. A raw
+    // localStorage.clear() used to sit here, which both duplicated that work and reached
+    // outside the app's namespace.
     await serviceCall('ftsResetIndex').catch(() => {})
     await serviceCall('resetDocumentLocatorIndex').catch(() => {})
     window.location.reload()
     return
   }
-  // DeleteFtsIndex now replies only once the wipe has actually run on the C# actor thread,
-  // so this await is what keeps the reload from racing the delete. It waits on a StopAll()
-  // that has no timeout by design (it must not return while a merge is still writing), which
-  // is why it gets a ceiling here: a reset that hangs forever behind the `resetting` flag
-  // strands the user on a dead page with no way out, which is worse than reloading with a
-  // stale index that the next boot's stamp check rebuilds anyway.
+
+  // Each hosted step replies as soon as its work is QUEUED, not when it completes — the wipes
+  // have to drain in-flight index builds first, which takes tens of seconds on a large index
+  // and is exactly what made the reset look frozen. The timeouts are therefore a safety net
+  // against a lost reply, not the normal path.
+  //
+  // The three wipes run concurrently with each other and with the reloaded page's startup;
+  // only DeleteFtsIndex has an ordering guarantee, and it is the one that needs it. Its
+  // handler posts to a single-consumer actor that the reloaded page's OnDbReady also posts
+  // to, so the rebuild cannot overtake the wipe. The other two each own their own index
+  // directory and gate readers behind their own readiness check, so nothing they race with
+  // can observe a half-wiped state. Do not add a fourth step here assuming a shared queue.
   await withTimeout(action('DeleteFtsIndex'), RESET_STEP_TIMEOUT_MS)
   // Hosted mode used to skip the file-search index that dev resets, so the same button
   // wiped a different set of indexes depending on which mode the app ran in.
-  // This one replies as soon as the rebuild is queued, so it does not need a long ceiling.
   await withTimeout(action('ResetDocumentLocatorIndex'), RESET_STEP_TIMEOUT_MS)
   await withTimeout(action('resetSettings'), RESET_STEP_TIMEOUT_MS)
   // clearBrowsingData is set ONLY here. The same action is sent by seforimDb.onDbReady after
@@ -452,16 +463,65 @@ function withTimeout(p: Promise<unknown>, ms: number): Promise<void> {
   })
 }
 
+/** One catalog TOC hit as it comes off the wire, from either transport. */
+export type CatalogTocHit = {
+  bookId: number
+  /** -1 = no resolved line. */
+  lineIndex: number
+  /** Display path: book title, then " / "-joined TOC segments. */
+  fullTocPath: string
+  /** 0 = book-title hit, 1+ = TOC depth. */
+  level: number
+  treeOrder: number
+}
+
+export type CatalogTocSearchResult = {
+  /** False while no index is available yet (first build) — the caller retries. */
+  ready: boolean
+  results: CatalogTocHit[]
+  /** True when a newer search superseded this one — discard and retry. */
+  superseded?: boolean
+  error?: string | null
+}
+
 /**
- * Wipe the catalog TOC (Lucene) index so the service rebuilds it from the seforim DB.
- * Service-only in both modes: KitveiHakodeshLib has no catalog-index handler, and the
- * catalog search itself already goes straight to the service via serviceCall.
+ * Search the catalog TOC (Lucene) index — book titles and full TOC paths in one query.
  *
- * Normally self-healing — the index carries a DbChangeStamp and rebuilds whenever the
+ * Both modes run the SAME engine: dev reaches the service over serviceCall, hosted goes
+ * through the C# host, whose CatalogTocHandler is compiled from the service's own engine
+ * source. Before that handler existed this was service-only, so the hosted app fell back to
+ * in-memory heuristics and ranked the same query differently.
+ *
+ * Both transports already deliver camelCase keys — the service client transforms msgpack's
+ * PascalCase, and the hosted handler emits camelCase directly — so the result needs no
+ * per-mode normalisation.
+ */
+export async function catalogTocSearch(query: string): Promise<CatalogTocSearchResult> {
+  if (typeof window.__webviewAction === 'function')
+    return action<CatalogTocSearchResult>('catalogTocSearch', { query })
+  return serviceCall<CatalogTocSearchResult>('catalogTocSearch', { query })
+}
+
+/**
+ * Wipe the catalog TOC (Lucene) index so it is rebuilt from the seforim DB.
+ *
+ * Both transports, matching catalogTocSearch. The hosted branch matters: routing this
+ * through serviceCall in hosted mode did not merely fail, it HUNG — serviceClient discovers
+ * the service via the dev server's /khs-endpoint route, which does not exist there, so every
+ * attempt gets a non-ok response and discovery runs its full 82-attempt loop (~77s at the 1s
+ * backoff cap) before throwing, once per each of postRpc's 6 attempts. As the first awaited
+ * step of the app reset, that alone stalled the whole reset for minutes before failing, which
+ * is what made the reset look like it did nothing.
+ *
+ * Normally self-healing — the index carries a DB content stamp and rebuilds whenever the
  * seforim DB or the index format version changes — so this exists for the case a stamp
  * cannot catch: an index corrupted in place.
  */
 export async function resetCatalogTocIndex(): Promise<void> {
+  if (typeof window.__webviewAction === 'function') {
+    await action('catalogTocResetIndex').catch(() => {})
+    return
+  }
   await serviceCall('catalogTocResetIndex').catch(() => {})
 }
 
