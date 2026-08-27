@@ -127,3 +127,34 @@ export function getCommentaryConnectionTypeIds(): number[] {
     .map((name) => getConnectionTypeId(name))
     .filter((id): id is number => id != null)
 }
+
+/**
+ * Connection type names that make a book DEPEND on another: everything that comments
+ * on, translates, or expounds a base text. Reversing a link of one of these types is
+ * what finds the base text of the current book.
+ *
+ * A commentary links to its base with COMMENTARY, but a targum links with TARGUM - so
+ * a COMMENTARY-only reverse lookup finds nothing for a targum and its base book goes
+ * missing. DIBUR_HAMATCHIL and EIN_MISHPAT are dependants in the same sense.
+ * Mirrors the type list Zayit uses for its inverse-link (SOURCE) queries.
+ */
+const BASE_TEXT_REVERSE_DB_NAMES = [
+  'COMMENTARY',
+  'SUPER_COMMENTARY',
+  'TARGUM',
+  'MIDRASH',
+  'PARSHANUT',
+  'DIBUR_HAMATCHIL',
+  'EIN_MISHPAT',
+]
+
+/**
+ * Connection type IDs used to find the BASE book of the current one by looking at
+ * links pointing AT it. Forward lookups keep using getCommentaryConnectionTypeIds.
+ * Caller must call ensureConnectionTypeNamesLoaded first.
+ */
+export function getBaseTextReverseConnectionTypeIds(): number[] {
+  return BASE_TEXT_REVERSE_DB_NAMES
+    .map((name) => getConnectionTypeId(name))
+    .filter((id): id is number => id != null)
+}

@@ -239,14 +239,54 @@ internal static class SeforimSql
         FROM link l
         JOIN line ln ON ln.id = l.sourceLineId
         WHERE l.targetLineId IN ({InPlaceholders("t", lineCount)})
-          AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})";
+          AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})
+          AND l.sourceBookId != l.targetBookId
+          -- Drop lateral citations: a book that merely QUOTES one line of this one is
+          -- not its base text. Keep a link only when the data DECLARES the base
+          -- relationship (baseProvenance > 0), or both books sit in the same top-level
+          -- corpus. A responsum citing a targum crosses corpora and is not declared.
+          AND (
+            l.baseProvenance > 0
+            OR (SELECT cc.ancestorId FROM book sb
+                  JOIN category_closure cc ON cc.descendantId = sb.categoryId
+                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                 WHERE sb.id = l.sourceBookId)
+             = (SELECT cc.ancestorId FROM book tb
+                  JOIN category_closure cc ON cc.descendantId = tb.categoryId
+                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                 WHERE tb.id = l.targetBookId)
+          )";
 
-    /// <summary>Reverse lookup: distinct source/targum books linking to any line in the base book.</summary>
+    /// <summary>Reverse lookup: the base text(s) of the given book, best first. A declared base
+    /// beats an inferred one, a book flagged as a base text beats one that is not, then catalogue
+    /// order, then how much of this book the candidate covers.</summary>
     public static string GetReverseBooks(int typeCount) => $@"
-        SELECT DISTINCT l.sourceBookId
+        SELECT l.sourceBookId
         FROM link l
+        JOIN book sb ON sb.id = l.sourceBookId
         WHERE l.targetBookId = @bookId
-          AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})";
+          AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})
+          AND l.sourceBookId != l.targetBookId
+          -- Drop lateral citations: a book that merely QUOTES one line of this one is
+          -- not its base text. Keep a link only when the data DECLARES the base
+          -- relationship (baseProvenance > 0), or both books sit in the same top-level
+          -- corpus. A responsum citing a targum crosses corpora and is not declared.
+          AND (
+            l.baseProvenance > 0
+            OR (SELECT cc.ancestorId FROM book src
+                  JOIN category_closure cc ON cc.descendantId = src.categoryId
+                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                 WHERE src.id = l.sourceBookId)
+             = (SELECT cc.ancestorId FROM book tb
+                  JOIN category_closure cc ON cc.descendantId = tb.categoryId
+                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                 WHERE tb.id = l.targetBookId)
+          )
+        GROUP BY l.sourceBookId
+        ORDER BY MAX(l.baseProvenance) DESC,
+                 sb.isBaseBook DESC,
+                 sb.orderIndex,
+                 COUNT(DISTINCT l.targetLineId) DESC";
 
     /// <summary>Distinct forward static-filter books for a source book (COMMENTARY/EIN_MISHPAT etc.).</summary>
     public static string GetStaticFilterBooks(int typeCount) => $@"
