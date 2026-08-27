@@ -9,11 +9,9 @@ import type { CommentaryGroup, CommentaryBookEntry } from './useCommentary'
 import {
   ensureConnectionTypeNamesLoaded,
   getConnectionTypeName,
-  getConnectionTypeId,
   getPrimaryConnectionType,
   normalizeConnectionTypeName,
-  getCommentaryConnectionTypeIds,
-  getDbNamesForCanonicalType,
+  getBaseTextReverseConnectionTypeIds,
   CONNECTION_TYPE_SECTION_LABELS,
 } from './commentaryConnectionTypes'
 import type { CommentaryConnectionType } from './commentaryConnectionTypes'
@@ -228,10 +226,10 @@ export async function fetchSourceEntriesViaReverseQuery(
   lineIds: number[],
   allBooksMap: Map<number, BookRow>,
 ): Promise<CommentaryBookEntry[]> {
-  const commentaryTypeIds = getCommentaryConnectionTypeIds()
-  if (!commentaryTypeIds.length) return []
+  const reverseTypeIds = getBaseTextReverseConnectionTypeIds()
+  if (!reverseTypeIds.length) return []
 
-  const rows = await getReverseLineData(lineIds, commentaryTypeIds)
+  const rows = await getReverseLineData(lineIds, reverseTypeIds)
 
   if (!rows.length) return []
 
@@ -277,22 +275,20 @@ export async function buildStaticCommentaryFilterGroups(
 ): Promise<CommentaryGroup[]> {
   await ensureConnectionTypeNamesLoaded()
 
-  // Forward lookup: TARGUM, COMMENTARY and EIN_MISHPAT. Only SOURCE is unreliable in
-  // the forward direction and needs the reverse lookup below.
-  const forwardDbNames = [
-    ...getDbNamesForCanonicalType('TARGUM'),
-    ...getDbNamesForCanonicalType('COMMENTARY'),
-    ...getDbNamesForCanonicalType('EIN_MISHPAT'),
-  ]
-  const forwardConnectionTypeIds = forwardDbNames
-    .map((name) => getConnectionTypeId(name))
-    .filter((id): id is number => id != null)
+  // Both directions ask for the same family: the things that actually COMMENT on a
+  // text - commentary, super-commentary, targum, midrash and the rest. Forward finds
+  // what depends on this book, reverse finds what this book depends on. Types that are
+  // mere citation (OTHER, REFERENCE, LINKER, QUOTATION) are not related books and stay
+  // out of both. Only SOURCE is unreliable forwards, which is why it comes from the
+  // reverse lookup below.
+  const dependantTypeIds = getBaseTextReverseConnectionTypeIds()
+  const forwardConnectionTypeIds = dependantTypeIds
 
-  const commentaryTypeIds = getCommentaryConnectionTypeIds()
+  const reverseTypeIds = dependantTypeIds
 
   const [forwardRows, reverseSourceRows] = await Promise.all([
     getStaticFilterBooks(sourceBookId, forwardConnectionTypeIds),
-    getReverseBooks(sourceBookId, commentaryTypeIds),
+    getReverseBooks(sourceBookId, reverseTypeIds),
   ])
 
   if (!forwardRows.length && !reverseSourceRows.length) return []

@@ -455,6 +455,25 @@ export const SQL = {
     JOIN line ln ON ln.id = l.sourceLineId
     WHERE l.targetLineId = ?
       AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
+      AND l.sourceBookId != l.targetBookId
+      -- Drop lateral citations. A book that merely QUOTES one line of this one is not
+      -- its base text. Zayit demotes these at import time (rewriting the connection
+      -- type to RELATED when a link crosses corpora and is not a declared base); we
+      -- read a prebuilt DB, so the same rule is applied here: keep a link only when the
+      -- data DECLARES the base relationship, or both books live in the same top-level
+      -- corpus (Tanach, Talmud, Halacha...). A responsum citing a targum crosses corpora
+      -- and is not declared, so it drops out.
+      AND (
+        l.baseProvenance > 0
+        OR (SELECT cc.ancestorId FROM book sb
+              JOIN category_closure cc ON cc.descendantId = sb.categoryId
+              JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+             WHERE sb.id = l.sourceBookId)
+         = (SELECT cc.ancestorId FROM book tb
+              JOIN category_closure cc ON cc.descendantId = tb.categoryId
+              JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+             WHERE tb.id = l.targetBookId)
+      )
   `,
 
   /**
@@ -467,19 +486,68 @@ export const SQL = {
     JOIN line ln ON ln.id = l.sourceLineId
     WHERE l.targetLineId IN (${Array(targetLineCount).fill('?').join(',')})
       AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
+      AND l.sourceBookId != l.targetBookId
+      -- Drop lateral citations. A book that merely QUOTES one line of this one is not
+      -- its base text. Zayit demotes these at import time (rewriting the connection
+      -- type to RELATED when a link crosses corpora and is not a declared base); we
+      -- read a prebuilt DB, so the same rule is applied here: keep a link only when the
+      -- data DECLARES the base relationship, or both books live in the same top-level
+      -- corpus (Tanach, Talmud, Halacha...). A responsum citing a targum crosses corpora
+      -- and is not declared, so it drops out.
+      AND (
+        l.baseProvenance > 0
+        OR (SELECT cc.ancestorId FROM book sb
+              JOIN category_closure cc ON cc.descendantId = sb.categoryId
+              JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+             WHERE sb.id = l.sourceBookId)
+         = (SELECT cc.ancestorId FROM book tb
+              JOIN category_closure cc ON cc.descendantId = tb.categoryId
+              JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+             WHERE tb.id = l.targetBookId)
+      )
   `,
 
   /**
-   * Reverse source book lookup: find distinct source books that link to any line in the
-   * given base book via a commentary-type connection. Used to populate the SOURCE section
-   * of the static commentary filter panel.
+   * Reverse source book lookup: find the base text(s) of the given book by reversing the
+   * commentary-family links that point at it. Used to populate the SOURCE section of the
+   * static commentary filter panel.
+   *
+   * Returned BEST FIRST: a declared base beats an inferred one, a book flagged as a base
+   * text beats one that is not, then catalogue order, then how much of this book the
+   * candidate actually covers. Ordering rather than a hard filter, so a real base text
+   * with few links is still reachable instead of being dropped outright.
    * Bind order: targetBookId, commentaryTypeId1, commentaryTypeId2, ...
    */
   GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number) => `
-    SELECT DISTINCT l.sourceBookId
+    SELECT l.sourceBookId
     FROM link l
+    JOIN book sb ON sb.id = l.sourceBookId
     WHERE l.targetBookId = ?
       AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
+      AND l.sourceBookId != l.targetBookId
+      -- Drop lateral citations. A book that merely QUOTES one line of this one is not
+      -- its base text. Zayit demotes these at import time (rewriting the connection
+      -- type to RELATED when a link crosses corpora and is not a declared base); we
+      -- read a prebuilt DB, so the same rule is applied here: keep a link only when the
+      -- data DECLARES the base relationship, or both books live in the same top-level
+      -- corpus (Tanach, Talmud, Halacha...). A responsum citing a targum crosses corpora
+      -- and is not declared, so it drops out.
+      AND (
+        l.baseProvenance > 0
+        OR (SELECT cc.ancestorId FROM book sb
+              JOIN category_closure cc ON cc.descendantId = sb.categoryId
+              JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+             WHERE sb.id = l.sourceBookId)
+         = (SELECT cc.ancestorId FROM book tb
+              JOIN category_closure cc ON cc.descendantId = tb.categoryId
+              JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+             WHERE tb.id = l.targetBookId)
+      )
+    GROUP BY l.sourceBookId
+    ORDER BY MAX(l.baseProvenance) DESC,
+             sb.isBaseBook DESC,
+             sb.orderIndex,
+             COUNT(DISTINCT l.targetLineId) DESC
   `,
 
   /** All available connection type IDs and names */
