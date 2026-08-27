@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
   <PropertyGroup>
@@ -23,7 +23,7 @@
     <DebugType>full</DebugType>
     <Optimize>false</Optimize>
     <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <DefineConstants>DEBUG;TRACE;NETFRAMEWORK</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -32,7 +32,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;NETFRAMEWORK</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
@@ -40,7 +40,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release-x64\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;NETFRAMEWORK</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -49,7 +49,7 @@
     <DebugType>pdbonly</DebugType>
     <Optimize>true</Optimize>
     <OutputPath>bin\Release-x86\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
+    <DefineConstants>TRACE;NETFRAMEWORK</DefineConstants>
     <ErrorReport>prompt</ErrorReport>
     <WarningLevel>4</WarningLevel>
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -93,6 +93,34 @@
       <HintPath>..\packages\System.Buffers.4.6.1\lib\net462\System.Buffers.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
+    <!-- Catalog TOC search engine. Pinned to the SAME Lucene build as KitveiHakodeshService
+         (4.8.0-beta00018), NOT the beta00016 that DocumentLocator uses. These are betas of a
+         port whose index internals still moved between releases, and the catalogtoc.ver stamp
+         records only the format version and the DB rows — not the Lucene build — so a skew
+         between the two legs would have nothing to force a rebuild. Same source AND same
+         engine version, or the shared-source guarantee is only half true. -->
+    <Reference Include="Lucene.Net, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181">
+      <HintPath>..\packages\Lucene.Net.4.8.0-beta00018\lib\net462\Lucene.Net.dll</HintPath>
+    </Reference>
+    <!-- Lucene.Net's own dependency: its Analyzer/TokenStream types surface J2N's
+         ICharSequence and IAppendable, so subclassing them needs this referenced directly.
+         Package 2.1.0 is what beta00018 requires ([2.1.0, 3.0.0)); its ASSEMBLY version is
+         still 2.0.0.0, which is what the Include must say — J2N keeps the assembly version
+         fixed across 2.x so the binding never needs a redirect. -->
+    <Reference Include="J2N, Version=2.0.0.0, Culture=neutral, PublicKeyToken=f39447d697a969af">
+      <HintPath>..\packages\J2N.2.1.0\lib\net462\J2N.dll</HintPath>
+    </Reference>
+    <!-- Also Lucene.Net's, and NOT optional despite nothing here referencing them in source:
+         Lucene.Net.Util.Constants reads its configuration in a STATIC initializer, so without
+         these every Lucene call — not just a configured one — dies with a
+         TypeInitializationException wrapping a FileNotFoundException. The project compiles
+         perfectly without them, which is exactly what makes the failure runtime-only. -->
+    <Reference Include="Microsoft.Extensions.Configuration.Abstractions, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60">
+      <HintPath>..\packages\Microsoft.Extensions.Configuration.Abstractions.8.0.0\lib\net462\Microsoft.Extensions.Configuration.Abstractions.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Extensions.Primitives, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60">
+      <HintPath>..\packages\Microsoft.Extensions.Primitives.8.0.0\lib\net462\Microsoft.Extensions.Primitives.dll</HintPath>
+    </Reference>
     <Reference Include="System.Data.SQLite, Version=1.0.119.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
       <HintPath>..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\lib\net46\System.Data.SQLite.dll</HintPath>
     </Reference>
@@ -174,6 +202,33 @@
     <Compile Include="Search\FtsSearchExecutor.cs" />
     <Compile Include="Search\SearchExpansion.cs" />
     <Compile Include="Search\SearchHandler.cs" />
+    <!-- Catalog TOC (Lucene) search — SHARED SOURCE with KitveiHakodeshService.
+         Linked rather than copied so the hosted (net48) and service (net10) legs can never
+         drift into two different search engines answering the same query. The files are
+         provider-agnostic ADO.NET plus Lucene; the only net48 gaps are patched by
+         Catalog\NetFxCompat.cs (Sqlite type alias + GetValueOrDefault), never by editing
+         the shared files. Keep this list in sync with the service's Catalog folder. -->
+    <Compile Include="..\KitveiHakodeshService\Catalog\CatalogTocIndex.cs">
+      <Link>Catalog\CatalogTocIndex.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodeshService\Catalog\CatalogTocTextRules.cs">
+      <Link>Catalog\CatalogTocTextRules.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodeshService\Catalog\CatalogAbbreviations.g.cs">
+      <Link>Catalog\CatalogAbbreviations.g.cs</Link>
+    </Compile>
+    <!-- The index's freshness stamp. Shared for correctness, not just tidiness: if the two
+         legs computed the stamp differently they would each consider the other's index
+         stale and rebuild it on every switch between them. -->
+    <Compile Include="..\KitveiHakodeshService\Common\DbContentStamp.cs">
+      <Link>Catalog\DbContentStamp.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodeshService\Common\DbParameterExtensions.cs">
+      <Link>Catalog\DbParameterExtensions.cs</Link>
+    </Compile>
+    <Compile Include="Catalog\GlobalUsings.cs" />
+    <Compile Include="Catalog\NetFxCompat.cs" />
+    <Compile Include="Catalog\CatalogTocHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="Settings\ShellRegistration.cs" />
     <Compile Include="UserSettings\UserSettingsDbAccess.cs" />

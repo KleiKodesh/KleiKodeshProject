@@ -115,6 +115,7 @@ namespace KitveiHakodeshLib
         private DictionaryHandler _dictionary;
         private HebrewBooksDb _hebrewBooksDb;
         private FileSystemSearchHandler _fileSystemSearch;
+        private KitveiHakodeshLib.Catalog.CatalogTocHandler _catalogToc;
         private UserSettingsDbHandler _userSettings;
         private string _dbInjectionScriptId;
 
@@ -579,13 +580,11 @@ namespace KitveiHakodeshLib
             _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
             _fileSystemSearch.UiControl = this;
+            _catalogToc = new KitveiHakodeshLib.Catalog.CatalogTocHandler(_bridge);
             _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
 
-            _db.OnDbPathPicked = path =>
-            {
-                _search.ResetAndReindex(path);
-                _userSettings.UpdateSeforimDbPath(path);
-            };
+            _db.OnDbPathPicked = HandleDbPathPicked;
+
             _db.ResetTitleBarToLight = () =>
             {
                 // After a full settings reset, restore the title bar to light immediately
@@ -608,6 +607,26 @@ namespace KitveiHakodeshLib
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
             _search.OnDbReady(savedPath);
+            // Open (and, if stale/missing, background-build) the catalog TOC index now rather
+            // than on the first search: EnsureIndex is cheap when the index is current, and
+            // doing it here means the first catalog query is answered from a warm reader.
+            // Off the UI thread — the first build walks the whole seforim DB.
+            _ = Task.Run(() => _catalogToc.EnsureIndex());
+        }
+
+        /// <summary>
+        /// Everything that must happen when the user picks a different seforim DB. ONE
+        /// method because there are two wiring sites — here and HandleReload — and the
+        /// reload copy silently omitted the catalog step, so a DB switch after any reload
+        /// left catalog search answering from the previous database.
+        /// </summary>
+        private void HandleDbPathPicked(string path)
+        {
+            _search.ResetAndReindex(path);
+            _userSettings.UpdateSeforimDbPath(path);
+            // The catalog index is built from the seforim DB, so a new DB makes the
+            // existing index answer for the wrong database.
+            _catalogToc.OnDbPathChanged();
         }
 
         // ── Dispose ─────────────────────────────────────────────────────────────────
@@ -642,6 +661,10 @@ namespace KitveiHakodeshLib
                 _hb?.DisposeAllHosts();
 
                 _fileSystemSearch?.Dispose();
+                // Cancels an in-flight catalog build and waits briefly so Lucene's writer
+                // closes cleanly. An interrupted build writes no ver file, so it is simply
+                // treated as stale and rebuilt next run.
+                _catalogToc?.Dispose();
                 _userSettings?.Dispose();
 
                 // Decrement the shared instance count. When the last AppViewer is

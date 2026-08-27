@@ -94,6 +94,13 @@ namespace KitveiHakodeshLib
                         case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
+                        // Catalog TOC (Lucene) search. Hosted used to have no equivalent — the
+                        // frontend fell back to in-memory heuristics here while dev used the
+                        // service's index — so these three run the SAME engine, from source
+                        // shared with KitveiHakodeshService (see the csproj's linked Catalog files).
+                        case "catalogTocSearch": _catalogToc.HandleSearch(root, id); break;
+                        case "catalogTocStatus": _catalogToc.HandleStatus(id); break;
+                        case "catalogTocResetIndex": _catalogToc.HandleResetIndex(id); break;
                         case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;

@@ -171,11 +171,12 @@ namespace KitveiHakodeshLib
 
             // Re-init the DB handler; keep the existing search handler and its index state.
             _db = new DbHandler(_bridge, _webView, savedPath);
-            _db.OnDbPathPicked = path =>
-            {
-                _search.ResetAndReindex(path);
-                _userSettings.UpdateSeforimDbPath(path);
-            };
+            // Shared with the constructor's wiring, not re-listed here: this copy used to
+            // omit the catalog-index invalidation, so after any reload (the app reset
+            // included) picking a new seforim DB left the catalog TOC index answering for
+            // the OLD database — wrong book ids, and no self-heal because its hash check is
+            // latched off once a build has started.
+            _db.OnDbPathPicked = HandleDbPathPicked;
             _db.ResetTitleBarToLight = () =>
             {
                 if (InvokeRequired)

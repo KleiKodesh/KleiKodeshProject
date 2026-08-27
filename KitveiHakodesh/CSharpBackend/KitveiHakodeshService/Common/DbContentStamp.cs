@@ -1,4 +1,8 @@
+using System.Data.Common;
+using System.Globalization;
+#if !NETFRAMEWORK
 using Microsoft.Data.Sqlite;
+#endif
 
 namespace KitveiHakodeshService.Common;
 
@@ -73,7 +77,9 @@ public static class DbContentStamp
         // The prefix is caller-owned and may contain '|', so look for the format tag as a
         // delimited field anywhere in the head rather than at a fixed offset.
         return !stamp.StartsWith(StampPrefix + "|", StringComparison.Ordinal)
-            && !stamp.Contains("|" + StampPrefix + "|", StringComparison.Ordinal);
+            // IndexOf, not Contains(string, StringComparison): that overload is .NET Core
+            // only, and this file is shared source that also compiles for net48.
+            && stamp.IndexOf("|" + StampPrefix + "|", StringComparison.Ordinal) < 0;
     }
 
     /// <summary>Identity of the `line` and `book` tables. Returns null when the database
@@ -84,6 +90,18 @@ public static class DbContentStamp
     {
         try
         {
+            // The only provider-specific lines here — see CatalogTocIndex.OpenDb for why the
+            // two legs use different SQLite providers. Both open read-only with no pooling.
+#if NETFRAMEWORK
+            var cs = new System.Data.SQLite.SQLiteConnectionStringBuilder
+            {
+                DataSource = dbPath,
+                ReadOnly = true,
+                Pooling = false,
+            }.ConnectionString;
+
+            using DbConnection conn = new System.Data.SQLite.SQLiteConnection(cs);
+#else
             var cs = new SqliteConnectionStringBuilder
             {
                 DataSource = dbPath,
@@ -91,14 +109,24 @@ public static class DbContentStamp
                 Pooling = false,
             }.ConnectionString;
 
-            using var conn = new SqliteConnection(cs);
+            using DbConnection conn = new SqliteConnection(cs);
+#endif
             conn.Open();
             using var cmd = conn.CreateCommand();
 
             // schema_version moves on any DDL, so a rebuilt DB that happens to share the
             // same id ranges still mismatches.
+            // Coerced to long rather than interpolated as the boxed object: a PRAGMA column
+            // has no declared affinity, so the two providers are free to box it differently
+            // (System.Data.SQLite int vs Microsoft.Data.Sqlite long). The stamp is compared
+            // as an opaque string across both legs, so a rendering difference alone would
+            // make each consider the other's index stale and rebuild the whole corpus on
+            // every switch between hosted and dev. Same discipline as ReadIdRange's GetInt64.
             cmd.CommandText = "PRAGMA schema_version";
-            object? schemaVer = cmd.ExecuteScalar();
+            object? schemaRaw = cmd.ExecuteScalar();
+            long schemaVer = schemaRaw is null || schemaRaw is DBNull
+                ? -1
+                : Convert.ToInt64(schemaRaw, CultureInfo.InvariantCulture);
 
             // MIN/MAX over an INTEGER PRIMARY KEY are index seeks, not scans.
             var (lineMin, lineMax) = ReadIdRange(cmd, "line");
@@ -107,10 +135,18 @@ public static class DbContentStamp
             // Ids alone would miss a DB swapped for one with the same ranges but different
             // text; the last line's length pins the actual rows.
             cmd.Parameters.Clear();
-            cmd.CommandText = "SELECT content FROM line WHERE id = $id";
-            cmd.Parameters.AddWithValue("$id", lineMax);
+            // "@id" not "$id": System.Data.SQLite only recognises the @ prefix, while
+            // Microsoft.Data.Sqlite accepts both — so @ is the one form both legs parse.
+            cmd.CommandText = "SELECT content FROM line WHERE id = @id";
+            cmd.AddWithValue("@id", lineMax);
+            // Length of the TEXT, not of whichever CLR type the provider chose to box it as:
+            // a BLOB-affinity row comes back as byte[] from System.Data.SQLite while
+            // Microsoft.Data.Sqlite may still surface a string, and an `is string` test would
+            // silently yield -1 on one leg only — two permanently-disagreeing stamps, no error.
             object? lastLine = cmd.ExecuteScalar();
-            int tail = lastLine is string s ? s.Length : -1;
+            int tail = lastLine is null || lastLine is DBNull
+                ? -1
+                : (Convert.ToString(lastLine, CultureInfo.InvariantCulture) ?? "").Length;
 
             return $"schema={schemaVer}|line={lineMin}:{lineMax}|book={bookMin}:{bookMax}|tail={tail}";
         }
@@ -120,7 +156,7 @@ public static class DbContentStamp
         }
     }
 
-    private static (long Min, long Max) ReadIdRange(SqliteCommand cmd, string table)
+    private static (long Min, long Max) ReadIdRange(DbCommand cmd, string table)
     {
         cmd.Parameters.Clear();
         // `table` is a compile-time literal from this file only — never caller input.
