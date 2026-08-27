@@ -8,7 +8,7 @@ import type { useTabStore } from '@/stores/tabStore'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
-import { escapeHtml, htmlToText } from '@/utils/htmlText'
+import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
 import { buildLineLink } from '@/utils/appDeepLink'
 import {
@@ -364,10 +364,10 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
         firstLineIndex = result.firstLineIndex
       } else {
         // Use the raw browser selection HTML directly (per-line blocks preserved).
-        const fragment = range.cloneContents()
-        const tmp = document.createElement('div')
-        tmp.appendChild(fragment)
-        joined = tmp.innerHTML
+        // Balanced serialization, not tmp.innerHTML: a selection starting mid-heading
+        // clones without its opening tag and innerHTML repairs it by running the
+        // heading over every following line (see serializeRangeBalanced).
+        joined = serializeRangeBalanced(range, scrollerEl.value)
         if (!joined.trim()) return null
         // Resolve firstLineIndex from the selection anchor (virtualization-safe).
         firstLineIndex = resolveFirstLineIndex(scrollerEl.value, range, lines())

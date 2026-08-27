@@ -15,7 +15,7 @@ import type { WordLinkTarget } from '../lines/wordLinkAnchors'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewAnnotationMenuRow from '../lines/BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
-import { escapeHtml, htmlToText } from '@/utils/htmlText'
+import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -298,10 +298,10 @@ export function useCommentaryCopy(
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
       const range = sel.getRangeAt(0)
-      const fragment = range.cloneContents()
-      const tmp = document.createElement('div')
-      tmp.appendChild(fragment)
-      joined = tmp.innerHTML
+      // Balanced serialization, not tmp.innerHTML: a selection starting mid-heading
+      // clones without its opening tag and innerHTML repairs it by running the heading
+      // over every following line (see serializeRangeBalanced).
+      joined = serializeRangeBalanced(range, scrollerEl.value)
       if (!joined.trim()) return null
 
       // copyJoinLines ON: re-collect the full innerHTML of each intersected .line so the

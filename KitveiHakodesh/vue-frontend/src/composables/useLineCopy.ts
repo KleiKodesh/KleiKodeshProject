@@ -44,9 +44,12 @@ function isSingleInlineRun(html: string): boolean {
  *
  * So a single inline run is emitted bare, carrying its RTL direction on the element's
  * own dir attribute. The dropped <style>body{direction:rtl}</style> was not pulling
- * weight: it is a `body` selector with no body to match once unwrapped, and the
- * pasteIntoWord path uses Merge Formatting, which discards imported formatting
- * anyway (see WordExporter.PasteAtCursorCore).
+ * weight: it is a `body` selector with no body to match once unwrapped.
+ *
+ * NOTE: only the pasteIntoWord path gets Merge Formatting (see
+ * WordExporter.PasteAtCursorCore) — a DRAG lands via Word's own drop handler, which
+ * does a Keep-Source-Formatting import, so nothing downstream flattens imported
+ * styles. The drag payload has to be correct on its own; see serializeRangeBalanced.
  *
  * Block payloads keep the document wrapper — they SHOULD paste as paragraphs (one
  * per line with copyJoinLines off). No whitespace around the payload there either:

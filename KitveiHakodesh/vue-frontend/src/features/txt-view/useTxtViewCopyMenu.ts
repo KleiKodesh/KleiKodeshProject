@@ -3,6 +3,7 @@ import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { serializeRangeBalanced } from '@/utils/htmlText'
 // Shared with the book-view copy path — see useLineCopy for why a single inline run
 // must NOT be wrapped in a document (Word's CF_HTML fragment markers, not the tags,
 // decide whether a paste terminates the paragraph).
@@ -51,10 +52,7 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
       )
       if (blocks.length === 0) {
         // Fallback: nothing matched as a block child — use raw fragment
-        const fragment = range.cloneContents()
-        const tmp = document.createElement('div')
-        tmp.appendChild(fragment)
-        html = tmp.innerHTML
+        html = serializeRangeBalanced(range, scrollerEl.value)
       } else {
         const parts: string[] = []
         let pendingLines: string[] = []
@@ -82,10 +80,10 @@ export function useTxtViewCopyMenu(options: TxtViewCopyMenuOptions): {
         html = parts.join('\n')
       }
     } else {
-      const fragment = range.cloneContents()
-      const tmp = document.createElement('div')
-      tmp.appendChild(fragment)
-      html = tmp.innerHTML
+      // Balanced serialization, not tmp.innerHTML: a selection starting mid-<h2> clones
+      // without its opening tag and innerHTML repairs it by running the heading over
+      // every following line (see serializeRangeBalanced).
+      html = serializeRangeBalanced(range, scrollerEl.value)
     }
 
     if (!html.trim()) return null
