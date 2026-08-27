@@ -1,5 +1,6 @@
 import { computed, ref, watch, nextTick, onScopeDispose } from 'vue'
 import { setCurrentMark } from '../lines/useBookViewLineRenderer'
+import { commentaryGroupKey } from './useCommentary'
 import { commentaryScrollTrace as trace } from '@/utils/commentaryScrollTrace'
 import type { Virtualizer } from '@tanstack/vue-virtual'
 
@@ -120,13 +121,42 @@ export function useCommentaryScroll(
   })
 
   /**
+   * The commentator the reader picked BY NAME from the header toolbar (the
+   * next/previous buttons and the search input, all of which land in
+   * scrollToGroup with reason 'header-nav-picker').
+   *
+   * `userAdjusted` cannot answer for these. It records scroll GESTURES on the
+   * scroller, and a toolbar pick never touches the scroller - the reader clicks
+   * chrome. Worse, the pick installs a user goal, and a user goal clears
+   * `userAdjusted`: the toolbar said "go to Rashi" and in the same breath erased
+   * the record that anyone had chosen Rashi. Nothing set it back, so the next
+   * line switch captured null and fell back to the held pin - the same snap-back
+   * as the scroll case, through a completely different door.
+   *
+   * Recorded as the CHOICE ITSELF rather than as another "the reader did
+   * something" flag. A pick names its book, so it needs no derivation from the
+   * sticky header and no waiting for the goal to land - it is correct the
+   * instant it happens, even if the goal is still in flight or never arrives.
+   * Consumed by consumeExplicitPick when the pin capture is APPLIED, and dropped
+   * by a later scroll gesture (see markUserAdjusted).
+   */
+  let explicitPick: { bookId: number; sectionLabel: string; subSectionLabel: string } | null = null
+
+  /**
    * True once the reader has manually moved this panel (wheel/touch/pointer/key)
-   * since the last programmatic positioning. Reset whenever a goal is installed:
-   * a goal repositions the panel, so whatever the sticky header says afterwards is
-   * the POSITIONER's doing, not the reader's.
+   * since the last programmatic positioning. Reset whenever a USER goal is
+   * installed: such a goal repositions the panel, so whatever the sticky header
+   * says afterwards is the POSITIONER's doing, not the reader's.
    */
   let userAdjusted = false
-  function markUserAdjusted() { userAdjusted = true }
+  function markUserAdjusted() {
+    userAdjusted = true
+    // A scroll gesture supersedes an earlier toolbar pick: pick Rashi, then scroll
+    // to another commentator without switching lines, and the sticky header is now
+    // the reader's latest word. Without this the stale pick would outrank it and
+    // the switch would land back on Rashi.
+    explicitPick = null
+  }
 
   /**
    * The active group AS A PIN-CAPTURE SOURCE, which is stricter than the display
@@ -146,8 +176,38 @@ export function useCommentaryScroll(
    * answers "what is true at this instant", asked imperatively at click time.
    */
   function activePinnedGroupForCapture(): any {
-    if (goal !== null || !userAdjusted) return null
-    return activePinnedGroup.value
+    // A pick by name outranks anything derived from the viewport, and is valid
+    // even mid-goal: the reader named this book, so there is nothing to infer and
+    // nothing to wait for. Checked before the goal guard for exactly that reason -
+    // a toolbar pick is normally still scrolling when the next click arrives.
+    //
+    // READ-ONLY: the pick is consumed by consumeExplicitPick, called from
+    // applyPendingPins when the snapshot is actually APPLIED to the pins.
+    //
+    // Capture is not consumption. captureActivePins runs from three places, and
+    // the scroll-sync one (useBookViewScrollSync.applyPositionSync, auto-select-
+    // top-line) captures a snapshot 120ms BEFORE it applies it - and may never
+    // apply it at all, because a newer scroll clears the timer. Consuming on read
+    // meant any lines-pane scroll between a toolbar pick and the next line click
+    // swallowed the pick, so the click captured null and fell back to the held
+    // pin. That is precisely the "sometimes it persists, sometimes not": the
+    // outcome depended on whether the lines pane happened to scroll in between.
+    // Everything this function can return is by definition the reader's own doing -
+    // a toolbar pick, or a group they scrolled to themselves; the guards above
+    // reject every derived case. So `chosen` is stamped ONCE here, on the way out,
+    // rather than at each source. See PinnedCommentaryGroup for what it decides.
+    const picked = explicitPick ?? (goal === null && userAdjusted ? activePinnedGroup.value : null)
+    return picked ? { ...picked, chosen: true } : null
+  }
+
+  /**
+   * Drop the pick, called when a captured snapshot is actually applied to the
+   * pins. Separate from reading it so that a capture which is discarded (the
+   * auto-select timer being superseded by a newer scroll) leaves the reader's
+   * choice intact for the switch that really happens.
+   */
+  function consumeExplicitPick() {
+    explicitPick = null
   }
 
   function onScroll(emitScroll: (scrollIndex: number, scrollOffset: number) => void) {
@@ -230,7 +290,18 @@ export function useCommentaryScroll(
     isPositioning.value = true
     // The positioner owns the viewport again; the sticky header stops being the
     // reader's own arrangement until they next touch the panel.
-    userAdjusted = false
+    //
+    // Only a USER-sourced goal may do this. An AUTO goal (pin-follow, debt
+    // settling) is fired by state changes the reader did not ask for - and
+    // content backfill mutates `groups` in place batch after batch, so
+    // settlePinDebt's groups watcher can install one many seconds after the
+    // reader has scrolled somewhere else. Clearing the flag there threw away the
+    // evidence that they had curated the view, so the next line switch captured
+    // null and captureActivePins fell back to the HELD pin: the panel snapped
+    // back to the old commentator on every switch and no amount of scrolling
+    // could escape it. A pin-follow that the reader has already scrolled away
+    // from is precisely the case where their choice must win.
+    if (source === 'user') userAdjusted = false
     const seq = ++goalSeq
     trace.begin(flowFor(g), { kind: g.kind, ...describe(g), flatItems: flatItems().length, hasEl: !!scrollerEl() })
     runLoop(seq)
@@ -567,6 +638,17 @@ export function useCommentaryScroll(
     subSectionLabel?: string,
     reason = 'unknown',
   ): boolean {
+    // A pick from the header toolbar IS the reader's commentator choice - record
+    // it before the goal runs, so a line switch during the scroll still captures
+    // it. Only this reason: an auto pin-follow is state catching up, and a
+    // search/restore jump moves the viewport without choosing a commentator.
+    if (reason === 'header-nav-picker') {
+      explicitPick = {
+        bookId,
+        sectionLabel: sectionLabel ?? '',
+        subSectionLabel: subSectionLabel ?? '',
+      }
+    }
     return setGoal(
       { kind: 'group', bookId, sectionLabel, subSectionLabel, reason },
       AUTO_REASONS.has(reason) ? 'auto' : 'user',
@@ -787,7 +869,19 @@ export function useCommentaryScroll(
     watch(isLoading, (loading) => { if (!loading) settlePinDebt('pin-owed-load-done') }, { flush: 'post' })
     // The pinned book appeared in a later slice of this load, or a filter change
     // brought it back - the last precondition in the remaining case.
-    watch(groups, () => settlePinDebt('pin-owed-groups-arrived'), { flush: 'post' })
+    //
+    // Watch the group STRUCTURE, not the array. Content backfill mutates
+    // `groups.value` in place batch after batch (that is the whole two-phase
+    // loader), and a plain deep/array watch therefore re-fires this for the
+    // entire duration of the fill. Every one of those fires could install an
+    // auto goal seconds after the reader had scrolled elsewhere. Only a change
+    // in WHICH groups exist can newly satisfy "the pinned book is in the list",
+    // which is the only thing this watcher is here to notice.
+    watch(
+      () => groups().map((g: any) => commentaryGroupKey(g)).join('|'),
+      () => settlePinDebt('pin-owed-groups-arrived'),
+      { flush: 'post' },
+    )
   }
 
   // Stop a goal's rAF loop and detach its listeners when the panel goes away,
@@ -799,6 +893,7 @@ export function useCommentaryScroll(
     activeHeader,
     activePinnedGroup,
     activePinnedGroupForCapture,
+    consumeExplicitPick,
     cancelPositioning,
     markUserAdjusted,
     isPositioning,

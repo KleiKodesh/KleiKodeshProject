@@ -44,6 +44,7 @@ import { useBookViewSearchPanel } from './useBookViewSearchPanel'
 import { useBookViewLinesBackfillGate } from './lines/useBookViewLinesBackfillGate'
 import { useBookViewTocNavigation } from './useBookViewTocNavigation'
 import { useBookViewCommentaryAnnotations } from './useBookViewCommentaryAnnotations'
+import { buildPin } from './useBookViewPinnedCommentary'
 import { COMMENTARY_SLOTS } from './bookViewTypes'
 import type { CommentaryGroup } from './commentary/useCommentary'
 import type { CommentaryPanel } from './commentary/useCommentaryPanelSlot'
@@ -74,6 +75,7 @@ type CommentaryViewInstance = {
   activeBookId: number | null
   activePinnedGroup: { bookId: number; sectionLabel: string; subSectionLabel: string } | null
   activePinnedGroupForCapture?: () => { bookId: number; sectionLabel: string; subSectionLabel: string } | null
+  consumeExplicitPick?: () => void
   cancelPositioning?: () => void
   getFilterButtonEl?: () => HTMLElement | null
   scrollToGroup: (bookId: number, sectionLabel?: string, subSectionLabel?: string, reason?: string) => void
@@ -221,6 +223,7 @@ export function useBookView(
     bookId,
     groups,
     staticFilterGroups,
+    staticFilterGroupsLoaded,
     loading: commentaryLoading,
     selectedLineId,
     commentaryLineId,
@@ -284,6 +287,13 @@ export function useBookView(
   function applyPendingPins(snapshot: CommentaryPinSnapshot) {
     for (const slot of COMMENTARY_SLOTS) {
       panels[slot].setPendingPin(snapshot[slot] ?? null)
+      // The reader's toolbar pick has now been handed to the pin, so it is spent.
+      // Consumption belongs HERE and not in the capture: applyPositionSync
+      // captures a snapshot 120ms before applying it and abandons it entirely if a
+      // newer scroll supersedes the timer. Clearing on capture let any lines-pane
+      // scroll between the pick and the next line click swallow the choice - the
+      // intermittent half of this bug.
+      commentaryViewRefs[slot]()?.consumeExplicitPick?.()
     }
   }
 
@@ -503,10 +513,9 @@ export function useBookView(
       return
     }
     applyPendingPins(captureActivePins())
-    const group = groups.value.find((group) => group.bookId === commentaryBookId)
-    panels[slot].setPendingPin(group
-      ? { bookId: commentaryBookId, sectionLabel: group.sectionLabel ?? '', subSectionLabel: group.subSectionLabel ?? '' }
-      : { bookId: commentaryBookId, sectionLabel: '', subSectionLabel: '' })
+    // Section nav is the reader steering this panel to this book, so the pin is
+    // chosen: it must keep its place through lines the book does not comment on.
+    panels[slot].setPendingPin(buildPin(commentaryBookId, groups.value, true))
   }
 
   function onNavigateSection(slot: CommentarySlot, direction: 'next' | 'prev', commentaryBookId: number) {

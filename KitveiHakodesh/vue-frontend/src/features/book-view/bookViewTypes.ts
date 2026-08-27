@@ -91,6 +91,21 @@ export interface PinnedCommentaryGroup {
   bookId: number
   sectionLabel: string      // e.g. "מפרשים"
   subSectionLabel: string   // e.g. "ראשונים", or "" if none
+  /**
+   * True when the READER put the panel on this book (scrolled to it, picked it
+   * from the header toolbar, navigated to it); false/absent when it was derived
+   * for them - the book's default commentator on a blank slate.
+   *
+   * The difference decides what happens when the pinned book has no commentary on
+   * the next line. A derived default should give way to the next default that
+   * does have text; a chosen book must NOT - it keeps its place via the injected
+   * "no text for this line" placeholder, so the reader stays on their commentator
+   * across lines it happens to skip. Without this distinction the fallback in
+   * usePinnedCommentary's groups watcher reassigned the pin before the
+   * placeholder could be built, and the panel jumped to another commentator on
+   * exactly the lines the placeholder exists to cover.
+   */
+  chosen?: boolean
 }
 
 /**

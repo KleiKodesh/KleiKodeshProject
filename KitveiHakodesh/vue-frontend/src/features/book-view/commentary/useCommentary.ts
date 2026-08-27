@@ -439,6 +439,16 @@ export function useGroupsForDisplay(
   staticFilterGroups: () => CommentaryGroup[],
   loading: () => boolean,
   selectedLineId: () => number | null,
+  /**
+   * Whether staticFilterGroups has finished loading. The placeholder's POSITION
+   * comes from that ordering, so injecting one before it lands puts the row at
+   * index 0 and then moves it when the real order arrives - two reshuffles of
+   * every row below it, while a restore is chasing its saved scrollIndex through
+   * them. That is the "it shows a placeholder and then jumps to the saved
+   * position" flicker. Better to inject nothing for those few ms: a missing row
+   * settles into place, a misplaced one drags the whole list twice.
+   */
+  staticFilterGroupsLoaded: () => boolean = () => true,
 ) {
   const booksDataStore = useBooksDataStore()
 
@@ -449,6 +459,7 @@ export function useGroupsForDisplay(
       !pinned ||
       selectedLineId() == null ||
       loading() ||
+      !staticFilterGroupsLoaded() ||
       currentGroups.some((g) => g.bookId === pinned)
     )
       return currentGroups

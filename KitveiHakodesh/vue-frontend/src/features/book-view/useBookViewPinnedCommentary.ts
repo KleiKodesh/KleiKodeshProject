@@ -32,6 +32,37 @@ function loadDefaultCommentatorIds(bookId: number): Promise<number[]> {
 }
 
 /**
+ * Build a pin for `bookId`, taking the disambiguating labels from that book's group
+ * in `groups` when it has one and falling back to blank labels when it does not
+ * (the book has no commentary on this line - scrollToGroup matches on bookId alone
+ * in that case, and the placeholder supplies the row).
+ *
+ * The single place a pin is constructed. There are several ways to end up on a
+ * commentator - scrolling to it, picking it from the header toolbar, section nav,
+ * the default on a blank slate - and each used to build this object inline, with
+ * its own copy of the `?? ''` fallbacks and its own decision about `chosen`. That
+ * is how the two halves of the placeholder bug got out of step in the first place;
+ * a new caller that forgets `chosen` reintroduces it silently.
+ *
+ * `chosen` says the READER put the panel here rather than it being derived for
+ * them - see PinnedCommentaryGroup. Callers pass it rather than it being inferred,
+ * because only the caller knows whether a person asked for this.
+ */
+export function buildPin(
+  bookId: number,
+  groups: CommentaryGroup[],
+  chosen: boolean,
+): PinnedCommentaryGroup {
+  const group = groups.find((g) => g.bookId === bookId)
+  return {
+    bookId,
+    sectionLabel: group?.sectionLabel ?? '',
+    subSectionLabel: group?.subSectionLabel ?? '',
+    chosen,
+  }
+}
+
+/**
  * One instance per commentary panel.
  *
  * `defaultRank` picks which of the book's default commentators this panel opens
@@ -121,10 +152,9 @@ export function usePinnedCommentary(
       pinnedCommentaryGroup.value = null
       return
     }
-    const defaultGroup = groups().find((g) => g.bookId === defaultId)
-    pinnedCommentaryGroup.value = defaultGroup
-      ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }
-      : { bookId: defaultId, sectionLabel: '', subSectionLabel: '' }
+    // Derived for the reader, not asked for: chosen = false, so it may still give
+    // way to another default on a line it has no text for.
+    pinnedCommentaryGroup.value = buildPin(defaultId, groups(), false)
   })
 
   // When groups load for a new line:
@@ -142,24 +172,30 @@ export function usePinnedCommentary(
     if (!defaultCommentatorBookIds.length) return
     const currentPin = pinnedCommentaryGroup.value
     if (currentPin == null || !defaultCommentatorBookIds.includes(currentPin.bookId)) return
-    const pinnedGroupInNewGroups = newGroups.find((g) => g.bookId === currentPin.bookId)
-    if (pinnedGroupInNewGroups) {
-      pinnedCommentaryGroup.value = {
-        bookId: currentPin.bookId,
-        sectionLabel: pinnedGroupInNewGroups.sectionLabel ?? '',
-        subSectionLabel: pinnedGroupInNewGroups.subSectionLabel ?? '',
-      }
+    if (newGroups.some((g) => g.bookId === currentPin.bookId)) {
+      // Same book, real labels now available - carry `chosen` across so a refresh
+      // never downgrades the reader's choice to a derived default.
+      pinnedCommentaryGroup.value = buildPin(currentPin.bookId, newGroups, !!currentPin.chosen)
       return
     }
+    // The pinned book has no commentary on this line. If the READER chose it, that
+    // is precisely the case the injected placeholder exists for: keep the pin so
+    // useGroupsForDisplay can build "no text for this line" at the book's own
+    // position and the reader stays on their commentator. Only a DERIVED default
+    // may give way to the next default below.
+    //
+    // This branch was the placeholder bug. It fires only when the pin happens to
+    // be one of the book's default commentators (the guard above), so it reassigned
+    // the pin out from under the placeholder for some commentators and not others -
+    // and useGroupsForDisplay keys the placeholder off this very ref, so it never
+    // got the chance to build one.
+    if (currentPin.chosen) return
     const defaultId = preferredDefaultId()
     if (defaultId === undefined) {
       pinnedCommentaryGroup.value = null
       return
     }
-    const defaultGroup = newGroups.find((g) => g.bookId === defaultId)
-    pinnedCommentaryGroup.value = defaultGroup
-      ? { bookId: defaultId, sectionLabel: defaultGroup.sectionLabel ?? '', subSectionLabel: defaultGroup.subSectionLabel ?? '' }
-      : { bookId: defaultId, sectionLabel: '', subSectionLabel: '' }
+    pinnedCommentaryGroup.value = buildPin(defaultId, newGroups, false)
   })
 
   function restorePin(group: PinnedCommentaryGroup) {
@@ -167,11 +203,10 @@ export function usePinnedCommentary(
     restoredFromSession = true
   }
 
+  // Named for what it is: the reader put the panel on this book. Always chosen,
+  // so it holds through lines the book has no commentary on (placeholder).
   function pinExplicitly(bookId: number) {
-    const group = groups().find((g) => g.bookId === bookId)
-    pinnedCommentaryGroup.value = group
-      ? { bookId, sectionLabel: group.sectionLabel ?? '', subSectionLabel: group.subSectionLabel ?? '' }
-      : { bookId, sectionLabel: '', subSectionLabel: '' }
+    pinnedCommentaryGroup.value = buildPin(bookId, groups(), true)
   }
 
   return { pinnedCommentaryGroup, restorePin, pinExplicitly, setPendingPin }
