@@ -112,9 +112,10 @@ namespace KitveiHakodeshLib
         /// <summary>
         /// Clears the WebView2 profile's browsing data (cache, storage) for the live webview.
         ///
-        /// This replaces the webcache folder that FtsIndexState.DeleteAllCaches used to try to
-        /// Directory.Delete. That could never work — the folder is this webview's own mounted
-        /// user-data directory — so the profile API is the only route that actually clears it.
+        /// This replaces the webcache folder that the app-reset cache wipe (now
+        /// FtsIndexState.DeletePdfCachesInBackground) used to try to Directory.Delete.
+        /// That could never work — the folder is this webview's own mounted user-data
+        /// directory — so the profile API is the only route that actually clears it.
         /// Best-effort: a failure here must not block the reload that follows, because a reset
         /// that leaves a stale HTTP cache behind is still far better than one that never
         /// finishes and strands the user on a dead page.

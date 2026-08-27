@@ -81,6 +81,13 @@ namespace FtsLib.Indexing
         // Read by the indexing thread — volatile for safe cross-thread visibility.
         internal volatile int LastFlushedLineId = int.MinValue;
 
+        // When true, each flush+merge task runs its thread in Windows background
+        // processing mode (lowest CPU + very-low I/O priority) for the task's duration —
+        // see BackgroundPriorityScope. Set by SeforimIndex.BuildIndex for a
+        // backgroundPriority build (and cleared when it ends); the scope is entered
+        // per task because these run on pool threads the mode must never leak onto.
+        internal volatile bool FlushInBackgroundPriority;
+
         // Observed by long-running LSM merges. When cancelled, an in-flight merge
         // aborts within a fraction of a second. Aborting is always safe: no source
         // segment is ever deleted before the merged target is fully committed, so
@@ -787,6 +794,10 @@ namespace FtsLib.Indexing
                     // The slot is released only after both the write AND any triggered
                     // merge complete, so the next flush never starts while a merge is
                     // still running on this thread.
+                    // Background-priority builds lower this pool thread for exactly this
+                    // task — the scope's Dispose in the outer finally restores the thread
+                    // before the pool reuses it for unrelated work.
+                    var priorityScope = BackgroundPriorityScope.EnterIf(FlushInBackgroundPriority);
                     try
                     {
                         FtsLog.Write("SegmentStore.Flush.BgTask",
@@ -838,6 +849,7 @@ namespace FtsLib.Indexing
                     }
                     finally
                     {
+                        priorityScope?.Dispose();
                         _flushSlot.Release();
                     }
 

@@ -229,7 +229,13 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                         totalLines: total,
                         resumeOffset: resumeOffset,
                         forceMergeOnComplete: true,
-                        ct: ct);
+                        ct: ct,
+                        // The FTS build is the long, heavy one; in background processing
+                        // mode (lowest CPU + very-low I/O priority) it stops contending
+                        // with searches and with the catalog/file-search rebuilds that an
+                        // app reset starts alongside it — they all run in parallel and the
+                        // FTS build takes whatever the machine has left over.
+                        backgroundPriority: true);
                     break;
                 }
                 catch (IndexWriteLockException) when (attempt < lockRetries)
@@ -314,6 +320,25 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     public void ResetIndex()
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
+
+        // Report "indexing, 0%" from the moment the reset is REQUESTED, not from whenever the
+        // background wipe finishes draining. The flags used to stay ready+idle until DoReset's
+        // final step, and ready+idle is a progress stream's TERMINAL state — so a stream opened
+        // between the reset RPC and that step (the app reset reloads the page right after the
+        // call) closed on its first snapshot and the UI never showed the rebuild.
+        //
+        // _buildStarted is latched here and held through the whole wipe so no concurrent
+        // EnsureIndexing (every search, status call, and stream open runs it) can start a build
+        // into the directory the wipe is about to delete; DoReset re-arms it at the end.
+        lock (_lock)
+        {
+            _isReady = false;
+            _isIndexing = true;
+            _buildStarted = true;
+            _pct = 0; _processed = 0; _total = 0;
+        }
+        NotifyProgress();
+
         _ = Task.Run(() =>
         {
             // Fire-and-forget: without this catch a failure is an unobserved task exception and
@@ -325,54 +350,79 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
     private void DoReset()
     {
-        // 1) Stop the running build (its `using IndexWriteLock` releases on return) and wait.
-        Task? build;
-        lock (_lock)
+        try
         {
-            _buildCts?.Cancel();
-            build = _buildTask;
-        }
-        try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancellation / aggregate */ }
+            // 1) Stop the running build (its `using IndexWriteLock` releases on return) and wait.
+            Task? build;
+            lock (_lock)
+            {
+                _buildCts?.Cancel();
+                build = _buildTask;
+            }
+            try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancellation / aggregate */ }
 
-        // 2) Cancel in-flight search sessions so nothing keeps reading the old segments, then WAIT
-        //    for them to unwind. Cancelling is not releasing: a search that is mid-fetch still
-        //    holds its lease on the segment files, and deleting the directory under it is exactly
-        //    what produces the "could not delete" path below. Every session removes itself in its
-        //    own finally, so an empty dictionary means every reader has let go.
-        // ObjectDisposedException: that session finished and disposed its CTS while we were
-        // iterating — it is already gone, which is the state we are asking for.
-        foreach (var kv in _sessions)
-        {
-            try { kv.Value.Cts.Cancel(); } catch (ObjectDisposedException) { }
-        }
-        for (int i = 0; i < 50 && !_sessions.IsEmpty; i++) Thread.Sleep(100); // bounded: up to 5s
-        if (!_sessions.IsEmpty)
-            logger.LogWarning("FTS reset: {Count} search session(s) still unwinding after 5s — deleting anyway",
-                _sessions.Count);
-        _sessions.Clear();
+            // 2) Cancel in-flight search sessions so nothing keeps reading the old segments, then WAIT
+            //    for them to unwind. Cancelling is not releasing: a search that is mid-fetch still
+            //    holds its lease on the segment files, and deleting the directory under it is exactly
+            //    what produces the "could not delete" path below. Every session removes itself in its
+            //    own finally, so an empty dictionary means every reader has let go.
+            // ObjectDisposedException: that session finished and disposed its CTS while we were
+            // iterating — it is already gone, which is the state we are asking for.
+            foreach (var kv in _sessions)
+            {
+                try { kv.Value.Cts.Cancel(); } catch (ObjectDisposedException) { }
+            }
+            for (int i = 0; i < 50 && !_sessions.IsEmpty; i++) Thread.Sleep(100); // bounded: up to 5s
+            if (!_sessions.IsEmpty)
+                logger.LogWarning("FTS reset: {Count} search session(s) still unwinding after 5s — deleting anyway",
+                    _sessions.Count);
+            _sessions.Clear();
 
-        // 3) Delete the whole index directory, then reset state for a fresh build.
-        lock (_lock)
-        {
-            _index = null; // drop the SegmentStore so it holds no file references
+            // 3) Detach the in-memory state, then delete the directory OUTSIDE the lock. The
+            //    recursive delete of a multi-gigabyte index takes seconds, and holding _lock
+            //    through it (as this used to) blocked every status stream, Status() call, and
+            //    search for the whole delete — they all enter EnsureIndexing, which takes the
+            //    lock. Nothing can repopulate _index while the delete runs: searches bail on
+            //    !_isReady before ever calling GetIndex, and EnsureIndexing is latched out by
+            //    the _buildStarted ResetIndex set.
+            lock (_lock)
+            {
+                _index = null; // drop the SegmentStore so it holds no file references
+                // Re-assert the flags the dying build may have flipped on its way out: its
+                // progress callback re-marks ready whenever segments exist, its finally
+                // clears _isIndexing, and its write-lock-retry catch re-arms _buildStarted.
+                // A stale "ready" or "idle" snapshot would claim the reset is over while the
+                // directory is mid-wipe, and an open latch would let a concurrent
+                // EnsureIndexing (every search and status call) build into it.
+                _isReady = false;
+                _isIndexing = true;
+                _buildStarted = true;
+            }
             try
             {
                 if (Directory.Exists(_indexPath))
                     Directory.Delete(_indexPath, recursive: true);
             }
             catch (Exception ex) { logger.LogError(ex, "FTS reset: could not delete {Index}", _indexPath); }
-
-            _isReady = false;
-            _isIndexing = false;
-            _buildStarted = false;
-            _pct = 0; _processed = 0; _total = 0;
-            _buildTask = null;
-            _buildCts = null;
         }
-
-        logger.LogInformation("FTS index reset — rebuilding from scratch");
-        EnsureIndexing();
-        NotifyProgress();
+        finally
+        {
+            // Re-arm and rebuild even when a step above failed: a partially-deleted index is
+            // exactly what EnsureIndexing's provenance stamps exist to catch on the next build,
+            // while bailing out with _isIndexing stuck true would freeze every status display
+            // on "indexing" forever with nothing running.
+            lock (_lock)
+            {
+                _isIndexing = false;
+                _buildStarted = false;
+                _pct = 0; _processed = 0; _total = 0;
+                _buildTask = null;
+                _buildCts = null;
+            }
+            logger.LogInformation("FTS index reset — rebuilding from scratch");
+            EnsureIndexing();
+            NotifyProgress();
+        }
     }
 
     /// <summary>

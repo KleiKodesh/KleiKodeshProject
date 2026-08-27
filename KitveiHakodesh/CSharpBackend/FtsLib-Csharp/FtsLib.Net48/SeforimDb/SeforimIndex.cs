@@ -306,46 +306,70 @@ namespace FtsLib.SeforimDb
                 return corpus.CountDocumentsUpTo(upToId);
         }
 
+        /// <param name="backgroundPriority">Run the whole build — the tokenizing loop on
+        /// this thread, the flush/merge pipeline on its background tasks, and the final
+        /// force merge — in Windows background processing mode (lowest CPU + very-low I/O
+        /// priority), so a long build never contends with searches, the UI, or the other
+        /// index rebuilds an app reset starts alongside it. The build simply takes longer
+        /// on a busy machine and full speed on an idle one. See
+        /// <see cref="FtsLib.Indexing.BackgroundPriorityScope"/>.</param>
         public bool BuildIndex(int limit = 0, Action<long> onProgress = null,
                                Action onFlush = null,
                                long totalLines = 0,
                                long resumeOffset = 0,
                                bool forceMergeOnComplete = false,
-                               CancellationToken ct = default)
+                               CancellationToken ct = default,
+                               bool backgroundPriority = false)
         {
             FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
                 $"acquiring IndexWriteLock for {_indexPath}");
             using (new IndexWriteLock(_indexPath))
+            using (FtsLib.Indexing.BackgroundPriorityScope.EnterIf(backgroundPriority))
             {
-                FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex", "IndexWriteLock acquired");
-                bool result = IndexingPipeline.Build(_indexPath, _openCorpus, _store, limit, totalLines, resumeOffset, onProgress, onFlush, ct);
-                if (_store.IsWiped)
+                // The flush/merge pipeline runs on its own background tasks, out of reach of
+                // this thread's mode — the store applies it per flush. Cleared in the finally
+                // (never leaked past the build): the store outlives this build and also
+                // serves searches. Only one build can hold the IndexWriteLock, so a plain
+                // reset to false cannot stomp a concurrent build's flag.
+                _store.FlushInBackgroundPriority = backgroundPriority;
+                try
                 {
-                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
-                        "store was wiped during build — resetting store");
-                    ResetStore();
-                }
-
-                if (result && forceMergeOnComplete)
-                {
-                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
-                        "forceMergeOnComplete=true — starting force merge");
-                    Console.WriteLine("[SeforimIndex] Build complete — starting force merge...");
-                    _store.MergeAll();
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex", "IndexWriteLock acquired");
+                    bool result = IndexingPipeline.Build(_indexPath, _openCorpus, _store, limit, totalLines, resumeOffset, onProgress, onFlush, ct);
                     if (_store.IsWiped)
                     {
                         FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
-                            "store wiped during force merge — resetting store");
+                            "store was wiped during build — resetting store");
                         ResetStore();
                     }
-                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
-                        "force merge complete");
-                    Console.WriteLine("[SeforimIndex] Force merge complete.");
-                }
 
-                FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
-                    $"IndexWriteLock releasing — result={result}");
-                return result;
+                    if (result && forceMergeOnComplete)
+                    {
+                        FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                            "forceMergeOnComplete=true — starting force merge");
+                        Console.WriteLine("[SeforimIndex] Build complete — starting force merge...");
+                        _store.MergeAll();
+                        if (_store.IsWiped)
+                        {
+                            FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                                "store wiped during force merge — resetting store");
+                            ResetStore();
+                        }
+                        FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                            "force merge complete");
+                        Console.WriteLine("[SeforimIndex] Force merge complete.");
+                    }
+
+                    FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                        $"IndexWriteLock releasing — result={result}");
+                    return result;
+                }
+                finally
+                {
+                    // ResetStore above may have swapped _store for a fresh instance whose
+                    // flag was never set — clearing through the field handles both.
+                    _store.FlushInBackgroundPriority = false;
+                }
             }
         }
 

@@ -114,8 +114,9 @@ namespace KitveiHakodeshLib.Search
                                      StringComparison.OrdinalIgnoreCase);
 
             // Stop any in-flight work before touching shared state.
-            // StopAll waits up to 60s so a background merge has time to finish before
-            // we touch the index directory.
+            // StopAll waits without a timeout for a background merge to finish before we touch
+            // the index directory — the old 60s cap was the corruption bug's root cause, see
+            // FtsIndexState.StopAll.
             _indexState.StopAll();
 
             // If the DB path changed the existing index belongs to a different database.
@@ -462,16 +463,33 @@ namespace KitveiHakodeshLib.Search
 
         public void HandleDeleteIndex(string id)
         {
-            // Reply immediately — the delete runs on the actor thread asynchronously.
+            // Replies as soon as the wipe is QUEUED, not when it finishes — deliberately, and
+            // matching the dev service's FullTextSearchService.ResetIndex, which is Task.Run
+            // fire-and-forget for the same reason. The wipe first has to drain an in-flight
+            // index build's flush+merge pipeline, which on a large index takes tens of seconds;
+            // making the user watch that is what turned the reset into a dead-looking freeze.
+            //
+            // Replying early does NOT reintroduce the race this originally tried to fix. The
+            // ordering guarantee comes from the queue, not from the reply: OnDbReady on the
+            // reloaded page is posted to this same single-consumer actor, so it cannot overtake
+            // a wipe queued before it. The reload proceeding while the wipe is still draining is
+            // fine — the fresh page just sees an index that is mid-teardown and waits for the
+            // rebuild, exactly as it does in dev.
             if (id != null) _bridge.Reply(id, new { });
             _lifecycleQueue.Add(() =>
             {
                 Console.WriteLine("[SearchHandler] HandleDeleteIndex executing");
                 StopWatcher();
                 _indexState.StopAll();
-                // Full reset — wipe all cache folders (FTS index, Bloom, Word PDFs,
-                // HebrewBooks downloads, WebView2 webcache).
-                FtsIndexState.DeleteAllCaches();
+                // Full reset. Only the index-coupled folders (FTS index, Bloom) are deleted
+                // here on the actor — they must be gone before the reloaded page's OnDbReady,
+                // queued behind this action, opens the index. The PDF caches (Word→PDF,
+                // HebrewBooks downloads) go to a background thread: they have no ordering
+                // relationship with the index lifecycle, and deleting gigabytes of PDFs in
+                // this slot is what delayed the post-reset rebuild.
+                FtsIndexState.DeleteFtsIndex();
+                FtsIndexState.DeleteBloomIndexIfPresent();
+                FtsIndexState.DeletePdfCachesInBackground();
             });
         }
 
