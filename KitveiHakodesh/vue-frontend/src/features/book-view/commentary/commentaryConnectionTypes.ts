@@ -6,7 +6,7 @@
 import { getAllConnectionTypes } from '@/webview-host/seforimApi'
 
 export type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT' | 'OTHER' | 'REFERENCE'
-export type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT'
+export type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY'
 
 export const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
   'SOURCE',
@@ -17,11 +17,13 @@ export const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
   'REFERENCE',
 ]
 
+// EIN_MISHPAT is deliberately absent: it is a per-line reference apparatus (this line
+// of gemara points at these halachot), not a book that stands in a fixed relationship
+// to the current one. It is resolved per line with the rest of the commentary instead.
 const STATIC_FILTER_CONNECTION_TYPE_LIST: StaticFilterConnectionType[] = [
   'SOURCE',
   'TARGUM',
   'COMMENTARY',
-  'EIN_MISHPAT',
 ]
 
 export const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType>(
@@ -135,8 +137,10 @@ export function getCommentaryConnectionTypeIds(): number[] {
  *
  * A commentary links to its base with COMMENTARY, but a targum links with TARGUM - so
  * a COMMENTARY-only reverse lookup finds nothing for a targum and its base book goes
- * missing. DIBUR_HAMATCHIL and EIN_MISHPAT are dependants in the same sense.
- * Mirrors the type list Zayit uses for its inverse-link (SOURCE) queries.
+ * missing. DIBUR_HAMATCHIL is a dependant in the same sense.
+ *
+ * EIN_MISHPAT is NOT here: it points at individual halachot from a line of gemara, so
+ * it belongs to the per-line lookup, not to the fixed list of related books.
  */
 const BASE_TEXT_REVERSE_DB_NAMES = [
   'COMMENTARY',
@@ -145,7 +149,6 @@ const BASE_TEXT_REVERSE_DB_NAMES = [
   'MIDRASH',
   'PARSHANUT',
   'DIBUR_HAMATCHIL',
-  'EIN_MISHPAT',
 ]
 
 /**
