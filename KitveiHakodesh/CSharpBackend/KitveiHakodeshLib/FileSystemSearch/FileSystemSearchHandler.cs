@@ -104,7 +104,9 @@ namespace KitveiHakodeshLib.FileSystemSearch
                     // and the index is ready. This blocks the search reply until ready,
                     // which is intentional — Vue's loading animation covers the wait.
                     ServiceBridge.StopIfStale();
-                    await _adapter.WaitUntilReadyAsync(cts.Token, _ => { })
+                    // mayPromptForInstall: the user typed a query, so if the service was never
+                    // registered this is the moment to ask for the elevation that registers it.
+                    await _adapter.WaitUntilReadyAsync(cts.Token, _ => { }, mayPromptForInstall: true)
                         .ConfigureAwait(false);
 
                     if (cts.Token.IsCancellationRequested) return;
