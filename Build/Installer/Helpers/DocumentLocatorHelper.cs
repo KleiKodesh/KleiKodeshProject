@@ -71,6 +71,14 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         // ── Public API ────────────────────────────────────────────────────────────
 
         /// <summary>
+        /// True when extraction put DocumentLocator.Service.exe in the install folder —
+        /// i.e. this release ships the service and registering it is expected to work.
+        /// Meaningful only after ExtractAsync has run.
+        /// </summary>
+        public static bool IsServiceDeployed =>
+            File.Exists(Path.Combine(AddinInstaller.InstallPath, ServiceExeName));
+
+        /// <summary>
         /// Sends a shutdown request to the DocumentLocator service (if running)
         /// and records the request time. Returns immediately after the pipe call
         /// so the installer can proceed with other work while the service stops.

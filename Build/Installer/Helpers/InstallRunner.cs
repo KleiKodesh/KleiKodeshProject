@@ -12,7 +12,14 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// </summary>
     public static class InstallRunner
     {
-        public static async Task RunAsync(IProgress<double> progress, IProgress<string> status)
+        /// <summary>
+        /// Returns true when the DocumentLocator service ended up registered — or was
+        /// not part of the package, which is equally fine. False means the package
+        /// ships the service but registration failed (typically a declined UAC
+        /// prompt): the add-in itself installed, only file search is missing, so the
+        /// caller decides how to surface it rather than the install throwing.
+        /// </summary>
+        public static async Task<bool> RunAsync(IProgress<double> progress, IProgress<string> status)
         {
             // NOTE: this assumes Word and כתבי הקודש are already closed. Enforcing that is
             // LandingPage's job — its constructor waits for them and the התקן click calls
@@ -66,12 +73,17 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // Normally a no-op on updates (already registered at the same path);
             // when registration IS needed it surfaces one UAC prompt.
             status?.Report("מתקין שירות אינדקס...");
-            await DocumentLocatorHelper.EnsureServiceInstalledAsync();
+            bool serviceRegistered = await DocumentLocatorHelper.EnsureServiceInstalledAsync();
 
             // Trigger a background reindex of the file-system search service
             // so it reflects any new files from this install. Fire-and-forget —
             // the service acks immediately and rebuilds without blocking us.
             _ = DocumentLocatorHelper.EnsureServiceRunningAndReindexAsync();
+
+            // EnsureServiceInstalledAsync returns false both for "registration failed"
+            // and for "the package doesn't ship the service at all". Only the former
+            // is a problem worth telling the user about.
+            return serviceRegistered || !DocumentLocatorHelper.IsServiceDeployed;
         }
     }
 }

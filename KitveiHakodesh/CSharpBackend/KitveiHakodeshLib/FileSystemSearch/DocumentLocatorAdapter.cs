@@ -77,10 +77,33 @@ namespace KitveiHakodeshLib.FileSystemSearch
             // Disabled is deliberately NOT here. That is a startup type someone set in
             // services.msc, and quietly re-enabling a service the user turned off is not
             // ours to do — that case keeps its explanatory message.
+            bool justInstalled = false;
             if (mayPromptForInstall
                 && (IsStartFailure(startError, ServiceBridge.ServiceStartFailure.NotInstalled)
                  || IsStartFailure(startError, ServiceBridge.ServiceStartFailure.ExeMissing))
                 && TryInstallService())
+            {
+                justInstalled = true;
+                startError = null;
+                try { ServiceBridge.StartService(); }
+                catch (Exception ex) { startError = ex; }
+            }
+
+            // AccessDenied has its own repair. A registration made by an older --install
+            // never granted SERVICE_START to authenticated users, so every start from
+            // this process is denied — permanently, until someone re-applies the DACL.
+            // --fixdacl does exactly that (one elevation), then the start is retried;
+            // the retry is also the only way to know whether the grant took. If the
+            // denial came from policy or security software instead, the retry fails the
+            // same way and the existing message about that stands.
+            //
+            // Not attempted right after a successful install: --install just wrote that
+            // same grant, so a denial now is not the stale-DACL case and a second UAC
+            // prompt in the same search could not help.
+            if (mayPromptForInstall
+                && !justInstalled
+                && IsStartFailure(startError, ServiceBridge.ServiceStartFailure.AccessDenied)
+                && TryFixServiceDacl())
             {
                 startError = null;
                 try { ServiceBridge.StartService(); }
@@ -234,6 +257,70 @@ namespace KitveiHakodeshLib.FileSystemSearch
                 // Throws when the exe is missing, or when --install ran but the registration
                 // never appeared. Neither is recoverable here, and neither should take down
                 // the search that asked — fall through to the usual unavailable message.
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// One per process, whatever the outcome: unlike --install, the DACL repair is
+        /// definitive — if the grant didn't cure the denial, the cause is policy or
+        /// security software and repeating the prompt on every search cures nothing.
+        /// Interlocked also collapses stacked keystrokes into a single UAC prompt.
+        /// </summary>
+        private static int _fixDaclAttempted;
+
+        /// <summary>
+        /// Runs DocumentLocator.Service.exe --fixdacl elevated, which re-grants
+        /// SERVICE_START to authenticated users. Repairs registrations made by an older
+        /// --install that never wrote that grant, leaving every non-elevated start
+        /// denied.
+        ///
+        /// Lives here rather than in ServiceBridge because that file belongs to the
+        /// DocumentLocator sub-repository, which this repository does not commit into.
+        /// The exe is resolved the same way ServiceBridge resolves it: next to the
+        /// DocumentLocator.Client assembly.
+        ///
+        /// Shares the declined-elevation latch with TryInstallService — a user who said
+        /// No to one elevation prompt is not asked a different one on the next search.
+        /// Returns true when the elevated process ran; whether the grant took is not
+        /// observable from here, so the caller's start retry is the verification.
+        /// </summary>
+        private static bool TryFixServiceDacl()
+        {
+            if (Volatile.Read(ref _userDeclinedElevation) != 0) return false;
+            if (Interlocked.Exchange(ref _fixDaclAttempted, 1) != 0) return false;
+
+            try
+            {
+                string exe = System.IO.Path.Combine(
+                    System.IO.Path.GetDirectoryName(typeof(ServiceBridge).Assembly.Location) ?? ".",
+                    "DocumentLocator.Service.exe");
+                if (!System.IO.File.Exists(exe)) return false;
+
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName        = exe,
+                    Arguments       = "--fixdacl",
+                    Verb            = "runas",
+                    UseShellExecute = true,
+                    WindowStyle     = System.Diagnostics.ProcessWindowStyle.Hidden,
+                };
+
+                using (var proc = System.Diagnostics.Process.Start(psi))
+                    proc?.WaitForExit(30_000);
+
+                return true;
+            }
+            catch (System.ComponentModel.Win32Exception ex)
+                when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED — user clicked No
+            {
+                Volatile.Write(ref _userDeclinedElevation, 1);
+                return false;
+            }
+            catch
+            {
+                // Anything else — can't run the repair; fall through to the usual
+                // unavailable message.
                 return false;
             }
         }

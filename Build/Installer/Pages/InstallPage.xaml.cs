@@ -51,7 +51,25 @@ namespace KleiKodeshVstoInstallerWpf
                 // The install sequence itself lives in InstallRunner. Both entry points
                 // reach it here: a user who clicked התקן, and the --silent auto-update,
                 // which shows this page and auto-runs it without the click.
-                await InstallRunner.RunAsync(_progress, _status);
+                bool serviceRegistered = await InstallRunner.RunAsync(_progress, _status);
+
+                // Registering the search service needs one UAC approval the rest of the
+                // per-user install doesn't. A declined (or blocked) prompt used to be
+                // swallowed here, leaving machines that look installed but have no file
+                // search. Offer a single visible retry; either way the install finishes —
+                // the add-in works without the service, and file search itself re-offers
+                // the elevation on first use.
+                if (!serviceRegistered)
+                {
+                    var retry = MessageBox.Show(
+                        "שירות חיפוש הקבצים לא נרשם (נדרש אישור הרשאה). לנסות שוב?",
+                        "התקנת שירות אינדקס",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (retry == MessageBoxResult.Yes)
+                        await DocumentLocatorHelper.EnsureServiceInstalledAsync();
+                }
 
                 while (ProgressBar.Value < ProgressBar.Maximum)
                 {
