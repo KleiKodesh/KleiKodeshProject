@@ -14,10 +14,16 @@ import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
 import { useHostSearchStore } from './stores/hostSearchStore'
 import { checkAndExecPendingReset } from './features/settings/appResetState'
+import { checkAndExecPendingDbSwitchCleanup } from './webview-host/dbSwitchCleanup'
 
 // Synchronous localStorage check — zero cost on normal boots.
 // Only opens IDB if a reset was scheduled (rare safety net).
 await checkAndExecPendingReset()
+
+// Same shape, for a library switch that died between the wipe and the reload. MUST
+// stay above the store init below: it finishes the wipe in place, so the stores then
+// read the cleaned state on this boot rather than needing another reload.
+await checkAndExecPendingDbSwitchCleanup()
 
 const pinia = createPinia()
 const app = createApp(App).use(pinia)

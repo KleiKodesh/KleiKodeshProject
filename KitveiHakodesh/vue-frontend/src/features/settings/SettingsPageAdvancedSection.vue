@@ -6,6 +6,7 @@ import SettingsPagePathField from './SettingsPagePathField.vue'
 import SettingsExcludedFoldersDialog from './SettingsExcludedFoldersDialog.vue'
 import ToggleGroup from './ToggleGroup.vue'
 import { onDbReady } from '@/webview-host/seforimDb'
+import { clearStaleBookData } from '@/webview-host/dbSwitchCleanup'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
   pickFolder,
@@ -41,11 +42,27 @@ async function pickDbPath() {
     // new DB. Reload so every store refetches from it; /khs waits for the respawn.
     const picked = await pickDbPathDev()
     if (!picked) return
+    const previous = dbPath.value
     dbPath.value = picked
+    await forgetStaleBookData(previous, picked)
     setTimeout(() => window.location.reload(), 800)
     return
   }
   window.__webviewPickDbPath?.()
+}
+
+/**
+ * Drop the book-id-keyed state (recent books, last-read, tabs, caches) when the dev
+ * routes below change library. Hosted mode gets this inside `onDbReady`; in dev the
+ * service owns the path and the page reloads directly, so the wipe is called here —
+ * always BEFORE the reload, or a store would write its stale copy back out.
+ *
+ * Same-path and first-time cases are skipped, so setting up the library for the first
+ * time or re-picking the same folder keeps the reader's history.
+ */
+async function forgetStaleBookData(previousPath: string, newPath: string) {
+  if (!previousPath || previousPath === newPath) return
+  await clearStaleBookData()
 }
 
 async function commitDbPath(newPath: string) {
@@ -54,6 +71,7 @@ async function commitDbPath(newPath: string) {
     try {
       await setDbPathDev(newPath)
       dbPath.value = newPath
+      await forgetStaleBookData(prev, newPath)
       // The service restarts on the new DB (and rebuilds a stale FTS index).
       // Reload so every store refetches from it; /khs waits for the respawn.
       setTimeout(() => window.location.reload(), 800)
@@ -67,7 +85,7 @@ async function commitDbPath(newPath: string) {
   try {
     await window.__webviewSetDbPath(newPath)
     dbPath.value = newPath
-    onDbReady(newPath)
+    await onDbReady(newPath)
   } catch (err) {
     // The rejection carries the host's FULL exception (type + stack). This catch
     // used to swallow it, so the field silently snapping back to the injected
@@ -98,15 +116,19 @@ async function resetHebrewBooksFolder() {
 // ── Database path clear ───────────────────────────────────────────────────────
 
 async function resetDbPath() {
+  const previous = dbPath.value
   const defaultPath = await clearDbPath()
   if (defaultPath !== null) {
     dbPath.value = defaultPath
     if (isDev) {
+      await forgetStaleBookData(previous, defaultPath)
       // Service restarted on the default DB — reload so stores refetch.
       setTimeout(() => window.location.reload(), 800)
       return
     }
-    onDbReady(defaultPath)
+    // Hosted: onDbReady does the same comparison against the path being left, so
+    // clearing back to the default drops the stale state exactly as a pick does.
+    await onDbReady(defaultPath)
   }
 }
 

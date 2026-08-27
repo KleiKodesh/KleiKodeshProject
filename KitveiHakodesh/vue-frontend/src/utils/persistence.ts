@@ -143,6 +143,29 @@ function openDb(name: string): Promise<IDBDatabase> {
   return open
 }
 
+// ── Write barrier ─────────────────────────────────────────────────────────────
+
+/**
+ * Databases that must accept no further writes this session.
+ *
+ * Dropping a database does not stop the code that writes to it: a store holding an
+ * in-memory copy re-persists it on the next mutation, and `openDb` happily recreates
+ * the file it was just deleted from. Between a wipe and the reload that follows, any
+ * watcher firing would restore exactly the data the wipe removed.
+ *
+ * Sealing is one-way and deliberately never lifted — every caller seals immediately
+ * before reloading, so the barrier only has to hold until the page goes away.
+ *
+ * Only writes are refused. Reads still work, so a store that reads during teardown
+ * sees an empty database rather than an error.
+ */
+const _sealed = new Set<string>()
+
+/** Refuse all further writes to `name`. Called by a wipe that is about to reload. */
+export function sealDatabase(name: string): void {
+  _sealed.add(name)
+}
+
 // ── Core get / set / delete ───────────────────────────────────────────────────
 
 export async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
@@ -155,6 +178,10 @@ export async function dbGet<T>(dbName: string, key: string): Promise<T | null> {
 }
 
 export async function dbSet<T>(dbName: string, key: string, value: T): Promise<void> {
+  // Silently dropped rather than thrown: callers are fire-and-forget watchers and
+  // teardown handlers, and a rejection there would surface as an unhandled error
+  // during a wipe that is working exactly as intended.
+  if (_sealed.has(dbName)) return
   const store = (await openDb(dbName)).transaction(STORE, 'readwrite').objectStore(STORE)
   return new Promise((resolve, reject) => {
     const req = store.put(value, key)

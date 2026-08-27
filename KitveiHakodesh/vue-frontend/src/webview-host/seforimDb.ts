@@ -57,9 +57,22 @@ export function ensureCategorySchema(): Promise<void> {
   return _schemaDetecting
 }
 
-export function onDbReady(path: string) {
+export async function onDbReady(path: string) {
+  // A DIFFERENT library means every stored book id now points somewhere else, so the
+  // recent books and the rest of the book-id-keyed state are dropped before the
+  // reload — see webview-host/dbSwitchCleanup. Compared against the path we are
+  // leaving, so first-ever setup (no previous path) and re-picking the same folder
+  // both keep the reader's history.
+  const previousPath = window.__webviewDbPath
+  const isSwitch = !!previousPath && previousPath !== path
   window.__webviewDbPath = path
   dbReady.value = true
+  // Awaited, not fire-and-forget: the reload below is what makes the surviving stores
+  // refetch, and reloading mid-wipe would leave some of the stale data behind.
+  if (isSwitch) {
+    const { clearStaleBookData } = await import('./dbSwitchCleanup')
+    await clearStaleBookData()
+  }
   // Ask C# to reload via its HandleReload() method, which re-reads the saved path from
   // the registry, updates the __webviewDbReady injection script, then navigates.
   // window.location.reload() bypasses that and would re-inject the old "false" value.
@@ -101,7 +114,9 @@ if (hasHostBridge) {
   }
   onWebviewEvent((msg) => {
     if (msg.event === 'dbPathPicked') {
-      onDbReady(msg.path as string)
+      // A push has nobody to return the promise to; onDbReady contains its own
+      // failures, so this only keeps an unexpected rejection out of the console.
+      void onDbReady(msg.path as string).catch(() => {})
     }
     // C# pushes the FULL exception (type + stack) of any failure in the DB path
     // flow here. Nothing used to listen, so a failed pick was invisible — log it
