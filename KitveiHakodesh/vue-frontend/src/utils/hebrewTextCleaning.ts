@@ -79,6 +79,10 @@ for (const ch of ['<', '>', ':', '"', '&', '.', ' ', '\u05F4']) {
  * action (העתק טקסט נקי). Both paths must produce identical output — this
  * is the single source of truth for all Hebrew text cleaning.
  *
+ * Display passes one line per call while copy passes many joined together, so any
+ * per-line rule here must key on block tags rather than on the call boundary (see
+ * the dibbur hamatchil latch in stripNikkudFromHtml) or the two paths will drift.
+ *
  * Operates directly on the HTML string without DOM parsing — safe to call
  * on every render cycle. Tags are passed through unchanged; only text nodes
  * are transformed.
