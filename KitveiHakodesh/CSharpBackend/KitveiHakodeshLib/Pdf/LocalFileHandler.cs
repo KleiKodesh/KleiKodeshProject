@@ -557,8 +557,14 @@ namespace KitveiHakodeshLib.LocalFile
                     _servedHandlerInstalled = true;
                 }
                 string host = "kitvei-localhtml-" + (++_hostCounter);
+                // The 3-arg overload with SourceKinds is REQUIRED: the legacy 2-arg filter
+                // only raised WebResourceRequested for the document navigation itself, so
+                // every CSS/JS/image subresource of a served addin page fell through to
+                // real DNS and died with ERR_NAME_NOT_RESOLVED — pages rendered unstyled,
+                // scriptless HTML (diagnosed live 2026-08-27).
                 _webView.CoreWebView2.AddWebResourceRequestedFilter(
-                    "http://" + host + "/*", CoreWebView2WebResourceContext.All);
+                    "http://" + host + "/*", CoreWebView2WebResourceContext.All,
+                    CoreWebView2WebResourceRequestSourceKinds.All);
                 m = new FolderMapping { HostName = host, RefCount = 0 };
                 _servedFolderByHost[host] = folder;
             }

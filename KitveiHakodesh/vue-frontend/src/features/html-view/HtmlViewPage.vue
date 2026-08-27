@@ -43,7 +43,7 @@ const addinIdRef = computed(() => {
   return parts[parts.length - 2] ?? parts[parts.length - 1] ?? ''
 })
 
-const bridge = useOtzariaAddinBridge(iframeRef, addinIdRef)
+const bridge = useOtzariaAddinBridge(iframeRef, addinIdRef, isOtzariaAddin)
 const iframeScrollbars = useIframeScrollbarsHidden(() => iframeRef.value)
 
 // ── Load handling ─────────────────────────────────────────────────────────────

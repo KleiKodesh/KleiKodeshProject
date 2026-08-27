@@ -566,8 +566,14 @@ namespace KitveiHakodeshLib
             // It is registered separately because it must not share the same document-created
             // slot as the bridge script — the bridge script references window.chrome.webview
             // which is only available in the top frame.
+            //
+            // OtzariaAddinBridgeStubScript shares this call (one browser round-trip): it
+            // no-ops everywhere except child frames on kitvei-localhtml-* hosts, where the
+            // window.Otzaria stub must exist BEFORE the addin's own scripts run. Those
+            // frames are cross-origin from the Vue app, so the Vue side cannot inject it —
+            // document-created injection is the only path that reaches them.
             await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                JsBridge.IframeScrollScript);
+                JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
 
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);
