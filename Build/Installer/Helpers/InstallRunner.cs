@@ -25,9 +25,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             // Retire services this product no longer ships, before extraction — a
             // registered service holds a lock on its exe that would fail the extract.
-            // No-op (one registry probe) once a machine has been cleaned up, so this is
-            // safe on every install. Runs elevated like the rest of the installer, so it
-            // needs no prompting of its own — see LegacyServiceRetirement.
+            //
+            // Currently a no-op: nothing is on the retirement list. DocumentLocatorSvc
+            // used to be, which was wrong — EnsureServiceInstalledAsync below installs
+            // that same service, so the two steps fought and left it registered but
+            // unstartable. Do not re-add it without also dropping the exe from the
+            // package and the install call below.
+            //
+            // Note this installer is asInvoker, NOT elevated (per-user install — see
+            // app.manifest), so retirement can only deregister on the repair flow that
+            // happens to already be elevated. It never prompts.
             await LegacyServiceRetirement.RetireAllAsync(status);
 
             // Send pipe shutdown to DocumentLocator service immediately so the
