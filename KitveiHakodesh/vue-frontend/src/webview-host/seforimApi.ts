@@ -7,7 +7,7 @@
 // Migrate one capability at a time: add a function here (dev → service op,
 // hosted → query(SQL.X)) and point the composable at it instead of query(SQL.X).
 
-import { query, categoryHasOrderIndex } from './seforimDb'
+import { query, categoryHasOrderIndex, declaredBaseColumn } from './seforimDb'
 import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import { SQL } from './queries.sql'
@@ -269,8 +269,8 @@ export async function getReverseLineData(lineIds: number[], typeIds: number[]): 
     return (await serviceCall<{ rows: ReverseLineRow[] }>('getReverseLineData', { lineIds, typeIds })).rows
   const isMulti = lineIds.length > 1
   const sql = isMulti
-    ? SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE(typeIds.length, lineIds.length)
-    : SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP(typeIds.length)
+    ? SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE(typeIds.length, lineIds.length, declaredBaseColumn)
+    : SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP(typeIds.length, declaredBaseColumn)
   const params = isMulti ? [...lineIds, ...typeIds] : [lineIds[0]!, ...typeIds]
   return query<ReverseLineRow>(sql, params)
 }
@@ -281,7 +281,7 @@ export async function getReverseBooks(bookId: number, typeIds: number[]): Promis
   if (!isDbHosted())
     return (await serviceCall<{ rows: { sourceBookId: number }[] }>('getReverseBooks', { bookId, typeIds })).rows
   return query<{ sourceBookId: number }>(
-    SQL.GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP(typeIds.length),
+    SQL.GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP(typeIds.length, declaredBaseColumn),
     [bookId, ...typeIds],
   )
 }

@@ -449,7 +449,7 @@ export const SQL = {
    * Returns sourceBookId, sourceLineId, lineIndex and content of the source line.
    * The connectionTypeId placeholders must cover all DB names that canonicalize to COMMENTARY.
    */
-  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number) => `
+  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number, declaredCol: string) => `
     SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
     FROM link l
     JOIN line ln ON ln.id = l.sourceLineId
@@ -464,7 +464,7 @@ export const SQL = {
       -- corpus (Tanach, Talmud, Halacha...). A responsum citing a targum crosses corpora
       -- and is not declared, so it drops out.
       AND (
-        l.baseProvenance > 0
+        l.${declaredCol} > 0
         OR (SELECT cc.ancestorId FROM book sb
               JOIN category_closure cc ON cc.descendantId = sb.categoryId
               JOIN category c ON c.id = cc.ancestorId AND c.level = 0
@@ -480,7 +480,7 @@ export const SQL = {
    * Reverse source lookup (range): same as above but for a set of target line IDs.
    * Bind order: targetLineId1, targetLineId2, ..., commentaryTypeId1, commentaryTypeId2, ...
    */
-  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE: (commentaryTypeCount: number, targetLineCount: number) => `
+  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE: (commentaryTypeCount: number, targetLineCount: number, declaredCol: string) => `
     SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
     FROM link l
     JOIN line ln ON ln.id = l.sourceLineId
@@ -495,7 +495,7 @@ export const SQL = {
       -- corpus (Tanach, Talmud, Halacha...). A responsum citing a targum crosses corpora
       -- and is not declared, so it drops out.
       AND (
-        l.baseProvenance > 0
+        l.${declaredCol} > 0
         OR (SELECT cc.ancestorId FROM book sb
               JOIN category_closure cc ON cc.descendantId = sb.categoryId
               JOIN category c ON c.id = cc.ancestorId AND c.level = 0
@@ -518,7 +518,7 @@ export const SQL = {
    * with few links is still reachable instead of being dropped outright.
    * Bind order: targetBookId, commentaryTypeId1, commentaryTypeId2, ...
    */
-  GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number) => `
+  GET_SOURCE_BOOKS_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number, declaredCol: string) => `
     SELECT l.sourceBookId
     FROM link l
     JOIN book sb ON sb.id = l.sourceBookId
@@ -533,7 +533,7 @@ export const SQL = {
       -- corpus (Tanach, Talmud, Halacha...). A responsum citing a targum crosses corpora
       -- and is not declared, so it drops out.
       AND (
-        l.baseProvenance > 0
+        l.${declaredCol} > 0
         OR (SELECT cc.ancestorId FROM book sb
               JOIN category_closure cc ON cc.descendantId = sb.categoryId
               JOIN category c ON c.id = cc.ancestorId AND c.level = 0
@@ -544,7 +544,7 @@ export const SQL = {
              WHERE tb.id = l.targetBookId)
       )
     GROUP BY l.sourceBookId
-    ORDER BY MAX(l.baseProvenance) DESC,
+    ORDER BY MAX(l.${declaredCol}) DESC,
              sb.isBaseBook DESC,
              sb.orderIndex,
              COUNT(DISTINCT l.targetLineId) DESC

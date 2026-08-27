@@ -318,6 +318,16 @@ public sealed partial class SeforimDbService
 
     // Whether link.targetLineIndex exists (Zayit: yes, Otzaria: no). Detected once —
     // the seforim DB is static for the life of the process (see the catalog caches).
+    /// <summary>Which column flags a declared base-text link in THIS db. Zayit's own schema
+    /// calls it isDeclaredBase, the newer otzaria build calls it baseProvenance; both mean
+    /// "> 0 = the data asserts this relationship". Cached after the first probe.</summary>
+    private string? _declaredBaseColumn;
+
+    private string DeclaredBaseColumn(SqliteConnection conn) =>
+        _declaredBaseColumn ??= ColumnExists(conn, "link", SeforimSql.DeclaredBaseColumnOtzaria)
+            ? SeforimSql.DeclaredBaseColumnOtzaria
+            : SeforimSql.DeclaredBaseColumnZayit;
+
     private bool? _linkHasTargetLineIndex;
 
     public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds)
@@ -475,7 +485,7 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetReverseLineData(lineIds.Count, typeIds.Count);
+            cmd.CommandText = SeforimSql.GetReverseLineData(lineIds.Count, typeIds.Count, DeclaredBaseColumn(conn));
             BindList(cmd, "t", lineIds);
             BindList(cmd, "c", typeIds);
             using var r = cmd.ExecuteReader();
@@ -501,7 +511,7 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetReverseBooks(typeIds.Count);
+            cmd.CommandText = SeforimSql.GetReverseBooks(typeIds.Count, DeclaredBaseColumn(conn));
             cmd.Parameters.AddWithValue("@bookId", bookId);
             BindList(cmd, "c", typeIds);
             using var r = cmd.ExecuteReader();

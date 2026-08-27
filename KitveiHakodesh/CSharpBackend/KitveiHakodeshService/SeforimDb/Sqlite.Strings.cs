@@ -234,45 +234,54 @@ internal static class SeforimSql
 
     /// <summary>Reverse lookup: source/targum lines that link TO the given target lines via the
     /// given connection types. A single-element IN handles both the single-line and range cases.</summary>
-    public static string GetReverseLineData(int lineCount, int typeCount) => $@"
+    public static string GetReverseLineData(int lineCount, int typeCount, string declaredCol) => $@"
         SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
         FROM link l
         JOIN line ln ON ln.id = l.sourceLineId
         WHERE l.targetLineId IN ({InPlaceholders("t", lineCount)})
           AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})
-          AND l.sourceBookId != l.targetBookId
-          -- Drop lateral citations: a book that merely QUOTES one line of this one is
-          -- not its base text. Keep a link only when the data DECLARES the base
-          -- relationship (baseProvenance > 0), or both books sit in the same top-level
-          -- corpus. A responsum citing a targum crosses corpora and is not declared.
-          AND (
-            l.baseProvenance > 0
-            OR (SELECT cc.ancestorId FROM book sb
-                  JOIN category_closure cc ON cc.descendantId = sb.categoryId
-                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                 WHERE sb.id = l.sourceBookId)
-             = (SELECT cc.ancestorId FROM book tb
-                  JOIN category_closure cc ON cc.descendantId = tb.categoryId
-                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                 WHERE tb.id = l.targetBookId)
-          )";
+{DeclaredOrSameCorpus(declaredCol)}";
 
     /// <summary>Reverse lookup: the base text(s) of the given book, best first. A declared base
     /// beats an inferred one, a book flagged as a base text beats one that is not, then catalogue
-    /// order, then how much of this book the candidate covers.</summary>
-    public static string GetReverseBooks(int typeCount) => $@"
+    /// order, then how much of this book the candidate covers.
+    /// The declared/inferred tier only exists on the otzaria schema, whose baseProvenance
+    /// distinguishes them (2 vs 1); Zayit's isDeclaredBase is a plain 0/1, so there the first
+    /// key simply separates declared from undeclared.</summary>
+    public static string GetReverseBooks(int typeCount, string declaredCol) => $@"
         SELECT l.sourceBookId
         FROM link l
         JOIN book sb ON sb.id = l.sourceBookId
         WHERE l.targetBookId = @bookId
           AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})
+{DeclaredOrSameCorpus(declaredCol)}
+        GROUP BY l.sourceBookId
+        ORDER BY MAX(l.{declaredCol}) DESC,
+                 sb.isBaseBook DESC,
+                 sb.orderIndex,
+                 COUNT(DISTINCT l.targetLineId) DESC";
+
+    /// <summary>
+    /// Name of the column flagging a link as a DECLARED base-text relationship. The two
+    /// seforim-DB schemas spell the same idea differently: Zayit's own DB has
+    /// `isDeclaredBase` (0/1), the newer otzaria build has `baseProvenance`
+    /// (0=none, 1=inferred from the title, 2=declared by Sefaria). Both are "> 0 means
+    /// the data asserts this relationship", so callers only need the name.
+    /// Probe with ColumnExists and pass the result to the queries below.
+    /// </summary>
+    public const string DeclaredBaseColumnZayit = "isDeclaredBase";
+    public const string DeclaredBaseColumnOtzaria = "baseProvenance";
+
+    /// <summary>
+    /// Keeps a reversed link only when it is a real base-text relationship rather than a
+    /// passing citation: either the data DECLARES it, or both books sit in the same
+    /// top-level corpus. Without this a responsum that quotes one line of a targum is
+    /// reported as that targum's source.
+    /// </summary>
+    private static string DeclaredOrSameCorpus(string declaredCol) => $@"
           AND l.sourceBookId != l.targetBookId
-          -- Drop lateral citations: a book that merely QUOTES one line of this one is
-          -- not its base text. Keep a link only when the data DECLARES the base
-          -- relationship (baseProvenance > 0), or both books sit in the same top-level
-          -- corpus. A responsum citing a targum crosses corpora and is not declared.
           AND (
-            l.baseProvenance > 0
+            l.{declaredCol} > 0
             OR (SELECT cc.ancestorId FROM book src
                   JOIN category_closure cc ON cc.descendantId = src.categoryId
                   JOIN category c ON c.id = cc.ancestorId AND c.level = 0
@@ -281,12 +290,7 @@ internal static class SeforimSql
                   JOIN category_closure cc ON cc.descendantId = tb.categoryId
                   JOIN category c ON c.id = cc.ancestorId AND c.level = 0
                  WHERE tb.id = l.targetBookId)
-          )
-        GROUP BY l.sourceBookId
-        ORDER BY MAX(l.baseProvenance) DESC,
-                 sb.isBaseBook DESC,
-                 sb.orderIndex,
-                 COUNT(DISTINCT l.targetLineId) DESC";
+          )";
 
     /// <summary>Distinct forward static-filter books for a source book (COMMENTARY/EIN_MISHPAT etc.).</summary>
     public static string GetStaticFilterBooks(int typeCount) => $@"

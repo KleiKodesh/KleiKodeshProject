@@ -28,6 +28,15 @@ export const dbReady = ref(window.__webviewDbReady ?? true)
 /** True once detected; false means the column doesn't exist or detection hasn't run yet. */
 export let categoryHasOrderIndex = false
 
+/**
+ * Column that flags a link as a DECLARED base-text relationship. The two seforim-DB
+ * schemas spell the same idea differently: Zayit's own DB has `isDeclaredBase` (0/1),
+ * the newer otzaria build has `baseProvenance` (0=none, 1=inferred, 2=declared). Both
+ * mean "> 0 = the data asserts this", so only the name varies. Zayit's is the safe
+ * default because that schema is the baseline; the probe upgrades it when present.
+ */
+export let declaredBaseColumn = 'isDeclaredBase'
+
 let _schemaDetected = false
 let _schemaDetecting: Promise<void> | null = null
 
@@ -41,9 +50,13 @@ export function ensureCategorySchema(): Promise<void> {
     return Promise.resolve()
   }
   if (_schemaDetecting) return _schemaDetecting
-  _schemaDetecting = query<{ name: string }>('PRAGMA table_info(category)', [])
-    .then((cols) => {
-      categoryHasOrderIndex = cols.some((c) => c.name === 'orderIndex')
+  _schemaDetecting = Promise.all([
+    query<{ name: string }>('PRAGMA table_info(category)', []),
+    query<{ name: string }>('PRAGMA table_info(link)', []),
+  ])
+    .then(([categoryCols, linkCols]) => {
+      categoryHasOrderIndex = categoryCols.some((c) => c.name === 'orderIndex')
+      if (linkCols.some((c) => c.name === 'baseProvenance')) declaredBaseColumn = 'baseProvenance'
       _schemaDetected = true
     })
     .catch(() => {
