@@ -137,7 +137,12 @@ namespace KitveiHakodeshLib.Search
                         partialReadyPushed = true;
                         _state.MarkReadyDirect();
                     }
-                }, ct: cts.Token);
+                // Background processing mode (lowest CPU + very-low I/O priority): the FTS
+                // build is the long, heavy one, and this stops it contending with the UI,
+                // searches, and the catalog/file-search rebuilds an app reset starts
+                // alongside it — they all run in parallel and the FTS build takes whatever
+                // the machine has left over.
+                }, ct: cts.Token, backgroundPriority: true);
 
                 // Only treat as a successful completed build if lines were actually
                 // processed. A false return means only WAL recovery ran (e.g. the

@@ -291,7 +291,7 @@ namespace KitveiHakodeshLib.Search
             // can reach TryMarkReady/TryMarkIdle and dispose this very source before we get
             // here. Already disposed means the build already finished — there is nothing to
             // cancel, and letting the exception out would abort the rest of the lifecycle
-            // action (DeleteAllCaches / DeleteFtsIndex + reindex never run, so the user's
+            // action (the cache deletes / DeleteFtsIndex + reindex never run, so the user's
             // "delete index" or "reset" would silently do nothing).
             try { cts?.Cancel(); } catch (ObjectDisposedException) { }
 
@@ -341,37 +341,51 @@ namespace KitveiHakodeshLib.Search
         }
 
         /// <summary>
-        /// Deletes all user-generated cache folders under the app's base directory:
-        /// FTS index, Bloom filters, Word→PDF cache, HebrewBooks cache, and WebView2 webcache.
-        /// Called by the full app reset flow (איפוס האפליקציה).
+        /// Deletes the Word→PDF and HebrewBooks PDF caches on a background thread.
+        /// Called by the full app reset flow, alongside DeleteFtsIndex and
+        /// DeleteBloomIndexIfPresent — but unlike those two, these folders have nothing to do
+        /// with the index lifecycle, so they must NOT be deleted on the lifecycle actor:
+        /// gigabytes of cached PDFs used to be deleted between the index wipe and the reloaded
+        /// page's OnDbReady, holding up the FTS rebuild for as long as the PDFs took to delete.
+        /// That serial delete is why the app reset's index rebuild started so much later than
+        /// the standalone "reset search index" button's, which never touches these folders.
+        ///
+        /// The WebView2 webcache is deliberately NOT in this list. It used to be, and it never
+        /// once worked: it is the live user-data folder of the very WebView2 that issued the
+        /// reset, so Directory.Delete fails on the open handles and the exception is swallowed
+        /// below. The folder name was wrong on top of that — the standalone app passes
+        /// "webcache-standalone" to the AppViewer constructor, so the hardcoded "webcache"
+        /// pointed at a directory that does not exist there. Browser storage is cleared by
+        /// AppViewer.ClearWebViewBrowsingDataAsync through the WebView2 profile API instead,
+        /// which is the only supported way to clear a cache that is currently mounted.
         /// </summary>
-        internal static void DeleteAllCaches()
+        internal static void DeletePdfCachesInBackground()
         {
             string baseDir = AppDomain.CurrentDomain.BaseDirectory;
             string[] cacheDirs =
             {
-                FtsIndexPath,
-                BloomFolderPath,
                 Path.Combine(baseDir, "KitveiHakodesh", "word-cache"),
                 Path.Combine(baseDir, "KitveiHakodesh", "hebrewbooks-cache"),
-                Path.Combine(baseDir, "KitveiHakodesh", "webcache"),
             };
 
-            foreach (string dir in cacheDirs)
+            Task.Run(() =>
             {
-                try
+                foreach (string dir in cacheDirs)
                 {
-                    if (Directory.Exists(dir))
+                    try
                     {
-                        Directory.Delete(dir, recursive: true);
-                        Console.WriteLine("[SearchHandler] Deleted cache: " + dir);
+                        if (Directory.Exists(dir))
+                        {
+                            Directory.Delete(dir, recursive: true);
+                            Console.WriteLine("[SearchHandler] Deleted cache: " + dir);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("[SearchHandler] Failed to delete cache " + dir + ": " + ex.Message);
                     }
                 }
-                catch (Exception ex)
-                {
-                    Console.WriteLine("[SearchHandler] Failed to delete cache " + dir + ": " + ex.Message);
-                }
-            }
+            });
         }
 
         internal static void DeleteBloomIndexIfPresent()

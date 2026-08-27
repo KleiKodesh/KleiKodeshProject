@@ -204,7 +204,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                         totalLines: total,
                         resumeOffset: resumeOffset,
                         forceMergeOnComplete: true,
-                        ct: cancellationToken);
+                        ct: cancellationToken,
+                        // Lowest CPU + very-low I/O priority for the whole build, so it
+                        // never contends with searches or the other index rebuilds that
+                        // run alongside it. Same policy as both current hosts.
+                        backgroundPriority: true);
                     break;
                 }
                 catch (IndexWriteLockException) when (attempt < WriteLockRetries)

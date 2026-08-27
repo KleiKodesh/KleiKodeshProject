@@ -1218,11 +1218,12 @@ engine state that belongs in **FtsLib**, not Core:
 | `TryStartBuilding`, `SetIndexingTask`, `TryMarkReady`, `TryMarkIdle`, `MarkReadyDirect`, `StopAll` | `ComputeDbStamp(dbPath)` |
 | `TryReadProgressFile` — reads FtsLib's own `build.progress` | `ReadSourceStamp` / `WriteSourceStamp` (`fts.src`) |
 | `ValidateFtsIndex`, `DeleteFtsIndex` | `GetInstalledAppVersion`, `Read/WriteVersionStamp` |
-| the cross-process build lock — see gotcha 13 | `DeleteAllCaches` (not FTS at all — app reset) |
+| the cross-process build lock — see gotcha 13 | `DeletePdfCachesInBackground` (not FTS at all — app reset) |
 
-`DeleteAllCaches` is the clearest misfit: it wipes the Word→PDF cache, HebrewBooks cache and
-the **WebView2 webcache**. It is the app-reset feature sitting next to index deletion for
-convenience. Split it: corpus/app caches to Core, WebView2 webcache stays in Lib.
+`DeletePdfCachesInBackground` (was `DeleteAllCaches`) is the clearest misfit: it wipes the
+Word→PDF and HebrewBooks PDF caches — the app-reset feature sitting next to index deletion
+for convenience. (The WebView2 webcache left the list: only the profile API can clear a
+mounted user-data folder — see AppViewer.ClearWebViewBrowsingDataAsync.) These caches go to Core.
 
 **Resume state: delete `build.progress`, don't move it.** The index already holds the answer
 — `DocSourceMap` is persisted per segment in that segment's `doc_source` table, mapping
@@ -1329,7 +1330,7 @@ what remains is transport belonging in Lib.
 
 | File | First claimed | Verified reality |
 |---|---|---|
-| `FtsIndexState` (532) | app lifecycle -> Core | mostly **generic -> FtsLib** (slice 4b); only stamps + `DeleteAllCaches` are Core's |
+| `FtsIndexState` (532) | app lifecycle -> Core | mostly **generic -> FtsLib** (slice 4b); only stamps + `DeletePdfCachesInBackground` are Core's |
 | `FtsIndexBuilder` (244) | "runs the build + background merge" | it only **calls** `index.BuildIndex(...)` (line 111) and `index.ForceMerge()` (line 197). Nothing generic left to move — FtsLib already owns it. Trigger + resume -> Core, `PushProgress` -> Lib |
 | `FtsSearchExecutor` (302) | generic execution + enrichment | execution is already FtsLib: `index.Search` (156), `GenerateSnippet` (164), `FetchNeighborContext` (287), `GenerateSnippetWithNeighbors` (293). Only `EmbellishShortSnippets` (273-298) and the batching policy are Core's; the rest is `PostSearch` -> `_bridge.PushEvent` |
 
