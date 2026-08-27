@@ -28,6 +28,15 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
     private volatile bool _isReady;      // an index (fresh or stale) is open and serving
     private volatile bool _isIndexing;
     private volatile bool _buildStarted; // latch: build at most once per process
+
+    // Failed build attempts. A failure re-arms the latch so the next Ensure retries, but
+    // only up to this many times — see the catch in RunBuild.
+    private const int MaxBuildAttempts = 3;
+    private int _failedBuilds;
+
+    // True while ResetIndexCore owns the wipe-and-rebuild. A failing build must NOT re-arm
+    // the build latch during that window — see the catch in RunBuild.
+    private bool _resetInFlight;
     private volatile int _builtBooks;
     private volatile int _totalBooks;
 
@@ -136,6 +145,35 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         catch (Exception ex)
         {
             logger.LogError(ex, "catalog TOC index build failed");
+            // Re-arm so a later EnsureIndex retries. _buildStarted is set BEFORE the build
+            // and was never cleared on failure, so one transient error (the seforim DB locked
+            // by the FTS rebuild, a full disk) left EnsureIndex a permanent no-op and catalog
+            // search dead for the rest of the process. Bounded, so a build that always fails
+            // cannot be restarted by every status call and search keystroke.
+            //
+            // NOT during a reset: ResetIndexCore cancels this build, then deletes the index
+            // directory, then re-arms and rebuilds itself. Re-arming here would let a status
+            // poll start a build into the directory that reset is about to delete — and that
+            // build's own failure would burn another attempt, so one unlucky reset could
+            // exhaust the budget and kill catalog search for the process.
+            // Interlocked: two builds can be in flight across a re-arm, and a lost increment
+            // would turn a bounded retry into an unbounded one.
+            int failures = Interlocked.Increment(ref _failedBuilds);
+            bool resetOwnsTheRebuild;
+            lock (_lock) { resetOwnsTheRebuild = _resetInFlight; }
+            if (resetOwnsTheRebuild)
+            {
+                logger.LogInformation("catalog TOC index build failed during a reset — the reset will rebuild");
+            }
+            else if (failures < MaxBuildAttempts)
+            {
+                lock (_lock) { _buildStarted = false; }
+            }
+            else
+            {
+                logger.LogWarning("catalog TOC index: giving up after {Attempts} failed build attempts",
+                    failures);
+            }
         }
         finally
         {
@@ -190,29 +228,53 @@ public sealed class CatalogTocSearchService(ILogger<CatalogTocSearchService> log
         Task? build;
         lock (_lock)
         {
+            // Claimed before the cancel: from here a failing build defers to this reset
+            // instead of re-arming the latch and racing a build into the directory that is
+            // about to be deleted.
+            _resetInFlight = true;
             _buildCts?.Cancel();
             build = _buildTask;
         }
-        try { build?.Wait(TimeSpan.FromSeconds(30)); } catch { /* cancelled */ }
-
-        // Searches run outside _lock, so cancel the in-flight one BEFORE disposing the
-        // index it is reading; a query that still lands mid-dispose comes back Superseded.
-        // The search owns its CTS (disposed when Search returns), so it may already be gone
-        // by the time we get here — that means it finished on its own, nothing left to cancel.
-        try { Interlocked.Exchange(ref _searchCts, null)?.Cancel(); }
-        catch (ObjectDisposedException) { /* search already completed and disposed it */ }
-
-        lock (_lock)
+        try
         {
-            _index?.Dispose();
-            _index = null;
-            try { if (Directory.Exists(_indexPath)) Directory.Delete(_indexPath, recursive: true); }
-            catch (Exception ex) { logger.LogError(ex, "catalog TOC index reset: delete failed"); }
-            _isReady = false;
-            _isIndexing = false;
-            _buildStarted = false;
-            _buildTask = null;
-            _buildCts = null;
+            // Wait until the build has actually unwound — the old 30s cap was discarded and
+            // the code deleted the index directory anyway, while BuildAndSwitch could still
+            // be writing through the CatalogTocIndex disposed just below. This runs on a
+            // background task, so waiting blocks no caller.
+            if (build != null)
+            {
+                if (!build.Wait(TimeSpan.FromSeconds(30)))
+                    logger.LogWarning(
+                        "catalog TOC reset: build still unwinding after 30s — waiting before deleting the index");
+                try { build.Wait(); } catch { /* cancelled or faulted */ }
+            }
+
+            // Searches run outside _lock, so cancel the in-flight one BEFORE disposing the
+            // index it is reading; a query that still lands mid-dispose comes back Superseded.
+            // The search owns its CTS (disposed when Search returns), so it may already be
+            // gone by the time we get here — that means it finished on its own.
+            try { Interlocked.Exchange(ref _searchCts, null)?.Cancel(); }
+            catch (ObjectDisposedException) { /* search already completed and disposed it */ }
+
+            lock (_lock)
+            {
+                _index?.Dispose();
+                _index = null;
+                try { if (Directory.Exists(_indexPath)) Directory.Delete(_indexPath, recursive: true); }
+                catch (Exception ex) { logger.LogError(ex, "catalog TOC index reset: delete failed"); }
+                _isReady = false;
+                _isIndexing = false;
+                _buildStarted = false;
+                _buildTask = null;
+                _buildCts = null;
+            }
+        }
+        finally
+        {
+            // Released before EnsureIndex so the rebuild it starts is a normal build whose
+            // own failure may re-arm the latch again. Cleared even if a step above threw —
+            // a stuck flag would silently disable the failure-retry path for good.
+            lock (_lock) { _resetInFlight = false; }
         }
         logger.LogInformation("catalog TOC index reset — rebuilding");
         EnsureIndex();

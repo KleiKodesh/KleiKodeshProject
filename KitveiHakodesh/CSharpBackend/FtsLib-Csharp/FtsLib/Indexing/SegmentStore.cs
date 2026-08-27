@@ -778,6 +778,14 @@ namespace FtsLib.Indexing
             string datPath = Live.SegDatPath(0, segId);
             string dbPath  = Live.SegDbPath(0, segId);
 
+            // Captured HERE, on the indexing thread, rather than read inside the task: the
+            // flag belongs to the build that SCHEDULED this flush, and BuildIndex's finally
+            // can clear it while a continuation is still queued (a build that throws, or the
+            // last flush of a cancelled one). Reading it late let a background build's final
+            // — usually largest — merge run at full priority, and let an unrelated caller's
+            // flush (IndexWriter.Purge takes no write lock) get throttled without asking.
+            bool flushAtBackgroundPriority = FlushInBackgroundPriority;
+
             // Sort terms on the calling thread — cheap, and keeps the background
             // task focused purely on I/O.
             var terms = new List<string>(ramIndex.Count);
@@ -797,7 +805,7 @@ namespace FtsLib.Indexing
                     // Background-priority builds lower this pool thread for exactly this
                     // task — the scope's Dispose in the outer finally restores the thread
                     // before the pool reuses it for unrelated work.
-                    var priorityScope = BackgroundPriorityScope.EnterIf(FlushInBackgroundPriority);
+                    var priorityScope = BackgroundPriorityScope.EnterIf(flushAtBackgroundPriority);
                     try
                     {
                         FtsLog.Write("SegmentStore.Flush.BgTask",
