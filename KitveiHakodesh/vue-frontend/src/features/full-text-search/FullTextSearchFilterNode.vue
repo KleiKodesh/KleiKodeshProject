@@ -176,7 +176,12 @@ function navigateToCategory() {
    Segoe UI Variable, but the renderer snaps intermediate weights to three
    buckets (measured: 500/550/600 render identically, as do 650/700), so a
    ladder built on 650-vs-600 would be invisible. Size and colour do the
-   fine-grained stepping instead — both are continuous and always render. */
+   fine-grained stepping instead — both are continuous and always render.
+
+   The three dimensions are deliberately staggered so no two adjacent rungs
+   differ on one axis alone: weight breaks between 0 and 1, size carries 1-3,
+   and colour carries 2-4. 11px is the floor — it matches the book rows, and
+   nothing in the tree renders smaller than that. */
 .cat-row[data-rung="0"] .row-title {
   font-size: 12.5px;
   font-weight: 700;
@@ -185,21 +190,21 @@ function navigateToCategory() {
 }
 .cat-row[data-rung="1"] .row-title {
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
 }
 .cat-row[data-rung="2"] .row-title {
   font-size: 11.5px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: color-mix(in srgb, var(--text-primary) 72%, var(--text-secondary));
 }
 .cat-row[data-rung="3"] .row-title {
   font-size: 11px;
   font-weight: 600;
-  color: color-mix(in srgb, var(--text-primary) 45%, var(--text-secondary));
+  color: color-mix(in srgb, var(--text-primary) 36%, var(--text-secondary));
 }
 .cat-row[data-rung="4"] .row-title {
-  font-size: 10.5px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
 }
