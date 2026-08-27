@@ -5,7 +5,12 @@ using Lucene.Net.Index;
 using Lucene.Net.Search;
 using Lucene.Net.Store;
 using Lucene.Net.Util;
+using System.Data.Common;
+// DbCommand.AddWithValue — the shared-source shim for the ADO.NET base type.
+using KitveiHakodeshService.Common;
+#if !NETFRAMEWORK
 using Microsoft.Data.Sqlite;
+#endif
 
 namespace KitveiHakodeshService.Catalog;
 
@@ -546,7 +551,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// LineIndex = the marker's line.
     /// </summary>
     private static int IndexTanachVerses(
-        IndexWriter writer, SqliteConnection conn,
+        IndexWriter writer, DbConnection conn,
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
         Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
     {
@@ -582,7 +587,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
 
             using var cmd = conn.CreateCommand();
             cmd.CommandText = "SELECT lineIndex, content FROM line WHERE bookId = @b ORDER BY lineIndex";
-            cmd.Parameters.AddWithValue("@b", book.Id);
+            cmd.AddWithValue("@b", book.Id);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
@@ -626,7 +631,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return added;
     }
 
-    private static List<TocRow> LoadTocRowsForBook(SqliteConnection conn, int bookId)
+    private static List<TocRow> LoadTocRowsForBook(DbConnection conn, int bookId)
     {
         var rows = new List<TocRow>();
         using var cmd = conn.CreateCommand();
@@ -637,7 +642,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             LEFT JOIN line l ON l.id = te.lineId
             WHERE te.bookId = @b
             ORDER BY te.id";
-        cmd.Parameters.AddWithValue("@b", bookId);
+        cmd.AddWithValue("@b", bookId);
         using var r = cmd.ExecuteReader();
         while (r.Read())
             rows.Add(new TocRow
@@ -881,7 +886,28 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         public string Text = "";
     }
 
-    private SqliteConnection OpenDb()
+    // The ONLY provider-specific code in this file. Everything else is plain ADO.NET on
+    // DbConnection, so the same source drives Microsoft.Data.Sqlite in the net10 service and
+    // System.Data.SQLite in the net48 hosted app (which already ships that provider and has
+    // no reason to carry a second one). Both open the seforim DB read-only.
+#if NETFRAMEWORK
+    private DbConnection OpenDb()
+    {
+        var cs = new System.Data.SQLite.SQLiteConnectionStringBuilder
+        {
+            DataSource = dbPath,
+            ReadOnly = true,
+            // System.Data.SQLite pools connections by default. A pooled read-only handle would
+            // outlive the build and keep a file handle on the seforim DB, which is exactly what
+            // OnDbPathChanged needs released when the user repoints the database.
+            Pooling = false,
+        }.ConnectionString;
+        var conn = new System.Data.SQLite.SQLiteConnection(cs);
+        conn.Open();
+        return conn;
+    }
+#else
+    private DbConnection OpenDb()
     {
         var cs = new SqliteConnectionStringBuilder
         {
@@ -892,10 +918,11 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         conn.Open();
         return conn;
     }
+#endif
 
     /// <summary>Categories in the SAME order the frontend loads them (level, then
     /// orderIndex when the column exists) — the tree-order computation depends on it.</summary>
-    private static List<(int Id, int? ParentId, string Title)> LoadCategories(SqliteConnection conn)
+    private static List<(int Id, int? ParentId, string Title)> LoadCategories(DbConnection conn)
     {
         bool hasOrderIndex = false;
         using (var probe = conn.CreateCommand())
@@ -917,7 +944,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return list;
     }
 
-    private static List<(int Id, string Title, int CategoryId, string? Authors)> LoadBooks(SqliteConnection conn)
+    private static List<(int Id, string Title, int CategoryId, string? Authors)> LoadBooks(DbConnection conn)
     {
         var list = new List<(int, string, int, string?)>();
         using var cmd = conn.CreateCommand();
@@ -935,7 +962,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return list;
     }
 
-    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(SqliteConnection conn)
+    private static Dictionary<int, (int LineId, int LineIndex)> LoadFirstLines(DbConnection conn)
     {
         // SQLite MIN() aggregate guarantees the bare columns come from the minimal row.
         var map = new Dictionary<int, (int, int)>();
@@ -1006,7 +1033,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     }
 
     /// <summary>All alt-TOC structures: structureId → owning bookId.</summary>
-    private static Dictionary<int, (int BookId, string Title, string HeTitle)> LoadAltStructures(SqliteConnection conn)
+    private static Dictionary<int, (int BookId, string Title, string HeTitle)> LoadAltStructures(DbConnection conn)
     {
         var map = new Dictionary<int, (int, string, string)>();
         using var cmd = conn.CreateCommand();
@@ -1029,7 +1056,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
 
     /// <summary>Stream all TOC entries ordered by book — one group per book so each
     /// book's tree is materialized (and released) in turn instead of all at once.</summary>
-    private static IEnumerable<TocGroup> StreamTocRowsByBook(SqliteConnection conn)
+    private static IEnumerable<TocGroup> StreamTocRowsByBook(DbConnection conn)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
@@ -1062,7 +1089,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     }
 
     /// <summary>Stream all alt-TOC entries ordered by structure — one group per structure.</summary>
-    private static IEnumerable<TocGroup> StreamAltTocRowsByStructure(SqliteConnection conn)
+    private static IEnumerable<TocGroup> StreamAltTocRowsByStructure(DbConnection conn)
     {
         using var cmd = conn.CreateCommand();
         cmd.CommandText = @"
