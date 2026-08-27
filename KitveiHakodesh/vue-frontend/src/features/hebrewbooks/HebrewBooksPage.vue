@@ -94,12 +94,6 @@ function onBookClicked(
 
 <template>
   <div class="hb-page">
-    <div v-if="downloadErrorMessage" class="hb-error-banner">
-      <span>{{ downloadErrorMessage }}</span>
-      <button class="hb-error-dismiss" @click="downloadErrorMessage = null">
-        <IconDismiss20Regular />
-      </button>
-    </div>
     <TopSearchBar>
       <template #left><IconSearch20Regular class="search-icon" /></template>
       <input
@@ -153,6 +147,13 @@ function onBookClicked(
         <span v-else>אין היסטוריה — חפש ספר להתחיל</span>
       </div>
     </div>
+
+    <div v-if="downloadErrorMessage" class="hb-error-banner">
+      <span>{{ downloadErrorMessage }}</span>
+      <button class="hb-error-dismiss" @click="downloadErrorMessage = null">
+        <IconDismiss20Regular />
+      </button>
+    </div>
   </div>
 </template>
 
@@ -205,7 +206,8 @@ function onBookClicked(
   gap: 8px;
   padding: 8px 12px;
   background: color-mix(in srgb, var(--status-danger) 12%, var(--bg-secondary));
-  border-bottom: 1px solid color-mix(in srgb, var(--status-danger) 30%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--status-danger) 30%, transparent);
+  flex-shrink: 0;
   color: var(--text-primary);
   font-size: 13px;
 }
