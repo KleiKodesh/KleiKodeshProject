@@ -201,8 +201,11 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  /* The toolbar's button size, not a copy of what it happened to be: the overflow
+     arithmetic charges every pinned control one of these, so a button that is its own size
+     makes the toolbar believe it has room it does not have. */
+  width: var(--toolbar-button-size);
+  height: var(--toolbar-button-size);
   padding: 6px;
   border-radius: 4px;
   flex-shrink: 0;
