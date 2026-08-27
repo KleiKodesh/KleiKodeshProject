@@ -63,8 +63,23 @@ namespace KitveiHakodeshLib.FileSystemSearch
             // Word as a normal user. EnsureInstalled re-launches the service exe with the
             // "runas" verb so Windows prompts for elevation once — the same thing the
             // installer does — then we retry the start that just failed.
+            //
+            // ExeMissing takes the same route: the registration points at an exe that is
+            // not there, which no amount of retrying fixes and which the user cannot act
+            // on from a message. --install re-registers at the exe next to this assembly,
+            // so it repairs a registration left pointing somewhere stale.
+            //
+            // It only helps when a good exe actually sits beside the add-in — EnsureInstalled
+            // needs that exe to run --install at all. When the files themselves are gone
+            // it throws, TryInstallService returns false, and we fall through to the
+            // "reinstall the application" message, which is the right advice then.
+            //
+            // Disabled is deliberately NOT here. That is a startup type someone set in
+            // services.msc, and quietly re-enabling a service the user turned off is not
+            // ours to do — that case keeps its explanatory message.
             if (mayPromptForInstall
-                && IsStartFailure(startError, ServiceBridge.ServiceStartFailure.NotInstalled)
+                && (IsStartFailure(startError, ServiceBridge.ServiceStartFailure.NotInstalled)
+                 || IsStartFailure(startError, ServiceBridge.ServiceStartFailure.ExeMissing))
                 && TryInstallService())
             {
                 startError = null;

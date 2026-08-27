@@ -11,11 +11,15 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// <summary>
     /// Removes Windows services that this product used to ship but no longer does.
     ///
-    /// TRANSITIONAL — this whole class exists for the DocumentLocatorSvc →
-    /// KitveiHakodeshService migration and is meant to be deleted, not maintained. Once no
-    /// supported upgrade path can still have a retired service registered (keep the entry
-    /// for several releases so machines that skip versions are still cleaned up), remove
-    /// the file and its call in InstallRunner. Nothing else depends on it.
+    /// DORMANT — the <see cref="Retired"/> list is empty, so this is a no-op on every
+    /// install. It was written for a DocumentLocatorSvc → KitveiHakodeshService migration
+    /// that has not happened: the package still ships DocumentLocator.Service.exe and
+    /// InstallRunner still registers it, so retiring it here fought the install two steps
+    /// later. See the commented entry in <see cref="Retired"/> for the full account.
+    ///
+    /// Kept because the mechanism is correct and hard to re-derive — SCM-direct deletion
+    /// that needs no cooperation from the retired binary. Populate the list when a service
+    /// is genuinely dropped from the package.
     ///
     /// Why this exists separately from <see cref="DocumentLocatorHelper"/>:
     /// that helper delegates registration to the service exe itself
@@ -71,11 +75,29 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// </summary>
         private static readonly RetiredService[] Retired =
         {
-            // DocumentLocatorSvc — superseded by KitveiHakodeshService, which performs
-            // the same path indexing in-process and needs no Windows service at all.
-            // Retained here (not deleted) so users updating from any older build get
-            // the stale registration cleaned up.
-            new RetiredService("DocumentLocatorSvc", "DocumentLocator.Service.exe"),
+            // Nothing is retired right now, so RetireAllAsync is a no-op that does not
+            // even probe the registry.
+            //
+            // DocumentLocatorSvc was listed here on the assumption that
+            // KitveiHakodeshService would index paths in-process and replace it. That
+            // migration has not happened: KleiKodesh.zip still ships
+            // DocumentLocator.Service.exe, and InstallRunner still registers it via
+            // DocumentLocatorHelper.EnsureServiceInstalledAsync two steps after this ran.
+            //
+            // Those two steps contradicted each other. On an elevated run this deleted a
+            // registration the same install then re-created, and because DeleteService
+            // only MARKS a service for deletion while a handle is open, the intermediate
+            // state is a service that still has a registry key but refuses to start —
+            // which the SCM reports as error 1058, the same code as a genuinely disabled
+            // service. That is why file search showed "the service is disabled, start it
+            // via services.msc" on a machine where the registration looked correct.
+            //
+            // Kept commented rather than deleted: if the in-process migration does land,
+            // restoring this line is the whole retirement step. Re-enable it only
+            // together with dropping DocumentLocator.Service.exe from the package AND
+            // removing the EnsureServiceInstalledAsync call, never on its own.
+            //
+            // new RetiredService("DocumentLocatorSvc", "DocumentLocator.Service.exe"),
         };
 
         private sealed class RetiredService
