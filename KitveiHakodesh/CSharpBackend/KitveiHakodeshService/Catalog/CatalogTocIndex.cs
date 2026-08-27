@@ -1245,6 +1245,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 // is recoverable right here, with the doc already open. Nothing extra is
                 // read and no index-side field is involved.
                 QuotedFormMatch = queryQuotedKeys is not null && HitCarriesQuotedKey(doc, queryQuotedKeys),
+                // Title/author beats category, same stored-text approach: the doc is open
+                // and the ordering pass above cannot see field-level provenance, because a
+                // word is matched across all three fields as one flat OR.
+                MatchesTitleOrAuthor = MatchesOnTitleOrAuthor(doc, tokens, variants),
             });
         }
 
@@ -1270,16 +1274,20 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
         }
 
-        // Written-form rank: a hit whose own raw text carries the quoted acronym the
-        // user typed is the more accurate match, so it leads. Applied here rather than
-        // in the collector's ordering because it is read from the STORED text, which
-        // only exists once the window is materialized.
+        // WHERE the query matched, as two accuracy keys. Both are read from the STORED
+        // text, so neither can live in the collector's ordering pass, which runs before
+        // stored fields are decompressed:
         //
-        // Unconditional, unlike the proximity sort below: that one guards on a 2+ word
-        // query, and an acronym is typically ONE word - the exact case this serves.
-        // Stable, and below IsLiteral: a variant match never overtakes a literal one.
-        if (queryQuotedKeys is not null)
-            StableSortByQuotedForm(hits);
+        //   QuotedFormMatch     - the hit's raw text carries the quoted acronym as typed.
+        //   MatchesTitleOrAuthor - every query word landed in the title/path or author,
+        //                          not merely in a category name shared by every book
+        //                          filed under it.
+        //
+        // Unconditional, unlike the proximity sort below, which guards on a 2+ word
+        // query: an acronym is typically ONE word, and a category collision needs no
+        // particular length either. Stable, and below IsLiteral throughout, so a variant
+        // match never overtakes a literal one.
+        StableSortByFieldAccuracy(hits);
 
         // Word-proximity rank: how tightly the query's words sit together in the path
         // (keys already measured in the fused pass above). Reordering the materialized
@@ -1399,11 +1407,13 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         return false;
     }
 
-    /// <summary>Stable sort by (IsLiteral desc, QuotedFormMatch desc), preserving the
-    /// arrival order - (Level, TreeOrder) from the collector - within each block.
+    /// <summary>Stable sort by the two WHERE-it-matched accuracy keys - (IsLiteral desc,
+    /// QuotedFormMatch desc, MatchesTitleOrAuthor desc) - preserving the arrival order,
+    /// (Level, TreeOrder) from the collector, within each block. Both keys are read from
+    /// STORED text, so neither can be applied in the collector's pre-materialization pass.
     /// List.Sort is UNSTABLE, so arrival position is carried as an explicit final key,
     /// the same way StableSortByProximity does it.</summary>
-    private static void StableSortByQuotedForm(List<CatalogTocHit> hits)
+    private static void StableSortByFieldAccuracy(List<CatalogTocHit> hits)
     {
         int n = hits.Count;
         var arrival = new int[n];
@@ -1416,11 +1426,74 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             var b = items[y];
             if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
             if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
+            if (a.MatchesTitleOrAuthor != b.MatchesTitleOrAuthor) return a.MatchesTitleOrAuthor ? -1 : 1;
             return x.CompareTo(y);
         });
 
         hits.Clear();
         for (int i = 0; i < n; i++) hits.Add(items[arrival[i]]);
+    }
+
+    /// <summary>Did every query token land in this hit's TOC path or author, rather than
+    /// only in its category path? A word is matched across all three fields as one flat OR
+    /// (see WordClause), so a book whose CATEGORY happens to be named like the query ranks
+    /// the same as one whose own title or author is - and the category is the weaker
+    /// signal: it is shared by every book filed under it, while a title or author
+    /// identifies the book itself.
+    ///
+    /// Requires ALL tokens, not any: a partial hit would let a book match one word on its
+    /// title and the rest on its category and still outrank a book matching everything on
+    /// its title.
+    ///
+    /// Mirrors <see cref="BuildQuery"/> per token, and must keep mirroring it: a token is
+    /// satisfied when SOME alternative is fully present, and a word within an alternative
+    /// is satisfied by its own form or any of its variants. Testing only the canonical
+    /// alternative would demote the very hits this key exists to promote - a title written
+    /// as the literal acronym matches through a later alternative, so re-testing it
+    /// against the first one's expansion finds nothing and ranks it below a category
+    /// match. Same for a title matched through a כתיב/ה-prefix variant: IsLiteral sits
+    /// above this key but is a whole-hit flag, so it does not separate a variant-title
+    /// hit from a variant-category one - this test has to.
+    ///
+    /// The path already carries the book title as its first segment, so a title match is
+    /// a path match; no separate title field is needed.</summary>
+    private static bool MatchesOnTitleOrAuthor(
+        Document doc, List<CatalogTocTextRules.QueryToken> tokens, VariantIndex? variants)
+    {
+        if (tokens.Count == 0) return false;
+
+        var pathTokens = CatalogTocTextRules.Tokenize(doc.Get(FieldFullTocPath) ?? "");
+        var authorText = doc.Get(FieldAuthor);
+        var authorTokens = string.IsNullOrEmpty(authorText)
+            ? null
+            : CatalogTocTextRules.Tokenize(authorText);
+
+        bool Present(string word)
+        {
+            if (pathTokens.Contains(word)) return true;
+            if (authorTokens is not null && authorTokens.Contains(word)) return true;
+            if (variants is not null)
+                foreach (var variant in variants.Lookup(word))
+                {
+                    if (pathTokens.Contains(variant)) return true;
+                    if (authorTokens is not null && authorTokens.Contains(variant)) return true;
+                }
+            return false;
+        }
+
+        foreach (var token in tokens)
+        {
+            bool anyAlt = false;
+            foreach (var alt in token.Alternatives)
+            {
+                bool allWords = true;
+                foreach (var word in alt)
+                    if (!Present(word)) { allWords = false; break; }
+                if (allWords) { anyAlt = true; break; }
+            }
+            if (!anyAlt) return false; // this token only matched the category path
+        }
+        return true;
     }
 
     /// <summary>Does this hit's own RAW text carry one of the query's quoted-acronym
@@ -1469,6 +1542,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             // undone here. Proximity must not float an ordinary-word hit above the book
             // actually written the way the query was typed.
             if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
+            if (a.MatchesTitleOrAuthor != b.MatchesTitleOrAuthor) return a.MatchesTitleOrAuthor ? -1 : 1;
             int c = b.WordsFound.CompareTo(a.WordsFound);   // more words found first
             if (c != 0) return c;
             c = a.WordSpan.CompareTo(b.WordSpan);           // tighter cluster first
@@ -1853,6 +1927,13 @@ public sealed class CatalogTocHit
     /// queries keep their order exactly.</summary>
     [MessagePack.IgnoreMember]
     public bool QuotedFormMatch { get; set; }
+    /// <summary>Internal (not on the wire): every query word landed in this hit's TOC path
+    /// (which begins with the book title) or its author - not only in its category path.
+    /// A category name is shared by every book filed under it; a title or author names the
+    /// book itself, so it is the stronger signal. Sorts under QuotedFormMatch, above
+    /// Level/TreeOrder. Tested at materialization from the STORED text.</summary>
+    [MessagePack.IgnoreMember]
+    public bool MatchesTitleOrAuthor { get; set; }
     /// <summary>Internal (not on the wire): which TOC structure the entry came from
     /// (0 = the regular TOC). Scopes the per-structure level truncation.</summary>
     [MessagePack.IgnoreMember]

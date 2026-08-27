@@ -822,9 +822,12 @@ for (int qi = 0; qi < corpus.Count; qi++)
             Fail($"self-recall q=\"{query}\" missing book={expectedBookId} path=\"{expectedPath}\" ({hits.Count} hits)");
     }
 
-    // 5. Ordering — accuracy first, then catalog position: (IsLiteral desc, Level asc,
-    //    TreeOrder asc) non-decreasing. A literal (exact) hit never sits below a variant/
-    //    fuzzy-matched one; within a literalness block, (Level, TreeOrder) is monotonic.
+    // 5. Ordering - accuracy first, then catalog position: (IsLiteral desc,
+    //    QuotedFormMatch desc, MatchesTitleOrAuthor desc, Level asc, TreeOrder asc)
+    //    non-decreasing. A literal (exact) hit never sits below a variant/fuzzy one; a
+    //    hit written as the typed acronym, or matching on title/author rather than only
+    //    on a category name, leads within its literalness block; and within one such
+    //    block (Level, TreeOrder) is monotonic.
     //    Plus the token-order discard invariant: no (level, book) group may contain both
     //    an in-order and an out-of-order hit (the out-of-order ones must have been dropped).
     {
@@ -832,11 +835,19 @@ for (int qi = 0; qi < corpus.Count; qi++)
         {
             var prev = hits[i - 1];
             var cur = hits[i];
+            // The WHERE-it-matched keys (QuotedFormMatch, MatchesTitleOrAuthor) sit
+            // between IsLiteral and Level, so they legitimately break (Level, TreeOrder)
+            // monotonicity. Compare them first; only when a pair is equal on all three
+            // accuracy keys does the catalog-position order have to hold.
             bool ok =
                 (prev.IsLiteral && !cur.IsLiteral) ||                    // literal block ends before variant block
-                (prev.IsLiteral == cur.IsLiteral && (                    // within the same block: (Level, TreeOrder)
-                    prev.Level < cur.Level ||
-                    (prev.Level == cur.Level && prev.TreeOrder <= cur.TreeOrder)));
+                (prev.IsLiteral == cur.IsLiteral && (
+                    (prev.QuotedFormMatch && !cur.QuotedFormMatch) ||    // quoted-form block ends
+                    (prev.QuotedFormMatch == cur.QuotedFormMatch && (
+                        (prev.MatchesTitleOrAuthor && !cur.MatchesTitleOrAuthor) || // title/author block ends
+                        (prev.MatchesTitleOrAuthor == cur.MatchesTitleOrAuthor && ( // same block: (Level, TreeOrder)
+                            prev.Level < cur.Level ||
+                            (prev.Level == cur.Level && prev.TreeOrder <= cur.TreeOrder)))))));
             if (!ok)
             {
                 orderViolations++;
