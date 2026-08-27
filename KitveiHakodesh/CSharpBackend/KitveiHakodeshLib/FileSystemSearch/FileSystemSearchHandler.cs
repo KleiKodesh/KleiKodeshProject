@@ -148,6 +148,12 @@ namespace KitveiHakodeshLib.FileSystemSearch
         /// Wipes and rebuilds the DocumentLocator index from scratch.
         /// Replies immediately with {}. Progress is not pushed to Vue — the next
         /// search call will block in WaitUntilReadyAsync until the rebuild finishes.
+        ///
+        /// The early reply is deliberate, and matches SearchHandler.HandleDeleteIndex. The app
+        /// reset awaits this call, so replying only on completion would stall the whole reset
+        /// behind a full MFT re-crawl — minutes — to no benefit. Nothing the reload does can
+        /// collide with the rebuild: it owns its own Lucene index, and readers wait on
+        /// WaitUntilReadyAsync rather than reading a half-built one.
         /// </summary>
         public void HandleReindex(string id)
         {

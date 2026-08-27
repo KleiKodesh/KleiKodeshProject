@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
+import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { useSettings } from './useSettingsPage'
 import { resetting, resetEverything } from './appResetState'
 import { showToast } from '@/composables/useToast'
@@ -14,6 +15,10 @@ type ConfirmAction = {
   action: () => Promise<void> | void
   successMessage?: string
 }
+/** The reset-all action's name. Single source for the button, the confirm dialog and the
+ *  progress overlay — they named the same action in three separate literals before. */
+const RESET_ALL_LABEL = 'איפוס האפליקציה'
+
 const pendingConfirm = ref<ConfirmAction | null>(null)
 
 function confirmAction(action: ConfirmAction) {
@@ -75,7 +80,7 @@ function confirmResetDocumentLocatorIndex() {
 
 function confirmResetAll() {
   confirmAction({
-    label: 'איפוס האפליקציה',
+    label: RESET_ALL_LABEL,
     desc: 'פעולה זו תמחק את כל נתוני האפליקציה ואת כל אינדקסי החיפוש ותטען אותה מחדש. בניית האינדקסים מחדש עשויה להימשך מספר דקות. לא ניתן לבטל פעולה זו.',
     // resetEverything sets the `resetting` flag itself before it starts.
     action: resetEverything,
@@ -112,7 +117,7 @@ function confirmResetAll() {
       </p>
     </div>
     <div class="reset-group">
-      <button class="reset-btn" @click="confirmResetAll">איפוס האפליקציה</button>
+      <button class="reset-btn" @click="confirmResetAll">{{ RESET_ALL_LABEL }}</button>
       <p class="reset-description" data-search-ignore>
         מוחק את כל נתוני האפליקציה — הגדרות, היסטוריית קריאה, מיקומי גלילה, טאבים פתוחים, ואת אינדקסי החיפוש בתוכן המאגר, בקטלוג, ובקבצים. לא ניתן לבטל פעולה זו.
       </p>
@@ -126,6 +131,20 @@ function confirmResetAll() {
     @confirm="runConfirmed"
     @cancel="cancelConfirm"
   />
+
+  <!--
+    A reset can take many seconds: wiping the FTS index has to wait for an in-flight
+    index build to drain its flush+merge pipeline before the directory is safe to
+    delete. Without this the confirm dialog just closed and the app sat there looking
+    dead, so the reset read as broken and users clicked away or killed the app mid-wipe.
+    Teleported to <body> because this section is inside a scrolling settings pane that
+    would otherwise clip the overlay and confine it to a fraction of the screen.
+  -->
+  <Teleport to="body">
+    <div v-if="resetting" class="reset-overlay">
+      <LoadingAnimation :text="RESET_ALL_LABEL" />
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -160,5 +179,24 @@ function confirmResetAll() {
 
 .reset-btn:hover {
   background: color-mix(in srgb, var(--status-danger) 16%, transparent);
+}
+</style>
+
+<!-- Unscoped on purpose: the overlay is Teleported to <body>, so it is outside this
+     component's subtree and a scoped rule's data attribute would never match it. -->
+<style>
+.reset-overlay {
+  position: fixed;
+  inset: 0;
+  /* Above every other overlay in the app (the highest is the toast banner at 10001):
+     this one exists to be the last thing on screen before the reload. */
+  z-index: 10002;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  /* The opaque full-viewport box is what actually swallows clicks aimed at the half-wiped
+     UI behind it; the cursor just says why nothing is responding. */
+  cursor: progress;
 }
 </style>
