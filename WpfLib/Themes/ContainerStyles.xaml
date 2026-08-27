@@ -16,7 +16,7 @@
         All colour values inlined inside the templates (VSTO rule).
     -->
 
-        <!--
+    <!--
         RTL - which glyphs flip.
 
         FlowDirection inherits, so a pane that sets RightToLeft mirrors layout
@@ -38,9 +38,17 @@
 
         The test is the glyph's meaning, never the host's language. Anything
         that needs a per-pane RTL patch belongs in this file instead.
+
+        The same trap catches alignment, and the answer is not symmetric:
+        HorizontalAlignment IS flow-relative, so Left means "reading start" and
+        lands on the right in an RTL pane by itself. TextAlignment is NOT - it
+        names a physical side whatever the flow - and a stretched TextBlock
+        with no alignment at all ignores the mirror and stays hard left. So
+        anything that should follow the text (a placeholder, a prefix, a hint)
+        uses HorizontalAlignment and never TextAlignment.
     -->
 
-<!-- Standalone rotating chevron, kept for consumers that compose their own
+    <!-- Standalone rotating chevron, kept for consumers that compose their own
          disclosure headers (none in-tree today - OfficeExpander below inlines
          its own). Not focusable: its focus visual is nulled, so focus here is
          invisible, and a pane that does work when focus arrives must not pay
