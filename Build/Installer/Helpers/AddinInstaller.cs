@@ -20,7 +20,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v10.0.0";
+        public const string Version         = "v9.1.0";
         public const string InstallFolderName = "KleiKodesh";
         public const string VstoFileName    = "KleiKodesh.vsto";
 
