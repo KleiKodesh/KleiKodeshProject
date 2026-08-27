@@ -60,6 +60,54 @@ public static class CatalogTocTextRules
         return sb.ToString();
     }
 
+    /// <summary>If <paramref name="word"/> is a quoted acronym — carries a quote glyph
+    /// AND its stripped form is an abbreviation key — returns that stripped key;
+    /// otherwise null. Edge punctuation is trimmed off FIRST — so a title's "acronym,"
+    /// still resolves, while a word merely wrapped in quotation marks does not count
+    /// (the glyph must sit inside the word to be an acronym mark).
+    ///
+    /// The quote matters because a few acronyms are spelled identically to an ordinary
+    /// Hebrew word once the quote is gone. Those keys are necessarily identity entries
+    /// in the map (they expand to themselves), so after normalization an author acronym
+    /// and a common noun are the SAME token and nothing downstream can tell them apart.
+    /// The quote — stripped by the pipeline before matching — is the only thing that
+    /// separates them, so it is captured here, per key: the index stores each doc's
+    /// quoted keys in a dedicated field and a query typed with one ranks the docs that
+    /// carry the SAME key first. See CatalogTocIndex.FieldQuotedAcronym.</summary>
+    public static string? GetQuotedAbbreviationKey(string word)
+    {
+        // Trim edge punctuation FIRST: a quote at the word boundary is quotation
+        // punctuation, not an acronym mark, and must not register — a common word
+        // wrapped in quotes in a title (or a phrase-quoted query) is not an acronym.
+        // Only a glyph INSIDE the trimmed word counts.
+        int a = 0, b = word.Length;
+        while (a < b && !char.IsLetterOrDigit(word[a])) a++;
+        while (b > a && !char.IsLetterOrDigit(word[b - 1])) b--;
+        if (b <= a) return null;
+
+        bool hasGlyph = false;
+        for (int i = a; i < b; i++) if (IsQuoteGlyph(word[i])) { hasGlyph = true; break; }
+        if (!hasGlyph) return null;
+
+        string candidate = StripQuoteGlyphs(word[a..b]);
+        return Abbrev.ContainsKey(candidate) ? candidate : null;
+    }
+
+    /// <summary>Every distinct quoted-acronym key in <paramref name="text"/> (see
+    /// GetQuotedAbbreviationKey), or null when there are none — the common case, which
+    /// then allocates nothing.</summary>
+    public static HashSet<string>? GetQuotedAbbreviationKeys(string? text)
+    {
+        if (string.IsNullOrEmpty(text)) return null;
+        HashSet<string>? keys = null;
+        foreach (var word in text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var key = GetQuotedAbbreviationKey(word);
+            if (key is not null) (keys ??= []).Add(key);
+        }
+        return keys;
+    }
+
     /// <summary>Largest key word-count in <see cref="Abbrev"/> — the lookahead window
     /// for greedy multi-word matching. Computed once from the generated map.</summary>
     private static readonly int MaxKeyWords = ComputeMaxKeyWords();
@@ -162,7 +210,7 @@ public static class CatalogTocTextRules
         int maxWindow = Math.Min(MaxKeyWords, raws.Length - start);
         for (int w = maxWindow; w >= 1; w--)
         {
-            string candidate = w == 1 ? raws[start] : string.Join(' ', raws, start, w);
+            string candidate = w == 1 ? raws[start] : string.Join(" ", raws, start, w);
             if (TryLookup(candidate, out alts!))
             {
                 consumed = w;
@@ -178,7 +226,7 @@ public static class CatalogTocTextRules
             string? heStripped = StripHePrefix(raws[start]);
             if (heStripped is not null)
             {
-                string heCandidate = w == 1 ? heStripped : heStripped + " " + string.Join(' ', raws, start + 1, w - 1);
+                string heCandidate = w == 1 ? heStripped : heStripped + " " + string.Join(" ", raws, start + 1, w - 1);
                 if (TryLookup(heCandidate, out alts!))
                 {
                     consumed = w;
