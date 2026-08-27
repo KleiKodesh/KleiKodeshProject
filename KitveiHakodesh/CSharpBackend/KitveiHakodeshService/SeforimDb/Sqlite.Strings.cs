@@ -275,21 +275,29 @@ internal static class SeforimSql
     /// <summary>
     /// Keeps a reversed link only when it is a real base-text relationship rather than a
     /// passing citation: either the data DECLARES it, or both books sit in the same
-    /// top-level corpus. Without this a responsum that quotes one line of a targum is
-    /// reported as that targum's source.
+    /// top-level corpus AND the book we are asking about is not itself a base text.
+    ///
+    /// The corpus test alone only catches citations that cross corpora - a responsum
+    /// quoting a targum. It says nothing about the commonest case, because a commentary
+    /// on a tractate lives in the same corpus as the tractate: every unprovenanced
+    /// commentary linking into Berachot would be reported as Berachot's source. A book
+    /// flagged as a base text has no base text, so the corpus fallback does not apply to
+    /// one. The declared branch is deliberately left alone - if the data asserts the
+    /// relationship, that outranks any inference we make here.
     /// </summary>
     private static string DeclaredOrSameCorpus(string declaredCol) => $@"
           AND l.sourceBookId != l.targetBookId
           AND (
             l.{declaredCol} > 0
-            OR (SELECT cc.ancestorId FROM book src
-                  JOIN category_closure cc ON cc.descendantId = src.categoryId
-                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                 WHERE src.id = l.sourceBookId)
-             = (SELECT cc.ancestorId FROM book tb
-                  JOIN category_closure cc ON cc.descendantId = tb.categoryId
-                  JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                 WHERE tb.id = l.targetBookId)
+            OR ((SELECT cc.ancestorId FROM book src
+                   JOIN category_closure cc ON cc.descendantId = src.categoryId
+                   JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                  WHERE src.id = l.sourceBookId)
+              = (SELECT cc.ancestorId FROM book tb
+                   JOIN category_closure cc ON cc.descendantId = tb.categoryId
+                   JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                  WHERE tb.id = l.targetBookId)
+                AND (SELECT tb2.isBaseBook FROM book tb2 WHERE tb2.id = l.targetBookId) = 0)
           )";
 
     /// <summary>Distinct forward static-filter books for a source book (COMMENTARY/EIN_MISHPAT etc.).</summary>
