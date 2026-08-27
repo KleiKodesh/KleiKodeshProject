@@ -81,6 +81,9 @@ export interface SharedCommentaryDeps {
   bookId: number | undefined
   groups: import('vue').Ref<CommentaryGroup[]>
   staticFilterGroups: import('vue').Ref<CommentaryGroup[]>
+  /** False until staticFilterGroups has loaded; gates the no-text placeholder,
+   *  whose POSITION comes from that ordering. */
+  staticFilterGroupsLoaded: import('vue').Ref<boolean>
   loading: import('vue').Ref<boolean>
   selectedLineId: import('vue').Ref<number | null>
   commentaryLineId: import('vue').Ref<number | null>
@@ -124,6 +127,7 @@ export function useCommentaryPanelSlot(
     () => shared.staticFilterGroups.value,
     () => shared.loading.value,
     () => shared.selectedLineId.value,
+    () => shared.staticFilterGroupsLoaded.value,
   )
 
   // Exactly the rows this panel renders. The panel's search scans this same list,
