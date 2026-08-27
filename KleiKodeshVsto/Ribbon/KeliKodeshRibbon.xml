@@ -156,28 +156,28 @@
 					getVisible="getContextVisible"/>
 		</contextMenu>
 
-		<!-- Numbered- and bulleted-list paragraphs use their OWN context menus
-		     (ContextMenuListsNumbering / ContextMenuListsBullets), NOT
-		     ContextMenuText, so right-clicking a list item never shows the items
-		     above. -->
-		<contextMenu idMso="ContextMenuListsNumbering">
-			<menuSeparator id="KleiKodeshContextSeparatorNum"/>
-			<button id="SearchFtsFromSelectionNum"
+		<!-- List paragraphs (numbered or bulleted) get their own context menu,
+		     ContextMenuList, NOT ContextMenuText - so right-clicking a list item
+		     never shows the items above. ContextMenuListTable is the same menu
+		     for a list paragraph inside a table. -->
+		<contextMenu idMso="ContextMenuList">
+			<menuSeparator id="KleiKodeshContextSeparatorLst"/>
+			<button id="SearchFtsFromSelectionLst"
 					label="העתק לחיפוש בכתבי הקודש"
 					supertip="מריץ את הטקסט המסומן כחיפוש בכל ספרי כתבי הקודש. סימנים מיוחדים מוסרים מהטקסט לפני החיפוש."
 					getImage="getKitveiHakodeshIcon"
 					onAction="contextMenu_Click"/>
-			<button id="SearchCatalogFromSelectionNum"
+			<button id="SearchCatalogFromSelectionLst"
 					label="חיפוש ספר בכתבי הקודש"
 					supertip="מחפש את הטקסט המסומן בקטלוג הספרים של כתבי הקודש - לאיתור ספר לפי שמו."
 					getImage="getKitveiHakodeshIcon"
 					onAction="contextMenu_Click"/>
-			<button id="CompareWithKitveiHakodeshNum"
+			<button id="CompareWithKitveiHakodeshLst"
 					label="השווה עם כתבי הקודש"
 					supertip="משווה את הפסקה המסומנת במסמך אל הטקסט המסומן בחלונית כתבי הקודש: ההבדלים נרשמים במסמך כשינויים עם עקוב, לאישור או דחייה אחד-אחד. יש לסמן תחילה קטע בכתבי הקודש."
 					getImage="getKitveiHakodeshIcon"
 					onAction="compareText_Click"/>
-			<button id="OpenLinkInKitveiHakodeshNum"
+			<button id="OpenLinkInKitveiHakodeshLst"
 					label="פתח קישור בכתבי הקודש"
 					supertip="פותח בחלונית כתבי הקודש את הספר שאליו מצביע הקישור שבבחירה."
 					getImage="getKitveiHakodeshIcon"
@@ -185,24 +185,24 @@
 					getVisible="getContextVisible"/>
 		</contextMenu>
 
-		<contextMenu idMso="ContextMenuListsBullets">
-			<menuSeparator id="KleiKodeshContextSeparatorBul"/>
-			<button id="SearchFtsFromSelectionBul"
+		<contextMenu idMso="ContextMenuListTable">
+			<menuSeparator id="KleiKodeshContextSeparatorLstTbl"/>
+			<button id="SearchFtsFromSelectionLstTbl"
 					label="העתק לחיפוש בכתבי הקודש"
 					supertip="מריץ את הטקסט המסומן כחיפוש בכל ספרי כתבי הקודש. סימנים מיוחדים מוסרים מהטקסט לפני החיפוש."
 					getImage="getKitveiHakodeshIcon"
 					onAction="contextMenu_Click"/>
-			<button id="SearchCatalogFromSelectionBul"
+			<button id="SearchCatalogFromSelectionLstTbl"
 					label="חיפוש ספר בכתבי הקודש"
 					supertip="מחפש את הטקסט המסומן בקטלוג הספרים של כתבי הקודש - לאיתור ספר לפי שמו."
 					getImage="getKitveiHakodeshIcon"
 					onAction="contextMenu_Click"/>
-			<button id="CompareWithKitveiHakodeshBul"
+			<button id="CompareWithKitveiHakodeshLstTbl"
 					label="השווה עם כתבי הקודש"
 					supertip="משווה את הפסקה המסומנת במסמך אל הטקסט המסומן בחלונית כתבי הקודש: ההבדלים נרשמים במסמך כשינויים עם עקוב, לאישור או דחייה אחד-אחד. יש לסמן תחילה קטע בכתבי הקודש."
 					getImage="getKitveiHakodeshIcon"
 					onAction="compareText_Click"/>
-			<button id="OpenLinkInKitveiHakodeshBul"
+			<button id="OpenLinkInKitveiHakodeshLstTbl"
 					label="פתח קישור בכתבי הקודש"
 					supertip="פותח בחלונית כתבי הקודש את הספר שאליו מצביע הקישור שבבחירה."
 					getImage="getKitveiHakodeshIcon"
