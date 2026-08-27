@@ -167,7 +167,7 @@
                                            FontFamily="{TemplateBinding FontFamily}"
                                            Padding="{TemplateBinding Padding}"
                                            VerticalAlignment="Center"
-                                           TextAlignment="Right"
+                                           HorizontalAlignment="Left"
                                            IsHitTestVisible="False"
                                            Visibility="Collapsed"/>
                                 <TextBox x:Name="PART_EditableTextBox" Grid.Column="0"

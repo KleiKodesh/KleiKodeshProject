@@ -46,7 +46,18 @@
                                 Behind the content host and never hit testable,
                                 so a click still lands in the text.
                             -->
+                            <!--
+                                HorizontalAlignment, not TextAlignment: a
+                                placeholder belongs at the reading start, and
+                                only HorizontalAlignment is flow-relative -
+                                Left means "start", so it lands on the right
+                                in an RTL pane by itself. TextAlignment names
+                                a physical side and needs a per-pane override,
+                                and a stretched TextBlock with no alignment at
+                                all ignores the mirror and stays hard left.
+                            -->
                             <TextBlock x:Name="Placeholder"
+                                       HorizontalAlignment="Left"
                                        Text="{TemplateBinding ap:Placeholder.Text}"
                                        Foreground="#99808080"
                                        Margin="{TemplateBinding Padding}"
