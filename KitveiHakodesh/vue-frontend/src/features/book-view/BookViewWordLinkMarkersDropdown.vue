@@ -75,6 +75,13 @@ interface MarkerCommentary {
 }
 
 const commentaries = ref<MarkerCommentary[]>([])
+// Whether this control is on the toolbar at all. The toolbar has to know, because its
+// overflow arithmetic charges for every button it renders, and this one decides for itself
+// (below) whether it renders - out of a list it fetches, which no caller can predict.
+const emit = defineEmits<{ 'presence-change': [present: boolean] }>()
+
+const isPresent = computed(() => !!wordLinkAnchorsSupported.value && commentaries.value.length > 0)
+watch(isPresent, (present) => emit('presence-change', present), { immediate: true })
 const loaded = ref(false)
 const loadedForBookId = ref<number | null>(null)
 
@@ -180,7 +187,7 @@ function toggleAll() {
   <!-- Absent entirely (not just disabled) unless this book actually has marker
        citations to filter: schema-v1 users never see a control for a subsystem they
        don't have, and neither does anyone reading a book that cites nothing. -->
-  <div v-if="wordLinkAnchorsSupported && commentaries.length > 0" class="wl-markers-wrapper">
+  <div v-if="isPresent" class="wl-markers-wrapper">
     <button
       ref="toggleButtonRef"
       :class="{ active: isOpen || anyHiddenGlobally }"
