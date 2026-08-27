@@ -61,8 +61,6 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     private const string FieldLevelDv = "vdv";     // numeric doc-values (sort key)
     private const string FieldTreeOrderDv = "odv"; // numeric doc-values (sort key)
     private const string FieldStructureDv = "sdv"; // numeric doc-values (truncation group)
-    private const string FieldQuotedAcronym = "qa";   // indexed, not stored: one term per
-                                                       // quoted-acronym KEY in the raw text
 
     /// <summary>Structure id of the regular TOC (and of book-title docs) — the alt
     /// structures carry their own positive ids from the DB, so 0 never collides.</summary>
@@ -166,24 +164,8 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// no structure field, so the doc-values read falls back to 0 for every doc and the
     /// truncation collapses to the old per-book behavior meanwhile. Old results, never
     /// wrong paths — and OpenMode.CREATE means a reader is all-v19 or all-v20, never a
-    /// mix.
-    /// v21: each doc records WHICH quoted acronyms its RAW text carries (the qa field,
-    /// one exact term per stripped key), and a query typed with one ranks the docs
-    /// carrying the SAME key first: a new sort key directly under IsLiteral, computed
-    /// as a doc-ID set the way the literal pass is. Per key, not a boolean; most
-    /// rabbinic author names are written as quoted acronyms, so a plain carries-any-
-    /// acronym bit would light up half the catalog and separate nothing.
-    /// The pipeline strips quote glyphs so that every flavour resolves through one
-    /// map key, which is right for matching but destroys the
-    /// only thing separating an acronym from an ordinary word spelled the same way once
-    /// stripped. Those keys are identity entries by necessity (they expand to themselves),
-    /// so before this bump a query for the author acronym ראש was the same token as the
-    /// ordinary noun and lost to catalog position: פסקי הרא"ש sat below every earlier book
-    /// whose title merely contains the word. A new field on every document, so this
-    /// schedules a full rebuild; a pre-v21 segment has no qa terms, its docs never
-    /// enter the quoted set, and the key is uniformly false - i.e. exactly the
-    /// old order — until the rebuild lands.</summary>
-    public const string IndexFormatVersion = "v21";
+    /// mix.</summary>
+    public const string IndexFormatVersion = "v20";
 
     /// <summary>Fingerprint of the seforim DB the index answers for — the shared
     /// <see cref="Common.DbContentStamp"/>, prefixed with this index's format version so a
@@ -720,28 +702,6 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         if (!string.IsNullOrWhiteSpace(authors))
             doc.Add(new TextField(FieldAuthor, authors, Field.Store.YES));
 
-        // Which quoted acronyms does this doc's RAW text carry? One term per stripped
-        // KEY, captured here because the analyzer strips the quote and by match time an
-        // acronym and an identically spelled ordinary word are the same token. A query
-        // typed with the quote probes this field for the SAME key (see Search), so only
-        // docs written the way the user typed rank first - a doc whose author merely
-        // carries some OTHER acronym gets nothing. StringField, not TextField: the keys
-        // are exact terms, already normalized by the map.
-        HashSet<string>? quotedKeys = null;
-        void CollectQuoted(string? text)
-        {
-            var found = CatalogTocTextRules.GetQuotedAbbreviationKeys(text);
-            if (found is null) return;
-            if (quotedKeys is null) quotedKeys = found;
-            else quotedKeys.UnionWith(found);
-        }
-        CollectQuoted(fullTocPath);
-        CollectQuoted(authors);
-        CollectQuoted(catalogPath);
-        if (quotedKeys is not null)
-            foreach (var key in quotedKeys)
-                doc.Add(new StringField(FieldQuotedAcronym, key, Field.Store.NO));
-
         return doc;
     }
 
@@ -1192,23 +1152,13 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             literalDocIds = litCollector.Ids;
         }
 
-        // Did the user write a quoted acronym? Computed from the RAW query, before the
-        // pipeline strips the quote (that stripping is exactly what makes an acronym
-        // and an identically spelled ordinary word indistinguishable downstream). When
-        // one was typed, collect the docs whose raw text carries the SAME key(s) written
-        // with a quote (same doc-ID-set pattern as the literal pass above); membership
-        // becomes the QuotedFormMatch sort key.
-        HashSet<int>? quotedDocIds = null;
+        // Did the user write a quoted acronym? Read from the RAW query, before the
+        // pipeline strips the quote - that stripping is exactly what makes an acronym
+        // and an identically spelled ordinary word indistinguishable. The keys are
+        // compared against each HIT's own raw text when the hits are built (see
+        // RunPass), so no index-side field and no rebuild are needed: the stored text
+        // already carries the quote.
         var queryQuotedKeys = CatalogTocTextRules.GetQuotedAbbreviationKeys(query);
-        if (queryQuotedKeys is not null)
-        {
-            var quotedQuery = new BooleanQuery();
-            foreach (var key in queryQuotedKeys)
-                quotedQuery.Add(new TermQuery(new Term(FieldQuotedAcronym, key)), Occur.MUST);
-            var quotedCollector = new DocIdSetCollector(ct);
-            searcher.Search(quotedQuery, quotedCollector);
-            quotedDocIds = quotedCollector.Ids;
-        }
 
         // Word list for the query-token-order tiebreak (see RunPass).
         var orderWords = new List<string>(tokens.Count);
@@ -1216,7 +1166,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
 
         // Normal pass: exact + כתיב/ה-prefix variants (never fuzzy).
         var hits = RunPass(
-            searcher, tokens, variants, fuzzy: false, literalDocIds, orderWords, quotedDocIds, ct);
+            searcher, tokens, variants, fuzzy: false, literalDocIds, orderWords, queryQuotedKeys, ct);
 
         // SPARSE-FUZZY APPEND: when the normal result set is sparse (fewer than
         // SparseFuzzyThreshold hits — which subsumes the old "exact found nothing"
@@ -1230,7 +1180,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         if (hits.Count < SparseFuzzyThreshold && tokens.Any(HasFuzzyableWord))
         {
             var fuzzyHits = RunPass(
-                searcher, tokens, variants, fuzzy: true, literalDocIds, orderWords, quotedDocIds, ct);
+                searcher, tokens, variants, fuzzy: true, literalDocIds, orderWords, queryQuotedKeys, ct);
             var seen = new HashSet<(int, string)>(hits.Count);
             foreach (var h in hits) seen.Add((h.BookId, h.FullTocPath));
             foreach (var fh in fuzzyHits)
@@ -1255,10 +1205,10 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// </summary>
     private List<CatalogTocHit> RunPass(
         IndexSearcher searcher, List<CatalogTocTextRules.QueryToken> tokens, VariantIndex? variants,
-        bool fuzzy, HashSet<int>? literalDocIds, List<string> orderWords, HashSet<int>? quotedDocIds,
+        bool fuzzy, HashSet<int>? literalDocIds, List<string> orderWords, HashSet<string>? queryQuotedKeys,
         CancellationToken ct)
     {
-        var collector = new SortKeyCollector(ct, literalDocIds, quotedDocIds);
+        var collector = new SortKeyCollector(ct, literalDocIds);
         searcher.Search(BuildQuery(tokens, fuzzy, variants), collector);
         if (collector.Count == 0) return [];
 
@@ -1289,7 +1239,12 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 TreeOrder = ordered[i].TreeOrder,
                 IsLiteral = ordered[i].IsLiteral,
                 StructureId = ordered[i].StructureId,
-                QuotedFormMatch = ordered[i].QuotedFormMatch,
+                // Written-form match, tested against this hit's OWN raw text: the stored
+                // title/author/catalog strings still carry their quote glyphs (only the
+                // INDEXED tokens were stripped), so the distinction the pipeline discards
+                // is recoverable right here, with the doc already open. Nothing extra is
+                // read and no index-side field is involved.
+                QuotedFormMatch = queryQuotedKeys is not null && HitCarriesQuotedKey(doc, queryQuotedKeys),
             });
         }
 
@@ -1314,6 +1269,17 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             if (groupsWithInOrder.Count > 0)
                 hits.RemoveAll(h => !h.QueryInOrder && groupsWithInOrder.Contains((h.Level, h.TreeOrder >> 24)));
         }
+
+        // Written-form rank: a hit whose own raw text carries the quoted acronym the
+        // user typed is the more accurate match, so it leads. Applied here rather than
+        // in the collector's ordering because it is read from the STORED text, which
+        // only exists once the window is materialized.
+        //
+        // Unconditional, unlike the proximity sort below: that one guards on a 2+ word
+        // query, and an acronym is typically ONE word - the exact case this serves.
+        // Stable, and below IsLiteral: a variant match never overtakes a literal one.
+        if (queryQuotedKeys is not null)
+            StableSortByQuotedForm(hits);
 
         // Word-proximity rank: how tightly the query's words sit together in the path
         // (keys already measured in the fused pass above). Reordering the materialized
@@ -1430,6 +1396,51 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         foreach (var alt in token.Alternatives)
             foreach (var word in alt)
                 if (word.Length >= 3) return true;
+        return false;
+    }
+
+    /// <summary>Stable sort by (IsLiteral desc, QuotedFormMatch desc), preserving the
+    /// arrival order - (Level, TreeOrder) from the collector - within each block.
+    /// List.Sort is UNSTABLE, so arrival position is carried as an explicit final key,
+    /// the same way StableSortByProximity does it.</summary>
+    private static void StableSortByQuotedForm(List<CatalogTocHit> hits)
+    {
+        int n = hits.Count;
+        var arrival = new int[n];
+        var items = new CatalogTocHit[n];
+        for (int i = 0; i < n; i++) { items[i] = hits[i]; arrival[i] = i; }
+
+        Array.Sort(arrival, (x, y) =>
+        {
+            var a = items[x];
+            var b = items[y];
+            if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
+            if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
+            return x.CompareTo(y);
+        });
+
+        hits.Clear();
+        for (int i = 0; i < n; i++) hits.Add(items[arrival[i]]);
+    }
+
+    /// <summary>Does this hit's own RAW text carry one of the query's quoted-acronym
+    /// keys? Reads the STORED title/author/catalog strings, which keep their quote
+    /// glyphs - only the indexed tokens were stripped - so the acronym-vs-ordinary-word
+    /// distinction the pipeline discards is recoverable at result time. Called with the
+    /// doc already open during materialization, so it costs no extra read.</summary>
+    private static bool HitCarriesQuotedKey(Document doc, HashSet<string> queryQuotedKeys)
+    {
+        // IndexedFields is the same three stored fields; reused so this allocates no
+        // array per hit. Their ORDER does not matter here - any one match answers the
+        // question - though path-first means the common case returns soonest.
+        foreach (var field in IndexedFields)
+        {
+            var text = doc.Get(field);
+            if (string.IsNullOrEmpty(text)) continue;
+            var keys = CatalogTocTextRules.GetQuotedAbbreviationKeys(text);
+            if (keys is null) continue;
+            foreach (var key in queryQuotedKeys) if (keys.Contains(key)) return true;
+        }
         return false;
     }
 
@@ -1611,21 +1622,15 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
     /// order is still promoted (and materialized) ahead of earlier variant hits. No cap
     /// on matching/ordering, no relevance scores.
     /// </summary>
-    private sealed class SortKeyCollector(
-        CancellationToken ct, HashSet<int>? literalDocIds, HashSet<int>? quotedDocIds) : ICollector
+    private sealed class SortKeyCollector(CancellationToken ct, HashSet<int>? literalDocIds) : ICollector
     {
-        public readonly struct Entry(
-            int docId, int level, long treeOrder, bool isLiteral, int structureId, bool quotedFormMatch)
+        public readonly struct Entry(int docId, int level, long treeOrder, bool isLiteral, int structureId)
         {
             public readonly int DocId = docId;
             public readonly int Level = level;
             public readonly long TreeOrder = treeOrder;
             public readonly bool IsLiteral = isLiteral;
             public readonly int StructureId = structureId;
-            /// <summary>The query was typed as a quoted acronym AND this doc's raw text
-            /// carries the SAME acronym written with a quote (the qa field). Always
-            /// false when the query typed none, so ordinary queries keep their order.</summary>
-            public readonly bool QuotedFormMatch = quotedFormMatch;
         }
 
         private readonly List<Entry> _entries = [];
@@ -1658,11 +1663,7 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             // hit is by definition literal) or the doc is in it.
             bool isLiteral = literalDocIds is null || literalDocIds.Contains(globalDoc);
             int structureId = (int)(_structures?.Get(doc) ?? RegularTocStructureId);
-            // Membership in the quoted set (null when the query typed no quoted acronym,
-            // and empty over pre-v21 segments, which have no qa terms - both give the
-            // old order). Same pattern as isLiteral above.
-            bool quotedFormMatch = quotedDocIds is not null && quotedDocIds.Contains(globalDoc);
-            _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral, structureId, quotedFormMatch));
+            _entries.Add(new Entry(globalDoc, level, treeOrder, isLiteral, structureId));
         }
 
         public List<Entry> Ordered()
@@ -1672,13 +1673,6 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
                 // Accuracy-first: literal matches (exact / non-variant) ahead of variant-
                 // or fuzzy-only matches. Then the existing catalog order within each block.
                 if (a.IsLiteral != b.IsLiteral) return a.IsLiteral ? -1 : 1;
-                // Written-form match: the user typed a quoted acronym and this doc's raw
-                // text carries one too. Sits directly under IsLiteral — it is an accuracy
-                // signal, not a relevance score — and above Level/TreeOrder, which is the
-                // point: catalog position must not bury the book that was actually written
-                // the way the query was typed. Inert unless the query carries a quoted
-                // acronym, so no ordinary query's order changes.
-                if (a.QuotedFormMatch != b.QuotedFormMatch) return a.QuotedFormMatch ? -1 : 1;
                 int c = a.Level.CompareTo(b.Level);
                 return c != 0 ? c : a.TreeOrder.CompareTo(b.TreeOrder);
             });
@@ -1853,9 +1847,10 @@ public sealed class CatalogTocHit
     [MessagePack.IgnoreMember]
     public bool IsLiteral { get; set; }
     /// <summary>Internal (not on the wire): the query was typed as a quoted acronym and
-    /// this hit's raw text was written as one too. Sorts directly under IsLiteral, above
-    /// Level/TreeOrder. Always false when the query carries no quoted acronym, so it is
-    /// inert for ordinary queries.</summary>
+    /// this hit's own raw text carries the same one. Tested at materialization against
+    /// the STORED text (which keeps its quote glyphs), then applied as a stable re-sort
+    /// under IsLiteral. False whenever the query typed no quoted acronym, so ordinary
+    /// queries keep their order exactly.</summary>
     [MessagePack.IgnoreMember]
     public bool QuotedFormMatch { get; set; }
     /// <summary>Internal (not on the wire): which TOC structure the entry came from

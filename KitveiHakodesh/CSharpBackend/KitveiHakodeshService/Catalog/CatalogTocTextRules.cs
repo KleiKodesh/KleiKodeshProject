@@ -71,9 +71,10 @@ public static class CatalogTocTextRules
     /// in the map (they expand to themselves), so after normalization an author acronym
     /// and a common noun are the SAME token and nothing downstream can tell them apart.
     /// The quote — stripped by the pipeline before matching — is the only thing that
-    /// separates them, so it is captured here, per key: the index stores each doc's
-    /// quoted keys in a dedicated field and a query typed with one ranks the docs that
-    /// carry the SAME key first. See CatalogTocIndex.FieldQuotedAcronym.</summary>
+    /// separates them, so it is recovered here, per key. The caller compares the query's
+    /// keys against each HIT's own stored raw text at result time - the stored strings
+    /// keep their glyphs, only the indexed tokens were stripped - so no index-side field
+    /// is involved. See CatalogTocIndex.HitCarriesQuotedKey.</summary>
     public static string? GetQuotedAbbreviationKey(string word)
     {
         // Trim edge punctuation FIRST: a quote at the word boundary is quotation
