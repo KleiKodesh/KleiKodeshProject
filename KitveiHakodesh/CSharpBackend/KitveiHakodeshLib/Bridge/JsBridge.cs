@@ -194,5 +194,78 @@ namespace KitveiHakodeshLib.Bridge
         }
     });
 })();";
+
+        /// <summary>
+        /// Otzaria addin SDK stub, injected on document creation into every frame and
+        /// self-limited to addin frames: child frames served from a kitvei-localhtml-N
+        /// virtual host (see LocalFileHandler.RegisterServedFolder).
+        ///
+        /// Those hosts are cross-origin from the Vue app, so the Vue side cannot inject
+        /// the stub itself (iframe.contentDocument is null cross-origin) — and even
+        /// same-origin injection would come after the page loaded, too late for addins
+        /// that touch window.Otzaria while their scripts first run. Document-created
+        /// injection solves both: the stub exists before any addin script executes.
+        ///
+        /// The stub only posts postMessage envelopes to window.parent; the Vue side
+        /// (useOtzariaAddinBridge.ts) answers them, and only for tabs flagged
+        /// isOtzariaAddin — on any other local HTML page the stub is inert.
+        ///
+        /// MUST STAY IN SYNC with the dev-mode copy in
+        /// vue-frontend/src/features/html-view/otzariaAddinBridgeStub.ts.
+        /// </summary>
+        public const string OtzariaAddinBridgeStubScript = @"
+(function () {
+    if (window === window.top) return;
+    if (location.hostname.indexOf('kitvei-localhtml-') !== 0) return;
+    if (window.Otzaria) return;
+    var callIdCounter = 0, pendingCalls = {}, eventHandlers = {};
+
+    window.addEventListener('message', function (event) {
+        var data = event.data;
+        if (!data || typeof data !== 'object') return;
+        if (data.type === 'otzaria-reply') {
+            var resolve = pendingCalls[data.callId]; if (!resolve) return;
+            delete pendingCalls[data.callId];
+            resolve({
+                success: data.success === true,
+                data: data.success === true ? data.data : null,
+                error: data.success === true ? null : (data.error || { code: 'INTERNAL', message: 'unknown error', schemaVersion: 1 })
+            });
+        }
+        if (data.type === 'otzaria-event') {
+            var handlers = eventHandlers[data.event]; if (!handlers) return;
+            for (var i = 0; i < handlers.length; i++) { try { handlers[i](data.payload); } catch (_) {} }
+        }
+    });
+
+    function call(method, payload) {
+        return new Promise(function (resolve) {
+            var id = String(++callIdCounter);
+            pendingCalls[id] = resolve;
+            window.parent.postMessage({ type: 'otzaria-call', callId: id, method: method, params: payload != null ? payload : null }, '*');
+        });
+    }
+    function on(eventName, handler) {
+        if (!eventHandlers[eventName]) eventHandlers[eventName] = [];
+        eventHandlers[eventName].push(handler);
+    }
+    function off(eventName, handler) {
+        if (!eventHandlers[eventName]) return;
+        if (!handler) { eventHandlers[eventName] = []; return; }
+        eventHandlers[eventName] = eventHandlers[eventName].filter(function (h) { return h !== handler; });
+    }
+
+    window.Otzaria = { call: call, on: on, off: off };
+    window.OtzariaAddin = {
+        call: function (method, payload) {
+            return call(method, payload).then(function (reply) {
+                if (!reply.success) return Promise.reject(new Error(reply.error && reply.error.message ? reply.error.message : 'call failed'));
+                return reply.data;
+            });
+        },
+        on: on,
+        off: off
+    };
+})();";
     }
 }

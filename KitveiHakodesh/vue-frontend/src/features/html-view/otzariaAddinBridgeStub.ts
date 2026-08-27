@@ -11,6 +11,13 @@
  * its `call` resolves with the bare data and rejects on error.
  *
  * Must be plain ES5 — we cannot control the addin's execution environment.
+ *
+ * This copy is only injected in DEV (same-origin /khs-file iframe). Hosted mode
+ * cannot inject from the Vue side — addins live on the cross-origin
+ * kitvei-localhtml-N host — so C# pre-injects the stub on document creation instead.
+ * MUST STAY IN SYNC with JsBridge.OtzariaAddinBridgeStubScript in
+ * CSharpBackend/KitveiHakodeshLib/Bridge/JsBridge.cs (that copy adds two frame/host
+ * guard lines at the top; the body is otherwise identical).
  */
 
 export function buildBridgeStubScript(): string {

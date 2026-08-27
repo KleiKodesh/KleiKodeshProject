@@ -3,8 +3,10 @@
  *
  * When an HTML file is opened and its tab has isOtzariaAddin=true, HtmlViewPage
  * calls `onIframeLoaded()` from this composable after the iframe fires onload.
- * This injects the official `window.Otzaria` SDK stub into the iframe
- * (otzariaAddinBridgeStub.ts) and routes every call back to the Vue app via
+ * This makes sure the official `window.Otzaria` SDK stub exists in the iframe —
+ * injected here in dev (same-origin /khs-file proxy), pre-injected by C# in hosted
+ * mode (cross-origin kitvei-localhtml-N host, JsBridge.OtzariaAddinBridgeStubScript)
+ * — fires the plugin.boot event, and routes every stub call back to the Vue app via
  * postMessage, answering with the official `{ success, data, error }` envelope.
  *
  * Only data-query APIs are served — see otzariaAddinDataQueryApi.ts for the
@@ -28,6 +30,13 @@ export function useOtzariaAddinBridge(
   iframeRef: Ref<HTMLIFrameElement | null>,
   /** The addin's plugin-folder name (used to scope its sandboxed storage). */
   addinIdRef: Ref<string>,
+  /**
+   * Hosted mode pre-injects the stub into EVERY kitvei-localhtml frame — plain local
+   * HTML pages included, since C# cannot know at document creation which frame is an
+   * addin. This flag is the actual gate: calls are only answered for tabs flagged
+   * isOtzariaAddin, so on a plain page the stub stays inert.
+   */
+  isOtzariaAddinRef: Ref<boolean>,
 ) {
   function pushEvent(event: string, payload: unknown) {
     iframeRef.value?.contentWindow?.postMessage({ type: 'otzaria-event', event, payload }, '*')
@@ -37,6 +46,7 @@ export function useOtzariaAddinBridge(
 
   async function handleMessage(event: MessageEvent) {
     if (!event.data || event.data.type !== 'otzaria-call') return
+    if (!isOtzariaAddinRef.value) return
     const iframe = iframeRef.value
     if (!iframe?.contentWindow || event.source !== iframe.contentWindow) return
 
@@ -57,6 +67,7 @@ export function useOtzariaAddinBridge(
   // ── Theme observer ──────────────────────────────────────────────────────────
 
   let themeObserver: MutationObserver | null = null
+  let bootTimer: number | null = null
 
   function startThemeObserver() {
     themeObserver?.disconnect()
@@ -73,6 +84,10 @@ export function useOtzariaAddinBridge(
 
   onBeforeUnmount(() => {
     window.removeEventListener('message', handleMessage)
+    if (bootTimer !== null) {
+      clearTimeout(bootTimer)
+      bootTimer = null
+    }
     themeObserver?.disconnect()
     themeObserver = null
   })
@@ -81,23 +96,35 @@ export function useOtzariaAddinBridge(
     /** Call once after the iframe's onload fires to inject the stub and fire plugin.boot. */
     onIframeLoaded() {
       const iframe = iframeRef.value
-      if (!iframe?.contentWindow || !iframe?.contentDocument) return
+      if (!iframe?.contentWindow) return
 
-      // Inject the bridge stub as a <script> tag directly into the iframe document.
-      // This works because the virtual host serves the addin on the same origin as the
-      // Vue app (same-origin /khs-file proxy in dev; ms-local-stream in hosted mode also
-      // allows same-document script injection via contentDocument).
+      // The stub is normally pre-injected before the addin's own scripts run —
+      // addins that touch window.Otzaria at startup need it to already exist:
+      //  • Hosted: C# injects it on document creation (the kitvei-localhtml-N frame
+      //    is cross-origin, contentDocument is null here, and injection from this
+      //    side is impossible anyway) — see JsBridge.OtzariaAddinBridgeStubScript.
+      //  • Dev: the same-origin /khs-file vite proxy inserts it into the served HTML
+      //    (injectAddinBridgeStub in vite.config.ts).
+      // The injection below is only the dev fallback for HTML the proxy could not
+      // touch (UTF-16/32 documents). An inaccessible document means "already
+      // handled", never "give up": plugin.boot must still fire below.
       try {
-        const script = iframe.contentDocument.createElement('script')
-        script.textContent = buildBridgeStubScript()
-        iframe.contentDocument.head?.appendChild(script) ?? iframe.contentDocument.body?.appendChild(script)
+        const iframeDocument = iframe.contentDocument
+        if (iframeDocument) {
+          const script = iframeDocument.createElement('script')
+          script.textContent = buildBridgeStubScript()
+          iframeDocument.head?.appendChild(script) ?? iframeDocument.body?.appendChild(script)
+        }
       } catch {
-        // Cross-origin fallback — should not happen with virtual host URLs, but be defensive.
-        return
+        // Engines that throw on cross-origin contentDocument instead of returning
+        // null — same meaning as the null case: the pre-injected stub owns this frame.
       }
 
       // Wait one tick for the stub to be evaluated, then fire plugin.boot.
-      setTimeout(() => {
+      // Tracked so unmount inside this window can't start a theme observer
+      // after onBeforeUnmount already disconnected it (leak).
+      bootTimer = window.setTimeout(() => {
+        bootTimer = null
         startThemeObserver()
         pushEvent('plugin.boot', buildBootPayload(addinIdRef.value))
       }, 50)

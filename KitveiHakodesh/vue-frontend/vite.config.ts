@@ -10,6 +10,7 @@ import net from 'node:net'
 import http from 'node:http'
 import { spawn, exec, type ChildProcess } from 'node:child_process'
 import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+import { buildBridgeStubScript } from './src/features/html-view/otzariaAddinBridgeStub.js'
 
 // ── KitveiHakodesh service (loopback HTTP host + private pipe handshake) ────────
 // The clean data path: this dev server spawns ITS OWN .NET service instance, which
@@ -38,6 +39,32 @@ const KHS_FTSLIB_DIR = path.resolve(
   path.dirname(toPath(import.meta.url)),
   '../CSharpBackend/FtsLib-Csharp/FtsLib',
 )
+
+/**
+ * Inserts the Otzaria addin SDK stub into an HTML byte stream, right after the
+ * opening <head> tag (falling back to <html>, then to the start of the body).
+ * Works on BYTES: the stub is pure ASCII, so the insert is charset-transparent
+ * for UTF-8 and Windows-1255 alike. UTF-16/32 documents (BOM-detected) are the
+ * one place a byte insert would corrupt — those are returned untouched and fall
+ * back to the post-load injection in useOtzariaAddinBridge.
+ */
+function injectAddinBridgeStub(body: Buffer): Buffer {
+  const b0 = body[0], b1 = body[1]
+  const isUtf16or32 = (b0 === 0xff && b1 === 0xfe) || (b0 === 0xfe && b1 === 0xff)
+  if (isUtf16or32) return body
+
+  const stubTag = Buffer.from(`<script>${buildBridgeStubScript()}</script>`, 'ascii')
+  const ascii = body.toString('latin1')
+  // (?=[\s>]) so <header> can never match as <head>
+  for (const openTag of [/<head(?=[\s>])[^>]*>/i, /<html(?=[\s>])[^>]*>/i]) {
+    const match = ascii.match(openTag)
+    if (match && match.index !== undefined) {
+      const at = match.index + match[0].length
+      return Buffer.concat([body.subarray(0, at), stubTag, body.subarray(at)])
+    }
+  }
+  return Buffer.concat([stubTag, body])
+}
 // The already-built Release exe. We spawn THIS directly (not `dotnet run`): a warm
 // `dotnet run` costs ~4s to pipe-ready (SDK host + MSBuild up-to-date check on every
 // launch) versus ~385ms for the prebuilt exe — a ~3.6s tax paid on every dev start.
@@ -711,7 +738,31 @@ function devSqlitePlugin(): Plugin {
           if (req.headers.range) headers.Range = req.headers.range as string
           const proxy = http.request(
             { host: KHS_HOST, port: khsHttpPort, path: `/file/${rest}`, method: 'GET', headers },
-            (pres) => { res.writeHead(pres.statusCode || 502, pres.headers); pres.pipe(res) },
+            (pres) => {
+              // HTML gets the Otzaria addin SDK stub injected BEFORE the page's own
+              // scripts — the dev twin of hosted mode's document-created injection
+              // (JsBridge.OtzariaAddinBridgeStubScript). Addins that touch
+              // window.Otzaria while their scripts first run need it to already
+              // exist; the post-load injection in useOtzariaAddinBridge is too late
+              // for them. The stub is inert on non-addin pages (the Vue bridge only
+              // answers tabs flagged isOtzariaAddin), so every served HTML page gets
+              // it, exactly like hosted's kitvei-localhtml frames.
+              if (String(pres.headers['content-type'] ?? '').includes('text/html')) {
+                const chunks: Buffer[] = []
+                pres.on('data', (chunk) => chunks.push(chunk))
+                pres.on('end', () => {
+                  const body = injectAddinBridgeStub(Buffer.concat(chunks))
+                  res.writeHead(pres.statusCode || 200, {
+                    ...pres.headers,
+                    'content-length': String(body.length),
+                  })
+                  res.end(body)
+                })
+                return
+              }
+              res.writeHead(pres.statusCode || 502, pres.headers)
+              pres.pipe(res)
+            },
           )
           proxy.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end() } })
           proxy.end()
