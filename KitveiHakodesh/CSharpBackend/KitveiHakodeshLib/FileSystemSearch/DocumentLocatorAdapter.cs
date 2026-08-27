@@ -41,7 +41,14 @@ namespace KitveiHakodeshLib.FileSystemSearch
         // a first-time MFT crawl can legitimately take minutes.
         private const int MaxConsecutiveStatusFailures = 5;
 
-        public async Task WaitUntilReadyAsync(CancellationToken ct, Action<string> onProgress)
+        /// <summary>
+        /// <paramref name="mayPromptForInstall"/> decides whether an unregistered service is
+        /// allowed to raise a UAC prompt. Only a search the user actually asked for passes
+        /// true: the warmup call runs on page load, and a UAC dialog appearing over Word
+        /// because a pane opened is not something the user asked for.
+        /// </summary>
+        public async Task WaitUntilReadyAsync(
+            CancellationToken ct, Action<string> onProgress, bool mayPromptForInstall = false)
         {
             // Remember a start failure (e.g. service not installed) so the eventual
             // error message names the root cause, not just "no response". The status
@@ -50,6 +57,20 @@ namespace KitveiHakodeshLib.FileSystemSearch
             Exception startError = null;
             try { ServiceBridge.StartService(); }
             catch (Exception ex) { startError = ex; }
+
+            // A service that was never registered cannot be started, and cannot be
+            // registered from here either: that writes to HKLM, and the VSTO runs inside
+            // Word as a normal user. EnsureInstalled re-launches the service exe with the
+            // "runas" verb so Windows prompts for elevation once — the same thing the
+            // installer does — then we retry the start that just failed.
+            if (mayPromptForInstall
+                && IsStartFailure(startError, ServiceBridge.ServiceStartFailure.NotInstalled)
+                && TryInstallService())
+            {
+                startError = null;
+                try { ServiceBridge.StartService(); }
+                catch (Exception ex) { startError = ex; }
+            }
 
             // Definitive failures (not installed / disabled / blocked / exe missing)
             // won't heal by polling — give up after a single failed status check.
@@ -163,6 +184,45 @@ namespace KitveiHakodeshLib.FileSystemSearch
             return sse != null && sse.Reason != ServiceBridge.ServiceStartFailure.Other;
         }
 
+        private static bool IsStartFailure(Exception ex, ServiceBridge.ServiceStartFailure reason)
+        {
+            var sse = Unwrap(ex) as ServiceBridge.ServiceStartException;
+            return sse != null && sse.Reason == reason;
+        }
+
+        /// <summary>
+        /// Set once the user dismisses the elevation prompt, so we stop asking for the
+        /// lifetime of the host process. Re-prompting on the next keystroke of a file search
+        /// would be its own kind of broken. Written from the thread pool, hence Volatile.
+        /// </summary>
+        private static int _userDeclinedElevation;
+
+        /// <summary>
+        /// Asks ServiceBridge to register the service, which raises a UAC prompt.
+        /// Returns true only if the service is registered afterwards.
+        ///
+        /// Blocks while the prompt is up, so this must stay on a background thread —
+        /// WaitUntilReadyAsync is already called from one.
+        /// </summary>
+        private static bool TryInstallService()
+        {
+            if (Volatile.Read(ref _userDeclinedElevation) != 0) return false;
+
+            try
+            {
+                if (ServiceBridge.EnsureInstalled()) return true;
+                Volatile.Write(ref _userDeclinedElevation, 1); // user clicked No
+                return false;
+            }
+            catch
+            {
+                // Throws when the exe is missing, or when --install ran but the registration
+                // never appeared. Neither is recoverable here, and neither should take down
+                // the search that asked — fall through to the usual unavailable message.
+                return false;
+            }
+        }
+
         /// <summary>
         /// Builds the user-facing (Hebrew) message for a service that could not be
         /// reached, keyed on the classified start-failure reason when available.
@@ -174,9 +234,11 @@ namespace KitveiHakodeshLib.FileSystemSearch
             {
                 switch (sse.Reason)
                 {
+                    // Reaching here means the install prompt was declined or failed —
+                    // WaitUntilReadyAsync always attempts the elevated install first.
                     case ServiceBridge.ServiceStartFailure.NotInstalled:
                         return "שירות החיפוש (DocumentLocator) אינו מותקן במחשב זה. " +
-                               "הפעל את היישום מחדש כדי להתקינו.";
+                               "חפש שוב ואשר את בקשת ההרשאה כדי להתקינו.";
                     case ServiceBridge.ServiceStartFailure.Disabled:
                         return "שירות החיפוש (DocumentLocator) מושבת. " +
                                "יש להפעיל אותו דרך ניהול השירותים של Windows (services.msc).";
