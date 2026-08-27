@@ -415,6 +415,23 @@ export async function resetHostApp(): Promise<void> {
     // outside the app's namespace.
     await serviceCall('ftsResetIndex').catch(() => {})
     await serviceCall('resetDocumentLocatorIndex').catch(() => {})
+    // Forget the saved database path, exactly as the hosted 'resetSettings' step below does
+    // by deleting the whole settings subtree. Without this, dev kept the registry value and
+    // the resolver's first step (saved choice, file still present) short-circuited before it
+    // could probe — so a reset on a machine with both libraries installed stayed on whichever
+    // one had been chosen instead of returning to the Otzaria-first default.
+    // Warn rather than swallow silently. The two calls above fail visibly — a stale index
+    // rebuilds itself — but this one failing leaves the saved path in place permanently and
+    // the reset looks like it worked, which is the exact bug this call was added to fix.
+    await serviceCall('clearSeforimDbPath').catch((e) => {
+      console.warn('[bridge] reset could not clear the saved database path:', e)
+    })
+    // Hosted 'resetSettings' below deletes the WHOLE KitveiHakodesh subtree, so dev has to
+    // clear the other shared settings by hand or the same button leaves different state
+    // behind depending on the mode. This is the only one dev can observe and act on; the rest
+    // of the subtree (window geometry, title-bar colours) is hosted-only and meaningless here,
+    // and HebrewBooks/CsvLastUpdated has no dev-reachable clear — it only re-downloads a CSV.
+    await clearHbLocalFolder().catch(() => {})
     window.location.reload()
     return
   }

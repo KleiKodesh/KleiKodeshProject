@@ -84,8 +84,11 @@ namespace KitveiHakodeshLib.Db
         /// </summary>
         public void HandleClearDbPath(string id)
         {
+            // CLEAR the setting rather than saving the resolved default into it. Saving turned
+            // "no choice, use the default" into an explicit choice, which pinned whichever
+            // library the probe happened to pick and stopped it ever probing again.
+            AppSettings.ClearDbPath();
             string defaultPath = AppSettings.ResolveDefaultDbPath();
-            AppSettings.SaveDbPath(defaultPath);
             if (_db != null) _db.Dispose();
             if (File.Exists(defaultPath))
             {
