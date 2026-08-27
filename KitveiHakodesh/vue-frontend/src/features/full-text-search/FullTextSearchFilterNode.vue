@@ -10,9 +10,18 @@ const props = withDefaults(
     checkedBookIds: Set<number>
     resultCounts: Map<number, number>
     hasSearched?: boolean
+    /** Nesting level, 0 at the roots. Drives the type ladder only — no indent. */
+    depth?: number
   }>(),
-  { hasSearched: false },
+  { hasSearched: false, depth: 0 },
 )
+
+// Depth is shown by type weight/size/colour rather than indentation, so the
+// title keeps the full panel width. The catalogue is ~91% L0-L4 (L5+ is 2.6%),
+// so the ladder spends its distinguishable rungs there and clamps the sparse
+// deep tail to the last rung — past that, extra rungs would not be legible.
+const LADDER_MAX_RUNG = 4
+const rung = computed(() => Math.min(props.depth, LADDER_MAX_RUNG))
 
 const emit = defineEmits<{
   toggleBook: [number]
@@ -72,6 +81,7 @@ function navigateToCategory() {
     <div
       class="row cat-row"
       :class="{ checked: isChecked, indet: isIndet, expanded }"
+      :data-rung="rung"
     >
       <button
         v-if="hasChildren"
@@ -96,6 +106,7 @@ function navigateToCategory() {
         v-for="child in category.children"
         :key="child.id"
         :category="child"
+        :depth="depth + 1"
         :checked-book-ids="checkedBookIds"
         :result-counts="resultCounts"
         :has-searched="hasSearched"
@@ -139,8 +150,15 @@ function navigateToCategory() {
      scrolled out of view. This keeps a fully-expanded (very tall) tree cheap. */
   content-visibility: auto;
   contain-intrinsic-size: auto 26px;
-  /* Hierarchy is shown by highlighting expanded categories (like the book-view
-     commentary filter) rather than by indentation. */
+  /* Hierarchy is shown by a TYPE LADDER — weight, size and colour step down
+     with depth — plus the tint on expanded categories. Deliberately no
+     indentation: the panel is only 180-300px wide with 26px + 28px already
+     spent on the expander and checkbox columns, and indenting 8 levels would
+     leave ~58px for the title at depth. The ladder keeps the full width.
+
+     Rungs are clamped at 4 (see LADDER_MAX_RUNG): the catalogue is ~91%
+     L0-L4, L5+ is only 2.6%, and more than ~5 weight steps stop being
+     tellable apart anyway. */
   --expanded-row-bg: color-mix(in srgb, var(--active-bg) 55%, transparent);
   --expanded-row-hover-bg: color-mix(in srgb, var(--active-bg) 65%, var(--hover-bg));
 }
@@ -148,6 +166,42 @@ function navigateToCategory() {
   font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* ── The type ladder ───────────────────────────────────────────────────────
+   Roots read as headings, mid levels as subheadings, deep levels recede
+   toward the secondary colour. Book rows stay the lightest thing in the tree.
+
+   Only 700 / 600 / 400 are used, and no in-between weights: the UI font is
+   Segoe UI Variable, but the renderer snaps intermediate weights to three
+   buckets (measured: 500/550/600 render identically, as do 650/700), so a
+   ladder built on 650-vs-600 would be invisible. Size and colour do the
+   fine-grained stepping instead — both are continuous and always render. */
+.cat-row[data-rung="0"] .row-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+.cat-row[data-rung="1"] .row-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.cat-row[data-rung="2"] .row-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.cat-row[data-rung="3"] .row-title {
+  font-size: 11px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-primary) 45%, var(--text-secondary));
+}
+.cat-row[data-rung="4"] .row-title {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
 }
 .cat-row.expanded {
   background: var(--expanded-row-bg);
@@ -157,6 +211,8 @@ function navigateToCategory() {
 }
 .book-row {
   font-size: 11px;
+  /* Pinned, not inherited: books are the ladder's lightest rung. */
+  font-weight: 400;
   color: var(--text-secondary);
 }
 

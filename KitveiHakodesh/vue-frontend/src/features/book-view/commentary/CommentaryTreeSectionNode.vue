@@ -38,6 +38,11 @@ function childKey(child: CommentaryTreeNode | CommentaryVisibilityItem): string 
 
 const leafItems = computed(() => collectLeafItems(props.node))
 
+// Depth is shown by type weight/size/colour rather than indentation, matching
+// the FTS results filter. This tree is capped at two node levels by its
+// builder (section -> subsection -> book leaves), so rungs 0-1 cover it.
+const rung = computed(() => Math.min(props.depth ?? 0, 1))
+
 // Stable key for this node in the store, derived from its first leaf's path —
 // section (depth 0) → sectionLabel, subsection (depth ≥ 1) → 'section::sub'.
 // Persisted so expand/collapse survives line changes and tab switches.
@@ -83,7 +88,7 @@ function navigateToFirstBook() {
 
 <template>
   <div style="display: contents">
-    <div class="row section-row" :class="[sectionState, { expanded }]">
+    <div class="row section-row" :class="[sectionState, { expanded }]" :data-rung="rung">
       <button class="expander" :class="{ open: expanded }" @click.stop="expanded = !expanded">
         <span class="expander-icon"><IconChevronDown20Regular /></span>
       </button>
@@ -142,6 +147,23 @@ function navigateToFirstBook() {
 
 .section-row { font-size: 12px; font-weight: 600; }
 
+/* ── Type ladder ───────────────────────────────────────────────────────────
+   Depth reads from weight/size/colour, not indentation, so the title keeps the
+   full panel width. Only 700/600/400 are used — the renderer snaps in-between
+   weights (500-600 render alike, 650-700 alike), so size and colour carry the
+   finer steps. Books stay the lightest thing in the tree. */
+.section-row[data-rung="0"] .section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--text-primary);
+}
+.section-row[data-rung="1"] .section-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text-primary) 50%, var(--text-secondary));
+}
+
 .section-row.expanded {
   background: var(--expanded-row-bg);
 }
@@ -150,7 +172,8 @@ function navigateToFirstBook() {
   background: var(--expanded-row-hover-bg);
 }
 
-.book-row { font-size: 11px; color: var(--text-secondary); }
+/* font-weight pinned, not inherited: books are the ladder's lightest rung. */
+.book-row { font-size: 11px; font-weight: 400; color: var(--text-secondary); }
 
 /* ── Expander button (left side in RTL) ── */
 .expander {
