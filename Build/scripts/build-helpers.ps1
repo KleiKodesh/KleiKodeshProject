@@ -25,6 +25,44 @@ function Get-CurrentVersion {
     return $m.Matches[0].Groups[1].Value
 }
 
+# -- Force a version into all three stamp targets -----------------------------
+# Last-resort repair for when UpdateVersion.ps1 leaves the constant untouched (its
+# regex can miss, and its auto-increment path derives from the GitHub tag rather than
+# from the file). Same three targets and formats as UpdateVersion.ps1 -- see
+# .kiro/steering/version-management.md, which is the contract for this list.
+function Set-Version {
+    param([Parameter(Mandatory)][string]$Version)   # "vX.Y.Z"
+
+    $numeric = $Version -replace '^v', ''
+    $utf8    = New-Object System.Text.UTF8Encoding($false)   # no BOM
+
+    # 1. AddinInstaller.cs -- the source of truth.
+    $c = [System.IO.File]::ReadAllText($AddinInstallerPath, $utf8)
+    $c = $c -replace '((?:public\s+)?const\s+string\s+Version\s*=\s*)"v[^"]*"', "`$1`"$Version`""
+    [System.IO.File]::WriteAllText($AddinInstallerPath, $c, $utf8)
+
+    # 2. Installer csproj <Version> -- numeric, no "v".
+    if (Test-Path $WpfProjectPath) {
+        $p = [System.IO.File]::ReadAllText($WpfProjectPath, $utf8)
+        $p = $p -replace '<Version>[^<]*</Version>', "<Version>$numeric</Version>"
+        [System.IO.File]::WriteAllText($WpfProjectPath, $p, $utf8)
+    }
+
+    # 3. KitveiHakodesh app exe -- old-style csproj, so the version lives in
+    # AssemblyInfo.cs. This file is UTF-8 WITH BOM and the BOM must survive: without it
+    # the compiler reads its Hebrew AssemblyTitle/AssemblyProduct literals as ANSI.
+    $info = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshDemoApp\Properties\AssemblyInfo.cs"
+    if (Test-Path $info) {
+        $utf8Bom = New-Object System.Text.UTF8Encoding($true)
+        $pe = "$numeric.0"                       # AssemblyVersion needs four parts
+        $a  = [System.IO.File]::ReadAllText($info, $utf8Bom)
+        $a  = $a `
+            -replace '(\[assembly:\s*AssemblyVersion\(")[^"]*("\)\])',     "`${1}$pe`${2}" `
+            -replace '(\[assembly:\s*AssemblyFileVersion\(")[^"]*("\)\])', "`${1}$pe`${2}"
+        [System.IO.File]::WriteAllText($info, $a, $utf8Bom)
+    }
+}
+
 # -- Locate MSBuild -----------------------------------------------------------
 function Find-MSBuild {
     $inPath = Get-Command msbuild -ErrorAction SilentlyContinue
