@@ -76,6 +76,7 @@ if (Test-Path $DemoAppReleaseDir) {
 
 # ── 2. Update version ─────────────────────────────────────────────────────────
 Write-Host "Updating version..." -ForegroundColor Yellow
+$versionBefore = Get-CurrentVersion
 if ($ManualVersion) {
     & powershell -ExecutionPolicy Bypass -File $UpdateVersionScript `
         -FilePath $AddinInstallerPath -ManualVersion $ManualVersion
@@ -87,6 +88,37 @@ if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: UpdateVersion.ps1 failed." -Foregr
 
 $version = Get-CurrentVersion
 Write-Host "Version: $version" -ForegroundColor Cyan
+
+# Re-stamp if the version did not actually land. UpdateVersion.ps1 reports success even
+# when its regex fails to match, and on the auto-increment path it derives the new
+# version from the GitHub tag rather than from this file -- so a hand-edited constant
+# can survive the stamp untouched and ship under the wrong tag. That is what happened
+# to v9.1.0: it was built and released with the constant still reading v10.0.0 (commit
+# 7842bb14), so every machine that installed it wrote v10.0.0 to
+# HKCU\SOFTWARE\KleiKodesh\Version and can never see a v9.x release as newer again.
+#
+# The tag is canon: whatever version this build is released under is the version that
+# must be baked in, so force it rather than trusting the first pass.
+if ($ManualVersion -and $version -ne $ManualVersion) {
+    Write-Host "  Version stamp did not apply ($version); forcing $ManualVersion." -ForegroundColor Yellow
+    Set-Version $ManualVersion
+    $version = Get-CurrentVersion
+    if ($version -ne $ManualVersion) {
+        Write-Host "ERROR: cannot stamp $ManualVersion into AddinInstaller.cs (still $version)." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host "  Version: $version (corrected)" -ForegroundColor Cyan
+}
+elseif (-not $ManualVersion -and $version -eq $versionBefore) {
+    # Auto-increment path: there is no independently-known expected version to compare
+    # against, so the guard above cannot apply. But an UNCHANGED constant is
+    # unambiguously a failed stamp -- every increment must move it -- and this is the
+    # path that produced the v9.1.0 mis-stamp. Fail rather than tag a stale version.
+    Write-Host "ERROR: version stamp did not change the constant (still $version)." -ForegroundColor Red
+    Write-Host "  UpdateVersion.ps1 reported success but AddinInstaller.cs was not updated." -ForegroundColor Red
+    Write-Host "  Re-run with -ManualVersion <vX.Y.Z> to set it explicitly." -ForegroundColor Red
+    exit 1
+}
 
 # ── 3. Clean ──────────────────────────────────────────────────────────────────
 if (-not $NoClean) { Invoke-SolutionClean }
