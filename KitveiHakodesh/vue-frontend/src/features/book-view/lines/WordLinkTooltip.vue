@@ -536,8 +536,8 @@ onBeforeUnmount(() => {
               v-if="interactive"
               class="word-link-tooltip-button"
               type="button"
-              title="אפס הגדלות וגודל"
-              aria-label="אפס הגדלות וגודל"
+              title="אפס עיצוב"
+              aria-label="אפס עיצוב"
               @click="resetToDefaults"
               @mousedown.left.stop
             >
