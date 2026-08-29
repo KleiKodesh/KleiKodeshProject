@@ -25,7 +25,7 @@
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { IconDismiss20Regular, IconFolderAdd20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
@@ -487,7 +487,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
             @click="decreaseFontSize"
             @mousedown.left.stop
           >
-            <IconDelete20Regular />
+            <IconZoomOut20Regular />
           </button>
           <button
             v-if="interactive"
@@ -498,7 +498,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
             @click="increaseFontSize"
             @mousedown.left.stop
           >
-            <IconFolderAdd20Regular />
+            <IconZoomIn20Regular />
           </button>
           <button
             v-if="interactive"
