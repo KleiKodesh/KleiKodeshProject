@@ -12,6 +12,10 @@
    Frank Ruehl typeface. All weights are included (Light, Regular, Medium,
    SemiBold, Bold, ExtraBold, Black).
 
+   Noto Rashi Hebrew is an OFL-1.1 semi-cursive font based on 15th-century
+   Sephardic writing, designed for religious commentary. All weights are
+   included (Thin through Black).
+
    Heebo is an OFL-1.1 variable font used for headings. */
 
 /* Taamey Frank CLM – all available weights */
@@ -164,6 +168,71 @@
   font-family: 'Heebo';
   src: url('/fonts/Heebo-var.woff2') format('woff2-variations');
   font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Noto Rashi Hebrew – all available weights */
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Thin.woff2') format('woff2');
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-ExtraLight.woff2') format('woff2');
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Noto Rashi Hebrew';
+  src: url('/fonts/NotoRashiHebrew-Black.woff2') format('woff2');
+  font-weight: 900;
   font-style: normal;
   font-display: swap;
 }
