@@ -344,21 +344,14 @@ const style = computed(() => {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
+    // Update dimensions reactively when reset
+    width: `${settingsStore.wordLinkTooltipWidth}px`,
+    height: `${settingsStore.wordLinkTooltipHeight}px`,
     zIndex: '9998',
   }
   console.log('style applied:', result)
   return result
 })
-
-/**
- * Size style applied always — even during the invisible measurement phase — so
- * that computePosition reads the correct offsetWidth/offsetHeight and centres
- * the panel against the real size, not the unconstrained layout width.
- */
-const sizeStyle = computed(() => ({
-  width: `${settingsStore.wordLinkTooltipWidth}px`,
-  height: `${settingsStore.wordLinkTooltipHeight}px`,
-}))
 
 /**
  * True when a STATIC panel's content is taller than the panel. Such a panel cannot be
@@ -518,7 +511,7 @@ onBeforeUnmount(() => {
         placement === 'beside' && `is-beside-${besideSide}`,
         { 'is-static': !interactive, 'is-clipped': clipped },
       ]"
-      :style="[sizeStyle, style]"
+      :style="style"
       dir="rtl"
       @mouseenter="emit('pointer-enter')"
       @mouseleave="emit('pointer-leave')"
