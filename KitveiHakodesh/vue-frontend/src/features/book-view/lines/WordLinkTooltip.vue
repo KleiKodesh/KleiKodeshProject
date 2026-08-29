@@ -608,11 +608,13 @@ useEventListener(() => window, 'resize', () => emit('close'))
   background: none;
   cursor: pointer;
   color: var(--text-secondary);
+  opacity: 0.6;
 }
 
 .word-link-tooltip-button:hover {
   background: var(--bg-hover, rgba(127, 127, 127, 0.18));
   color: var(--text-primary);
+  opacity: 1;
 }
 
 .word-link-tooltip-button svg {
@@ -635,11 +637,13 @@ useEventListener(() => window, 'resize', () => emit('close'))
   background: none;
   cursor: pointer;
   color: var(--text-secondary);
+  opacity: 0.6;
 }
 
 .word-link-tooltip-close:hover {
   background: var(--bg-hover, rgba(127, 127, 127, 0.18));
   color: var(--text-primary);
+  opacity: 1;
 }
 
 .word-link-tooltip-close svg {
