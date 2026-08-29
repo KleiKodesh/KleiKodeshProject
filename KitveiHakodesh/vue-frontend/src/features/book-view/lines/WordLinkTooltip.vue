@@ -317,7 +317,6 @@ const style = computed(() => {
       position: 'fixed' as const,
       top: '-9999px',
       left: '-9999px',
-      maxWidth: `${Math.min(MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
       zIndex: '9998',
       visibility: 'hidden' as const,
     }
@@ -326,12 +325,7 @@ const style = computed(() => {
     position: 'fixed' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // The beside placement narrows the panel to fit one flank of the anchor; every
-    // other placement keeps the usual width.
-    maxWidth: `${Math.min(resolvedMaxWidth.value ?? MAX_WIDTH, MAX_WIDTH, window.innerWidth - MARGIN * 2)}px`,
-    // Overrides the stylesheet's preferred cap. That one is a comfort target; this
-    // is the constraint that keeps the panel inside the viewport, so it has to win
-    // — hence inline, and hence unconditional rather than only when it bites.
+    // Allow resize: don't constrain maxWidth when resizable
     maxHeight: `${resolvedMaxHeight.value}px`,
     zIndex: '9998',
   }
