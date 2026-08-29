@@ -607,6 +607,12 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
+  /* Default size — must be present during the invisible measurement phase so that
+     computePosition reads the correct offsetWidth/offsetHeight. The inline width/height
+     from the settings store (applied via the style binding after positioning resolves)
+     overrides these once the user has resized. */
+  width: 360px;
+  height: 140px;
   overflow: auto;
   /* Native HTML resize handle */
   resize: both;
