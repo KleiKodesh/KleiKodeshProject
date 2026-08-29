@@ -450,21 +450,7 @@ onMounted(() => {
  */
 useEventListener(() => window, 'resize', () => emit('close'))
 
-// Resize event listeners
-useEventListener(window, 'pointermove', (event: PointerEvent) => {
-  if (!resizeState.value.isResizing) return
-  const deltaX = event.clientX - resizeState.value.startX
-  const deltaY = event.clientY - resizeState.value.startY
-  
-  tooltipSize.value = {
-    width: Math.max(200, resizeState.value.startWidth + deltaX),
-    height: Math.max(100, resizeState.value.startHeight + deltaY),
-  }
-})
 
-useEventListener(window, 'pointerup', () => {
-  resizeState.value.isResizing = false
-})
 </script>
 
 <template>
@@ -483,60 +469,63 @@ useEventListener(window, 'pointerup', () => {
       @mouseleave="emit('pointer-leave')"
       @mousedown.left="emit('select-start')"
     >
-      <!-- Shown when there is a heading OR a close button to hold; an interactive
-           panel always has the latter, so it always keeps its header line. -->
-      <div v-if="heading || interactive" class="word-link-tooltip-title" :style="headingStyle">
-        <span class="word-link-tooltip-heading">{{ heading }}</span>
-        <div class="word-link-tooltip-controls">
-          <button
-            v-if="interactive"
-            class="word-link-tooltip-button"
-            type="button"
-            title="הקטן טקסט"
-            aria-label="הקטן טקסט"
-            @click="decreaseFontSize"
-            @mousedown.left.stop
-          >
-            <IconZoomOut20Regular />
-          </button>
-          <button
-            v-if="interactive"
-            class="word-link-tooltip-button"
-            type="button"
-            title="הגדל טקסט"
-            aria-label="הגדל טקסט"
-            @click="increaseFontSize"
-            @mousedown.left.stop
-          >
-            <IconZoomIn20Regular />
-          </button>
-          <button
-            v-if="interactive"
-            class="word-link-tooltip-close"
-            type="button"
-            title="סגור"
-            aria-label="סגור"
-            @click="emit('close')"
-            @mousedown.left.stop
-          >
-            <IconDismiss20Regular />
-          </button>
+      <!-- Content wrapper with RTL direction for proper text flow -->
+      <div class="word-link-tooltip-content">
+        <!-- Shown when there is a heading OR a close button to hold; an interactive
+             panel always has the latter, so it always keeps its header line. -->
+        <div v-if="heading || interactive" class="word-link-tooltip-title" :style="headingStyle">
+          <span class="word-link-tooltip-heading">{{ heading }}</span>
+          <div class="word-link-tooltip-controls">
+            <button
+              v-if="interactive"
+              class="word-link-tooltip-button"
+              type="button"
+              title="הקטן טקסט"
+              aria-label="הקטן טקסט"
+              @click="decreaseFontSize"
+              @mousedown.left.stop
+            >
+              <IconZoomOut20Regular />
+            </button>
+            <button
+              v-if="interactive"
+              class="word-link-tooltip-button"
+              type="button"
+              title="הגדל טקסט"
+              aria-label="הגדל טקסט"
+              @click="increaseFontSize"
+              @mousedown.left.stop
+            >
+              <IconZoomIn20Regular />
+            </button>
+            <button
+              v-if="interactive"
+              class="word-link-tooltip-close"
+              type="button"
+              title="סגור"
+              aria-label="סגור"
+              @click="emit('close')"
+              @mousedown.left.stop
+            >
+              <IconDismiss20Regular />
+            </button>
+          </div>
         </div>
-      </div>
-      <div ref="bodyRef" class="word-link-tooltip-body" :style="bodyStyle">
-        <template v-if="sectionLines">
+        <div ref="bodyRef" class="word-link-tooltip-body" :style="bodyStyle">
+          <template v-if="sectionLines">
+            <!-- eslint-disable-next-line vue/no-v-html -->
+            <div
+              v-for="line in sectionLines"
+              :key="line.id"
+              class="word-link-tooltip-line"
+              :class="{ 'is-focus': line.isFocus }"
+              :data-focus-line="line.isFocus ? '' : undefined"
+              v-html="line.html"
+            />
+          </template>
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <div
-            v-for="line in sectionLines"
-            :key="line.id"
-            class="word-link-tooltip-line"
-            :class="{ 'is-focus': line.isFocus }"
-            :data-focus-line="line.isFocus ? '' : undefined"
-            v-html="line.html"
-          />
-        </template>
-        <!-- eslint-disable-next-line vue/no-v-html -->
-        <div v-else v-html="html" />
+          <div v-else v-html="html" />
+        </div>
       </div>
     </div>
   </Teleport>
@@ -549,7 +538,7 @@ useEventListener(window, 'pointerup', () => {
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
   padding: 4px 0;
-  direction: rtl;
+  direction: ltr;
   font-size: calc(12px * (v-bind('settingsStore.wordLinkTooltipFontSize') / 100));
   line-height: 1.5;
   color: var(--text-primary);
@@ -565,6 +554,14 @@ useEventListener(window, 'pointerup', () => {
   /* Allow user to resize the tooltip */
   resize: both;
   overflow: hidden;
+}
+
+/* Content wrapper to restore RTL text flow */
+.word-link-tooltip-content {
+  direction: rtl;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .word-link-tooltip-title {
@@ -737,6 +734,7 @@ useEventListener(window, 'pointerup', () => {
      Horizontal padding lives here rather than on the root so the scrollbar
      itself renders flush with the tooltip edge, with the gap on its inner side. */
   overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
   /* Makes this the offsetParent of the section lines, so their `offsetTop` is
      measured against the scroll container and can be assigned to `scrollTop`
