@@ -23,7 +23,7 @@
  * dead space where a `mouseout` would look like leaving — it hangs off whichever
  * edge faces the anchor, hence the `is-above`/`is-below` class.
  */
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
@@ -449,6 +449,32 @@ onMounted(() => {
  */
 useEventListener(() => window, 'resize', () => emit('close'))
 
+/**
+ * Watch for user resizing the tooltip and persist the new dimensions to the
+ * settings store so the next tooltip shown has the same size.
+ */
+const resizeObserver = new ResizeObserver(() => {
+  if (tooltipRef.value) {
+    const width = tooltipRef.value.offsetWidth
+    const height = tooltipRef.value.offsetHeight
+    if (width > 0 && height > 0) {
+      settingsStore.wordLinkTooltipWidth = width
+      settingsStore.wordLinkTooltipHeight = height
+    }
+  }
+})
+
+onMounted(() => {
+  if (tooltipRef.value) {
+    resizeObserver.observe(tooltipRef.value)
+  }
+})
+
+// Clean up the observer when the component is unmounted
+onBeforeUnmount(() => {
+  resizeObserver.disconnect()
+})
+
 
 </script>
 
@@ -547,9 +573,9 @@ useEventListener(() => window, 'resize', () => emit('close'))
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  /* Default sizes */
-  width: 360px;
-  height: 140px;
+  /* Default sizes from settings */
+  width: calc(1px * v-bind('settingsStore.wordLinkTooltipWidth'));
+  height: calc(1px * v-bind('settingsStore.wordLinkTooltipHeight'));
   overflow: auto;
   /* Native HTML resize handle */
   resize: both;
