@@ -325,8 +325,7 @@ const style = computed(() => {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // Allow resize: don't constrain maxWidth when resizable
-    maxHeight: `${resolvedMaxHeight.value}px`,
+    // With native resize: both, don't set maxHeight inline — let the user resize freely
     zIndex: '9998',
   }
 })
