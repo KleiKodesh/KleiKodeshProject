@@ -34,9 +34,10 @@ import { detectFontsByCanvas } from './fontsCanvasProbe'
  * A name repeated by the enumerator is de-duplicated in favour of this entry, so a
  * user who ALSO has the font installed system-wide still sees one row, at the top.
  *
- * Ordered te'amim-capable families first, then Heebo. Every family above Heebo draws
- * the cantillation marks, so anything a reader picks from the head of this list is
- * safe for a hasTeamim book; Heebo trails because it is a headings sans with none.
+ * Ordered te'amim-capable families first, then commentary and display fonts. Every family
+ * except Heebo draws the cantillation marks, so anything a reader picks from the head of
+ * this list is safe for a hasTeamim book; Noto Rashi Hebrew is for commentary, and Heebo
+ * is for headings only, both without te'amim support.
  */
 export const BUNDLED_FONTS = [
   'Taamey Frank CLM',
@@ -44,6 +45,8 @@ export const BUNDLED_FONTS = [
   'Simple CLM',
   'Stam Ashkenaz CLM',
   'Stam Sefarad CLM',
+  'Frank Ruehl Libre',
+  'Noto Rashi Hebrew',
   'Heebo',
 ] as const
 
