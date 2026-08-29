@@ -25,7 +25,7 @@
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { IconDismiss20Regular, IconAdd20Regular, IconSubtract20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconTextFontSize20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
@@ -482,12 +482,21 @@ useEventListener(() => window, 'resize', () => emit('close'))
             v-if="interactive"
             class="word-link-tooltip-button"
             type="button"
+            title="גודל גופן"
+            aria-label="גודל גופן"
+          >
+            <span class="font-size-display">{{ settingsStore.wordLinkTooltipFontSize }}%</span>
+          </button>
+          <button
+            v-if="interactive"
+            class="word-link-tooltip-button"
+            type="button"
             title="הקטן טקסט"
             aria-label="הקטן טקסט"
             @click="decreaseFontSize"
             @mousedown.left.stop
           >
-            <IconSubtract20Regular />
+            −
           </button>
           <button
             v-if="interactive"
@@ -498,7 +507,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
             @click="increaseFontSize"
             @mousedown.left.stop
           >
-            <IconAdd20Regular />
+            +
           </button>
           <button
             v-if="interactive"
@@ -595,29 +604,6 @@ useEventListener(() => window, 'resize', () => emit('close'))
   flex-shrink: 0;
 }
 
-.word-link-tooltip-close {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  padding: 0;
-  margin-inline-end: -4px;
-  border: none;
-  border-radius: 3px;
-  background: none;
-  cursor: pointer;
-  /* theme.css pins `svg { color: ... }`, which severs currentColor inheritance —
-     the icon needs the colour handed to it explicitly. */
-  color: var(--text-secondary);
-}
-
-.word-link-tooltip-close:hover {
-  background: var(--bg-hover, rgba(127, 127, 127, 0.18));
-  color: var(--text-primary);
-}
-
 .word-link-tooltip-button {
   flex-shrink: 0;
   display: flex;
@@ -631,6 +617,8 @@ useEventListener(() => window, 'resize', () => emit('close'))
   background: none;
   cursor: pointer;
   color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .word-link-tooltip-button:hover {
@@ -638,8 +626,34 @@ useEventListener(() => window, 'resize', () => emit('close'))
   color: var(--text-primary);
 }
 
-.word-link-tooltip-close svg,
-.word-link-tooltip-button svg {
+.font-size-display {
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.word-link-tooltip-close {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  margin-inline-end: -4px;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.word-link-tooltip-close:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.18));
+  color: var(--text-primary);
+}
+
+.word-link-tooltip-close svg {
   width: 14px;
   height: 14px;
   color: inherit;
