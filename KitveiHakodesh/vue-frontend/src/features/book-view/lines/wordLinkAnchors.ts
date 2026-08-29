@@ -72,10 +72,9 @@ export interface WordLinkTreatment {
  * signs a future DB introduces.
  */
 const ENCLOSURE_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
-  ['[', ']'],
-  ['‹', '›'],
+  ['(', ')'],
   ['{', '}'],
-  ['⟨', '⟩'],
+  ['⟦', '⟧'],
 ]
 
 /**

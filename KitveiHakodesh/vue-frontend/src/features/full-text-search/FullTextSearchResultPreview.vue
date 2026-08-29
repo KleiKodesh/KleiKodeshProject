@@ -211,7 +211,6 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
 /* Muted by opacity — matches the reading views. All markers share the same color
    (--text-secondary fallback). */
 .preview-line :deep(.word-link-marker) {
-  font-size: 0.72em;
   vertical-align: super;
   line-height: 1;
   color: var(--wl-marker-color, var(--text-secondary));
