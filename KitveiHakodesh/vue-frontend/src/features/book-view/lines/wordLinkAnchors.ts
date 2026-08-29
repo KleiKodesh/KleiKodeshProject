@@ -58,11 +58,12 @@ const openTag = (a: WordLinkAnchor) => `<span class="word-link" data-wl="${wlDat
 /** Color buckets for point markers — must match the data-wl-c palette in main.css. */
 const MARKER_COLOR_BUCKETS = 8
 
-/** Fallback treatment for one commentary book: palette slot + optional enclosure glyphs. */
+/** Fallback treatment for one commentary book: palette slot + optional enclosure glyphs + optional underline. */
 export interface WordLinkTreatment {
   bucket: number
   open?: string
   close?: string
+  underline?: boolean
 }
 
 /**
@@ -73,8 +74,11 @@ export interface WordLinkTreatment {
  */
 const ENCLOSURE_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
   ['(', ')'],
+  ['[', ']'],
   ['{', '}'],
-  ['⟦', '⟧'],
+  ['⟨', '⟩'],
+  ['⟪', '⟫'],
+  ['⦅', '⦆'],
 ]
 
 /**
@@ -82,11 +86,11 @@ const ENCLOSURE_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
  *
  * Ranking: distinct commentary books that have at least one undecorated label (only those
  * ever use the fallback), ascending by book id — the smaller the id, the simpler the
- * treatment. Slot order matches main.css: all slots share the same color (--text-secondary)
- * and font-weight 300. Differentiation is by underline (slots 1, 3) and enclosure glyphs
- * (slots 4-7). Ranks beyond the palette wrap (rank % 8); real books top out at 9 marker
- * commentaries. If the book's own signs ban all but one (or every) enclosure candidate,
- * the affected slots are visually identical to the plain slots.
+ * treatment. Treatments cycle: plain → underlined → enclosure 1 → enclosure 2 → etc.
+ * Each rank gets a unique treatment, so commentary books are always visually distinct.
+ * Custom delimiters (labels with their own signs) get no extra treatment — they're clear
+ * on their own. Delimiters already present in the book's labels are excluded from the
+ * enclosure pool.
  */
 export function buildWordLinkTreatments(targets: WordLinkTargetRow[]): Map<number, WordLinkTreatment> {
   const banned = new Set<string>()
@@ -98,15 +102,36 @@ export function buildWordLinkTreatments(targets: WordLinkTargetRow[]): Map<numbe
       participants.add(t.targetBookId)
     }
   }
-  const enclosures = ENCLOSURE_CANDIDATES.filter(([o, c]) => !banned.has(o) && !banned.has(c)).slice(0, 2)
+  const enclosures = ENCLOSURE_CANDIDATES.filter(([o, c]) => !banned.has(o) && !banned.has(c))
 
   const map = new Map<number, WordLinkTreatment>()
   const ordered = [...participants].sort((a, b) => a - b)
+
   for (let rank = 0; rank < ordered.length; rank++) {
     const slot = rank % MARKER_COLOR_BUCKETS
-    // Slots 4 and 6 take the first enclosure, 5 and 7 the second.
-    const enc = slot >= 4 ? enclosures[slot % 2] : undefined
-    map.set(ordered[rank]!, enc ? { bucket: slot, open: enc[0], close: enc[1] } : { bucket: slot })
+    let treatment: WordLinkTreatment
+
+    if (rank === 0) {
+      // Slot 0: plain (no decoration)
+      treatment = { bucket: slot }
+    } else if (rank === 1) {
+      // Slot 1: underlined
+      treatment = { bucket: slot }
+      treatment.underline = true
+    } else {
+      // Slots 2+: enclosures (no decoration)
+      const encIndex = rank - 2
+      if (encIndex < enclosures.length) {
+        const enc = enclosures[encIndex]
+        treatment = { bucket: slot, open: enc[0], close: enc[1] }
+      } else {
+        // Ran out of enclosures — cycle back with underline
+        treatment = { bucket: slot }
+        treatment.underline = true
+      }
+    }
+
+    map.set(ordered[rank]!, treatment)
   }
   return map
 }

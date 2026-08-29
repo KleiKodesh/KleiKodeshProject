@@ -124,6 +124,9 @@ export function useWordLinkAnchors(getVisibleLineIds?: () => number[]) {
             row.encOpen = t.open
             row.encClose = t.close
           }
+          if (t.underline) {
+            ;(row as any).decoration = 'underline'
+          }
         }
       }
       const byLine = new Map<number, WordLinkAnchor[]>()

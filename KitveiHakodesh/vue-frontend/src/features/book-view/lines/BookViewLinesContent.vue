@@ -585,7 +585,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 /* Muted by opacity so the marks don't compete with the text; hover restores the
    affordance. All markers share the same color (--text-secondary fallback). */
 .line :deep(.word-link-marker) {
-  vertical-align: super;
+  font-size: 0.6em;
   line-height: 1;
   color: var(--wl-marker-color, var(--text-secondary));
   opacity: 0.65;

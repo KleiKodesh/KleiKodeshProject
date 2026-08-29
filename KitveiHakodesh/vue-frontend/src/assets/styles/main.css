@@ -251,20 +251,21 @@
    prefix — driven by the toolbar's marker dropdown. The markers hold no text
    content (label is a ::before), so hiding them cannot shift annotation offsets.
 
-   Per-commentary marker slots. Each marker's data-wl-c is its commentary's rank
-   within the source book, ascending by book id (buildWordLinkTreatments in
-   wordLinkAnchors.ts) — the smaller the book id, the SIMPLER the treatment. All
-   markers share the same color (--text-secondary fallback in the component rules) and
-   font-weight 300 (Heebo Light). Differentiation is by underline only (slots 1, 3) and
-   by enclosure glyphs (slots 4-7). Enclosure glyphs are deliberately NOT defined here:
-   they are chosen at runtime per book — never a glyph the book's own printed signs use —
-   and travel as inline custom properties from the splicer. Without them, slots 4-7
-   are visually identical to slots 0 and 2. Labels that carry their own sign render
-   verbatim and get no slot at all (labelCarriesOwnSign). */
+/* Word-link point markers (superscript letter marks spliced by wordLinkAnchors.ts).
+   Per-commentary visibility is a stylesheet injected by settingsStore — one
+   display:none rule per hidden commentary book, keyed on the marker's data-wl
+   prefix — driven by the toolbar's marker dropdown. The markers hold no text
+   content (label is a ::before), so hiding them cannot shift annotation offsets.
+
+   Per-commentary marker treatments: plain, underlined, then enclosures with glyphs.
+   All use the same color (--text-secondary) and font-weight 300 (Heebo Light). Custom
+   delimiters (labels with their own signs) get no treatment — they're clear on their
+   own. Delimiters already present in the book's labels are excluded from the enclosure
+   pool, so an app-assigned wrapper can never imitate a sign the source edition uses. */
 .word-link-marker[data-wl-c='0'] { --wl-marker-weight: 300; }
 .word-link-marker[data-wl-c='1'] { --wl-marker-weight: 300; --wl-marker-decoration: underline; }
 .word-link-marker[data-wl-c='2'] { --wl-marker-weight: 300; }
-.word-link-marker[data-wl-c='3'] { --wl-marker-weight: 300; --wl-marker-decoration: underline; }
+.word-link-marker[data-wl-c='3'] { --wl-marker-weight: 300; }
 .word-link-marker[data-wl-c='4'] { --wl-marker-weight: 300; }
 .word-link-marker[data-wl-c='5'] { --wl-marker-weight: 300; }
 .word-link-marker[data-wl-c='6'] { --wl-marker-weight: 300; }
