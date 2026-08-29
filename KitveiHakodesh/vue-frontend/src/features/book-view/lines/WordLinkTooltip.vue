@@ -314,7 +314,7 @@ const style = computed(() => {
   if (resolvedTop.value === null) {
     // Not yet measured: render invisible so dimensions can be read on mount
     return {
-      position: 'fixed' as const,
+      position: 'absolute' as const,
       top: '-9999px',
       left: '-9999px',
       zIndex: '9998',
@@ -322,7 +322,7 @@ const style = computed(() => {
     }
   }
   return {
-    position: 'fixed' as const,
+    position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
     // Allow resize: don't constrain maxWidth when resizable
@@ -551,9 +551,9 @@ useEventListener(() => window, 'resize', () => emit('close'))
   /* Default sizes */
   width: 360px;
   height: 140px;
-  /* Allow user to resize the tooltip */
+  overflow: auto;
+  /* Native HTML resize handle */
   resize: both;
-  overflow: hidden;
 }
 
 /* Content wrapper to restore RTL text flow */
