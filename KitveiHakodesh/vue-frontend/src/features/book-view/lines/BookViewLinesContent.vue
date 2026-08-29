@@ -582,8 +582,8 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line :deep(.word-link:hover) {
   text-decoration-color: currentColor;
 }
-/* Colored per commentary via --wl-marker-color (palette in main.css), muted by
-   opacity so the marks don't compete with the text; hover restores the affordance. */
+/* Muted by opacity so the marks don't compete with the text; hover restores the
+   affordance. All markers share the same color (--text-secondary fallback). */
 .line :deep(.word-link-marker) {
   font-size: 0.72em;
   vertical-align: super;

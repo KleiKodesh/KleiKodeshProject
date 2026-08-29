@@ -521,7 +521,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
   padding-inline: 10px;
   font-weight: 600;
   font-size: 12px;
-  color: var(--accent-color);
+  color: var(--text-primary);
   padding-bottom: 4px;
   margin-bottom: 4px;
   border-bottom: 1px solid var(--border-color);
@@ -543,6 +543,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
      clips instead, matching the breadcrumb convention of clipping over ellipsis. */
   overflow: hidden;
   white-space: nowrap;
+  font-weight: 700;
 }
 
 .word-link-tooltip-close {

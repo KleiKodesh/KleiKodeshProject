@@ -83,10 +83,11 @@ const ENCLOSURE_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
  *
  * Ranking: distinct commentary books that have at least one undecorated label (only those
  * ever use the fallback), ascending by book id — the smaller the id, the simpler the
- * treatment. Slot order matches main.css: plain, underline, bold, bold underline, then the
- * two runtime-chosen enclosures, then their bold variants. Ranks beyond the palette wrap
- * (rank % 8); real books top out at 9 marker commentaries. If the book's own signs ban all
- * but one (or every) enclosure candidate, the affected slots degrade to color/weight only.
+ * treatment. Slot order matches main.css: all slots share the same color (--text-secondary)
+ * and font-weight 300. Differentiation is by underline (slots 1, 3) and enclosure glyphs
+ * (slots 4-7). Ranks beyond the palette wrap (rank % 8); real books top out at 9 marker
+ * commentaries. If the book's own signs ban all but one (or every) enclosure candidate,
+ * the affected slots are visually identical to the plain slots.
  */
 export function buildWordLinkTreatments(targets: WordLinkTargetRow[]): Map<number, WordLinkTreatment> {
   const banned = new Set<string>()
