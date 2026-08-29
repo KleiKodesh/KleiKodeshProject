@@ -77,11 +77,13 @@ function decreaseFontSize() {
 
 /**
  * Reset font size and tooltip dimensions to their default values.
+ * Close the tooltip so it remounts with the new defaults.
  */
 function resetToDefaults() {
   settingsStore.wordLinkTooltipFontSize = 100
   settingsStore.wordLinkTooltipWidth = 360
   settingsStore.wordLinkTooltipHeight = 140
+  emit('close')
 }
 
 /**
