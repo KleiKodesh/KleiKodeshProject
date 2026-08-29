@@ -323,7 +323,7 @@ const style = computed(() => {
   if (resolvedTop.value === null) {
     // Not yet measured: render invisible so dimensions can be read on mount
     return {
-      position: 'absolute' as const,
+      position: 'fixed' as const,
       top: '-9999px',
       left: '-9999px',
       zIndex: '9998',
@@ -331,7 +331,7 @@ const style = computed(() => {
     }
   }
   return {
-    position: 'absolute' as const,
+    position: 'fixed' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
     // Update dimensions reactively when reset
@@ -464,26 +464,61 @@ useEventListener(() => window, 'resize', () => emit('close'))
  * Watch for user resizing the tooltip and persist the new dimensions to the
  * settings store so the next tooltip shown has the same size.
  */
-const resizeObserver = new ResizeObserver(() => {
-  if (tooltipRef.value) {
-    const width = tooltipRef.value.offsetWidth
-    const height = tooltipRef.value.offsetHeight
-    if (width > 0 && height > 0) {
-      settingsStore.wordLinkTooltipWidth = width
-      settingsStore.wordLinkTooltipHeight = height
-    }
-  }
-})
+let isResizing = false
+let resizeStartX = 0
+let resizeStartY = 0
+let resizeStartWidth = 0
+let resizeStartHeight = 0
+
+function startResize(e: PointerEvent) {
+  if (!tooltipRef.value) return
+  const rect = tooltipRef.value.getBoundingClientRect()
+  
+  // Only allow resize from the bottom-right corner (within ~20px)
+  const isBottomRight =
+    e.clientX >= rect.right - 20 &&
+    e.clientY >= rect.bottom - 20
+  
+  if (!isBottomRight) return
+  
+  isResizing = true
+  resizeStartX = e.clientX
+  resizeStartY = e.clientY
+  resizeStartWidth = rect.width
+  resizeStartHeight = rect.height
+  e.preventDefault()
+}
+
+function handlePointerMove(e: PointerEvent) {
+  if (!isResizing || !tooltipRef.value) return
+  
+  const deltaX = e.clientX - resizeStartX
+  const deltaY = e.clientY - resizeStartY
+  
+  // In LTR direction, dragging right increases width
+  const newWidth = Math.max(200, resizeStartWidth + deltaX)
+  const newHeight = Math.max(100, resizeStartHeight + deltaY)
+  
+  tooltipRef.value.style.width = `${newWidth}px`
+  tooltipRef.value.style.height = `${newHeight}px`
+  
+  // Persist to settings
+  settingsStore.wordLinkTooltipWidth = newWidth
+  settingsStore.wordLinkTooltipHeight = newHeight
+}
+
+function stopResize() {
+  isResizing = false
+}
+
+useEventListener(window, 'pointermove', handlePointerMove)
+useEventListener(window, 'pointerup', stopResize)
+useEventListener(window, 'pointercancel', stopResize)
 
 onMounted(() => {
   if (tooltipRef.value) {
-    resizeObserver.observe(tooltipRef.value)
+    useEventListener(tooltipRef.value, 'pointerdown', startResize)
   }
-})
-
-// Clean up the observer when the component is unmounted
-onBeforeUnmount(() => {
-  resizeObserver.disconnect()
 })
 
 
@@ -596,8 +631,20 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   overflow: auto;
-  /* Native HTML resize handle */
-  resize: both;
+  /* Resize handle indicator in the bottom-right corner */
+  background-image: linear-gradient(135deg, transparent calc(100% - 16px), var(--border-color) calc(100% - 16px), var(--border-color) 100%);
+  position: relative;
+}
+
+/* Make bottom-right corner draggable with cursor feedback */
+.word-link-tooltip::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  cursor: nwse-resize;
 }
 
 /* Content wrapper to restore RTL text flow */
