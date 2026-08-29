@@ -455,6 +455,22 @@ onMounted(() => {
  * re-summon and has no state worth preserving across a layout change.
  */
 useEventListener(() => window, 'resize', () => emit('close'))
+
+// Resize event listeners
+useEventListener(window, 'pointermove', (event: PointerEvent) => {
+  if (!resizeState.value.isResizing) return
+  const deltaX = event.clientX - resizeState.value.startX
+  const deltaY = event.clientY - resizeState.value.startY
+  
+  tooltipSize.value = {
+    width: Math.max(200, resizeState.value.startWidth + deltaX),
+    height: Math.max(100, resizeState.value.startHeight + deltaY),
+  }
+})
+
+useEventListener(window, 'pointerup', () => {
+  resizeState.value.isResizing = false
+})
 </script>
 
 <template>
@@ -557,6 +573,9 @@ useEventListener(() => window, 'resize', () => emit('close'))
      scrolls, and the cited line is scrolled to, so the cap costs no context. */
   max-height: min(140px, 35vh);
   min-height: 0;
+  /* Allow user to resize the tooltip */
+  resize: both;
+  overflow: hidden;
 }
 
 .word-link-tooltip-title {
