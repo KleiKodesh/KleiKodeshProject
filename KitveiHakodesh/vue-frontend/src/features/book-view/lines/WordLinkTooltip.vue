@@ -214,12 +214,6 @@ function computePosition() {
   const width = tooltipRef.value?.offsetWidth ?? MAX_WIDTH
   const height = tooltipRef.value?.offsetHeight ?? 60
 
-  console.log('computePosition:', {
-    anchorRect: { top: rect.top, left: rect.left, width: rect.width, height: rect.height, bottom: rect.bottom, right: rect.right },
-    viewport: { width: viewportW, height: viewportH },
-    tooltipSize: { width, height },
-  })
-
   // Only placeBeside narrows the panel, so clear that here rather than leaving it to
   // the branch that does not set it. Currently this runs once per mount, but a stale
   // width surviving into a vertical placement would be silent and baffling, and the
@@ -229,8 +223,6 @@ function computePosition() {
   // Room between the anchor and each viewport edge, once the gap and margin are paid.
   const roomAbove = rect.top - MARGIN * 2
   const roomBelow = viewportH - rect.bottom - MARGIN * 2
-
-  console.log('room:', { roomAbove, roomBelow, minHeight: minHeight.value })
 
   // Neither side can seat the panel's irreducible height without either overhanging
   // the viewport or riding up over the link — go beside it.
@@ -262,8 +254,6 @@ function computePosition() {
   resolvedMaxHeight.value = constrainedHeight
   resolvedTop.value = top
   resolvedLeft.value = clampLeft(rect.left + rect.width / 2 - width / 2, width, viewportW)
-
-  console.log('resolved:', { top: resolvedTop.value, left: resolvedLeft.value, width, height: constrainedHeight, placement: placement.value })
 }
 
 /**
@@ -340,17 +330,16 @@ const style = computed(() => {
       visibility: 'hidden' as const,
     }
   }
-  const result = {
+  return {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // Update dimensions reactively when reset
+    // Dimensions from settings — override the CSS defaults after positioning resolves,
+    // and update reactively when the user resets or the settings change.
     width: `${settingsStore.wordLinkTooltipWidth}px`,
     height: `${settingsStore.wordLinkTooltipHeight}px`,
     zIndex: '9998',
   }
-  console.log('style applied:', result)
-  return result
 })
 
 /**
