@@ -571,7 +571,7 @@ useEventListener(window, 'pointerup', () => {
      only binds on short viewports; on a tall screen the px term is what applies, so it
      is the one that decides the shape. A full section is normally longer than this — it
      scrolls, and the cited line is scrolled to, so the cap costs no context. */
-  max-height: min(140px, 35vh);
+  max-height: none;
   min-height: 0;
   /* Allow user to resize the tooltip */
   resize: both;
