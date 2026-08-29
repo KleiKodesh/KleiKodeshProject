@@ -77,17 +77,11 @@ function decreaseFontSize() {
 
 /**
  * Reset font size and tooltip dimensions to their default values.
- * Recompute position to apply the new size immediately.
  */
 function resetToDefaults() {
   settingsStore.wordLinkTooltipFontSize = 100
   settingsStore.wordLinkTooltipWidth = 360
   settingsStore.wordLinkTooltipHeight = 140
-  // Recompute position with the new dimensions
-  nextTick(() => {
-    minHeight.value = measureMinHeight()
-    computePosition()
-  })
 }
 
 /**
@@ -340,7 +334,9 @@ const style = computed(() => {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // With native resize: both, don't set maxHeight inline — let the user resize freely
+    // Update dimensions reactively when reset
+    width: `${settingsStore.wordLinkTooltipWidth}px`,
+    height: `${settingsStore.wordLinkTooltipHeight}px`,
     zIndex: '9998',
   }
 })
@@ -599,9 +595,6 @@ onBeforeUnmount(() => {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  /* Default sizes from settings */
-  width: calc(1px * v-bind('settingsStore.wordLinkTooltipWidth'));
-  height: calc(1px * v-bind('settingsStore.wordLinkTooltipHeight'));
   overflow: auto;
   /* Native HTML resize handle */
   resize: both;
