@@ -323,7 +323,7 @@ const style = computed(() => {
   if (resolvedTop.value === null) {
     // Not yet measured: render invisible so dimensions can be read on mount
     return {
-      position: 'fixed' as const,
+      position: 'absolute' as const,
       top: '-9999px',
       left: '-9999px',
       zIndex: '9998',
@@ -331,7 +331,7 @@ const style = computed(() => {
     }
   }
   return {
-    position: 'fixed' as const,
+    position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
     // Update dimensions reactively when reset
