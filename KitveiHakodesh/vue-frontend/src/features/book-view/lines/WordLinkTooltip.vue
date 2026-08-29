@@ -25,7 +25,7 @@
  */
 import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular, IconArrowReset20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
@@ -73,6 +73,15 @@ function increaseFontSize() {
 
 function decreaseFontSize() {
   settingsStore.wordLinkTooltipFontSize = Math.max(50, settingsStore.wordLinkTooltipFontSize - 10)
+}
+
+/**
+ * Reset font size and tooltip dimensions to their default values.
+ */
+function resetToDefaults() {
+  settingsStore.wordLinkTooltipFontSize = 100
+  settingsStore.wordLinkTooltipWidth = 360
+  settingsStore.wordLinkTooltipHeight = 140
 }
 
 /**
@@ -522,6 +531,17 @@ onBeforeUnmount(() => {
               @mousedown.left.stop
             >
               <IconZoomIn20Regular />
+            </button>
+            <button
+              v-if="interactive"
+              class="word-link-tooltip-button"
+              type="button"
+              title="אפס הגדלות וגודל"
+              aria-label="אפס הגדלות וגודל"
+              @click="resetToDefaults"
+              @mousedown.left.stop
+            >
+              <IconArrowReset20Regular />
             </button>
             <button
               v-if="interactive"
