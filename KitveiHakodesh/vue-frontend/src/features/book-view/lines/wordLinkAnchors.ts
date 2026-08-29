@@ -85,42 +85,86 @@ const ENCLOSURE_CANDIDATES: ReadonlyArray<readonly [string, string]> = [
  * Assign the fallback treatments for one source book's word-link targets.
  *
  * Ranking: distinct commentary books that have at least one undecorated label (only those
- * ever use the fallback), ascending by book id — the smaller the id, the simpler the
- * treatment. Treatments cycle: plain → underlined → enclosure 1 → enclosure 2 → etc.
+ * ever use the fallback). High-priority reference types (Ein Mishpat עין משפט and 
+ * Mesorah Hashas מסורת הש״ס) get first priority with the simplest treatment (plain, no decoration). 
+ * After high-priority refs, other books are sorted by tree order (catalog hierarchy) — then by
+ * ascending book id as tiebreaker. Treatments cycle: plain → underlined → enclosure 1 → enclosure 2 → etc.
  * Each rank gets a unique treatment, so commentary books are always visually distinct.
  * Custom delimiters (labels with their own signs) get no extra treatment — they're clear
  * on their own. Delimiters already present in the book's labels are excluded from the
  * enclosure pool.
+ *
+ * Optional `getCanonicalType` maps connectionTypeId to canonical type name for high-priority
+ * reference detection. If provided, targets with canonical type 'EIN_MISHPAT' or 
+ * 'MESORAH_HASHAS' get rank 0 treatment (simplest, plain).
+ * If not provided, high-priority detection is skipped (backward compatibility).
  */
-export function buildWordLinkTreatments(targets: WordLinkTargetRow[]): Map<number, WordLinkTreatment> {
+export function buildWordLinkTreatments(
+  targets: WordLinkTargetRow[],
+  getCanonicalType?: (typeId: number) => string | null,
+): Map<number, WordLinkTreatment> {
   const banned = new Set<string>()
   const participants = new Set<number>()
+  const highPriorityBooks = new Set<number>()
+  const bookOrderIndex = new Map<number, number>()
+  
   for (const t of targets) {
     if (labelCarriesOwnSign(t.label)) {
       for (const ch of t.label!) if (!/[א-ת0-9]/.test(ch)) banned.add(ch)
     } else {
       participants.add(t.targetBookId)
+      bookOrderIndex.set(t.targetBookId, t.orderIndex)
+      // Detect high-priority reference links if the mapping function is provided
+      if (getCanonicalType) {
+        const canonical = getCanonicalType(t.connectionTypeId)
+        if (canonical === 'EIN_MISHPAT' || canonical === 'MESORAH_HASHAS') {
+          highPriorityBooks.add(t.targetBookId)
+        }
+      }
     }
   }
   const enclosures = ENCLOSURE_CANDIDATES.filter(([o, c]) => !banned.has(o) && !banned.has(c))
 
   const map = new Map<number, WordLinkTreatment>()
-  const ordered = [...participants].sort((a, b) => a - b)
-
-  for (let rank = 0; rank < ordered.length; rank++) {
+  
+  // Separate high-priority books from others
+  const otherParticipants = [...participants].filter(id => !highPriorityBooks.has(id))
+  const orderedHighPriority = [...highPriorityBooks].sort((a, b) => a - b)
+  
+  // Sort other books by tree order, then by book id
+  const orderedOthers = otherParticipants.sort((a, b) => {
+    const orderA = bookOrderIndex.get(a) ?? 999
+    const orderB = bookOrderIndex.get(b) ?? 999
+    if (orderA !== orderB) return orderA - orderB
+    return a - b
+  })
+  
+  // High-priority books come first with simplest treatments (plain, no decoration)
+  let rank = 0
+  for (const bookId of orderedHighPriority) {
+    const slot = rank % MARKER_COLOR_BUCKETS
+    const treatment: WordLinkTreatment = { bucket: slot }
+    map.set(bookId, treatment)
+    rank++
+  }
+  
+  // Other books follow in tree order with remaining treatments
+  const otherStartRank = rank
+  for (const bookId of orderedOthers) {
+    const adjustedRank = rank - otherStartRank
     const slot = rank % MARKER_COLOR_BUCKETS
     let treatment: WordLinkTreatment
 
-    if (rank === 0) {
-      // Slot 0: plain (no decoration)
+    if (adjustedRank === 0) {
+      // First non-high-priority: plain (no decoration)
       treatment = { bucket: slot }
-    } else if (rank === 1) {
-      // Slot 1: underlined
+    } else if (adjustedRank === 1) {
+      // Second non-high-priority: underlined
       treatment = { bucket: slot }
       treatment.underline = true
     } else {
       // Slots 2+: enclosures (no decoration)
-      const encIndex = rank - 2
+      const encIndex = adjustedRank - 2
       if (encIndex < enclosures.length) {
         const enc = enclosures[encIndex]
         treatment = { bucket: slot, open: enc[0], close: enc[1] }
@@ -131,7 +175,8 @@ export function buildWordLinkTreatments(targets: WordLinkTargetRow[]): Map<numbe
       }
     }
 
-    map.set(ordered[rank]!, treatment)
+    map.set(bookId, treatment)
+    rank++
   }
   return map
 }

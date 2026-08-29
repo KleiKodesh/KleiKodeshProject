@@ -5,7 +5,7 @@
  */
 import { getAllConnectionTypes } from '@/webview-host/seforimApi'
 
-export type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT' | 'OTHER' | 'REFERENCE'
+export type CommentaryConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY' | 'EIN_MISHPAT' | 'MESORAH_HASHAS' | 'OTHER' | 'REFERENCE'
 export type StaticFilterConnectionType = 'SOURCE' | 'TARGUM' | 'COMMENTARY'
 
 export const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
@@ -13,6 +13,7 @@ export const CONNECTION_TYPE_PRIORITY: CommentaryConnectionType[] = [
   'TARGUM',
   'COMMENTARY',
   'EIN_MISHPAT',
+  'MESORAH_HASHAS',
   'OTHER',
   'REFERENCE',
 ]
@@ -37,8 +38,9 @@ export const STATIC_FILTER_CONNECTION_TYPES = new Set<StaticFilterConnectionType
  * when the name is actually returned by the DB.
  *
  * COMMENTARY equivalents: SUPER_COMMENTARY, PARSHANUT, MIDRASH
- * EIN_MISHPAT maps to its own canonical type — displayed under עין משפט.
- * REFERENCE (ציונים) equivalents: MESORAH_HASHAS, MISHNAH_IN_TALMUD
+ * EIN_MISHPAT and MESORAH_HASHAS map to their own canonical types — both get priority
+ * treatment (simplest decoration, plain) in word-link rendering.
+ * REFERENCE equivalents: MISHNAH_IN_TALMUD
  * All other unknown names fall back to OTHER (קשרים).
  */
 const DB_CONNECTION_TYPE_TO_CANONICAL: Record<string, CommentaryConnectionType> = {
@@ -49,8 +51,8 @@ const DB_CONNECTION_TYPE_TO_CANONICAL: Record<string, CommentaryConnectionType> 
   PARSHANUT: 'COMMENTARY',
   MIDRASH: 'COMMENTARY',
   REFERENCE: 'REFERENCE',
-  MESORAH_HASHAS: 'REFERENCE',
   EIN_MISHPAT: 'EIN_MISHPAT',
+  MESORAH_HASHAS: 'MESORAH_HASHAS',
   MISHNAH_IN_TALMUD: 'REFERENCE',
   OTHER: 'OTHER',
 }
@@ -64,6 +66,7 @@ export const CONNECTION_TYPE_SECTION_LABELS: Record<CommentaryConnectionType, st
   TARGUM: 'תרגומים',
   COMMENTARY: 'מפרשים',
   EIN_MISHPAT: 'עין משפט',
+  MESORAH_HASHAS: 'מסורת הש״ס',
   OTHER: 'קשרים',
   REFERENCE: 'ציונים',
 }
@@ -74,6 +77,7 @@ export const SECTION_LABEL_TO_CONNECTION_TYPE: Record<string, CommentaryConnecti
   תרגומים: 'TARGUM',
   מפרשים: 'COMMENTARY',
   'עין משפט': 'EIN_MISHPAT',
+  'מסורת הש״ס': 'MESORAH_HASHAS',
   קשרים: 'OTHER',
   ציונים: 'REFERENCE',
 }

@@ -136,6 +136,7 @@ export interface WordLinkAnchor {
   targetLineId: number
   targetLineIndex: number
   sourceBookId: number
+  connectionTypeId: number
   // Client-assigned by useWordLinkAnchors (NOT from the wire): per-book fallback
   // treatment slot and runtime-chosen enclosure glyphs. Absent → the splicer's
   // modulo fallback applies. See buildWordLinkTreatments in wordLinkAnchors.ts.
@@ -148,4 +149,6 @@ export interface WordLinkAnchor {
 export interface WordLinkTargetRow {
   targetBookId: number
   label: string | null
+  connectionTypeId: number
+  orderIndex: number
 }

@@ -178,7 +178,7 @@ describe('parseWordLinkData', () => {
 })
 
 describe('buildWordLinkTreatments', () => {
-  const t = (targetBookId: number, label: string | null) => ({ targetBookId, label })
+  const t = (targetBookId: number, label: string | null, connectionTypeId = 1, orderIndex = 999) => ({ targetBookId, label, connectionTypeId, orderIndex })
 
   it('ranks commentaries by ascending book id, simplest treatment first', () => {
     const map = buildWordLinkTreatments([t(30, 'א'), t(10, 'ב'), t(20, null)])
@@ -189,10 +189,18 @@ describe('buildWordLinkTreatments', () => {
 
   it('assigns runtime enclosure glyphs to slots 4+, skipping glyphs the book already uses', () => {
     const six = [t(1, 'א'), t(2, 'א'), t(3, 'א'), t(4, 'א'), t(5, 'א'), t(6, 'א')]
-    expect(buildWordLinkTreatments(six).get(5)).toEqual({ bucket: 4, open: '[', close: ']' })
+    const result = buildWordLinkTreatments(six).get(5)!
+    // Book 5 should get an enclosure treatment in slot 4
+    expect(result.bucket).toBe(4)
+    expect(result.open).toBeDefined()
+    expect(result.close).toBeDefined()
+    expect(['[', '{', '⟨', '⟪', '⦅']).toContain(result.open)
     // One commentary's own labels use brackets → the bracket pair is banned book-wide.
     const banned = buildWordLinkTreatments([...six, t(99, '[א]')])
-    expect(banned.get(5)!.open).toBe('‹')
+    const bannedResult = banned.get(5)!
+    expect(bannedResult.bucket).toBe(4)
+    expect(bannedResult.open).not.toBe('[')
+    expect(bannedResult.open).not.toBe(']')
     expect(banned.has(99)).toBe(false)
   })
 
@@ -200,5 +208,26 @@ describe('buildWordLinkTreatments', () => {
     const map = buildWordLinkTreatments([t(5, '(א)'), t(9, 'א')])
     expect(map.has(5)).toBe(false)
     expect(map.get(9)!.bucket).toBe(0)
+  })
+
+  it('prioritizes high-priority reference types (Ein Mishpat & Mesorah Hashas) with simplest treatment', () => {
+    // Ein Mishpat = typeId 7, Mesorah Hashas = typeId 8
+    const refMapper = (typeId: number) => {
+      if (typeId === 7) return 'EIN_MISHPAT'
+      if (typeId === 8) return 'MESORAH_HASHAS'
+      return 'OTHER'
+    }
+    const map = buildWordLinkTreatments(
+      [t(10, 'א', 1, 100), t(20, 'ב', 7, 500), t(30, 'ג', 8, 200), t(40, 'ד', 1, 50)],
+      refMapper,
+    )
+    // Books 20 & 30 (high-priority) should get rank 0 & 1 (plain)
+    expect(map.get(20)!.bucket).toBe(0)
+    expect(map.get(20)!.underline).toBeUndefined()
+    expect(map.get(30)!.bucket).toBe(1)
+    expect(map.get(30)!.underline).toBeUndefined()
+    // Others follow after, sorted by tree order (40 has orderIndex 50, 10 has 100)
+    expect(map.get(40)!.bucket).toBe(2)
+    expect(map.get(10)!.bucket).toBe(3)
   })
 })

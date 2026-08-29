@@ -413,7 +413,7 @@ export const SQL = {
    */
   GET_WORD_LINK_ANCHORS_FOR_LINES: (count: number) => `
     SELECT l.sourceLineId AS lineId, la.charStart, la.charEnd, la.label,
-           l.targetBookId, l.targetLineId, l.targetLineIndex, l.sourceBookId
+           l.targetBookId, l.targetLineId, l.targetLineIndex, l.sourceBookId, l.connectionTypeId
     FROM link l
     JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
     WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
@@ -422,16 +422,18 @@ export const SQL = {
 
   /**
    * Distinct word-link targets (commentary book id + anchor label) of one source book's
-   * side-0 POINT anchors (range citations never render markers), ascending by book id.
-   * Feeds the per-book fallback-treatment ranking (smaller book id = simpler decoration),
+   * side-0 POINT anchors (range citations never render markers), ordered by book tree order
+   * to maintain catalog hierarchy when assigning treatments.
+   * Feeds the per-book fallback-treatment ranking (high-priority refs first, then by tree order),
    * the toolbar's marker visibility dropdown, and the sign-vocabulary guard (labels reveal
    * which glyphs the book's printed signs already use) — see buildWordLinkTreatments in
    * wordLinkAnchors.ts. Guard behind HAS_LINK_ANCHOR_TABLE like the anchors query.
    */
   GET_WORD_LINK_ANCHOR_TARGETS_FOR_BOOK: `
-    SELECT DISTINCT l.targetBookId, la.label
+    SELECT DISTINCT l.targetBookId, la.label, l.connectionTypeId, b.orderIndex
     FROM link l
     JOIN link_anchor la ON la.linkId = l.id AND la.side = 0
+    JOIN book b ON b.id = l.targetBookId
     WHERE l.sourceBookId = ?
       AND (la.charEnd IS NULL OR la.charEnd <= la.charStart)
     ORDER BY l.targetBookId
