@@ -437,10 +437,7 @@ input:focus { background: none !important; }
   background: color-mix(in srgb, var(--accent-color) 50%, transparent);
 }
 
-h1, h2, h3, h4, h5, h6 { 
-  opacity: 0.95;
-  font-weight: 300;
-}
+h1, h2, h3, h4, h5, h6 { opacity: 0.95; }
 
 h1 {
   position: relative;
