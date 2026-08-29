@@ -3,6 +3,7 @@ import { ref, watch, nextTick, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular, IconNavigation20Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { detectAvailableFonts } from '@/webview-host/fontsApi'
 import {
   getSettingsScrollTop,
   setSettingsScrollTop,
@@ -97,6 +98,9 @@ function focusSearchInput() {
 }
 
 onMounted(() => {
+  // Warm the font cache immediately so the font dropdowns are instant on first open.
+  void detectAvailableFonts()
+
   focusSearchInput()
 
   nextTick(() => {
