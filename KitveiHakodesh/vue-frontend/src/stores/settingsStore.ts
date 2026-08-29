@@ -112,19 +112,18 @@ const DEFAULTS = {
   // now trail as fallbacks for a build with the font files stripped.
   headerFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
   // Bundled, so this resolves on every machine; OS David only if the file is missing.
-  // Same family as teamimTextFont on purpose: it draws te'amim, so a book that turns
-  // out to carry them needs no second face to look right.
-  textFont: "'Taamey Frank CLM', David, serif",
+  // Frank Ruehl Libre is the default for all books and commentaries.
+  textFont: "'Frank Ruehl Libre', David, serif",
   // Body font for books whose text carries cantillation marks (the hasTeamim column).
-  // Kept as its own setting so a reader can give those books a different face, even
-  // though it now matches textFont by default; both are Taamey Frank CLM, BUNDLED in
-  // public/fonts/. David follows as the Windows fallback for a build with the font
-  // files stripped -- it draws only 1 of the 31 marks, so it is a last resort.
+  // Taamey Frank CLM is the dedicated teamim font; it is bundled in public/fonts/ and
+  // draws all 31 cantillation marks correctly. David follows as the Windows fallback
+  // for a build with the font files stripped -- it draws only 1 of the 31 marks, so
+  // it is a last resort.
   teamimTextFont: "'Taamey Frank CLM', David, serif",
   fontSize: 120,
-  // 400 = CSS `normal`. Heebo is variable so every slider value is a real weight; the
-  // CLM faces ship regular and bold only, so in between the browser picks the nearer
-  // of the two rather than drawing a true intermediate weight.
+  // 400 = CSS `normal`. Both Heebo and Frank Ruehl Libre are variable fonts, so the
+  // slider is 1:1 mapped to real weight values across the full range. Taamey Frank CLM
+  // (for teamim books only) is discrete with 400/700 only.
   fontWeight: 400,
   linePadding: 1.6,
   // Off by default: with an absolute line box, a word larger than the body text
@@ -132,7 +131,7 @@ const DEFAULTS = {
   // spacing at the cost of a possible overlap — is the user's to opt into.
   fixedLineHeight: false,
   commentaryHeaderFont: "'Heebo', 'Segoe UI Variable', 'Segoe UI', sans-serif",
-  commentaryTextFont: "'Taamey Frank CLM', David, serif",
+  commentaryTextFont: "'Frank Ruehl Libre', David, serif",
   // Deliberately smaller than the main text's 120%. The commentary is the supporting
   // column, and separate settings are ON by default, so this size is what a reader
   // actually sees rather than a value that only takes effect once they opt in.
