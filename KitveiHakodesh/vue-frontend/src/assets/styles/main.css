@@ -4,17 +4,17 @@
    Shipped in public/fonts/ so the reading defaults do not depend on what the
    machine happens to have installed.
 
-   Every Hebrew face here carries the cantillation marks (U+0591-05AF) that books
-   flagged hasTeamim need — verified against each cmap, 31/31 marks. That is the
-   bar for being bundled at all: a body face without te'amim renders such books
-   broken, so there is no longer one that lacks them. Heebo is the single
-   exception and is headings-only, never a body or teamim font.
+   Culmus fonts (Taamey Frank CLM, Hadasim CLM, Simple CLM, Stam Ashkenaz CLM,
+   Stam Sefarad CLM) carry GPL-2.0 WITH the font-embedding exception.
+   LICENSE-CulmusCLM.txt covers them.
 
-   Licensing decides which Culmus families ship. These four carry GPL-2.0 WITH
-   the font-embedding exception, which is what keeps the app's own code clear of
-   the GPL. Frank Ruehl CLM, Nachlieli CLM, Miriam Mono CLM and Drugulin CLM have
-   te'amim too but are plain GPL-2.0 with NO exception — do not add them. See
-   LICENSE-CulmusCLM.txt. */
+   Frank Ruehl Libre is a permissively-licensed OFL-1.1 revival of the classic
+   Frank Ruehl typeface. All weights are included (Light, Regular, Medium,
+   SemiBold, Bold, ExtraBold, Black).
+
+   Heebo is an OFL-1.1 variable font used for headings. */
+
+/* Taamey Frank CLM – all available weights */
 @font-face {
   font-family: 'Taamey Frank CLM';
   src: url('/fonts/TaameyFrankCLM-Regular.woff2') format('woff2');
@@ -29,8 +29,8 @@
   font-style: normal;
   font-display: swap;
 }
-/* The oblique faces are declared so the browser picks the real drawn slant instead
-   of shearing the upright face itself. */
+
+/* Hadasim CLM – regular, bold, and oblique variants */
 @font-face {
   font-family: 'Hadasim CLM';
   src: url('/fonts/HadasimCLM-Regular.woff2') format('woff2');
@@ -59,7 +59,8 @@
   font-style: oblique;
   font-display: swap;
 }
-/* Simple CLM ships a full Latin set, which is why it is the largest of the four. */
+
+/* Simple CLM – medium, bold, and oblique variants */
 @font-face {
   font-family: 'Simple CLM';
   src: url('/fonts/SimpleCLM-Medium.woff2') format('woff2');
@@ -88,7 +89,8 @@
   font-style: oblique;
   font-display: swap;
 }
-/* Scribal faces — one weight each, as the script has no bold form. */
+
+/* Stam Ashkenaz CLM – scribal face, single weight */
 @font-face {
   font-family: 'Stam Ashkenaz CLM';
   src: url('/fonts/StamAshkenazCLM.woff2') format('woff2');
@@ -96,6 +98,8 @@
   font-style: normal;
   font-display: swap;
 }
+
+/* Stam Sefarad CLM – scribal face, single weight */
 @font-face {
   font-family: 'Stam Sefarad CLM';
   src: url('/fonts/StamSefaradCLM.woff2') format('woff2');
@@ -103,9 +107,59 @@
   font-style: normal;
   font-display: swap;
 }
-/* Headings. A sans face against the serif body, bundled because the previous
-   default (Segoe UI) exists only on Windows. OFL-1.1. Variable: one file covers
-   the whole weight range, so the range is declared rather than a file per weight. */
+
+/* Frank Ruehl Libre – all available weights */
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Light.woff2') format('woff2');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Medium.woff2') format('woff2');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-SemiBold.woff2') format('woff2');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-ExtraBold.woff2') format('woff2');
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Frank Ruehl Libre';
+  src: url('/fonts/FrankRuhlLibre-Black.woff2') format('woff2');
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Heebo – variable font, headings only */
 @font-face {
   font-family: 'Heebo';
   src: url('/fonts/Heebo-var.woff2') format('woff2-variations');
