@@ -530,9 +530,9 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
   opacity: 0.35;
   padding-block-end: 2px;
 }
-/* Headings stay heavier than the body at EVERY slider stop, instead of inheriting
-   its weight. 800 rather than bold(700): the weight slider tops out at 700, so a
-   700 pin would render headings identically to a maxed-out body. */
+/* Headings are always 200 units heavier than the body so they stay visually
+   distinct at every slider stop. calc() is clamped to 100–900 by the browser;
+   the slider tops out at 700, so the maximum produced here is 900. */
 .line :deep(h1),
 .line :deep(h2),
 .line :deep(h3),
@@ -540,7 +540,7 @@ html[data-fixed-line-height='true'] .line :deep(.word-link-marker) {
 .line :deep(h5),
 .line :deep(h6) {
   font-family: var(--header-font);
-  font-weight: 800;
+  font-weight: calc(var(--font-weight, 400) + 300);
 }
 .line :deep(mark.search-match) {
   background: rgba(255, 165, 0, 0.4);
