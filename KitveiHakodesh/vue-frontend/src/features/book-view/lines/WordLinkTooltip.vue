@@ -559,14 +559,9 @@ useEventListener(window, 'pointerup', () => {
   pointer-events: auto;
   display: flex;
   flex-direction: column;
-  /* Wider than tall: the panel is MAX_WIDTH (360px) across, and a preview taller than
-     that reads as a column rather than a passage — it also covers more of the text the
-     citation came from, which is what the reader is comparing it against. The vh term
-     only binds on short viewports; on a tall screen the px term is what applies, so it
-     is the one that decides the shape. A full section is normally longer than this — it
-     scrolls, and the cited line is scrolled to, so the cap costs no context. */
-  max-height: none;
-  min-height: 0;
+  /* Default sizes */
+  width: 360px;
+  height: 140px;
   /* Allow user to resize the tooltip */
   resize: both;
   overflow: hidden;
