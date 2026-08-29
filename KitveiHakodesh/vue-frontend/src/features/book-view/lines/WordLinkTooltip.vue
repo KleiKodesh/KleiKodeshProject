@@ -602,7 +602,7 @@ onBeforeUnmount(() => {
      overrides these once the user has resized. */
   width: 360px;
   height: 140px;
-  overflow: auto;
+  overflow: hidden;
   /* Native HTML resize handle */
   resize: both;
 }
@@ -613,6 +613,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  flex: 1;
+  overflow: hidden;
 }
 
 .word-link-tooltip-title {
