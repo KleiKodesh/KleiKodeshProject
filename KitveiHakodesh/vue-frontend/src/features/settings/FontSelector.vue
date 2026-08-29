@@ -2,7 +2,7 @@
 import { ref, computed, nextTick } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
-import { detectAvailableFonts } from '@/webview-host/fontsApi'
+import { detectAvailableFonts, BUNDLED_FONTS } from '@/webview-host/fontsApi'
 import HintIcon from '@/components/HintIcon.vue'
 
 const props = defineProps<{
@@ -24,10 +24,10 @@ const dropdownRef = ref<HTMLElement | null>(null)
 const isOpen = ref(false)
 const dropdownStyle = ref<Record<string, string>>({})
 
-// Loaded live on every open — nothing is cached, so the list always reflects the
-// machine's current fonts. isLoading shows the loading row until the answer lands;
-// the generation counter keeps a stale in-flight load from finishing a newer open.
-const availableFonts = ref<string[]>([])
+// On first open the cache miss triggers a fetch; subsequent opens resolve instantly.
+// Bundled fonts are shown immediately so the list is never empty while loading.
+// isLoading only shows if the full list hasn't landed yet (first open only).
+const availableFonts = ref<string[]>([...BUNDLED_FONTS])
 const isLoading = ref(false)
 let loadGeneration = 0
 
@@ -72,8 +72,9 @@ async function toggle() {
 
 async function loadFonts() {
   const generation = ++loadGeneration
+  // Only show the spinner if the cache isn't warm yet (promise not yet resolved).
+  // Either way, don't clear the list — bundled fonts stay visible throughout.
   isLoading.value = true
-  availableFonts.value = []
   try {
     const fonts = await detectAvailableFonts()
     if (generation === loadGeneration) availableFonts.value = fonts

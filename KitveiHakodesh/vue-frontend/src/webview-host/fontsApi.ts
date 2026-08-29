@@ -56,7 +56,14 @@ function withBundledFirst(systemFonts: string[]): string[] {
   return [...bundled, ...systemFonts.filter((f) => !bundled.includes(f))]
 }
 
-export async function detectAvailableFonts(): Promise<string[]> {
+/**
+ * Module-level cache: a single Promise set on the first call and reused for the
+ * lifetime of the page. A hard reload clears it because the module is re-evaluated.
+ * Every FontSelector dropdown shares one fetch — subsequent opens are instant.
+ */
+let _fontsCache: Promise<string[]> | null = null
+
+async function fetchFonts(): Promise<string[]> {
   if (typeof window.__webviewAction === 'function') {
     try {
       const result = await window.__webviewAction('getFonts')
@@ -74,4 +81,9 @@ export async function detectAvailableFonts(): Promise<string[]> {
     }
   }
   return withBundledFirst(await detectFontsByCanvas())
+}
+
+export function detectAvailableFonts(): Promise<string[]> {
+  if (!_fontsCache) _fontsCache = fetchFonts()
+  return _fontsCache
 }
