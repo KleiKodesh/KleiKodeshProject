@@ -334,10 +334,14 @@ const style = computed(() => {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // Dimensions from settings — override the CSS defaults after positioning resolves,
-    // and update reactively when the user resets or the settings change.
-    width: `${settingsStore.wordLinkTooltipWidth}px`,
-    height: `${settingsStore.wordLinkTooltipHeight}px`,
+    // User's saved size, clamped by the positioning logic's viewport-safe caps so the
+    // tooltip never overflows the page regardless of how large the user has resized it.
+    width: resolvedMaxWidth.value !== null
+      ? `${Math.min(settingsStore.wordLinkTooltipWidth, resolvedMaxWidth.value)}px`
+      : `${settingsStore.wordLinkTooltipWidth}px`,
+    height: resolvedMaxHeight.value !== null
+      ? `${Math.min(settingsStore.wordLinkTooltipHeight, resolvedMaxHeight.value)}px`
+      : `${settingsStore.wordLinkTooltipHeight}px`,
     zIndex: '9998',
   }
 })
