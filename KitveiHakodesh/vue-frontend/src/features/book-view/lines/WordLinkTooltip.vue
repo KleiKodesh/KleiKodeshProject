@@ -25,7 +25,7 @@
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { IconDismiss20Regular, IconTextFontSize20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconFolderAdd20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
@@ -482,21 +482,12 @@ useEventListener(() => window, 'resize', () => emit('close'))
             v-if="interactive"
             class="word-link-tooltip-button"
             type="button"
-            title="גודל גופן"
-            aria-label="גודל גופן"
-          >
-            <span class="font-size-display">{{ settingsStore.wordLinkTooltipFontSize }}%</span>
-          </button>
-          <button
-            v-if="interactive"
-            class="word-link-tooltip-button"
-            type="button"
             title="הקטן טקסט"
             aria-label="הקטן טקסט"
             @click="decreaseFontSize"
             @mousedown.left.stop
           >
-            −
+            <IconDelete20Regular />
           </button>
           <button
             v-if="interactive"
@@ -507,7 +498,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
             @click="increaseFontSize"
             @mousedown.left.stop
           >
-            +
+            <IconFolderAdd20Regular />
           </button>
           <button
             v-if="interactive"
@@ -617,8 +608,6 @@ useEventListener(() => window, 'resize', () => emit('close'))
   background: none;
   cursor: pointer;
   color: var(--text-secondary);
-  font-size: 12px;
-  font-weight: 600;
 }
 
 .word-link-tooltip-button:hover {
@@ -626,10 +615,10 @@ useEventListener(() => window, 'resize', () => emit('close'))
   color: var(--text-primary);
 }
 
-.font-size-display {
-  font-size: 10px;
-  font-weight: 600;
-  white-space: nowrap;
+.word-link-tooltip-button svg {
+  width: 14px;
+  height: 14px;
+  color: inherit;
 }
 
 .word-link-tooltip-close {
