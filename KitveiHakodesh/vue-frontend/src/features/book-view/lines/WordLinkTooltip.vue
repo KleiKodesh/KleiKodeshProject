@@ -25,7 +25,7 @@
  */
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconAdd20Regular, IconSubtract20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
@@ -55,6 +55,25 @@ const emit = defineEmits<{
 
 const settingsStore = useSettingsStore()
 const html = computed(() => censorDivineNames(props.data.html, settingsStore.censorOptions))
+
+const headingStyle = computed(() => ({
+  fontFamily: settingsStore.commentaryHeaderFont,
+}))
+
+const bodyStyle = computed(() => ({
+  fontFamily: settingsStore.commentaryTextFont,
+}))
+
+/**
+ * Adjust the font size for the tooltip. Size is stored in percent (50-200).
+ */
+function increaseFontSize() {
+  settingsStore.wordLinkTooltipFontSize = Math.min(200, settingsStore.wordLinkTooltipFontSize + 10)
+}
+
+function decreaseFontSize() {
+  settingsStore.wordLinkTooltipFontSize = Math.max(50, settingsStore.wordLinkTooltipFontSize - 10)
+}
 
 /**
  * The target's TOC section, one entry per line, with the cited line flagged. Every
@@ -456,21 +475,45 @@ useEventListener(() => window, 'resize', () => emit('close'))
     >
       <!-- Shown when there is a heading OR a close button to hold; an interactive
            panel always has the latter, so it always keeps its header line. -->
-      <div v-if="heading || interactive" class="word-link-tooltip-title">
+      <div v-if="heading || interactive" class="word-link-tooltip-title" :style="headingStyle">
         <span class="word-link-tooltip-heading">{{ heading }}</span>
-        <button
-          v-if="interactive"
-          class="word-link-tooltip-close"
-          type="button"
-          title="סגור"
-          aria-label="סגור"
-          @click="emit('close')"
-          @mousedown.left.stop
-        >
-          <IconDismiss20Regular />
-        </button>
+        <div class="word-link-tooltip-controls">
+          <button
+            v-if="interactive"
+            class="word-link-tooltip-button"
+            type="button"
+            title="הקטן טקסט"
+            aria-label="הקטן טקסט"
+            @click="decreaseFontSize"
+            @mousedown.left.stop
+          >
+            <IconSubtract20Regular />
+          </button>
+          <button
+            v-if="interactive"
+            class="word-link-tooltip-button"
+            type="button"
+            title="הגדל טקסט"
+            aria-label="הגדל טקסט"
+            @click="increaseFontSize"
+            @mousedown.left.stop
+          >
+            <IconAdd20Regular />
+          </button>
+          <button
+            v-if="interactive"
+            class="word-link-tooltip-close"
+            type="button"
+            title="סגור"
+            aria-label="סגור"
+            @click="emit('close')"
+            @mousedown.left.stop
+          >
+            <IconDismiss20Regular />
+          </button>
+        </div>
       </div>
-      <div ref="bodyRef" class="word-link-tooltip-body">
+      <div ref="bodyRef" class="word-link-tooltip-body" :style="bodyStyle">
         <template v-if="sectionLines">
           <!-- eslint-disable-next-line vue/no-v-html -->
           <div
@@ -495,11 +538,10 @@ useEventListener(() => window, 'resize', () => emit('close'))
   border: 1px solid var(--border-color);
   border-radius: 3px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12);
-  padding: 6px 0;
+  padding: 4px 0;
   direction: rtl;
-  font-family: 'Segoe UI Variable', 'Segoe UI', system-ui, sans-serif;
-  font-size: 12.5px;
-  line-height: 1.7;
+  font-size: calc(12px * (v-bind('settingsStore.wordLinkTooltipFontSize') / 100));
+  line-height: 1.5;
   color: var(--text-primary);
   /* Long previews scroll, and the user must be able to reach that scrollbar — so
      this accepts the pointer, stated outright rather than left to the initial
@@ -513,7 +555,7 @@ useEventListener(() => window, 'resize', () => emit('close'))
      only binds on short viewports; on a tall screen the px term is what applies, so it
      is the one that decides the shape. A full section is normally longer than this — it
      scrolls, and the cited line is scrolled to, so the cap costs no context. */
-  max-height: min(260px, 45vh);
+  max-height: min(140px, 35vh);
   min-height: 0;
 }
 
@@ -533,17 +575,24 @@ useEventListener(() => window, 'resize', () => emit('close'))
   flex-shrink: 0;
 }
 
-/* Takes the slack so the close button is pushed to the end edge — which under
+/* Takes the slack so the controls are pushed to the end edge — which under
    this panel's `dir="rtl"` is the visual LEFT. Logical properties throughout, so
-   the button stays on the correct side without hard-coding a direction. */
+   the buttons stay on the correct side without hard-coding a direction. */
 .word-link-tooltip-heading {
   flex: 1;
   min-width: 0;
-  /* A long book+path heading must not push the close button off the panel; it
+  /* A long book+path heading must not push the controls off the panel; it
      clips instead, matching the breadcrumb convention of clipping over ellipsis. */
   overflow: hidden;
   white-space: nowrap;
   font-weight: 700;
+}
+
+.word-link-tooltip-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
 }
 
 .word-link-tooltip-close {
@@ -569,7 +618,28 @@ useEventListener(() => window, 'resize', () => emit('close'))
   color: var(--text-primary);
 }
 
-.word-link-tooltip-close svg {
+.word-link-tooltip-button {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  background: none;
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.word-link-tooltip-button:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.18));
+  color: var(--text-primary);
+}
+
+.word-link-tooltip-close svg,
+.word-link-tooltip-button svg {
   width: 14px;
   height: 14px;
   color: inherit;
