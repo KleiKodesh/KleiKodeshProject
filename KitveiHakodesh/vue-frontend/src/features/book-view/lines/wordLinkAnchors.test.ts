@@ -12,6 +12,7 @@ const anchor = (over: Partial<WordLinkAnchor>): WordLinkAnchor => ({
   targetLineId: 99,
   targetLineIndex: 42,
   sourceBookId: 5,
+  connectionTypeId: 1,
   ...over,
 })
 

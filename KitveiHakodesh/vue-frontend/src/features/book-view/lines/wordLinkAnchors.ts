@@ -166,7 +166,7 @@ export function buildWordLinkTreatments(
       // Slots 2+: enclosures (no decoration)
       const encIndex = adjustedRank - 2
       if (encIndex < enclosures.length) {
-        const enc = enclosures[encIndex]
+        const enc = enclosures[encIndex]!
         treatment = { bucket: slot, open: enc[0], close: enc[1] }
       } else {
         // Ran out of enclosures — cycle back with underline
