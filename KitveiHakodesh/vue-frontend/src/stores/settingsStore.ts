@@ -34,8 +34,6 @@ const KEYS = {
 
   // Word link tooltip
   SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE: 'wordLinkTooltip.fontSize',
-  SETTINGS_WORD_LINK_TOOLTIP_WIDTH: 'wordLinkTooltip.width',
-  SETTINGS_WORD_LINK_TOOLTIP_HEIGHT: 'wordLinkTooltip.height',
 
   // Divine-name censoring
   SETTINGS_CENSOR_DIVINE: 'censor.divineNames',
@@ -144,8 +142,6 @@ const DEFAULTS = {
   commentaryFontWeight: 400,
   commentaryLinePadding: 1.6,
   wordLinkTooltipFontSize: 100,
-  wordLinkTooltipWidth: 360,
-  wordLinkTooltipHeight: 140,
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
@@ -256,8 +252,6 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryFontWeight = ref(DEFAULTS.commentaryFontWeight)
   const commentaryLinePadding = ref(DEFAULTS.commentaryLinePadding)
   const wordLinkTooltipFontSize = ref(DEFAULTS.wordLinkTooltipFontSize)
-  const wordLinkTooltipWidth = ref(DEFAULTS.wordLinkTooltipWidth)
-  const wordLinkTooltipHeight = ref(DEFAULTS.wordLinkTooltipHeight)
   const appZoom = ref(DEFAULTS.appZoom)
   const dictionaryZoom = ref(DEFAULTS.dictionaryZoom)
   const newTabPage = ref<NewTabPage>(DEFAULTS.newTabPage)
@@ -385,8 +379,6 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMMENTARY_FONT_WEIGHT, commentaryFontWeight)
     loadSetting(KEYS.SETTINGS_COMMENTARY_LINE_PADDING, commentaryLinePadding)
     loadSetting(KEYS.SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE, wordLinkTooltipFontSize)
-    loadSetting(KEYS.SETTINGS_WORD_LINK_TOOLTIP_WIDTH, wordLinkTooltipWidth)
-    loadSetting(KEYS.SETTINGS_WORD_LINK_TOOLTIP_HEIGHT, wordLinkTooltipHeight)
     loadSetting(KEYS.SETTINGS_APP_ZOOM, appZoom)
     loadSetting(KEYS.SETTINGS_DICTIONARY_ZOOM, dictionaryZoom)
     const storedNewTabPage = normalizeNewTabPage(lsGet<LegacyNewTabPage>(KEYS.SETTINGS_NEW_TAB_PAGE))
@@ -475,8 +467,6 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryFontWeight, KEYS.SETTINGS_COMMENTARY_FONT_WEIGHT, applyCSSVariables)
   persistSetting(commentaryLinePadding, KEYS.SETTINGS_COMMENTARY_LINE_PADDING, applyCSSVariables)
   persistSetting(wordLinkTooltipFontSize, KEYS.SETTINGS_WORD_LINK_TOOLTIP_FONT_SIZE)
-  persistSetting(wordLinkTooltipWidth, KEYS.SETTINGS_WORD_LINK_TOOLTIP_WIDTH)
-  persistSetting(wordLinkTooltipHeight, KEYS.SETTINGS_WORD_LINK_TOOLTIP_HEIGHT)
   persistSetting(appZoom, KEYS.SETTINGS_APP_ZOOM, applyCSSVariables)
   persistSetting(dictionaryZoom, KEYS.SETTINGS_DICTIONARY_ZOOM)
   persistSetting(newTabPage, KEYS.SETTINGS_NEW_TAB_PAGE)
@@ -636,8 +626,6 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryFontWeight.value = DEFAULTS.commentaryFontWeight
     commentaryLinePadding.value = DEFAULTS.commentaryLinePadding
     wordLinkTooltipFontSize.value = DEFAULTS.wordLinkTooltipFontSize
-    wordLinkTooltipWidth.value = DEFAULTS.wordLinkTooltipWidth
-    wordLinkTooltipHeight.value = DEFAULTS.wordLinkTooltipHeight
     appZoom.value = DEFAULTS.appZoom
     dictionaryZoom.value = DEFAULTS.dictionaryZoom
     newTabPage.value = DEFAULTS.newTabPage
@@ -686,7 +674,7 @@ export const useSettingsStore = defineStore('settings', () => {
   return {
     divineNameMode, elokimMode, otherNamesSelected, censorOptions, censorCacheKey,
     diacriticsState, hiddenWordLinkMarkerBookIds, headerFont, textFont, teamimTextFont, fontSize, fontWeight, linePadding, fixedLineHeight,
-    commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize, wordLinkTooltipWidth, wordLinkTooltipHeight,
+    commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,

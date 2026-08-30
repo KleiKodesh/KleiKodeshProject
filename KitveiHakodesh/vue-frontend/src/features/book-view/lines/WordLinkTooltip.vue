@@ -23,9 +23,9 @@
  * dead space where a `mouseout` would look like leaving — it hangs off whichever
  * edge faces the anchor, hence the `is-above`/`is-below` class.
  */
-import { ref, computed, onMounted, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular, IconArrowReset20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular } from '@iconify-prerendered/vue-fluent'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
@@ -73,18 +73,6 @@ function increaseFontSize() {
 
 function decreaseFontSize() {
   settingsStore.wordLinkTooltipFontSize = Math.max(50, settingsStore.wordLinkTooltipFontSize - 10)
-}
-
-/**
- * Reset font size and tooltip dimensions to their default values.
- */
-function resetToDefaults() {
-  settingsStore.wordLinkTooltipFontSize = 100
-  settingsStore.wordLinkTooltipWidth = 360
-  settingsStore.wordLinkTooltipHeight = 140
-  // Also update the live size immediately
-  initialWidth.value = 360
-  initialHeight.value = 140
 }
 
 /**
@@ -190,15 +178,6 @@ const resolvedMaxHeight = ref<number | null>(null)
 const resolvedMaxWidth = ref<number | null>(null)
 
 /**
- * The initial width/height for this tooltip instance — the persisted values capped
- * to the viewport-safe room computed by computePosition. Set once on mount; the live
- * size after that is whatever the user drags to and is uncapped (the ResizeObserver
- * persists it, the cap only applies when the next tooltip loads).
- */
-const initialWidth = ref(settingsStore.wordLinkTooltipWidth)
-const initialHeight = ref(settingsStore.wordLinkTooltipHeight)
-
-/**
  * Places the panel under two hard constraints, both of which must hold together:
  * no part of it may fall outside the viewport, and no part of it may cover the link
  * that triggered it. Covering the anchor is not a lesser evil to be traded away —
@@ -266,11 +245,6 @@ function computePosition() {
   resolvedMaxHeight.value = constrainedHeight
   resolvedTop.value = top
   resolvedLeft.value = clampLeft(rect.left + rect.width / 2 - width / 2, width, viewportW)
-  // Cap the persisted size to what the viewport can actually seat on this placement.
-  // The live size after this is uncapped — the user can drag as large as they want and
-  // that value is persisted; the cap only fires when the next tooltip loads.
-  initialWidth.value = Math.min(settingsStore.wordLinkTooltipWidth, viewportW - MARGIN * 2)
-  initialHeight.value = Math.min(settingsStore.wordLinkTooltipHeight, constrainedHeight)
 }
 
 /**
@@ -330,9 +304,6 @@ function placeBeside(rect: DOMRect, height: number, viewportW: number, viewportH
   resolvedLeft.value = useStart ? rect.left - MARGIN - beside : rect.right + MARGIN
   placement.value = 'beside'
   besideSide.value = useStart ? 'right' : 'left'
-  // Cap the persisted size to what the beside placement can seat.
-  initialWidth.value = Math.min(settingsStore.wordLinkTooltipWidth, beside)
-  initialHeight.value = Math.min(settingsStore.wordLinkTooltipHeight, seated)
 }
 
 const style = computed(() => {
@@ -350,10 +321,6 @@ const style = computed(() => {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // Use the viewport-capped initial size. The user can drag larger after open and
-    // that is fine — the ResizeObserver persists it; the cap only applies on next load.
-    width: `${initialWidth.value}px`,
-    height: `${initialHeight.value}px`,
     zIndex: '9998',
   }
 })
@@ -477,32 +444,6 @@ onMounted(() => {
  */
 useEventListener(() => window, 'resize', () => emit('close'))
 
-/**
- * Watch for user resizing the tooltip and persist the new dimensions to the
- * settings store so the next tooltip shown has the same size.
- */
-const resizeObserver = new ResizeObserver(() => {
-  if (tooltipRef.value) {
-    const width = tooltipRef.value.offsetWidth
-    const height = tooltipRef.value.offsetHeight
-    if (width > 0 && height > 0) {
-      settingsStore.wordLinkTooltipWidth = width
-      settingsStore.wordLinkTooltipHeight = height
-    }
-  }
-})
-
-onMounted(() => {
-  if (tooltipRef.value) {
-    resizeObserver.observe(tooltipRef.value)
-  }
-})
-
-// Clean up the observer when the component is unmounted
-onBeforeUnmount(() => {
-  resizeObserver.disconnect()
-})
-
 
 </script>
 
@@ -550,17 +491,6 @@ onBeforeUnmount(() => {
               @mousedown.left.stop
             >
               <IconZoomIn20Regular />
-            </button>
-            <button
-              v-if="interactive"
-              class="word-link-tooltip-button"
-              type="button"
-              title="אפס עיצוב"
-              aria-label="אפס עיצוב"
-              @click="resetToDefaults"
-              @mousedown.left.stop
-            >
-              <IconArrowReset20Regular />
             </button>
             <button
               v-if="interactive"
