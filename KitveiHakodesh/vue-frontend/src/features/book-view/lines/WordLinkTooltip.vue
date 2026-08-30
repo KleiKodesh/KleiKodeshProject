@@ -82,6 +82,9 @@ function resetToDefaults() {
   settingsStore.wordLinkTooltipFontSize = 100
   settingsStore.wordLinkTooltipWidth = 360
   settingsStore.wordLinkTooltipHeight = 140
+  // Also update the live size immediately
+  initialWidth.value = 360
+  initialHeight.value = 140
 }
 
 /**
@@ -187,6 +190,15 @@ const resolvedMaxHeight = ref<number | null>(null)
 const resolvedMaxWidth = ref<number | null>(null)
 
 /**
+ * The initial width/height for this tooltip instance — the persisted values capped
+ * to the viewport-safe room computed by computePosition. Set once on mount; the live
+ * size after that is whatever the user drags to and is uncapped (the ResizeObserver
+ * persists it, the cap only applies when the next tooltip loads).
+ */
+const initialWidth = ref(settingsStore.wordLinkTooltipWidth)
+const initialHeight = ref(settingsStore.wordLinkTooltipHeight)
+
+/**
  * Places the panel under two hard constraints, both of which must hold together:
  * no part of it may fall outside the viewport, and no part of it may cover the link
  * that triggered it. Covering the anchor is not a lesser evil to be traded away —
@@ -254,6 +266,11 @@ function computePosition() {
   resolvedMaxHeight.value = constrainedHeight
   resolvedTop.value = top
   resolvedLeft.value = clampLeft(rect.left + rect.width / 2 - width / 2, width, viewportW)
+  // Cap the persisted size to what the viewport can actually seat on this placement.
+  // The live size after this is uncapped — the user can drag as large as they want and
+  // that value is persisted; the cap only fires when the next tooltip loads.
+  initialWidth.value = Math.min(settingsStore.wordLinkTooltipWidth, viewportW - MARGIN * 2)
+  initialHeight.value = Math.min(settingsStore.wordLinkTooltipHeight, constrainedHeight)
 }
 
 /**
@@ -311,12 +328,11 @@ function placeBeside(rect: DOMRect, height: number, viewportW: number, viewportH
 
   resolvedMaxWidth.value = beside
   resolvedLeft.value = useStart ? rect.left - MARGIN - beside : rect.right + MARGIN
-  // The gap to bridge is horizontal now — the panel is level with the link, not
-  // above or below it — and the bridge belongs on the flank that faces the anchor.
   placement.value = 'beside'
-  // useStart put the panel to the LEFT of the anchor, so the anchor is off its
-  // right edge, and that is where the bridge belongs.
   besideSide.value = useStart ? 'right' : 'left'
+  // Cap the persisted size to what the beside placement can seat.
+  initialWidth.value = Math.min(settingsStore.wordLinkTooltipWidth, beside)
+  initialHeight.value = Math.min(settingsStore.wordLinkTooltipHeight, seated)
 }
 
 const style = computed(() => {
@@ -334,14 +350,10 @@ const style = computed(() => {
     position: 'absolute' as const,
     top: `${resolvedTop.value}px`,
     left: `${resolvedLeft.value}px`,
-    // User's saved size, clamped by the positioning logic's viewport-safe caps so the
-    // tooltip never overflows the page regardless of how large the user has resized it.
-    width: resolvedMaxWidth.value !== null
-      ? `${Math.min(settingsStore.wordLinkTooltipWidth, resolvedMaxWidth.value)}px`
-      : `${settingsStore.wordLinkTooltipWidth}px`,
-    height: resolvedMaxHeight.value !== null
-      ? `${Math.min(settingsStore.wordLinkTooltipHeight, resolvedMaxHeight.value)}px`
-      : `${settingsStore.wordLinkTooltipHeight}px`,
+    // Use the viewport-capped initial size. The user can drag larger after open and
+    // that is fine — the ResizeObserver persists it; the cap only applies on next load.
+    width: `${initialWidth.value}px`,
+    height: `${initialHeight.value}px`,
     zIndex: '9998',
   }
 })
