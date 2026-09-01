@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>כלי קודש למק</title>
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    :root {
+      --bg: #f7f5f0;
+      --card: #ffffff;
+      --ink: #2b2b2b;
+      --accent: #7a5c2e;
+      --accent-soft: #efe7d6;
+      --line: #e2dccd;
+      --ok: #2e7d4f;
+      --err: #b3261e;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      font-size: 14px;
+      direction: rtl;
+    }
+    .wrap { padding: 12px; }
+    h1 {
+      font-size: 16px;
+      margin: 0 0 10px;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 12px;
+      border-bottom: 2px solid var(--line);
+    }
+    .tab {
+      padding: 8px 12px;
+      cursor: pointer;
+      border: none;
+      background: none;
+      font-size: 14px;
+      font-family: inherit;
+      color: #666;
+      border-bottom: 3px solid transparent;
+      margin-bottom: -2px;
+    }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 10px;
+    }
+    label { display: block; font-size: 12px; color: #555; margin: 0 0 4px; }
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+      direction: rtl;
+    }
+    textarea { resize: vertical; min-height: 38px; }
+    .row { margin-bottom: 10px; }
+    .opts { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; font-size: 13px; }
+    .opts label { display: flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+    button.action {
+      flex: 1;
+      min-width: 90px;
+      padding: 9px 10px;
+      border: none;
+      border-radius: 6px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+    }
+    button.action.secondary { background: var(--accent-soft); color: var(--accent); }
+    button.action:hover { opacity: 0.92; }
+    .status { margin-top: 10px; font-size: 13px; min-height: 18px; }
+    .status.ok { color: var(--ok); }
+    .status.err { color: var(--err); }
+    .sites { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .site-btn {
+      padding: 12px 8px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--card);
+      cursor: pointer;
+      font-size: 13px;
+      font-family: inherit;
+      text-align: center;
+      color: var(--ink);
+    }
+    .site-btn:hover { background: var(--accent-soft); border-color: var(--accent); }
+    .site-btn b { display: block; color: var(--accent); margin-bottom: 2px; }
+    .hint { font-size: 12px; color: #888; margin: 4px 0 0; line-height: 1.5; }
+    .examples { font-size: 12px; color: #777; margin-top: 8px; line-height: 1.7; }
+    .examples code {
+      background: var(--accent-soft);
+      padding: 1px 5px;
+      border-radius: 4px;
+      direction: ltr;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>📜 כלי קודש למק</h1>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="regex">חיפוש והחלפה</button>
+      <button class="tab" data-tab="dicta">דיקטא וניקוד</button>
+      <button class="tab" data-tab="sites">אתרים</button>
+    </div>
+
+    <!-- ===== חיפוש והחלפה רגקס ===== -->
+    <div class="panel active" id="panel-regex">
+      <div class="card">
+        <div class="row">
+          <label>חיפוש (תומך בביטויים רגולריים)</label>
+          <textarea id="findInput" rows="2" placeholder="לדוגמה: רב(י)? \w+"></textarea>
+        </div>
+        <div class="row">
+          <label>החלפה</label>
+          <textarea id="replaceInput" rows="2" placeholder="טקסט חלופי. אפשר $1 $2 לקבוצות"></textarea>
+        </div>
+        <div class="opts">
+          <label><input type="checkbox" id="optRegex" checked /> רגקס</label>
+          <label><input type="checkbox" id="optCase" /> תלוי רישיות</label>
+          <label><input type="checkbox" id="optWhole" /> מילה שלמה</label>
+        </div>
+        <div class="btns">
+          <button class="action secondary" id="btnCount">ספירה</button>
+          <button class="action" id="btnReplaceAll">החלף הכל</button>
+        </div>
+        <div class="status" id="regexStatus"></div>
+        <div class="examples">
+          דוגמאות שימושיות:<br>
+          הסרת רווחים כפולים: <code>\s{2,}</code> ⟸ רווח אחד<br>
+          גרשיים לועזיים לעבריים: <code>"</code> (כבוי רגקס)<br>
+          הוספת מקף בין מילים: <code>(\S) (\S)</code> ⟸ <code>$1־$2</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== דיקטא וניקוד ===== -->
+    <div class="panel" id="panel-dicta">
+      <div class="card">
+        <p class="hint">סמן טקסט במסמך ולחץ "נקד את הבחירה". הטקסט יישלח לשרת הניקוד של דיקטא והניקוד יוחזר ישירות למסמך.</p>
+        <div class="opts">
+          <label><input type="radio" name="genre" value="modern" /> עברית מודרנית</label>
+          <label><input type="radio" name="genre" value="rabbinic" checked /> לשון חז"ל / רבנית</label>
+        </div>
+        <div class="btns">
+          <button class="action" id="btnNakdan">נקד את הבחירה</button>
+        </div>
+        <div class="status" id="dictaStatus"></div>
+      </div>
+      <div class="card">
+        <p class="hint">פתיחת כלי דיקטא המלאים בחלון בתוך וורד:</p>
+        <div class="sites">
+          <button class="site-btn" data-url="https://nakdanpro.dicta.org.il/"><b>נקדן פרו</b>ניקוד מקצועי</button>
+          <button class="site-btn" data-url="https://dicta.org.il/"><b>דיקטא</b>כל הכלים</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== אתרים תורניים ===== -->
+    <div class="panel" id="panel-sites">
+      <div class="card">
+        <p class="hint">לחיצה פותחת את האתר בחלון בתוך וורד (אפשר לסמן טקסט במסמך לפני, והוא יועתק ללוח כדי שתוכל להדביק).</p>
+        <div class="sites">
+          <button class="site-btn" data-url="https://nakdanit.morfix.co.il/"><b>נקדנית</b>מורפיקס</button>
+          <button class="site-btn" data-url="https://www.sefaria.org.il/"><b>ספריא</b>מקורות</button>
+          <button class="site-btn" data-url="https://hebrewbooks.org/"><b>HebrewBooks</b>ספרים סרוקים</button>
+          <button class="site-btn" data-url="https://tablet.otzar.org/"><b>אוצר החכמה</b>טאבלט</button>
+          <button class="site-btn" data-url="https://dicta.org.il/"><b>דיקטא</b>חיפוש וכלים</button>
+          <button class="site-btn" data-url="https://nakdanpro.dicta.org.il/"><b>נקדן פרו</b>ניקוד</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let officeReady = false;
+    Office.onReady(function (info) {
+      officeReady = (info.host === Office.HostType.Word);
+    });
+
+    // ---------- ניווט בין לשוניות ----------
+    document.querySelectorAll(".tab").forEach(function (t) {
+      t.addEventListener("click", function () {
+        document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+        document.querySelectorAll(".panel").forEach(x => x.classList.remove("active"));
+        t.classList.add("active");
+        document.getElementById("panel-" + t.dataset.tab).classList.add("active");
+      });
+    });
+
+    function setStatus(id, msg, type) {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.className = "status" + (type ? " " + type : "");
+    }
+
+    function escapeRegex(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function buildRegex() {
+      const raw = document.getElementById("findInput").value;
+      if (!raw) return null;
+      const useRegex = document.getElementById("optRegex").checked;
+      const caseSensitive = document.getElementById("optCase").checked;
+      const wholeWord = document.getElementById("optWhole").checked;
+      let pattern = useRegex ? raw : escapeRegex(raw);
+      if (wholeWord) pattern = "(?<![\\wא-ת])(?:" + pattern + ")(?![\\wא-ת])";
+      let flags = "g";
+      if (!caseSensitive) flags += "i";
+      try {
+        return new RegExp(pattern, flags);
+      } catch (e) {
+        setStatus("regexStatus", "ביטוי לא תקין: " + e.message, "err");
+        return false;
+      }
+    }
+
+    // ---------- ספירה ----------
+    document.getElementById("btnCount").addEventListener("click", async function () {
+      const re = buildRegex();
+      if (re === false) return;
+      if (!re) { setStatus("regexStatus", "הזן טקסט לחיפוש.", "err"); return; }
+      try {
+        await Word.run(async (context) => {
+          const body = context.document.body;
+          body.load("text");
+          await context.sync();
+          const matches = body.text.match(re);
+          const n = matches ? matches.length : 0;
+          setStatus("regexStatus", "נמצאו " + n + " התאמות במסמך.", n ? "ok" : "");
+        });
+      } catch (e) {
+        setStatus("regexStatus", "שגיאה: " + e.message, "err");
+      }
+    });
+
+    // ---------- החלף הכל ----------
+    document.getElementById("btnReplaceAll").addEventListener("click", async function () {
+      const re = buildRegex();
+      if (re === false) return;
+      if (!re) { setStatus("regexStatus", "הזן טקסט לחיפוש.", "err"); return; }
+      const replacement = document.getElementById("replaceInput").value;
+      try {
+        await Word.run(async (context) => {
+          // עובדים פסקה-פסקה כדי לשמר את מבנה המסמך ולמנוע מחיקת עיצוב כללי.
+          const paras = context.document.body.paragraphs;
+          paras.load("items");
+          await context.sync();
+          paras.items.forEach(p => p.load("text"));
+          await context.sync();
+
+          let total = 0;
+          paras.items.forEach(p => {
+            const original = p.text;
+            if (!original) return;
+            re.lastIndex = 0;
+            const matchCount = (original.match(re) || []).length;
+            if (matchCount === 0) return;
+            const updated = original.replace(re, replacement);
+            if (updated !== original) {
+              p.insertText(updated, Word.InsertLocation.replace);
+              total += matchCount;
+            }
+          });
+          await context.sync();
+          setStatus("regexStatus", total ? ("הוחלפו " + total + " התאמות.") : "לא נמצאו התאמות.", total ? "ok" : "");
+        });
+      } catch (e) {
+        setStatus("regexStatus", "שגיאה: " + e.message, "err");
+      }
+    });
+
+    // ---------- ניקוד דיקטא ----------
+    async function getSelectedText() {
+      let result = "";
+      await Word.run(async (context) => {
+        const sel = context.document.getSelection();
+        sel.load("text");
+        await context.sync();
+        result = sel.text || "";
+      });
+      return result;
+    }
+
+    document.getElementById("btnNakdan").addEventListener("click", async function () {
+      let text = "";
+      try { text = await getSelectedText(); } catch (e) {}
+      if (!text || !text.trim()) {
+        setStatus("dictaStatus", "סמן קודם טקסט במסמך.", "err");
+        return;
+      }
+      const genre = document.querySelector('input[name="genre"]:checked').value;
+      setStatus("dictaStatus", "שולח לדיקטא…", "");
+      try {
+        const niqqud = await callDictaNakdan(text, genre);
+        await Word.run(async (context) => {
+          const sel = context.document.getSelection();
+          sel.insertText(niqqud, Word.InsertLocation.replace);
+          await context.sync();
+        });
+        setStatus("dictaStatus", "הניקוד הוחזר למסמך ✓", "ok");
+      } catch (e) {
+        setStatus("dictaStatus", "החיבור האוטומטי נכשל. פותח את נקדן פרו בחלון – העתק/הדבק שם. (" + e.message + ")", "err");
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch (_) {}
+        openInDialog("https://nakdanpro.dicta.org.il/");
+      }
+    });
+
+    // קריאה ל-API של דיקטא. אם המבנה ישתנה בעתיד – הגיבוי הוא פתיחת נקדן פרו בחלון.
+    async function callDictaNakdan(text, genre) {
+      const resp = await fetch("https://nakdan-5-1.loadbalancer.dicta.org.il/api", {
+        method: "POST",
+        headers: { "Content-Type": "text/plain;charset=UTF-8" },
+        body: JSON.stringify({
+          task: "nakdan",
+          data: text,
+          genre: genre,
+          addmorph: true,
+          keepqq: false,
+          nodageshdefmem: false,
+          patachma: false,
+          keepmetagim: true
+        })
+      });
+      if (!resp.ok) throw new Error("HTTP " + resp.status);
+      const data = await resp.json();
+      // המבנה: מערך מילים, לכל אחת options[0].w עם הניקוד, או sep למפרידים.
+      let out = "";
+      data.forEach(function (item) {
+        if (item.sep || !item.options || !item.options.length) { out += item.word; return; }
+        out += (item.options[0][0] || item.word);
+      });
+      // ניקוי סימן הפרדת תחיליות של דיקטא
+      out = out.replace(/\|/g, "");
+      // שחזור גרשיים (״) וגרש (׳) שדיקטא המירה למרכאות ישרות
+      out = out.replace(/([א-ת][֑-ׇ]*)"(?=[֑-ׇ]*[א-ת])/g, "$1״");
+      out = out.replace(/([א-ת][֑-ׇ]*)'/g, "$1׳");
+      return out;
+    }
+
+    // ---------- פתיחת אתרים בחלון בתוך וורד ----------
+    function openInDialog(url) {
+      if (!officeReady || !Office.context || !Office.context.ui) {
+        window.open(url, "_blank");
+        return;
+      }
+      Office.context.ui.displayDialogAsync(
+        url,
+        { height: 80, width: 70, displayInIframe: false },
+        function (asyncResult) {
+          if (asyncResult.status === Office.AsyncResultStatus.Failed) {
+            window.open(url, "_blank");
+          }
+        }
+      );
+    }
+
+    document.querySelectorAll(".site-btn").forEach(function (b) {
+      b.addEventListener("click", async function () {
+        // אם יש טקסט מסומן – נעתיק אותו ללוח להדבקה נוחה באתר
+        try {
+          const t = await getSelectedText();
+          if (t && t.trim()) { await navigator.clipboard.writeText(t); }
+        } catch (e) {}
+        openInDialog(b.dataset.url);
+      });
+    });
+  </script>
+</body>
+</html>
