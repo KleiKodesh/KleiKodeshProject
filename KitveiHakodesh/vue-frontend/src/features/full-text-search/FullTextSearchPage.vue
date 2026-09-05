@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEventListener, useMediaQuery } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
@@ -116,6 +116,9 @@ const initialScrollOffset = ref<number | undefined>(_scrollMirror?.o)
 const isAdvancedOpen = ref(false)
 const advancedPanelRef = ref<HTMLElement | null>(null)
 // Scroll position owned here — updated by SearchResultsList via saveScroll emit
+// Set for one tick while the searchRestore watcher is applying a history position, so the
+// new-search reset can recognize that navigation no matter which watcher runs first.
+let restoringNonce: number | null = null
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
 
@@ -192,11 +195,41 @@ watch(
   },
 )
 
+// A NEW search starts at the top of its OWN result list. The saved scroll position is
+// per-tab (not per-query), so without clearing it here the previous search's index would be
+// restored into the new results -- the list would open mid-way instead of at the first hit.
+// Only user-initiated NEW searches call this: the filter/sort and index-ready watchers above
+// re-run the SAME query and must keep the user where they were.
+function resetScrollForNewSearch() {
+  // Back/Forward (and picking a search row from the address-bar dropdown) patches
+  // `searchRestore` and `searchQuery` in the SAME patch, so this runs for that navigation
+  // too -- and its sibling watcher below is deliberately restoring a position. Order between
+  // the two watchers is not guaranteed, so defer to the explicit intent whenever the field is
+  // still pending: that navigation is a RESTORE, not a new search.
+  if (paneNavigation.tabs.find((t) => t.id === tabId)?.searchRestore || restoringNonce != null) return
+  initialScrollIndex.value = undefined
+  initialScrollOffset.value = undefined
+  lastScrollIndex = undefined
+  lastScrollOffset = undefined
+  lsDelete(scrollMirrorKey)
+  // Clear the IDB copy too, not just the mirror. The mirror is only PREFERRED over IDB on
+  // boot -- when it is absent the IDB value is still used as the legacy fallback, so leaving
+  // it behind means a reload right after a new search would restore the stale index anyway.
+  // Go through saveFilterState: setTabViewState REPLACES the whole record, so writing the
+  // scroll scalars alone would drop the tab's checked books, filters, zoom and sort order.
+  // lastScroll* are already cleared above, so this persists them as absent.
+  void saveFilterState(true)
+  resultsListRef.value?.cancelRestore()
+}
+
 function onSearch(q: string) {
   const { term, atFilters: tokens } = parseSearchQuery(q)
   setAtFilters(tokens)
   paneNavigation.updateActiveTab({ searchQuery: q, title: `חיפוש: ${term || q}` })
-  if (term) handleSearch(term)
+  if (term) {
+    resetScrollForNewSearch()
+    handleSearch(term)
+  }
 }
 function onClearSearch() {
   paneNavigation.updateActiveTab({ searchQuery: undefined, title: 'חיפוש' })
@@ -217,7 +250,10 @@ watch(
     const { term, atFilters: tokens } = parseSearchQuery(q)
     setAtFilters(tokens)
     paneNavigation.updateActiveTab({ title: `חיפוש: ${term || q}` })
-    if (term) handleSearch(term)
+    if (term) {
+      resetScrollForNewSearch()
+      handleSearch(term)
+    }
   },
 )
 
@@ -238,6 +274,12 @@ watch(
   () => paneNavigation.tabs.find((t) => t.id === tabId)?.searchRestore,
   (restore) => {
     if (!restore) return
+    // Claim the navigation BEFORE consuming the field: resetScrollForNewSearch checks
+    // `searchRestore` to detect a restore-navigation, but consuming it below makes that
+    // check fail if this watcher happens to run FIRST. The nonce marks which navigation is
+    // spoken for; the flag is cleared on the next tick, once both watchers have run.
+    restoringNonce = restore.nonce
+    nextTick(() => { restoringNonce = null })
     initialScrollIndex.value = restore.index
     initialScrollOffset.value = restore.offset
     // Consume it, like openTocLineIndex: the field describes ONE navigation, and leaving it
@@ -256,8 +298,11 @@ function onNavigateToBook(bookId: number) {
   resultsListRef.value?.scrollToBook(bookId)
 }
 
-async function saveFilterState() {
-  const captured = resultsListRef.value?.captureScrollPos()
+// `keepScrollCleared` is for the new-search reset: it has just nulled the scroll scalars on
+// purpose, and recapturing the live position here would write the OUTGOING search's index
+// straight back into both the mirror and IDB.
+async function saveFilterState(keepScrollCleared = false) {
+  const captured = keepScrollCleared ? null : resultsListRef.value?.captureScrollPos()
   if (captured) {
     lastScrollIndex = captured.scrollIndex
     lastScrollOffset = captured.scrollOffset

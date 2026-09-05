@@ -107,6 +107,18 @@ watch(
   () => {
     clearPreviews()
     renderCount.value = RENDER_PAGE // new search → collapse the window to the first page
+    // A new query means a new result list: kill any pending/armed restore so the previous
+    // search's saved index can't be applied to it, and start at the top. The parent clears
+    // its saved position too, but this watcher is what catches an in-flight retry loop.
+    // ...unless the parent explicitly armed a target for THIS navigation (Back/Forward onto
+    // a search row). That is a restore, not a fresh search, and the two watchers can fire in
+    // either order -- so an arm in the same tick wins over this blanket cancel.
+    const armedAt = lastArmTick
+    nextTick(() => {
+      if (lastArmTick !== armedAt) return // parent armed a target -- leave it alone
+      cancelRestore()
+      scrollEl.value?.scrollTo({ top: 0 })
+    })
   },
 )
 
@@ -204,6 +216,16 @@ function restoreScrollPos(scrollIndex: number, scrollOffset: number) {
 // watch; the parent calls it after updating the target.
 let armRestore = () => {}
 
+// The inverse of armRestore: spends the latch so no restore can fire for the results that
+// are about to arrive. A NEW search must start at the top of its own list, but the restore
+// watcher lives for the component's lifetime and stays armed whenever nothing has been
+// restored yet in this session -- so without this it would happily apply the PREVIOUS
+// search's saved index to the new result set as it streams in.
+let cancelRestore = () => {}
+// Bumped every time the parent arms a restore target, so the new-search cancel above can tell
+// whether an explicit arm landed in the same tick and step aside for it.
+let lastArmTick = 0
+
 {
   // Restore scroll once the target row is actually reachable. This is the tricky case on
   // reload: results stream in over time (fresh re-search) or arrive as a partial cache
@@ -266,6 +288,7 @@ let armRestore = () => {}
     { flush: 'post', immediate: true },
   )
   armRestore = () => {
+    lastArmTick++
     generation++   // abandon any retry loop still running for the previous target
     restored = false
     // Do NOT attempt the restore synchronously here. The navigation that re-armed us also
@@ -282,6 +305,10 @@ let armRestore = () => {}
     // that: by then executeSearch has either emptied the list (watcher takes over) or the
     // navigation didn't re-search at all and the settled rows are the right ones.
     nextTick(() => { if (!restored) tryRestore() })
+  }
+  cancelRestore = () => {
+    generation++   // abandon any retry loop still running for the previous target
+    restored = true // spend the latch: the streaming results below belong to a NEW search
   }
 }
 
@@ -335,7 +362,12 @@ function scrollToBook(bookId: number) {
 
 function onScroll() {}
 
-defineExpose({ captureScrollPos, scrollToBook, armRestore: () => armRestore() })
+defineExpose({
+  captureScrollPos,
+  scrollToBook,
+  armRestore: () => armRestore(),
+  cancelRestore: () => cancelRestore(),
+})
 </script>
 
 <template>
