@@ -27,8 +27,6 @@ namespace KleiKodesh.Helpers
             {
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
 
-                // Match on the hosted view type alone - see TaskPaneManager.Show for why
-                // there is no window to compare against.
                 var pane = FindReusable(panes, typeof(T));
 
                 if (pane != null)
@@ -78,8 +76,10 @@ namespace KleiKodesh.Helpers
         /// </summary>
         static CustomTaskPane FindReusable(CustomTaskPaneCollection panes, Type viewType)
         {
+            var activeHwnd = TaskPaneManager.ActiveWindowHandle();
+
             var matches = panes.Cast<CustomTaskPane>()
-                .Where(p => HostsView(p, viewType))
+                .Where(p => HostsView(p, viewType) && TaskPaneManager.IsForWindow(p, activeHwnd))
                 .ToList();
 
             return matches.FirstOrDefault(TaskPaneManager.IsLastRevealed)

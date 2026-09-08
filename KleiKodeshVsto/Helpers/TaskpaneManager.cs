@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using UpdateCheckerLib;
 using DockPosition = Microsoft.Office.Core.MsoCTPDockPosition;
+using Word = Microsoft.Office.Interop.Word;
 
 namespace KleiKodesh.Helpers
 {
@@ -31,13 +32,10 @@ namespace KleiKodesh.Helpers
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var type = userControl.GetType();
 
-                // Match on the control type alone. These panes are created with the
-                // two-argument Add, which leaves Window null on purpose so one pane
-                // serves every window - this add-in opens a second document in a second
-                // window (WordWindowHelper.OpenSoftSnapLeft) and both sides share the
-                // pane. The old predicate also compared Window against a live
-                // ActiveWindow, which a null never matched, so no pane was ever reused
-                // and every ribbon click and context-menu search added another one.
+                // Reuse a pane of this control type in this window, and otherwise build
+                // one. Both halves matter: matching on type alone reused another
+                // document's pane and nothing appeared here, while never matching at all
+                // added a fresh pane on every ribbon click and context-menu search.
                 var pane = FindReusable(panes, type)
                     ?? CreateNew(userControl, title, width, matchOfficeTheme, popOutBehavior);
 
@@ -118,13 +116,53 @@ namespace KleiKodesh.Helpers
         /// </summary>
         static CustomTaskPane FindReusable(CustomTaskPaneCollection panes, Type type)
         {
+            var activeHwnd = ActiveWindowHandle();
+
             var matches = panes.Cast<CustomTaskPane>()
-                .Where(p => ControlTypeOf(p) == type)
+                .Where(p => ControlTypeOf(p) == type && IsForWindow(p, activeHwnd))
                 .ToList();
 
             return matches.FirstOrDefault(IsLastRevealed)
                 ?? matches.FirstOrDefault(IsUsable)
                 ?? matches.FirstOrDefault();
+        }
+
+        /// <summary>
+        /// The window handle of the window the user is in, or zero if there is none.
+        /// Read once per lookup rather than per pane: each read is a COM call, and two
+        /// reads inside one lookup could disagree.
+        /// </summary>
+        public static int ActiveWindowHandle()
+        {
+            try { return Globals.ThisAddIn.Application.ActiveWindow.Hwnd; }
+            catch { return 0; }
+        }
+
+        /// <summary>
+        /// Whether <paramref name="pane"/> belongs to the window with
+        /// <paramref name="activeHwnd"/>.
+        ///
+        /// A pane is owned by the window that was active when it was added, and Word
+        /// only ever draws it there. Reusing one across documents is what stopped the
+        /// pane appearing in a second document: the lookup matched the first document's
+        /// pane on control type, revealed it, and Word showed it in the document it
+        /// belonged to - so nothing opened where the user had asked, with no error.
+        ///
+        /// Compare handles, not the objects. CustomTaskPane.Window is typed object, so
+        /// `pane.Window == someWindow` is a reference comparison, and two fetches of the
+        /// same Word window can hand back two different wrappers - which compares false
+        /// for the very window the pane belongs to. That failure mode is silent and
+        /// total: no pane is ever reused, and a new one is added on every ribbon click.
+        ///
+        /// Same disposed-pane hazard as ControlTypeOf: a pane whose document has gone
+        /// throws from Window, and a throw here is not a match.
+        /// </summary>
+        public static bool IsForWindow(CustomTaskPane pane, int activeHwnd)
+        {
+            if (activeHwnd == 0) return false;
+
+            try { return (pane.Window as Word.Window)?.Hwnd == activeHwnd; }
+            catch { return false; }
         }
 
         /// <summary>
@@ -185,8 +223,12 @@ namespace KleiKodesh.Helpers
                 // Hakodesh and Settings open would duplicate whichever was created first
                 // rather than the one being used - and a popped-out pane reports itself
                 // invisible, so the fallback alone swings on pop-out state.
-                var current = panes.FirstOrDefault(p => p == _lastRevealed && IsUsable(p))
-                    ?? panes.FirstOrDefault(IsVisible);
+                // Only panes in the window the user is in are candidates - duplicating
+                // must not pick up the pane belonging to another open document.
+                var activeHwnd = ActiveWindowHandle();
+
+                var current = panes.FirstOrDefault(p => p == _lastRevealed && IsUsable(p) && IsForWindow(p, activeHwnd))
+                    ?? panes.FirstOrDefault(p => IsVisible(p) && IsForWindow(p, activeHwnd));
 
                 if (current == null)
                     return null;
@@ -195,6 +237,7 @@ namespace KleiKodesh.Helpers
 
                 var existing = panes.FirstOrDefault(p =>
                     p != current &&
+                    IsForWindow(p, activeHwnd) &&
                     p.Title.TrimStart('@') == baseTitle);
 
                 if (existing != null)
