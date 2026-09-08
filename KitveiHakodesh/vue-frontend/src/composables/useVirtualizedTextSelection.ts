@@ -28,11 +28,13 @@
  *     all keep working untouched.
  *
  * WHAT IS STILL NOT AUTOMATIC
- * Copying: the middle rows genuinely are not in the DOM, so a caller that wants them
- * in the clipboard fills them in from its own model — see selectedRowIndexRange and
- * its callers in the two book-view copy files. The search results list does not, and
- * copies only what the range holds; its rows are independent search hits rather than
- * one continuous text, so a copy spanning unloaded ones has no obvious meaning.
+ * Copying: the middle rows genuinely are not in the DOM, so every caller fills them
+ * in from its own model rather than serializing the live Range — see
+ * selectedRowIndexRange and its callers in the two book-view copy files and in
+ * fullTextSearchResultsCopy. Each decides what a row contributes: the reading panes
+ * splice partial text for the two end rows, while a search result is emitted whole
+ * with its citation. A selection confined to ONE row is left to the native copy
+ * everywhere, since the DOM already holds exactly what the user highlighted.
  *
  * Re-rendering a pinned row's markup — which applying a highlight or a note does —
  * replaces its text nodes and collapses the selection, so the boundaries are captured

@@ -12,6 +12,8 @@ import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
+import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
+import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const props = defineProps<{
@@ -54,8 +56,8 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollEl, {
 })
 
 // Right-click copy and the clean-text toggle are served by the app-wide fallback
-// menu (GlobalContextMenu), which also honors the toggle on Ctrl+C — no
-// FTS-specific menu or scoped copy interceptor is needed here.
+// menu (GlobalContextMenu). The PAYLOAD, though, is built here: see
+// buildSelectedResultsCopyHtml for why the DOM selection is not enough.
 
 const fontPx = computed(() => {
   const zoomFactor = (props.zoom ?? 100) / 100
@@ -77,7 +79,7 @@ const renderLimit = computed(() => Math.min(props.results.length, renderCount.va
 // away. Without it, dragging a selection down the results list unmounts the row it
 // started in, and the browser re-homes the anchor onto whatever row now occupies
 // that position — so the selection silently comes to mean something else.
-const { rangeExtractor: selectionRangeExtractor } = useVirtualizedTextSelection(
+const { rangeExtractor: selectionRangeExtractor, selectedRowIndexRange } = useVirtualizedTextSelection(
   scrollEl,
   // The rebuild generation, which is the only thing that tracks this exactly.
   //
@@ -154,6 +156,82 @@ watch(
   },
 )
 
+/**
+ * The clipboard payload for the current selection, built from the RESULT MODEL
+ * rather than the DOM.
+ *
+ * A selection dragged over many results has only a screenful of them in the DOM, so
+ * serializing the live Range would silently drop the rest — the same virtualization
+ * gap the pinned rows fix for the selection itself. Copying a range of results is a
+ * normal thing to want (collecting every hit for a phrase), so the payload spans
+ * every selected result and gives each one its reference.
+ *
+ * Returns null when nothing is selected here, which leaves the copy event alone for
+ * GlobalContextMenu or the browser to handle.
+ */
+function buildSelectedResultsCopyHtml(): string | null {
+  const selection = window.getSelection()
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return null
+  const range = selection.getRangeAt(0)
+  if (!scrollEl.value?.contains(range.commonAncestorContainer)) return null
+
+  // An open preview replaces the row's snippet with up to 120 lines of the real book
+  // text, nested INSIDE the row — so a selection in there resolves to the row like any
+  // other, and rebuilding from the model would hand back the short clamped snippet
+  // instead of the paragraphs the user highlighted. That text is not even in the
+  // snippet. Leave the preview's own selection to the native copy, the same way the
+  // abbreviation tooltip is set up to ignore it.
+  const container =
+    range.commonAncestorContainer instanceof Element
+      ? range.commonAncestorContainer
+      : range.commonAncestorContainer.parentElement
+  if (container?.closest('.preview-box')) return null
+
+  // Likewise when the selection merely CROSSES an open preview: any result whose
+  // preview is open is showing text the snippet does not contain, so a model rebuild
+  // would quietly substitute different content for it. Rare enough (a preview has to
+  // be open inside the selected span) that falling back to the native copy — which at
+  // least reflects the DOM — beats substituting text the user never saw.
+  const rowIndexRange = selectedRowIndexRange()
+  if (rowIndexRange) {
+    for (let rowIndex = rowIndexRange.firstRowIndex; rowIndex <= rowIndexRange.lastRowIndex; rowIndex++) {
+      const result = props.results[rowIndex]
+      if (result && previewOf(result)) return null
+    }
+  }
+
+  return buildSelectedResultsHtml(
+    props.results,
+    rowIndexRange,
+    renderSnippet,
+    settingsStore.copyCleanText,
+  )
+}
+
+// Serves Ctrl+C and the context menu's copy — both fire a native copy event on the
+// scroller — plus a drag of the selection into Word. An element listener rather than
+// useScopedCopy because that composable also takes a select-all flag and a lines
+// getter this list has no equivalent of; the two event handlers are the whole of
+// what it would give us here.
+//
+// Writing a payload preventDefaults the event, which is also what stands
+// GlobalContextMenu's document-level fallback down (it returns early on
+// event.defaultPrevented) so the two cannot both write to the clipboard.
+useEventListener(scrollEl, 'copy', (event: ClipboardEvent) => {
+  const html = buildSelectedResultsCopyHtml()
+  if (html === null) return
+  event.clipboardData?.setData('text/html', wrapRtlHtml(html))
+  event.clipboardData?.setData('text/plain', htmlToPlainText(html))
+  event.preventDefault()
+})
+
+useEventListener(scrollEl, 'dragstart', (event: DragEvent) => {
+  const html = buildSelectedResultsCopyHtml()
+  if (html === null) return
+  event.dataTransfer?.setData('text/html', wrapRtlHtml(html))
+  event.dataTransfer?.setData('text/plain', htmlToPlainText(html))
+})
+
 // Open previews' component instances, keyed by lineId — the header recenter button
 // lives outside the preview component, so it reaches the scroll through this map.
 const previewRefs = new Map<number, InstanceType<typeof FullTextSearchResultPreview>>()
@@ -166,8 +244,9 @@ function recenterPreview(result: FullTextSearchResult) {
 }
 
 function resultTitle(result: FullTextSearchResult): string {
-  const base = result.tocText ? `${result.bookTitle} › ${result.tocText}` : result.bookTitle
-  return withNewTabHint(base)
+  // Shares resultReference with the copy path so a citation reads the same whether it
+  // is hovered or pasted.
+  return withNewTabHint(resultReference(result))
 }
 
 function captureScrollPos() {
