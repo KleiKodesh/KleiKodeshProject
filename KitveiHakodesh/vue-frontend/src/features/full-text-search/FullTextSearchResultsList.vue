@@ -11,11 +11,19 @@ import { useFullTextSearchPreview } from './useFullTextSearchPreview'
 import FullTextSearchResultPreview from './FullTextSearchResultPreview.vue'
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
+import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
 
 const props = defineProps<{
   results: FullTextSearchResult[]
   totalResults: number
+  /**
+   * Bumped whenever the results array is REBUILT rather than appended to — a new
+   * search, a sort change, or a book/@-token filter change. Row indexes address
+   * different results after any of those, which the selection pins must know about;
+   * see useFullTextSearchFilters.filteredGeneration.
+   */
+  resultsGeneration: number
   searchQuery: string
   isSearching: boolean
   hasSearched: boolean
@@ -65,6 +73,29 @@ const RENDER_PAGE = 200
 const renderCount = ref(RENDER_PAGE)
 const renderLimit = computed(() => Math.min(props.results.length, renderCount.value))
 
+// Keeps the rows holding a selection's two ends mounted however far they scroll
+// away. Without it, dragging a selection down the results list unmounts the row it
+// started in, and the browser re-homes the anchor onto whatever row now occupies
+// that position — so the selection silently comes to mean something else.
+const { rangeExtractor: selectionRangeExtractor } = useVirtualizedTextSelection(
+  scrollEl,
+  // The rebuild generation, which is the only thing that tracks this exactly.
+  //
+  // Deliberately NOT the result count or the render window: both grow WHILE the user
+  // drags — results stream in, and renderCount widens as the viewport nears the end of
+  // the render window (see the watch on getVirtualItems below) — so either one changed
+  // the identity mid-drag and cleared the pins, putting the bug straight back.
+  // Verified live: the anchor row was dropped from the rendered range and Chromium
+  // re-homed the anchor onto a different row.
+  //
+  // Also not the leading result's id, which was the first fix attempted here and is
+  // NOT sufficient: a filter change rebuilds the whole list, and unchecking a book
+  // that owns no early row leaves results[0] untouched while re-indexing everything
+  // behind it. The generation counter is bumped by exactly the rebuilds that
+  // re-address the rows, and by nothing else.
+  () => props.resultsGeneration,
+)
+
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: renderLimit.value,
@@ -72,6 +103,7 @@ const virtualizer = useVirtualizer(
     estimateSize: () => 80,
     overscan: 8,
     getItemKey: (index) => props.results[index]?.lineId ?? index,
+    rangeExtractor: selectionRangeExtractor.value,
   })),
 )
 

@@ -1,5 +1,7 @@
 /**
- * Keeps a text selection alive across virtualization, for both reading panes.
+ * Keeps a text selection alive across virtualization. Used by every virtualized list
+ * whose text the user can select and copy: the book-view lines pane, the commentary
+ * panels, and the full-text-search results list.
  *
  * THE BUG THIS EXISTS FOR
  * A selection dragged past the bottom of the viewport used to collapse. The row
@@ -26,11 +28,16 @@
  *     all keep working untouched.
  *
  * WHAT IS STILL NOT AUTOMATIC
- * Copying: the middle rows genuinely are not in the DOM, so the copy paths fill them
- * in from the model (see selectedRowIndexRange, and its callers in the two copy
- * files). And re-rendering a pinned row's markup — which applying a highlight or a
- * note does — replaces its text nodes and collapses the selection, so the boundaries
- * are captured as stripped-text offsets and restored afterwards.
+ * Copying: the middle rows genuinely are not in the DOM, so a caller that wants them
+ * in the clipboard fills them in from its own model — see selectedRowIndexRange and
+ * its callers in the two book-view copy files. The search results list does not, and
+ * copies only what the range holds; its rows are independent search hits rather than
+ * one continuous text, so a copy spanning unloaded ones has no obvious meaning.
+ *
+ * Re-rendering a pinned row's markup — which applying a highlight or a note does —
+ * replaces its text nodes and collapses the selection, so the boundaries are captured
+ * as stripped-text offsets and restored afterwards. Only the annotating panes need
+ * that; a list that never re-renders a row under the selection can ignore it.
  */
 import { computed, ref, watch, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -51,7 +58,7 @@ interface SelectionBoundary {
   strippedOffset: number
 }
 
-export function useBookViewSelectionPinnedRows(
+export function useVirtualizedTextSelection(
   scrollerElement: Ref<HTMLElement | null>,
   /**
    * A value that changes whenever the row list is rebuilt — a different book, a
@@ -76,6 +83,14 @@ export function useBookViewSelectionPinnedRows(
     return row && scrollerElement.value?.contains(row) ? row : null
   }
 
+  /**
+   * The `.line` element a boundary sits in, when the list has one.
+   *
+   * Only the reading panes mark their text up that way. A list whose rows carry no
+   * `.line` (the search results list) simply gets no character offset — see
+   * boundaryFromDomPosition — which costs it nothing, because the offset is used
+   * only by restoreSelectionFromPinnedRows and only annotations need that.
+   */
   function lineElementFromNode(node: Node | null): HTMLElement | null {
     const element = node instanceof Element ? node : node?.parentElement ?? null
     const line = element?.closest('.line') as HTMLElement | null
@@ -88,9 +103,10 @@ export function useBookViewSelectionPinnedRows(
     const rowIndex = parseInt(row.dataset['index'] ?? '', 10)
     if (isNaN(rowIndex)) return null
 
-    // A boundary on the row wrapper rather than inside the line (which happens when
-    // a drag crosses a row gap) has no meaningful character offset — pin the row at
-    // offset 0 rather than dropping the pin entirely.
+    // Offset 0 when there is no `.line` to measure into — either the list does not
+    // use them at all, or the boundary landed on the row wrapper rather than inside
+    // its text (which happens when a drag crosses the gap between two rows). Pinning
+    // the ROW is what keeps the selection alive; the offset only refines a restore.
     const lineElement = lineElementFromNode(node)
     const strippedOffset = lineElement
       ? strippedOffsetFromDomPosition(lineElement, node!, offsetInNode)

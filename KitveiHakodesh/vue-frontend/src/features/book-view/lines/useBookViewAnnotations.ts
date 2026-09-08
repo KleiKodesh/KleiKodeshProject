@@ -45,7 +45,7 @@ export function useBookViewAnnotations(
    * Re-creates the selection after an annotation re-renders the lines it landed on.
    * Applying a highlight or a note replaces those lines' markup, which destroys the
    * text nodes the selection's boundaries point at — so the selection has to be put
-   * back rather than simply left alone (see useBookViewSelectionPinnedRows).
+   * back rather than simply left alone (see useVirtualizedTextSelection).
    */
   restoreSelectionFromPinnedRows: () => void,
   /**

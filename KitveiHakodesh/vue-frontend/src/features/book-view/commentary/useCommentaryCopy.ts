@@ -83,7 +83,7 @@ export function useCommentaryCopy(
   },
   // Reaches the selected rows that scrolled out of the virtualized window mid-drag.
   // The two rows holding the selection's ends stay rendered (they are pinned by
-  // useBookViewSelectionPinnedRows), so their partial text still comes from the DOM
+  // useVirtualizedTextSelection), so their partial text still comes from the DOM
   // and only the rows BETWEEN them are rebuilt from the model.
   virtualizedSelection?: {
     /** Row index span of the current selection, or null when there is none here. */

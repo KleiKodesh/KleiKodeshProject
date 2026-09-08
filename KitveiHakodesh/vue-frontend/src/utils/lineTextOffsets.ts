@@ -14,7 +14,7 @@
  *
  * The pair is exact inverses over every position a selection can hold, which is
  * what lets a selection be re-created after the line's markup is replaced (see
- * useBookViewSelectionPinnedRows for why that is needed).
+ * useVirtualizedTextSelection for why that is needed).
  */
 
 /** Matches the Hebrew diacritics excluded from the offset coordinate space. */

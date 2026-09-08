@@ -212,7 +212,7 @@ function extractSelection(
  *
  * A selection can span thousands of lines while only a screenful is rendered. The two
  * rows holding the selection's ends are always rendered — they are pinned there by
- * useBookViewSelectionPinnedRows — so those two keep their exact partial text from
+ * useVirtualizedTextSelection — so those two keep their exact partial text from
  * the DOM, and every line between them is taken whole from the model instead.
  *
  * Returns null when the selection is not one this can stitch (no pinned range, or the

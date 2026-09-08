@@ -12,7 +12,7 @@ import type { BookViewLinesScrollProps } from './useBookViewLinesScroll'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '../useTextSelectionKeys'
-import { useBookViewSelectionPinnedRows } from '../useBookViewSelectionPinnedRows'
+import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useZoomHandler } from '@/composables/useZoom'
@@ -107,7 +107,7 @@ const {
   rangeExtractor: selectionRangeExtractor,
   selectedRowIndexRange,
   restoreSelectionFromPinnedRows,
-} = useBookViewSelectionPinnedRows(
+} = useVirtualizedTextSelection(
   scrollerEl,
   // The version overlay keeps the line ids and the count but replaces every line's
   // text, so the count alone would not notice it.

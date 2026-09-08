@@ -19,7 +19,7 @@ import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
-import { useBookViewSelectionPinnedRows } from '../useBookViewSelectionPinnedRows'
+import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
@@ -204,7 +204,7 @@ const {
   rangeExtractor: selectionRangeExtractor,
   selectedRowIndexRange,
   restoreSelectionFromPinnedRows,
-} = useBookViewSelectionPinnedRows(
+} = useVirtualizedTextSelection(
   scrollerEl,
   // Which groups are shown, not just how many rows they add up to: a filter change
   // that swaps one group for another of equal length leaves the count untouched while

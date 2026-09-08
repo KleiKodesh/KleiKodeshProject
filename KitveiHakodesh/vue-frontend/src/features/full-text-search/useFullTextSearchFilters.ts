@@ -46,6 +46,17 @@ export function useFullTextSearchFilters(
   // than re-filtering the whole accumulated set.
   const effectiveBookIds = ref<Set<number>>(new Set())
   const filteredResults = shallowRef<FullTextSearchResult[]>([])
+  /**
+   * Bumped every time filteredResults is REBUILT rather than appended to — i.e.
+   * whenever a given row index comes to address a different result.
+   *
+   * Streaming appends leave it alone, because appending never re-addresses the rows
+   * already in the list. Consumers that hold a row INDEX across time need this to
+   * know when to drop it: the results list pins the rows holding a text selection by
+   * index, and a filter change that re-indexes the list underneath those pins would
+   * otherwise leave them silently pointing at unrelated search hits.
+   */
+  const filteredGeneration = ref(0)
   const resultCounts = ref<Map<number, number>>(new Map())
   const initialized = ref(false)
 
@@ -127,6 +138,8 @@ export function useFullTextSearchFilters(
       if (kept.length) filteredResults.value = [...filteredResults.value, ...kept]
     } else {
       filteredResults.value = isEffectivelyAll ? raw.slice() : raw.filter(keep)
+      // A rebuild, not an append: every row index may now address a different result.
+      filteredGeneration.value++
     }
     filteredThrough = raw.length
 
@@ -266,6 +279,7 @@ export function useFullTextSearchFilters(
     checkedBookIds,
     atFilters,
     filteredResults,
+    filteredGeneration,
     resultCounts,
     initCheckedBooks,
     setCheckedBookIds,

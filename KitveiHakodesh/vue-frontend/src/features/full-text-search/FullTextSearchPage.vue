@@ -83,6 +83,7 @@ const {
   checkedBookIds,
   atFilters,
   filteredResults,
+  filteredGeneration,
   resultCounts,
   initCheckedBooks,
   setCheckedBookIds,
@@ -478,6 +479,7 @@ onBeforeUnmount(() => {
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
+          :results-generation="filteredGeneration"
           :total-results="results.length"
           :search-query="executedQuery"
           :is-searching="isSearching"
