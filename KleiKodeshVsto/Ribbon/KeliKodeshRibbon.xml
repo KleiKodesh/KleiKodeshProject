@@ -265,5 +265,59 @@
 					onAction="openLink_Click"
 					getVisible="getContextVisible"/>
 		</contextMenu>
+
+		<!-- Text inside a footnote or an endnote gets ContextMenuFootnote /
+		     ContextMenuEndnote instead of ContextMenuText, so without these two the
+		     items are missing exactly where sources are cited - the place they are
+		     most useful. The note pane and the balloon both raise the same menus. -->
+		<contextMenu idMso="ContextMenuFootnote">
+			<menuSeparator id="KleiKodeshContextSeparatorFn"/>
+			<button id="SearchFtsFromSelectionFn"
+					label="העתק לחיפוש בכתבי הקודש"
+					supertip="מריץ את הטקסט המסומן כחיפוש בכל ספרי כתבי הקודש. סימנים מיוחדים מוסרים מהטקסט לפני החיפוש."
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="SearchCatalogFromSelectionFn"
+					label="חיפוש ספר בכתבי הקודש"
+					supertip="מחפש את הטקסט המסומן בקטלוג הספרים של כתבי הקודש - לאיתור ספר לפי שמו."
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="CompareWithKitveiHakodeshFn"
+					label="השווה עם כתבי הקודש"
+					supertip="משווה את הפסקה המסומנת במסמך אל הטקסט המסומן בחלונית כתבי הקודש: ההבדלים נרשמים במסמך כשינויים עם עקוב, לאישור או דחייה אחד-אחד. יש לסמן תחילה קטע בכתבי הקודש."
+					getImage="getKitveiHakodeshIcon"
+					onAction="compareText_Click"/>
+			<button id="OpenLinkInKitveiHakodeshFn"
+					label="פתח קישור בכתבי הקודש"
+					supertip="פותח בחלונית כתבי הקודש את הספר שאליו מצביע הקישור שבבחירה."
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"/>
+		</contextMenu>
+
+		<contextMenu idMso="ContextMenuEndnote">
+			<menuSeparator id="KleiKodeshContextSeparatorEn"/>
+			<button id="SearchFtsFromSelectionEn"
+					label="העתק לחיפוש בכתבי הקודש"
+					supertip="מריץ את הטקסט המסומן כחיפוש בכל ספרי כתבי הקודש. סימנים מיוחדים מוסרים מהטקסט לפני החיפוש."
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="SearchCatalogFromSelectionEn"
+					label="חיפוש ספר בכתבי הקודש"
+					supertip="מחפש את הטקסט המסומן בקטלוג הספרים של כתבי הקודש - לאיתור ספר לפי שמו."
+					getImage="getKitveiHakodeshIcon"
+					onAction="contextMenu_Click"/>
+			<button id="CompareWithKitveiHakodeshEn"
+					label="השווה עם כתבי הקודש"
+					supertip="משווה את הפסקה המסומנת במסמך אל הטקסט המסומן בחלונית כתבי הקודש: ההבדלים נרשמים במסמך כשינויים עם עקוב, לאישור או דחייה אחד-אחד. יש לסמן תחילה קטע בכתבי הקודש."
+					getImage="getKitveiHakodeshIcon"
+					onAction="compareText_Click"/>
+			<button id="OpenLinkInKitveiHakodeshEn"
+					label="פתח קישור בכתבי הקודש"
+					supertip="פותח בחלונית כתבי הקודש את הספר שאליו מצביע הקישור שבבחירה."
+					getImage="getKitveiHakodeshIcon"
+					onAction="openLink_Click"
+					getVisible="getContextVisible"/>
+		</contextMenu>
 	</contextMenus>
 </customUI>
