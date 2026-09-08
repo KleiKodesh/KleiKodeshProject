@@ -41,6 +41,24 @@ export function useBookViewAnnotations(
   scrollerEl: Ref<HTMLElement | null>,
   lines: () => LineItem[],
   virtualItemsViewportIds: () => number[],
+  /**
+   * Re-creates the selection after an annotation re-renders the lines it landed on.
+   * Applying a highlight or a note replaces those lines' markup, which destroys the
+   * text nodes the selection's boundaries point at — so the selection has to be put
+   * back rather than simply left alone (see useBookViewSelectionPinnedRows).
+   */
+  restoreSelectionFromPinnedRows: () => void,
+  /**
+   * The row index span of the current selection, from the pinned-row tracker. Lets an
+   * annotation reach the selected lines the virtualizer never mounted.
+   */
+  selectedRowIndexRange: () => { firstRowIndex: number; lastRowIndex: number } | null,
+  /**
+   * How many annotation offsets a line's model content spans. Supplied by the caller
+   * because it depends on the live diacritics and censor settings — the offset space
+   * is the text AFTER those transforms, not the raw content.
+   */
+  annotationOffsetLengthOf: (content: string) => number,
 ) {
   // ── Highlights ──────────────────────────────────────────────────────────────
 
@@ -123,8 +141,46 @@ export function useBookViewAnnotations(
       }
     }
 
+    appendUnmountedSelectedLines(selectionLines)
+
     if (selectionLines.length === 0) return null
     return { lines: selectionLines }
+  }
+
+  /**
+   * Adds the selected lines that are not in the DOM — the ones that scrolled out of
+   * the virtualized window while the selection was being dragged over them.
+   *
+   * The loop above can only see rendered lines, so without this an annotation applied
+   * to a selection spanning more than a screen would silently land on the handful of
+   * rendered rows and skip every line between them. Those middle lines are selected in
+   * full by definition (only the two ends can be partial, and both are always rendered
+   * because they are pinned), so each takes a whole-line offset span measured from the
+   * model's own text — the same diacritic-stripped count the rendered walk produces.
+   */
+  function appendUnmountedSelectedLines(selectionLines: SelectionOnLine[]) {
+    const rowIndexRange = selectedRowIndexRange()
+    if (!rowIndexRange) return
+    const { firstRowIndex, lastRowIndex } = rowIndexRange
+
+    const alreadyCollectedLineIds = new Set(selectionLines.map((line) => line.lineId))
+    const allLines = lines()
+
+    for (let rowIndex = firstRowIndex + 1; rowIndex < lastRowIndex; rowIndex++) {
+      const line = allLines[rowIndex]
+      if (!line || line.content == null) continue
+      if (alreadyCollectedLineIds.has(line.id)) continue
+      const strippedLength = annotationOffsetLengthOf(line.content)
+      if (strippedLength === 0) continue
+      selectionLines.push({
+        lineId: line.id,
+        lineIndex: line.lineIndex,
+        startOffset: 0,
+        endOffset: strippedLength,
+      })
+    }
+
+    selectionLines.sort((first, second) => first.lineIndex - second.lineIndex)
   }
 
   // ── Annotation action handlers ──────────────────────────────────────────────
@@ -132,19 +188,25 @@ export function useBookViewAnnotations(
   function onHighlight(colorArgb: number) {
     const selection = extractSelectionOnLine()
     if (!selection) return
-    for (const line of selection.lines) {
-      applyHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)
-    }
-    window.getSelection()?.removeAllRanges()
+    // Awaited, THEN restored: applyHighlight only mutates the reactive highlight map
+    // after its round-trip to the settings database, so the re-render that destroys
+    // the selection's text nodes happens long after this function's own microtasks.
+    // Restoring on a bare nextTick would run against the pre-render DOM and be lost.
+    void Promise.all(
+      selection.lines.map((line) =>
+        applyHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb),
+      ),
+    ).then(() => nextTick(restoreSelectionFromPinnedRows))
   }
 
   function onClearHighlight() {
     const selection = extractSelectionOnLine()
     if (!selection) return
-    for (const line of selection.lines) {
-      clearHighlight(line.lineId, line.startOffset, line.endOffset)
-    }
-    window.getSelection()?.removeAllRanges()
+    void Promise.all(
+      selection.lines.map((line) =>
+        clearHighlight(line.lineId, line.startOffset, line.endOffset),
+      ),
+    ).then(() => nextTick(restoreSelectionFromPinnedRows))
   }
 
   function onAddNote() {
@@ -153,10 +215,10 @@ export function useBookViewAnnotations(
     const firstLine = selection.lines[0]!
     const rawQuote = window.getSelection()?.toString() ?? ''
     const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
-    window.getSelection()?.removeAllRanges()
     void createNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote).then(
       (note) => {
         nextTick(() => {
+          restoreSelectionFromPinnedRows()
           const markerElement = scrollerEl.value?.querySelector(
             `[data-note-id="${note.id}"]`,
           ) as HTMLElement | null

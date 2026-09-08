@@ -19,6 +19,7 @@ import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
+import { useBookViewSelectionPinnedRows } from '../useBookViewSelectionPinnedRows'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
 import BookViewNoteBubble from '../lines/BookViewNoteBubble.vue'
@@ -51,8 +52,16 @@ const props = defineProps<{
   loadError?: boolean
   // Hoisted annotation & render state — initialized in useBookView, survive v-if toggle
   getHighlightsForLine: (lineId: number) => Highlight[]
-  applyHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void
-  clearHighlight: (lineId: number, startOffset: number, endOffset: number) => void
+  // Promise-returning: both persist to the settings database before mutating the
+  // reactive state that re-renders the lines, and the selection restore has to wait
+  // for that (see restoreSelectionAfterAnnotation in useCommentaryCopy).
+  applyHighlight: (
+    lineId: number,
+    startOffset: number,
+    endOffset: number,
+    colorArgb: number,
+  ) => Promise<void>
+  clearHighlight: (lineId: number, startOffset: number, endOffset: number) => Promise<void>
   getNotesForLine: (lineId: number) => Note[]
   scheduleNotesLoad: (lineIds: number[]) => void
   // Viewport-driven lazy load of word-level link anchors (link_anchor, schema v2+ DBs).
@@ -70,6 +79,11 @@ const props = defineProps<{
   deleteNote: (note: Note) => Promise<void>
   commentaryFontPx: number
   renderContent: (content: string, flatIndex: number, lineId: number | undefined, searchQuery: string | undefined) => string
+  /**
+   * How many annotation offsets a line's model content spans. Comes from the renderer
+   * because the offset space is the text after its diacritics and censor transforms.
+   */
+  annotationOffsetLengthOf: (content: string) => number
   setCurrentMark: (scroller: HTMLElement, flatIndex: number, occurrence: number) => void
   commentaryTocPaths: Map<string, string>
   searchQuery?: string
@@ -184,12 +198,27 @@ useContextMenuLongPress(scrollerEl, (event) => {
   contextMenuRef.value?.showAtPosition(event.clientX, event.clientY)
 })
 
+// Keeps the rows holding a selection's two ends mounted however far they scroll
+// away, so a drag past the viewport edge cannot break the selection.
+const {
+  rangeExtractor: selectionRangeExtractor,
+  selectedRowIndexRange,
+  restoreSelectionFromPinnedRows,
+} = useBookViewSelectionPinnedRows(
+  scrollerEl,
+  // Which groups are shown, not just how many rows they add up to: a filter change
+  // that swaps one group for another of equal length leaves the count untouched while
+  // every row index comes to mean a different line.
+  () => visibleGroups.value.map(commentaryGroupKey).join('|'),
+)
+
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: flatItems.value.length,
     getScrollElement: () => scrollerEl.value,
     estimateSize: (i) => (flatItems.value[i]?.type === 'header' ? 40 : 48),
     overscan: 10,
+    rangeExtractor: selectionRangeExtractor.value,
   })),
 )
 
@@ -304,6 +333,32 @@ function buildAllCommentaryContentHtml(): string {
   return parts.join('')
 }
 
+/**
+ * The same rendered markup as buildAllCommentaryContentHtml, but only for the flat
+ * items in [firstIndex, lastIndex] — the rows a selection spans. Lets a copy include
+ * the selected rows that scrolled out of the virtualized window (and so are not in
+ * the DOM to be serialized), headers included, in their true reading order.
+ */
+function buildCommentaryContentHtmlForRange(firstIndex: number, lastIndex: number): string {
+  const parts: string[] = []
+  let flatIndex = 0
+  for (const g of visibleGroups.value) {
+    if (flatIndex >= firstIndex && flatIndex <= lastIndex) {
+      parts.push(`<div class="line">${g.bookTitle}</div>`)
+    }
+    flatIndex++
+    for (const l of g.lines) {
+      if (flatIndex > lastIndex) return parts.join('')
+      if (flatIndex >= firstIndex) {
+        const rendered = props.renderContent(l.content, flatIndex, l.lineId, props.searchQuery)
+        parts.push(`<div class="line" data-line-id="${l.lineId}">${rendered}</div>`)
+      }
+      flatIndex++
+    }
+  }
+  return parts.join('')
+}
+
 const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCopy: onCommentaryCopy, onPasteIntoWord: onCommentaryPasteIntoWord, onSearchInRepository: onCommentarySearchInRepository } = useCommentaryCopy(
   () => {
     const pinned = activePinnedGroup.value
@@ -322,9 +377,11 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
   (lineId, startOffset, endOffset, colorArgb) =>
     props.applyHighlight(lineId, startOffset, endOffset, colorArgb),
   (lineId, startOffset, endOffset) => props.clearHighlight(lineId, startOffset, endOffset),
+  // Returns the write's promise so the selection restore runs after the note has
+  // landed and re-rendered its line, not before.
   (lineId, startOffset, endOffset, quote) =>
     props.createNote(lineId, startOffset, endOffset, quote).then((note) => {
-      nextTick(() => {
+      void nextTick(() => {
         const marker = scrollerEl.value?.querySelector(
           `[data-note-id="${note.id}"]`,
         ) as HTMLElement | null
@@ -342,6 +399,16 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
         resolveWordLinkTarget: props.resolveWordLinkTarget,
       }
     : undefined,
+  {
+    selectedRowIndexRange,
+    buildContentHtmlForRange: buildCommentaryContentHtmlForRange,
+    restoreSelectionFromPinnedRows,
+    lineAtRowIndex: (rowIndex) => {
+      const item = flatItems.value[rowIndex]
+      if (!item || item.type !== 'line') return null
+      return { lineId: item.lineId, offsetLength: props.annotationOffsetLengthOf(item.content) }
+    },
+  },
 )
 useScopedCopy(
   scrollerEl,

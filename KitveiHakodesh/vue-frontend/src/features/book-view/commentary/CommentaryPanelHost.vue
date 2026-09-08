@@ -39,8 +39,15 @@ const props = defineProps<{
   loading: boolean
   loadError?: boolean
   getHighlightsForLine: (lineId: number) => Highlight[]
-  applyHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void
-  clearHighlight: (lineId: number, startOffset: number, endOffset: number) => void
+  // Promise-returning: the panel's selection restore waits on the write before
+  // re-creating the selection (see CommentaryView's own prop declaration).
+  applyHighlight: (
+    lineId: number,
+    startOffset: number,
+    endOffset: number,
+    colorArgb: number,
+  ) => Promise<void>
+  clearHighlight: (lineId: number, startOffset: number, endOffset: number) => Promise<void>
   getNotesForLine: (lineId: number) => Note[]
   scheduleNotesLoad: (lineIds: number[]) => void
   scheduleWordLinkAnchorsLoad?: (lineIds: number[]) => void
@@ -142,6 +149,7 @@ defineExpose({ view })
       :delete-note="deleteNote"
       :commentary-font-px="panel.commentaryFontPx.value"
       :render-content="panel.renderContent"
+      :annotation-offset-length-of="panel.annotationOffsetLengthOf"
       :set-current-mark="panel.setCurrentMark"
       :commentary-toc-paths="commentaryTocPaths"
       :search-query="searchQuery"

@@ -179,7 +179,7 @@ export function useCommentaryPanelSlot(
 
   // Per panel: the render cache is keyed partly by the active search query, and
   // the two panels search independently - one shared cache would thrash.
-  const { commentaryFontPx, renderContent, setCurrentMark } = useCommentaryRender(
+  const { commentaryFontPx, renderContent, setCurrentMark, annotationOffsetLengthOf } = useCommentaryRender(
     () => groupsForDisplay.value,
     getCommentaryZoom,
     shared.getHighlightsForLine,
@@ -208,6 +208,7 @@ export function useCommentaryPanelSlot(
     visibleGroups,
     commentaryFontPx,
     renderContent,
+    annotationOffsetLengthOf,
     setCurrentMark,
     search,
     visible: panel.commentaryVisible,

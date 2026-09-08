@@ -248,6 +248,81 @@ export function highlightFromSnippet(
  * boundaries never split entities (e.g., &thinsp;). If a highlight's start/end
  * falls in the middle of an entity, the entire entity stays outside the mark tag.
  */
+/**
+ * A line's model content transformed up to — and not past — the point where user
+ * annotations are applied, which is the text their offsets are measured against.
+ *
+ * Annotation offsets address the text as applyUserHighlights sees it, and by then the
+ * censor has already rewritten the divine names (the call order in lineContent below
+ * is: word-link anchors, diacritics, censor, THEN highlights). The censor changes the
+ * character count — the Tetragrammaton expands under the hyphen mode and contracts
+ * under the two-yud and he-apostrophe modes — so measuring raw content would produce
+ * offsets that are wrong by several characters per occurrence.
+ *
+ * Word-link anchors are deliberately NOT applied: they splice pure markup, which
+ * every walker skips, so they cannot change the count. The diacritics transforms only
+ * remove characters that are already uncounted, so they are count-invariant too — but
+ * they are applied anyway, so this function stays a true prefix of the render pipeline
+ * rather than a lookalike that has to be re-audited whenever that pipeline changes.
+ */
+export function contentInAnnotationOffsetSpace(
+  content: string,
+  diacriticsState: number,
+  censorOptions: Parameters<typeof censorDivineNames>[1],
+): string {
+  const withDiacritics =
+    diacriticsState === 0
+      ? content
+      : diacriticsState === 2
+        ? cleanHebrewText(content)
+        : applyDiacriticsFilter(content, diacriticsState)
+  return censorDivineNames(withDiacritics, censorOptions)
+}
+
+/**
+ * How many annotation offsets a line's HTML content spans — i.e. the offset that
+ * addresses its very end, which is what a whole-line highlight or note uses.
+ *
+ * Counts exactly what applyUserHighlights counts as it walks: tag characters are
+ * skipped, each HTML entity is one position, and diacritics (the maqaf included) are
+ * skipped. Lives here so it cannot drift from the walk that defines the space.
+ *
+ * MUST be given content already in the annotation offset space — pass model text
+ * through contentInAnnotationOffsetSpace first, or the censor's rewriting of the
+ * divine names will throw the count off. This is the model-side counterpart of
+ * measuring a RENDERED line's stripped textContent, and is what lets a selection
+ * annotate lines the virtualizer never mounted (see appendUnmountedSelectedLines).
+ */
+export function annotationOffsetLength(content: string): number {
+  let length = 0
+  let inTag = false
+  let i = 0
+  while (i < content.length) {
+    const ch = content[i]!
+    if (ch === '<') { inTag = true; i++; continue }
+    if (ch === '>') { inTag = false; i++; continue }
+    if (inTag) { i++; continue }
+
+    if (ch === '&') {
+      let entityEnd = -1
+      for (let j = i + 1; j < content.length && j <= i + 12; j++) {
+        const c = content[j]!
+        if (c === ';') { entityEnd = j; break }
+        if (c === ' ' || c === '\t' || c === '\n' || c === '<') break
+      }
+      if (entityEnd !== -1) {
+        length++
+        i = entityEnd + 1
+        continue
+      }
+    }
+
+    if (!isDiacriticChar(ch)) length++
+    i++
+  }
+  return length
+}
+
 export function applyUserHighlights(content: string, highlights: Highlight[]): string {
   if (!highlights.length) return content
 

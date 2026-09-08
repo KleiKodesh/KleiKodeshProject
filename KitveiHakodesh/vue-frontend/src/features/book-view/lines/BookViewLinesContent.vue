@@ -12,10 +12,16 @@ import type { BookViewLinesScrollProps } from './useBookViewLinesScroll'
 import ContextMenu from '@/components/ContextMenu.vue'
 import { useContextMenuLongPress, hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
 import { useScopedKeys } from '../useTextSelectionKeys'
+import { useBookViewSelectionPinnedRows } from '../useBookViewSelectionPinnedRows'
 import { useScopedCopy, triggerCopy } from '@/composables/useLineCopy'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useZoomHandler } from '@/composables/useZoom'
-import { useBookViewLineRenderer, setCurrentMark } from './useBookViewLineRenderer'
+import {
+  useBookViewLineRenderer,
+  setCurrentMark,
+  annotationOffsetLength,
+  contentInAnnotationOffsetSpace,
+} from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 import { useBookViewLineLink } from './useBookViewLineLink'
 import { useBookViewAnnotations } from './useBookViewAnnotations'
@@ -95,12 +101,26 @@ const { isSelectAll, selectAllInContainer } = useScopedKeys(scrollerEl, {
   onCtrlShiftC: () => onSearchInRepository(),
 })
 
+// Keeps the rows holding a selection's two ends mounted however far they scroll
+// away, so a drag past the viewport edge cannot break the selection.
+const {
+  rangeExtractor: selectionRangeExtractor,
+  selectedRowIndexRange,
+  restoreSelectionFromPinnedRows,
+} = useBookViewSelectionPinnedRows(
+  scrollerEl,
+  // The version overlay keeps the line ids and the count but replaces every line's
+  // text, so the count alone would not notice it.
+  () => `${props.activeVersionId ?? 0}:${props.lines.length}`,
+)
+
 const virtualizer = useVirtualizer(
   computed(() => ({
     count: props.lines.length,
     getScrollElement: () => scrollerEl.value,
     estimateSize: () => 32,
     overscan: 10,
+    rangeExtractor: selectionRangeExtractor.value,
   })),
 )
 const virtualItems = computed(() => virtualizer.value.getVirtualItems())
@@ -135,6 +155,14 @@ const {
   scrollerEl,
   () => props.lines,
   () => virtualItems.value.map((v) => props.lines[v.index]?.id ?? 0).filter((id) => id > 0),
+  restoreSelectionFromPinnedRows,
+  selectedRowIndexRange,
+  // Measured in the annotation offset space — after the diacritics and censor
+  // transforms, which is the text the highlight walk addresses.
+  (content) =>
+    annotationOffsetLength(
+      contentInAnnotationOffsetSpace(content, diacriticsState.value, settingsStore.censorOptions),
+    ),
 )
 
 const { suppressPositionSave, onScroll, captureScrollPos, readCurrentPosition, cancelRestoreCorrection } =
@@ -197,6 +225,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   lines: () => props.lines,
   isSelectAll,
   selectAllInContainer,
+  selectedRowIndexRange,
   bookTitle,
   bookId,
   tabStore,

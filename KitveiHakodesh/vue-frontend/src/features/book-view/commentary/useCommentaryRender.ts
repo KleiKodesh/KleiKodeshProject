@@ -3,7 +3,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { applyDiacriticsFilter, removeDiacriticsForSearch, stripHtmlForSearch, isSearchIgnoredMark } from '@/utils/hebrewTextProcessing'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
 import { censorDivineNames } from '@/utils/censorDivineNames'
-import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark } from '../lines/useBookViewLineRenderer'
+import { applyUserHighlights, applyUserNoteMarkers, setCurrentMark, annotationOffsetLength, contentInAnnotationOffsetSpace } from '../lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors, wordLinkAnchorsSig } from '../lines/wordLinkAnchors'
 import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import type { Highlight } from '../lines/useBookViewHighlights'
@@ -201,10 +201,25 @@ export function useCommentaryRender(
     { flush: 'sync' },
   )
 
+  /**
+   * How many annotation offsets a line's model content spans — the offset that
+   * addresses its end, which is what a whole-line highlight or note uses.
+   *
+   * Lives here because the answer depends on the same live diacritics and censor
+   * settings renderContent applies: annotation offsets are measured against the text
+   * AFTER those transforms, and the censor changes the character count.
+   */
+  function annotationOffsetLengthOf(content: string): number {
+    return annotationOffsetLength(
+      contentInAnnotationOffsetSpace(content, diacriticsState.value, settingsStore.censorOptions),
+    )
+  }
+
   return {
     diacriticsState,
     commentaryFontPx,
     renderContent,
     setCurrentMark,
+    annotationOffsetLengthOf,
   }
 }

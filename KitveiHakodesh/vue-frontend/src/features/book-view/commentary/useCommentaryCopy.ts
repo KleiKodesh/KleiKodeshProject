@@ -1,4 +1,4 @@
-import { watch } from 'vue'
+import { nextTick, watch } from 'vue'
 import type { Ref } from 'vue'
 import type { ContextMenuItem } from '@/components/ContextMenu.vue'
 import { buildLineLink } from '@/utils/appDeepLink'
@@ -41,9 +41,26 @@ export function useCommentaryCopy(
   getTocPath: (group: CommentaryGroupRef) => string | undefined,
   selectAllInContainer: () => void,
   scrollerEl: Ref<HTMLElement | null>,
-  onHighlight: (lineId: number, startOffset: number, endOffset: number, colorArgb: number) => void,
-  onClearHighlight: (lineId: number, startOffset: number, endOffset: number) => void,
-  onAddNote: (lineId: number, startOffset: number, endOffset: number, quote: string) => void,
+  // These persist to the settings database and only then mutate the reactive state
+  // that re-renders the lines, so they return a promise the selection restore waits
+  // on — see restoreSelectionAfterAnnotation.
+  onHighlight: (
+    lineId: number,
+    startOffset: number,
+    endOffset: number,
+    colorArgb: number,
+  ) => void | Promise<void>,
+  onClearHighlight: (
+    lineId: number,
+    startOffset: number,
+    endOffset: number,
+  ) => void | Promise<void>,
+  onAddNote: (
+    lineId: number,
+    startOffset: number,
+    endOffset: number,
+    quote: string,
+  ) => void | Promise<void>,
   getNotesForLine?: (lineId: number) => Note[],
   // Select-all/copy-all support. isSelectAll reflects the container-wide "בחר הכל"
   // state; getAllContentHtml returns the ENTIRE (filtered) commentary document as
@@ -63,6 +80,24 @@ export function useCommentaryCopy(
     /** Resolves only the citations already rendered in a fragment — the selection path. */
     prepareForRenderedHtml: (html: string) => Promise<void>
     resolveWordLinkTarget: (target: WordLinkTarget) => WordLinkTargetContent | undefined
+  },
+  // Reaches the selected rows that scrolled out of the virtualized window mid-drag.
+  // The two rows holding the selection's ends stay rendered (they are pinned by
+  // useBookViewSelectionPinnedRows), so their partial text still comes from the DOM
+  // and only the rows BETWEEN them are rebuilt from the model.
+  virtualizedSelection?: {
+    /** Row index span of the current selection, or null when there is none here. */
+    selectedRowIndexRange: () => { firstRowIndex: number; lastRowIndex: number } | null
+    /** The rendered markup of the flat items in an inclusive row-index span. */
+    buildContentHtmlForRange: (firstIndex: number, lastIndex: number) => string
+    /** Re-creates the selection after an annotation re-rendered the lines it hit. */
+    restoreSelectionFromPinnedRows: () => void
+    /**
+     * The annotatable line at a flat row index — its id and how many annotation
+     * offsets it spans — or null for a header row or a row index out of range. Lets
+     * an annotation reach the selected lines the virtualizer never mounted.
+     */
+    lineAtRowIndex: (rowIndex: number) => { lineId: number; offsetLength: number } | null
   },
 ) {
   const resolveWordLinkTarget = exportData?.resolveWordLinkTarget
@@ -123,6 +158,12 @@ export function useCommentaryCopy(
     lineId: number
     startOffset: number
     endOffset: number
+    /**
+     * The line's flat row index — its position in the document, used to keep the
+     * collected lines in reading order once the unmounted ones are added to the
+     * rendered ones. Not part of what an annotation stores.
+     */
+    rowIndex: number
   }
 
   function extractSelectionOnCommentaryLines(): SelectionOnCommentaryLine[] {
@@ -175,29 +216,71 @@ export function useCommentaryCopy(
       if (isLastLine) endOffset = countStrippedOffset(range.endContainer, range.endOffset)
 
       if (startOffset < endOffset) {
-        result.push({ lineId, startOffset, endOffset: Math.min(endOffset, strippedText.length) })
+        result.push({
+          lineId,
+          startOffset,
+          endOffset: Math.min(endOffset, strippedText.length),
+          rowIndex: parseInt(vItemEl.dataset['index'] ?? '', 10),
+        })
       }
     }
 
+    appendUnmountedSelectedLines(result)
+
     return result
+  }
+
+  /**
+   * Adds the selected lines that are not in the DOM — the ones that scrolled out of
+   * the virtualized window while the selection was being dragged over them.
+   *
+   * The loop above can only see rendered lines, so without this an annotation applied
+   * to a selection spanning more than a screen would silently land on the handful of
+   * rendered rows and skip every line between them. Those middle lines are selected in
+   * full by definition (only the two ends can be partial, and both are always rendered
+   * because they are pinned), so each takes a whole-line offset span measured from the
+   * model. Header rows carry no annotatable line and are skipped.
+   */
+  function appendUnmountedSelectedLines(selectionLines: SelectionOnCommentaryLine[]) {
+    const rowIndexRange = virtualizedSelection?.selectedRowIndexRange()
+    if (!rowIndexRange || !virtualizedSelection) return
+    const { firstRowIndex, lastRowIndex } = rowIndexRange
+
+    const alreadyCollectedLineIds = new Set(selectionLines.map((line) => line.lineId))
+
+    for (let rowIndex = firstRowIndex + 1; rowIndex < lastRowIndex; rowIndex++) {
+      const line = virtualizedSelection.lineAtRowIndex(rowIndex)
+      if (!line || line.offsetLength === 0) continue
+      if (alreadyCollectedLineIds.has(line.lineId)) continue
+      selectionLines.push({
+        lineId: line.lineId,
+        startOffset: 0,
+        endOffset: line.offsetLength,
+        rowIndex,
+      })
+    }
+
+    // Sorted, not spliced into place: the rendered rows the DOM loop collected are a
+    // contiguous block around the viewport, so the unmounted rows belong AFTER some of
+    // them and BEFORE others. Only a real sort puts every line in reading order — and
+    // addNoteFromSelection depends on it, anchoring the note to lines[0].
+    selectionLines.sort((first, second) => first.rowIndex - second.rowIndex)
   }
 
   // ── Highlight actions ───────────────────────────────────────────────────────
 
   function applyHighlightFromSelection(colorArgb: number): void {
     const lines = extractSelectionOnCommentaryLines()
-    for (const line of lines) {
-      onHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)
-    }
-    window.getSelection()?.removeAllRanges()
+    restoreSelectionAfterAnnotation(
+      lines.map((line) => onHighlight(line.lineId, line.startOffset, line.endOffset, colorArgb)),
+    )
   }
 
   function clearHighlightFromSelection(): void {
     const lines = extractSelectionOnCommentaryLines()
-    for (const line of lines) {
-      onClearHighlight(line.lineId, line.startOffset, line.endOffset)
-    }
-    window.getSelection()?.removeAllRanges()
+    restoreSelectionAfterAnnotation(
+      lines.map((line) => onClearHighlight(line.lineId, line.startOffset, line.endOffset)),
+    )
   }
 
   function addNoteFromSelection(): void {
@@ -206,8 +289,24 @@ export function useCommentaryCopy(
     const firstLine = lines[0]!
     const rawQuote = window.getSelection()?.toString() ?? ''
     const quote = rawQuote.replace(/[\u0591-\u05C7]/g, '').trim()
-    window.getSelection()?.removeAllRanges()
-    onAddNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote)
+    restoreSelectionAfterAnnotation([
+      onAddNote(firstLine.lineId, firstLine.startOffset, firstLine.endOffset, quote),
+    ])
+  }
+
+  /**
+   * Puts the selection back after an annotation replaced the markup of the lines it
+   * landed on \u2014 which destroys the text nodes the selection's boundaries pointed at.
+   *
+   * Waits on the annotation writes first: they reach the settings database before
+   * they mutate the reactive state that re-renders the lines, so restoring on a bare
+   * nextTick would run against the pre-render DOM and be thrown away by the render
+   * that follows. A no-op when the pane has no pinned-row tracker wired up.
+   */
+  function restoreSelectionAfterAnnotation(writes: Array<void | Promise<void>>): void {
+    const restore = virtualizedSelection?.restoreSelectionFromPinnedRows
+    if (!restore) return
+    void Promise.all(writes).then(() => nextTick(restore))
   }
 
   // ── Note marker helpers ─────────────────────────────────────────────────────
@@ -275,6 +374,55 @@ export function useCommentaryCopy(
   // ── Copy actions ────────────────────────────────────────────────────────────
 
   /**
+   * The selected rows' HTML including the ones not currently in the DOM, or null when
+   * this selection needs no stitching (it fits in the rendered window, or the pinned
+   * boundary rows are unavailable) and the caller should use its DOM-only path.
+   *
+   * The rows between the two ends are rebuilt whole from the model, headers included.
+   * The two END rows follow whatever the non-stitched path would have done with them,
+   * so the same selection copies identically however far it happens to be scrolled:
+   * with copyJoinLines OFF they keep only their selected part, and with it ON they are
+   * taken whole, matching that path's re-collect of every intersected line.
+   */
+  function extractSelectionWithUnmountedLines(range: Range): string | null {
+    const scroller = scrollerEl.value
+    const rowIndexRange = virtualizedSelection?.selectedRowIndexRange()
+    if (!scroller || !rowIndexRange) return null
+    const { firstRowIndex, lastRowIndex } = rowIndexRange
+    // A selection inside a single row is entirely rendered: nothing to stitch.
+    if (firstRowIndex >= lastRowIndex) return null
+
+    const firstRowElement = scroller.querySelector(`[data-index="${firstRowIndex}"]`)
+    const lastRowElement = scroller.querySelector(`[data-index="${lastRowIndex}"]`)
+    if (!firstRowElement || !lastRowElement) return null
+
+    /** One end row: its selected part, or the whole line when joining. */
+    function endRowHtml(rowElement: Element, clip: (clipped: Range) => void): string {
+      if (settingsStore.copyJoinLines) {
+        const lineElement = rowElement.querySelector('.line') as HTMLElement | null
+        return lineElement ? lineElement.innerHTML : ''
+      }
+      const clipped = range.cloneRange()
+      clip(clipped)
+      return serializeRangeBalanced(clipped, scroller)
+    }
+
+    const middleHtml =
+      lastRowIndex - firstRowIndex > 1
+        ? virtualizedSelection!.buildContentHtmlForRange(firstRowIndex + 1, lastRowIndex - 1)
+        : ''
+
+    const joined = [
+      endRowHtml(firstRowElement, (clipped) => clipped.setEndAfter(firstRowElement)),
+      middleHtml,
+      endRowHtml(lastRowElement, (clipped) => clipped.setStartBefore(lastRowElement)),
+    ]
+      .filter((part) => part.trim())
+      .join('')
+    return joined.trim() ? joined : null
+  }
+
+  /**
    * Builds the final HTML for the current selection applying all active copy flags.
    * Returns null when there is no selection.
    * See the copy flag semantics block at the top of the file for a full description.
@@ -298,19 +446,28 @@ export function useCommentaryCopy(
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
       const range = sel.getRangeAt(0)
-      // Balanced serialization, not tmp.innerHTML: a selection starting mid-heading
-      // clones without its opening tag and innerHTML repairs it by running the heading
-      // over every following line (see serializeRangeBalanced).
-      joined = serializeRangeBalanced(range, scrollerEl.value)
-      if (!joined.trim()) return null
 
-      // copyJoinLines ON: re-collect the full innerHTML of each intersected .line so the
-      // flatten step (Step 2) works on complete line content, not just the DOM range.
-      if (settingsStore.copyJoinLines && scrollerEl.value) {
-        const intersectedLines = Array.from(scrollerEl.value.querySelectorAll('.line'))
-          .filter((el) => range.intersectsNode(el))
-        if (intersectedLines.length) {
-          joined = intersectedLines.map((el) => (el as HTMLElement).innerHTML).join(' ')
+      // A selection long enough to have scrolled its middle rows out of the DOM is
+      // stitched from the model; a selection living entirely inside the rendered
+      // window falls through to reading the DOM alone.
+      const stitched = extractSelectionWithUnmountedLines(range)
+      if (stitched !== null) {
+        joined = stitched
+      } else {
+        // Balanced serialization, not tmp.innerHTML: a selection starting mid-heading
+        // clones without its opening tag and innerHTML repairs it by running the heading
+        // over every following line (see serializeRangeBalanced).
+        joined = serializeRangeBalanced(range, scrollerEl.value)
+        if (!joined.trim()) return null
+
+        // copyJoinLines ON: re-collect the full innerHTML of each intersected .line so the
+        // flatten step (Step 2) works on complete line content, not just the DOM range.
+        if (settingsStore.copyJoinLines && scrollerEl.value) {
+          const intersectedLines = Array.from(scrollerEl.value.querySelectorAll('.line'))
+            .filter((el) => range.intersectsNode(el))
+          if (intersectedLines.length) {
+            joined = intersectedLines.map((el) => (el as HTMLElement).innerHTML).join(' ')
+          }
         }
       }
     }
