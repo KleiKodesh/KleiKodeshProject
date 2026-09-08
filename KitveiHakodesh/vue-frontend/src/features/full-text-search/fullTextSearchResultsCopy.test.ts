@@ -1,4 +1,6 @@
 /**
+ * @vitest-environment jsdom
+ *
  * The copy builder is what makes a selection spanning many search results paste as
  * every one of those results — including the ones the virtualizer never mounted, which
  * is the whole reason it reads the model instead of the DOM selection.
@@ -6,6 +8,12 @@
  * These tests pin the two rules that a live probe cannot pin cheaply: that the row
  * range is honoured exactly (no off-by-one at either end, unmounted rows included),
  * and that a single-row selection is REFUSED so the native copy keeps it.
+ *
+ * jsdom rather than the suite-wide node environment (see vitest.config.ts), so the
+ * builder runs its REAL entity decoding — htmlToText needs a DOM. A hand-written
+ * stand-in decoder was the alternative, and that is exactly the kind of thing that
+ * diverges from the browser at the cases that matter: the spurious-space bug the
+ * abutting-mark test below guards against lived in this very step.
  */
 import { describe, it, expect } from 'vitest'
 import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
@@ -26,24 +34,8 @@ const RESULTS = [
 /** Identity renderer — the censor is exercised by its own suite. */
 const passThrough = (snippet: string) => snippet
 
-/**
- * Stands in for htmlToText, which needs a DOM this suite's node environment has not
- * got (see vitest.config.ts). Covers the entities the corpus actually contains —
- * nbsp and thinsp are the ones the tokenizer names explicitly — so the stand-in does
- * not diverge from the browser exactly where snippets do.
- */
-const decodeEntities = (html: string) =>
-  html
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&thinsp;/g, ' ')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    // Ampersand last, so a decoded entity's own text cannot be re-decoded.
-    .replace(/&amp;/g, '&')
-
 function build(range: { firstRowIndex: number; lastRowIndex: number } | null) {
-  return buildSelectedResultsHtml(RESULTS, range, passThrough, false, decodeEntities)
+  return buildSelectedResultsHtml(RESULTS, range, passThrough, false)
 }
 
 describe('resultReference', () => {
@@ -119,7 +111,6 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       false,
-      decodeEntities,
     )!
     expect(html).not.toContain('<mark')
     expect(html).toContain('plain hit text')
@@ -140,7 +131,6 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       false,
-      decodeEntities,
     )!
     expect(html).toContain('words and more')
     expect(html).not.toContain('wor d')
@@ -159,9 +149,36 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       false,
-      decodeEntities,
     )!
     expect(html).toContain('two  spaces')
+  })
+
+  it('decodes the entities a snippet carries, then escapes once', () => {
+    // The renderer collapses thin and non-breaking spaces to entities, and the
+    // tokenizer treats them as separators sitting right against a match — so they
+    // reach this path routinely. They must arrive in the clipboard as the characters
+    // they stand for, not as their entity source, and the ampersand of a real `&amp;`
+    // must not be re-escaped into `&amp;amp;` on the way out.
+    const results = [
+      makeResult(1, 'BookOne', 'ChapterA', 'a&thinsp;b&nbsp;c &amp; d'),
+      makeResult(2, 'BookOne', 'ChapterB', 'second'),
+    ]
+    const html = buildSelectedResultsHtml(
+      results,
+      { firstRowIndex: 0, lastRowIndex: 1 },
+      passThrough,
+      false,
+    )!
+    // Asserts the CHARACTERS, not merely that the entity source is gone: a
+    // hand-rolled decoder that maps both of these to an ordinary space would satisfy
+    // a "no longer contains &thinsp;" check while quietly flattening two distinct
+    // characters. Only real decoding produces the thin and non-breaking spaces.
+    expect(html).toContain('a b c')
+    expect(html).not.toContain('&thinsp;')
+    expect(html).not.toContain('&nbsp;')
+    // Escaped exactly once on the way out — never re-escaped into &amp;amp;.
+    expect(html).toContain('&amp; d')
+    expect(html).not.toContain('&amp;amp;')
   })
 
   it('escapes text that would otherwise be read as markup', () => {
@@ -174,7 +191,6 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       false,
-      decodeEntities,
     )!
     expect(html).toContain('Book &lt;One&gt;')
     expect(html).toContain('A &amp; B')
@@ -191,7 +207,6 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       passThrough,
       false,
-      decodeEntities,
     )!
     // The reference still lands; only the empty text block is skipped.
     expect(html).toContain('BookOne › ChapterA')
@@ -206,7 +221,6 @@ describe('buildSelectedResultsHtml', () => {
       { firstRowIndex: 0, lastRowIndex: 1 },
       (snippet) => snippet.replace("first", "RENDERED"),
       false,
-      decodeEntities,
     )!
     expect(html).toContain('RENDERED snippet')
   })

@@ -50,7 +50,6 @@ export function resultReference(result: FullTextSearchResult): string {
 function resultToHtml(
   result: FullTextSearchResult,
   renderSnippet: (snippet: string) => string,
-  toText: (html: string) => string,
 ): string {
   // Tags out first, then entities decoded: htmlToText expects tag-free input (see its
   // contract), and the snippet still carries the search-match <mark> elements.
@@ -64,7 +63,7 @@ function resultToHtml(
   // word-joining hyphen — as a token boundary that still renders, so a match starting
   // after one puts <mark> flush against a visible character, and a space there splits
   // a word that belongs together.
-  const snippetText = toText(renderSnippet(result.snippet).replace(/<[^>]*>/g, '')).trim()
+  const snippetText = htmlToText(renderSnippet(result.snippet).replace(/<[^>]*>/g, '')).trim()
   return (
     `<div dir="rtl"><b>${escapeHtml(resultReference(result))}</b></div>` +
     (snippetText ? `<div dir="rtl">${escapeHtml(snippetText)}</div>` : '')
@@ -83,12 +82,6 @@ export function buildSelectedResultsHtml(
   rowIndexRange: { firstRowIndex: number; lastRowIndex: number } | null,
   renderSnippet: (snippet: string) => string,
   cleanText: boolean,
-  /**
-   * Decodes the HTML entities left in a snippet once its tags are gone. Defaults to
-   * htmlToText, which needs a DOM; injectable so the row-range and escaping rules can
-   * be unit-tested without one.
-   */
-  toText: (html: string) => string = htmlToText,
 ): string | null {
   if (!rowIndexRange) return null
   const { firstRowIndex, lastRowIndex } = rowIndexRange
@@ -103,7 +96,7 @@ export function buildSelectedResultsHtml(
   for (let rowIndex = firstRowIndex; rowIndex <= lastRowIndex; rowIndex++) {
     const result = results[rowIndex]
     if (!result) continue
-    blocks.push(resultToHtml(result, renderSnippet, toText))
+    blocks.push(resultToHtml(result, renderSnippet))
   }
   if (!blocks.length) return null
   const html = blocks.join('')
