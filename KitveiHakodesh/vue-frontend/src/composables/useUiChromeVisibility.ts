@@ -46,8 +46,12 @@ function clearScrollingFlag() {
   }
 }
 
-function onAnyScroll(event: Event) {
-  const target = event.target instanceof Element ? event.target : document.documentElement
+/**
+ * Reveal exactly one element's bar and restart the linger. The shared core of
+ * both reveal triggers: actually scrolling, and pointing at the bar
+ * (`revealScrollbarOnHover`).
+ */
+function revealScrollbarFor(target: Element) {
   if (scrollingElement !== target) {
     scrollingElement?.classList.remove('scrollbars-scrolling')
     scrollingElement = target
@@ -60,6 +64,27 @@ function onAnyScroll(event: Event) {
     scrollbarsScrollingTimer = null
     clearScrollingFlag()
   }, SCROLLBARS_SCROLLING_LINGER_MS)
+}
+
+function onAnyScroll(event: Event) {
+  revealScrollbarFor(event.target instanceof Element ? event.target : document.documentElement)
+}
+
+/**
+ * Reveals a hidden scrollbar because the pointer is ON it — reaching for a bar is
+ * as clear an intent to see it as scrolling is. Hiding is pure `scrollbar-color`
+ * tinting with the gutter always reserved, so a hidden bar is invisible but still
+ * present and still hoverable; without this the reader would be pointing at, and
+ * dragging, something they cannot see.
+ *
+ * A no-op unless the mode is on, so callers need not know the setting. The linger
+ * restarts on each call, so repeated calls while the pointer sits on the track
+ * hold the bar visible.
+ */
+export function revealScrollbarOnHover(target: Element | null) {
+  if (!target) return
+  if (!document.documentElement.classList.contains('scrollbars-hidden')) return
+  revealScrollbarFor(target)
 }
 
 function applyScrollbarsHidden(hidden: boolean) {
