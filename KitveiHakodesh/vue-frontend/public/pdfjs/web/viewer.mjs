@@ -385,6 +385,10 @@ function normalizeWheelEventDelta(evt) {
 function isValidRotation(angle) {
   return Number.isInteger(angle) && angle % 90 === 0;
 }
+function isValidCursorTool(tool) {
+  // ZOOM is excluded deliberately: PDFCursorTools rejects it as unsupported.
+  return tool === CursorTool.SELECT || tool === CursorTool.HAND;
+}
 function isValidScrollMode(mode) {
   return Number.isInteger(mode) && Object.values(ScrollMode).includes(mode) && mode !== ScrollMode.UNKNOWN;
 }
@@ -6248,6 +6252,15 @@ class PDFCursorTools {
   }
   switchTool(tool) {
     if (this.#prevActive !== null) {
+      // A tool is being suppressed (annotation editor / presentation mode), so
+      // switching now would be undone on exit. Retarget what gets restored
+      // instead of dropping the request, otherwise a tool set while suppressed
+      // is lost for good. Only a tool #switchTool can actually apply may be
+      // parked here: an unsupported one would be rejected on restore, leaving
+      // the toolbar buttons stuck disabled.
+      if (isValidCursorTool(tool)) {
+        this.#prevActive = tool;
+      }
       return;
     }
     this.#switchTool(tool);
@@ -17678,6 +17691,19 @@ class ViewHistory {
     this.file[name] = val;
     return this._writeToStorage();
   }
+  setSync(name, val) {
+    // Discrete one-shot settings (unlike scrolling, which re-fires constantly)
+    // get no second chance to persist: the host can tear this frame down in the
+    // same task as the click. Write through synchronously once initialized so
+    // the value cannot be lost with a pending promise. No-op before init, when
+    // there is nothing user-chosen to lose yet.
+    if (!this.file) {
+      return false;
+    }
+    this.file[name] = val;
+    this._writeToStorage();
+    return true;
+  }
   async setMultiple(properties) {
     await this._initializedPromise;
     for (const name in properties) {
@@ -18972,7 +18998,8 @@ const PDFViewerApplication = {
       rotation: null,
       sidebarView: SidebarView.UNKNOWN,
       scrollMode: ScrollMode.UNKNOWN,
-      spreadMode: SpreadMode.UNKNOWN
+      spreadMode: SpreadMode.UNKNOWN,
+      cursorTool: null
     }).catch(() => {});
     firstPagePromise.then(pdfPage => {
       this.loadingBar?.setWidth(this.appConfig.viewerContainer);
@@ -18991,6 +19018,7 @@ const PDFViewerApplication = {
         let sidebarView = AppOptions.get("sidebarViewOnLoad");
         let scrollMode = AppOptions.get("scrollModeOnLoad");
         let spreadMode = AppOptions.get("spreadModeOnLoad");
+        let cursorTool = AppOptions.get("cursorToolOnLoad");
         if (stored?.page && viewOnLoad !== ViewOnLoad.INITIAL) {
           hash = `page=${stored.page}&zoom=${zoom || stored.zoom},` + `${stored.scrollLeft},${stored.scrollTop}`;
           rotation = parseInt(stored.rotation, 10);
@@ -19002,6 +19030,12 @@ const PDFViewerApplication = {
           }
           if (spreadMode === SpreadMode.UNKNOWN) {
             spreadMode = stored.spreadMode | 0;
+          }
+          // Tabs are not kept alive, so the viewer reloads on every tab switch;
+          // restore the tool the user picked unless an explicit non-default
+          // cursorToolOnLoad is configured.
+          if (cursorTool === CursorTool.SELECT && isValidCursorTool(stored.cursorTool | 0)) {
+            cursorTool = stored.cursorTool | 0;
           }
         }
         if (pageMode && sidebarView === SidebarView.UNKNOWN) {
@@ -19015,7 +19049,8 @@ const PDFViewerApplication = {
           rotation,
           sidebarView,
           scrollMode,
-          spreadMode
+          spreadMode,
+          cursorTool
         });
         this.eventBus.dispatch("documentinit", {
           source: this
@@ -19272,7 +19307,8 @@ const PDFViewerApplication = {
     rotation,
     sidebarView,
     scrollMode,
-    spreadMode
+    spreadMode,
+    cursorTool
   } = {}) {
     const setRotation = angle => {
       if (isValidRotation(angle)) {
@@ -19290,6 +19326,9 @@ const PDFViewerApplication = {
     this.isInitialViewSet = true;
     this.viewsManager?.setInitialView(sidebarView);
     setViewerModes(scrollMode, spreadMode);
+    if (cursorTool != null) {
+      this.pdfCursorTools?.switchTool(cursorTool);
+    }
     if (this.initialBookmark) {
       setRotation(this.initialRotation);
       delete this.initialRotation;
@@ -19428,6 +19467,7 @@ const PDFViewerApplication = {
     eventBus._on("scrollmodechanged", onViewerModesChanged.bind(this, "scrollMode"), opts);
     eventBus._on("switchspreadmode", evt => pdfViewer.spreadMode = evt.mode, opts);
     eventBus._on("spreadmodechanged", onViewerModesChanged.bind(this, "spreadMode"), opts);
+    eventBus._on("cursortoolchanged", onCursorToolChanged.bind(this), opts);
     eventBus._on("imagealttextsettings", onImageAltTextSettings.bind(this), opts);
     eventBus._on("documentproperties", () => pdfDocumentProperties?.open(), opts);
     eventBus._on("findfromurlhash", onFindFromUrlHash.bind(this), opts);
@@ -19777,6 +19817,17 @@ function onUpdateViewarea({
   }
   if (this.appConfig.secondaryToolbar) {
     this.appConfig.secondaryToolbar.viewBookmarkButton.href = this.pdfLinkService.getAnchorUrl(location.pdfOpenParams);
+  }
+}
+function onCursorToolChanged({
+  tool,
+  disabled
+}) {
+  // `disabled` marks a forced switch to SELECT while the annotation editor or
+  // presentation mode suppresses the real tool — transient, so never persist
+  // it. The matching restore on exit re-fires this event undisabled.
+  if (this.isInitialViewSet && !disabled) {
+    this.store?.setSync("cursorTool", tool);
   }
 }
 function onViewerModesChanged(name, evt) {
