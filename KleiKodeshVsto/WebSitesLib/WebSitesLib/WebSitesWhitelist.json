@@ -18,6 +18,12 @@
     "IsVisible": true
   },
   {
+    "Name": "המשיב",
+    "Description": "עזר ללימוד מקורות בית המדרש.",
+    "Url": "https://hameshiv.com",
+    "IsVisible": true
+  },
+  {
     "Name": "איתוריא",
     "Description": "כלי בינה מלאכותית לחיפוש ועיון בטקסטים תורניים.",
     "Url": "https://huggingface.co/spaces/sivan22/Ituria",
