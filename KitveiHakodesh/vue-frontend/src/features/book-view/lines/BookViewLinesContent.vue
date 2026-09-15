@@ -33,6 +33,8 @@ import { useBookViewAbbrevTooltip } from './useBookViewAbbrevTooltip'
 import WordLinkTooltip from './WordLinkTooltip.vue'
 import { useWordLinkTooltip } from './useWordLinkTooltip'
 import { useNoteTooltip } from './useNoteTooltip'
+import BookViewScrollbarTocTooltip from './BookViewScrollbarTocTooltip.vue'
+import { useBookViewScrollbarTocTooltip } from './useBookViewScrollbarTocTooltip'
 import { useWordLinkAnchors } from './useWordLinkAnchors'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
@@ -267,6 +269,15 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
 // replaces the native title tooltip the marker used to have.
 const { noteTooltip, closeNoteTooltip } = useNoteTooltip(scrollerEl)
 
+// Hovering the scrollbar shows the reader's current book and TOC path — reaching
+// for the scrollbar is when "where am I?" gets asked.
+const { scrollbarTocTooltip, refreshScrollbarTocTooltip } = useBookViewScrollbarTocTooltip(scrollerEl, {
+  getCurrentLineIndex: () => readCurrentPosition()?.lineIndex ?? null,
+  getBookTitle: () => bookTitle,
+  getActiveTocEntry: () => props.getActiveTocEntry,
+  getTocPath: () => props.getTocPath,
+})
+
 const {
   wordLinkTooltip,
   closeWordLinkTooltip,
@@ -384,6 +395,7 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
       :interactive="false"
       @close="closeNoteTooltip"
     />
+    <BookViewScrollbarTocTooltip v-if="scrollbarTocTooltip" :data="scrollbarTocTooltip" />
     <div
       ref="scrollerEl"
       class="scroller"
@@ -391,7 +403,7 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
       data-ctrlf-enabled
       :style="{ fontSize: `${fontPx}px` }"
       :data-teamim="bookHasTeamim ? 'true' : 'false'"
-      @scroll="onScroll"
+      @scroll="onScroll(); refreshScrollbarTocTooltip()"
       @click="onMarkerClick"
       @contextmenu="contextMenuRef?.show($event)"
     >
