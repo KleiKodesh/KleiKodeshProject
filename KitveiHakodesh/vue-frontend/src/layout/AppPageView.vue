@@ -27,7 +27,9 @@ const pageKey = computed(() => {
     const t = activeTab.value
     return `${activeTabId.value}:${t.bookId ?? ''}:${t.navNonce ?? ''}`
   }
-  if (r === '/search' || r === '/txt-view') return activeTabId.value
+  // Home is keyed for the same reason: its search box is a local ref, so without a
+  // key two home tabs in a pane share one typed query (the component never remounts).
+  if (r === '/' || r === '/search' || r === '/txt-view') return activeTabId.value
   return undefined
 })
 
