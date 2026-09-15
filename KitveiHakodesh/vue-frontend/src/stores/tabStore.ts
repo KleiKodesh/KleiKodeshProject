@@ -1160,12 +1160,11 @@ export const useTabStore = defineStore('tabs', () => {
     if (tab) applyTabPatch(tab, patch)
   }
 
+  // Home is not unique: every "new tab" gesture gets its own home tab, exactly as a
+  // browser opens a fresh new-tab page each time rather than switching to the one
+  // already open. Home holds no app-wide state, so copies cannot go stale.
   function openNewHomeTab() {
-    // Only consider tabs pane 1 can display (its own + adopted orphans) — never
-    // steal a home tab that lives in the open split pane.
-    const existing = pane1Tabs.value.find((t) => t.route === '/')
-    if (existing) switchTab(existing.id)
-    else openTab({ title: 'בית', route: '/' })
+    openTab({ title: 'בית', route: '/' })
   }
 
   // Destination pages (the tool routes listed in DESTINATION_ROUTES). Never

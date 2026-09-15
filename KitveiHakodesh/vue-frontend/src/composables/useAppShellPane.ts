@@ -135,14 +135,11 @@ export function useAppShellPane(paneId: 1 | 2) {
     else openTab(patch)
   }
 
+  // Each gesture opens its own home tab in this pane — see openNewHomeTab in tabStore
+  // for why home is deliberately not unique.
   function openNewHomeTab() {
-    if (paneId === 1) {
-      tabStore.openNewHomeTab()
-    } else {
-      const existing = tabStore.pane2Tabs.find((t) => t.route === '/')
-      if (existing) tabStore.switchPaneTab(existing.id, 2)
-      else tabStore.openPane2Tab({ title: 'בית', route: '/' })
-    }
+    if (paneId === 1) tabStore.openNewHomeTab()
+    else tabStore.openPane2Tab({ title: 'בית', route: '/' })
   }
 
   function navigateToDestination(route: TabRoute, openInNewTab = false) {

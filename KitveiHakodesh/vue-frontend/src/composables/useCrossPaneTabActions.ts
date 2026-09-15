@@ -59,10 +59,7 @@ export function openNewTabInPane(pane: 1 | 2 = 1) {
 
   if (pane === 2 && bookViewStore.splitViewEnabled) {
     bookViewStore.setFocusedPane(2)
-    const existingHome =
-      target.route === '/' ? tabStore.pane2Tabs.find((t) => t.route === '/') : undefined
-    if (existingHome) tabStore.switchPaneTab(existingHome.id, 2)
-    else tabStore.openPane2Tab({ title: target.title, route: target.route })
+    tabStore.openPane2Tab({ title: target.title, route: target.route })
     return
   }
 
