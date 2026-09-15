@@ -59,6 +59,12 @@ namespace KitveiHakodeshLib
             _form.RestoreToolTip = "שחזר";
             _form.CloseToolTip = "סגור";
 
+            // Hebrew tab context-menu captions (the base class defaults are English)
+            _form.CloseTabMenuText = "סגור לשונית";
+            _form.CloseOtherTabsMenuText = "סגור לשוניות אחרות";
+            _form.CloseTabsToTheLeftMenuText = "סגור לשוניות משמאל";
+            _form.CloseTabsToTheRightMenuText = "סגור לשוניות מימין";
+
             ApplyPersistedTheme();
 
             _form.SelectedTabChanged += OnSelectedTabChanged;
