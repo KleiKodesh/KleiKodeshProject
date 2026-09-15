@@ -40,12 +40,14 @@ Keyboard navigation follows the combobox model (`useInputListNavigation`): focus
 
 ## Tile visibility rules
 
-The first two tiles are DB-dependent and swap based on DB state. All other tiles are always visible regardless of DB state.
+**The static row is hidden entirely while this pane's nav rail (`AppNavSidebar`) is showing.** The rail holds the same destinations on every page (its tail collapsing into a `more` flyout in a short pane), so beside it the tiles are pure duplication; what home then shows is what the rail cannot — the search bar, the frequent folders and the recent documents. Turning the rail off (per pane — `settingsStore.getNavSidebarVisible(paneId)`, injected as `paneId`) brings the whole row straight back. The freed rows are deliberately **not** given to the dynamic groups: the page gets shorter, the lists do not get longer. The grid's width cap still measures the full static row even while it is hidden, so the remaining tiles keep the same grid instead of spreading across the window.
+
+While the row IS shown, the first two tiles are DB-dependent and swap based on DB state. All other tiles are visible regardless of DB state.
 
 When `isHosted && !dbReady`: the first two tiles are **הורד מסד ספרים** and **בחר מסד ספרים**, which let the user set up a database.
 
 When DB is available (or not hosted): the first two tiles are **ספרים** and **חיפוש**, which require a DB to function.
 
-Never hide or conditionally render any tile beyond these first two — the rest (פתח קובץ, היברו-בוקס, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, הגדרות) are always shown.
+Beyond those first two and the rail rule above, never hide or conditionally render individual tiles — the rest (פתח קובץ, היברו-בוקס, חיפוש קבצים, מילון, לוח שנה, מידות ושיעורים, הגדרות) come and go only as one row.
 
 Workspaces (סביבות עבודה) is deliberately **not** a tile and not a page: it is a picker, reached from the shell's own menus (`layout/WorkspaceMenu.vue`), not a place you navigate to.

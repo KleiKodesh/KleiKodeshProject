@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, type Component, type Ref } from 'vue'
+import { ref, computed, inject, onMounted, type Component, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
   IconDatabase24Filled,
@@ -29,7 +29,8 @@ const MAX_FOLDER_TILES = 9
  * folder tiles, then however many recently-opened tiles fit alongside them.
  *
  * The first two tiles are DB-dependent and swap when no database is available.
- * Every other tile is always shown — see the feature README before changing this.
+ * The static row as a whole drops out when this pane's nav rail is showing — see
+ * `staticTilesVisible` below and the feature README before changing this.
  *
  * The static tile list must stay in sync with the destination list in
  * `AppTitleBarNavDropdown.vue`; neither is derived from the other.
@@ -37,7 +38,11 @@ const MAX_FOLDER_TILES = 9
 export function useHomeTiles(containerWidth: Ref<number>) {
   const recentlyOpenedStore = useRecentlyOpenedStore()
   const frequentFoldersStore = useFrequentFoldersStore()
-  const { showRecentlyOpened, showFrequentFolders } = storeToRefs(useSettingsStore())
+  const settingsStore = useSettingsStore()
+  const { showRecentlyOpened, showFrequentFolders } = storeToRefs(settingsStore)
+  // Which pane this home page is in — the rail is per-pane, so the tiles follow
+  // the rail beside THEM, not the one in the other half of a split view.
+  const paneId = inject<1 | 2>('paneId', 1)
 
   const recentlyOpenedList = ref<RecentlyOpenedEntry[]>([])
   const frequentFolderList = ref<FrequentFolderEntry[]>([])
@@ -48,7 +53,16 @@ export function useHomeTiles(containerWidth: Ref<number>) {
     return { icon: icon.icon24, color: icon.color }
   }
 
-  const tiles = computed(() => {
+  /**
+   * The static tiles are the same destinations the nav rail holds, so when the rail
+   * is beside this pane they are pure duplication — the rail offers every one of
+   * them on every page, not just this one. Dropping them leaves home as what the
+   * rail cannot show: the search bar and the user's own folders and documents.
+   * Turning the rail off brings them straight back.
+   */
+  const staticTilesVisible = computed(() => !settingsStore.getNavSidebarVisible(paneId))
+
+  const allStaticTiles = computed(() => {
     const dbMissing = !dbReady.value
     return [
       // Tiles whose destination also appears as a tab read their glyph and colour
@@ -70,14 +84,21 @@ export function useHomeTiles(containerWidth: Ref<number>) {
     ]
   })
 
+  /** What the grid actually renders: empty while the rail is carrying these. */
+  const tiles = computed(() => (staticTilesVisible.value ? allStaticTiles.value : []))
+
   /**
    * How wide the grid is allowed to get: exactly the width of one full row of
    * static tiles. The static row is the widest the grid ever needs to be, so
    * capping here means a wide window can never start a row longer than that —
    * the recently-opened tiles wrap underneath instead of stretching past it.
+   *
+   * Measured off the full static list even when it is not rendered, so hiding the
+   * row keeps the remaining tiles on the same grid rather than letting them spread
+   * across the whole window.
    */
   const gridMaxWidth = computed(
-    () => tiles.value.length * (TILE_WIDTH + TILE_GAP) - TILE_GAP,
+    () => allStaticTiles.value.length * (TILE_WIDTH + TILE_GAP) - TILE_GAP,
   )
 
   /**
@@ -93,9 +114,14 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   /**
    * How many tiles the two dynamic groups get between them: the gap left on the
    * static tiles' last row, plus DYNAMIC_TILE_ROWS more full rows.
+   *
+   * With the static row hidden there is no tail to fill, and the whole budget is
+   * the full rows — the freed rows are deliberately not handed to the dynamic
+   * groups, so the page gets shorter rather than the lists longer.
    */
   const dynamicTileBudget = computed(() => {
     const perRow = tilesPerRow.value
+    if (!staticTilesVisible.value) return DYNAMIC_TILE_ROWS * perRow
     const tailSlots = tiles.value.length % perRow
     const freeOnLastRow = tailSlots === 0 ? 0 : perRow - tailSlots
     return freeOnLastRow + DYNAMIC_TILE_ROWS * perRow
