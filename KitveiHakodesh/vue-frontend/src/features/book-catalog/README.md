@@ -1,14 +1,16 @@
 # book-catalog
 
-Book catalog browser: one list view, with two-tier search.
+Book catalog browser: list and tiles views, with two-tier search.
 
-**BookCatalogPage.vue** - main page, orchestrating the address bar and the list. It owns which face the bar shows (path or search field) — see the `showSearch` note in the file — and forwards the search input's keys to whichever list is on screen.
+**BookCatalogPage.vue** - main page, orchestrating the address bar and the active view. It owns which face the bar shows (path or search field) — see the `showSearch` note in the file — and forwards the search input's keys to whichever view is on screen. Which view that is comes from `settingsStore.booksView`, an app-wide preference shared by every `/books` tab, not per-tab state; assigning it persists it, so there is nothing to load on mount.
 
 **BookCatalogView.List.vue** - the catalog list, with folder and book rows.
 
-**BookCatalogTitleBar.vue** - the address bar: one pill (`TopSearchBar`) holding home, the breadcrumb or the search field, and the button that swaps between them.
+**BookCatalogView.Tiles.vue** - the same items as a wrapping tile grid, sharing the home page's tile look. Its keyboard steps a whole row at a time and takes left/right within a row (`getColumnsPerRow` / `countGridColumns` in `useInputListNavigation`).
 
-**BookCatalogSearch.vue** - renders book matches and TOC entry matches.
+**BookCatalogTitleBar.vue** - the address bar: one pill (`TopSearchBar`) holding home, the breadcrumb or the search field, and — beside the search icon — the list/tiles toggle.
+
+**BookCatalogSearch.vue** - renders book matches and TOC entry matches, in a list or as tiles to match the active view.
 
 **BookCatalogBreadcrumb.vue** - breadcrumb trail for the current folder path.
 

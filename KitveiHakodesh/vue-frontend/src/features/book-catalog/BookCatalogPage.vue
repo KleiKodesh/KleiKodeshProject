@@ -3,11 +3,14 @@ import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
-import BookCatalogView from './BookCatalogView.List.vue'
+import BookCatalogViewList from './BookCatalogView.List.vue'
+import BookCatalogViewTiles from './BookCatalogView.Tiles.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { useTabStore } from '@/stores/tabStore'
+import { useSettingsStore, type BooksView } from '@/stores/settingsStore'
+import { storeToRefs } from 'pinia'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from './useBookCatalogSearch'
@@ -31,6 +34,18 @@ const {
   navigateTo,
   navigateToSibling,
 } = useBookCatalog()
+
+// Persisted in settingsStore alongside every other display preference — it is
+// app-wide, not per-tab, so it needs no load-on-mount step.
+const { booksView: view } = storeToRefs(useSettingsStore())
+const activeViewComponent = computed(() =>
+  view.value === 'tiles' ? BookCatalogViewTiles : BookCatalogViewList,
+)
+
+function setView(v: BooksView) {
+  // Assigning the store ref persists it — settingsStore watches and writes.
+  view.value = v
+}
 
 // This tab's id, captured at mount. The catalog is NOT a singleton (multiple
 // '/books' tabs can coexist), so we persist against the specific tab, never the
@@ -102,7 +117,7 @@ function copyDiagnostics() {
   void copyTextToClipboard(lines.join('\n'))
 }
 type ActiveViewInstance = ComponentPublicInstance & {
-  /** The list forwards the search input's keys, keeping the caret in the field. */
+  /** Both views forward the search input's keys, keeping the caret in the field. */
   onSearchInputKeydown: (event: KeyboardEvent) => boolean
 }
 
@@ -258,8 +273,10 @@ function onSearchEnter() {
 <template>
   <div class="books-page">
     <BookCatalogTitleBar
+      :view="view"
       :path="path"
       :show-search="showSearch"
+      @set-view="setView"
       @navigate="onNavigate"
       @navigate-to-sibling="onNavigateToSibling($event.atIndex, $event.node)"
       @open-search="openSearch"
@@ -315,7 +332,8 @@ function onSearchEnter() {
         </template>
       </div>
       <template v-else>
-        <BookCatalogView
+        <component
+          :is="activeViewComponent"
           ref="activeViewRef"
           v-show="!isSearching"
           :items="treeItems"
@@ -330,6 +348,7 @@ function onSearchEnter() {
             ref="searchResultsRef"
             v-else
             :items="searchItems"
+            :view="view"
             :searching="tocSearching"
             @select-book="onSelectBook"
             @select-toc="onSelectToc"

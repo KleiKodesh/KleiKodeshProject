@@ -1,20 +1,46 @@
 <script setup lang="ts">
-import { IconHome16Regular, IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import { computed } from 'vue'
+import {
+  IconHome16Regular,
+  IconSearch20Regular,
+  IconTextBulletList20Regular,
+  IconGrid20Regular,
+} from '@iconify-prerendered/vue-fluent'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import BookCatalogBreadcrumb from './BookCatalogBreadcrumb.vue'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
+import type { BooksView } from '@/stores/settingsStore'
 
-defineProps<{
+const props = defineProps<{
+  view: BooksView
   path: CategoryNode[]
   /** Which face the bar is showing: the search field, or the path. */
   showSearch: boolean
 }>()
-defineEmits<{
+const emit = defineEmits<{
+  setView: [BooksView]
   navigate: [number]
   navigateToSibling: [{ atIndex: number; node: CategoryNode }]
   openSearch: []
   goHome: []
 }>()
+
+// Two views, so the button is a straight toggle: it shows the view you are IN and
+// switches to the other one on click. The title names the view being switched TO,
+// since the icon already says where you are.
+const VIEWS: Record<BooksView, { label: string; icon: typeof IconGrid20Regular }> = {
+  list: { label: 'תצוגת רשימה', icon: IconTextBulletList20Regular },
+  tiles: { label: 'תצוגת אריחים', icon: IconGrid20Regular },
+}
+
+const otherView = computed(() => (props.view === 'list' ? 'tiles' : 'list') as BooksView)
+const viewToggleTitle = computed(
+  () => `${VIEWS[props.view].label} — החלף ל${VIEWS[otherView.value].label}`,
+)
+
+function toggleView() {
+  emit('setView', otherView.value)
+}
 </script>
 
 <template>
@@ -69,6 +95,16 @@ defineEmits<{
            step. -->
       <IconSearch20Regular class="search-icon path-search-icon" />
     </div>
+    <template #right>
+      <button
+        class="bar-btn pill-btn"
+        :title="viewToggleTitle"
+        @mousedown.prevent
+        @click="toggleView"
+      >
+        <component :is="VIEWS[view].icon" :key="view" />
+      </button>
+    </template>
   </TopSearchBar>
 </template>
 

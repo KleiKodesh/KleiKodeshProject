@@ -74,6 +74,7 @@ const KEYS = {
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
 
   // Per-feature preferences
+  SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
@@ -97,9 +98,15 @@ import {
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
+/** Layout modes for the book catalog page. */
+export type BooksView = 'list' | 'tiles'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
 // Do not remove these; they are matched in normalizeNewTabPage below.
 type LegacyNewTabPage = NewTabPage | 'kezayit-search' | 'kitveihakodesh-search'
+// The catalog also had a tree view once. It is gone, but the preference was never
+// cleared from disk, so anyone who chose it still has it stored under the same key
+// this setting uses again — see normalizeBooksView.
+type LegacyBooksView = BooksView | 'tree'
 
 const DEFAULTS = {
   // How the divine names are rendered. Was a boolean in builds before the
@@ -145,6 +152,7 @@ const DEFAULTS = {
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
+  booksView: 'list' as BooksView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   pdfPageFilters: false,
@@ -296,6 +304,8 @@ export const useSettingsStore = defineStore('settings', () => {
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
+  /** Which layout the book catalog page renders in. */
+  const booksView = ref<BooksView>(DEFAULTS.booksView)
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
@@ -444,6 +454,8 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
+    const storedBooksView = normalizeBooksView(lsGet<LegacyBooksView>(KEYS.SETTINGS_BOOKS_VIEW))
+    if (storedBooksView != null) booksView.value = storedBooksView
     applyCSSVariables()
   }
 
@@ -507,6 +519,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
+  persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -664,6 +677,7 @@ export const useSettingsStore = defineStore('settings', () => {
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
     // next reload.
     fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
+    booksView.value = DEFAULTS.booksView
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
     // undone by them re-writing every key we just deleted. Clear once they have run.
@@ -695,6 +709,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showRecentlyOpened,
     showFrequentFolders,
     fileSearchSortOrder,
+    booksView,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer, completeAddressBarHint,
   }
@@ -702,4 +717,14 @@ export const useSettingsStore = defineStore('settings', () => {
   function normalizeNewTabPage(value: LegacyNewTabPage | null): NewTabPage | null {
     if (value === 'kezayit-search' || value === 'kitveihakodesh-search') return 'search'
     return value
+  }
+
+  // A stored value is whatever an older build wrote, not necessarily a BooksView:
+  // the catalog's retired tree view is still on disk for anyone who picked it. Map
+  // it to the list, and reject anything else unrecognized, because the title bar
+  // indexes a two-key record by this value and would throw on a third one.
+  function normalizeBooksView(value: LegacyBooksView | null): BooksView | null {
+    if (value === 'list' || value === 'tiles') return value
+    if (value === 'tree') return 'list'
+    return null
   }
