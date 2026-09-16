@@ -30,8 +30,12 @@ import type { Workspace } from '@/stores/workspaceStore'
  * change input device or hunt for a tab stop in between.
  *
  * On a row: Enter switches to it, Delete starts its delete confirmation, F2 starts a
- * rename. In the box: Enter creates. Home/End jump to the ends of the walk. Escape is
- * the host's, and is let through.
+ * rename. In the box: Enter creates. Home/End jump to the ends of the walk.
+ *
+ * While a row is asking "delete this?", that question owns both answer keys for as long
+ * as it stands: **Enter deletes, Escape backs out**. Neither reaches its usual meaning
+ * until the question is gone, which is the whole point of a confirmation - it would be a
+ * poor one if the key the reader just pressed to raise it also answered it.
  *
  * `useListKeys` is deliberately NOT used here, though the rows still carry its
  * `data-nav-item` marker and its `is-focused` class so they look like every other list in
@@ -168,6 +172,14 @@ function onPanelKeydown(e: KeyboardEvent): boolean {
       moveTo(createBoxIndex())
       return true
     case 'Enter': {
+      // A row asking "delete this?" has put a question on screen, and Enter is the answer
+      // to THAT question for as long as it stands - not "switch to this workspace", which
+      // is what Enter means on every other row. Checked before the create box and before
+      // the row guard below, both of which would otherwise answer for it.
+      if (confirmDeleteId.value !== null) {
+        void confirmDelete(confirmDeleteId.value)
+        return true
+      }
       if (inBox) {
         void create()
         return true
