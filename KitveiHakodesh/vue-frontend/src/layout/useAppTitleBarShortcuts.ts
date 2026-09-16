@@ -51,6 +51,8 @@ export function useAppTitleBarShortcuts(options: {
   toggleAddressBar: () => void
   /** Ctrl+M. Owned by the component for the same reason. */
   toggleNavDropdown: () => void
+  /** F8. Owned by the component, which holds the picker's open state. */
+  toggleWorkspaces: () => void
 }) {
   const { paneId, pane, titleBarVisible, isSplitViewAvailable } = options
   const bookViewStore = useBookViewStore()
@@ -101,6 +103,15 @@ export function useAppTitleBarShortcuts(options: {
     if (!e.ctrlKey) {
       if (e.code === 'F1') {
         navigateInNewTab('הגדרות')
+        return true
+      }
+      // F8 - open the workspace picker. A bare function key rather than a Ctrl pair
+      // because every Ctrl+letter left is one the BROWSER takes before the page ever
+      // sees it: Ctrl+Shift+W closes the window outright, and preventDefault cannot
+      // call that back. F8 has no Chromium binding at all, and it joins the F-key
+      // family this app already has - F1 settings, F9 reading mode, F11 fullscreen.
+      if (e.code === 'F8') {
+        options.toggleWorkspaces()
         return true
       }
       // Alt+Arrow — the tab's own Back/Forward, like a browser. RTL: back is the

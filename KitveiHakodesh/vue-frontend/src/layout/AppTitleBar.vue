@@ -274,6 +274,15 @@ useAppTitleBarShortcuts({
   isSplitViewAvailable,
   toggleAddressBar,
   toggleNavDropdown,
+  // Inert while the button is not on screen - hidden by the titleBarHiddenButtons
+  // setting, by the nav rail taking the bar's buttons over, by Ctrl+H, or by reading
+  // mode. The panel positions itself from that button, so with no anchor `place()`
+  // bails and the panel mounts invisible at 0,0 - and, because it focuses itself on
+  // open, silently swallows the keyboard. Better that the key does nothing.
+  toggleWorkspaces: () => {
+    if (!workspacesButtonEl.value) return
+    workspacesSubmenu.value?.toggle()
+  },
 })
 
 </script>
@@ -401,7 +410,7 @@ useAppTitleBarShortcuts({
         class="bar-btn"
         :class="{ active: workspacesOpen }"
         tabindex="-1"
-        title="סביבות עבודה"
+        title="סביבות עבודה (F8)"
         :aria-expanded="workspacesOpen"
         @click.stop="workspacesSubmenu?.toggle()"
       >

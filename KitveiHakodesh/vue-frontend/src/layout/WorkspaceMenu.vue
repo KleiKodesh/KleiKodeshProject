@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch, nextTick } from 'vue'
 import {
   IconAdd20Regular,
   IconEdit20Regular,
@@ -22,6 +22,27 @@ import type { Workspace } from '@/stores/workspaceStore'
  * of row-local state: which row is being renamed, which is confirming a delete, and the
  * new-name box.
  *
+ * The whole menu is **one keyboard list**, and that includes the new-name box at the
+ * bottom: the rows and the box are stops on a single up/down walk, so arrowing past the
+ * last row lands the caret in the box and arrowing up out of it returns to the last row.
+ * Treating the box as a stop rather than as a separate tab target is the point - a reader
+ * creating a workspace is doing the same job as one picking one, and should not have to
+ * change input device or hunt for a tab stop in between.
+ *
+ * On a row: Enter switches to it, Delete starts its delete confirmation, F2 starts a
+ * rename. In the box: Enter creates. Home/End jump to the ends of the walk. Escape is
+ * the host's, and is let through.
+ *
+ * `useListKeys` is deliberately NOT used here, though the rows still carry its
+ * `data-nav-item` marker and its `is-focused` class so they look like every other list in
+ * the app. That composable binds its listener to the container it is given and assumes the
+ * container is what holds the focus - but this menu never holds focus. The host panel does
+ * (`WorkspaceSubmenu` focuses itself on open), and the panel is this menu's PARENT, so
+ * keydowns there bubble up and away and never reach a listener bound down here. The walk
+ * is therefore driven by `onPanelKeydown`, which the panel calls on the element the focus
+ * is actually on. A text field that owns its own caret keys is the other reason: `Home`,
+ * `End` and the arrows have to mean something different while the caret is in the box.
+ *
  * No surface of its own - the panel that hosts it paints the background, frame and
  * shadow, so it drops into either host unchanged.
  */
@@ -33,6 +54,173 @@ const newName = ref('')
 const editingId = ref<string | null>(null)
 const editingName = ref('')
 const confirmDeleteId = ref<string | null>(null)
+
+// ── Keyboard ────────────────────────────────────────────────────
+//
+// One walk over `rowCount + 1` stops: every workspace row, then the new-name box last.
+// `focusedIndex === wsStore.workspaces.length` IS the box, which is why the bound below
+// is `<=` the row count rather than `<` it.
+const menuRef = ref<HTMLElement | null>(null)
+const newNameInput = ref<HTMLInputElement | null>(null)
+
+/** -1 until something is focused; `wsStore.workspaces.length` means the create box. */
+const focusedIndex = ref(-1)
+
+/** The index that means "the create box" - one past the last row. */
+function createBoxIndex() {
+  return wsStore.workspaces.length
+}
+
+function isCreateBoxFocused() {
+  return focusedIndex.value === createBoxIndex()
+}
+
+// A row being renamed or confirming a delete has swapped its name for a text box or a pair
+// of confirm buttons, and Enter there already means something else ("save the name",
+// "yes, delete"). Walking onto such a row and pressing Enter must not ALSO switch away
+// from it, so activation is ignored while the row is in either of those states.
+function isRowEditing(id: string) {
+  return editingId.value === id || confirmDeleteId.value === id
+}
+
+/** Put the walk on the row with this id, if it is still in the list. */
+function syncFocusToRow(id: string) {
+  const index = wsStore.workspaces.findIndex((ws) => ws.id === id)
+  if (index >= 0) focusedIndex.value = index
+}
+
+/**
+ * Move the walk to `index`, and move the real DOM focus with it.
+ *
+ * The create box is a genuine text field, so landing on it has to put the caret there -
+ * a highlight alone would leave the reader typing into nothing. Leaving it has to hand
+ * the focus back to the panel, or the caret stays in the box and every further arrow
+ * press walks the text instead of the list.
+ */
+function moveTo(index: number) {
+  const last = createBoxIndex()
+  const clamped = Math.max(0, Math.min(last, index))
+  focusedIndex.value = clamped
+
+  if (clamped === last) {
+    void nextTick(() => newNameInput.value?.focus())
+    return
+  }
+
+  // Back onto a row: take the caret out of the box before scrolling, so the field does
+  // not keep receiving keys meant for the walk. The panel is this menu's parent and is
+  // what the host focused on open, so it is where the focus belongs between stops.
+  if (document.activeElement === newNameInput.value) {
+    menuRef.value?.parentElement?.focus({ preventScroll: true })
+  }
+  void nextTick(() => {
+    const rows = menuRef.value?.querySelectorAll<HTMLElement>('[data-nav-item]')
+    rows?.[clamped]?.scrollIntoView({ block: 'nearest' })
+  })
+}
+
+/**
+ * The menu's key handling, called by the host panel on the element that actually holds
+ * the focus. Returns true when the key was consumed, so the panel knows to stop it.
+ *
+ * Only the keys the walk owns are claimed. Anything else - typing into the create box
+ * included - is left alone, which is what keeps the box a normal text field.
+ */
+function onPanelKeydown(e: KeyboardEvent): boolean {
+  const inBox = isCreateBoxFocused()
+
+  // Escape backs out ONE level at a time. A row that is mid-rename or mid-delete-confirm
+  // is a level of this menu's own, so Escape cancels that and the panel stays up; only
+  // once there is no such row does Escape fall through to the host, whose Escape closes
+  // the panel. Without this the panel's handler takes every Escape first (it is the
+  // focused element, and the rename box never actually holds the focus), so cancelling a
+  // rename shut the whole picker instead.
+  if (e.code === 'Escape') {
+    if (editingId.value !== null) {
+      cancelEdit()
+      return true
+    }
+    if (confirmDeleteId.value !== null) {
+      confirmDeleteId.value = null
+      return true
+    }
+    return false
+  }
+
+  switch (e.code) {
+    case 'ArrowDown':
+      moveTo(focusedIndex.value < 0 ? 0 : focusedIndex.value + 1)
+      return true
+    case 'ArrowUp':
+      // From the box this walks back onto the last row; from row 0 it stays put rather
+      // than wrapping, so the ends of the list are felt rather than looped past.
+      moveTo(focusedIndex.value <= 0 ? 0 : focusedIndex.value - 1)
+      return true
+    case 'Home':
+      // The caret keys win while the reader is typing: Home/End in a text field mean
+      // "start/end of what I typed", and stealing them would be worse than not offering
+      // the jump at all.
+      if (inBox) return false
+      moveTo(0)
+      return true
+    case 'End':
+      if (inBox) return false
+      moveTo(createBoxIndex())
+      return true
+    case 'Enter': {
+      if (inBox) {
+        void create()
+        return true
+      }
+      const ws = wsStore.workspaces[focusedIndex.value]
+      if (!ws || isRowEditing(ws.id)) return false
+      void switchTo(ws.id)
+      return true
+    }
+    case 'Delete': {
+      if (inBox) return false
+      const ws = wsStore.workspaces[focusedIndex.value]
+      // Same guard the delete BUTTON carries: the last workspace cannot be deleted, or
+      // there would be nothing left to switch to.
+      if (!ws || isRowEditing(ws.id) || wsStore.workspaces.length <= 1) return false
+      startConfirmDelete(ws.id)
+      return true
+    }
+    case 'F2': {
+      // The keyboard's way to the rename button, which is otherwise reachable only by
+      // pointer. F2 is the rename key throughout Windows, so it needs no teaching.
+      if (inBox) return false
+      const ws = wsStore.workspaces[focusedIndex.value]
+      if (!ws || isRowEditing(ws.id)) return false
+      startEdit(ws)
+      return true
+    }
+    default:
+      return false
+  }
+}
+
+// Open with the active workspace highlighted: it is the row the reader is oriented from,
+// so one press of an arrow key moves to its neighbour rather than jumping to the top of
+// the list.
+//
+// Watched on the LIST, not on `activeId` alone: deleting a workspace that is not the
+// active one leaves `activeId` untouched while every index below the deleted row shifts
+// up by one, which would leave the highlight pointing at the wrong row - or, for a
+// deleted last row, past the end of the list entirely.
+watch(
+  () => wsStore.workspaces.map((ws) => ws.id).join('\u0000'),
+  () => {
+    // Never drag the caret out of the create box on a list change: creating a workspace
+    // changes the list, and the reader may well be typing the next name.
+    if (isCreateBoxFocused()) return
+    const index = wsStore.workspaces.findIndex((ws) => ws.id === wsStore.activeId)
+    focusedIndex.value = index >= 0 ? index : -1
+  },
+  { immediate: true },
+)
+
+defineExpose({ onPanelKeydown })
 
 async function create() {
   const name = newName.value.trim()
@@ -46,16 +234,39 @@ function startEdit(ws: Workspace) {
   editingId.value = ws.id
   editingName.value = ws.name
   confirmDeleteId.value = null
+  // Keep the walk on this row, so cancelling the rename leaves the reader where they were
+  // rather than back at nothing. Matters for the pointer path too: clicking the rename
+  // button on a row should make that row the keyboard's row as well.
+  syncFocusToRow(ws.id)
+}
+
+/**
+ * Hand the focus back to the host panel after the rename box goes away.
+ *
+ * The box is `autofocus`ed and stops its own keys, so while it is up it owns the keyboard.
+ * When it unmounts the focus would otherwise be left on a removed element - which the
+ * browser resolves to `<body>`, where none of the walk's keys arrive. The reader would
+ * finish a rename and find the arrows dead with no way back in but Escape and F8.
+ *
+ * `nextTick` because the box is still mounted on this tick: focusing the panel before Vue
+ * has removed the input just lets the input take the focus straight back.
+ */
+function returnFocusToPanel() {
+  void nextTick(() => {
+    menuRef.value?.parentElement?.focus({ preventScroll: true })
+  })
 }
 
 async function commitEdit() {
   if (!editingId.value) return
   await wsStore.renameWorkspace(editingId.value, editingName.value)
   editingId.value = null
+  returnFocusToPanel()
 }
 
 function cancelEdit() {
   editingId.value = null
+  returnFocusToPanel()
 }
 
 async function switchTo(id: string) {
@@ -84,39 +295,56 @@ async function confirmDelete(id: string) {
 function startConfirmDelete(id: string) {
   confirmDeleteId.value = id
   editingId.value = null
+  syncFocusToRow(id)
 }
 
 /**
- * Keys typed in here are this menu's own and must not reach the host menu.
+ * Keep the text fields' own typing out of the host panel - but only the typing.
  *
- * The hamburger dropdown runs `useListKeys` on its root, which listens for bubbled
- * keydowns: without this, Enter in the new-name box would be swallowed and re-activate
- * whichever row the arrow keys had last focused, and the arrow keys would walk that
- * menu's rows while the caret sat in a text field.
+ * This used to be a blanket `stopPropagation` on every key but Escape, guarding against
+ * the hamburger dropdown that used to host this menu and ran `useListKeys` on bubbled
+ * keydowns. That host is gone; `WorkspaceSubmenu` is the only one now, and it is the panel
+ * that drives the walk - by handling keydowns as they bubble UP through it from whatever
+ * holds the focus. So a blanket stop here is actively wrong: it severs the create box from
+ * the walk, and `ArrowUp` out of the box reaches nothing. That is a bug this shipped with
+ * until the browser caught it.
  *
- * Escape is deliberately let through: it is the host's "back out one level", and this
- * component does not own a level of its own to back out of.
+ * So the keys the WALK owns are let through to the panel, and everything else - the actual
+ * typing - is stopped here. Escape is let through too: it is the host's "back out one
+ * level", and this component does not own a level of its own to back out of.
  */
-function onKeydown(e: KeyboardEvent) {
-  if (e.code === 'Escape') return
+/**
+ * The keys the host panel drives the walk with; a field must not swallow these.
+ *
+ * `Enter` is on the list because in the create box Enter IS a walk action - it creates the
+ * workspace - and the panel is what runs it. Leaving it off meant the box stopped its own
+ * Enter and nothing ever created anything.
+ */
+const WALK_KEYS = ['ArrowUp', 'ArrowDown', 'Home', 'End', 'Escape', 'Enter']
+
+
+function onFieldKeydown(e: KeyboardEvent) {
+  if (WALK_KEYS.includes(e.code)) return
   e.stopPropagation()
 }
 </script>
 
 <template>
-  <div class="ws-menu" @click.stop @keydown="onKeydown">
+  <div ref="menuRef" class="ws-menu" @click.stop>
     <div class="ws-list">
       <div
-        v-for="ws in wsStore.workspaces"
+        v-for="(ws, index) in wsStore.workspaces"
         :key="ws.id"
         class="ws-row"
-        :class="{ active: ws.id === wsStore.activeId }"
+        data-nav-item
+        :class="{ active: ws.id === wsStore.activeId, 'is-focused': focusedIndex === index }"
       >
         <template v-if="editingId === ws.id">
           <input
             v-model="editingName"
             name="workspace-name-edit"
             class="ws-input ws-input-inline"
+            @keydown.stop
             @keydown.enter="commitEdit"
             @keydown.escape.stop="cancelEdit"
             autofocus
@@ -155,11 +383,14 @@ function onKeydown(e: KeyboardEvent) {
 
     <div class="ws-create">
       <input
+        ref="newNameInput"
         v-model="newName"
         name="workspace-name-new"
         class="ws-input"
+        :class="{ 'is-focused': isCreateBoxFocused() }"
         placeholder="סביבת עבודה חדשה"
-        @keydown.enter="create"
+        @keydown="onFieldKeydown"
+        @focus="focusedIndex = createBoxIndex()"
       />
       <button class="create-btn" :disabled="!newName.trim()" title="צור" @click="create">
         <IconAdd20Regular />
@@ -198,7 +429,8 @@ function onKeydown(e: KeyboardEvent) {
   padding: 0 10px;
   gap: 4px;
 }
-.ws-row:hover {
+.ws-row:hover,
+.ws-row.is-focused {
   background: color-mix(in srgb, var(--text-primary) 6%, transparent);
 }
 .ws-row.active .ws-name {
@@ -240,7 +472,11 @@ function onKeydown(e: KeyboardEvent) {
   opacity: 0;
   transition: opacity 100ms;
 }
-.ws-row:hover .ws-actions {
+/* The keyboard-focused row shows its actions for the same reason the hovered one does:
+   it is the row the reader is on, and rename/delete have to be visible to be reachable
+   from there. */
+.ws-row:hover .ws-actions,
+.ws-row.is-focused .ws-actions {
   opacity: 1;
 }
 

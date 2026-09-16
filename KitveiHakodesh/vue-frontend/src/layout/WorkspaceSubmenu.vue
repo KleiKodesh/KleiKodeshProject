@@ -13,9 +13,17 @@ import WorkspaceMenu from './WorkspaceMenu.vue'
  * the one direction with nothing below it. Workspaces lives in the title bar now, where the
  * whole page is below the button and sideways is the wrong answer.
  *
- * It **opens on hover**; the click is there for touch, where there is no hover to open on.
- * The anchor's hover listeners are attached from in here rather than by the caller - see
- * the hover section below for the two timers that make it usable.
+ * It **opens on click only** - a pointer merely crossing the button never opens it. It used
+ * to open on hover, which put a panel over the page every time the pointer passed the button
+ * on its way somewhere else, and made the button the one control in this bar that acted
+ * before it was asked. The keyboard route is `F8` (see `useAppTitleBarShortcuts`), which is
+ * why the button needs no hover affordance to be reachable.
+ *
+ * This panel is also where the menu's LIST keys are bound, though the list itself lives in
+ * `WorkspaceMenu`. It has to be: the panel takes the focus on open, so it is the keydown
+ * target, and events bubble up and away from it rather than down into its children. So the
+ * panel takes every keydown and offers it to the menu's `onPanelKeydown`, consuming it only
+ * when the menu says it used it.
  *
  * Teleported to the body and `position: fixed`, like every other floating panel here
  * (AppTitleBarBreadcrumbChevronDropdown): the title bar clips its own overflow, and a panel
@@ -43,6 +51,7 @@ const VIEWPORT_MARGIN = 8
 const ANCHOR_GAP = 3
 
 const panelRef = ref<HTMLElement | null>(null)
+const menuRef = ref<InstanceType<typeof WorkspaceMenu> | null>(null)
 const top = ref(0)
 const left = ref(0)
 /** Hidden for the first frame: `place()` has to measure the panel before it can place it. */
@@ -64,102 +73,57 @@ useDropdownClose(panelRef, () => close(), {
 
 /**
  * Open or dismiss the panel. Callers wire their button's `@click` straight to this rather
- * than flipping the bound value themselves, so all three entry points - pointer, keyboard,
- * and hover-intent - go through one door.
+ * than flipping the bound value themselves, so both entry points - pointer and keyboard -
+ * go through one door.
  *
- * A click on a panel the POINTER ALREADY OPENED does nothing, which is the whole reason
- * this is not a plain flip. With a mouse, clicking a submenu row means "yes, this one" -
- * but the pointer is by definition hovering the row it clicks, so hover has already opened
- * the panel and a toggle would read that click as "close" and shut it in the user's face.
- * The other two dismissals still work: click away, or press Escape.
+ * A plain flip is all it has to be now that hover is gone: the only thing that can have
+ * opened the panel before this click is an earlier click or the shortcut, and for both of
+ * those a second press meaning "close" is exactly right.
  *
  * No reopen guard is needed, per the note on `useDropdownClose` above: on the anchor path
  * the composable never closes, so there is never a close for this click to undo.
  */
 function toggle() {
-  if (props.open && openedByHover) return
-  openedByHover = false
   emit('update:open', !props.open)
 }
-
-// ── Hover ─────────────────────────────────────────────────────────────────────
-//
-// A submenu opens on hover; the click is for touch, where there is no hover to have.
-// Two timers, because both edges need slack:
-//
-// - Opening waits out a short intent delay, so dragging the pointer down a column of rail
-//   buttons on the way somewhere else does not flash a panel at every one it crosses.
-// - Closing waits out a grace period, because the pointer has to cross the gap between the
-//   anchor and the panel, and for that moment it is over neither. Closing on the first
-//   `pointerleave` would make the panel unreachable.
-//
-// Both are cancelled by the opposite intent, so the last thing the pointer did wins. A
-// pointer that never reports hover (`pointerenter` with `pointerType: 'touch'` fires on
-// tap, immediately followed by the click) is ignored here and left to `toggle()`, or the
-// tap would open the panel and the click would close it again.
-
-/** How long the pointer must rest on the anchor before the panel opens. */
-const HOVER_OPEN_DELAY_MS = 120
-/** How long the panel survives the pointer being over neither it nor the anchor. */
-const HOVER_CLOSE_GRACE_MS = 220
-
-let openTimer: ReturnType<typeof setTimeout> | undefined
-let closeTimer: ReturnType<typeof setTimeout> | undefined
-/**
- * Whether the open that is about to happen came from the pointer merely passing over the
- * anchor. Read once by the open watcher, which takes the focus only when it did NOT - see
- * there. Not a ref: nothing renders from it.
- */
-let openedByHover = false
-
-function clearHoverTimers() {
-  clearTimeout(openTimer)
-  clearTimeout(closeTimer)
-  openTimer = undefined
-  closeTimer = undefined
-}
-
-function onHoverEnter(e: PointerEvent) {
-  if (e.pointerType === 'touch') return
-  clearHoverTimers()
-  if (props.open) return
-  openTimer = setTimeout(() => {
-    openedByHover = true
-    emit('update:open', true)
-  }, HOVER_OPEN_DELAY_MS)
-}
-
-function onHoverLeave(e: PointerEvent) {
-  if (e.pointerType === 'touch') return
-  clearHoverTimers()
-  if (!props.open) return
-  closeTimer = setTimeout(() => close(), HOVER_CLOSE_GRACE_MS)
-}
-
-// The anchor belongs to the caller, so its hover listeners are attached here rather than
-// asking every caller to wire three more handlers onto its button.
-useEventListener(
-  () => props.anchor,
-  'pointerenter',
-  (e: PointerEvent) => onHoverEnter(e),
-)
-useEventListener(
-  () => props.anchor,
-  'pointerleave',
-  (e: PointerEvent) => onHoverLeave(e),
-)
-
-onBeforeUnmount(clearHoverTimers)
 
 defineExpose({ toggle })
 
 function close() {
-  // A close from any source settles the hover question too: without this, a grace-period
-  // timer left running by an earlier `pointerleave` would fire into an already-closed
-  // panel and emit a second, spurious `close`.
-  clearHoverTimers()
   emit('update:open', false)
   emit('close')
+}
+
+/**
+ * Hand a keydown to the menu inside, and consume it if the menu used it.
+ *
+ * This is bound HERE, on the panel, because the panel is what holds the focus: it focuses
+ * itself on open so Escape has somewhere to land, and a keydown's target is whatever holds
+ * the focus. Events bubble UP from the target, so a listener on the menu - which is this
+ * panel's CHILD - is never on the path and never fires. Binding the list's keys down there
+ * is exactly the mistake that shipped the arrow keys dead: they worked in neither direction
+ * because the event had already gone the other way.
+ *
+ * The one exception routes itself: while the caret is in one of the menu's text fields,
+ * that field IS the target, and this handler sees the keydown on the way past as the event
+ * bubbles up through the panel - which is what lets the walk keep working from inside the
+ * create box without the box losing its own typing.
+ */
+function onKeydown(e: KeyboardEvent) {
+  // The menu gets first refusal, Escape included: a row that is mid-rename or
+  // mid-delete-confirm is a level of the menu's own, and Escape has to back out of that
+  // before it backs out of the panel. The menu returns false once it has no such level
+  // left, and only then does Escape reach the close below. Handling Escape here first -
+  // which is how this was first written - shut the whole picker on a cancelled rename.
+  if (menuRef.value?.onPanelKeydown(e)) {
+    e.preventDefault()
+    e.stopPropagation()
+    return
+  }
+  if (e.code === 'Escape') {
+    e.stopPropagation()
+    close()
+  }
 }
 
 function place() {
@@ -282,14 +246,24 @@ watch(
     place()
     const panel = panelRef.value
     if (!panel) return
-    // Focus the panel so Escape has somewhere to land. Without this there is no keyboard
-    // dismissal at all: the title bar's buttons are `tabindex="-1"`, so after opening one
-    // the focus is still on a button in a different DOM tree from this teleported panel,
-    // and an Escape keydown there never passes through it.
+    // Focus the panel so the arrow keys and Escape have somewhere to land. Without this
+    // there is no keyboard route at all: the title bar's buttons are `tabindex="-1"`, so
+    // after opening one the focus is still on a button in a different DOM tree from this
+    // teleported panel, and a keydown there never passes through it.
     //
-    // Not on a hover-open, though - the pointer merely passing over a button must not take
-    // the focus away from whatever the reader was typing in.
-    if (!openedByHover) panel.focus({ preventScroll: true })
+    // Unconditional, which it could not be while the panel opened on hover: an open the
+    // reader did not ask for must not steal the caret, but every open is now deliberate.
+    //
+    // The `visibility` is cleared straight on the ELEMENT first, and that is not belt and
+    // braces - it is the whole reason this works. `place()` ends by setting `placed`, but
+    // that is a ref, so it reaches the DOM on Vue's NEXT flush, i.e. after this line. Until
+    // then the panel is still `visibility: hidden` from its first frame, and a hidden
+    // element cannot take focus: the call is silently ignored and the focus stays on the
+    // body, where none of the panel's keys ever arrive. It is the same ref-versus-element
+    // timing trap `place()` documents for its own max-height writes; the binding puts the
+    // identical value back on the next flush, so nothing flickers.
+    panel.style.visibility = 'visible'
+    panel.focus({ preventScroll: true })
     observer = new ResizeObserver(() => props.open && place())
     observer.observe(panel)
   },
@@ -311,11 +285,9 @@ onBeforeUnmount(() => observer?.disconnect())
       }"
       tabindex="-1"
       @click.stop
-      @pointerenter="onHoverEnter"
-      @pointerleave="onHoverLeave"
-      @keydown.escape.stop="close()"
+      @keydown="onKeydown"
     >
-      <WorkspaceMenu @close="close" />
+      <WorkspaceMenu ref="menuRef" @close="close" />
     </div>
   </Teleport>
 </template>
