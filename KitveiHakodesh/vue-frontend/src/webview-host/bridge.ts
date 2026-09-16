@@ -9,6 +9,7 @@
 import { hasHostBridge, emitWebviewEvent } from './seforimDb'
 import { serviceCall, serviceCallVoid } from './serviceClient'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
+import { showToast } from '@/composables/useToast'
 
 declare global {
   interface Window {
@@ -730,7 +731,14 @@ export async function exportToWord(html: string, title: string = ''): Promise<{ 
       return { error: e instanceof Error ? e.message : String(e) }
     }
   }
-  return action<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
+  // Same try/catch as pasteIntoWord: the hosted handler now awaits the real Word result
+  // instead of replying ok=true immediately, so this can reject where it previously always
+  // resolved. Callers get an { error } to inspect rather than an unhandled rejection.
+  try {
+    return await action<{ ok?: boolean; error?: string }>('exportToWord', { html, title })
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /**
@@ -750,6 +758,17 @@ export async function exportToWord(html: string, title: string = ''): Promise<{ 
  * and reject with 'bridge not available'.
  */
 export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
+  const result = await runPasteIntoWord()
+  // Reported HERE rather than at the call sites: all five of them fire this as
+  // `pasteIntoWord().catch(() => {})` from inside a copy event, where there is no
+  // sensible place to await an answer. Surfacing the failure centrally is what turns
+  // "the button does nothing" into a message naming the reason — the C# side now
+  // returns one instead of swallowing it into a Release-mode no-op.
+  if (result.error) showToast(result.error, { variant: 'error' })
+  return result
+}
+
+async function runPasteIntoWord(): Promise<{ ok?: boolean; error?: string }> {
   if (typeof window.__webviewAction !== 'function') {
     try {
       const r = await serviceCall<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
@@ -758,7 +777,11 @@ export async function pasteIntoWord(): Promise<{ ok?: boolean; error?: string }>
       return { error: e instanceof Error ? e.message : String(e) }
     }
   }
-  return action<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
+  try {
+    return await action<{ ok?: boolean; error?: string }>('pasteIntoWord', {})
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) }
+  }
 }
 
 /**

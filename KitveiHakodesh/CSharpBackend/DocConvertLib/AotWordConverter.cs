@@ -1,4 +1,4 @@
-#if NET10_0_OR_GREATER
+﻿#if NET10_0_OR_GREATER
 using System.Runtime.InteropServices;
 
 namespace DocConvertLib;
@@ -297,9 +297,21 @@ public static unsafe partial class AotWordConverter
         bool coInit = hr >= 0;
         nint app = 0, docs = 0, doc = 0;
 
-        string safeName = BuildSafeFileName(title);
-        string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), safeName + ".html");
+        // A FRESH directory per export, so the file name can stay the book's title while the path
+        // is still unique. BuildSafeFileName is deterministic — and its no-title fallback is a
+        // CONSTANT — so exporting twice used to resolve to the same path, and the second
+        // WriteAllText threw a sharing violation because Word still had the first one open. A
+        // successful export must never be what blocks the next one.
+        string exportDir = System.IO.Path.Combine(
+            System.IO.Path.GetTempPath(), "KitveiHakodesh", Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(exportDir);
+
+        string tempFile = System.IO.Path.Combine(exportDir, BuildSafeFileName(title) + ".html");
         System.IO.File.WriteAllText(tempFile, html, new System.Text.UTF8Encoding(true));
+
+        // Collect previous runs' leftovers; a successful export deliberately leaves its file for
+        // Word. Best-effort, never allowed to fail the export.
+        PurgeOldExports(exportDir);
 
         bool opened = false;
         try
@@ -307,13 +319,7 @@ public static unsafe partial class AotWordConverter
             if (CLSIDFromProgID("Word.Application", out Guid clsid) < 0)
                 throw new COMException("Word is not installed (Word.Application ProgID not found).");
 
-            if (GetActiveObject(in clsid, 0, out nint unk) >= 0 && unk != 0)
-            {
-                app = QueryInterface(unk, in IID_IDispatch);
-                Release(unk);
-            }
-            if (app == 0 && (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0))
-                throw new COMException("Failed to start Word (CoCreateInstance).");
+            app = AcquireRunningOrNew(in clsid);
 
             PropPut(app, "Visible", Bool(true));
 
@@ -328,8 +334,9 @@ public static unsafe partial class AotWordConverter
         }
         finally
         {
-            // Only clean up the temp file if Word never got it open; otherwise leave it in place.
-            if (!opened) { try { System.IO.File.Delete(tempFile); } catch { } }
+            // Only clean up if Word never got it open; otherwise leave it for the next run's
+            // PurgeOldExports — Word holds the file and deleting it would break the user's Save.
+            if (!opened) { try { System.IO.Directory.Delete(exportDir, true); } catch { } }
             if (doc != 0) Release(doc);
             if (docs != 0) Release(docs);
             // NEVER Quit — the user is left looking at the exported document.
@@ -338,14 +345,43 @@ public static unsafe partial class AotWordConverter
         }
     }
 
+    /// <summary>
+    /// Deletes export directories from previous runs, skipping <paramref name="keep"/> and
+    /// anything recent enough that Word may still hold it. Mirrors KitveiHakodeshLib
+    /// WordExporter.PurgeOldExports — a successful export leaves its file behind on purpose, so
+    /// the next export is what collects the last one. Entirely best-effort.
+    /// </summary>
+    private static void PurgeOldExports(string keep)
+    {
+        try
+        {
+            string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "KitveiHakodesh");
+            if (!System.IO.Directory.Exists(root)) return;
+
+            DateTime cutoff = DateTime.UtcNow.AddDays(-1);
+            foreach (string dir in System.IO.Directory.GetDirectories(root))
+            {
+                if (string.Equals(dir, keep, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    if (System.IO.Directory.GetCreationTimeUtc(dir) > cutoff) continue;
+                    System.IO.Directory.Delete(dir, true);
+                }
+                catch { /* still open in Word, or not ours to delete */ }
+            }
+        }
+        catch { /* the sweep is never worth failing an export over */ }
+    }
+
     /// <summary>Strips characters that are invalid in a file name, so a book title can be used as
     /// one. Mirrors KitveiHakodeshLib WordExporter.BuildSafeFileName.</summary>
     private static string BuildSafeFileName(string title)
     {
         string name = string.IsNullOrWhiteSpace(title) ? "KitveiHakodesh" : title.Trim();
         foreach (char c in System.IO.Path.GetInvalidFileNameChars()) name = name.Replace(c, '_');
-        // Keep well clear of MAX_PATH once the temp dir and extension are added.
-        return name.Length > 100 ? name.Substring(0, 100) : name;
+        // Keep well clear of MAX_PATH once the temp dir and extension are added. 80 matches
+        // KitveiHakodeshLib WordExporter.BuildSafeFileName, so the two legs name files alike.
+        return name.Length > 80 ? name.Substring(0, 80) : name;
     }
 
     /// <summary>
@@ -369,16 +405,7 @@ public static unsafe partial class AotWordConverter
                 throw new COMException("Word is not installed (Word.Application ProgID not found).");
 
             // Prefer the instance the user already has open.
-            if (GetActiveObject(in clsid, 0, out nint unk) >= 0 && unk != 0)
-            {
-                app = QueryInterface(unk, in IID_IDispatch);
-                Release(unk);
-            }
-            if (app == 0)
-            {
-                if (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0)
-                    throw new COMException("Failed to start Word (CoCreateInstance).");
-            }
+            app = AcquireRunningOrNew(in clsid);
 
             // Visible always — the point is for the user to see the pasted text. A reused
             // instance is already visible; a spawned one would otherwise stay hidden.
@@ -415,6 +442,94 @@ public static unsafe partial class AotWordConverter
             if (coInit) CoUninitialize();
         }
     }
+
+    /// <summary>
+    /// An IDispatch for Word: the instance already running when there is one, otherwise a new one.
+    /// Never returns 0 — it throws instead.
+    ///
+    /// The running-object table can hand back an instance that is ALREADY TEARING DOWN (Word
+    /// mid-exit, or a crash-recovery cycle). Reusing that one means every later call fails with
+    /// RPC_E_DISCONNECTED while a perfectly good Word sits on screen — a paste that stays broken
+    /// until the user restarts Word. So the ROT instance is probed before it is trusted, and a
+    /// dead one is dropped in favour of starting a fresh instance.
+    ///
+    /// Releases everything it takes on any failure path: a QueryInterface that fails must not
+    /// leak the IUnknown GetActiveObject handed over.
+    /// </summary>
+    private static nint AcquireRunningOrNew(in Guid clsid)
+    {
+        nint app = 0;
+
+        if (GetActiveObject(in clsid, 0, out nint unk) >= 0 && unk != 0)
+        {
+            app = QueryInterface(unk, in IID_IDispatch);
+            Release(unk);
+
+            if (app != 0 && !IsAlive(app))
+            {
+                Release(app);
+                app = 0;
+            }
+        }
+
+        if (app == 0 && (CoCreateInstance(in clsid, 0, CLSCTX_LOCAL_SERVER, in IID_IDispatch, out app) < 0 || app == 0))
+            throw new COMException("Failed to start Word (CoCreateInstance).");
+
+        return app;
+    }
+
+    /// <summary>
+    /// True when the instance still answers automation. Reads one trivial property — what matters
+    /// is whether the call completes, not what it returns.
+    ///
+    /// A BUSY Word counts as alive: RPC_E_CALL_REJECTED means it is sitting on a dialog and will
+    /// answer shortly, so dropping the reference (and starting a SECOND visible Word next to the
+    /// user's own) would be exactly the wrong response. Only a severed channel is dead.
+    /// </summary>
+    private static bool IsAlive(nint app)
+    {
+        try
+        {
+            var r = InvokeNamed(app, "Build", DISPATCH_PROPERTYGET, []);
+            ClearVariant(ref r);
+            return true;
+        }
+        catch (COMException ex)
+        {
+            // ALIVE UNLESS PROVEN DEAD — the test is deliberately inverted.
+            //
+            // Only a severed channel means the instance is gone. Everything else (a busy Word, a
+            // dispid we could not resolve, a scode wrapped in DISP_E_EXCEPTION by Invoke above)
+            // is a Word that is still there and will answer shortly. Getting this backwards is
+            // expensive in a way the managed leg is not: a false "dead" here makes
+            // AcquireRunningOrNew start a SECOND VISIBLE Word beside the user's own, which is
+            // worse than the failure it was trying to avoid. A false "alive" merely surfaces the
+            // real error to the user, who can retry.
+            return !IsDisconnected(ex.HResult);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>True for the HRESULTs that mean the instance itself is gone, rather than busy.
+    ///
+    /// Only the exception's own HRESULT is examined, and that is sufficient: Invoke and GetDispId
+    /// preserve the raw transport HRESULT, so a genuine disconnect arrives here intact. An error
+    /// wrapped as DISP_E_EXCEPTION came from Word's APPLICATION layer — which means Word answered,
+    /// so reading it as alive is correct.</summary>
+    private static bool IsDisconnected(int hr)
+        // Verified against the Windows SDK winerror.h. A busy code listed here would be a false
+        // "dead", which releases the user's own Word and starts a SECOND visible one beside it.
+        // 0x80010005 is RPC_E_CANTCALLOUT_INEXTERNALCALL ("inside a message filter") — a BUSY,
+        // alive Word — and must never appear below.
+        => hr == unchecked((int)0x80010108)    // RPC_E_DISCONNECTED
+        || hr == unchecked((int)0x800706BA)    // RPC_S_SERVER_UNAVAILABLE
+        || hr == unchecked((int)0x800706BE)    // RPC_S_CALL_FAILED
+        || hr == unchecked((int)0x80010007)    // RPC_E_SERVER_DIED
+        || hr == unchecked((int)0x80010012)    // RPC_E_SERVER_DIED_DNE
+        || hr == unchecked((int)0x800401FD);   // CO_E_OBJNOTCONNECTED
 
     /// <summary>Read an integer property (e.g. Documents.Count).</summary>
     private static int GetInt(nint disp, string name)
@@ -467,8 +582,20 @@ public static class AotWordPaste
                 catch (Exception ex) { completion.TrySetResult(ex.Message); }
             })
             { IsBackground = true, Name = threadName };
-            thread.SetApartmentState(ApartmentState.STA);
-            thread.Start();
+            // Start inside the try: a thread that never runs can never complete the TCS, so a
+            // throw from SetApartmentState or Start would hang the await FOREVER while holding
+            // the gate, permanently blocking every later paste. Completing it here guarantees
+            // the await always returns.
+            try
+            {
+                thread.SetApartmentState(ApartmentState.STA);
+                thread.Start();
+            }
+            catch (Exception ex)
+            {
+                completion.TrySetResult(ex.Message);
+            }
+
             return await completion.Task;
         }
         finally { Gate.Release(); }

@@ -1,4 +1,4 @@
-using KitveiHakodeshLib.Db;
+﻿using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.HebrewBooks;
@@ -104,8 +104,8 @@ namespace KitveiHakodeshLib
                         case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
-                        case "exportToWord": HandleExportToWord(root, id); break;
-                        case "pasteIntoWord": HandlePasteIntoWord(root, id); break;
+                        case "exportToWord": await HandleExportToWord(root, id); break;
+                        case "pasteIntoWord": await HandlePasteIntoWord(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
                         case "setTheme": HandleSetTheme(root, id); break;
                         case "tabsChanged": HandleTabsChanged(root, id); break;
@@ -274,18 +274,24 @@ namespace KitveiHakodeshLib
             _bridge.Reply(id, new { diagnostics = report });
         }
 
-        private void HandleExportToWord(JsonElement root, string id)
+        // Both Word actions AWAIT the result and report it. They used to reply ok=true
+        // immediately and drop the task on the floor, so every failure inside Word automation
+        // ended at a Debug.WriteLine — a no-op in Release. A user whose paste did nothing had
+        // no way to find out why, and neither did anyone reading a bug report about it.
+        // WordExporter never throws: it returns null on success or a message to show.
+
+        private async Task HandleExportToWord(JsonElement root, string id)
         {
-            _bridge.Reply(id, new { ok = true });
             string html = root.TryGetProperty("html", out var h) ? h.GetString() ?? "" : "";
             string title = root.TryGetProperty("title", out var t) ? t.GetString() ?? "" : "";
-            _ = WordExporter.ExportAsync(html, title);
+            string error = await WordExporter.ExportAsync(html, title);
+            _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
         }
 
-        private void HandlePasteIntoWord(JsonElement root, string id)
+        private async Task HandlePasteIntoWord(JsonElement root, string id)
         {
-            _bridge.Reply(id, new { ok = true });
-            _ = WordExporter.PasteAtCursorAsync();
+            string error = await WordExporter.PasteAtCursorAsync();
+            _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
         }
 
         /// <summary>
