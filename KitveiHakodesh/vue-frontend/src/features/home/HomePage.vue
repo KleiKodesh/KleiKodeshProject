@@ -25,6 +25,7 @@ const { width: containerWidth } = useElementSize(innerRef)
 const {
   tiles,
   gridMaxWidth,
+  tileRowWidth,
   visibleFrequentFolderList,
   visibleRecentlyOpenedList,
   totalTileCount,
@@ -126,7 +127,11 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   <div class="home-page">
     <div ref="innerRef" class="home-inner">
       <div class="home-search-blanket">
-        <div ref="searchBarRef" class="home-search-bar-wrapper">
+        <div
+          ref="searchBarRef"
+          class="home-search-bar-wrapper"
+          :style="{ maxWidth: `${tileRowWidth}px` }"
+        >
           <div class="home-search-bar">
             <input
               ref="searchBarInputRef"
@@ -222,15 +227,16 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   container-type: inline-size;
 }
 
-/* Search + tiles scroll together as one group, centered when there's room and
-   pushed toward the top once they overflow. Only the date bar stays fixed. */
+/* Search + tiles scroll together as one group. Only the date bar stays fixed.
+
+   Centered or top-anchored is decided purely by WIDTH (see the container query
+   below), never by how tall the content is. Narrow is the default: a narrow pane
+   needs every row it can get, so the group starts at the top. */
 .home-inner {
   display: flex;
   flex-direction: column;
   align-items: center;
-  /* safe center: vertically centered when there's room, but aligns to the top
-     once content overflows so the search bar stays reachable by scrolling. */
-  justify-content: safe center;
+  justify-content: flex-start;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -239,6 +245,28 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   /* No top padding: the sticky search wrapper supplies its own top spacing so
      it can stick flush to the scroll-area top with nothing peeking above it. */
   padding: 0 24px 16px;
+}
+
+/* Wide pane: center the group vertically.
+
+   `safe center`, NOT plain `center`. This is a scroll container (overflow-y:
+   auto) in column direction, and plain `center` on one of those splits NEGATIVE
+   free space between both ends when the content overflows: the first child's top
+   edge goes above the scroll origin, which no scroll offset can reach, so the
+   search bar ends up clipped and unscrollable in a short pane. `safe` falls back
+   to start-alignment in exactly that case.
+
+   `safe` used to make this read as top-anchored even on a wide screen, but that
+   was the 45-tile budget overflowing almost every pane. With the flat cap in
+   useHomeTiles the content fits, so `safe` centers as intended and only yields in
+   the short-pane case where centering cannot be rendered anyway.
+
+   A container query, not a media query, so a split pane is judged on ITS OWN
+   width — half a wide monitor is a narrow pane and gets the top layout. */
+@container (min-width: 720px) {
+  .home-inner {
+    justify-content: safe center;
+  }
 }
 
 .home-grid {
@@ -253,7 +281,7 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
    but sticks to the top of the scroll area once the tiles scroll under it.
    The blanket spans the scroll area's full width with an opaque page-colored
    backdrop, so tiles scrolling underneath truly disappear instead of peeking
-   out around the sides of the 560px search pill. */
+   out around the sides of the search pill. */
 .home-search-blanket {
   position: sticky;
   top: 0;
@@ -262,23 +290,32 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   justify-content: center;
   width: 100%;
   flex-shrink: 0;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   background: var(--bg-primary);
 }
 
+/* max-width is bound inline from useHomeTiles' tileRowWidth: the bar is never
+   wider than the row of tiles beneath it, at any pane width. */
 .home-search-bar-wrapper {
   display: block;
   width: 100%;
-  max-width: 560px;
-  padding: 16px 0 8px;
+  /* Trimmed with the pill, so the height it saves is not handed straight back as
+     whitespace around it. */
+  padding: 12px 0 6px;
 }
 
+/* The same 30px pill the catalog, dictionary and every other TopSearchBar page
+   uses — components/TopSearchBar.vue sets that height explicitly so every page
+   agrees, and this page is no exception. The 13px field font already matches, so
+   height and padding are all that differ. Keep the two in step: if TopSearchBar's
+   height changes, change it here too. */
 .home-search-bar {
   display: flex;
   align-items: center;
   gap: 6px;
   width: 100%;
-  padding: 5px 10px;
+  height: 30px;
+  padding: 0 10px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 999px;

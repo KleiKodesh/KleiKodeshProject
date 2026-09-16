@@ -17,11 +17,21 @@ import {
 } from '@/stores/frequentFoldersStore'
 
 const TILE_WIDTH = 72
+/** The grid's COLUMN gap (`.home-grid` uses `gap: 4px 8px`) — the axis tile-row
+ *  arithmetic wraps along. Keep in step with that rule. */
 const TILE_GAP = 8
-/** How many full rows the folder and document tiles get, on top of the static row's tail. */
-const DYNAMIC_TILE_ROWS = 5
+/**
+ * The most folder and document tiles ever shown between them.
+ *
+ * A flat count, deliberately NOT derived from how many tiles fit on a row. When
+ * it was, a nine-wide window showed 45 dynamic tiles and a narrow one showed ~10
+ * — same user, same work. These lists are a shortlist of what you are actually
+ * working in, and that does not change when you resize the window. Width still
+ * decides how the tiles WRAP, never how many of them there are.
+ */
+const MAX_DYNAMIC_TILES = 18
 /** The most folder tiles ever shown, however much budget there is to go round. */
-const MAX_FOLDER_TILES = 9
+const MAX_FOLDER_TILES = 6
 
 
 /**
@@ -102,30 +112,22 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   )
 
   /**
-   * How many tiles sit on one row at the current width. Clamped to the grid's own
-   * cap, not just the container: past that width the grid stops growing, so extra
-   * container width buys no extra columns.
+   * The width of one full row of tiles at the current pane width — what the tile
+   * block actually occupies on screen, which is a whole number of columns and so
+   * rarely the full container width.
+   *
+   * The search bar is capped to this so it never runs wider than the tiles under
+   * it. A plain percentage or a fixed max-width cannot do that: the grid is a
+   * centered wrap container whose BOX is the full width even when the tiles
+   * inside it wrap to four columns, so the bar has to be told the same column
+   * arithmetic the grid wraps by.
    */
-  const tilesPerRow = computed(() => {
-    const effectiveWidth = Math.min(containerWidth.value || 320, gridMaxWidth.value)
-    return Math.max(1, Math.floor((effectiveWidth + TILE_GAP) / (TILE_WIDTH + TILE_GAP)))
+  const tileRowWidth = computed(() => {
+    const available = Math.min(containerWidth.value || 320, gridMaxWidth.value)
+    const columns = Math.max(1, Math.floor((available + TILE_GAP) / (TILE_WIDTH + TILE_GAP)))
+    return columns * (TILE_WIDTH + TILE_GAP) - TILE_GAP
   })
 
-  /**
-   * How many tiles the two dynamic groups get between them: the gap left on the
-   * static tiles' last row, plus DYNAMIC_TILE_ROWS more full rows.
-   *
-   * With the static row hidden there is no tail to fill, and the whole budget is
-   * the full rows — the freed rows are deliberately not handed to the dynamic
-   * groups, so the page gets shorter rather than the lists longer.
-   */
-  const dynamicTileBudget = computed(() => {
-    const perRow = tilesPerRow.value
-    if (!staticTilesVisible.value) return DYNAMIC_TILE_ROWS * perRow
-    const tailSlots = tiles.value.length % perRow
-    const freeOnLastRow = tailSlots === 0 ? 0 : perRow - tailSlots
-    return freeOnLastRow + DYNAMIC_TILE_ROWS * perRow
-  })
 
   /**
    * The folder tiles, shown between the static tiles and the documents.
@@ -133,8 +135,9 @@ export function useHomeTiles(containerWidth: Ref<number>) {
    * Folders get half the budget, or MAX_FOLDER_TILES — whichever is lower. They earn
    * their points from the same opens the documents do, so an unsplit budget would let
    * a folder opened all morning push the documents off the page entirely — and the two
-   * are not substitutes for each other. The flat cap is what keeps that true once the
-   * budget is big: half of five rows is more folders than anyone works in.
+   * are not substitutes for each other. MAX_FOLDER_TILES sits BELOW half the budget on
+   * purpose, so it is the binding limit rather than dead code: folders are the smaller
+   * of the two lists in practice, and the documents get the slack.
    *
    * The half is rounded down, so an odd budget gives the spare slot to the documents.
    * Both limits are ceilings on the folders rather than reservations, so with the
@@ -143,7 +146,7 @@ export function useHomeTiles(containerWidth: Ref<number>) {
    */
   const visibleFrequentFolderList = computed(() => {
     if (!showFrequentFolders.value) return []
-    const budget = dynamicTileBudget.value
+    const budget = MAX_DYNAMIC_TILES
     const half = showRecentlyOpened.value ? Math.floor(budget / 2) : budget
     return frequentFolderList.value.slice(0, Math.min(MAX_FOLDER_TILES, half))
   })
@@ -156,7 +159,7 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   const visibleRecentlyOpenedList = computed(() => {
     if (!showRecentlyOpened.value) return []
     if (!recentlyOpenedList.value.length) return []
-    const room = dynamicTileBudget.value - visibleFrequentFolderList.value.length
+    const room = MAX_DYNAMIC_TILES - visibleFrequentFolderList.value.length
     return recentlyOpenedList.value.slice(0, Math.max(0, room))
   })
 
@@ -208,6 +211,7 @@ export function useHomeTiles(containerWidth: Ref<number>) {
   return {
     tiles,
     gridMaxWidth,
+    tileRowWidth,
     visibleFrequentFolderList,
     visibleRecentlyOpenedList,
     totalTileCount,
