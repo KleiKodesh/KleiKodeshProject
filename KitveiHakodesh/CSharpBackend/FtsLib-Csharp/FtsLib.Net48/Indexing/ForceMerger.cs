@@ -51,7 +51,7 @@ namespace FtsLib.Indexing
         /// each level merge locks only its own commit step.
         /// The WAL must already be open before calling this.
         /// </summary>
-        internal void Run()
+        internal void Run(Action<int, int> onMergeProgress = null)
         {
             var livePaths = _store.Live.GetLiveSegmentPaths();
             FtsLog.Write("ForceMerger.Run",
@@ -63,7 +63,7 @@ namespace FtsLib.Indexing
 
             try
             {
-                MergeLevelsIncremental();
+                MergeLevelsIncremental(onMergeProgress);
 
                 _store.Wal.EndForceMerge();
                 FtsLog.Write("ForceMerger.Run", "WAL END_FORCE_MERGE written");
@@ -106,7 +106,7 @@ namespace FtsLib.Indexing
         /// The WAL must NOT be open before calling this — this method opens and
         /// closes it itself.
         /// </summary>
-        internal void ResumeForceMerge()
+        internal void ResumeForceMerge(Action<int, int> onMergeProgress = null)
         {
             FtsLog.Write("ForceMerger.ResumeForceMerge",
                 $"resuming force merge — totalLiveSegs={_store.Live.TotalLiveSegs()}");
@@ -118,7 +118,7 @@ namespace FtsLib.Indexing
 
             try
             {
-                MergeLevelsIncremental();
+                MergeLevelsIncremental(onMergeProgress);
 
                 _store.Wal.EndForceMerge();
                 FtsLog.Write("ForceMerger.ResumeForceMerge", "WAL END_FORCE_MERGE written");
@@ -187,7 +187,18 @@ namespace FtsLib.Indexing
         /// Must be called while the WAL is open. Locking is handled per-commit
         /// inside SegmentMerger.MergeLevel.
         /// </summary>
-        internal void MergeLevelsIncremental()
+        /// <param name="onMergeProgress">(passesDone, passesExpected) after each committed
+        /// pass. The force merge is the build's last phase and a long one — minutes on a
+        /// full index — and without this it reported nothing at all, so every host sat on
+        /// a frozen percentage and looked hung.
+        ///
+        /// passesExpected is an ESTIMATE re-derived after each pass, and it always exceeds
+        /// passesDone while the loop is still running; the true count is unknowable up
+        /// front, because merging one level can create a new overflow on the level above.
+        /// done == expected is reported EXACTLY ONCE, by the post-loop tick, and only when
+        /// the merge converged — never after an abort, which leaves the index
+        /// half-collapsed. So treat it as a bar that keeps moving, not a countdown.</param>
+        internal void MergeLevelsIncremental(Action<int, int> onMergeProgress = null)
         {
             // Purge (delete-set) mode: deleted docs are only physically removed
             // when a segment is REWRITTEN. The multi-segment loop below never
@@ -201,7 +212,11 @@ namespace FtsLib.Indexing
             bool purging = deletes != null && !deletes.IsEmpty;
             var  cleaned = purging ? new HashSet<int>() : null;
 
-            int pass = 0;
+            int  pass    = 0;
+            // The loop has TWO exits: convergence, and the abort below. Only the first
+            // means the merge finished, and the final progress tick must not claim
+            // completion for the second — an aborted merge leaves a half-collapsed index.
+            bool aborted = false;
             while (true)
             {
                 // Shutdown requested — stop between level merges. Every completed
@@ -211,6 +226,7 @@ namespace FtsLib.Indexing
                 {
                     FtsLog.Write("ForceMerger.MergeLevelsIncremental",
                         "merge abort requested — stopping force merge between passes");
+                    aborted = true;
                     break;
                 }
 
@@ -256,10 +272,66 @@ namespace FtsLib.Indexing
 
                 FtsLog.Write("ForceMerger.MergeLevelsIncremental",
                     $"pass {pass}: complete — totalLiveSegs={_store.Live.TotalLiveSegs()}");
+
+                // Report AFTER the commit, so a reported pass is a durable one. A callback
+                // that throws must not fail a merge that already succeeded.
+                if (onMergeProgress != null)
+                {
+                    try { onMergeProgress(pass, EstimateRemainingPasses(pass, purging)); }
+                    catch (Exception ex)
+                    {
+                        FtsLog.Write("ForceMerger.MergeLevelsIncremental",
+                            "progress callback threw (ignored): " + ex.Message);
+                    }
+                }
+            }
+
+            // Final tick, on CONVERGENCE only: the merge really finished, so the estimate
+            // resolves to the real count and the host can show a full bar instead of
+            // stopping at its last guess. After an abort the index is NOT collapsed, so
+            // reporting done == expected here would be a false "complete".
+            if (onMergeProgress != null && pass > 0 && !aborted)
+            {
+                try { onMergeProgress(pass, pass); }
+                catch (Exception ex)
+                {
+                    FtsLog.Write("ForceMerger.MergeLevelsIncremental",
+                        "final progress callback threw (ignored): " + ex.Message);
+                }
             }
 
             FtsLog.Write("ForceMerger.MergeLevelsIncremental",
                 $"all levels converged after {pass} pass(es) — totalLiveSegs={_store.Live.TotalLiveSegs()}");
+        }
+
+        /// <summary>
+        /// A live estimate of the total pass count, for the progress callback only — never
+        /// for control flow.
+        ///
+        /// Each remaining pass consumes one level: a level holding several segments merges
+        /// in one pass, and a stranded single segment costs one pass per level it is
+        /// laddered up. Counting populated levels therefore tracks the real work closely,
+        /// but it can still be wrong in both directions — a merge can overflow the level
+        /// above and add a pass.
+        ///
+        /// It never returns passesDone: while the loop runs there is always at least one
+        /// more pass, and a mid-merge "done == expected" would show a full bar and then
+        /// walk it backwards. Only the post-loop tick reports completion.
+        /// </summary>
+        private int EstimateRemainingPasses(int passesDone, bool purging)
+        {
+            int populated = _store.Live.GetPopulatedLevels().Count;
+            // Each remaining populated level above the first costs at least one pass.
+            int remaining = populated > 1 ? populated - 1 : 0;
+
+            // In PURGE mode a lone populated level is NOT proof of convergence: an
+            // unpurged single segment still earns a rewrite pass (see
+            // TryFindUnpurgedSingleLevel). Reporting done == expected here would show a
+            // full bar and then move it BACKWARDS on the next pass, so keep one pass of
+            // headroom and let the post-loop tick be the only thing that reports done.
+            if (remaining == 0 && purging) remaining = 1;
+
+            return passesDone + remaining;
         }
 
         /// <summary>

@@ -7,18 +7,28 @@ defineProps<{ state: IndexingState }>()
   <div class="indexing-banner">
     <div class="banner-top">
       <span class="status-message">
-        <template v-if="state.percentage >= 100">מסיים בניית האינדקס…</template>
+        <template v-if="state.isMerging">מסיים בניית האינדקס…</template>
+        <template v-else-if="state.percentage >= 100">מסיים בניית האינדקס…</template>
         <template v-else-if="!state.isReady">אנא המתן בעת בניית האינדקס</template>
         <template v-else>תוצאות חיפוש חלקיות — האינדקס עדיין בבנייה</template>
       </span>
       <span class="percentage">
-        {{ Math.round(state.percentage) }}%
-        <template v-if="state.processedChunks > 0"> · {{ state.processedChunks.toLocaleString('he-IL') }}</template>
-        <span v-if="state.eta"> · {{ state.eta }}</span>
+        <template v-if="state.isMerging">
+          <template v-if="state.mergePassesDone > 0 && state.mergePassesExpected > 0">{{ state.mergePassesDone }}/{{ state.mergePassesExpected }}</template>
+        </template>
+        <template v-else>
+          {{ Math.round(state.percentage) }}%
+          <template v-if="state.processedChunks > 0"> · {{ state.processedChunks.toLocaleString('he-IL') }}</template>
+          <span v-if="state.eta"> · {{ state.eta }}</span>
+        </template>
       </span>
     </div>
     <div class="progress-track">
-      <div class="progress-fill" :style="{ width: `${state.percentage}%` }" />
+      <div
+        class="progress-fill"
+        :class="{ merging: state.isMerging }"
+        :style="state.isMerging ? undefined : { width: `${state.percentage}%` }"
+      />
       <div
         v-if="state.latestSegmentPct !== null"
         class="segment-marker"
@@ -72,6 +82,27 @@ defineProps<{ state: IndexingState }>()
   background: var(--accent-color);
   transition: width 0.4s ease;
   margin-inline-start: auto;
+}
+.progress-fill.merging {
+  width: 100%;
+  transition: none;
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--bg-secondary) 55%, transparent) 50%,
+    transparent 100%
+  );
+  background-size: 40% 100%;
+  background-repeat: no-repeat;
+  animation: merging-sheen 1.4s linear infinite;
+}
+@keyframes merging-sheen {
+  from {
+    background-position: 140% 0;
+  }
+  to {
+    background-position: -40% 0;
+  }
 }
 .segment-marker {
   position: absolute;

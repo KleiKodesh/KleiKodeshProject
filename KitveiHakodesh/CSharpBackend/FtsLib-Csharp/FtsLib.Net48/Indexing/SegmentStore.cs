@@ -903,7 +903,10 @@ namespace FtsLib.Indexing
         /// segment write or automatic LSM merge can race with the force merge.
         /// See <see cref="ForceMerger"/> for the full protocol.
         /// </summary>
-        internal void MergeAll()
+        /// <param name="onMergeProgress">(passesDone, passesExpected) after each committed
+        /// merge pass — see ForceMerger.MergeLevelsIncremental. Optional; the estimate moves
+        /// as the merge proceeds.</param>
+        internal void MergeAll(Action<int, int> onMergeProgress = null)
         {
             // Drain any in-flight background flush+merge tasks before opening
             // the WAL. This guarantees that every segment produced by the build
@@ -913,7 +916,7 @@ namespace FtsLib.Indexing
             WaitForMerge(clearWal: false);
 
             Wal.Open();
-            try   { _forceMerger.Run(); }
+            try   { _forceMerger.Run(onMergeProgress); }
             finally { /* Wal.Clear() is done inside ForceMerger.Run */ }
         }
 

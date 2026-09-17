@@ -313,13 +313,19 @@ namespace FtsLib.SeforimDb
         /// index rebuilds an app reset starts alongside it. The build simply takes longer
         /// on a busy machine and full speed on an idle one. See
         /// <see cref="FtsLib.Indexing.BackgroundPriorityScope"/>.</param>
+        /// <param name="onMergeProgress">(passesDone, passesExpected) during the final force
+        /// merge, when <paramref name="forceMergeOnComplete"/> is set. That merge is a long
+        /// phase with no line-level progress of its own, so without this the host's last
+        /// line-progress number is all it can show for minutes and the build looks stalled.
+        /// passesExpected is an estimate that moves — see ForceMerger.</param>
         public bool BuildIndex(int limit = 0, Action<long> onProgress = null,
                                Action onFlush = null,
                                long totalLines = 0,
                                long resumeOffset = 0,
                                bool forceMergeOnComplete = false,
                                CancellationToken ct = default,
-                               bool backgroundPriority = false)
+                               bool backgroundPriority = false,
+                               Action<int, int> onMergeProgress = null)
         {
             FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
                 $"acquiring IndexWriteLock for {_indexPath}");
@@ -348,7 +354,20 @@ namespace FtsLib.SeforimDb
                         FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
                             "forceMergeOnComplete=true — starting force merge");
                         Console.WriteLine("[SeforimIndex] Build complete — starting force merge...");
-                        _store.MergeAll();
+                        // Announce the phase BEFORE the first pass: pass 1 can itself take
+                        // minutes, so waiting for its callback would leave exactly the silent
+                        // gap this reporting exists to close. (0, 0) means "merging, no pass
+                        // committed yet".
+                        if (onMergeProgress != null)
+                        {
+                            try { onMergeProgress(0, 0); }
+                            catch (Exception ex)
+                            {
+                                FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
+                                    "merge-start progress callback threw (ignored): " + ex.Message);
+                            }
+                        }
+                        _store.MergeAll(onMergeProgress);
                         if (_store.IsWiped)
                         {
                             FtsLib.Indexing.FtsLog.Write("SeforimIndex.BuildIndex",
@@ -385,7 +404,9 @@ namespace FtsLib.SeforimDb
         /// Searches run concurrently: each level merge blocks them only for its
         /// millisecond commit step, never for the merge write itself.
         /// </summary>
-        public void ForceMerge()
+        /// <param name="onMergeProgress">(passesDone, passesExpected) after each committed
+        /// pass — see ForceMerger. Optional.</param>
+        public void ForceMerge(Action<int, int> onMergeProgress = null)
         {
             if (_store == null)
                 throw new InvalidOperationException("No index is open.");
@@ -400,7 +421,7 @@ namespace FtsLib.SeforimDb
                 // MergeAll drains the flush pipeline internally before merging —
                 // no flush can race. Searches proceed concurrently; each level
                 // merge locks only its own commit step.
-                _store.MergeAll();
+                _store.MergeAll(onMergeProgress);
 
                 if (_store.IsWiped)
                 {

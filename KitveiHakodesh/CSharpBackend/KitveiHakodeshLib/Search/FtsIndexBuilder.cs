@@ -106,6 +106,7 @@ namespace KitveiHakodeshLib.Search
             double lastPct      = resumeOffset > 0 && totalLines > 0
                                     ? Math.Min(99.9, resumeOffset * 100.0 / totalLines)
                                     : 0.0;
+            long lastSessionCount = 0;
 
             // Push an initial progress event so the frontend shows the correct
             // starting percentage immediately — before the first 5000-line tick.
@@ -121,6 +122,7 @@ namespace KitveiHakodeshLib.Search
             {
                 bool ranToCompletion = index.BuildIndex(limit: 0, totalLines: totalLines, resumeOffset: resumeOffset, forceMergeOnComplete: true, onProgress: (sessionCount) =>
                 {
+                    lastSessionCount = sessionCount;
                     if (totalLines > 0 && sessionCount % 5000 == 0)
                     {
                         long  totalIndexed = resumeOffset + sessionCount;
@@ -153,7 +155,17 @@ namespace KitveiHakodeshLib.Search
                 // searches, and the catalog/file-search rebuilds an app reset starts
                 // alongside it — they all run in parallel and the FTS build takes whatever
                 // the machine has left over.
-                }, ct: cts.Token, backgroundPriority: true);
+                }, ct: cts.Token, backgroundPriority: true,
+                   // The force merge that forceMergeOnComplete runs is the build's last
+                   // phase and a long one, with no line-level progress of its own. Without
+                   // these ticks the UI held the last line percentage for minutes and the
+                   // build looked hung. (0,0) is the phase-start signal, before pass 1.
+                   onMergeProgress: (passesDone, passesExpected) =>
+                   {
+                       PushProgress(partialReadyPushed, true, lastPct,
+                                    (int)(resumeOffset + lastSessionCount), (int)totalLines,
+                                    "", segmentMarkers, true, passesDone, passesExpected);
+                   });
 
                 // Only treat as a successful completed build if lines were actually
                 // processed. A false return means only WAL recovery ran (e.g. the
@@ -199,32 +211,27 @@ namespace KitveiHakodeshLib.Search
             FtsIndexState.WriteVersionStamp(!string.IsNullOrEmpty(version) ? version : "unversioned");
             index.DeleteBuildProgressFile();
 
-            // Collapse the freshly built index into a single segment (perf audit
-            // F04): every term lookup and vocabulary scan afterwards touches one
-            // segment instead of four. Searches keep running during the merge
-            // (commit-only locking).
+            // NO ForceMerge call here. BuildIndex was given forceMergeOnComplete:true, so
+            // the index (perf audit F04) was ALREADY collapsed inside the call above. The
+            // explicit call that used to sit here ran a SECOND MergeAll over an
+            // already-converged tree: not a second full pass set — it found nothing to
+            // merge and returned after the level scan — but still a pipeline drain, a WAL
+            // open/close and a scan, all of it progress-silent.
             //
-            // NOT cancellable: ForceMerge takes no token and never consults one, so
-            // a StopAll arriving here blocks on indexingTask.Wait() for the whole
-            // merge — a minute-plus on the full index — which means shutdown and
-            // "delete index" wait it out. That is the accepted cost of the untimed
-            // wait that fixed the index-corruption bug; do not "fix" it by putting
-            // the timeout back. (An earlier comment here claimed the build token
-            // aborted this in under a second. It never did.)
+            // THIS MOVED THE VERSION STAMP FROM BEFORE THE MERGE TO AFTER IT, and that is
+            // a deliberate trade, not an oversight. The old ordering was documented as
+            // leaving a complete, stamped, multi-segment index if the merge was
+            // interrupted — a performance-only difference. Now an interruption during the
+            // merge leaves the index UNSTAMPED with its build.progress file intact, so the
+            // next start treats it as unfinished and resumes instead of trusting it. That
+            // is the safer direction (an unstamped index is never mistaken for finished),
+            // and WAL recovery still settles the partial merge via ResumeForceMerge.
             //
-            // This runs AFTER the version stamp on purpose: an interruption leaves a
-            // complete, stamped, multi-segment index — a performance difference only
-            // — and WAL recovery settles any partial merge at the next start.
-            try
-            {
-                Console.WriteLine("[SearchHandler] FTS post-build force merge starting...");
-                index.ForceMerge();
-                Console.WriteLine("[SearchHandler] FTS post-build force merge complete.");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[SearchHandler] FTS post-build force merge skipped: " + ex.Message);
-            }
+            // Still NOT cancellable, and that has not changed: the merge inside BuildIndex
+            // ignores the build token, so a StopAll arriving during it blocks on
+            // indexingTask.Wait() for the whole merge. That is the accepted cost of the
+            // untimed wait that fixed the index-corruption bug; do not "fix" it by putting
+            // a timeout back.
 
             if (!_state.TryMarkReady(cts))
             {
@@ -244,9 +251,17 @@ namespace KitveiHakodeshLib.Search
                          _state.IsReady ? 100.0 : 0.0, 0, 0, "", null);
         }
 
+        /// <param name="isMerging">True while the final force merge runs. That phase has no
+        /// line-level progress, so the percentage necessarily holds still for minutes; the
+        /// frontend needs the flag to show "finishing" instead of a bar that looks stuck.</param>
+        /// <param name="mergePassesDone">Committed merge passes, and the current ESTIMATE of
+        /// the total — the estimate moves as the merge proceeds, so it drives a phase
+        /// indicator, never an ETA.</param>
         internal void PushProgress(bool isReady, bool isIndexing, double pct,
                                    int processed, int total, string eta,
-                                   System.Collections.Generic.List<double> segmentMarkers)
+                                   System.Collections.Generic.List<double> segmentMarkers,
+                                   bool isMerging = false,
+                                   int mergePassesDone = 0, int mergePassesExpected = 0)
         {
             int segmentCount = segmentMarkers?.Count ?? 0;
             double? latestSegmentPct = segmentCount > 0 ? segmentMarkers[segmentCount - 1] : (double?)null;
@@ -261,7 +276,10 @@ namespace KitveiHakodeshLib.Search
                 totalChunks     = total,
                 eta             = eta,
                 segmentCount    = segmentCount,
-                latestSegmentPct = latestSegmentPct
+                latestSegmentPct = latestSegmentPct,
+                isMerging       = isMerging,
+                mergePassesDone = mergePassesDone,
+                mergePassesExpected = mergePassesExpected
             });
         }
     }

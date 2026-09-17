@@ -448,6 +448,15 @@ public sealed class FtsIndexStatus
     /// it. TERMINAL, like IsReady and DbMissing: without it a failed build reported
     /// "not ready, not indexing" forever and every progress stream waited on it.</summary>
     public bool Failed { get; set; }
+    /// <summary>True while the build is in its final force-merge phase. That phase has no
+    /// line-level progress — Percentage necessarily sits at its last value for minutes —
+    /// so the UI needs to be told it is a distinct phase rather than a stalled bar.</summary>
+    public bool IsMerging { get; set; }
+    /// <summary>Force-merge passes committed so far, and the CURRENT ESTIMATE of the total.
+    /// The estimate moves as the merge proceeds (merging one level can create work on the
+    /// level above), so this drives a phase indicator, never an ETA.</summary>
+    public int MergePassesDone { get; set; }
+    public int MergePassesExpected { get; set; }
 }
 
 // ── Streaming FTS (ftsSearchStream) — the service PUSHES result frames continuously

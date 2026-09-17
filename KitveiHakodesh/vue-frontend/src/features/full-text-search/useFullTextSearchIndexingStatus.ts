@@ -14,6 +14,9 @@ export interface IndexingState {
   segmentCount: number
   latestSegmentPct: number | null
   dbNotFound: boolean
+  isMerging: boolean
+  mergePassesDone: number
+  mergePassesExpected: number
 }
 
 const IDLE: IndexingState = {
@@ -26,6 +29,9 @@ const IDLE: IndexingState = {
   segmentCount: 0,
   latestSegmentPct: null,
   dbNotFound: false,
+  isMerging: false,
+  mergePassesDone: 0,
+  mergePassesExpected: 0,
 }
 
 export function useFullTextSearchIndexingStatus() {
@@ -53,6 +59,7 @@ export function useFullTextSearchIndexingStatus() {
             const stream = serviceStream<{
               isReady: boolean; isIndexing: boolean; percentage: number
               processedChunks: number; totalChunks: number; dbMissing: boolean
+              isMerging: boolean; mergePassesDone: number; mergePassesExpected: number
             }>('ftsIndexProgressStream', {}, abort.signal)
             let last: { isReady: boolean; isIndexing: boolean; dbMissing: boolean } | null = null
             for await (const s of stream) {
@@ -67,6 +74,9 @@ export function useFullTextSearchIndexingStatus() {
                 segmentCount: 0,
                 latestSegmentPct: null,
                 dbNotFound: s.dbMissing ?? false,
+                isMerging: s.isMerging ?? false,
+                mergePassesDone: s.mergePassesDone ?? 0,
+                mergePassesExpected: s.mergePassesExpected ?? 0,
               }
             }
             // Terminal state reached — nothing more will ever be pushed.
@@ -95,6 +105,9 @@ export function useFullTextSearchIndexingStatus() {
           segmentCount: p.segmentCount ?? 0,
           latestSegmentPct: p.latestSegmentPct ?? null,
           dbNotFound: p.dbNotFound ?? false,
+          isMerging: p.isMerging ?? false,
+          mergePassesDone: p.mergePassesDone ?? 0,
+          mergePassesExpected: p.mergePassesExpected ?? 0,
         }
     } catch (err) {
       console.warn('[useFullTextSearchIndexingStatus] poll failed:', err)
@@ -127,6 +140,9 @@ export function useFullTextSearchIndexingStatus() {
         segmentCount: (msg.segmentCount as number) ?? 0,
         latestSegmentPct: (msg.latestSegmentPct as number | null) ?? null,
         dbNotFound: false,
+        isMerging: (msg.isMerging as boolean) ?? false,
+        mergePassesDone: (msg.mergePassesDone as number) ?? 0,
+        mergePassesExpected: (msg.mergePassesExpected as number) ?? 0,
       }
     })
   })

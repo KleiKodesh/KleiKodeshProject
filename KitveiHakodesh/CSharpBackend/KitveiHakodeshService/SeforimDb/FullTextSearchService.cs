@@ -49,6 +49,13 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     private volatile int _processed;
     private volatile int _total;
 
+    /// <summary>Set for the duration of the final force merge. That phase reports no lines,
+    /// so _pct cannot move during it; without this flag the UI could only show a bar frozen
+    /// at its last value for minutes and users read that as a hung build.</summary>
+    private volatile bool _isMerging;
+    private volatile int _mergePassesDone;
+    private volatile int _mergePassesExpected;
+
     /// <summary>
     /// Identifies the build generation that currently owns the status fields. Bumped by
     /// every reset, so a build cancelled by that reset can be recognised as STALE.
@@ -289,6 +296,18 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                         resumeOffset: resumeOffset,
                         forceMergeOnComplete: true,
                         ct: ct,
+                        // The force merge is the build's last phase and a long one. It has
+                        // no line-level progress, so it reports passes instead — enough to
+                        // tell the UI "still working, different phase" rather than leaving
+                        // the bar frozen on the last line count.
+                        onMergeProgress: (done, expected) =>
+                        {
+                            if (!IsCurrentBuild(generation)) return; // see onProgress
+                            _isMerging = true;
+                            _mergePassesDone = done;
+                            _mergePassesExpected = expected;
+                            NotifyProgress();
+                        },
                         // The FTS build is the long, heavy one; in background processing
                         // mode (lowest CPU + very-low I/O priority) it stops contending
                         // with searches and with the catalog/file-search rebuilds that an
@@ -326,6 +345,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                     Common.DbContentStamp.Compute(_dbPath!, FtsVersion));
                 try { index.DeleteBuildProgressFile(); } catch { }
                 _pct = 100.0;
+                _isMerging = false;   // the merge is part of the build; it is over too
                 _isReady = true;
                 logger.LogInformation("FTS build complete — {Index}", _indexPath);
             }
@@ -372,6 +392,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             if (IsCurrentBuild(generation))
             {
                 _isIndexing = false;
+                // Whatever ended this build — success, cancellation, or a throw out of the
+                // merge itself — the merge phase is not running any more. Leaving this set
+                // would strand the UI on "finishing" after the stream has closed.
+                _isMerging = false;
                 NotifyProgress();   // terminal (or failed) state — wake subscribers so streams close
             }
         }
@@ -451,6 +475,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             _buildStarted = true;
             _buildFailed = false;   // a reset is a fresh attempt, not the old failure
             _pct = 0; _processed = 0; _total = 0;
+            _isMerging = false; _mergePassesDone = 0; _mergePassesExpected = 0;
         }
         NotifyProgress();
 
@@ -563,6 +588,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                 // memory trimmer could fire between the wipe and the rebuild.
                 _buildStarted = false;
                 _pct = 0; _processed = 0; _total = 0;
+                _isMerging = false; _mergePassesDone = 0; _mergePassesExpected = 0;
                 _buildTask = null;
                 _buildCts = null;
                 // Released HERE, before the rebuild is started — not after it. The wipe is
@@ -950,6 +976,9 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         TotalChunks = _total,
         DbMissing = !HasDb,
         Failed = _buildFailed,
+        IsMerging = _isMerging,
+        MergePassesDone = _mergePassesDone,
+        MergePassesExpected = _mergePassesExpected,
     };
 
     /// <summary>Push the current status immediately, then a fresh snapshot on every
