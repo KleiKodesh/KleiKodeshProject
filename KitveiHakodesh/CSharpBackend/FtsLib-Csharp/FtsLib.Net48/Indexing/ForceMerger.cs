@@ -277,7 +277,7 @@ namespace FtsLib.Indexing
                 // that throws must not fail a merge that already succeeded.
                 if (onMergeProgress != null)
                 {
-                    try { onMergeProgress(pass, EstimateRemainingPasses(pass, purging)); }
+                    try { onMergeProgress(pass, EstimateRemainingPasses(pass)); }
                     catch (Exception ex)
                     {
                         FtsLog.Write("ForceMerger.MergeLevelsIncremental",
@@ -318,20 +318,20 @@ namespace FtsLib.Indexing
         /// more pass, and a mid-merge "done == expected" would show a full bar and then
         /// walk it backwards. Only the post-loop tick reports completion.
         /// </summary>
-        private int EstimateRemainingPasses(int passesDone, bool purging)
+        private int EstimateRemainingPasses(int passesDone)
         {
             int populated = _store.Live.GetPopulatedLevels().Count;
             // Each remaining populated level above the first costs at least one pass.
             int remaining = populated > 1 ? populated - 1 : 0;
 
-            // In PURGE mode a lone populated level is NOT proof of convergence: an
-            // unpurged single segment still earns a rewrite pass (see
-            // TryFindUnpurgedSingleLevel). Reporting done == expected here would show a
-            // full bar and then move it BACKWARDS on the next pass, so keep one pass of
-            // headroom and let the post-loop tick be the only thing that reports done.
-            if (remaining == 0 && purging) remaining = 1;
-
-            return passesDone + remaining;
+            // ALWAYS keep a pass of headroom. This is called from inside the loop, which
+            // has not yet re-tested its exit condition, so "looks converged" is not proof
+            // that it is: in purge mode an unpurged single segment still earns a rewrite
+            // pass (TryFindUnpurgedSingleLevel), and a merge can overflow the level above.
+            // Reporting done == expected from in here would show a full bar and then walk
+            // it backwards. Only the post-loop tick — which runs when the loop really has
+            // ended, and only on convergence — reports done.
+            return passesDone + (remaining > 0 ? remaining : 1);
         }
 
         /// <summary>
