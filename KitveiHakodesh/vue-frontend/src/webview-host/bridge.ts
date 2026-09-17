@@ -546,7 +546,9 @@ export async function resetCatalogTocIndex(): Promise<void> {
 /**
  * Trigger a full DocumentLocator index rebuild on the C# side.
  * The service wipes its Lucene index and re-crawls the NTFS MFT from scratch.
- * Progress is pushed via fileSystemIndexingStatus events while the rebuild runs.
+ * Returns as soon as the rebuild has been kicked off — the rebuild itself runs in the
+ * background and pushes no events. While it runs, searches wait for the new index and
+ * localFileIndexStatus() reports that a build is in progress.
  */
 export async function resetDocumentLocatorIndex(): Promise<void> {
   if (typeof window.__webviewAction !== 'function') {
@@ -709,6 +711,29 @@ export function fileSystemSearch(
     }))
   }
   return action('fileSystemSearch', { query, max })
+}
+
+/**
+ * Whether the file index is currently being built.
+ *
+ * A search waits for the index, and a first-time crawl can take minutes — long enough
+ * that a spinner saying "searching" reads as a hang. The page polls this while a search
+ * is outstanding so it can say "building the index" instead.
+ *
+ * Reports the state as of right now and never prompts. It is not entirely passive on the
+ * hosted side — it may start the service — so only poll it while a search is already
+ * waiting. Any failure is reported as not-building, because the search call itself is
+ * what surfaces real errors.
+ */
+export function localFileIndexStatus(): Promise<{ isBuilding: boolean; message?: string }> {
+  if (typeof window.__webviewAction !== 'function') {
+    return serviceCall<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(
+      () => ({ isBuilding: false }),
+    )
+  }
+  return action<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(() => ({
+    isBuilding: false,
+  }))
 }
 
 /**

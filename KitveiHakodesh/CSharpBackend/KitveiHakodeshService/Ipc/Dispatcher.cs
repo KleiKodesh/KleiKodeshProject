@@ -349,6 +349,11 @@ public sealed class Dispatcher(
                     locator.Warmup();
                     return RpcResponse.Ok(MsgPack.Ser(new StartedResult()));
 
+                // Polled while a search is in flight so the page can say "building the
+                // index" instead of "searching". Must stay non-blocking — see GetIndexStatus.
+                case "localFileIndexStatus":
+                    return RpcResponse.Ok(MsgPack.Ser(locator.GetIndexStatus()));
+
                 // App-load warm-up: an app that just loaded is about to need the seforim
                 // DB — pay the service's one-time cold costs (native lib, first connection,
                 // catalog cache, JIT) in the background now, not on the first book click.

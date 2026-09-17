@@ -33,6 +33,54 @@ namespace KitveiHakodeshLib.FileSystemSearch
             catch { return false; }
         }
 
+        /// <summary>
+        /// A snapshot of the index state for the UI: is a build in progress, and the
+        /// service's own status line if so.
+        /// <para>Polled while a search is outstanding so the page can say "building the
+        /// index" rather than "searching" during a cold crawl, which can take minutes.
+        /// It never prompts for elevation, but it is NOT free: GetStatusAsync starts the
+        /// service via the SCM if the pipe does not answer. That is acceptable only because
+        /// the search this is explaining has already asked for the service to start. If the
+        /// status cannot be had quickly we report not-building and let the search itself
+        /// surface the real error.</para>
+        /// </summary>
+        public IndexBuildStatus GetBuildStatus()
+        {
+            // Give up after two seconds, and CANCEL rather than abandon: the call underneath
+            // can spend StartupTimeoutMs (30s) starting the service and waiting for the pipe.
+            // Walking away from it without cancelling would leave one such task per poll —
+            // ~15 of them alive at a 1s poll rate, each retrying the SCM start.
+            using (var timeout = new CancellationTokenSource(2000))
+            {
+                try
+                {
+                    var status = ServiceBridge.GetStatusAsync(timeout.Token)
+                        .GetAwaiter().GetResult();
+                    if (status == null || status.State == "ready" || status.State == "error")
+                        return new IndexBuildStatus();
+
+                    // "building" is the only other state the service reports today. Match it
+                    // exactly rather than treating every unknown state as building: a state
+                    // that means "stuck" (the service has one — a failed index wipe leaves a
+                    // non-error state with nobody building) would otherwise claim the index
+                    // is being built forever.
+                    if (status.State != "building") return new IndexBuildStatus();
+
+                    return new IndexBuildStatus { IsBuilding = true, Message = status.Message };
+                }
+                catch { return new IndexBuildStatus(); }
+            }
+        }
+
+        /// <summary>Index build state as reported to the UI. See <see cref="GetBuildStatus"/>.</summary>
+        public sealed class IndexBuildStatus
+        {
+            public bool IsBuilding { get; set; }
+            /// <summary>The service's own progress line (English, diagnostic). The UI shows
+            /// its own wording; this is detail, not display text.</summary>
+            public string Message { get; set; }
+        }
+
         // ── 2. WaitUntilReadyAsync ────────────────────────────────────────────────
 
         // How many consecutive failed status polls (pipe timeouts, service-not-installed,

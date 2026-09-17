@@ -93,6 +93,7 @@ namespace KitveiHakodeshLib
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
+                        case "localFileIndexStatus": _fileSystemSearch.HandleIndexStatus(id); break;
                         case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
                         // Catalog TOC (Lucene) search. Hosted used to have no equivalent — the
                         // frontend fell back to in-memory heuristics here while dev used the

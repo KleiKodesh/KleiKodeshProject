@@ -230,6 +230,21 @@ public sealed class LocateDocumentsResult
     public int Total { get; set; }
 }
 
+/// <summary>
+/// Result payload for <c>localFileIndexStatus</c>: whether the file index is still being
+/// built. Polled by the local-file-search page while a search is outstanding, so that a
+/// cold build (minutes) says "building the index" instead of "searching".
+/// <para>Non-blocking: it reports the state as of right now and never waits for the build.</para>
+/// </summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LocalFileIndexStatusResult
+{
+    public bool IsBuilding { get; set; }
+    /// <summary>The crawler's latest progress line (English, diagnostic). The UI shows its
+    /// own wording; this is detail, not display text.</summary>
+    public string? Message { get; set; }
+}
+
 /// <summary>Args for the <c>hbSearch</c> op (HebrewBooks catalog search).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class HbSearchArgs

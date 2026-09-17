@@ -7,13 +7,20 @@
  * waits until the index is ready, then executes the search. The whole thing is
  * one blocking call from Vue's perspective — Vue's loading animation covers the
  * wait. If the service fails to start or the index errors, { error } is returned
- * and shown as an error banner. No page-load handshake, no push events, no
- * separate indexing state.
+ * and shown as an error banner. No page-load handshake, no push events.
+ *
+ * Index building:
+ * That single call also covers the FIRST-EVER search, which waits for a full crawl of
+ * the disk and can take minutes. A spinner that says "searching" for that long reads as
+ * a hang, so while a search is outstanding we poll localFileIndexStatus() and flip
+ * `indexBuilding` on — the page then says the index is being built. It is a poll rather
+ * than a push because the wait is the only time anyone cares, and polling needs no event
+ * plumbing on either host.
  */
 
 import { ref, watch, computed, onUnmounted } from 'vue'
 import { refDebounced } from '@vueuse/core'
-import { fileSystemSearch, fileSystemSearchWarmup } from '@/webview-host/bridge'
+import { fileSystemSearch, fileSystemSearchWarmup, localFileIndexStatus } from '@/webview-host/bridge'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
 import { normalizeAddinQuery } from './otzariaAddins'
 
@@ -32,6 +39,13 @@ const DEBOUNCE_MS = 200
 const MAX_RESULTS = 5000
 const LOADING_ANIMATION_DELAY_MS = 200
 
+/**
+ * How often to re-ask whether the index is still being built, while a search waits.
+ * Slow on purpose: a build runs for minutes, so this only has to be fast enough to
+ * swap the label early and to notice when the build finishes.
+ */
+const INDEX_STATUS_POLL_MS = 1000
+
 export function useLocalFileSearch(
   searchQuery: ReturnType<typeof ref<string>>,
   sortOrder: ReturnType<typeof ref<LocalFileSearchSortOrder>>,
@@ -41,8 +55,10 @@ export function useLocalFileSearch(
   const showLoadingAnimation = ref(false)
   const totalCount = ref(0)
   const errorMessage = ref<string | null>(null)
+  const indexBuilding = ref(false)
 
   let loadingAnimationTimer: ReturnType<typeof setTimeout> | null = null
+  let indexStatusTimer: ReturnType<typeof setInterval> | null = null
 
   function startLoadingAnimationTimer() {
     cancelLoadingAnimationTimer()
@@ -59,7 +75,40 @@ export function useLocalFileSearch(
     showLoadingAnimation.value = false
   }
 
-  onUnmounted(() => cancelLoadingAnimationTimer())
+  /**
+   * Ask once immediately, then keep asking, whether the index is still being built.
+   * Only runs while a search is outstanding: the answer is only interesting to explain
+   * a wait, and asking when nobody is waiting would be pointless traffic.
+   */
+  function startIndexStatusPolling(pollGeneration: number) {
+    stopIndexStatusPolling()
+
+    const poll = async () => {
+      const status = await localFileIndexStatus()
+      // Discard the answer unless the search that asked is still the current one.
+      // `searching` alone is not enough: clearInterval cannot recall a request already in
+      // flight, so a slow poll from a superseded search can land during a later, faster
+      // one and label a warm search as "building the index".
+      if (pollGeneration !== generation || !searching.value) return
+      indexBuilding.value = status.isBuilding
+    }
+
+    void poll()
+    indexStatusTimer = setInterval(() => void poll(), INDEX_STATUS_POLL_MS)
+  }
+
+  function stopIndexStatusPolling() {
+    if (indexStatusTimer !== null) {
+      clearInterval(indexStatusTimer)
+      indexStatusTimer = null
+    }
+    indexBuilding.value = false
+  }
+
+  onUnmounted(() => {
+    cancelLoadingAnimationTimer()
+    stopIndexStatusPolling()
+  })
 
   // Warm up the service every time the user navigates to this page — fire-and-forget.
   const paneNavigation = usePaneNavigation()
@@ -83,6 +132,7 @@ export function useLocalFileSearch(
       rawResults.value = []
       totalCount.value = 0
       searching.value = false
+      stopIndexStatusPolling()
       return
     }
 
@@ -90,6 +140,7 @@ export function useLocalFileSearch(
 
     searching.value = true
     startLoadingAnimationTimer()
+    startIndexStatusPolling(thisGeneration)
 
     try {
       const response = await fileSystemSearch(normalizedQuery, MAX_RESULTS)
@@ -119,6 +170,7 @@ export function useLocalFileSearch(
       if (thisGeneration === generation) {
         searching.value = false
         cancelLoadingAnimationTimer()
+        stopIndexStatusPolling()
       }
     }
   }
@@ -159,6 +211,7 @@ export function useLocalFileSearch(
     results,
     searching,
     showLoadingAnimation,
+    indexBuilding,
     totalCount,
     errorMessage,
   }

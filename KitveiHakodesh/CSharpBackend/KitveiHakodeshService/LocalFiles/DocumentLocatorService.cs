@@ -74,10 +74,61 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
     private readonly SemaphoreSlim _buildGate = new(1, 1);
     private Task<DocumentLocator.PathIndex>? _buildTask;
 
+    // ── Build status ──────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The crawler's latest progress message. Written from the build thread, read from
+    /// request threads, so it is volatile.
+    /// <para>Detail ONLY: whether a build is running is answered by <c>_buildTask</c>, never
+    /// by this field being non-null. Because a build can end without clearing it, and a new
+    /// build can start before publishing anything, its null-ness does not track the build
+    /// lifetime — treating it as a boolean is exactly the bug <see cref="GetIndexStatus"/>
+    /// documents.</para>
+    /// </summary>
+    private volatile string? _buildStatusMessage;
+
+    /// <summary>
+    /// Placeholder status for the window between a build being queued and the crawler
+    /// emitting its first progress message. English and diagnostic, like every other
+    /// message the crawler produces — the user-facing wording lives in the frontend,
+    /// which treats <c>Message</c> as an optional detail, not as display text.
+    /// </summary>
+    private const string BuildStartingMessage = "Starting index build";
+
+    /// <summary>
+    /// Whether the index is currently being built, and the crawler's latest progress
+    /// message if so. Cheap and non-blocking by design — the frontend polls it while a
+    /// search is outstanding, so it must never wait on <see cref="_buildGate"/> or the
+    /// build task itself.
+    /// </summary>
+    public LocalFileIndexStatusResult GetIndexStatus()
+    {
+        // _index is assigned only after the build completes, so a non-null index means
+        // ready. Checking it first keeps the common (warm) case a single field read.
+        if (_index is not null) return new LocalFileIndexStatusResult { IsBuilding = false };
+
+        // Read the task ONCE: it can be replaced (by a reindex) or nulled (by a faulted
+        // build being dropped) between reads, and a torn view here would be reported as a
+        // state that never existed.
+        var build = _buildTask;
+
+        // The TASK is what says whether a build is running — not the progress message.
+        // Deriving it from the message instead would strand the flag on when a build dies
+        // before it can publish anything (the PathIndex ctor can throw on a held write
+        // lock), and would strand it off whenever an outgoing build's cleanup cleared a
+        // message its successor had already posted.
+        return new LocalFileIndexStatusResult
+        {
+            IsBuilding = build is not null && !build.IsCompleted,
+            Message = _buildStatusMessage,
+        };
+    }
+
     /// <summary>
     /// Ensures the index is open and fully built, then returns it.
     /// The build is run once; subsequent calls return the already-open instance.
-    /// Progress is swallowed — the caller's loading animation covers the wait.
+    /// Progress is published to <see cref="_buildStatusMessage"/> so a waiting caller can be
+    /// told the index is being built rather than just watching a "searching" spinner.
     /// <para>The build is SHARED, so it deliberately carries no caller's cancellation token:
     /// whoever asks first must not be able to cancel the build every other client is waiting on
     /// by closing their tab. <paramref name="ct"/> cancels only this caller's WAIT. The index
@@ -94,6 +145,9 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             if (_index is not null) return _index;
             // Run the (potentially slow) build on a thread-pool thread so we
             // don't block the host's async machinery.
+            // Assigning the task is also what makes the status report "building": it covers
+            // the build from the moment it is QUEUED, so a status poll landing before the
+            // thread-pool actually starts it still sees a build in progress.
             _buildTask ??= Task.Run(BuildIndex);
             build = _buildTask;
         }
@@ -164,10 +218,18 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
 
     private DocumentLocator.PathIndex BuildAndStartWatchers(DocumentLocator.PathIndex index)
     {
+        // Publish the crawler's progress so GetIndexStatus can report "building" to the UI.
+        // The flag was already raised by EnsureIndexAsync when it queued this build; here we
+        // only refine it with real progress. Cleared in the finally: once the crawl is over
+        // the caller is waiting on the watchers below, not on the index, and that wait is short.
         try
         {
             index.Build(
-                msg => logger.LogDebug("[DocumentLocator] {Message}", msg),
+                msg =>
+                {
+                    _buildStatusMessage = msg;
+                    logger.LogDebug("[DocumentLocator] {Message}", msg);
+                },
                 CancellationToken.None);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -175,6 +237,10 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             // A failed crawl still leaves a usable (if incomplete) index — searches return
             // whatever was written. Only the failures below are fatal to the instance.
             logger.LogError(ex, "[DocumentLocator] Index build failed");
+        }
+        finally
+        {
+            _buildStatusMessage = null;
         }
 
         // Start the live USN journal update loop now that the initial build is done.
@@ -278,6 +344,9 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             _index?.Dispose();
             _index = null;
             _buildTask = null;
+            // Stale the moment the index it described is gone. The rebuild republishes as
+            // it crawls; until then the status carries no detail, only "building".
+            _buildStatusMessage = null;
         }
         finally
         {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import {
   IconSearch20Regular,
@@ -30,9 +30,16 @@ const settingsStore = useSettingsStore()
 const { fileSearchSortOrder: sortOrder } = storeToRefs(settingsStore)
 
 const {
-  results, searching, showLoadingAnimation,
+  results, searching, showLoadingAnimation, indexBuilding,
   totalCount, errorMessage,
 } = useLocalFileSearch(searchQuery, sortOrder)
+
+// A cold index build takes minutes, and a plain "searching" spinner for that long
+// reads as a hang. While the index is being built we say so instead, reusing the
+// full-text-search overlay's wording so the two search pages read consistently.
+const loadingLabel = computed(() =>
+  indexBuilding.value ? 'אנא המתן בעת בניית האינדקס' : 'מחפש...'
+)
 
 const searchInputElement = ref<HTMLInputElement | null>(null)
 const resultsListElement = ref<InstanceType<typeof LocalFileSearchResultsList> | null>(null)
@@ -244,7 +251,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
       <div class="results-container">
         <!-- Loading while any search is in flight for more than 200ms -->
         <div v-if="showLoadingAnimation" class="searching-state">
-          <LoadingAnimation text="מחפש..." />
+          <LoadingAnimation :text="loadingLabel" />
         </div>
 
         <!-- Empty state when idle with no results. A failed search lands here too:

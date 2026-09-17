@@ -65,6 +65,31 @@ namespace KitveiHakodeshLib.FileSystemSearch
             });
         }
 
+        /// <summary>
+        /// Reports whether the index is currently being built, so the page can show
+        /// "building the index" instead of "searching" while a search waits on a cold
+        /// crawl. Vue polls this during a search. It never prompts for elevation, and it
+        /// answers within a couple of seconds at worst — but it may start the service (see
+        /// GetBuildStatus), which is why nothing polls it outside a search.
+        /// </summary>
+        public void HandleIndexStatus(string id)
+        {
+            Task.Run(() =>
+            {
+                try
+                {
+                    var status = _adapter.GetBuildStatus();
+                    _bridge.Reply(id, new { isBuilding = status.IsBuilding, message = status.Message });
+                }
+                catch
+                {
+                    // A status poll must never break the page — the search reply carries the
+                    // real error. Say "not building" and let the spinner stand.
+                    _bridge.Reply(id, new { isBuilding = false });
+                }
+            });
+        }
+
         // ── Search ────────────────────────────────────────────────────────────────
 
         /// <summary>
