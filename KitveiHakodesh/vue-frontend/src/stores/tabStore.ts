@@ -31,6 +31,8 @@ import {
   stepHistory,
   jumpHistory,
   dropHistory,
+  popCurrentAndGoBack,
+  clearHistory,
   canGoBack as historyCanGoBack,
   canGoForward as historyCanGoForward,
 } from './navHistory'
@@ -548,6 +550,52 @@ export const useTabStore = defineStore('tabs', () => {
   function forgetLocation(id: string) {
     recentLocations.value = recentLocations.value.filter((l) => l.id !== id)
   }
+
+  /**
+   * "Close current page" for environments without a native tab strip (VSTO, dev).
+   *
+   * Removes the current entry from the per-tab history stack and navigates back
+   * to the previous entry. Also removes the page from recentLocations so it
+   * disappears from the address-bar dropdown. If there is no previous entry
+   * (the reader is at the very beginning of their history), navigates home instead.
+   */
+  function closeCurrentPage(tabId: string) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (!tab) return
+
+    // Remove from recentLocations before moving — captureCurrentPosition would
+    // just update it, but we want it gone.
+    const docKey = locationKey(tab)
+    recentLocations.value = recentLocations.value.filter((l) => locationKey(l) !== docKey)
+
+    // Remove from the per-tab history stack and step back.
+    const target = popCurrentAndGoBack(tabId)
+    if (target) {
+      const patch = tabPatchForLocation(target)
+      applyLocationPosition(patch, target)
+      Object.assign(tab, patch)
+    } else {
+      // No history to go back to — navigate home and clear the (now empty) stack.
+      Object.assign(tab, { route: '/', title: 'בית', bookId: undefined, localFilePath: undefined, localFileName: undefined, searchQuery: undefined, tocPath: undefined })
+    }
+  }
+
+  /**
+   * "Close all pages" (Ctrl+X) for environments without a native tab strip.
+   *
+   * Clears the entire per-tab history stack and all recentLocations, then
+   * navigates home.
+   */
+  function closeAllPages(tabId: string) {
+    const tab = tabs.value.find((t) => t.id === tabId)
+    if (!tab) return
+
+    clearHistory(tabId)
+    recentLocations.value = []
+
+    Object.assign(tab, { route: '/', title: 'בית', bookId: undefined, localFilePath: undefined, localFileName: undefined, searchQuery: undefined, tocPath: undefined })
+  }
+
 
   /**
    * Everything a closing tab must give up. Its final position is folded into the
@@ -1256,6 +1304,8 @@ export const useTabStore = defineStore('tabs', () => {
     recentLocations,
     locationPatch,
     forgetLocation,
+    closeCurrentPage,
+    closeAllPages,
     canGoBack,
     canGoForward,
     goHistory,

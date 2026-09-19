@@ -96,6 +96,23 @@ export function useAppShellPane(paneId: 1 | 2) {
     }
   }
 
+  /**
+   * VSTO / dev only. Removes the current page from both the per-tab history
+   * stack and recentLocations, then navigates back to the previous entry (or
+   * home if there is no previous entry).
+   */
+  function closeCurrentPage() {
+    tabStore.closeCurrentPage(activeTabId.value)
+  }
+
+  /**
+   * VSTO / dev only. Clears the entire per-tab history stack and all
+   * recentLocations, then navigates home.
+   */
+  function closeAllPages() {
+    tabStore.closeAllPages(activeTabId.value)
+  }
+
   function openTab(partial: Omit<Tab, 'id'>) {
     if (paneId === 1) return tabStore.openTab(partial)
     else return tabStore.openPane2Tab(partial)
@@ -200,6 +217,8 @@ export function useAppShellPane(paneId: 1 | 2) {
     goToHistoryIndex,
     closeTab,
     closeAllTabs,
+    closeCurrentPage,
+    closeAllPages,
     openTab,
     openNewTab,
     openNewHomeTab,

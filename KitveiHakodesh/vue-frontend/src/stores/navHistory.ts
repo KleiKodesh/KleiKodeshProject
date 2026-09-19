@@ -115,6 +115,38 @@ export function currentLocation(tabId: string): NavLocation | null {
   return history.entries[history.cursor] ?? null
 }
 
+/**
+ * Removes the current entry from the stack and steps back to the previous one.
+ * Returns the location to navigate to, or null if there is no previous entry
+ * (i.e. the current entry is the only one — caller should go home instead).
+ *
+ * This is the "close current page" operation for environments without a native
+ * tab strip (VSTO, dev): Ctrl+W removes this place from history rather than
+ * merely moving the cursor past it.
+ */
+export function popCurrentAndGoBack(tabId: string): NavLocation | null {
+  const history = get(tabId)
+  if (!history || history.cursor === 0) return null
+  // Remove the current entry and step the cursor back.
+  history.entries.splice(history.cursor, 1)
+  history.cursor = history.cursor - 1
+  bump()
+  return history.entries[history.cursor] ?? null
+}
+
+/**
+ * Clears ALL history entries for a tab, leaving an empty stack.
+ * Used by Ctrl+X ("close all") in environments without a native tab strip.
+ * The caller is responsible for navigating home afterwards.
+ */
+export function clearHistory(tabId: string): void {
+  const history = get(tabId)
+  if (!history) return
+  history.entries = []
+  history.cursor = -1
+  bump()
+}
+
 /** Drops a tab's history — called when the tab closes. */
 export function dropHistory(tabId: string): void {
   if (!histories.value.has(tabId)) return

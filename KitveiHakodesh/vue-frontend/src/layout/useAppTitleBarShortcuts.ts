@@ -161,11 +161,16 @@ export function useAppTitleBarShortcuts(options: {
     switch (e.code) {
       // Closing is meaningless where there is only ever one tab — the store would just
       // replace it with a fresh home tab, which reads as "my document vanished".
+      // In VSTO and dev (no native strip), Ctrl+W instead removes the current page
+      // from both the per-tab history stack and recentLocations, then goes back.
+      // Ctrl+X does the same for all pages at once (clears everything, goes home).
       case 'KeyW':
         if (hasNativeChromeTabs) pane.closeTab(pane.activeTabId.value)
+        else pane.closeCurrentPage()
         return true
       case 'KeyX':
         if (hasNativeChromeTabs) pane.closeAllTabs()
+        else pane.closeAllPages()
         return true
       case 'KeyB':
         if (isBookViewActive.value) bookViewStore.toggleToolbar(paneId)
