@@ -6,6 +6,7 @@ import {
   IconArrowSync20Regular,
   IconChevronDown20Regular,
   IconDismiss20Regular,
+  IconDelete20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import {
   documentIcon,
@@ -225,7 +226,7 @@ function getTabIcon(route: string): FileIconInfo {
             :title="clearAllLocationsTitle"
             @click.stop="emit('clearAllTabs')"
           >
-            <IconDismiss20Regular />
+            <IconDelete20Regular />
           </button>
         </div>
         <div
