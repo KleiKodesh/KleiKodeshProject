@@ -5,7 +5,7 @@ import {
   IconBookOpen20Filled,
   IconArrowSync20Regular,
   IconChevronDown20Regular,
-  IconDelete20Regular,
+  IconDismiss20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import {
   documentIcon,
@@ -54,6 +54,12 @@ const props = defineProps<{
    */
   tabs?: NavLocation[]
   activeTabId?: string
+  /** Tooltip for each row's dismiss button. Parent supplies it so the text can
+   *  reflect which keyboard shortcut applies in the current environment. */
+  removeLocationTitle?: string
+  /** Tooltip for the "clear all" button at the top of the recents list. Same
+   *  reasoning as removeLocationTitle. */
+  clearAllLocationsTitle?: string
   /**
    * Merge the panel into its anchor instead of floating below it (address-bar
    * mode, like a browser omnibox): the top corners square off and the top border
@@ -71,6 +77,7 @@ const emit = defineEmits<{
   selectFile: [item: FileSearchResult, openInNewTab: boolean]
   selectTab: [id: string, openInNewTab: boolean]
   forgetTab: [id: string]
+  clearAllTabs: []
 }>()
 
 const dropdownRef = ref<HTMLElement | null>(null)
@@ -209,6 +216,18 @@ function getTabIcon(route: string): FileIconInfo {
            the CURRENT tab (Ctrl/middle-click opens a new one), like any address-bar
            row. Headerless — it is the only list here, so a header would cost a row. -->
       <template v-if="tabs && tabs.length > 0">
+        <!-- Clear-all row — only shown when a tooltip is supplied, so callers
+             that don't support bulk-clear simply omit the prop. -->
+        <div v-if="clearAllLocationsTitle" class="global-search-dropdown__recents-header">
+          <span class="global-search-dropdown__recents-label">היסטוריה</span>
+          <button
+            class="global-search-dropdown__clear-all"
+            :title="clearAllLocationsTitle"
+            @click.stop="emit('clearAllTabs')"
+          >
+            <IconDismiss20Regular />
+          </button>
+        </div>
         <div
           v-for="tab in tabs"
           :key="tab.id"
@@ -231,13 +250,13 @@ function getTabIcon(route: string): FileIconInfo {
             {{ tab.title }}<span v-if="tab.tocPath" class="global-search-dropdown__item-toc"> · {{ tab.tocPath }}</span>
           </span>
           <!-- Forgets the location. Closes nothing: locations and tabs are
-               independent, so this is "remove from history", hence a trash icon. -->
+               independent, so this is "remove from history". -->
           <button
             class="global-search-dropdown__tab-close"
-            title="הסר מהרשימה"
+            :title="removeLocationTitle ?? 'הסר מהרשימה'"
             @click.stop="emit('forgetTab', tab.id)"
           >
-            <IconDelete20Regular />
+            <IconDismiss20Regular />
           </button>
         </div>
       </template>
@@ -544,6 +563,39 @@ function getTabIcon(route: string): FileIconInfo {
   opacity: 0.8;
 }
 
+.global-search-dropdown__recents-header {
+  display: flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 10px 0 6px;
+  gap: 4px;
+}
+
+.global-search-dropdown__recents-label {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.global-search-dropdown__clear-all {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+.global-search-dropdown__clear-all svg {
+  width: 14px;
+  height: 14px;
+}
+.global-search-dropdown__clear-all:hover {
+  color: var(--text-primary);
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+}
+
 .global-search-dropdown__tab-close {
   display: flex;
   align-items: center;
@@ -553,6 +605,11 @@ function getTabIcon(route: string): FileIconInfo {
   height: 24px;
   border-radius: 4px;
   color: var(--text-secondary);
+  visibility: hidden;
+}
+.global-search-dropdown__item:hover .global-search-dropdown__tab-close,
+.global-search-dropdown__item.is-focused .global-search-dropdown__tab-close {
+  visibility: visible;
 }
 .global-search-dropdown__tab-close svg {
   width: 16px;
