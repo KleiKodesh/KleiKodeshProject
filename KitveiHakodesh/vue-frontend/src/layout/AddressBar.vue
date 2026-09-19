@@ -29,7 +29,7 @@ import { useGlobalSearch, type FileSearchResult } from '@/features/global-search
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppShellPane } from '@/composables/useAppShellPane'
-import { restoreLocalFile, triggerHbDownload } from '@/webview-host/bridge'
+import { restoreLocalFile, triggerHbDownload, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import { useTabStore, type Tab } from '@/stores/tabStore'
 import { sortedByRecency } from '@/stores/recentLocations'
@@ -150,6 +150,22 @@ function onForgetLocation(id: string) {
   // forgets the location; any tab showing that document is untouched.
   tabStore.forgetLocation(id)
 }
+
+function onClearAllLocations() {
+  pane.closeAllPages()
+}
+
+// Tooltip text for the dismiss buttons varies by environment so the user knows
+// which keyboard shortcut to use.
+//
+//   Native strip host  — Ctrl+W closes a real tab, so the history-aware close is Alt+W / Alt+X
+//   VSTO + dev         — Ctrl+W / Ctrl+X do the history-aware close (and Alt+W/X also work)
+const removeLocationTitle = hasNativeChromeTabs
+  ? 'הסר מהיסטוריה (Alt+W)'
+  : 'הסר מהיסטוריה (Ctrl+W)'
+const clearAllLocationsTitle = hasNativeChromeTabs
+  ? 'נקה את כל ההיסטוריה (Alt+X)'
+  : 'נקה את כל ההיסטוריה (Ctrl+X)'
 
 // ── Dropdown anchor (positioned under the field, like the home page) ──────────
 // Width rule: on a narrow ("android-width") shell the dropdown fills the whole
@@ -429,12 +445,15 @@ nextTick(() => {
       :max-height="maxHeight"
       :tabs="dropdownTabs"
       :active-tab-id="pane.activeTabId.value"
+      :remove-location-title="removeLocationTitle"
+      :clear-all-locations-title="clearAllLocationsTitle"
       @select-catalog-book="onSelectCatalogBook"
       @select-catalog-toc="onSelectCatalogToc"
       @select-hebrew-book="onSelectHebrewBook"
       @select-file="onSelectFile"
       @select-tab="onSelectLocation"
       @forget-tab="onForgetLocation"
+      @clear-all-tabs="onClearAllLocations"
     />
   </div>
 </template>
