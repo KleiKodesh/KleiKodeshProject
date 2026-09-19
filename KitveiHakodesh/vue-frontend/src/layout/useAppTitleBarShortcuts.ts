@@ -125,6 +125,17 @@ export function useAppTitleBarShortcuts(options: {
         else pane.goForward()
         return true
       }
+      // Alt+W / Alt+X — history-aware close for the native-strip host, where
+      // Ctrl+W/X own the real tab close. Same semantics as Ctrl+W/X in VSTO/dev:
+      // remove the current page (or all pages) from both history stacks.
+      if (e.altKey && e.code === 'KeyW') {
+        pane.closeCurrentPage()
+        return true
+      }
+      if (e.altKey && e.code === 'KeyX') {
+        pane.closeAllPages()
+        return true
+      }
       return false
     }
 
