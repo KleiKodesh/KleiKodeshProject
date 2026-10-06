@@ -345,7 +345,10 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   border: none;
   border-radius: 4px;
   background: transparent;
+  /* Greyed out: a dismissal, not one of the three actions at the bottom. It brightens
+     on hover so it still reads as reachable. */
   color: var(--text-secondary);
+  opacity: 0.55;
   font-size: 13px;
   line-height: 1;
   cursor: pointer;
@@ -354,6 +357,7 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 .report-close-btn:hover {
   background: var(--bg-hover, rgba(127, 127, 127, 0.16));
   color: var(--text-primary);
+  opacity: 1;
 }
 
 /* Sits inside the label, so it stays attached to the field it qualifies. */
