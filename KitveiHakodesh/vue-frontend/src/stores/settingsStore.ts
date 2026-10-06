@@ -80,6 +80,7 @@ const KEYS = {
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
   SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
+  SETTINGS_ERROR_REPORT_EMAIL: 'errorReport.senderEmail',
 } as const
 import { getHbLocalFolderFromRegistry, setHbLocalFolderInRegistry, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { getWordLinkTargetsForBook } from '@/webview-host/seforimApi'
@@ -155,6 +156,9 @@ const DEFAULTS = {
   booksView: 'list' as BooksView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
+  // The address a "דיווח על טעות" report is sent from. Remembered so the user types
+  // it once, not once per report; empty means they have never filled it in.
+  errorReportSenderEmail: '',
   pdfPageFilters: false,
   resumeLastRead: true,
   showClock: false,
@@ -304,6 +308,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const showRecentlyOpened = ref(DEFAULTS.showRecentlyOpened)
   const showFrequentFolders = ref(DEFAULTS.showFrequentFolders)
   const fileSearchSortOrder = ref(DEFAULTS.fileSearchSortOrder)
+  const errorReportSenderEmail = ref(DEFAULTS.errorReportSenderEmail)
   /** Which layout the book catalog page renders in. */
   const booksView = ref<BooksView>(DEFAULTS.booksView)
 
@@ -454,6 +459,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SHOW_RECENTLY_OPENED, showRecentlyOpened)
     loadSetting(KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS, showFrequentFolders)
     loadSetting(KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER, fileSearchSortOrder)
+    loadSetting(KEYS.SETTINGS_ERROR_REPORT_EMAIL, errorReportSenderEmail)
     const storedBooksView = normalizeBooksView(lsGet<LegacyBooksView>(KEYS.SETTINGS_BOOKS_VIEW))
     if (storedBooksView != null) booksView.value = storedBooksView
     applyCSSVariables()
@@ -519,6 +525,7 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(showRecentlyOpened, KEYS.SETTINGS_SHOW_RECENTLY_OPENED)
   persistSetting(showFrequentFolders, KEYS.SETTINGS_SHOW_FREQUENT_FOLDERS)
   persistSetting(fileSearchSortOrder, KEYS.SETTINGS_FILE_SEARCH_SORT_ORDER)
+  persistSetting(errorReportSenderEmail, KEYS.SETTINGS_ERROR_REPORT_EMAIL)
   persistSetting(booksView, KEYS.SETTINGS_BOOKS_VIEW)
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -677,6 +684,7 @@ export const useSettingsStore = defineStore('settings', () => {
     // key deleted while the ref kept the old value — memory and disk disagreeing until the
     // next reload.
     fileSearchSortOrder.value = DEFAULTS.fileSearchSortOrder
+    errorReportSenderEmail.value = DEFAULTS.errorReportSenderEmail
     booksView.value = DEFAULTS.booksView
     applyCSSVariables()
     // The persist watchers flush on nextTick, so clearing synchronously here would be
@@ -709,6 +717,7 @@ export const useSettingsStore = defineStore('settings', () => {
     showRecentlyOpened,
     showFrequentFolders,
     fileSearchSortOrder,
+    errorReportSenderEmail,
     booksView,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
     togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer, completeAddressBarHint,

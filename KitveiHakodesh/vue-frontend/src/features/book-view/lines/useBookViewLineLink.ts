@@ -21,7 +21,15 @@ interface LineLinkOptions {
  * originating event is long gone. Clicks inside the menu itself never reach this
  * listener — the menu is teleported to <body>, outside the scroller.
  */
-export function useBookViewLineLink(options: LineLinkOptions): { copyLineLink: () => void } {
+export function useBookViewLineLink(options: LineLinkOptions): {
+  copyLineLink: () => void
+  /**
+   * The line the menu was opened on, for any menu action that needs a target line
+   * even when nothing is selected (the error report). Read at action time; null when
+   * the gesture did not start on a line.
+   */
+  pressedLineIndex: () => number | null
+} {
   let pressedLineIndex: number | null = null
 
   function lineIndexFromNode(node: Node | null): number | null {
@@ -48,5 +56,5 @@ export function useBookViewLineLink(options: LineLinkOptions): { copyLineLink: (
     })
   }
 
-  return { copyLineLink }
+  return { copyLineLink, pressedLineIndex: () => pressedLineIndex }
 }

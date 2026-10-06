@@ -53,6 +53,12 @@ interface CopyMenuOptions {
   onAddNote?: () => void
   onCopyLineLink?: () => void
   /**
+   * "דיווח על טעות בספר" — opens the report dialog. Takes nothing: the dialog's host
+   * owns the selection and the pressed line, since it is the one that has to keep
+   * them alive after the menu closes.
+   */
+  onReportError?: () => void
+  /**
    * Warms the lazily-loaded notes and citations for a set of lines before an export
    * reads them. Awaited by the copy actions — see prepareAndCopy for why the
    * select-all case is additionally warmed the moment the selection is made.
@@ -333,7 +339,7 @@ export function buildBookExportHtml(
 //   OFF: leave text as-is
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void } {
+export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: ContextMenuItem[], buildFormattedHtml: () => string | null, onCopy: () => void, onPasteIntoWord: () => void, onSearchInRepository: () => void, buildSource: (firstLineIndex: number | null) => string } {
   const { scrollerEl, lines, isSelectAll, selectAllInContainer, bookTitle, tabStore } = options
   const settingsStore = useSettingsStore()
 
@@ -646,6 +652,8 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: 'העתק לחיפוש במאגר', action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: 'העתק קישור לקטע זה', action: options.onCopyLineLink ?? (() => {}) },
       { type: 'separator' },
+      { label: 'דיווח על טעות בספר', action: options.onReportError ?? (() => {}) },
+      { type: 'separator' },
       {
         type: 'submenu',
         label: 'אפשרויות העתקה',
@@ -699,5 +707,8 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
     onCopy,
     onPasteIntoWord,
     onSearchInRepository,
+    // Exported so the error report names the line the SAME way a copied מקור does —
+    // one reference format in the app, built in one place.
+    buildSource: (firstLineIndex: number | null) => buildSource(firstLineIndex),
   }
 }

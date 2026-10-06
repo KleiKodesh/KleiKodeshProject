@@ -15,8 +15,12 @@ import { storeToRefs } from 'pinia'
 import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
+import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
 
 useTabSwipeNavigation()
+// Error reports that could not go out (offline, no endpoint yet) are retried from
+// here — once for the whole app, not once per book pane.
+startErrorReportRetries()
 
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()

@@ -790,6 +790,72 @@ public sealed partial class SeforimDbService
         return list;
     }
 
+    // ── Error-report provenance ──────────────────────────────────────────────
+
+    public List<BookSourceNameRow> GetBookSourceName(int bookId)
+    {
+        var list = new List<BookSourceNameRow>();
+        Run(() =>
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimSql.GetBookSourceName;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new BookSourceNameRow { SourceName = r.IsDBNull(0) ? "" : r.GetString(0) });
+        }, "getBookSourceName");
+        return list;
+    }
+
+    /// <summary>
+    /// The library build. Returns no rows when the database carries no schema_meta
+    /// table — an older library is unidentifiable, which the caller reports as
+    /// "unknown" rather than treating as a failure.
+    /// </summary>
+    public List<SchemaMetaValueRow> GetLibraryDbVersion()
+    {
+        var list = new List<SchemaMetaValueRow>();
+        Run(() =>
+        {
+            using var conn = Open();
+            using var exists = conn.CreateCommand();
+            exists.CommandText = "SELECT 1 FROM sqlite_master WHERE type='table' AND name='schema_meta' LIMIT 1";
+            if (exists.ExecuteScalar() == null) return;
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimSql.GetLibraryDbVersion;
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new SchemaMetaValueRow { Value = r.IsDBNull(0) ? "" : r.GetString(0) });
+        }, "getLibraryDbVersion");
+        return list;
+    }
+
+    public List<LineRefRow> GetLineRefAndContent(int bookId, int lineIndex)
+    {
+        var list = new List<LineRefRow>();
+        Run(() =>
+        {
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            using var lineContent = LineContentFor(conn);
+            cmd.CommandText = SeforimSql.GetLineRefAndContent(lineContent);
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.Parameters.AddWithValue("@lineIndex", lineIndex);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new LineRefRow
+                {
+                    Id = r.GetInt32(0),
+                    LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    HeRef = r.IsDBNull(2) ? null : r.GetString(2),
+                    Content = lineContent.Read(r, 3),
+                });
+        }, "getLineRefAndContent");
+        return list;
+    }
+
     /// <summary>Binds a list of ints to @{prefix}0..@{prefix}N-1 (for dynamic IN clauses).</summary>
     private static void BindList(SqliteCommand cmd, string prefix, List<int> values)
     {

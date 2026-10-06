@@ -696,6 +696,22 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new RawLinesResult { Rows = seforim.GetLineByBookAndLineIndex(a.BookId, a.LineIndex) }));
                 }
 
+                // ── Error-report provenance ────────────────────────────────────
+                case "getBookSourceName":
+                {
+                    var a = MsgPack.De<BookIdArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BookSourceNameResult { Rows = seforim.GetBookSourceName(a.BookId) }));
+                }
+
+                case "getLibraryDbVersion":
+                    return RpcResponse.Ok(MsgPack.Ser(new SchemaMetaValueResult { Rows = seforim.GetLibraryDbVersion() }));
+
+                case "getLineRefAndContent":
+                {
+                    var a = MsgPack.De<LineByIndexArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new LineRefResult { Rows = seforim.GetLineRefAndContent(a.BookId, a.LineIndex) }));
+                }
+
                 // ── User settings (highlights/notes) — read + write ────────────
                 case "userSettingsQuery":
                 {

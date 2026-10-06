@@ -419,3 +419,64 @@ export async function getLineByBookAndLineIndex(
       'getLineByBookAndLineIndex', { bookId, lineIndex })).rows
   return query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX(hasSplitLineContent), [bookId, lineIndex])
 }
+
+// ── Error-report provenance ──────────────────────────────────────────────────
+
+/**
+ * Which upstream corpus this book was built from, e.g. 'Sefaria', 'DictaToOtzaria'.
+ *
+ * undefined when the book or its source row is missing. Callers send the NAME and
+ * never the id: `source.id` differs between the seforim databases in use here (id 3
+ * is pninimToOtzaria in one and DictaToOtzaria in the other), so an id would identify
+ * a different corpus depending on which library the reader happens to have open.
+ */
+export async function getBookSourceName(bookId: number): Promise<string | undefined> {
+  if (bookId <= 0) return undefined
+  if (!isDbHosted())
+    return (await serviceCall<{ rows: { sourceName: string }[] }>('getBookSourceName', { bookId })).rows[0]?.sourceName
+  const rows = await query<{ sourceName: string }>(SQL.GET_BOOK_SOURCE_NAME(), [bookId])
+  return rows[0]?.sourceName
+}
+
+// Whether the open DB carries schema_meta. null = not probed yet — same lifecycle as
+// _hasBookVersions, so a DB swapped under us re-probes rather than staying wrong.
+let _hasSchemaMeta: boolean | null = null
+
+/**
+ * The library build identifier — `schema_meta.db_version`. undefined when the database
+ * does not carry the table or the row.
+ *
+ * STAMPING ONLY. Schema detection goes by table structure and must never consult this;
+ * see the WHY NOT READ schema_meta note in SeforimDbSchema.cs. The two databases in use
+ * here report '1' and '31', which is precisely why a report needs to say which it was.
+ */
+export async function getLibraryDbVersion(): Promise<string | undefined> {
+  if (_hasSchemaMeta === false) return undefined
+  if (!isDbHosted())
+    return (await serviceCall<{ rows: { value: string }[] }>('getLibraryDbVersion')).rows[0]?.value
+  try {
+    const rows = await query<{ value: string }>(SQL.GET_LIBRARY_DB_VERSION())
+    _hasSchemaMeta = true
+    return rows[0]?.value
+  } catch {
+    // No schema_meta table (or the DB is not ready) — leave unknown so a later call
+    // re-probes rather than permanently writing the library off as unidentifiable.
+    _hasSchemaMeta = null
+    return undefined
+  }
+}
+
+/**
+ * One line's canonical reference and stored text, for checking that what the reader
+ * saw still matches the library before a proposed correction is allowed to travel.
+ */
+export async function getLineRefAndContent(
+  bookId: number, lineIndex: number,
+): Promise<{ id: number; lineIndex: number; heRef: string | null; content: string } | undefined> {
+  if (bookId <= 0 || lineIndex < 0) return undefined
+  type Row = { id: number; lineIndex: number; heRef: string | null; content: string }
+  if (!isDbHosted())
+    return (await serviceCall<{ rows: Row[] }>('getLineRefAndContent', { bookId, lineIndex })).rows[0]
+  const rows = await query<Row>(SQL.GET_LINE_REF_AND_CONTENT(hasSplitLineContent), [bookId, lineIndex])
+  return rows[0]
+}

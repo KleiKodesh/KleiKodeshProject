@@ -494,6 +494,29 @@ internal static class SeforimSql
         + " FROM line l" + lineContent.ContentJoin("l")
         + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
 
+    // ── Error-report provenance ──────────────────────────────────────────────
+
+    /// <summary>
+    /// The book's upstream corpus. Callers send the NAME, never the id: source.id is
+    /// not stable across library builds — the same id names a different corpus in the
+    /// two seforim databases in use.
+    /// </summary>
+    public static string GetBookSourceName =>
+        "SELECT s.name AS sourceName FROM book b JOIN source s ON s.id = b.sourceId WHERE b.id = @bookId";
+
+    /// <summary>
+    /// The library build, for STAMPING a report only. Schema detection goes by table
+    /// structure and never by this number — see SeforimDbSchema.
+    /// </summary>
+    public static string GetLibraryDbVersion =>
+        "SELECT value FROM schema_meta WHERE key = 'db_version' LIMIT 1";
+
+    /// <summary>One line's canonical reference and stored text, for verifying a report.</summary>
+    public static string GetLineRefAndContent(SeforimLineContent lineContent) =>
+        "SELECT l.id, l.lineIndex, l.heRef, " + lineContent.ContentColumn("l")
+        + " FROM line l" + lineContent.ContentJoin("l")
+        + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
+
     /// <summary>Builds "@p0, @p1, …, @pN-1" for a dynamic IN clause.</summary>
     internal static string InPlaceholders(string prefix, int count)
     {

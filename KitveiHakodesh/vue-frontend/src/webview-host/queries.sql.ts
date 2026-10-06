@@ -783,4 +783,47 @@ export const SQL = {
     WHERE l.bookId = ? AND l.lineIndex = ?
   `,
 
+  // ── Error-report provenance ─────────────────────────────────────────────────
+  //
+  // What a "דיווח על טעות" stamps itself with, so a collector can tell WHICH copy of
+  // WHICH library the reported text came from. All three read tables that exist on
+  // every shape of the database — see .kiro/steering/database-schema.md.
+
+  /**
+   * The book's provenance: which upstream corpus it was built from.
+   *
+   * `source.name` is the value a collector routes on (Sefaria, DictaToOtzaria,
+   * Ben-YehudaToOtzaria, …). Read it BY NAME and never cache the id — `source.id` is
+   * not stable across library builds: id 3 is pninimToOtzaria in one of the two
+   * seforim databases in use here and DictaToOtzaria in the other.
+   * Bind: bookId
+   */
+  GET_BOOK_SOURCE_NAME: () => `
+    SELECT s.name AS sourceName
+    FROM book b JOIN source s ON s.id = b.sourceId
+    WHERE b.id = ?
+  `,
+
+  /**
+   * The library build the text came from — `schema_meta.db_version`.
+   *
+   * This is for STAMPING a report only. Schema DETECTION goes by table structure and
+   * never by this number; see the WHY NOT READ schema_meta note in SeforimDbSchema.cs.
+   * Guard with TABLE_EXISTS('schema_meta'): not every database carries it.
+   */
+  GET_LIBRARY_DB_VERSION: () => `
+    SELECT value FROM schema_meta WHERE key = 'db_version' LIMIT 1
+  `,
+
+  /**
+   * One line's canonical reference and text, for verifying that what the reader saw
+   * still matches the database before a correction is allowed to travel.
+   * Bind: bookId, lineIndex
+   */
+  GET_LINE_REF_AND_CONTENT: (isSplit: boolean) => `
+    SELECT l.id, l.lineIndex, l.heRef, ${lineContentColumn(isSplit, 'l')}
+    FROM line l${lineContentJoin(isSplit, 'l')}
+    WHERE l.bookId = ? AND l.lineIndex = ?
+  `,
+
 } as const

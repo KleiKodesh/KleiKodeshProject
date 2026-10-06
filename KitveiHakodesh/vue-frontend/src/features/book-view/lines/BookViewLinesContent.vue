@@ -24,6 +24,8 @@ import {
 } from './useBookViewLineRenderer'
 import { useBookViewLineCopyMenu } from './useBookViewLineCopyMenu'
 import { useBookViewLineLink } from './useBookViewLineLink'
+import BookViewErrorReportDialog from '../errorReport/BookViewErrorReportDialog.vue'
+import { useBookViewErrorReport } from '../errorReport/useBookViewErrorReport'
 import { useBookViewAnnotations } from './useBookViewAnnotations'
 import { useBookViewLinesScroll } from './useBookViewLinesScroll'
 import { useBookViewLinesNavigation } from './useBookViewLinesNavigation'
@@ -211,7 +213,19 @@ watch(
 )
 
 const contextMenuRef = ref<InstanceType<typeof ContextMenu> | null>(null)
-const { copyLineLink } = useBookViewLineLink({ scrollerEl, lines: () => props.lines, bookId })
+const { copyLineLink, pressedLineIndex } = useBookViewLineLink({ scrollerEl, lines: () => props.lines, bookId })
+const {
+  target: errorReportTarget,
+  openErrorReport,
+  closeErrorReport,
+  awaitSourceResolution: awaitErrorReportSource,
+} = useBookViewErrorReport({
+  lines: () => props.lines,
+  pressedLineIndex,
+  scrollerEl,
+  bookId,
+  activeVersionId: () => props.activeVersionId ?? null,
+})
 const booksDataStore = useBooksDataStore()
 // What copy-with-notes needs beyond the rendered markup: the notes and citations of
 // lines that were never scrolled into view, plus the target lines those citations
@@ -222,7 +236,7 @@ const { prepareForLines, prepareForRenderedHtml, resolveWordLinkTarget } = useCo
   getWordLinkAnchorsForLine,
   getBookTitle: (targetBookId) => booksDataStore.allBooksMap.get(targetBookId)?.title ?? '',
 })
-const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, onSearchInRepository } = useBookViewLineCopyMenu({
+const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, onSearchInRepository, buildSource } = useBookViewLineCopyMenu({
   scrollerEl,
   lines: () => props.lines,
   isSelectAll,
@@ -240,6 +254,7 @@ const { items: contextMenuItems, buildFormattedHtml, onCopy, onPasteIntoWord, on
   onClearHighlight,
   onAddNote,
   onCopyLineLink: copyLineLink,
+  onReportError: openErrorReport,
   prepareForLines,
   prepareForRenderedHtml,
   resolveWordLinkTarget,
@@ -365,6 +380,19 @@ defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, re
 <template>
   <div class="lines-content">
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <BookViewErrorReportDialog
+      v-if="errorReportTarget"
+      :selected-text="errorReportTarget.selectedText"
+      :original-line="errorReportTarget.originalLine"
+      :selection-offset="errorReportTarget.selectionOffset"
+      :book-title="bookTitle"
+      :current-ref="buildSource(errorReportTarget.lineIndex >= 0 ? errorReportTarget.lineIndex : null)"
+      :line-index="errorReportTarget.lineIndex"
+      :book-id="bookId"
+      :source="errorReportTarget.source"
+      :await-source="awaitErrorReportSource"
+      @close="closeErrorReport"
+    />
     <BookViewNoteBubble
       v-if="activeBubbleNote && activeBubbleAnchorRect"
       :note="activeBubbleNote"

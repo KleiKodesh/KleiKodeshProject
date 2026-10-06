@@ -393,6 +393,32 @@ public sealed class RawLineRow { public int Id { get; set; } public int LineInde
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class RawLinesResult { public List<RawLineRow> Rows { get; set; } = new(); }
 
+// ── Error-report provenance ───────────────────────────────────────────────────
+// What a "report a mistake" stamps itself with: which corpus and which library build
+// the reported text came from, and the line's canonical reference.
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookSourceNameRow { public string SourceName { get; set; } = ""; }
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookSourceNameResult { public List<BookSourceNameRow> Rows { get; set; } = new(); }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class SchemaMetaValueRow { public string Value { get; set; } = ""; }
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class SchemaMetaValueResult { public List<SchemaMetaValueRow> Rows { get; set; } = new(); }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineRefRow
+{
+    public int Id { get; set; }
+    public int LineIndex { get; set; }
+    /// <summary>Nullable in the database — structural lines carry no reference.</summary>
+    public string? HeRef { get; set; }
+    public string Content { get; set; } = "";
+}
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class LineRefResult { public List<LineRefRow> Rows { get; set; } = new(); }
+
 // ── Full-text search (FtsLib) ──────────────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
