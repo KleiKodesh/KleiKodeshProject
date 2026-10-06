@@ -119,6 +119,13 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Line content in SeforimLibrary schema 6+ is zstd-compressed with a dictionary that
+         ships inside the database. ZstdSharp.Port is a pure-C# port: no native libzstd.dll
+         to package per architecture, nothing for the per-user installer to place, and
+         nothing for ILC to choke on. Decode of a ~1 KB line is microseconds either way;
+         the one path where a native binding could win is a full FTS index rebuild, which
+         is measurable if it ever matters. netstandard2.0, so both legs resolve it. -->
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.6" />
     <!-- HebrewBooksCatalogUpdater parses upstream book pages. VERIFIED AOT-CLEAN: a native-AOT
          console app calling LoadHtml + GetElementbyId + SelectNodes published with no ILC
          warnings and ran correctly. The reflection in this package lives in HtmlWeb and the
