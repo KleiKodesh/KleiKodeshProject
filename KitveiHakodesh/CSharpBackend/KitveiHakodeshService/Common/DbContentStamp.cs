@@ -139,16 +139,31 @@ public static class DbContentStamp
             // Microsoft.Data.Sqlite accepts both — so @ is the one form both legs parse.
             cmd.CommandText = "SELECT content FROM line WHERE id = @id";
             cmd.AddWithValue("@id", lineMax);
-            // Length of the TEXT, not of whichever CLR type the provider chose to box it as:
-            // a BLOB-affinity row comes back as byte[] from System.Data.SQLite while
-            // Microsoft.Data.Sqlite may still surface a string, and an `is string` test would
-            // silently yield -1 on one leg only — two permanently-disagreeing stamps, no error.
             object? lastLine = cmd.ExecuteScalar();
+            // A BLOB here is schema 6's zstd-compressed content, which this build cannot read.
+            // Throwing beats stringifying it: Convert.ToString on a byte[] yields the type
+            // name, so every compressed DB stamped identically and the index either never
+            // rebuilt or rebuilt on every launch, with nothing logged either way. Only
+            // System.Data.SQLite surfaces the byte[] — Microsoft.Data.Sqlite may still hand
+            // back a string — but the test is kept on both legs so neither can stamp a
+            // compressed DB as if it were readable. Rethrown past the catch below so it
+            // cannot decay into the file-length fallback.
+            if (lastLine is byte[]) throw new NotSupportedException(
+                $"line.content is a BLOB in '{dbPath}', which means this is a schema 6 "
+                + "seforim.db storing line content zstd-COMPRESSED. Compressed content is not "
+                + "supported yet, so no content stamp can be computed for this database.");
             int tail = lastLine is null || lastLine is DBNull
                 ? -1
                 : (Convert.ToString(lastLine, CultureInfo.InvariantCulture) ?? "").Length;
 
             return $"schema={schemaVer}|line={lineMin}:{lineMax}|book={bookMin}:{bookMax}|tail={tail}";
+        }
+        // Deliberately NOT caught: the catch below is for a DB that cannot be read (locked,
+        // corrupt, unexpected schema), where falling back is correct. Compressed content is a
+        // different thing — a DB we can read and must not guess about.
+        catch (NotSupportedException)
+        {
+            throw;
         }
         catch
         {

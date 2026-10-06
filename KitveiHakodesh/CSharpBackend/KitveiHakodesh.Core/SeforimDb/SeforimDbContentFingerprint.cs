@@ -117,12 +117,29 @@ namespace KitveiHakodesh.Core.SeforimDb
                 command.CommandText = "SELECT content FROM line WHERE id = $id";
                 command.Parameters.AddWithValue("$id", lines.Max);
                 object? lastLine = command.ExecuteScalar();
+                // A BLOB here is schema 6's zstd-compressed content, which this build cannot
+                // read. Throwing beats the old `: -1` fallback: that silently fingerprinted
+                // every compressed database identically, so the index either never rebuilt or
+                // rebuilt on every launch, with nothing logged either way. Rethrown past the
+                // catch below so it cannot decay into the file-length fallback.
+                if (lastLine is byte[]) throw new NotSupportedException(
+                    "line.content is a BLOB in '" + databasePath + "', which means this is a "
+                    + "schema 6 seforim.db storing line content zstd-COMPRESSED. Compressed "
+                    + "content is not supported yet, so no content fingerprint can be computed "
+                    + "for this database.");
                 int tail = lastLine is string text ? text.Length : -1;
 
                 return "schema=" + schemaVersion
                      + "|line=" + lines.Min + ":" + lines.Max
                      + "|book=" + books.Min + ":" + books.Max
                      + "|tail=" + tail;
+            }
+            // Deliberately NOT caught: this catch exists for a database that cannot be read
+            // (locked, corrupt, unexpected schema), where falling back is correct. Compressed
+            // content is a different thing — a database we can read and must not guess about.
+            catch (NotSupportedException)
+            {
+                throw;
             }
             catch (Exception)
             {
