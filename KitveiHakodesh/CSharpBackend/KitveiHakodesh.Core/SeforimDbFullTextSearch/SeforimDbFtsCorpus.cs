@@ -41,9 +41,20 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         private readonly SqliteConnection _connection;
 
+        /// <summary>
+        /// The database's shape, and the decoder for its line text. Held for the life of this
+        /// corpus because it owns ONE connection used for the whole indexing scan: probing the
+        /// schema once and loading the zstd dictionary once is the point, over millions of rows.
+        /// Both are read-only after construction, matching this class's single-threaded use.
+        /// </summary>
+        private readonly SeforimDbSchema _schema;
+        private readonly SeforimDbLineContentCodec _codec;
+
         public SeforimDbFtsCorpus(string databasePath)
         {
             _connection = SqliteConnectionFactory.OpenCorpusRead(databasePath);
+            _schema = SeforimDbSchema.ForDatabase(_connection, databasePath);
+            _codec = SeforimDbLineContentCodec.Create(_connection);
 
             // Scan tuning on top of the standard corpus-read policy, per connection: an index
             // build reads every line of a multi-gigabyte file in one pass, which earns a bigger
@@ -74,30 +85,29 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public string? GetDocumentText(int id)
         {
             using var command = _connection.CreateCommand();
-            command.CommandText = SeforimDbSqlStrings.FtsGetLineContent;
+            command.CommandText = SeforimDbSqlStrings.FtsGetLineContent(_schema);
             command.Parameters.AddWithValue("@id", id);
-            object? result = command.ExecuteScalar();
-            return result == null || result is DBNull ? null : (string)result;
+            return _codec.Decode(command.ExecuteScalar());
         }
 
         public IEnumerable<(int Id, string Text)> ReadDocuments(int limit, CancellationToken ct = default)
         {
             using var command = _connection.CreateCommand();
-            command.CommandText = SeforimDbSqlStrings.FtsReadLines(limit > 0);
+            command.CommandText = SeforimDbSqlStrings.FtsReadLines(_schema, limit > 0);
             if (limit > 0) command.Parameters.AddWithValue("@lim", limit);
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                yield return (reader.GetInt32(0), reader.IsDBNull(1) ? "" : reader.GetString(1));
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
             }
         }
 
         public IEnumerable<(int Id, string Text)> ReadDocumentsAfter(int afterId, int limit = 0, CancellationToken ct = default)
         {
             using var command = _connection.CreateCommand();
-            command.CommandText = SeforimDbSqlStrings.FtsReadLinesAfter(limit > 0);
+            command.CommandText = SeforimDbSqlStrings.FtsReadLinesAfter(_schema, limit > 0);
             command.Parameters.AddWithValue("@after", afterId);
             if (limit > 0) command.Parameters.AddWithValue("@lim", limit);
 
@@ -105,7 +115,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             while (reader.Read())
             {
                 ct.ThrowIfCancellationRequested();
-                yield return (reader.GetInt32(0), reader.IsDBNull(1) ? "" : reader.GetString(1));
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
             }
         }
 
@@ -130,10 +140,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 foreach (var row in FetchChunk(command, parameterNames, chunk)) yield return row;
         }
 
-        private static IEnumerable<(int Id, string Text, string Title)> FetchChunk(
+        private IEnumerable<(int Id, string Text, string Title)> FetchChunk(
             SqliteCommand command, string[] parameterNames, List<int> ids)
         {
-            command.CommandText = SeforimDbSqlStrings.FtsFetchLinesWithTitles(ids.Count);
+            command.CommandText = SeforimDbSqlStrings.FtsFetchLinesWithTitles(_schema, ids.Count);
             for (int i = 0; i < ids.Count; i++)
                 command.Parameters[parameterNames[i]].Value = ids[i];
 
@@ -142,7 +152,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             {
                 yield return (
                     reader.GetInt32(0),
-                    reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    _codec.DecodeColumnOrEmpty(reader, 1),
                     reader.IsDBNull(2) ? "" : reader.GetString(2));
             }
         }
@@ -166,7 +176,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 for (int start = 0; start < ids.Count; start += NeighborChunkSize)
                 {
                     int count = Math.Min(NeighborChunkSize, ids.Count - start);
-                    command.CommandText = SeforimDbSqlStrings.FtsFetchNeighborLines(count);
+                    command.CommandText = SeforimDbSqlStrings.FtsFetchNeighborLines(_schema, count);
                     for (int i = 0; i < count; i++)
                         command.Parameters[parameterNames[i]].Value = ids[start + i];
 
@@ -175,7 +185,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     {
                         int matchedId = reader.GetInt32(0);
                         int delta = reader.GetInt32(1);
-                        string text = reader.IsDBNull(2) ? "" : reader.GetString(2);
+                        string text = _codec.DecodeColumnOrEmpty(reader, 2);
                         if (text.Length == 0) continue;
 
                         var side = delta < 0 ? previousParts : nextParts;
@@ -209,6 +219,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             return names;
         }
 
-        public void Dispose() => _connection.Dispose();
+        public void Dispose()
+        {
+            // The codec holds the database's zstd dictionary, which is megabytes - release it
+            // with the connection it belongs to rather than waiting for a collection.
+            _codec.Dispose();
+            _connection.Dispose();
+        }
     }
 }

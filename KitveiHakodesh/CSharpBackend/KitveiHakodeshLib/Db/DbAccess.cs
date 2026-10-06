@@ -1,3 +1,4 @@
+using FtsLib.SeforimDb;
 using Dapper;
 using System;
 using System.Collections.Generic;
@@ -66,6 +67,19 @@ namespace KitveiHakodeshLib.Db
             }
         }
 
+        /// <summary>
+        /// How this database stores line text, probed lazily on the first query that returns
+        /// rows. Null until then; see <see cref="DecodeLineContent"/>.
+        /// </summary>
+        private volatile SeforimLineContent _lineContent;
+
+        /// <summary>
+        /// Guards the one-time line-content probe. Deliberately NOT the pool's lock: probing
+        /// reads a PRAGMA and loads a multi-megabyte dictionary, and holding the pool lock for
+        /// that would serialise all eight connections behind the first query that returns rows.
+        /// </summary>
+        private readonly object _lineContentLock = new object();
+
         private SQLiteConnection _OpenConnection()
         {
             var conn = new SQLiteConnection(_connectionString);
@@ -78,6 +92,68 @@ namespace KitveiHakodeshLib.Db
             try { conn.Execute("PRAGMA mmap_size = 268435456"); } // 256 MB
             catch { /* non-fatal */ }
             return conn;
+        }
+
+        /// <summary>
+        /// Turns any compressed `content` value in a result set back into text.
+        ///
+        /// This is the one place in the app where rows are read with NO knowledge of their
+        /// columns: the SQL arrives from the frontend and Dapper hands back a bag of objects
+        /// that go straight out to the webview as JSON. On a SeforimLibrary schema-6 database
+        /// line content is a zstd frame, which would serialise as a base64 blob and reach
+        /// every consumer as garbage - with nothing failing to compile and no error logged.
+        ///
+        /// Only a column actually named `content` is touched, and only when its value is a
+        /// byte array, so a legacy database and every non-line query pass through untouched.
+        /// </summary>
+        private void DecodeLineContent(SQLiteConnection connection, List<IDictionary<string, object>> rows)
+        {
+            if (rows.Count == 0) return;
+
+            // Probe once per DbAccess, not per query: the file cannot change shape underneath
+            // an open pool.
+            if (_lineContent == null)
+            {
+                lock (_lineContentLock)
+                {
+                    if (_lineContent == null)
+                    {
+                        try
+                        {
+                            _lineContent = SeforimLineContent.ForConnection(connection);
+                        }
+                        catch
+                        {
+                            // A database whose dictionaries cannot be loaded is broken, but
+                            // this runs on the generic query path: letting the probe throw
+                            // would fail EVERY frontend query rather than the content reads
+                            // that actually need it. Leave the rows untouched - a compressed
+                            // value then reaches the webview as a blob, which is visible and
+                            // reportable, instead of the whole app going dark.
+                            return;
+                        }
+                    }
+                }
+            }
+
+            if (!_lineContent.IsCompressed) return;
+
+            foreach (var row in rows)
+            {
+                object value;
+                if (!row.TryGetValue("content", out value)) continue;
+                if (!(value is byte[])) continue;
+                try
+                {
+                    row["content"] = _lineContent.Decode(value);
+                }
+                catch
+                {
+                    // Not one of our frames after all - some other table's `content` column
+                    // holding an unrelated blob. Leave it exactly as it came back rather than
+                    // failing the whole query on a column we only guessed was ours.
+                }
+            }
         }
 
         public IEnumerable<IDictionary<string, object>> Query(string sql, object[] parameters)
@@ -98,9 +174,12 @@ namespace KitveiHakodeshLib.Db
             for (int i = 0; i < parameters.Length; i++)
                 dp.Add("@p" + i, parameters[i]);
 
-            return conn.Query(namedSql, dp)
-                       .Cast<IDictionary<string, object>>()
-                       .ToList();
+            var rows = conn.Query(namedSql, dp)
+                           .Cast<IDictionary<string, object>>()
+                           .ToList();
+
+            DecodeLineContent(conn, rows);
+            return rows;
         }
 
         public void Dispose()

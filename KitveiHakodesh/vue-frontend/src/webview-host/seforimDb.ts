@@ -37,6 +37,18 @@ export let categoryHasOrderIndex = false
  */
 export let declaredBaseColumn = 'isDeclaredBase'
 
+/**
+ * True when line text lives in the `line_content` sidecar and `line` itself has no
+ * `content` column - SeforimLibrary schema 6 and later.
+ *
+ * This decides the SHAPE of every query that reads line text, not merely how a value is
+ * read: on such a database `SELECT content FROM line` fails outright with "no such
+ * column". The queries in queries.sql.ts take this flag and join the sidecar instead.
+ *
+ * False by default, which is the older layout, and the probe below upgrades it.
+ */
+export let hasSplitLineContent = false
+
 let _schemaDetected = false
 let _schemaDetecting: Promise<void> | null = null
 
@@ -53,15 +65,22 @@ export function ensureCategorySchema(): Promise<void> {
   _schemaDetecting = Promise.all([
     query<{ name: string }>('PRAGMA table_info(category)', []),
     query<{ name: string }>('PRAGMA table_info(link)', []),
+    query<{ name: string }>('PRAGMA table_info(line)', []),
   ])
-    .then(([categoryCols, linkCols]) => {
+    .then(([categoryCols, linkCols, lineCols]) => {
       categoryHasOrderIndex = categoryCols.some((c) => c.name === 'orderIndex')
       if (linkCols.some((c) => c.name === 'baseProvenance')) declaredBaseColumn = 'baseProvenance'
+      // Both halves matter: a database part-way through a rebuild could have the sidecar
+      // while `line` still carries the old column, and then the old queries are the
+      // correct ones to run. `line` always exists, so an empty result means the probe
+      // failed rather than that the column is gone.
+      hasSplitLineContent = lineCols.length > 0 && !lineCols.some((c) => c.name === 'content')
       _schemaDetected = true
     })
     .catch(() => {
       // Schema detection failed — proceed with the safe default (no orderIndex)
       categoryHasOrderIndex = false
+      hasSplitLineContent = false
       _schemaDetected = true
     })
     .finally(() => {

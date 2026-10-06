@@ -423,6 +423,10 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
         Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
     {
+        // One probe and one dictionary load for the whole Tanach scan, rather than per book.
+        var schema = SeforimDbSchema.Probe(conn);
+        using var codec = SeforimDbLineContentCodec.Create(conn);
+
         int added = 0;
         foreach (var book in books)
         {
@@ -454,13 +458,13 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
             int chapterLevel = 0;
 
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBookLines;
+            cmd.CommandText = SeforimDbSqlStrings.CatalogIndexBookLines(schema);
             cmd.Parameters.AddWithValue("@b", book.Id);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
                 int lineIndex = reader.IsDBNull(0) ? -1 : reader.GetInt32(0);
-                string content = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                string content = codec.DecodeColumnOrEmpty(reader, 1);
 
                 // Advance to the TOC entry this line belongs to (reset the verse counter).
                 while (entryIdx + 1 < entries.Count && entries[entryIdx + 1].LineIndex <= lineIndex)

@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using FtsLib.SeforimDb;
 
 namespace KitveiHakodeshService.SeforimDb;
 
@@ -30,6 +31,15 @@ public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
         conn.Open();
         return conn;
     }
+
+    /// <summary>
+    /// Where this database keeps line text and how to decode it, probed per connection.
+    /// Schema 6 moved the text into a `line_content` sidecar and compresses it with a
+    /// dictionary from the database itself, so this decides the SQL as well as how a value
+    /// is read. Shared with FtsLib rather than reimplemented here.
+    /// </summary>
+    private static SeforimLineContent LineContentFor(SqliteConnection connection)
+        => SeforimLineContent.ForConnection(connection);
 
     /// <summary>True if <paramref name="table"/> has a column named <paramref name="column"/>.</summary>
     private static bool ColumnExists(SqliteConnection conn, string table, string column)

@@ -7,7 +7,7 @@
 // Migrate one capability at a time: add a function here (dev → service op,
 // hosted → query(SQL.X)) and point the composable at it instead of query(SQL.X).
 
-import { query, categoryHasOrderIndex, declaredBaseColumn } from './seforimDb'
+import { query, categoryHasOrderIndex, declaredBaseColumn, hasSplitLineContent } from './seforimDb'
 import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import { SQL } from './queries.sql'
@@ -48,8 +48,8 @@ export async function getLinesPaged(
 ): Promise<LineRow[]> {
   if (!isDbHosted())
     return (await serviceCall<{ rows: LineRow[] }>('getLinesPaged', { bookId, limit, offset, versionId })).rows
-  if (versionId > 0) return query<LineRow>(SQL.GET_VERSION_LINES_PAGED, [versionId, bookId, limit, offset])
-  return query<LineRow>(SQL.GET_LINES_PAGED, [bookId, limit, offset])
+  if (versionId > 0) return query<LineRow>(SQL.GET_VERSION_LINES_PAGED(hasSplitLineContent), [versionId, bookId, limit, offset])
+  return query<LineRow>(SQL.GET_LINES_PAGED(hasSplitLineContent), [bookId, limit, offset])
 }
 
 // ── Versions (book_version / version_line, later schemas only) ────────────────
@@ -245,7 +245,7 @@ export async function getWordLinkTargetsForBook(bookId: number): Promise<WordLin
 export async function getLineContents(lineIds: number[]): Promise<{ id: number; content: string }[]> {
   if (!isDbHosted())
     return (await serviceCall<{ rows: { id: number; content: string }[] }>('getLineContents', { lineIds })).rows
-  return query<{ id: number; content: string }>(SQL.GET_LINE_CONTENTS(lineIds.length), lineIds)
+  return query<{ id: number; content: string }>(SQL.GET_LINE_CONTENTS(hasSplitLineContent, lineIds.length), lineIds)
 }
 
 export async function getAllConnectionTypes(): Promise<{ id: number; name: string }[]> {
@@ -269,8 +269,8 @@ export async function getReverseLineData(lineIds: number[], typeIds: number[]): 
     return (await serviceCall<{ rows: ReverseLineRow[] }>('getReverseLineData', { lineIds, typeIds })).rows
   const isMulti = lineIds.length > 1
   const sql = isMulti
-    ? SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE(typeIds.length, lineIds.length, declaredBaseColumn)
-    : SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP(typeIds.length, declaredBaseColumn)
+    ? SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE(hasSplitLineContent, typeIds.length, lineIds.length, declaredBaseColumn)
+    : SQL.GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP(hasSplitLineContent, typeIds.length, declaredBaseColumn)
   const params = isMulti ? [...lineIds, ...typeIds] : [lineIds[0]!, ...typeIds]
   return query<ReverseLineRow>(sql, params)
 }
@@ -399,7 +399,7 @@ export async function getLinesWithContentPatternForBooks(
     return (await serviceCall<{ rows: { content: string; title: string; bookId: number; lineId: number; lineIndex: number }[] }>(
       'getLinesWithContentPatternForBooks', { bookIds, pattern })).rows
   return query<{ content: string; title: string; bookId: number; lineId: number; lineIndex: number }>(
-    SQL.GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS(bookIds.length), [...bookIds, pattern])
+    SQL.GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS(hasSplitLineContent, bookIds.length), [...bookIds, pattern])
 }
 
 export async function getLinesWithEitherContentPattern(
@@ -408,7 +408,7 @@ export async function getLinesWithEitherContentPattern(
   if (!isDbHosted())
     return (await serviceCall<{ rows: { id: number; lineIndex: number; content: string }[] }>(
       'getLinesWithEitherContentPattern', { bookId, p1, p2 })).rows
-  return query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINES_WITH_EITHER_CONTENT_PATTERN, [bookId, p1, p2])
+  return query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINES_WITH_EITHER_CONTENT_PATTERN(hasSplitLineContent), [bookId, p1, p2])
 }
 
 export async function getLineByBookAndLineIndex(
@@ -417,5 +417,5 @@ export async function getLineByBookAndLineIndex(
   if (!isDbHosted())
     return (await serviceCall<{ rows: { id: number; lineIndex: number; content: string }[] }>(
       'getLineByBookAndLineIndex', { bookId, lineIndex })).rows
-  return query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX, [bookId, lineIndex])
+  return query<{ id: number; lineIndex: number; content: string }>(SQL.GET_LINE_BY_BOOK_AND_LINE_INDEX(hasSplitLineContent), [bookId, lineIndex])
 }

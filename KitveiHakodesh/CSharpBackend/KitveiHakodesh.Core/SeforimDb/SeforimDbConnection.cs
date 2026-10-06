@@ -67,6 +67,30 @@ namespace KitveiHakodesh.Core.SeforimDb
             return SqliteConnectionFactory.OpenCorpusRead(_databasePath!);
         }
 
+        /// <summary>
+        /// The shape of the database behind an open connection: whether line text sits in the
+        /// `line_content` sidecar, whether it is compressed, whether alternate versions exist.
+        /// Probed once per database file and cached, so asking per query is free.
+        ///
+        /// Every query that reads line text needs this, because the SQL itself differs - on a
+        /// schema-6 database `line` has no `content` column at all, so the old statements do
+        /// not merely return compressed bytes, they fail outright.
+        /// </summary>
+        private SeforimDbSchema SchemaOf(SqliteConnection connection)
+            => SeforimDbSchema.ForDatabase(connection, _databasePath);
+
+        /// <summary>
+        /// A codec for decoding line content read over this connection.
+        ///
+        /// Built per connection rather than cached on the instance: it holds a zstd
+        /// decompressor with a reusable buffer and is NOT safe to share across threads, and
+        /// these query methods are called concurrently. A legacy database gets the shared
+        /// no-op codec, so the only real cost is on compressed databases, where it is loading
+        /// the dictionary once per connection.
+        /// </summary>
+        private static SeforimDbLineContentCodec CodecFor(SqliteConnection connection)
+            => SeforimDbLineContentCodec.Create(connection);
+
         /// <summary>True if <paramref name="table"/> has a column named <paramref name="column"/>.</summary>
         private static bool ColumnExists(SqliteConnection connection, string table, string column)
         {

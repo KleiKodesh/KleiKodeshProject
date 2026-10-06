@@ -121,8 +121,9 @@ namespace KitveiHakodesh.Core.SeforimDb
         {
             var list = new List<LineRow>();
             using var conn = Open();
+            using var codec = CodecFor(conn);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesPaged;
+            cmd.CommandText = SeforimDbSqlStrings.GetLinesPaged(SchemaOf(conn));
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@limit", limit);
             cmd.Parameters.AddWithValue("@offset", offset);
@@ -133,7 +134,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                 {
                     Id = r.GetInt32(0),
                     LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    Content = r.IsDBNull(2) ? "" : r.GetString(2),
+                    Content = codec.DecodeColumnOrEmpty(r, 2),
                 });
             }
             return list;
@@ -359,12 +360,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<LineContentRow>();
             if (lineIds is null || lineIds.Count == 0) return list;
             using var conn = Open();
+            using var codec = CodecFor(conn);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLineContents(lineIds.Count);
+            cmd.CommandText = SeforimDbSqlStrings.GetLineContents(SchemaOf(conn), lineIds.Count);
             BindList(cmd, "p", lineIds);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new LineContentRow { Id = r.GetInt32(0), Content = r.IsDBNull(1) ? "" : r.GetString(1) });
+                list.Add(new LineContentRow { Id = r.GetInt32(0), Content = codec.DecodeColumnOrEmpty(r, 1) });
             return list;
         }
 
@@ -400,8 +402,9 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<ReverseLineRow>();
             if (lineIds is null || lineIds.Count == 0 || typeIds is null || typeIds.Count == 0) return list;
             using var conn = Open();
+            using var codec = CodecFor(conn);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetReverseLineData(lineIds.Count, typeIds.Count);
+            cmd.CommandText = SeforimDbSqlStrings.GetReverseLineData(SchemaOf(conn), lineIds.Count, typeIds.Count);
             BindList(cmd, "t", lineIds);
             BindList(cmd, "c", typeIds);
             using var r = cmd.ExecuteReader();
@@ -412,7 +415,7 @@ namespace KitveiHakodesh.Core.SeforimDb
                     SourceBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
                     SourceLineId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
                     LineIndex = r.IsDBNull(2) ? 0 : r.GetInt32(2),
-                    Content = r.IsDBNull(3) ? "" : r.GetString(3),
+                    Content = codec.DecodeColumnOrEmpty(r, 3),
                 });
             }
             return list;
@@ -610,7 +613,8 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (bookIds is null || bookIds.Count == 0) return list;
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesWithContentPatternForBooks(bookIds.Count);
+            using var codec = CodecFor(conn);
+            cmd.CommandText = SeforimDbSqlStrings.GetLinesWithContentPatternForBooks(SchemaOf(conn), bookIds.Count);
             BindList(cmd, "b", bookIds);
             cmd.Parameters.AddWithValue("@pattern", pattern);
             using var r = cmd.ExecuteReader();
@@ -618,7 +622,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             {
                 list.Add(new BoldLineRow
                 {
-                    Content = r.IsDBNull(0) ? "" : r.GetString(0),
+                    Content = codec.DecodeColumnOrEmpty(r, 0),
                     Title = r.IsDBNull(1) ? "" : r.GetString(1),
                     BookId = r.IsDBNull(2) ? 0 : r.GetInt32(2),
                     LineId = r.IsDBNull(3) ? 0 : r.GetInt32(3),
@@ -633,13 +637,14 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<RawLineRow>();
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesWithEitherContentPattern;
+            using var codec = CodecFor(conn);
+            cmd.CommandText = SeforimDbSqlStrings.GetLinesWithEitherContentPattern(SchemaOf(conn));
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@p1", p1);
             cmd.Parameters.AddWithValue("@p2", p2);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = r.IsDBNull(2) ? "" : r.GetString(2) });
+                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = codec.DecodeColumnOrEmpty(r, 2) });
             return list;
         }
 
@@ -648,12 +653,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             var list = new List<RawLineRow>();
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLineByBookAndLineIndex;
+            using var codec = CodecFor(conn);
+            cmd.CommandText = SeforimDbSqlStrings.GetLineByBookAndLineIndex(SchemaOf(conn));
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@lineIndex", lineIndex);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = r.IsDBNull(2) ? "" : r.GetString(2) });
+                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = codec.DecodeColumnOrEmpty(r, 2) });
             return list;
         }
 

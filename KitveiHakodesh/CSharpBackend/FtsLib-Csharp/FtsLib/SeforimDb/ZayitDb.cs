@@ -11,6 +11,14 @@ namespace FtsLib.SeforimDb
     internal sealed class ZayitDb : IDisposable, IFtsCorpus
     {
         private readonly SqliteConnection _connection;
+
+        /// <summary>
+        /// Where this database keeps line text, and how to decode it. Probed once per
+        /// connection: schema 6 moved the text into `line_content` and compresses it with a
+        /// dictionary from the database itself, while Zayit and older Otzaria databases store
+        /// plain text in `line.content`. Null until the connection is open.
+        /// </summary>
+        private SeforimLineContent _lineContent;
         private readonly string _dbPath;
         private bool _disposed;
 
@@ -50,6 +58,8 @@ namespace FtsLib.SeforimDb
                     "PRAGMA mmap_size=268435456;"; // 256 MB memory-mapped I/O
                 cmd.ExecuteNonQuery();
             }
+
+            _lineContent = SeforimLineContent.ForConnection(_connection);
         }
 
         // ── Indexing helpers ──────────────────────────────────────────
@@ -80,10 +90,14 @@ namespace FtsLib.SeforimDb
             EnsureOpen();
             using (var cmd = _connection.CreateCommand())
             {
-                cmd.CommandText = "SELECT content FROM line WHERE id = @id";
+                cmd.CommandText = "SELECT " + _lineContent.ContentExpression("l")
+                                + " FROM line l" + _lineContent.ContentJoin("l")
+                                + " WHERE l.id = @id";
                 cmd.Parameters.AddWithValue("@id", id);
-                var result = cmd.ExecuteScalar();
-                return result == null || result == DBNull.Value ? null : (string)result;
+                // Decode rather than cast: on a schema-6 database this scalar is the zstd
+                // frame, and a direct (string) cast throws. Decode maps null/DBNull to null,
+                // which is the contract this method already had.
+                return _lineContent.Decode(cmd.ExecuteScalar());
             }
         }
 
@@ -94,15 +108,17 @@ namespace FtsLib.SeforimDb
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText = limit > 0
-                    ? "SELECT id, content FROM line ORDER BY id LIMIT @lim"
-                    : "SELECT id, content FROM line ORDER BY id";
+                    ? "SELECT l.id, " + _lineContent.ContentColumn("l")
+                      + " FROM line l" + _lineContent.ContentJoin("l") + " ORDER BY l.id LIMIT @lim"
+                    : "SELECT l.id, " + _lineContent.ContentColumn("l")
+                      + " FROM line l" + _lineContent.ContentJoin("l") + " ORDER BY l.id";
                 if (limit > 0) cmd.Parameters.AddWithValue("@lim", limit);
 
                 using (var r = cmd.ExecuteReader())
                     while (r.Read())
                     {
                         ct.ThrowIfCancellationRequested();
-                        yield return (r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1));
+                        yield return (r.GetInt32(0), _lineContent.Read(r, 1));
                     }
             }
         }
@@ -114,8 +130,12 @@ namespace FtsLib.SeforimDb
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText = limit > 0
-                    ? "SELECT id, content FROM line WHERE id > @after ORDER BY id LIMIT @lim"
-                    : "SELECT id, content FROM line WHERE id > @after ORDER BY id";
+                    ? "SELECT l.id, " + _lineContent.ContentColumn("l")
+                      + " FROM line l" + _lineContent.ContentJoin("l")
+                      + " WHERE l.id > @after ORDER BY l.id LIMIT @lim"
+                    : "SELECT l.id, " + _lineContent.ContentColumn("l")
+                      + " FROM line l" + _lineContent.ContentJoin("l")
+                      + " WHERE l.id > @after ORDER BY l.id";
                 cmd.Parameters.AddWithValue("@after", afterId);
                 if (limit > 0) cmd.Parameters.AddWithValue("@lim", limit);
 
@@ -123,7 +143,7 @@ namespace FtsLib.SeforimDb
                     while (r.Read())
                     {
                         ct.ThrowIfCancellationRequested();
-                        yield return (r.GetInt32(0), r.IsDBNull(1) ? string.Empty : r.GetString(1));
+                        yield return (r.GetInt32(0), _lineContent.Read(r, 1));
                     }
             }
         }
@@ -176,11 +196,15 @@ namespace FtsLib.SeforimDb
                         // m = the matched line; n = a neighbor in the same book within ±radius
                         // rows by lineIndex (excluding the matched line itself). Returns the
                         // matched id, the delta, and the neighbor content.
-                        "SELECT m.id, n.lineIndex - m.lineIndex AS delta, n.content" +
+                        "SELECT m.id, n.lineIndex - m.lineIndex AS delta, " + _lineContent.ContentColumn("n") +
+                        // The sidecar join goes AFTER this JOIN's own ON clause - between
+                        // `JOIN line n` and its ON it would be a syntax error, because the
+                        // ON would bind to the sidecar instead of to `n`.
                         " FROM line m JOIN line n" +
                         " ON n.bookId = m.bookId" +
                         " AND n.lineIndex BETWEEN m.lineIndex - @radius AND m.lineIndex + @radius" +
                         " AND n.lineIndex <> m.lineIndex" +
+                        _lineContent.ContentJoin("n") +
                         " WHERE m.id IN (");
                     for (int i = 0; i < count; i++)
                     {
@@ -196,7 +220,7 @@ namespace FtsLib.SeforimDb
                         {
                             int matchedId = r.GetInt32(0);
                             int delta     = r.GetInt32(1);
-                            string text   = r.IsDBNull(2) ? string.Empty : r.GetString(2);
+                            string text   = _lineContent.Read(r, 2);
                             if (string.IsNullOrEmpty(text)) continue;
 
                             var bucket = delta < 0 ? prevParts : nextParts;
@@ -245,8 +269,9 @@ namespace FtsLib.SeforimDb
                     int count = end - start;
 
                     var sb = new System.Text.StringBuilder(
-                        "SELECT l.id, l.content, b.title" +
-                        " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
+                        "SELECT l.id, " + _lineContent.ContentColumn("l") + ", b.title" +
+                        " FROM line l" + _lineContent.ContentJoin("l") +
+                        " LEFT JOIN book b ON b.id = l.bookId" +
                         " WHERE l.id IN (");
                     for (int i = 0; i < count; i++)
                     {
@@ -261,7 +286,7 @@ namespace FtsLib.SeforimDb
                         while (r.Read())
                             yield return (
                                 r.GetInt32(0),
-                                r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                                _lineContent.Read(r, 1),
                                 r.IsDBNull(2) ? string.Empty : r.GetString(2));
                 }
             }
@@ -310,14 +335,15 @@ namespace FtsLib.SeforimDb
             }
         }
 
-        private static IEnumerable<(int Id, string Content, string BookTitle)> FetchChunk(
+        private IEnumerable<(int Id, string Content, string BookTitle)> FetchChunk(
             SqliteCommand cmd,
             string[]      paramNames,
             List<int>     ids)
         {
             var sb = new System.Text.StringBuilder(
-                "SELECT l.id, l.content, b.title" +
-                " FROM line l LEFT JOIN book b ON b.id = l.bookId" +
+                "SELECT l.id, " + _lineContent.ContentColumn("l") + ", b.title" +
+                " FROM line l" + _lineContent.ContentJoin("l") +
+                " LEFT JOIN book b ON b.id = l.bookId" +
                 " WHERE l.id IN (");
             for (int i = 0; i < ids.Count; i++)
             {
@@ -332,7 +358,7 @@ namespace FtsLib.SeforimDb
                 while (r.Read())
                     yield return (
                         r.GetInt32(0),
-                        r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                        _lineContent.Read(r, 1),
                         r.IsDBNull(2) ? string.Empty : r.GetString(2));
         }
 
@@ -388,17 +414,28 @@ namespace FtsLib.SeforimDb
         public List<(long Id, string Content)> FindByPhrase(string phrase, int limit = 20)
         {
             EnsureOpen();
+            // LIKE cannot see inside a compressed frame: on a schema-6 database this
+            // predicate matches nothing at all, silently. Say so rather than return an empty
+            // list that reads as "no such phrase in the library".
+            if (_lineContent.IsCompressed)
+                throw new NotSupportedException(
+                    "This seforim database stores line content compressed, so it cannot be "
+                    + "searched with a SQL LIKE. Use the full-text index instead.");
+
             var results = new List<(long, string)>();
             using (var cmd = _connection.CreateCommand())
             {
                 string escaped = phrase.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
                 cmd.CommandText =
-                    "SELECT id, content FROM line WHERE content LIKE @p ESCAPE '\\' LIMIT @lim";
+                    "SELECT l.id, " + _lineContent.ContentColumn("l")
+                    + " FROM line l" + _lineContent.ContentJoin("l")
+                    + " WHERE " + _lineContent.ContentExpression("l")
+                    + " LIKE @p ESCAPE '\\' LIMIT @lim";
                 cmd.Parameters.AddWithValue("@p",   "%" + escaped + "%");
                 cmd.Parameters.AddWithValue("@lim", limit);
                 using (var r = cmd.ExecuteReader())
                     while (r.Read())
-                        results.Add((r.GetInt64(0), r.IsDBNull(1) ? string.Empty : r.GetString(1)));
+                        results.Add((r.GetInt64(0), _lineContent.Read(r, 1)));
             }
             return results;
         }
@@ -407,16 +444,24 @@ namespace FtsLib.SeforimDb
             string bookTitleFragment, string phrase, int limit = 20)
         {
             EnsureOpen();
+            // LIKE cannot see inside a compressed frame: on a schema-6 database this
+            // predicate matches nothing at all, silently. Say so rather than return an empty
+            // list that reads as "no such phrase in the library".
+            if (_lineContent.IsCompressed)
+                throw new NotSupportedException(
+                    "This seforim database stores line content compressed, so it cannot be "
+                    + "searched with a SQL LIKE. Use the full-text index instead.");
+
             var results = new List<(long, string, string, string)>();
             using (var cmd = _connection.CreateCommand())
             {
                 string escapedPhrase = phrase.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
                 string escapedBook   = bookTitleFragment.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
                 cmd.CommandText = @"
-                    SELECT l.id, b.title, l.heRef, l.content
-                    FROM line l JOIN book b ON b.id = l.bookId
+                    SELECT l.id, b.title, l.heRef, " + _lineContent.ContentColumn("l") + @"
+                    FROM line l" + _lineContent.ContentJoin("l") + @" JOIN book b ON b.id = l.bookId
                     WHERE b.title LIKE @book ESCAPE '\'
-                      AND l.content LIKE @phrase ESCAPE '\'
+                      AND " + _lineContent.ContentExpression("l") + @" LIKE @phrase ESCAPE '\'
                     LIMIT @lim";
                 cmd.Parameters.AddWithValue("@book",   "%" + escapedBook   + "%");
                 cmd.Parameters.AddWithValue("@phrase", "%" + escapedPhrase + "%");
@@ -427,7 +472,7 @@ namespace FtsLib.SeforimDb
                             r.GetInt64(0),
                             r.IsDBNull(1) ? string.Empty : r.GetString(1),
                             r.IsDBNull(2) ? string.Empty : r.GetString(2),
-                            r.IsDBNull(3) ? string.Empty : r.GetString(3)));
+                            _lineContent.Read(r, 3)));
             }
             return results;
         }
@@ -488,8 +533,8 @@ namespace FtsLib.SeforimDb
             using (var cmd = _connection.CreateCommand())
             {
                 cmd.CommandText = @"
-                    SELECT b.title, l.heRef, l.content
-                    FROM line l JOIN book b ON b.id = l.bookId
+                    SELECT b.title, l.heRef, " + _lineContent.ContentColumn("l") + @"
+                    FROM line l" + _lineContent.ContentJoin("l") + @" JOIN book b ON b.id = l.bookId
                     WHERE l.id = @id";
                 cmd.Parameters.AddWithValue("@id", id);
                 using (var r = cmd.ExecuteReader())
@@ -498,7 +543,7 @@ namespace FtsLib.SeforimDb
                     return (
                         r.IsDBNull(0) ? string.Empty : r.GetString(0),
                         r.IsDBNull(1) ? string.Empty : r.GetString(1),
-                        r.IsDBNull(2) ? string.Empty : r.GetString(2));
+                        _lineContent.Read(r, 2));
                 }
             }
         }

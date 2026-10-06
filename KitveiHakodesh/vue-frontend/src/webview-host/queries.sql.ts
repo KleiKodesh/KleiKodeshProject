@@ -3,6 +3,36 @@
  * Import from this file — never write inline SQL elsewhere.
  */
 
+/**
+ * Where line text comes from, which moved in SeforimLibrary schema 6.
+ *
+ * Before schema 6 the text is `line.content`. From schema 6 on `line` has NO content
+ * column at all and the text lives in `line_content`, keyed by the same id - so a query
+ * written for one layout does not merely return the wrong thing on the other, it fails
+ * with "no such column". Every statement below that reads line text is built from these
+ * two fragments and takes the flag from `seforimDb.hasSplitLineContent`.
+ *
+ * The alias is always `content` on both layouts, so the callers above are identical.
+ */
+
+/** The text expression for a line, aliased `content`. */
+export const lineContentColumn = (isSplit: boolean, lineAlias: string): string =>
+  isSplit ? `COALESCE(${lineAlias}_content.content, '') AS content` : `${lineAlias}.content`
+
+/** The same expression with no alias, for use inside a larger expression. */
+export const lineContentExpression = (isSplit: boolean, lineAlias: string): string =>
+  isSplit ? `COALESCE(${lineAlias}_content.content, '')` : `${lineAlias}.content`
+
+/**
+ * The join that brings the text into scope, or nothing when it is already a column of
+ * `line`. LEFT JOIN so a line with no sidecar row still comes back; the join is on the
+ * sidecar's INTEGER PRIMARY KEY, which SQLite resolves as a rowid lookup.
+ */
+export const lineContentJoin = (isSplit: boolean, lineAlias: string): string =>
+  isSplit
+    ? ` LEFT JOIN line_content ${lineAlias}_content ON ${lineAlias}_content.id = ${lineAlias}.id`
+    : ''
+
 export const SQL = {
   // ── Categories ──────────────────────────────────────────────────────────────
 
@@ -287,11 +317,11 @@ export const SQL = {
   // GET_ALL_LINES is intentionally omitted — use GET_LINES_PAGED for streaming load
 
   /** A page of lines for streaming load */
-  GET_LINES_PAGED: `
-    SELECT id, lineIndex, content
-    FROM line
-    WHERE bookId = ?
-    ORDER BY lineIndex
+  GET_LINES_PAGED: (isSplit: boolean) => `
+    SELECT l.id, l.lineIndex, ${lineContentColumn(isSplit, 'l')}
+    FROM line l${lineContentJoin(isSplit, 'l')}
+    WHERE l.bookId = ?
+    ORDER BY l.lineIndex
     LIMIT ? OFFSET ?
   `,
 
@@ -323,11 +353,27 @@ export const SQL = {
    * than falling back to line.content, which would interleave two versions in one page
    * and read as a single text. Partial versions are real: some cover 31 of 1584 lines.
    */
-  GET_VERSION_LINES_PAGED: `
+  /*
+   * THREE cases, and COALESCE cannot tell the last two apart:
+   *
+   *   no version_line row       the version does not cover this line  -> empty
+   *   row with NULL content     schema 6 only: the version's text is IDENTICAL to the
+   *                             base line, stored once instead of twice -> base text
+   *   row with content          the version's own text
+   *
+   * Before schema 6 the column was NOT NULL, so NULL only ever meant "no row" and
+   * COALESCE(vl.content, '') was right. In schema 6 it is nullable and 744 of 1542
+   * versions are entirely NULL, so that expression would render each of them as a
+   * completely blank book. `vl.lineId IS NULL` separates a missing row from a present
+   * one, which is why the fallback is spelled out rather than coalesced.
+   */
+  GET_VERSION_LINES_PAGED: (isSplit: boolean) => `
     SELECT l.id, l.lineIndex,
-           CASE WHEN l.heRef IS NULL THEN l.content
-                ELSE COALESCE(vl.content, '') END AS content
-    FROM line l
+           CASE WHEN l.heRef IS NULL   THEN ${lineContentExpression(isSplit, 'l')}
+                WHEN vl.lineId IS NULL  THEN ''
+                WHEN vl.content IS NULL THEN ${lineContentExpression(isSplit, 'l')}
+                ELSE vl.content END AS content
+    FROM line l${lineContentJoin(isSplit, 'l')}
     LEFT JOIN version_line vl ON vl.versionId = ? AND vl.lineId = l.id
     WHERE l.bookId = ?
     ORDER BY l.lineIndex
@@ -337,20 +383,20 @@ export const SQL = {
   // ── Links ────────────────────────────────────────────────────────────────────
 
   /** Combined links and lines data for commentary loader (single query) */
-  GET_COMMENTARY_DATA_FOR_SOURCE_LINE: `
+  GET_COMMENTARY_DATA_FOR_SOURCE_LINE: (isSplit: boolean) => `
     SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
-           ln.lineIndex, ln.content
+           ln.lineIndex, ${lineContentColumn(isSplit, 'ln')}
     FROM link l
-    JOIN line ln ON ln.id = l.targetLineId
+    JOIN line ln ON ln.id = l.targetLineId${lineContentJoin(isSplit, 'ln')}
     WHERE l.sourceLineId = ?
   `,
 
   /** Combined links and lines data for commentary loader (range) */
-  GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE: (count: number) => `
+  GET_COMMENTARY_DATA_FOR_SOURCE_LINE_RANGE: (isSplit: boolean, count: number) => `
     SELECT l.targetBookId, l.targetLineId, l.connectionTypeId,
-           ln.lineIndex, ln.content
+           ln.lineIndex, ${lineContentColumn(isSplit, 'ln')}
     FROM link l
-    JOIN line ln ON ln.id = l.targetLineId
+    JOIN line ln ON ln.id = l.targetLineId${lineContentJoin(isSplit, 'ln')}
     WHERE l.sourceLineId IN (${Array(count).fill('?').join(',')})
   `,
 
@@ -440,8 +486,10 @@ export const SQL = {
   `,
 
   /** Content backfill for a batch of line ids (commentary lazy-content second phase). */
-  GET_LINE_CONTENTS: (count: number) => `
-    SELECT id, content FROM line WHERE id IN (${Array(count).fill('?').join(',')})
+  GET_LINE_CONTENTS: (isSplit: boolean, count: number) => `
+    SELECT l.id, ${lineContentColumn(isSplit, 'l')}
+    FROM line l${lineContentJoin(isSplit, 'l')}
+    WHERE l.id IN (${Array(count).fill('?').join(',')})
   `,
 
   /**
@@ -451,10 +499,10 @@ export const SQL = {
    * Returns sourceBookId, sourceLineId, lineIndex and content of the source line.
    * The connectionTypeId placeholders must cover all DB names that canonicalize to COMMENTARY.
    */
-  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP: (commentaryTypeCount: number, declaredCol: string) => `
-    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP: (isSplit: boolean, commentaryTypeCount: number, declaredCol: string) => `
+    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ${lineContentColumn(isSplit, 'ln')}
     FROM link l
-    JOIN line ln ON ln.id = l.sourceLineId
+    JOIN line ln ON ln.id = l.sourceLineId${lineContentJoin(isSplit, 'ln')}
     WHERE l.targetLineId = ?
       AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
       AND l.sourceBookId != l.targetBookId
@@ -482,10 +530,10 @@ export const SQL = {
    * Reverse source lookup (range): same as above but for a set of target line IDs.
    * Bind order: targetLineId1, targetLineId2, ..., commentaryTypeId1, commentaryTypeId2, ...
    */
-  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE: (commentaryTypeCount: number, targetLineCount: number, declaredCol: string) => `
-    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+  GET_SOURCE_DATA_BY_REVERSE_COMMENTARY_LOOKUP_RANGE: (isSplit: boolean, commentaryTypeCount: number, targetLineCount: number, declaredCol: string) => `
+    SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ${lineContentColumn(isSplit, 'ln')}
     FROM link l
-    JOIN line ln ON ln.id = l.sourceLineId
+    JOIN line ln ON ln.id = l.sourceLineId${lineContentJoin(isSplit, 'ln')}
     WHERE l.targetLineId IN (${Array(targetLineCount).fill('?').join(',')})
       AND l.connectionTypeId IN (${Array(commentaryTypeCount).fill('?').join(',')})
       AND l.sourceBookId != l.targetBookId
@@ -701,11 +749,11 @@ export const SQL = {
    * מצודת ציון and מלבי"ם באור המילות.
    * Bind: bookId1, bookId2, ..., contentPattern (e.g. '<b>TERM</b>%')
    */
-  GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS: (bookCount: number) => `
-    SELECT l.content, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
-    FROM line l JOIN book b ON b.id = l.bookId
+  GET_LINES_WITH_CONTENT_PATTERN_FOR_BOOKS: (isSplit: boolean, bookCount: number) => `
+    SELECT ${lineContentColumn(isSplit, 'l')}, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
+    FROM line l JOIN book b ON b.id = l.bookId${lineContentJoin(isSplit, 'l')}
     WHERE l.bookId IN (${Array(bookCount).fill('?').join(', ')})
-      AND l.content LIKE ?
+      AND ${lineContentExpression(isSplit, 'l')} LIKE ?
     LIMIT 50
   `,
 
@@ -715,9 +763,11 @@ export const SQL = {
    * מחברת מנחם and ספר הערוך (with/without trailing space before the closing tag).
    * Bind: bookId, pattern1, pattern2
    */
-  GET_LINES_WITH_EITHER_CONTENT_PATTERN: `
-    SELECT id, lineIndex, content FROM line
-    WHERE bookId = ? AND (content LIKE ? OR content LIKE ?)
+  GET_LINES_WITH_EITHER_CONTENT_PATTERN: (isSplit: boolean) => `
+    SELECT l.id, l.lineIndex, ${lineContentColumn(isSplit, 'l')}
+    FROM line l${lineContentJoin(isSplit, 'l')}
+    WHERE l.bookId = ? AND (${lineContentExpression(isSplit, 'l')} LIKE ?
+                         OR ${lineContentExpression(isSplit, 'l')} LIKE ?)
     ORDER BY lineIndex LIMIT 20
   `,
 
@@ -727,8 +777,10 @@ export const SQL = {
    * follows a מחברת מנחם headword line.
    * Bind: bookId, lineIndex
    */
-  GET_LINE_BY_BOOK_AND_LINE_INDEX: `
-    SELECT id, lineIndex, content FROM line WHERE bookId = ? AND lineIndex = ?
+  GET_LINE_BY_BOOK_AND_LINE_INDEX: (isSplit: boolean) => `
+    SELECT l.id, l.lineIndex, ${lineContentColumn(isSplit, 'l')}
+    FROM line l${lineContentJoin(isSplit, 'l')}
+    WHERE l.bookId = ? AND l.lineIndex = ?
   `,
 
 } as const

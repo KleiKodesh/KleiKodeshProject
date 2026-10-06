@@ -20,6 +20,10 @@
   <ItemGroup>
     <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict). -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Seforim databases from SeforimLibrary schema 6 on store line content zstd-compressed
+         with a dictionary shipped inside the database. Pure-C# port: nothing native to
+         package, and it resolves on both this leg and the net48 twin. -->
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.6" />
   </ItemGroup>
 
   <!-- The related-forms expansion artifact (research/word-association, FINDINGS

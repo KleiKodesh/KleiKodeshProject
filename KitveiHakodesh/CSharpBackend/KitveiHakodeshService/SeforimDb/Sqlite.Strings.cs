@@ -1,3 +1,4 @@
+using FtsLib.SeforimDb;
 namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
@@ -38,11 +39,11 @@ internal static class SeforimSql
     // ── Lines ─────────────────────────────────────────────────────────────────
 
     /// <summary>A page of lines for streaming load.</summary>
-    public const string GetLinesPaged = @"
-        SELECT id, lineIndex, content
-        FROM line
-        WHERE bookId = @bookId
-        ORDER BY lineIndex
+    public static string GetLinesPaged(SeforimLineContent lineContent) => @"
+        SELECT l.id, l.lineIndex, " + lineContent.ContentColumn("l") + @"
+        FROM line l" + lineContent.ContentJoin("l") + @"
+        WHERE l.bookId = @bookId
+        ORDER BY l.lineIndex
         LIMIT @limit OFFSET @offset";
 
     /// <summary>
@@ -58,11 +59,27 @@ internal static class SeforimSql
     /// which would silently interleave two different versions in one page and read as
     /// a single text. Partial versions are real here — some cover 31 of 1584 lines.
     /// </summary>
-    public const string GetVersionLinesPaged = @"
+    /// <summary>
+    /// THREE cases, not two, and COALESCE cannot tell the last two apart:
+    ///
+    ///   no version_line row      the version does not cover this line  -> empty
+    ///   row with NULL content    schema 6 only: the version's text is IDENTICAL to the
+    ///                            base line, stored once rather than twice -> base text
+    ///   row with content         the version's own text
+    ///
+    /// Before schema 6 the column was NOT NULL, so NULL only ever meant "no row" and
+    /// COALESCE(vl.content, '') was right. In schema 6 it is nullable and 744 of 1542
+    /// versions are entirely NULL, so that same expression would render each of them as a
+    /// completely blank book. `vl.lineId IS NULL` is what distinguishes a missing row from
+    /// a present one, which is why the fallback is spelled out rather than coalesced.
+    /// </summary>
+    public static string GetVersionLinesPaged(SeforimLineContent lineContent) => @"
         SELECT l.id, l.lineIndex,
-               CASE WHEN l.heRef IS NULL THEN l.content
-                    ELSE COALESCE(vl.content, '') END AS content
-        FROM line l
+               CASE WHEN l.heRef IS NULL  THEN " + lineContent.ContentExpression("l") + @"
+                    WHEN vl.lineId IS NULL THEN ''
+                    WHEN vl.content IS NULL THEN " + lineContent.ContentExpression("l") + @"
+                    ELSE vl.content END AS content
+        FROM line l" + lineContent.ContentJoin("l") + @"
         LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
         WHERE l.bookId = @bookId
         ORDER BY l.lineIndex
@@ -179,8 +196,10 @@ internal static class SeforimSql
         WHERE l.sourceLineId IN ({InPlaceholders("p", count)})";
 
     /// <summary>Content backfill for a batch of line ids.</summary>
-    public static string GetLineContents(int count) =>
-        $"SELECT id, content FROM line WHERE id IN ({InPlaceholders("p", count)})";
+    public static string GetLineContents(SeforimLineContent lineContent, int count) =>
+        "SELECT l.id, " + lineContent.ContentColumn("l")
+        + " FROM line l" + lineContent.ContentJoin("l")
+        + $" WHERE l.id IN ({InPlaceholders("p", count)})";
 
     /// <summary>Word-level link anchors (link_anchor, SeforimLibrary schema v2+) for a batch of
     /// source lines. side 0 = the anchor sits in the source line's text. Offsets are visible-char
@@ -234,10 +253,10 @@ internal static class SeforimSql
 
     /// <summary>Reverse lookup: source/targum lines that link TO the given target lines via the
     /// given connection types. A single-element IN handles both the single-line and range cases.</summary>
-    public static string GetReverseLineData(int lineCount, int typeCount, string declaredCol) => $@"
-        SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, ln.content
+    public static string GetReverseLineData(SeforimLineContent lineContent, int lineCount, int typeCount, string declaredCol) => $@"
+        SELECT l.sourceBookId, l.sourceLineId, ln.lineIndex, {lineContent.ContentColumn("ln")}
         FROM link l
-        JOIN line ln ON ln.id = l.sourceLineId
+        JOIN line ln ON ln.id = l.sourceLineId{lineContent.ContentJoin("ln")}
         WHERE l.targetLineId IN ({InPlaceholders("t", lineCount)})
           AND l.connectionTypeId IN ({InPlaceholders("c", typeCount)})
 {DeclaredOrSameCorpus(declaredCol)}";
@@ -453,22 +472,27 @@ internal static class SeforimSql
     public const string GetBookIdByExactTitle = "SELECT id FROM book WHERE title = @title";
 
     /// <summary>Bold-tagged headword lines for a set of books matching a content LIKE pattern.</summary>
-    public static string GetLinesWithContentPatternForBooks(int bookCount) => $@"
-        SELECT l.content, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
-        FROM line l JOIN book b ON b.id = l.bookId
+    public static string GetLinesWithContentPatternForBooks(
+        SeforimLineContent lineContent, int bookCount) => $@"
+        SELECT {lineContent.ContentColumn("l")}, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
+        FROM line l{lineContent.ContentJoin("l")} JOIN book b ON b.id = l.bookId
         WHERE l.bookId IN ({InPlaceholders("b", bookCount)})
-          AND l.content LIKE @pattern
+          AND {lineContent.ContentExpression("l")} LIKE @pattern
         LIMIT 50";
 
     /// <summary>Lines from one book matching either of two content LIKE patterns.</summary>
-    public const string GetLinesWithEitherContentPattern = @"
-        SELECT id, lineIndex, content FROM line
-        WHERE bookId = @bookId AND (content LIKE @p1 OR content LIKE @p2)
-        ORDER BY lineIndex LIMIT 20";
+    public static string GetLinesWithEitherContentPattern(SeforimLineContent lineContent) => $@"
+        SELECT l.id, l.lineIndex, {lineContent.ContentColumn("l")}
+        FROM line l{lineContent.ContentJoin("l")}
+        WHERE l.bookId = @bookId AND ({lineContent.ContentExpression("l")} LIKE @p1
+                                   OR {lineContent.ContentExpression("l")} LIKE @p2)
+        ORDER BY l.lineIndex LIMIT 20";
 
     /// <summary>A single line from a book by its lineIndex.</summary>
-    public const string GetLineByBookAndLineIndex =
-        "SELECT id, lineIndex, content FROM line WHERE bookId = @bookId AND lineIndex = @lineIndex";
+    public static string GetLineByBookAndLineIndex(SeforimLineContent lineContent) =>
+        "SELECT l.id, l.lineIndex, " + lineContent.ContentColumn("l")
+        + " FROM line l" + lineContent.ContentJoin("l")
+        + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
 
     /// <summary>Builds "@p0, @p1, …, @pN-1" for a dynamic IN clause.</summary>
     internal static string InPlaceholders(string prefix, int count)

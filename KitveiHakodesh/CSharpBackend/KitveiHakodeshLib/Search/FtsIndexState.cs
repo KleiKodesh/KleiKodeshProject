@@ -692,21 +692,38 @@ namespace KitveiHakodeshLib.Search
 
                         // A DB swapped for one with the same id ranges but different text would
                         // slip past the ids alone; the last line's content pins the actual rows.
-                        cmd.CommandText = "SELECT content FROM line WHERE id = @id";
+                        //
+                        // Read the STORED value's LENGTH rather than its text. On a schema-6
+                        // database the text lives in `line_content` and is compressed, so the
+                        // length is the frame's size - which still changes whenever the text
+                        // does, and costs no dictionary load on a path whose job is to touch
+                        // the database as little as possible. An earlier build threw here
+                        // rather than stamp a compressed database at all.
+                        bool hasSplitContent;
+                        using (var probe = conn.CreateCommand())
+                        {
+                            probe.CommandText =
+                                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='line_content' LIMIT 1";
+                            bool hasSidecar = probe.ExecuteScalar() != null;
+
+                            bool lineHasContent = false;
+                            probe.CommandText = "PRAGMA table_info(line)";
+                            using (var pr = probe.ExecuteReader())
+                                while (pr.Read())
+                                    if (string.Equals(pr.GetString(1), "content", StringComparison.Ordinal))
+                                    { lineHasContent = true; break; }
+
+                            hasSplitContent = hasSidecar && !lineHasContent;
+                        }
+
+                        cmd.CommandText = hasSplitContent
+                            ? "SELECT length(content) FROM line_content WHERE id = @id"
+                            : "SELECT length(content) FROM line WHERE id = @id";
                         cmd.Parameters.AddWithValue("@id", lineMax);
-                        object lastLine = cmd.ExecuteScalar();
-                        // A BLOB here is schema 6's zstd-compressed content, which this build
-                        // cannot read. Throwing beats the old `: -1` fallback: that silently
-                        // stamped every compressed DB identically, so the index either never
-                        // rebuilt or rebuilt on every launch, with nothing logged either way.
-                        // Rethrown past the catch below so it cannot decay into a null stamp.
-                        if (lastLine is byte[])
-                            throw new NotSupportedException(
-                                "line.content is a BLOB in '" + dbPath + "', which means this is a "
-                                + "schema 6 seforim.db storing line content zstd-COMPRESSED. "
-                                + "Compressed content is not supported yet, so no content stamp "
-                                + "can be computed for this database.");
-                        int lastLineLen = lastLine is string s ? s.Length : -1;
+                        object lastLineLengthValue = cmd.ExecuteScalar();
+                        long lastLineLen = lastLineLengthValue == null || lastLineLengthValue is DBNull
+                            ? -1
+                            : Convert.ToInt64(lastLineLengthValue);
 
                         return "schema=" + schemaVer
                              + "|line=" + lineMin + ":" + lineMax

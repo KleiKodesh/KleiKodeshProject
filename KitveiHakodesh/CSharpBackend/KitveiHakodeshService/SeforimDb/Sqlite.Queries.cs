@@ -161,8 +161,11 @@ public sealed partial class SeforimDbService
         Run(() =>
         {
             using var conn = Open();
+            using var lineContent = LineContentFor(conn);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = versionId > 0 ? SeforimSql.GetVersionLinesPaged : SeforimSql.GetLinesPaged;
+            cmd.CommandText = versionId > 0
+                ? SeforimSql.GetVersionLinesPaged(lineContent)
+                : SeforimSql.GetLinesPaged(lineContent);
             if (versionId > 0) cmd.Parameters.AddWithValue("@versionId", versionId);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@limit", limit);
@@ -174,7 +177,7 @@ public sealed partial class SeforimDbService
                 {
                     Id = r.GetInt32(0),
                     LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    Content = r.IsDBNull(2) ? "" : r.GetString(2),
+                    Content = lineContent.Read(r, 2),
                 });
             }
         }, "getLinesPaged");
@@ -435,11 +438,12 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetLineContents(lineIds.Count);
+            using var lineContent = LineContentFor(conn);
+            cmd.CommandText = SeforimSql.GetLineContents(lineContent, lineIds.Count);
             BindList(cmd, "p", lineIds);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new LineContentRow { Id = r.GetInt32(0), Content = r.IsDBNull(1) ? "" : r.GetString(1) });
+                list.Add(new LineContentRow { Id = r.GetInt32(0), Content = lineContent.Read(r, 1) });
         }, "getLineContents");
         return list;
     }
@@ -485,7 +489,9 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetReverseLineData(lineIds.Count, typeIds.Count, DeclaredBaseColumn(conn));
+            using var lineContent = LineContentFor(conn);
+            cmd.CommandText = SeforimSql.GetReverseLineData(
+                lineContent, lineIds.Count, typeIds.Count, DeclaredBaseColumn(conn));
             BindList(cmd, "t", lineIds);
             BindList(cmd, "c", typeIds);
             using var r = cmd.ExecuteReader();
@@ -496,7 +502,7 @@ public sealed partial class SeforimDbService
                     SourceBookId = r.IsDBNull(0) ? 0 : r.GetInt32(0),
                     SourceLineId = r.IsDBNull(1) ? 0 : r.GetInt32(1),
                     LineIndex = r.IsDBNull(2) ? 0 : r.GetInt32(2),
-                    Content = r.IsDBNull(3) ? "" : r.GetString(3),
+                    Content = lineContent.Read(r, 3),
                 });
             }
         }, "getReverseLineData");
@@ -727,7 +733,8 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetLinesWithContentPatternForBooks(bookIds.Count);
+            using var lineContent = LineContentFor(conn);
+            cmd.CommandText = SeforimSql.GetLinesWithContentPatternForBooks(lineContent, bookIds.Count);
             BindList(cmd, "b", bookIds);
             cmd.Parameters.AddWithValue("@pattern", pattern);
             using var r = cmd.ExecuteReader();
@@ -735,7 +742,7 @@ public sealed partial class SeforimDbService
             {
                 list.Add(new BoldLineRow
                 {
-                    Content = r.IsDBNull(0) ? "" : r.GetString(0),
+                    Content = lineContent.Read(r, 0),
                     Title = r.IsDBNull(1) ? "" : r.GetString(1),
                     BookId = r.IsDBNull(2) ? 0 : r.GetInt32(2),
                     LineId = r.IsDBNull(3) ? 0 : r.GetInt32(3),
@@ -753,13 +760,14 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetLinesWithEitherContentPattern;
+            using var lineContent = LineContentFor(conn);
+            cmd.CommandText = SeforimSql.GetLinesWithEitherContentPattern(lineContent);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@p1", p1);
             cmd.Parameters.AddWithValue("@p2", p2);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = r.IsDBNull(2) ? "" : r.GetString(2) });
+                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = lineContent.Read(r, 2) });
         }, "getLinesWithEitherContentPattern");
         return list;
     }
@@ -771,12 +779,13 @@ public sealed partial class SeforimDbService
         {
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimSql.GetLineByBookAndLineIndex;
+            using var lineContent = LineContentFor(conn);
+            cmd.CommandText = SeforimSql.GetLineByBookAndLineIndex(lineContent);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@lineIndex", lineIndex);
             using var r = cmd.ExecuteReader();
             while (r.Read())
-                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = r.IsDBNull(2) ? "" : r.GetString(2) });
+                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = lineContent.Read(r, 2) });
         }, "getLineByBookAndLineIndex");
         return list;
     }

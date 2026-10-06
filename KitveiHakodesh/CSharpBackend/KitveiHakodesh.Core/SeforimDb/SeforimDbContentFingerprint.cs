@@ -107,27 +107,30 @@ namespace KitveiHakodesh.Core.SeforimDb
                 command.CommandText = "PRAGMA schema_version";
                 object? schemaVersion = command.ExecuteScalar();
 
+                // Which layout this database uses - the content column moved in schema 6.
+                var schema = SeforimDbSchema.Probe(connection);
+
                 // MIN/MAX over an INTEGER PRIMARY KEY are index seeks, not scans.
                 var lines = ReadIdRange(command, "line");
                 var books = ReadIdRange(command, "book");
 
                 // Id ranges alone would miss a database swapped for one with the same ranges
                 // but different text; the last line's length pins the actual rows.
+                //
+                // Read the STORED value's length rather than the decoded text: on a schema-6
+                // database that is the compressed frame's size, which changes with the text
+                // just as faithfully and costs no dictionary load on a path whose whole job is
+                // to touch the database as little as possible. The earlier build threw here
+                // rather than fingerprint a compressed database at all.
                 command.Parameters.Clear();
-                command.CommandText = "SELECT content FROM line WHERE id = $id";
+                command.CommandText = schema.HasSplitLineContent
+                    ? "SELECT length(content) FROM line_content WHERE id = $id"
+                    : "SELECT length(content) FROM line WHERE id = $id";
                 command.Parameters.AddWithValue("$id", lines.Max);
-                object? lastLine = command.ExecuteScalar();
-                // A BLOB here is schema 6's zstd-compressed content, which this build cannot
-                // read. Throwing beats the old `: -1` fallback: that silently fingerprinted
-                // every compressed database identically, so the index either never rebuilt or
-                // rebuilt on every launch, with nothing logged either way. Rethrown past the
-                // catch below so it cannot decay into the file-length fallback.
-                if (lastLine is byte[]) throw new NotSupportedException(
-                    "line.content is a BLOB in '" + databasePath + "', which means this is a "
-                    + "schema 6 seforim.db storing line content zstd-COMPRESSED. Compressed "
-                    + "content is not supported yet, so no content fingerprint can be computed "
-                    + "for this database.");
-                int tail = lastLine is string text ? text.Length : -1;
+                object? lastLineLength = command.ExecuteScalar();
+                long tail = lastLineLength is null || lastLineLength is DBNull
+                    ? -1
+                    : Convert.ToInt64(lastLineLength);
 
                 return "schema=" + schemaVersion
                      + "|line=" + lines.Min + ":" + lines.Max

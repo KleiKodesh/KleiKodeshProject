@@ -88,6 +88,12 @@
       <HintPath>..\packages\System.Buffers.4.6.1\lib\net462\System.Buffers.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
+    <!-- Seforim databases from SeforimLibrary schema 6 on store line content zstd-compressed
+         with a dictionary shipped inside the database. Same package and version as the net10
+         leg, so both copies of SeforimLineContent.cs behave identically. -->
+    <Reference Include="ZstdSharp, Version=0.8.6.0, Culture=neutral, PublicKeyToken=8d151af33a4ad5cf, processorArchitecture=MSIL">
+      <HintPath>..\packages\ZstdSharp.Port.0.8.6\lib\net462\ZstdSharp.dll</HintPath>
+    </Reference>
     <Reference Include="System.Data.SQLite, Version=1.0.119.0, Culture=neutral, PublicKeyToken=db937bc2d44ff139, processorArchitecture=MSIL">
       <HintPath>..\packages\Stub.System.Data.SQLite.Core.NetFramework.1.0.119.0\lib\net46\System.Data.SQLite.dll</HintPath>
     </Reference>
@@ -173,6 +179,7 @@
     <Compile Include="SeforimDb\SnippetPipeline.cs" />
     <Compile Include="SeforimDb\SnippetResult.cs" />
     <!-- Misc -->
+    <Compile Include="SeforimDb\SeforimLineContent.cs" />
     <Compile Include="SeforimDb\ZayitDb.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

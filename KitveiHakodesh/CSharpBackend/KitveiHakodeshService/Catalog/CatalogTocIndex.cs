@@ -1,3 +1,4 @@
+using FtsLib.SeforimDb;
 using Lucene.Net.Analysis;
 using Lucene.Net.Analysis.TokenAttributes;
 using Lucene.Net.Documents;
@@ -555,6 +556,9 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
         List<(int Id, string Title, int CategoryId, string? Authors)> books,
         Func<int, long> treeOrder, Dictionary<int, string> catalogPathByBook, CancellationToken ct)
     {
+        // One probe and one dictionary load for the whole scan, not per book.
+        using var lineContent = SeforimLineContent.ForConnection(conn);
+
         int added = 0;
         foreach (var book in books)
         {
@@ -586,13 +590,15 @@ public sealed class CatalogTocIndex(string rootPath, string dbPath) : IDisposabl
             int chapterLevel = 0;
 
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT lineIndex, content FROM line WHERE bookId = @b ORDER BY lineIndex";
+            cmd.CommandText = "SELECT l.lineIndex, " + lineContent.ContentColumn("l")
+                            + " FROM line l" + lineContent.ContentJoin("l")
+                            + " WHERE l.bookId = @b ORDER BY l.lineIndex";
             cmd.AddWithValue("@b", book.Id);
             using var reader = cmd.ExecuteReader();
             while (reader.Read())
             {
                 int lineIndex = reader.IsDBNull(0) ? -1 : reader.GetInt32(0);
-                string content = reader.IsDBNull(1) ? "" : reader.GetString(1);
+                string content = lineContent.Read(reader, 1);
 
                 // Advance to the TOC entry this line belongs to (reset the verse counter).
                 while (entryIdx + 1 < entries.Count && entries[entryIdx + 1].LineIndex <= lineIndex)
