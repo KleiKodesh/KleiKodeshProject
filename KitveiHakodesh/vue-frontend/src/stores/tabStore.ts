@@ -159,6 +159,25 @@ const IDENTITY_FIELDS = [
 ] as const satisfies readonly (keyof Tab)[]
 
 /**
+ * The tab fields that spell "show the home page". Every identity field is named
+ * explicitly as undefined rather than omitted: these go through a merge, and a
+ * merge keeps what a patch leaves out, so an omitted field would strand the
+ * outgoing document's identity on the tab.
+ */
+const HOME_PATCH = {
+  route: '/' as TabRoute,
+  title: 'בית',
+  bookId: undefined,
+  localFilePath: undefined,
+  localFileName: undefined,
+  localFileHbBookId: undefined,
+  localFileHbBookTitle: undefined,
+  isOtzariaAddin: undefined,
+  searchQuery: undefined,
+  tocPath: undefined,
+} satisfies Partial<Omit<Tab, 'id'>>
+
+/**
  * Cleared automatically whenever a patch changes identity. A patch that sets one of
  * these itself still wins — navigating to a specific line means supplying the line.
  */
@@ -508,6 +527,23 @@ export const useTabStore = defineStore('tabs', () => {
     moveThroughHistory(tabId, () => jumpHistory(tabId, index))
   }
 
+  /**
+   * Points a tab at a location WITHOUT recording a frame — the one primitive behind
+   * every cursor move and every page close. Recording here would push the frame we
+   * just stepped off (or deleted) back onto the stack, which is the whole thing
+   * these callers exist to avoid.
+   */
+  function showLocationWithoutRecording(tab: Tab, location: NavLocation) {
+    const patch = tabPatchForLocation(location)
+    applyLocationPosition(patch, location)
+    Object.assign(tab, patch)
+  }
+
+  /** Sends a tab home without recording a frame — the "nothing left to show" fallback. */
+  function showHomeWithoutRecording(tab: Tab) {
+    Object.assign(tab, HOME_PATCH)
+  }
+
   function moveThroughHistory(tabId: string, move: () => NavLocation | null) {
     const tab = tabs.value.find((t) => t.id === tabId)
     if (!tab) return
@@ -516,11 +552,7 @@ export const useTabStore = defineStore('tabs', () => {
     const target = move()
     if (!target) return
 
-    const patch = tabPatchForLocation(target)
-    applyLocationPosition(patch, target)
-    // Assign directly rather than through applyTabPatch: this is a history MOVE,
-    // and recording it would push the frame we just stepped off onto the stack.
-    Object.assign(tab, patch)
+    showLocationWithoutRecording(tab, target)
   }
 
   /**
@@ -570,14 +602,21 @@ export const useTabStore = defineStore('tabs', () => {
 
     // Remove from the per-tab history stack and step back.
     const target = popCurrentAndGoBack(tabId)
-    if (target) {
-      const patch = tabPatchForLocation(target)
-      applyLocationPosition(patch, target)
-      Object.assign(tab, patch)
-    } else {
-      // No history to go back to — navigate home and clear the (now empty) stack.
-      Object.assign(tab, { route: '/', title: 'בית', bookId: undefined, localFilePath: undefined, localFileName: undefined, searchQuery: undefined, tocPath: undefined })
-    }
+    forgetClosedPageState(tab)
+    if (target) showLocationWithoutRecording(tab, target)
+    // No history to go back to — the reader is at the very beginning.
+    else showHomeWithoutRecording(tab)
+  }
+
+  /**
+   * Drops the position state that described the page being closed. The page is gone
+   * for good, so a pending jump or a search highlight belonging to it must not ride
+   * along onto whatever the tab shows next. This is hygiene, not the fix for the
+   * reopening book — that lives in popCurrentAndGoBack, which purges every frame for
+   * the closed document, not just the one under the cursor.
+   */
+  function forgetClosedPageState(tab: Tab) {
+    for (const field of POSITION_FIELDS) delete tab[field]
   }
 
   /**
@@ -593,7 +632,8 @@ export const useTabStore = defineStore('tabs', () => {
     clearHistory(tabId)
     recentLocations.value = []
 
-    Object.assign(tab, { route: '/', title: 'בית', bookId: undefined, localFilePath: undefined, localFileName: undefined, searchQuery: undefined, tocPath: undefined })
+    forgetClosedPageState(tab)
+    showHomeWithoutRecording(tab)
   }
 
 
