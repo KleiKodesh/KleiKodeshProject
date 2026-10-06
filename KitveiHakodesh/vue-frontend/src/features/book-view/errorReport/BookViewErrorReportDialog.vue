@@ -17,8 +17,9 @@ const UNRESOLVED_SOURCE: ErrorReportSource = {
 }
 
 /**
- * "דיווח על טעות בספר" — the user names a mistake in the text, and optionally writes
- * out how it should read instead.
+ * "דיווח על טעות בספר" — the user names a mistake in the text, and may edit the
+ * pre-filled box to say how it should read instead. Describing the mistake is
+ * required; proposing a replacement is not.
  *
  * Its own component rather than a ConfirmDialog with slots: it owns three fields, a
  * send that can be in flight, and a correction editor whose state decides what kind of
@@ -55,20 +56,22 @@ const errorDetails = ref('')
 const senderEmail = ref(settingsStore.errorReportSenderEmail)
 const isSending = ref(false)
 
-// The correction editor starts closed and empty. Opening it seeds the box with the
-// text as it reads now, which is what the user edits — so "no proposal" and "propose
-// exactly the current text" stay distinguishable, and only the first sends freeText.
-const isProposingCorrection = ref(false)
-const proposedText = ref('')
+// The correction editor is always open, seeded with the text as it reads now. What
+// makes a proposal a proposal is therefore the user having CHANGED it: leaving the
+// box untouched means "I am describing a mistake, not dictating the fix", and sends
+// freeText. Emptying it deliberately is a different thing — that proposes a deletion.
+// Captured once, and compared against from then on. Reading props.selectedText live
+// here would make "has the user changed it?" depend on a prop staying frozen for the
+// dialog's lifetime: if the target were ever re-resolved in place, an untouched box
+// would start claiming to propose the PREVIOUS line's text.
+const seedText = props.selectedText
+const proposedText = ref(seedText)
 
-function openCorrectionEditor(): void {
-  isProposingCorrection.value = true
-  proposedText.value = props.selectedText
-}
+const isProposingCorrection = computed(() => proposedText.value !== seedText)
 
-function closeCorrectionEditor(): void {
-  isProposingCorrection.value = false
-  proposedText.value = ''
+/** Puts the box back to the text as it reads now, which withdraws the proposal. */
+function resetProposedText(): void {
+  proposedText.value = seedText
 }
 
 /** 1-based, for a human to read. 0 when no line could be identified. */
@@ -78,14 +81,13 @@ const context = computed(() =>
   extractContextAround(props.originalLine, props.selectionOffset, props.selectedText.length),
 )
 
-// A report with neither a description nor a proposed change says nothing a collector
-// could act on, so it cannot be sent at all.
-const hasSomethingToReport = computed(
-  () => errorDetails.value.trim() !== '' || isProposingCorrection.value,
-)
+// The description is mandatory. A bare proposal would leave a collector guessing WHY
+// the text should change, and the correction editor is pre-filled with the current
+// text, so "the user touched it" is far too easy to do by accident to stand alone.
+const hasSomethingToReport = computed(() => errorDetails.value.trim() !== '')
 
 function buildPayload() {
-  // An unopened editor sends null (no proposal). An opened one sends its text verbatim
+  // An untouched box sends null (no proposal). An edited one sends its text verbatim
   // INCLUDING the empty string — that is the user proposing a deletion, not an absence.
   const proposal = isProposingCorrection.value ? proposedText.value : null
   return buildErrorReportPayload({
@@ -119,8 +121,19 @@ function rememberSenderEmail(): void {
   settingsStore.errorReportSenderEmail = senderEmail.value.trim()
 }
 
+/**
+ * The description is what makes a report actionable, and the always-open correction
+ * box invites a user to write the fix there and press send. Saying so beats a dead
+ * button: the keyboard path (Ctrl+Enter) has no hover affordance to explain itself.
+ */
+function warnDescriptionRequired(): boolean {
+  if (hasSomethingToReport.value) return false
+  showToast('נא למלא את תיאור הטעות', { variant: 'error' })
+  return true
+}
+
 async function onSendNow(): Promise<void> {
-  if (!hasSomethingToReport.value || isSending.value) return
+  if (isSending.value || warnDescriptionRequired()) return
   isSending.value = true
   try {
     // A send that beats the database reads would stamp the report as unverifiable and
@@ -139,7 +152,7 @@ async function onSendNow(): Promise<void> {
 }
 
 async function onSaveForLater(): Promise<void> {
-  if (!hasSomethingToReport.value || isSending.value) return
+  if (isSending.value || warnDescriptionRequired()) return
   isSending.value = true
   try {
     // Same reason as onSendNow: a queued report is sent later unchanged, so it has to
@@ -174,7 +187,17 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   <Teleport to="body">
     <div class="report-backdrop" @click.self="emit('close')">
       <div class="report-dialog">
-        <p class="report-title">דיווח על טעות בספר</p>
+        <div class="report-titlebar">
+          <p class="report-title">דיווח על טעות בספר</p>
+          <button
+            class="report-close-btn"
+            type="button"
+            aria-label="סגירה"
+            @click="emit('close')"
+          >
+            &#10005;
+          </button>
+        </div>
 
         <dl class="report-location">
           <dt>ספר</dt>
@@ -187,11 +210,11 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
         <label class="report-field">
           <span class="report-label">הטקסט שנבחר</span>
-          <p class="report-selected-text">{{ selectedText }}</p>
+          <p class="report-selected-text report-book-text">{{ selectedText }}</p>
         </label>
 
         <label class="report-field">
-          <span class="report-label">מה הטעות?</span>
+          <span class="report-label">מה הטעות? <span class="report-required">שדה חובה</span></span>
           <textarea
             v-model="errorDetails"
             class="report-textarea"
@@ -201,38 +224,33 @@ useEventListener('keydown', (event: KeyboardEvent) => {
         </label>
 
         <div class="report-field">
+          <span class="report-label">הצעת נוסח מתוקן</span>
+          <textarea
+            v-model="proposedText"
+            class="report-textarea report-book-text"
+            rows="3"
+            dir="rtl"
+          ></textarea>
+          <!-- The untouched words on either side: what the server re-anchors the
+               correction by, shown so the user can see the proposal replaces only
+               the middle. -->
+          <p v-if="context.before || context.after" class="report-context">
+            {{ context.before }} <strong>[הנוסח המתוקן]</strong> {{ context.after }}
+          </p>
+          <!-- An unverified line means the proposal travels as a description only.
+               Said here, before sending, rather than silently dropped. -->
+          <p v-if="isProposingCorrection && !isResolvingSource && !isCorrectionApplicable" class="report-warning">
+            לא ניתן לאמת את השורה מול הספריה, ולכן ההצעה תישלח כתיאור בלבד ולא כתיקון
+            שניתן להחיל אוטומטית.
+          </p>
           <button
-            v-if="!isProposingCorrection"
+            v-if="isProposingCorrection"
             class="report-link-btn"
             type="button"
-            @click="openCorrectionEditor"
+            @click="resetProposedText"
           >
-            הצעת נוסח מתוקן
+            החזרת הנוסח המקורי
           </button>
-          <template v-else>
-            <span class="report-label">הנוסח המתוקן</span>
-            <textarea
-              v-model="proposedText"
-              class="report-textarea"
-              rows="3"
-              dir="rtl"
-            ></textarea>
-            <!-- The untouched words on either side: what the server re-anchors the
-                 correction by, shown so the user can see the proposal replaces only
-                 the middle. -->
-            <p v-if="context.before || context.after" class="report-context">
-              {{ context.before }} <strong>[הנוסח המתוקן]</strong> {{ context.after }}
-            </p>
-            <!-- An unverified line means the proposal travels as a description only.
-                 Said here, before sending, rather than silently dropped. -->
-            <p v-if="!isResolvingSource && !isCorrectionApplicable" class="report-warning">
-              לא ניתן לאמת את השורה מול הספרייה, ולכן ההצעה תישלח כתיאור בלבד ולא כתיקון
-              שניתן להחיל אוטומטית.
-            </p>
-            <button class="report-link-btn" type="button" @click="closeCorrectionEditor">
-              ביטול ההצעה
-            </button>
-          </template>
         </div>
 
         <label class="report-field">
@@ -300,11 +318,48 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   gap: 12px;
 }
 
+.report-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .report-title {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+/* Matches the dialog's other dismissals (Escape, backdrop click) — a plain affordance
+   in the corner, not an action button competing with the three at the bottom. */
+.report-close-btn {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.report-close-btn:hover {
+  background: var(--bg-hover, rgba(127, 127, 127, 0.16));
+  color: var(--text-primary);
+}
+
+/* Sits inside the label, so it stays attached to the field it qualifies. */
+.report-required {
+  font-weight: 400;
+  color: var(--text-secondary);
 }
 
 /* The location block is reference data, not something to fill in — a definition list
@@ -336,12 +391,25 @@ useEventListener('keydown', (event: KeyboardEvent) => {
   color: var(--text-secondary);
 }
 
+/* The two fields that hold BOOK TEXT — the quoted line and the proposed replacement
+   — are pinned to one fixed face rather than var(--text-font). The reader's chosen
+   book font is a display preference that can be any installed family, and a report is
+   a comparison between what the library says and what the user typed: both halves have
+   to be set in the same metrics for that comparison to mean anything. Frank Ruehl
+   Libre ships with the app (main.css), so this never waits on a network fetch. */
+.report-book-text {
+  font-family: 'Frank Ruehl Libre', var(--text-font), serif;
+  /* Matched to the quoted line above, not to the surrounding form controls: the user
+     is reading the two against each other. */
+  font-size: 14px;
+  line-height: 1.7;
+}
+
 .report-selected-text {
   margin: 0;
   max-height: 120px;
   overflow-y: auto;
   padding: 8px 10px;
-  font-family: var(--text-font);
   font-size: 14px;
   line-height: 1.7;
   color: var(--text-primary);

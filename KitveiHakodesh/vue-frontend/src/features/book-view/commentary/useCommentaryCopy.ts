@@ -99,6 +99,8 @@ export function useCommentaryCopy(
      */
     lineAtRowIndex: (rowIndex: number) => { lineId: number; offsetLength: number } | null
   },
+  /** Opens the "report a mistake" dialog for the pressed commentary line. */
+  onReportError?: () => void,
 ) {
   const resolveWordLinkTarget = exportData?.resolveWordLinkTarget
   const settingsStore = useSettingsStore()
@@ -726,6 +728,8 @@ export function useCommentaryCopy(
         },
       ],
     },
+    { type: 'separator' },
+    { label: 'דיווח על טעות בספר', action: onReportError ?? (() => {}) },
     { type: 'separator' },
     annotationRow,
   ]

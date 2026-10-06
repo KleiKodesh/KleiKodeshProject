@@ -19,6 +19,8 @@ import type { CommentarySlot, PinnedCommentaryGroup } from '../bookViewTypes'
 import { useVirtualScrollerKeys } from '@/composables/useVirtualScrollerKeys'
 import { useCommentaryScroll } from './useCommentaryScroll'
 import { useCommentaryCopy } from './useCommentaryCopy'
+import { useCommentaryErrorReport } from '../errorReport/useCommentaryErrorReport'
+import BookViewErrorReportDialog from '../errorReport/BookViewErrorReportDialog.vue'
 import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSelection'
 import type { Highlight } from '../lines/useBookViewHighlights'
 import type { Note } from '../lines/useBookViewNotes'
@@ -409,7 +411,36 @@ const { contextMenuItems, buildFormattedHtml: buildCommentaryFormattedHtml, onCo
       return { lineId: item.lineId, offsetLength: props.annotationOffsetLengthOf(item.content) }
     },
   },
+  () => openCommentaryErrorReport(),
 )
+// A commentary line belongs to the commentary book its group came from, never to the
+// base book this pane is attached to — so the report's identity is looked up from the
+// groups rather than taken from the surrounding view.
+const {
+  target: commentaryErrorReportTarget,
+  openErrorReport: openCommentaryErrorReport,
+  closeErrorReport: closeCommentaryErrorReport,
+  awaitSourceResolution: awaitCommentaryErrorReportSource,
+} = useCommentaryErrorReport({
+  scrollerEl,
+  findLine: (lineId) => {
+    for (const group of visibleGroups.value) {
+      const line = group.lines.find((l) => l.lineId === lineId)
+      if (line) {
+        return {
+          bookId: group.bookId,
+          bookTitle: group.bookTitle,
+          // The group's own path already reads "book · section · category"; the copy
+          // menu flattens that separator for a citation, so the report does too.
+          reference: (group.path ?? group.bookTitle).split(' · ').join(' '),
+          line: { lineId: line.lineId, lineIndex: line.lineIndex, content: line.content },
+        }
+      }
+    }
+    return null
+  },
+})
+
 useScopedCopy(
   scrollerEl,
   () => visibleGroups.value.flatMap((g) => g.lines.map((l) => l.content)),
@@ -508,6 +539,19 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
       selection can tell the two panels apart; both carry .commentary-view.
     -->
     <ContextMenu ref="contextMenuRef" :items="contextMenuItems" />
+    <BookViewErrorReportDialog
+      v-if="commentaryErrorReportTarget"
+      :selected-text="commentaryErrorReportTarget.selectedText"
+      :original-line="commentaryErrorReportTarget.originalLine"
+      :selection-offset="commentaryErrorReportTarget.selectionOffset"
+      :book-title="commentaryErrorReportTarget.bookTitle"
+      :current-ref="commentaryErrorReportTarget.reference"
+      :line-index="commentaryErrorReportTarget.lineIndex"
+      :book-id="commentaryErrorReportTarget.bookId"
+      :source="commentaryErrorReportTarget.source"
+      :await-source="awaitCommentaryErrorReportSource"
+      @close="closeCommentaryErrorReport"
+    />
     <BookViewNoteBubble
       v-if="activeBubbleNote && activeBubbleAnchorRect"
       :note="activeBubbleNote"

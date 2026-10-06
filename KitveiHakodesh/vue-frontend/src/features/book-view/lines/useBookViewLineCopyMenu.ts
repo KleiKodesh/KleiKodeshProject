@@ -652,8 +652,6 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       { label: 'העתק לחיפוש במאגר', action: onSearchInRepository, shortcut: 'Ctrl+Shift+C' },
       { label: 'העתק קישור לקטע זה', action: options.onCopyLineLink ?? (() => {}) },
       { type: 'separator' },
-      { label: 'דיווח על טעות בספר', action: options.onReportError ?? (() => {}) },
-      { type: 'separator' },
       {
         type: 'submenu',
         label: 'אפשרויות העתקה',
@@ -700,6 +698,8 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
           },
         ],
       },
+      { type: 'separator' },
+      { label: 'דיווח על טעות בספר', action: options.onReportError ?? (() => {}) },
       { type: 'separator' },
       annotationRow,
     ],
