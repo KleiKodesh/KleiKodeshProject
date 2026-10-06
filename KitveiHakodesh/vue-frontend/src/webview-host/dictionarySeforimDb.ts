@@ -253,7 +253,15 @@ async function resolveMicropediaGloss(bookId: number, headerLineIndex: number): 
 
 export async function micropediaLookup(term: string): Promise<MicropediaRow[]> {
   if (_micropediaCache.ids === null) {
-    const rows = await getBookIdByExactTitle('מיקרופדיה')
+    // PREFIX match, not an exact title. Zayit calls this book by the bare word, while
+    // the Otzaria library ships it with a second word appended - an exact match finds
+    // nothing there, which left this lookup silently returning no results on every
+    // Otzaria library. A prefix resolves to exactly one book on both.
+    //
+    // Deliberately NOT a '%...%' contains: for the other sources that would also match a
+    // commentary written ON the book (there is one such title for the Aruch), and the
+    // wrong book's lines would be parsed as dictionary entries.
+    const rows = await getBookIdsByTitlePattern('מיקרופדיה%')
     _micropediaCache.ids = rows.map(r => r.id)
   }
   if (_micropediaCache.ids.length === 0) return []
