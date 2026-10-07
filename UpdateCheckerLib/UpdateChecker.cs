@@ -7,6 +7,12 @@ using System.Net.Http;
 using System.Text.Json;
 using System.Threading.Tasks;
 
+// The GitHub release model is KitveiHakodesh.Core's: the same shape, the same JsonPropertyName
+// mapping, and serialized through Core's source-generated context so the AOT leg never needs the
+// reflection path. This project used to declare its own identical copy.
+using GitHubRelease = KitveiHakodesh.Core.Updates.GithubRelease;
+using GitHubReleaseAsset = KitveiHakodesh.Core.Updates.GithubReleaseAsset;
+
 namespace UpdateCheckerLib
 {
     public static class UpdateChecker
@@ -36,18 +42,11 @@ namespace UpdateCheckerLib
         /// %LOCALAPPDATA%\KleiKodesh and registers the Word add-in. Doing that from a
         /// portable copy would install software the user never asked to install.
         /// </summary>
-        public static bool IsInstalled() =>
-            !string.IsNullOrEmpty(GetCurrentVersionFromRegistry());
+        public static bool IsInstalled() => KitveiHakodesh.Core.Updates.UpdateChecker.IsInstalled();
 
-        public static string GetCurrentVersionFromRegistry()
-        {
-            try
-            {
-                using (var key = Registry.CurrentUser.OpenSubKey(REGISTRY_KEY))
-                    return key?.GetValue("Version")?.ToString();
-            }
-            catch { return null; }
-        }
+        /// <summary>The installed version from the registry, or null for a portable copy.
+        /// KitveiHakodesh.Core's — the same read the rest of the app does.</summary>
+        public static string GetCurrentVersionFromRegistry() => KitveiHakodesh.Core.Updates.UpdateChecker.InstalledVersion();
 
         /// <summary>
         /// Records the installed version as seen, so LastSeenVersion tracks the version
@@ -166,24 +165,11 @@ namespace UpdateCheckerLib
         /// low without any installed three-part version blocking the update.
         /// Versions with the same component count compare numerically as usual.
         /// </summary>
+        /// <summary>Orders two version strings. KitveiHakodesh.Core's, so every consumer
+        /// agrees about what "newer" means — including the field-count rule that treats a
+        /// 4-component version as newer than a 3-component one.</summary>
         public static int CompareVersions(string githubVersion, string registryVersion)
-        {
-            var normalizedGithub = githubVersion?.TrimStart('v') ?? "";
-            var normalizedRegistry = registryVersion?.TrimStart('v') ?? "";
-
-            if (Version.TryParse(normalizedGithub, out var githubVer) &&
-                Version.TryParse(normalizedRegistry, out var registryVer))
-            {
-                int lengthDiff = FieldCount(githubVer).CompareTo(FieldCount(registryVer));
-                return lengthDiff != 0 ? lengthDiff : githubVer.CompareTo(registryVer);
-            }
-
-            return string.Compare(normalizedGithub, normalizedRegistry, StringComparison.OrdinalIgnoreCase);
-        }
-
-        /// <summary>Number of components a parsed Version carries (2, 3, or 4).</summary>
-        private static int FieldCount(Version v) =>
-            v.Revision >= 0 ? 4 : v.Build >= 0 ? 3 : 2;
+            => KitveiHakodesh.Core.Updates.UpdateChecker.CompareVersions(githubVersion, registryVersion);
 
         /// <summary>
         /// Background-only task: hits the GitHub API and silently downloads a newer

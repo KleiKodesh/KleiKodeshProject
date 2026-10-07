@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -86,37 +86,12 @@ namespace UpdateCheckerLib
         /// this machine's installer variant — e.g. "KleiKodeshSetup-v8.7.2-x64.exe".
         /// </summary>
         internal static string GetInstallerAssetName(string version) =>
-            $"KleiKodeshSetup-{version}{GetInstallerSuffix()}.exe";
+            KitveiHakodesh.Core.Updates.UpdateChecker.InstallerAssetName(version);
 
-        /// <summary>
-        /// Returns the installer variant stored in the registry ("x64", "x86", or "AnyCPU").
-        /// Falls back to "AnyCPU" if the value is missing (pre-variant installs).
-        /// </summary>
-        private static string GetInstallerVariantFromRegistry()
-        {
-            try
-            {
-                using (var key = Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
-                {
-                    var value = key?.GetValue("InstallerVariant")?.ToString();
-                    if (value == "x64" || value == "x86") return value;
-                }
-            }
-            catch { }
-            return "AnyCPU";
-        }
-
-        /// <summary>
-        /// Returns the URL suffix for the installer file name based on the stored variant.
-        /// x64 → "-x64", x86 → "-x86", AnyCPU → "" (no suffix).
-        /// </summary>
-        private static string GetInstallerSuffix()
-        {
-            var variant = GetInstallerVariantFromRegistry();
-            if (variant == "x64") return "-x64";
-            if (variant == "x86") return "-x86";
-            return "";
-        }
+        // The installer VARIANT (x64 / x86 / AnyCPU) and the asset-name suffix it implies are
+        // KitveiHakodesh.Core's (UpdateChecker.InstallerVariant / InstallerAssetName). They were
+        // implemented here too, which is how a variant rule ends up disagreeing with itself and
+        // the updater downloads an installer for the wrong architecture.
 
         /// <summary>
         /// Downloads the installer for <paramref name="version"/> silently to
