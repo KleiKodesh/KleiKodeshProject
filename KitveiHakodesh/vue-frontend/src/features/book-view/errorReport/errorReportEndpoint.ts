@@ -13,7 +13,7 @@
 export const ERROR_REPORT_ENDPOINT = 'https://otzaria.org/api/reportingerrors'
 
 /** Milliseconds before a send is abandoned and the report re-queued as pending. */
-export const ERROR_REPORT_TIMEOUT_MS = 20_000
+export const ERROR_REPORT_TIMEOUT_MS = 10_000
 
 /** Is there an endpoint to send to at all? Guards every send path. */
 export function hasErrorReportEndpoint(): boolean {

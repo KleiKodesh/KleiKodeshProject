@@ -8,15 +8,16 @@
  */
 
 import type { ErrorReportSource } from './errorReportSource'
+import { canonicalJsonSha256 } from './canonicalJson'
 
 export const ERROR_REPORT_SCHEMA_VERSION = 2
 
 /**
- * What the user is claiming. 'freeText' = "something is wrong here, here's what";
- * 'textCorrection' = "and here is the text it should say" — the second carries a
+ * What the user is claiming. 'free_text' = "something is wrong here, here's what";
+ * 'text_correction' = "and here is the text it should say" — the second carries a
  * `correction` block and is the only kind a server can apply mechanically.
  */
-export type ErrorReportKind = 'freeText' | 'textCorrection'
+export type ErrorReportKind = 'free_text' | 'text_correction'
 
 /**
  * A proposed replacement text. EXACT by contract: none of these fields is ever
@@ -28,8 +29,12 @@ export interface ErrorReportCorrection {
   original_line: string
   /** The part of it the user selected (equals original_line when nothing was selected). */
   original_selection: string
-  /** Where original_selection starts inside original_line; -1 when it could not be located. */
-  selection_offset: number
+  /**
+   * Where the selection sits inside original_line, as a half-open range. null when the
+   * selection could not be located — a correction of the whole line. The unit matters:
+   * both ends are UTF-16 code units, which is what JS string indices already are.
+   */
+  selection_offset: { unit: 'utf16_code_units'; start: number; end: number } | null
   /** The replacement. null = no proposal at all; '' = the user proposes deleting the text. */
   proposed_text: string | null
   /** The untouched text on either side, so a server can re-anchor the selection. */
@@ -56,7 +61,7 @@ export interface ErrorReportPayload {
   report_kind: ErrorReportKind
   content_digest: string
   location: {
-    line_index: number
+    line_index: number | null
     book_id: number | null
     library_build_id: string | null
     he_ref: string | null
@@ -71,6 +76,13 @@ export interface ErrorReportPayload {
     platform: string
   }
   correction?: ErrorReportCorrection
+  /**
+   * Queue-local, never sent: JSON.stringify drops it only because the server ignores
+   * unknown keys, so it is stripped explicitly before the body is encoded. Marks a
+   * report the collector refused under its previous id — kept so the user can resubmit
+   * deliberately, skipped by every automatic flush.
+   */
+  manualResendOnly?: boolean
 }
 
 // ── Client-side caps ──────────────────────────────────────────────────────────
@@ -117,7 +129,9 @@ function utf8ByteLength(text: string): number {
  * this point is correction text, and that is the one thing that must stay exact.
  */
 export function encodeErrorReportBody(payload: ErrorReportPayload): string | null {
-  const body = JSON.stringify(payload)
+  // manualResendOnly is our own bookkeeping and has no place on the wire.
+  const { manualResendOnly: _omit, ...wire } = payload
+  const body = JSON.stringify(wire)
   return utf8ByteLength(body) > ERROR_REPORT_LIMITS.maxApiBodyBytes ? null : body
 }
 
@@ -152,28 +166,45 @@ export function buildReportId(bookTitle: string, currentRef: string, selectedTex
 }
 
 /**
- * A digest over what the report IDENTIFIES — never over the timestamp or the reporter.
- * Two people reporting the same mistake on the same line must produce the same digest,
- * which is exactly what the server's `duplicate` flag is decided on.
+ * The digest the collector decides its `duplicate` flag on.
+ *
+ * Byte-compatible with Otzaria by construction: SHA-256 over the OCJ-1 canonical
+ * encoding of the SAME field map, including the `v: 1` marker. Every part of that
+ * matters — a different hash, a different field set, or a different key order all
+ * produce a digest that simply never collides with anyone else's, which looks like
+ * nothing at all locally and means de-duplication silently does not work.
+ *
+ * Async because SubtleCrypto is. That is why it is computed once at send time rather
+ * than inside buildErrorReportPayload, which the dialog calls on every keystroke.
  */
-function buildContentDigest(parts: {
-  bookTitle: string
-  currentRef: string
-  lineNumber: number
-  selectedText: string
-  errorDetails: string
-  proposedText: string | null
-}): string {
-  return stableHash(
-    [
-      parts.bookTitle,
-      parts.currentRef,
-      String(parts.lineNumber),
-      parts.selectedText,
-      parts.errorDetails,
-      parts.proposedText ?? '',
-    ].join('\u0000'),
-  )
+export function buildContentDigest(payload: ErrorReportPayload): Promise<string> {
+  return canonicalJsonSha256({
+    v: 1,
+    report_kind: payload.report_kind,
+    book_title: payload.book_title,
+    current_ref: payload.current_ref,
+    // The 0-based machine index, NOT the 1-based line_number a human reads.
+    line_index: payload.location.line_index,
+    selected_text: payload.selected_text,
+    error_details: payload.error_details,
+    context_text: payload.context_text,
+    source_folder: payload.source_folder,
+    file_path: payload.file_path,
+    library_version: payload.library_version,
+    correction: payload.correction
+      ? {
+          original_line: payload.correction.original_line,
+          original_selection: payload.correction.original_selection,
+          proposed_text: payload.correction.proposed_text,
+          selection_offset: payload.correction.selection_offset,
+        }
+      : null,
+  })
+}
+
+/** Stamps the digest onto a payload. The last step before the body is encoded. */
+export async function withContentDigest(payload: ErrorReportPayload): Promise<ErrorReportPayload> {
+  return { ...payload, content_digest: await buildContentDigest(payload) }
 }
 
 // ── Context extraction ────────────────────────────────────────────────────────
@@ -234,6 +265,10 @@ export interface ErrorReportDraft {
  * The client identification. Deliberately coarse: this is a mistake report, not
  * telemetry, so it says which build to reproduce on and nothing about the machine.
  */
+// TODO: wire the real build version through a vite `define`. The installer records
+// v9.x in the registry, but nothing surfaces it to the frontend, and package.json is
+// 0.0.0. Until then every report is unattributable to a build, which is a triage cost
+// for whoever receives them.
 export const ERROR_REPORT_APP_VERSION = '0.0.0'
 const ERROR_REPORT_PLATFORM = 'windows-webview2'
 
@@ -281,25 +316,17 @@ export function buildErrorReportPayload(draft: ErrorReportDraft): ErrorReportPay
     library_version: draft.source.libraryVersion,
     created_at: new Date().toISOString(),
     schema_version: ERROR_REPORT_SCHEMA_VERSION,
-    report_kind: hasCorrection ? 'textCorrection' : 'freeText',
-    content_digest: buildContentDigest({
-      bookTitle,
-      currentRef,
-      lineNumber: draft.lineNumber,
-      selectedText,
-      errorDetails: draft.errorDetails,
-      // The proposal as SENT, not as typed: a dropped correction must not make two
-      // otherwise identical reports digest differently.
-      proposedText: hasCorrection ? draft.proposedText : null,
-    }),
+    report_kind: hasCorrection ? 'text_correction' : 'free_text',
+    // Stamped by withContentDigest at send time — it needs SubtleCrypto, which is async.
+    content_digest: '',
     // Null throughout when the line could not be vouched for — see resolveErrorReportSource.
     // A collector must be able to tell "this is line 42 of book 7 in library build 31"
     // from "someone reported something about a line we cannot locate".
     location: {
-      // -1, not the unverified draft index: "line 42 of no book" is indistinguishable
-      // from a verified index whose book id happened to be missing, and a collector
-      // would re-anchor on it.
-      line_index: location ? location.lineIndex : -1,
+      // null, never a sentinel: a collector testing `line_index != null` would read -1
+      // as a real verified index and try to anchor there. book_id and he_ref beside it
+      // go null the same way.
+      line_index: location ? location.lineIndex : null,
       book_id: location?.bookId ?? null,
       library_build_id: draft.source.libraryBuildId,
       he_ref: location?.heRef ?? null,
@@ -319,7 +346,14 @@ export function buildErrorReportPayload(draft: ErrorReportDraft): ErrorReportPay
     payload.correction = {
       original_line: draft.originalLine,
       original_selection: draft.selectedText,
-      selection_offset: draft.selectionOffset,
+      selection_offset:
+        draft.selectionOffset >= 0
+          ? {
+              unit: 'utf16_code_units',
+              start: draft.selectionOffset,
+              end: draft.selectionOffset + draft.selectedText.length,
+            }
+          : null,
       proposed_text: draft.proposedText,
       context_before: context.before,
       context_after: context.after,

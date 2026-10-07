@@ -16,6 +16,7 @@
 
 import { getBookSourceName, getLibraryDbVersion, getLineRefAndContent } from '@/webview-host/seforimApi'
 import { htmlToText } from '@/utils/htmlText'
+import { reportReachesOtzaria } from './errorReportRouting'
 
 /** What Otzaria sends when the library build cannot be identified. */
 export const UNKNOWN_LIBRARY_VERSION = 'unknown'
@@ -40,16 +41,21 @@ export interface ErrorReportSource {
 /**
  * Is the database line still the line the reader is looking at?
  *
- * Compared as plain text with whitespace collapsed, because the rendered line carries
- * markup, note markers and citation anchors the stored text has no idea about. Not
- * compared any looser than that: the whole purpose is to stop a correction being
- * anchored to a line the library has since changed, and a fuzzy match would wave
- * through precisely the case this exists to catch.
+ * Otzaria compares the raw stored line to the displayed one with plain `==`. We cannot
+ * quite do that: the text we show is HTML we rendered ourselves, so the markup has to
+ * come off first, and the edges trimmed with it. INNER whitespace stays significant,
+ * exactly as on their side.
+ *
+ * Collapsing whitespace was the earlier approach and it was wrong: a library edit that
+ * changes only spacing is a real change to the line, and waving it through is how a
+ * correction gets anchored to text the corpus no longer has.
  */
 function isSameLine(storedHtml: string, displayedPlainText: string): boolean {
-  const normalize = (text: string): string => htmlToText(text).replace(/\s+/g, ' ').trim()
-  const stored = normalize(storedHtml)
-  return stored !== '' && stored === displayedPlainText.replace(/\s+/g, ' ').trim()
+  // Both sides are trimmed: the rendered line arrives with the whitespace the markup
+  // stripper left around it, which is an artefact of our own rendering rather than a
+  // difference in the text. Inner whitespace stays significant.
+  const stored = htmlToText(storedHtml).trim()
+  return stored !== '' && stored === displayedPlainText.trim()
 }
 
 export interface ResolveSourceInput {
@@ -77,9 +83,12 @@ export async function resolveErrorReportSource(input: ResolveSourceInput): Promi
   const rawSourceName = input.bookId == null
     ? undefined
     : await getBookSourceName(input.bookId).catch(() => undefined)
-  const sourceFolder = (rawSourceName ?? '').startsWith(PERSONAL_SOURCE_PREFIX)
-    ? rawSourceName!.slice(PERSONAL_SOURCE_PREFIX.length)
-    : (rawSourceName ?? '')
+  // The prefix is KEPT, deliberately. Stripping it turns "Personal::Dicta notes" into
+  // "Dicta notes", which the recipient map matches on `dicta` and mails to a corpus
+  // maintainer — someone else's private book forwarded to a third party. Left intact,
+  // it matches nothing and falls to the default inbox.
+  const sourceFolder = rawSourceName ?? ''
+  const isPersonalBook = sourceFolder.startsWith(PERSONAL_SOURCE_PREFIX)
 
   const base: ErrorReportSource = {
     sourceFolder,
@@ -87,6 +96,12 @@ export async function resolveErrorReportSource(input: ResolveSourceInput): Promi
     libraryBuildId: libraryVersion === UNKNOWN_LIBRARY_VERSION ? null : libraryVersion,
     location: null,
   }
+
+  // A correction only makes sense where the collector can act on it. A corpus that
+  // routes solely to its own maintainers gets free text, so there is no reason to
+  // claim a location for it — this is the same precondition Otzaria applies, and it
+  // is what stops a Sefaria book sending an applicable correction to Sefaria.
+  if (isPersonalBook || !reportReachesOtzaria(sourceFolder)) return base
 
   // Each of these means "the text on screen is not the text in `line`", so there is
   // nothing authoritative to point a collector at.

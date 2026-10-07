@@ -13,6 +13,7 @@ import { lsGet, lsSet } from '@/utils/persistence'
 import {
   encodeErrorReportBody,
   reissueReportId,
+  withContentDigest,
   type ErrorReportPayload,
 } from './errorReportPayload'
 import {
@@ -35,6 +36,13 @@ export type ErrorReportOutcome = 'sent' | 'duplicate' | 'queued' | 'rejected'
 
 export interface ErrorReportResult {
   outcome: ErrorReportOutcome
+  /**
+   * The server refused THIS CONTENT under THIS id (409). The report stays on the queue
+   * under a fresh id so the user can resubmit it deliberately, but no automatic flush
+   * will ever send it — resending refused content on a timer is how an app turns into
+   * a spammer.
+   */
+  needsManualResend?: boolean
   /** The server's answer to "can I apply a textCorrection automatically?", when it said. */
   correctionSupported?: boolean
 }
@@ -77,20 +85,29 @@ function dequeue(reportId: string): void {
   savePendingReports()
 }
 
+/** Statuses that mean "do not send this again" — the collector's contract 2.4. */
+const PERMANENT_STATUSES = new Set([400, 409, 413, 422])
+
+/** At most this many queued reports go out per flush, so a long queue cannot burst. */
+const MAX_FLUSH_PER_RUN = 20
+
+/** How often a pending queue is retried while the app is running. */
+const FLUSH_INTERVAL_MS = 5 * 60 * 1000
+
 // ── The POST ──────────────────────────────────────────────────────────────────
 
 /**
  * One attempt. Decides ONLY what the server said; the queue is managed by the callers
  * below, which is what keeps "did it go out?" and "what do we keep?" separable.
  *
- * `allowReissue` guards the one recursive case: a 409 means the server already holds a
- * DIFFERENT report under this id, so the same report goes out again under a new id.
- * Once. A server answering 409 to every id would otherwise loop forever.
+ * The content digest is stamped here rather than when the payload was built: it is a
+ * SHA-256 over the canonical encoding, so computing it is async, and the dialog
+ * rebuilds its payload on every keystroke.
  */
 async function postReport(
-  payload: ErrorReportPayload,
-  allowReissue: boolean,
+  draft: ErrorReportPayload,
 ): Promise<ErrorReportResult & { sent: ErrorReportPayload }> {
+  const payload = await withContentDigest(draft)
   const body = encodeErrorReportBody(payload)
   // Over the body cap even after the per-field caps: only correction text can be this
   // large, and correction text is never truncated. Nothing retrying will fix it.
@@ -126,13 +143,22 @@ async function postReport(
     }
   }
 
-  if (response.status === 409 && allowReissue) {
-    return postReport(reissueReportId(payload), false)
+  // The collector's contract: 400/409/413/422 are permanent, everything else is
+  // transient. A 409 means THIS CONTENT was refused, so re-sending it under a new id
+  // would just manufacture a second copy of a report that was already turned down.
+  // The report keeps a fresh id so the user can resubmit deliberately, but nothing
+  // sends it again automatically.
+  if (response.status === 409) {
+    return { outcome: 'rejected', needsManualResend: true, sent: reissueReportId(payload) }
+  }
+  if (PERMANENT_STATUSES.has(response.status)) {
+    return { outcome: 'rejected', sent: payload }
   }
 
-  // 5xx is the server having a bad day, not the report being wrong: keep it.
-  if (response.status >= 500) return { outcome: 'queued', sent: payload }
-  return { outcome: 'rejected', sent: payload }
+  // 408 and 429 land here with the 5xx family: the server is busy or rate-limiting,
+  // which is the most likely answer during a queue flush. Dropping those would throw
+  // away exactly the reports a flush exists to deliver.
+  return { outcome: 'queued', sent: payload }
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
@@ -146,11 +172,12 @@ export async function sendErrorReport(payload: ErrorReportPayload): Promise<Erro
     enqueue(payload)
     return { outcome: 'queued' }
   }
-  const { sent, ...result } = await postReport(payload, true)
+  const { sent, ...result } = await postReport(payload)
   // Queue what was actually SENT, not what was handed in: a 409 reissues the report
   // under a fresh id, and re-queueing the original would replay the id the server has
   // already refused — a collision re-paid on every retry, forever.
   if (result.outcome === 'queued') enqueue(sent)
+  else if (result.needsManualResend) enqueue({ ...sent, manualResendOnly: true })
   else dequeue(sent.report_id)
   if (sent.report_id !== payload.report_id) dequeue(payload.report_id)
   return result
@@ -167,22 +194,29 @@ export const pendingErrorReportCount = computed(() => pendingReports.value.lengt
 let flushing = false
 
 /**
- * Try every pending report once, oldest first.
+ * Try the pending reports, oldest first, up to MAX_FLUSH_PER_RUN.
  *
  * Serial rather than parallel on purpose: the queue is tiny and a collector receiving
  * one report at a time can deduplicate by content_digest without racing itself. The
- * `flushing` latch stops the online watcher and a manual flush from running together
- * and sending every report twice.
+ * `flushing` latch stops the timer and the online watcher from running together and
+ * sending every report twice. The per-run cap matters for the same reason the 429
+ * handling does — a long queue that bursts is what earns a rate-limit.
  */
 export async function flushPendingErrorReports(): Promise<void> {
   if (flushing || !hasErrorReportEndpoint()) return
   flushing = true
   try {
-    for (const payload of [...pendingReports.value]) {
-      const { sent, outcome } = await postReport(payload, true)
+    const sweepable = pendingReports.value
+      .filter((p) => !p.manualResendOnly)
+      .slice(0, MAX_FLUSH_PER_RUN)
+    for (const payload of sweepable) {
+      const { sent, outcome, needsManualResend } = await postReport(payload)
       // A reissued id replaces the queued entry rather than joining it, so a report
       // that keeps failing transiently does not accumulate one copy per 409.
-      if (outcome === 'queued') {
+      if (needsManualResend) {
+        dequeue(payload.report_id)
+        enqueue({ ...sent, manualResendOnly: true })
+      } else if (outcome === 'queued') {
         if (sent.report_id !== payload.report_id) {
           dequeue(payload.report_id)
           enqueue(sent)
@@ -198,20 +232,27 @@ export async function flushPendingErrorReports(): Promise<void> {
 }
 
 /**
- * Retry the queue whenever the machine comes back online.
+ * Retry the queue on a timer, and again whenever the machine comes back online.
  *
- * Called once, from the app root. Module-level rather than a composable so the watcher
- * exists exactly once however many book panes are open — each pane mounting its own
- * would mean one flush per pane the moment connectivity returned.
+ * BOTH triggers are needed. Coming back online catches the laptop-reopened case, but a
+ * report queued by a 5xx or a rate-limit while the machine never lost connectivity
+ * would otherwise sit untouched until the next app start — useOnline never fires.
+ *
+ * Called once, from the app root. Module-level rather than a composable so this exists
+ * exactly once however many book panes are open — each pane mounting its own would
+ * mean one flush per pane the moment connectivity returned.
  */
 export function startErrorReportRetries(): void {
   // VueUse's useOnline is a reactive wrapper over the online/offline events, so this
-  // watch IS the whole retry trigger — no listeners and no polling of our own.
+  // watch needs no listeners of our own.
   const online = useOnline()
   if (online.value) void flushPendingErrorReports()
-  // Deliberately never stopped: it has no owning component, and it must live as long
-  // as the app does.
+  // Deliberately never stopped: neither has an owning component, and both must live as
+  // long as the app does.
   watch(online, (isOnline) => {
     if (isOnline) void flushPendingErrorReports()
   })
+  setInterval(() => {
+    if (online.value) void flushPendingErrorReports()
+  }, FLUSH_INTERVAL_MS)
 }
