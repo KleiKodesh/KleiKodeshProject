@@ -44,5 +44,23 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <summary>True when no seforim database exists at the resolved path — there is
         /// nothing to index, which is a different message than "still building".</summary>
         public bool DbMissing { get; set; }
+
+        /// <summary>True when the build ended without a searchable index and nothing will retry
+        /// it. TERMINAL, like <see cref="IsReady"/> and <see cref="DbMissing"/>: without it a
+        /// failed build reported "not ready, not indexing" forever and every progress stream
+        /// waited on it.</summary>
+        public bool Failed { get; set; }
+
+        /// <summary>True while the build is in its final force-merge phase. That phase has no
+        /// line-level progress — <see cref="Percentage"/> necessarily sits at its last value for
+        /// minutes — so a host needs to be told it is a distinct phase rather than a stalled
+        /// bar.</summary>
+        public bool IsMerging { get; set; }
+
+        /// <summary>Force-merge passes committed so far, and the CURRENT ESTIMATE of the total.
+        /// The estimate MOVES as the merge proceeds, so it drives a phase indicator and never
+        /// an ETA.</summary>
+        public int MergePassesDone { get; set; }
+        public int MergePassesExpected { get; set; }
     }
 }

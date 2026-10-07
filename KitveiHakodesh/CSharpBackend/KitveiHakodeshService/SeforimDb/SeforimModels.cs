@@ -239,21 +239,6 @@ public sealed class FtsSearchArgs
     public bool ExpandRelated { get; set; }
 }
 
-/// <summary>One FTS hit — matches the frontend FullTextSearchResult shape.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsHit
-{
-    public int LineId { get; set; }
-    public int BookId { get; set; }
-    public string BookTitle { get; set; } = "";
-    public string TocText { get; set; } = "";
-    public int Score { get; set; }
-    /// <summary>Word-distance of the tightest window (0 = query words adjacent). Used for relevancy sorting on the frontend.</summary>
-    public int WordDistance { get; set; }
-    public string Snippet { get; set; } = "";
-    public List<string> MatchedTerms { get; set; } = new();
-}
-
 /// <summary>FTS result set. <c>Ready</c> is false while the index is still building.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class FtsSearchResult
@@ -261,32 +246,6 @@ public sealed class FtsSearchResult
     public bool Ready { get; set; }
     public string? Error { get; set; }
     public List<FtsHit> Results { get; set; } = new();
-}
-
-/// <summary>Background-indexing status — matches the frontend indexing-progress shape.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsIndexStatus
-{
-    public bool IsReady { get; set; }
-    public bool IsIndexing { get; set; }
-    public double Percentage { get; set; }
-    public int ProcessedChunks { get; set; }
-    public int TotalChunks { get; set; }
-    /// <summary>True when no seforim DB exists at the resolved path — nothing to index.</summary>
-    public bool DbMissing { get; set; }
-    /// <summary>True when the build ended without a searchable index and nothing will retry
-    /// it. TERMINAL, like IsReady and DbMissing: without it a failed build reported
-    /// "not ready, not indexing" forever and every progress stream waited on it.</summary>
-    public bool Failed { get; set; }
-    /// <summary>True while the build is in its final force-merge phase. That phase has no
-    /// line-level progress — Percentage necessarily sits at its last value for minutes —
-    /// so the UI needs to be told it is a distinct phase rather than a stalled bar.</summary>
-    public bool IsMerging { get; set; }
-    /// <summary>Force-merge passes committed so far, and the CURRENT ESTIMATE of the total.
-    /// The estimate moves as the merge proceeds (merging one level can create work on the
-    /// level above), so this drives a phase indicator, never an ETA.</summary>
-    public int MergePassesDone { get; set; }
-    public int MergePassesExpected { get; set; }
 }
 
 // ── Streaming FTS (ftsSearchStream) — the service PUSHES result frames continuously

@@ -41,6 +41,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     private SeforimDbFtsIndexer Indexer =>
         _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!);
     private SeforimDbFtsIndexer? _indexer;
+
+    /// <summary>Snippeting, the word-distance filter, short-snippet embellishment and the
+    /// book/TOC enrichment every hit carries — all Core's, and the same code the hosted app
+    /// runs, so one query cannot come back ranked or rendered differently in the two apps.
+    /// Enrichment needs corpus queries, hence the SeforimDbQueries.</summary>
+    private SeforimDbFtsSearcher Searcher =>
+        _searcher ??= new SeforimDbFtsSearcher(new SeforimDbQueries(_dbPath));
+    private SeforimDbFtsSearcher? _searcher;
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
     private readonly bool _external = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FTS_INDEX_PATH"));
 
@@ -593,24 +601,15 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
         try
         {
-            var index = GetIndex();
-            // Buffer in batches and reuse BuildBatch so the one-shot path gets the same
-            // parallel snippeting, short-snippet embellishment, and enrichment as streaming.
-            const int SnippetBatch = 256;
-            var batch = new List<SearchResult>(SnippetBatch);
-            bool capped = false;
-            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv))
+            // Core's searcher yields finished batches; the one-shot path just collects them, so
+            // it gets exactly the same parallel snippeting, short-snippet embellishment and
+            // enrichment as the streaming path, from the same code the hosted app runs.
+            foreach (var built in Searcher.SearchInBatches(
+                         GetIndex(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv))
             {
-                batch.Add(hit);
-                if (batch.Count >= SnippetBatch)
-                {
-                    result.Results.AddRange(BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, default));
-                    batch.Clear();
-                    if (cap > 0 && result.Results.Count >= cap) { capped = true; break; }
-                }
+                result.Results.AddRange(built);
+                if (cap > 0 && result.Results.Count >= cap) break;
             }
-            if (!capped && batch.Count > 0)
-                result.Results.AddRange(BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, default));
             if (cap > 0 && result.Results.Count > cap)
                 result.Results.RemoveRange(cap, result.Results.Count - cap);
         }
@@ -723,58 +722,13 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
         CancellationToken ct, Func<List<FtsHit>, Task> onBatch)
     {
-        var index = GetIndex();
-        const int SnippetBatch = 256;
-        var batch = new List<SearchResult>(SnippetBatch);
-        foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
+        // Backpressure is why this awaits per batch rather than collecting: each batch is
+        // written to the caller's pipe before the next one is built.
+        foreach (var built in Searcher.SearchInBatches(
+                     GetIndex(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct))
         {
-            ct.ThrowIfCancellationRequested();
-            batch.Add(hit);
-            if (batch.Count >= SnippetBatch)
-            {
-                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, ct);
-                if (built.Count > 0) await onBatch(built);
-                batch.Clear();
-            }
+            await onBatch(built);
         }
-        if (batch.Count > 0)
-        {
-            var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, ct);
-            if (built.Count > 0) await onBatch(built);
-        }
-    }
-
-    /// <summary>Snippet-generate a batch across all cores (thread-safe: FtsLib's
-    /// GenerateSnippet uses a [ThreadStatic] builder), preserving order, and enrich the
-    /// passing hits (bookId + toc path) server-side.
-    ///
-    /// Short snippets — fewer visible words than the requested context (contextWords per
-    /// side) because the matched line is itself short — are then EMBELLISHED with their
-    /// surrounding lines: the whole batch's short lines get their neighbors in one batched
-    /// query, and only those hits are re-rendered. Lines that already fill the context are
-    /// untouched, so a batch with no short lines pays nothing extra.</summary>
-    private List<FtsHit> BuildBatch(SeforimIndex index, IReadOnlyList<SearchResult> results,
-        bool requireOrdered, int contextWords, int maxWordDistance, CancellationToken ct)
-    {
-        var built     = new FtsHit?[results.Count];
-        var wordCount = new int[results.Count];   // window word count of each passing hit (0 = didn't pass)
-        Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = ct }, i =>
-        {
-            if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance,
-                            out var h, out int words))
-            {
-                built[i]     = h;
-                wordCount[i] = words;
-            }
-        });
-
-        EmbellishShortSnippets(index, results, built, wordCount, requireOrdered, contextWords, ct);
-
-        var passing = new List<FtsHit>(results.Count);
-        for (int i = 0; i < built.Length; i++)
-            if (built[i] is { } hit) passing.Add(hit);
-        EnrichHits(passing);
-        return passing;
     }
 
     // How many lines of context to pull on each side when embellishing (same book). Two
@@ -782,90 +736,6 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     // the requested per-side word context for prose; benchmarking showed radius 2 costs
     // roughly half of radius 3 (it re-tokenizes fewer neighbor lines). See EmbellishBenchTest.
     private const int NeighborLineRadius = 2;
-
-    /// <summary>Re-render the batch's short snippets — those whose window spans fewer words
-    /// than the requested context (<paramref name="contextWords"/>), i.e. the matched line
-    /// was too short to fill it — over their surrounding lines. One batched neighbor fetch
-    /// for the whole batch; re-render runs across cores. No-op — and no DB hit — when nothing
-    /// is short (a broad query's typical batch has only ~1 in 6 short lines).</summary>
-    private static void EmbellishShortSnippets(
-        SeforimIndex index, IReadOnlyList<SearchResult> results,
-        FtsHit?[] built, int[] wordCount, bool requireOrdered, int contextWords,
-        CancellationToken ct)
-    {
-        // "Smaller than the setting": a snippet whose window holds fewer words than the
-        // context the user asked for on one side didn't have room to show full context, so
-        // its matched line is short enough to enrich with neighbors.
-        int target = contextWords;
-
-        List<int>? shortIdx = null;
-        List<int>? shortIds = null;
-        for (int i = 0; i < built.Length; i++)
-        {
-            if (built[i] == null || wordCount[i] >= target) continue;
-            (shortIdx ??= new List<int>()).Add(i);
-            (shortIds ??= new List<int>()).Add(results[i].LineId);
-        }
-        if (shortIds == null) return; // nothing short — zero extra cost
-
-        var neighbors = index.FetchNeighborContext(shortIds, NeighborLineRadius);
-        if (neighbors.Count == 0) return;
-
-        Parallel.ForEach(shortIdx!, new ParallelOptions { CancellationToken = ct }, i =>
-        {
-            if (!neighbors.TryGetValue(results[i].LineId, out var ctx)) return;
-            var re = index.GenerateSnippetWithNeighbors(
-                results[i], ctx.Prev, ctx.Next, requireOrdered, contextWords);
-            // Keep the original word-distance/score (relevance keys computed on the line
-            // itself); only swap in the richer snippet HTML. Guard against a failed
-            // re-render (shouldn't happen — same terms) by keeping the original.
-            if (re.IsMatch && !string.IsNullOrEmpty(re.Html) && built[i] is { } h)
-                h.Snippet = re.Html;
-        });
-    }
-
-    /// <summary>
-    /// Fill each hit's <c>BookId</c> and <c>TocText</c> from the seforim DB so results come
-    /// out of the service COMPLETE — no consumer has to make a second round-trip to resolve
-    /// them. This is the same lookup the frontend used to do per batch (getTocPathsForLines +
-    /// a getBookIdsForLines fallback for lines with no toc entry, e.g. custom books), now
-    /// owned by the service. Batched (one query per flush), so it adds negligible cost and
-    /// removes an entire client-side enrichment lane. SeforimDbService opens a fresh
-    /// read-only connection per call, so this is safe to call from the search task.
-    /// </summary>
-    private void EnrichHits(List<FtsHit> hits)
-    {
-        if (hits.Count == 0) return;
-
-        var lineIds = new List<int>(hits.Count);
-        foreach (var h in hits) lineIds.Add(h.LineId);
-
-        var toc = seforim.GetTocPathsForLines(lineIds);
-        if (toc.Count > 0)
-        {
-            var map = new Dictionary<int, TocPathRow>(toc.Count);
-            foreach (var t in toc) map[t.LineId] = t;
-            foreach (var h in hits)
-                if (map.TryGetValue(h.LineId, out var t)) { h.BookId = t.BookId; h.TocText = t.TocPath; }
-        }
-
-        // Fallback: lines with no line_toc entry (custom books / negative IDs) get no toc row,
-        // so resolve their bookId directly from the line table.
-        List<int>? missing = null;
-        foreach (var h in hits)
-            if (h.BookId == 0) (missing ??= new List<int>()).Add(h.LineId);
-        if (missing != null)
-        {
-            var books = seforim.GetBookIdsForLines(missing);
-            if (books.Count > 0)
-            {
-                var bmap = new Dictionary<int, int>(books.Count);
-                foreach (var b in books) bmap[b.LineId] = b.BookId;
-                foreach (var h in hits)
-                    if (h.BookId == 0 && bmap.TryGetValue(h.LineId, out var bid)) h.BookId = bid;
-            }
-        }
-    }
 
     // ── Indexing-progress stream (ftsIndexProgressStream) ────────────────────────
     // Event-driven push: the build's progress callback signals every subscriber, and
@@ -940,35 +810,4 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         }
     }
 
-    /// <summary>Generate the snippet, apply the match / word-distance filter, and build the
-    /// frontend hit. Returns false for hits that don't pass. Shared by one-shot + streaming.</summary>
-    private static bool TryBuildHit(SeforimIndex index, SearchResult hit,
-        bool requireOrdered, int contextWords, int maxWordDistance, out FtsHit? built,
-        out int windowWordCount)
-    {
-        built = null;
-        windowWordCount = 0;
-        var snippet = index.GenerateSnippet(hit, requireOrdered, contextWords);
-        if (!snippet.IsMatch) return false;
-        if (snippet.WordDistance > maxWordDistance) return false;
-        windowWordCount = snippet.WindowWordCount;
-
-        var matchedTerms = new List<string>();
-        foreach (var group in hit.MatchedGroups)
-            foreach (var term in group)
-                if (!matchedTerms.Contains(term)) matchedTerms.Add(term);
-
-        built = new FtsHit
-        {
-            LineId = hit.LineId,
-            BookId = 0,
-            BookTitle = hit.BookTitle ?? "",
-            TocText = "",
-            Score = snippet.Score,
-            WordDistance = snippet.WordDistance,
-            Snippet = snippet.Html ?? "",
-            MatchedTerms = matchedTerms,
-        };
-        return true;
-    }
 }
