@@ -56,9 +56,22 @@ namespace KitveiHakodeshDemoApp
                     // a second window is never opened, for a deep link exactly as for a file:
                     // the running instance turns it into a new tab.
                     if (!string.IsNullOrEmpty(request))
+                    {
+                        // Hand our foreground rights to the already-running instance BEFORE
+                        // it is asked to raise itself. Without this its Activate() is refused
+                        // by the foreground lock -- we are the process Windows currently
+                        // considers entitled to the foreground -- and the user gets a
+                        // flashing taskbar button instead of the window they clicked a link
+                        // for. ASFW_ANY because the running instance's pid is not known here
+                        // and any of our own instances raising itself is the wanted outcome.
+                        AllowSetForegroundWindow(ASFW_ANY);
                         SendOpenRequestToPipe(request);
+                    }
 
-                    // Only restore if minimized — do NOT call SetForegroundWindow cross-process.
+                    // Only restore if minimized — do NOT call SetForegroundWindow on the
+                    // OTHER process's window from here. (The running instance calls it on its
+                    // own window, which is a different thing and is what AllowSetForegroundWindow
+                    // above enables.)
                     // On a maximized WebView2-hosted window, SetForegroundWindow posts a
                     // WM_WINDOWPOSCHANGED/SIZE_RESTORED to the first process's queue, which
                     // visibly flashes the window to Normal. The first process's pipe callback
@@ -132,7 +145,17 @@ namespace KitveiHakodeshDemoApp
                                             // cross-process SetForegroundWindow the caller avoids.
                                             // Without it a link clicked in Word or a browser opens a
                                             // tab in a window the user never sees.
+                                            //
+                                            // Activate() alone is not enough: the launching instance
+                                            // (or Word, or the browser) is the process Windows gives
+                                            // foreground rights to, so our request is refused and only
+                                            // flashes the taskbar button. The launcher calls
+                                            // AllowSetForegroundWindow before sending, which makes the
+                                            // SetForegroundWindow below succeed; Activate() stays as
+                                            // the fallback for callers that cannot do that (a launch
+                                            // arriving over the pipe from anywhere else).
                                             _mainForm.Activate();
+                                            SetForegroundWindow(_mainForm.Handle);
                                             _mainForm.OpenRequest(request);
                                         }));
                                     }
@@ -173,6 +196,15 @@ namespace KitveiHakodeshDemoApp
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);
 
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool SetForegroundWindow(IntPtr hWnd);
+
         private const int SW_RESTORE = 9;
+
+        /// <summary>ASFW_ANY - any process may take the foreground from us.</summary>
+        private const int ASFW_ANY = -1;
     }
 }
