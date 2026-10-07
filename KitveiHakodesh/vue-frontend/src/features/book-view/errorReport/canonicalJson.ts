@@ -1,11 +1,12 @@
 /**
  * OCJ-1 — the canonical JSON encoding the report collector digests.
  *
- * A digest is only useful if two clients that mean the same thing produce the same
- * bytes, so this is a byte-for-byte port of Otzaria's canonical_json.dart rather than
- * a reasonable-looking equivalent: keys sorted, no whitespace, integers only, and the
- * same escape set. A difference here is invisible locally and shows up as "the server
- * never recognises our duplicates".
+ * The COLLECTOR RECOMPUTES this digest and rejects a mismatch outright, so this is a
+ * byte-for-byte port of its src/lib/corrections/ocj1.js rather than a reasonable-looking
+ * equivalent: keys sorted, no whitespace, safe integers only, the same escape set, and
+ * the same refusals. Verified byte-identical against that file, including Hebrew with
+ * niqqud, quotes and astral characters. A difference here is invisible locally and
+ * arrives as a 400 'digest_mismatch' on every single report.
  */
 
 /** The largest integer JS and Dart both represent exactly. */
@@ -40,7 +41,11 @@ function encodeString(value: string): string {
 }
 
 export function canonicalJsonEncode(value: unknown): string {
-  if (value === null || value === undefined) return 'null'
+  // `undefined` is REFUSED, not coerced. The collector's encoder throws on it, and
+  // quietly turning it into null here would produce a digest it cannot reproduce —
+  // a mismatch that only ever shows up as a 400 from the live server.
+  if (value === undefined) throw new Error('OCJ-1: undefined is not encodable')
+  if (value === null) return 'null'
   if (typeof value === 'boolean') return value ? 'true' : 'false'
   if (typeof value === 'number') {
     if (!Number.isInteger(value)) throw new Error('OCJ-1 allows integers only')
@@ -50,9 +55,12 @@ export function canonicalJsonEncode(value: unknown): string {
   if (typeof value === 'string') return encodeString(value)
   if (Array.isArray(value)) return '[' + value.map(canonicalJsonEncode).join(',') + ']'
   if (typeof value === 'object') {
+    // Plain objects only, matching the collector: a Date or a Map would otherwise
+    // encode as {} and digest as something neither side intended.
+    const proto = Object.getPrototypeOf(value)
+    if (proto !== Object.prototype && proto !== null) throw new Error('OCJ-1: plain objects only')
     const entries = Object.entries(value as Record<string, unknown>)
-    // Sorted by UTF-16 code unit, which is what Dart's List.sort() on Strings does —
-    // the default JS comparator for strings is the same ordering.
+    // Sorted by UTF-16 code unit, matching the collector's own compareUtf16.
     entries.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     return '{' + entries.map(([k, v]) => encodeString(k) + ':' + canonicalJsonEncode(v)).join(',') + '}'
   }

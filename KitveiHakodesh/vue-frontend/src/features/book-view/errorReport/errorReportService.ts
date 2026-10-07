@@ -88,8 +88,14 @@ function dequeue(reportId: string): void {
 /** Statuses that mean "do not send this again" — the collector's contract 2.4. */
 const PERMANENT_STATUSES = new Set([400, 409, 413, 422])
 
-/** At most this many queued reports go out per flush, so a long queue cannot burst. */
-const MAX_FLUSH_PER_RUN = 20
+/**
+ * At most this many queued reports go out per flush.
+ *
+ * The collector rate-limits to 8 per minute per IP and answers 429 beyond that. Six
+ * leaves headroom for a report the user sends by hand while a flush is running, so a
+ * backlog drains steadily instead of tripping the limit it just caused.
+ */
+const MAX_FLUSH_PER_RUN = 6
 
 /** How often a pending queue is retried while the app is running. */
 const FLUSH_INTERVAL_MS = 5 * 60 * 1000

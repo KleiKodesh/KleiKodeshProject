@@ -3,7 +3,11 @@ import { computed, ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { showToast } from '@/composables/useToast'
-import { buildErrorReportPayload, extractContextAround } from './errorReportPayload'
+import {
+  buildErrorReportPayload,
+  extractContextAround,
+  ERROR_REPORT_LIMITS,
+} from './errorReportPayload'
 import { queueErrorReport, sendErrorReport } from './errorReportService'
 import { hasErrorReportEndpoint } from './errorReportEndpoint'
 import { UNKNOWN_LIBRARY_VERSION, type ErrorReportSource } from './errorReportSource'
@@ -109,11 +113,19 @@ function buildPayload() {
 /**
  * Can a proposed correction actually be applied by whoever receives it?
  *
- * Only when the database confirmed the line is still the one on screen. Said in the
- * dialog rather than discovered after sending, so the user knows their proposal will
- * travel as a description rather than as an applicable change.
+ * Two conditions, and the user is told when either fails rather than discovering it as
+ * a silently-dropped block after sending: the database must confirm the line is still
+ * the one on screen, AND the line must be something the collector will accept as an
+ * anchor — it refuses an empty one, or one past its 20,000 character cap.
  */
-const isCorrectionApplicable = computed(() => props.source?.location != null)
+const canAnchorCorrection = computed(
+  () =>
+    props.originalLine.length > 0 &&
+    props.originalLine.length <= ERROR_REPORT_LIMITS.maxOriginalLineLength,
+)
+const isCorrectionApplicable = computed(
+  () => props.source?.location != null && canAnchorCorrection.value,
+)
 const isResolvingSource = computed(() => props.source == null)
 
 /** The email is remembered on every successful action, never on a cancel. */

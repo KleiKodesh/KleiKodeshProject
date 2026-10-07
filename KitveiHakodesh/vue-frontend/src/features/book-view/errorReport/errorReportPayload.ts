@@ -27,8 +27,12 @@ export type ErrorReportKind = 'free_text' | 'text_correction'
 export interface ErrorReportCorrection {
   /** The whole source line, as it reads now. */
   original_line: string
-  /** The part of it the user selected (equals original_line when nothing was selected). */
-  original_selection: string
+  /**
+   * The part of original_line the user selected, or null for a whole-line correction.
+   * null and `selection_offset` go together: the collector refuses a selection without
+   * an offset, and an offset without a selection.
+   */
+  original_selection: string | null
   /**
    * Where the selection sits inside original_line, as a half-open range. null when the
    * selection could not be located — a correction of the whole line. The unit matters:
@@ -37,7 +41,12 @@ export interface ErrorReportCorrection {
   selection_offset: { unit: 'utf16_code_units'; start: number; end: number } | null
   /** The replacement. null = no proposal at all; '' = the user proposes deleting the text. */
   proposed_text: string | null
-  /** The untouched text on either side, so a server can re-anchor the selection. */
+  /**
+   * The ENTIRE remainder of original_line on each side of the selection — not an
+   * excerpt. The collector reconstructs the line and rejects the correction unless
+   * `context_before + original_selection + context_after === original_line`, so a
+   * few-words-of-context version fails validation on any longer line.
+   */
   context_before: string
   context_after: string
 }
@@ -99,6 +108,14 @@ export const ERROR_REPORT_LIMITS = {
   maxContextTextLength: 20_000,
   /** The whole UTF-8 encoded body, in bytes. */
   maxApiBodyBytes: 256 * 1024,
+  /**
+   * The collector's own cap on correction.original_line, past which it answers 413.
+   * A correction cannot be truncated to fit — the line IS the anchor — so an
+   * over-long line sends as free text instead of being refused outright.
+   */
+  maxOriginalLineLength: 20_000,
+  /** Keeps a pasted essay from making the whole body undeliverable. */
+  maxErrorDetailsLength: 20_000,
 } as const
 
 /**
@@ -296,7 +313,30 @@ export function buildErrorReportPayload(draft: ErrorReportDraft): ErrorReportPay
   // freeText — the user's words still travel, they just cannot be applied mechanically.
   // Otzaria degrades the same way for the same reason.
   const location = draft.source.location
-  const hasCorrection = draft.proposedText !== null && location !== null
+
+  // The collector refuses a proposal identical to what it would replace
+  // ('proposal_identical'), and WHICH text that is depends on whether the selection
+  // could be located: the selection when it could, the whole line when it could not.
+  // Computed here so an unlocatable selection cannot slip through as a no-op change.
+  const locatedSelection =
+    draft.selectionOffset >= 0 &&
+    draft.originalLine.slice(
+      draft.selectionOffset,
+      draft.selectionOffset + draft.selectedText.length,
+    ) === draft.selectedText
+  const replacedText = locatedSelection ? draft.selectedText : draft.originalLine
+  // A correction block the collector would refuse outright is worse than no correction
+  // block: the report dies with a 4xx instead of arriving as a description. Both of
+  // these are its hard requirements on original_line — non-empty, and within its cap —
+  // and neither can be fixed by trimming, because that line is the anchor itself.
+  const canAnchorCorrection =
+    draft.originalLine.length > 0 &&
+    draft.originalLine.length <= ERROR_REPORT_LIMITS.maxOriginalLineLength
+  const hasCorrection =
+    draft.proposedText !== null &&
+    location !== null &&
+    draft.proposedText !== replacedText &&
+    canAnchorCorrection
   const payload: ErrorReportPayload = {
     report_id: buildReportId(bookTitle, currentRef, selectedText),
     sender_email: draft.senderEmail,
@@ -305,7 +345,7 @@ export function buildErrorReportPayload(draft: ErrorReportDraft): ErrorReportPay
     current_ref: currentRef,
     line_number: draft.lineNumber,
     selected_text: selectedText,
-    error_details: draft.errorDetails,
+    error_details: truncateText(draft.errorDetails, ERROR_REPORT_LIMITS.maxErrorDetailsLength),
     context_text: contextText,
     // Otzaria's file_path is a `book.filePath` column dressed up to look like a path;
     // neither seforim database in use here HAS that column, so there is nothing
@@ -343,20 +383,28 @@ export function buildErrorReportPayload(draft: ErrorReportDraft): ErrorReportPay
   }
 
   if (hasCorrection) {
+    // The collector pairs these three strictly: a non-null original_selection REQUIRES
+    // a selection_offset, and an offset without a selection is refused. So a selection
+    // we could not locate inside the line is sent as a whole-line correction (both
+    // null) rather than as a located one with a missing offset.
+    const hasLocatedSelection = locatedSelection
     payload.correction = {
       original_line: draft.originalLine,
-      original_selection: draft.selectedText,
-      selection_offset:
-        draft.selectionOffset >= 0
-          ? {
-              unit: 'utf16_code_units',
-              start: draft.selectionOffset,
-              end: draft.selectionOffset + draft.selectedText.length,
-            }
-          : null,
+      original_selection: hasLocatedSelection ? draft.selectedText : null,
+      selection_offset: hasLocatedSelection
+        ? {
+            unit: 'utf16_code_units',
+            start: draft.selectionOffset,
+            end: draft.selectionOffset + draft.selectedText.length,
+          }
+        : null,
       proposed_text: draft.proposedText,
-      context_before: context.before,
-      context_after: context.after,
+      // Exact remainders, so the collector's reconstruction check passes. The
+      // four-word `context_text` above is a separate, human-readable field.
+      context_before: hasLocatedSelection ? draft.originalLine.slice(0, draft.selectionOffset) : '',
+      context_after: hasLocatedSelection
+        ? draft.originalLine.slice(draft.selectionOffset + draft.selectedText.length)
+        : '',
     }
   }
 
