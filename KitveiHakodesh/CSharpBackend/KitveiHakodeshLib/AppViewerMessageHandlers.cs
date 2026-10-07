@@ -55,6 +55,14 @@ namespace KitveiHakodeshLib
                                 await _seforimQuery.HandleAsync(root, id);
                             break;
                         case "dict-sql": await HandleDictSql(root, id); break;
+                        // The TYPED dictionary path: the page names a lookup, Core runs it.
+                        // "dict-sql" above is the passthrough it replaces.
+                        case "dictQuery":
+                            if (_dictionaryQuery == null)
+                                _bridge.Reply(id, new { error = "Dictionary database not available" });
+                            else
+                                await _dictionaryQuery.HandleAsync(root, id);
+                            break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "clearDbPath": _db.HandleClearDbPath(id); break;

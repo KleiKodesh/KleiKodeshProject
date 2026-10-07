@@ -217,6 +217,7 @@
     <Compile Include="UserSettings\UserSettingsDbAccess.cs" />
     <Compile Include="UserSettings\UserSettingsDbHandler.cs" />
     <Compile Include="Dictionary\DictionaryHandler.cs" />
+    <Compile Include="Dictionary\DictionaryQueryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

@@ -10,13 +10,6 @@ import {
   getMetzudatBookIds, getMalbimBookIds,
   menchemLookup, aruchLookup, micropediaLookup,
 } from './dictionarySeforimDb'
-import {
-  SQL_DICT_EXACT, SQL_DICT_PREFIX, SQL_DICT_CONTAINS, SQL_DICT_EXACT_IN_WORD,
-  SQL_DICT_REDIRECT, SQL_DICT_ABBREV_CONTAINS,
-  SQL_DICT_LINKS, SQL_DICT_SYNONYMS, SQL_DICT_VARIANTS,
-  SQL_DICT_SPELL_CANDIDATES_FRAG2, SQL_DICT_SPELL_CANDIDATES_FRAG3,
-  buildKetivExistsQuery,
-} from './dictionaryDb.sql'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -43,78 +36,62 @@ declare global {
 
 // ── Query transport ───────────────────────────────────────────────────────────
 
-/** True when the C# dict-sql bridge is present (hosted). Dev falls to the service. */
-const isDictHosted = (): boolean => typeof window.__webviewDictQuery === 'function'
+/** True when the C# bridge is present (hosted). Dev falls to the service. */
+const isDictHosted = (): boolean => typeof window.__webviewAction === 'function'
 
-/** Hosted-only transport — runs SQL via the C# dict-sql bridge. */
-async function queryDictHosted<T>(sql: string, params: unknown[]): Promise<T[]> {
-  return (await window.__webviewDictQuery!(sql, params)).rows as T[]
+/**
+ * Runs a named dictionary lookup on whichever leg is present. Both answer the same op names
+ * with the same shapes — dev through the service, hosted through the WebView2 bridge into
+ * KitveiHakodesh.Core — so a lookup cannot behave differently between the two apps.
+ *
+ * Arguments are NESTED under `params`: __webviewAction flattens whatever it is given onto the
+ * message root, where `id` is already the bridge's correlation id.
+ */
+function dictOp<T>(op: string, args: object = {}): Promise<T> {
+  if (!isDictHosted()) return serviceCall<T>(op, args)
+  return (window.__webviewAction!('dictQuery', { op, params: args }) as Promise<{ error?: string } & T>)
+    .then((reply) => {
+      if (reply && reply.error) throw new Error(String(reply.error))
+      return reply as T
+    })
 }
 
 // ── Dictionary tier queries ───────────────────────────────────────────────────
 
 async function dictExact(term: string): Promise<{ rows: SenseRow[]; isExact: boolean }> {
-  if (!isDictHosted())
-    return serviceCall<{ rows: SenseRow[]; isExact: boolean }>('dictExact', { term })
-  const rows = await queryDictHosted<SenseRow>(SQL_DICT_EXACT, [term])
-  if (rows.length > 0) return { rows, isExact: true }
-  // No direct senses — follow a curated spelling/inflection redirect to the base entry.
-  const redirect = await queryDictHosted<SenseRow>(SQL_DICT_REDIRECT, [term])
-  if (redirect.length > 0) return { rows: redirect, isExact: true }
-  const hit = await queryDictHosted<{ '1': number }>(SQL_DICT_EXACT_IN_WORD, [term])
-  return { rows: [], isExact: hit.length > 0 }
+  return dictOp<{ rows: SenseRow[]; isExact: boolean }>('dictExact', { term })
 }
 
 async function dictPrefix(term: string): Promise<SenseRow[]> {
-  if (!isDictHosted()) return (await serviceCall<{ rows: SenseRow[] }>('dictPrefix', { term })).rows
-  return queryDictHosted<SenseRow>(SQL_DICT_PREFIX, [`${term}%`, term])
+  return (await dictOp<{ rows: SenseRow[] }>('dictPrefix', { term })).rows
 }
 
 async function dictContains(term: string): Promise<SenseRow[]> {
-  if (!isDictHosted()) return (await serviceCall<{ rows: SenseRow[] }>('dictContains', { term })).rows
-  return queryDictHosted<SenseRow>(SQL_DICT_CONTAINS, [`%${term}%`, `${term}%`])
+  return (await dictOp<{ rows: SenseRow[] }>('dictContains', { term })).rows
 }
 
 // ── Exported dictionary functions ─────────────────────────────────────────────
 
 /** Related words (ראו גם, נגזרות, ניגודים — excludes כתיב variants). */
 export async function dictLinks(term: string): Promise<DictLink[]> {
-  if (!isDictHosted()) return (await serviceCall<{ links: DictLink[] }>('dictLinks', { term })).links
-  return queryDictHosted<DictLink>(SQL_DICT_LINKS, [term])
+  return (await dictOp<{ links: DictLink[] }>('dictLinks', { term })).links
 }
 
 /** Synonym words (נרדף). */
 export async function dictSynonyms(term: string): Promise<string[]> {
-  if (!isDictHosted()) return (await serviceCall<{ words: string[] }>('dictSynonyms', { term })).words
-  const rows = await queryDictHosted<{ word: string }>(SQL_DICT_SYNONYMS, [term])
-  return rows.map(r => r.word)
+  return (await dictOp<{ words: string[] }>('dictSynonyms', { term })).words
 }
 
 /** Spelling variants — same word different spelling (כתיב). */
 export async function dictVariants(term: string): Promise<string[]> {
-  if (!isDictHosted()) return (await serviceCall<{ words: string[] }>('dictVariants', { term })).words
-  const rows = await queryDictHosted<{ word: string }>(SQL_DICT_VARIANTS, [term])
-  return rows.map(r => r.word)
+  return (await dictOp<{ words: string[] }>('dictVariants', { term })).words
 }
 
 /** Candidate headwords for spelling suggestions (Levenshtein). */
 export async function dictSpellCandidates(term: string): Promise<string[]> {
-  if (!isDictHosted())
-    return (await serviceCall<{ words: string[] }>('dictSpellCandidates', { term })).words
-  const frag2 = term.slice(0, 2)
-  const frag3 = term.slice(0, 3)
-  const [r2, r3] = await Promise.all([
-    queryDictHosted<{ headword: string }>(SQL_DICT_SPELL_CANDIDATES_FRAG2, [`${frag2}%`]),
-    frag3.length === 3
-      ? queryDictHosted<{ headword: string }>(SQL_DICT_SPELL_CANDIDATES_FRAG3, [`${frag3}%`])
-      : Promise.resolve([]),
-  ])
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (const r of [...r2, ...r3]) {
-    if (!seen.has(r.headword)) { seen.add(r.headword); out.push(r.headword) }
-  }
-  return out
+  // The two-then-three character fragment probes, and the de-duplication across them, run
+  // inside C# — this used to issue both queries and merge their rows here.
+  return (await dictOp<{ words: string[] }>('dictSpellCandidates', { term })).words
 }
 
 /** Abbreviation lookup — delegates to combinedLookup (abbreviations are in the sense table). */
@@ -133,19 +110,10 @@ export async function abbrevLookup(term: string): Promise<SenseRow[]> {
 export async function dictAbbrevSenses(
   candidates: string[],
 ): Promise<{ matched: string; rows: SenseRow[] } | null> {
-  if (!isDictHosted()) {
-    const r = await serviceCall<{ matched: string | null; rows: SenseRow[] }>('dictAbbrevSenses', { candidates })
-    return r.matched ? { matched: r.matched, rows: r.rows } : null
-  }
-  for (const candidate of candidates) {
-    const rows = await queryDictHosted<SenseRow>(SQL_DICT_EXACT, [candidate])
-    if (rows.length > 0) return { matched: candidate, rows }
-  }
-  for (const candidate of candidates) {
-    const rows = await queryDictHosted<SenseRow>(SQL_DICT_ABBREV_CONTAINS, [`%${candidate}%`])
-    if (rows.length > 0) return { matched: candidate, rows }
-  }
-  return null
+  // The two passes — every candidate by exact match first, then every candidate by
+  // %contains% — run inside C#, so this no longer walks the list a query at a time.
+  const r = await dictOp<{ matched: string | null; rows: SenseRow[] }>('dictAbbrevSenses', { candidates })
+  return r.matched ? { matched: r.matched, rows: r.rows } : null
 }
 
 /**
@@ -154,13 +122,7 @@ export async function dictAbbrevSenses(
  */
 export async function dictKetivVariants(candidates: string[]): Promise<string[]> {
   if (candidates.length === 0) return []
-  if (!isDictHosted())
-    return (await serviceCall<{ words: string[] }>('dictKetivVariants', { candidates })).words
-  const rows = await queryDictHosted<{ headword: string }>(
-    buildKetivExistsQuery(candidates.length),
-    candidates,
-  )
-  return rows.map(r => r.headword)
+  return (await dictOp<{ words: string[] }>('dictKetivVariants', { candidates })).words
 }
 
 // ── Combined lookup ───────────────────────────────────────────────────────────

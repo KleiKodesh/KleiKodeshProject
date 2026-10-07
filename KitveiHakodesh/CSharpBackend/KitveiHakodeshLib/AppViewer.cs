@@ -114,6 +114,7 @@ namespace KitveiHakodeshLib
         private HebrewBooksHandler _hb;
         private SearchHandler _search;
         private DictionaryHandler _dictionary;
+        private DictionaryQueryHandler _dictionaryQuery;
         private HebrewBooksDb _hebrewBooksDb;
         private FileSystemSearchHandler _fileSystemSearch;
         private KitveiHakodeshLib.Catalog.CatalogTocHandler _catalogToc;
@@ -585,6 +586,9 @@ namespace KitveiHakodeshLib
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _search = new SearchHandler(_bridge, _webView);
             _dictionary = new DictionaryHandler(AppDir);
+            // Same dictionary, typed access — see DictionaryQueryHandler.
+            _dictionaryQuery = new DictionaryQueryHandler(
+                _bridge, System.IO.Path.Combine(AppDir, "dictionary", "KitveiHakodesh_dictionary.db"));
             _hebrewBooksDb = HebrewBooksDb.Instance;
             _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
