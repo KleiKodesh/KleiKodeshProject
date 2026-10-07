@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using KitveiHakodesh.Core.SeforimDb;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
 
@@ -152,7 +153,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             if (_buildStarted) return;
 
             // Provenance check. fts.ver records the CONTENT stamp of the seforim DB the
-            // index was built from (Common.DbContentStamp — the rows, not the file),
+            // index was built from (Core's SeforimDbContentFingerprint — the rows, not the file),
             // written on build COMPLETION. fts.src records the same stamp at build START,
             // so an interrupted build still carries provenance. If any index state exists
             // (segments or a build.progress watermark) and its recorded stamp doesn't
@@ -167,7 +168,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // rebuild for users whose DB gets touched on open, and its USN/file-id fields
             // made it permanent (they never return to a previous value).
             string verFile = Path.Combine(_indexPath, "fts.ver");
-            string currentStamp = Common.DbContentStamp.Compute(_dbPath!, FtsVersion);
+            string currentStamp = SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion);
             string? recordedStamp = ReadStamp(verFile) ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
             bool hasIndexState = SegmentsExist() || File.Exists(Path.Combine(_indexPath, "build.progress"));
 
@@ -183,7 +184,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // not "legacy": it stays null and the mismatch check wipes, as before.
             bool completedBuild = File.Exists(verFile) && SegmentsExist()
                                && !File.Exists(Path.Combine(_indexPath, "build.progress"));
-            if (Common.DbContentStamp.IsLegacy(recordedStamp) && completedBuild)
+            if (SeforimDbContentFingerprint.IsLegacy(recordedStamp) && completedBuild)
             {
                 logger.LogInformation(
                     "FTS provenance stamp is an older format (recorded={Recorded}) — keeping the completed index",
@@ -241,7 +242,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             try
             {
                 File.WriteAllText(Path.Combine(_indexPath, "fts.src"),
-                    Common.DbContentStamp.Compute(_dbPath!, FtsVersion));
+                    SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion));
             }
             catch (Exception ex) { logger.LogError(ex, "FTS fts.src write failed"); }
             var index = GetIndex();
@@ -342,7 +343,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
                 // Record the source-DB change stamp so any later DB change (switch,
                 // edit, or replacement) invalidates this index on the next start.
                 File.WriteAllText(Path.Combine(_indexPath, "fts.ver"),
-                    Common.DbContentStamp.Compute(_dbPath!, FtsVersion));
+                    SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion));
                 try { index.DeleteBuildProgressFile(); } catch { }
                 _pct = 100.0;
                 _isMerging = false;   // the merge is part of the build; it is over too
@@ -420,10 +421,10 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         if (builtFrom == null) return false;
         // An older-format stamp is not comparable — reading it as "changed" here would
         // wipe and rebuild a live index. EnsureIndexing already re-stamps on the next build.
-        if (Common.DbContentStamp.IsLegacy(builtFrom)) return false;
+        if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return false;
 
         string current;
-        try { current = Common.DbContentStamp.Compute(_dbPath!, FtsVersion); } catch { return false; }
+        try { current = SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion); } catch { return false; }
         if (string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase))
             return false; // unchanged
 

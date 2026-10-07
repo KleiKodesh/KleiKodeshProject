@@ -101,8 +101,10 @@ namespace KitveiHakodeshLib.Search
                 // WebView2 message thread). Failure degrades to unexpanded search.
                 if (expandRelated)
                 {
-                    try { query = SearchExpansion.RewriteQuery(query); }
-                    catch (Exception ex) { Console.WriteLine("[FtsSearchExecutor] expansion rewrite failed: " + ex.Message); }
+                    // One expander, shared with the service, so the hosted and dev legs can
+                    // never answer the same query differently. It never throws — a corrupt or
+                    // missing artifact degrades to the unexpanded query inside Core.
+                    query = RelatedFormExpander.RewriteQuery(query);
                 }
 
                 // Batching strategy:

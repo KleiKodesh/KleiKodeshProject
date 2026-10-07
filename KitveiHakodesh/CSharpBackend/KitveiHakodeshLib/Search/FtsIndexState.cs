@@ -617,35 +617,23 @@ namespace KitveiHakodeshLib.Search
         // this stays a startup-cheap check; COUNT(*) on `line` is a multi-second full
         // scan and is deliberately NOT part of it.
 
-        /// <summary>Content fingerprint of the seforim DB: path plus the identity of the
-        /// `line` and `book` tables (extremal ids and the schema cookie). Read-only, and
-        /// invariant under anything that rewrites the file without changing its rows.
-        /// Falls back to the file's size alone when the DB cannot be queried, so a
-        /// genuinely different DB still mismatches. Returns null on error.</summary>
+        /// <summary>Content fingerprint of the seforim DB — KitveiHakodesh.Core's, so the
+        /// hosted leg and the service stamp an index identically and neither considers the
+        /// other's index stale. Path plus the identity of the `line` and `book` tables
+        /// (extremal ids and the schema cookie); read-only, and invariant under anything that
+        /// rewrites the file without changing its rows. Falls back to the file's size when the
+        /// DB cannot be queried, so a genuinely different DB still mismatches.
+        ///
+        /// The format tag moved from this project's "v2|" to Core's "c1|". An index stamped by
+        /// an older build therefore reads as a DIFFERENT FORMAT rather than a different
+        /// database — see <see cref="IsLegacySourceStamp"/> — which keeps a COMPLETED index and
+        /// re-stamps it on its next build. Nobody rebuilds because of the move.</summary>
         internal static string ComputeDbStamp(string dbPath)
         {
-            try
-            {
-                if (string.IsNullOrEmpty(dbPath)) return null;
-                // Carries StampPrefix like every other branch — without it this stamp would
-                // read as the older format and be excused rather than compared.
-                if (!File.Exists(dbPath)) return StampPrefix + dbPath.ToLowerInvariant() + "|missing";
-
-                string content = TryComputeDbContentStamp(dbPath);
-                if (content != null) return StampPrefix + dbPath.ToLowerInvariant() + "|" + content;
-
-                // The DB is present but unreadable (locked, corrupt, unexpected schema).
-                // Size alone still separates two different databases, and unlike mtime it
-                // does not move when the file is merely rewritten in place.
-                return StampPrefix + dbPath.ToLowerInvariant() + "|len=" + new FileInfo(dbPath).Length;
-            }
+            if (string.IsNullOrEmpty(dbPath)) return null;
+            try { return KitveiHakodesh.Core.SeforimDb.SeforimDbContentFingerprint.Compute(dbPath); }
             catch { return null; }
         }
-
-        /// <summary>Version tag on every stamp this build writes. Bump it whenever the
-        /// fingerprint's format changes, so old stamps are recognised as a DIFFERENT
-        /// FORMAT rather than compared as a different DB — see IsLegacySourceStamp.</summary>
-        private const string StampPrefix = "v2|";
 
         /// <summary>True for an fts.src written by an app version whose stamp format
         /// predates this one. Such a stamp can never compare equal to a current stamp, so
@@ -656,95 +644,13 @@ namespace KitveiHakodeshLib.Search
         /// watermark.</summary>
         internal static bool IsLegacySourceStamp(string stamp)
         {
-            return stamp != null && !stamp.StartsWith(StampPrefix, StringComparison.Ordinal);
+            return KitveiHakodesh.Core.SeforimDb.SeforimDbContentFingerprint.IsLegacy(stamp);
         }
 
-        /// <summary>Queries the DB for a content fingerprint. Returns null if it cannot be
-        /// read, so the caller can fall back. Opens READ-ONLY: this must never write the
-        /// header or create a -wal sidecar (that is the bug this stamp exists to survive).</summary>
-        private static string TryComputeDbContentStamp(string dbPath)
-        {
-            try
-            {
-                using (var conn = new System.Data.SQLite.SQLiteConnection(
-                           "Data Source=" + dbPath + ";Version=3;Read Only=True;FailIfMissing=True;"))
-                {
-                    conn.Open();
-                    using (var cmd = conn.CreateCommand())
-                    {
-                        // schema_version changes on any DDL, so a rebuilt DB with coincidentally
-                        // identical extremal ids still mismatches.
-                        cmd.CommandText = "PRAGMA schema_version";
-                        object schemaVer = cmd.ExecuteScalar();
-
-                        // MIN/MAX over an INTEGER PRIMARY KEY are index seeks, not scans.
-                        cmd.CommandText = "SELECT MIN(id), MAX(id) FROM line";
-                        long lineMin = 0, lineMax = 0;
-                        using (var r = cmd.ExecuteReader())
-                            if (r.Read() && !r.IsDBNull(0))
-                            { lineMin = r.GetInt64(0); lineMax = r.GetInt64(1); }
-
-                        cmd.CommandText = "SELECT MIN(id), MAX(id) FROM book";
-                        long bookMin = 0, bookMax = 0;
-                        using (var r = cmd.ExecuteReader())
-                            if (r.Read() && !r.IsDBNull(0))
-                            { bookMin = r.GetInt64(0); bookMax = r.GetInt64(1); }
-
-                        // A DB swapped for one with the same id ranges but different text would
-                        // slip past the ids alone; the last line's content pins the actual rows.
-                        //
-                        // Read the STORED value's LENGTH rather than its text. On a schema-6
-                        // database the text lives in `line_content` and is compressed, so the
-                        // length is the frame's size - which still changes whenever the text
-                        // does, and costs no dictionary load on a path whose job is to touch
-                        // the database as little as possible. An earlier build threw here
-                        // rather than stamp a compressed database at all.
-                        bool hasSplitContent;
-                        using (var probe = conn.CreateCommand())
-                        {
-                            probe.CommandText =
-                                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='line_content' LIMIT 1";
-                            bool hasSidecar = probe.ExecuteScalar() != null;
-
-                            bool lineHasContent = false;
-                            probe.CommandText = "PRAGMA table_info(line)";
-                            using (var pr = probe.ExecuteReader())
-                                while (pr.Read())
-                                    if (string.Equals(pr.GetString(1), "content", StringComparison.Ordinal))
-                                    { lineHasContent = true; break; }
-
-                            hasSplitContent = hasSidecar && !lineHasContent;
-                        }
-
-                        cmd.CommandText = hasSplitContent
-                            ? "SELECT length(content) FROM line_content WHERE id = @id"
-                            : "SELECT length(content) FROM line WHERE id = @id";
-                        cmd.Parameters.AddWithValue("@id", lineMax);
-                        object lastLineLengthValue = cmd.ExecuteScalar();
-                        long lastLineLen = lastLineLengthValue == null || lastLineLengthValue is DBNull
-                            ? -1
-                            : Convert.ToInt64(lastLineLengthValue);
-
-                        return "schema=" + schemaVer
-                             + "|line=" + lineMin + ":" + lineMax
-                             + "|book=" + bookMin + ":" + bookMax
-                             + "|tail=" + lastLineLen;
-                    }
-                }
-            }
-            // Deliberately NOT caught: the catch below is for a DB that cannot be read
-            // (locked, corrupt, unexpected schema), where falling back is correct. Compressed
-            // content is a different thing — a DB we can read and must not guess about.
-            catch (NotSupportedException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("[FtsIndexState] Content stamp unavailable, falling back: " + ex.Message);
-                return null;
-            }
-        }
+        // The content fingerprint itself is KitveiHakodesh.Core's (SeforimDbContentFingerprint).
+        // This project used to carry its own copy of the same queries — extremal line/book ids,
+        // the schema cookie, the last line's stored length — which is precisely the kind of
+        // "keep the two in sync" duplicate the Core migration exists to remove.
 
         internal static string ReadSourceStamp()
         {

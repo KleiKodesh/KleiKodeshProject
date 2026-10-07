@@ -200,7 +200,7 @@
     <Compile Include="Search\FtsIndexState.cs" />
     <Compile Include="Search\FtsIndexBuilder.cs" />
     <Compile Include="Search\FtsSearchExecutor.cs" />
-    <Compile Include="Search\SearchExpansion.cs" />
+    <Compile Include="Search\RelatedFormExpander.cs" />
     <Compile Include="Search\SearchHandler.cs" />
     <!-- Catalog TOC (Lucene) search now comes from KitveiHakodesh.Core, which multi-targets
          net48 natively — so this leg consumes the SAME engine as the service by referencing a
