@@ -165,10 +165,23 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// reported every <see cref="ProgressReportInterval"/> lines.</param>
         /// <param name="onSegmentFlushed">A segment just reached disk — from the first of
         /// these on, the index answers searches.</param>
+        /// <param name="isStillCurrent">Asked once, after the build succeeds and BEFORE the
+        /// completion stamp is written. A host that can supersede a build — an app reset
+        /// starting a replacement — answers false for the old one, and nothing is recorded.
+        /// Writing the stamp anyway would mark the NEW build's directory as a finished index of
+        /// the OLD build's content, and the next launch would skip the rebuild entirely.
+        /// Defaults to "always current", which is correct for a host that never supersedes.</param>
+        /// <param name="onMergeProgress">(passesDone, passesExpected) during the final force
+        /// merge. That phase reports no LINES, so without these ticks a host can only hold its
+        /// last line percentage for minutes and the build reads as hung. (0, 0) is the
+        /// phase-start signal, sent before the first pass; passesExpected is an estimate that
+        /// moves as the merger discovers how much work is left.</param>
         public bool Build(
             SeforimIndex index,
             Action<long, long>? onProgress = null,
             Action? onSegmentFlushed = null,
+            Action<int, int>? onMergeProgress = null,
+            Func<bool>? isStillCurrent = null,
             CancellationToken cancellationToken = default)
         {
             if (index == null) throw new ArgumentNullException(nameof(index));
@@ -208,7 +221,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                         // Lowest CPU + very-low I/O priority for the whole build, so it
                         // never contends with searches or the other index rebuilds that
                         // run alongside it. Same policy as both current hosts.
-                        backgroundPriority: true);
+                        backgroundPriority: true,
+                        onMergeProgress: onMergeProgress);
                     break;
                 }
                 catch (IndexWriteLockException) when (attempt < WriteLockRetries)
@@ -216,6 +230,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                     Thread.Sleep(WriteLockRetryDelay);
                 }
             }
+
+            // A superseded build has had its segments deleted by whatever replaced it, so there
+            // is nothing left of it to record — and recording it would be actively wrong.
+            if (completed && isStillCurrent != null && !isStillCurrent())
+                return completed;
 
             if (completed)
             {

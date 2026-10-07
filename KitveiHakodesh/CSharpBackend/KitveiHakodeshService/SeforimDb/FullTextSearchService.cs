@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using KitveiHakodesh.Core.SeforimDb;
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
 
@@ -26,10 +27,20 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     // fts2 (2026-07-22): tokenizer change — inline tags (<b>, <small>, …) are now
     // word-transparent and HTML entities are word separators, so indexed terms
     // differ from fts1 indexes; the stamp mismatch forces a clean rebuild.
-    private const string FtsVersion = "fts2";
+    // Core's constant, not a second copy of the string: the two legs must agree about what
+    // "fts2" means or each would consider the other's index stale.
+    private const string FtsVersion = SeforimDbFtsIndexer.IndexFormatVersion;
 
     private readonly string? _dbPath = SeforimDbLocator.Resolve();
     private readonly string _indexPath = ResolveIndexPath();
+
+    /// <summary>The build mechanics — the at-start and at-completion stamps, resume state,
+    /// write-lock retry, background priority and the force merge — shared with the hosted app
+    /// so both legs stamp and resume an index identically. Only built once there is a database
+    /// to index; RunBuild is never reached without one.</summary>
+    private SeforimDbFtsIndexer Indexer =>
+        _indexer ??= new SeforimDbFtsIndexer(_indexPath, _dbPath!);
+    private SeforimDbFtsIndexer? _indexer;
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
     private readonly bool _external = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FTS_INDEX_PATH"));
 
@@ -152,58 +163,35 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // the progress file on the next service start.
             if (_buildStarted) return;
 
-            // Provenance check. fts.ver records the CONTENT stamp of the seforim DB the
-            // index was built from (Core's SeforimDbContentFingerprint — the rows, not the file),
-            // written on build COMPLETION. fts.src records the same stamp at build START,
-            // so an interrupted build still carries provenance. If any index state exists
-            // (segments or a build.progress watermark) and its recorded stamp doesn't
-            // match the current DB — or there is no stamp at all (legacy interrupted
-            // build) — the state belongs to a different/unknown database and resuming it
-            // would permanently skip every line below the old watermark (2026-07-28
-            // incident: a DB swap under an incomplete build left the whole
-            // chumash-parshanut corpus unsearchable). Wipe and rebuild.
-            //
-            // This used to use DbChangeStamp, which answers "did anything touch the file?"
-            // — including a rewrite that changed no row. That turned every launch into a
-            // rebuild for users whose DB gets touched on open, and its USN/file-id fields
-            // made it permanent (they never return to a previous value).
-            string verFile = Path.Combine(_indexPath, "fts.ver");
-            string currentStamp = SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion);
-            string? recordedStamp = ReadStamp(verFile) ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
-            bool hasIndexState = SegmentsExist() || File.Exists(Path.Combine(_indexPath, "build.progress"));
-
-            // A stamp in the older STAMP FORMAT cannot be compared against a current one;
-            // it would always look like a different DB and wipe a good index once per
-            // format change. A COMPLETED build (fts.ver + segments, no watermark to resume
-            // from) is kept and re-stamped on its next build. Anything resumable is still
-            // wiped: resuming needs positive proof the watermark belongs to this DB.
-            //
-            // Note this covers only an unreadable stamp FORMAT, never a changed FtsVersion
-            // — a bumped FtsVersion means the segment format changed and MUST rebuild, so
-            // it falls through to the mismatch check below. No stamp at all (null) is also
-            // not "legacy": it stays null and the mismatch check wipes, as before.
-            bool completedBuild = File.Exists(verFile) && SegmentsExist()
-                               && !File.Exists(Path.Combine(_indexPath, "build.progress"));
-            if (SeforimDbContentFingerprint.IsLegacy(recordedStamp) && completedBuild)
+            // Provenance: validate whatever is on disk against the CURRENT database and clear
+            // anything that cannot be trusted. Core's, and the same check the hosted app runs —
+            // resuming a watermark that belongs to a different database permanently skips every
+            // line below it (the 2026-07-28 incident, where a DB swap under an incomplete build
+            // left the whole chumash-parshanut corpus unsearchable).
+            SeforimDbFtsIndexPlan plan;
+            try
             {
-                logger.LogInformation(
-                    "FTS provenance stamp is an older format (recorded={Recorded}) — keeping the completed index",
-                    recordedStamp);
-                recordedStamp = currentStamp; // unverifiable, but not evidence of a different DB
+                plan = Indexer.Prepare();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "FTS stale-index wipe failed");
+                return;
             }
 
-            if (hasIndexState && !string.Equals(recordedStamp, currentStamp, StringComparison.OrdinalIgnoreCase))
+            if (plan.KeptUnverifiableCompletedIndex)
+                logger.LogInformation(
+                    "FTS provenance stamp is an older format — keeping the completed index");
+
+            if (plan.WipedStaleState)
             {
                 logger.LogInformation(
-                    "FTS index is stale (seforim DB changed or provenance unknown; recorded={Recorded}) — wiping for rebuild",
-                    recordedStamp ?? "(none)");
-                try { Directory.Delete(_indexPath, recursive: true); }
-                catch (Exception ex) { logger.LogError(ex, "FTS stale-index wipe failed"); }
+                    "FTS index is stale (seforim DB changed or provenance unknown) — wiping for rebuild");
                 _index = null; // never let an already-open store answer over the wiped directory
             }
 
             // A completed service-owned build against the CURRENT DB → ready, no rebuild.
-            if (File.Exists(verFile) && SegmentsExist())
+            if (plan.IsReady)
             {
                 _isReady = true;
                 _buildStarted = true;
@@ -223,31 +211,18 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         }
     }
 
-    /// <summary>Reads a stamp file; null when absent or unreadable.</summary>
-    private static string? ReadStamp(string path)
-    {
-        try { return File.Exists(path) ? File.ReadAllText(path).Trim() : null; }
-        catch { return null; }
-    }
-
     private void RunBuild(CancellationToken ct, int generation)
     {
         try
         {
-            Directory.CreateDirectory(_indexPath);
-            // Record the source-DB stamp BEFORE any segment or progress state exists, so
-            // an interrupted build is attributable to its DB on the next start (see the
-            // provenance check in EnsureIndexing). A resume session rewrites the same
-            // stamp — EnsureIndexing already validated it matches the current DB.
-            try
-            {
-                File.WriteAllText(Path.Combine(_indexPath, "fts.src"),
-                    SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion));
-            }
-            catch (Exception ex) { logger.LogError(ex, "FTS fts.src write failed"); }
             var index = GetIndex();
 
-            // Resume from the progress file if a prior build was interrupted (no DB scan on resume).
+            // Everything mechanical about a build — the at-start and at-completion stamps, the
+            // resume state, the write-lock retry, background priority, the force merge and
+            // clearing the watermark — is Core's, and is the SAME code the hosted app runs.
+            // What stays here is this host's own bookkeeping: the generation guard that stops a
+            // superseded build writing over the one that replaced it, and the progress fields
+            // the RPC stream reads.
             index.GetResumeState(out _, out long cachedTotal, out long cachedOffset);
             long total = cachedTotal > 0 ? cachedTotal : SafeCountLines(index);
             long resumeOffset = cachedOffset;
@@ -258,103 +233,56 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
             logger.LogInformation("FTS build starting — index={Index} total≈{Total}", _indexPath, total);
 
-            // A fast service restart (dev respawn) can begin the new build before the
-            // previous process has fully exited and released the OS write.lock — the
-            // acquisition then throws IndexWriteLockException. The stale lock clears the
-            // moment the old process dies (the OS releases it), so wait-and-retry a few
-            // times instead of abandoning the build. This is the ONLY place we can guard
-            // it without changing shared FtsLib (used by the hosted net48 path too).
-            bool ok = false;
-            const int lockRetries = 8;
-            for (int attempt = 0; ; attempt++)
-            {
-                ct.ThrowIfCancellationRequested();
-                try
+            bool ok = Indexer.Build(
+                index,
+                onProgress: (indexed, totalLines) =>
                 {
-                    ok = index.BuildIndex(
-                        limit: 0,
-                        onProgress: sessionCount =>
-                        {
-                            // A reset that gave up waiting for this build leaves it running;
-                            // its progress must not be written over the new build's state.
-                            if (!IsCurrentBuild(generation)) return;
-                            if (total > 0 && sessionCount % 5000 == 0)
-                            {
-                                long indexed = resumeOffset + sessionCount;
-                                _pct = Math.Min(99.9, indexed * 100.0 / total);
-                                _processed = (int)Math.Min(indexed, int.MaxValue);
-                                if (!_isReady && SegmentsExist()) _isReady = true; // first segment → searchable
-                                NotifyProgress();
-                            }
-                        },
-                        onFlush: () =>
-                        {
-                            if (!IsCurrentBuild(generation)) return; // see onProgress
-                            if (!_isReady && SegmentsExist()) _isReady = true;
-                            NotifyProgress();
-                        },
-                        totalLines: total,
-                        resumeOffset: resumeOffset,
-                        forceMergeOnComplete: true,
-                        ct: ct,
-                        // The force merge is the build's last phase and a long one. It has
-                        // no line-level progress, so it reports passes instead — enough to
-                        // tell the UI "still working, different phase" rather than leaving
-                        // the bar frozen on the last line count.
-                        onMergeProgress: (done, expected) =>
-                        {
-                            if (!IsCurrentBuild(generation)) return; // see onProgress
-                            _isMerging = true;
-                            _mergePassesDone = done;
-                            _mergePassesExpected = expected;
-                            NotifyProgress();
-                        },
-                        // The FTS build is the long, heavy one; in background processing
-                        // mode (lowest CPU + very-low I/O priority) it stops contending
-                        // with searches and with the catalog/file-search rebuilds that an
-                        // app reset starts alongside it — they all run in parallel and the
-                        // FTS build takes whatever the machine has left over.
-                        backgroundPriority: true);
-                    break;
-                }
-                catch (IndexWriteLockException) when (attempt < lockRetries)
+                    // A reset that gave up waiting for this build leaves it running; its
+                    // progress must not be written over the new build's state.
+                    if (!IsCurrentBuild(generation)) return;
+                    if (totalLines <= 0) return;
+                    _pct = Math.Min(99.9, indexed * 100.0 / totalLines);
+                    _processed = (int)Math.Min(indexed, int.MaxValue);
+                    if (!_isReady && SegmentsExist()) _isReady = true; // first segment → searchable
+                    NotifyProgress();
+                },
+                onSegmentFlushed: () =>
                 {
-                    logger.LogInformation(
-                        "FTS index write-lock held (attempt {Attempt}/{Max}) — a prior instance is still exiting; retrying",
-                        attempt + 1, lockRetries);
-                    Task.Delay(500, ct).GetAwaiter().GetResult();
-                }
-            }
-
-            if (ok)
-            {
-                // A superseded build must not claim completion: writing fts.ver here would
-                // stamp the NEW build's directory as a finished index of the old build's
-                // content, and EnsureIndexing would then skip the rebuild entirely on the
-                // next start. Its segments are already gone (the reset deleted them), so
-                // there is nothing of this build left to record.
-                if (!IsCurrentBuild(generation))
+                    if (!IsCurrentBuild(generation)) return; // see onProgress
+                    if (!_isReady && SegmentsExist()) _isReady = true;
+                    NotifyProgress();
+                },
+                onMergeProgress: (done, expected) =>
                 {
+                    if (!IsCurrentBuild(generation)) return; // see onProgress
+                    _isMerging = true;
+                    _mergePassesDone = done;
+                    _mergePassesExpected = expected;
+                    NotifyProgress();
+                },
+                // Core asks this before stamping completion. A superseded build answers false
+                // and nothing is recorded — its segments are already gone.
+                isStillCurrent: () =>
+                {
+                    if (IsCurrentBuild(generation)) return true;
                     logger.LogInformation(
                         "FTS build finished after a reset superseded it — discarding its result");
-                    return;
-                }
+                    return false;
+                },
+                cancellationToken: ct);
 
-                // Record the source-DB change stamp so any later DB change (switch,
-                // edit, or replacement) invalidates this index on the next start.
-                File.WriteAllText(Path.Combine(_indexPath, "fts.ver"),
-                    SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion));
-                try { index.DeleteBuildProgressFile(); } catch { }
+            if (ok && IsCurrentBuild(generation))
+            {
                 _pct = 100.0;
                 _isMerging = false;   // the merge is part of the build; it is over too
                 _isReady = true;
                 logger.LogInformation("FTS build complete — {Index}", _indexPath);
             }
-            else if (IsCurrentBuild(generation) && !_isReady)
+            else if (!ok && IsCurrentBuild(generation) && !_isReady)
             {
-                // BuildIndex returned false with nothing searchable: an empty corpus, or a
-                // session that only replayed WAL recovery. No stamp is written and the latch
-                // stays armed, so nothing here will retry — terminal, not "still working".
+                // Build returned false with nothing searchable: an empty corpus, or a session
+                // that only replayed WAL recovery. No stamp is written and the latch stays
+                // armed, so nothing here will retry — terminal, not "still working".
                 logger.LogInformation(
                     "FTS build processed no lines and produced no searchable index — reporting terminal");
                 _buildFailed = true;
@@ -412,21 +340,14 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     {
         if (_external || !HasDb) return false;
 
-        // fts.ver = completed build; fts.src = in-progress build (written at build
-        // start). Either one is a valid provenance record to invalidate — a DB swapped
-        // MID-BUILD must cancel and restart, not keep appending the new DB's lines onto
-        // the old DB's segments. Neither present → nothing built yet to invalidate.
-        string? builtFrom = ReadStamp(Path.Combine(_indexPath, "fts.ver"))
-                         ?? ReadStamp(Path.Combine(_indexPath, "fts.src"));
-        if (builtFrom == null) return false;
-        // An older-format stamp is not comparable — reading it as "changed" here would
-        // wipe and rebuild a live index. EnsureIndexing already re-stamps on the next build.
-        if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return false;
-
-        string current;
-        try { current = SeforimDbContentFingerprint.Compute(_dbPath!, FtsVersion); } catch { return false; }
-        if (string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase))
-            return false; // unchanged
+        // Core's check, read-only and cheap: fts.ver (completed) or fts.src (in progress) —
+        // either is a valid provenance record to invalidate, because a DB swapped MID-BUILD
+        // must cancel and restart rather than append the new DB's lines onto the old DB's
+        // segments. No stamp means nothing built yet, and an older-format stamp is not
+        // comparable; both answer "not stale" so a live index is never wiped over them.
+        bool stale;
+        try { stale = Indexer.IsIndexStale(); } catch { return false; }
+        if (!stale) return false;
 
         logger.LogInformation("FTS: seforim DB changed while running — wiping and rebuilding");
         ResetIndex(); // cancels the in-flight build, wipes, re-arms, and rebuilds
