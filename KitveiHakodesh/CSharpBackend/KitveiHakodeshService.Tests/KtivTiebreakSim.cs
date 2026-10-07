@@ -12,7 +12,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using KitveiHakodeshService.Catalog;
 using Microsoft.Data.Sqlite;
 
 namespace KitveiHakodeshService.Tests

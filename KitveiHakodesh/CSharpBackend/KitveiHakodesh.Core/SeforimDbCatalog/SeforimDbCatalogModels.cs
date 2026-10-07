@@ -28,4 +28,29 @@ public sealed class CatalogTocHit
     /// path — the last tiebreak within a (book, level) group.</summary>
     [MessagePack.IgnoreMember]
     public bool QueryInOrder { get; set; }
+
+    /// <summary>Internal (not on the wire): how many DISTINCT query words this hit's own path
+    /// contains. Ranks above <see cref="WordSpan"/>, because a span is only meaningful between
+    /// hits that found equally many words.</summary>
+    [MessagePack.IgnoreMember]
+    public int WordsFound { get; set; }
+
+    /// <summary>Internal (not on the wire): width of the smallest run of path tokens covering
+    /// every word counted in <see cref="WordsFound"/> — smaller is tighter, so ascending. A
+    /// path that gathers the query into one phrase beats one scattering it over four levels.</summary>
+    [MessagePack.IgnoreMember]
+    public int WordSpan { get; set; }
+
+    /// <summary>Internal (not on the wire): the query was typed with a quoted acronym and this
+    /// hit's own stored text carries the same one. Separates an author acronym from the ordinary
+    /// word it strips to — see SeforimDbCatalogTextNormalizer.GetQuotedAbbreviationKey.</summary>
+    [MessagePack.IgnoreMember]
+    public bool QuotedFormMatch { get; set; }
+
+    /// <summary>Internal (not on the wire): EVERY query token landed in the book's own title or
+    /// author rather than only in the category path. A category is the weaker signal — it is
+    /// shared by every book filed under it — so a book that IS the query outranks one merely
+    /// filed under a category named like it.</summary>
+    [MessagePack.IgnoreMember]
+    public bool MatchesTitleOrAuthor { get; set; }
 }

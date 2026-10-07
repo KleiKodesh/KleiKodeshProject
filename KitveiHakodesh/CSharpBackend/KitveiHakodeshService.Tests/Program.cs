@@ -15,7 +15,6 @@
 //
 // Usage: dotnet run -c Release [-- --db <seforim.db>] [--books 300] [--entries 3] [--rebuild]
 using System.Diagnostics;
-using KitveiHakodeshService.Catalog;
 using KitveiHakodeshService.Tests;
 using Microsoft.Data.Sqlite;
 

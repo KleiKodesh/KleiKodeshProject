@@ -1,14 +1,14 @@
 using System.Collections.Generic;
 
-// ── net48 compatibility shims for the SHARED catalog source ──────────────────────────────
+// ── net48 compatibility shims ─────────────────────────────────────────────────────────────
 //
-// Catalog\CatalogTocIndex.cs and friends are compiled from KitveiHakodeshService's Catalog
-// folder (see the <Compile Link> items in the csproj). They are written against net10, and
-// this file is what lets that exact source also compile on net48 — so the two legs stay one
-// engine instead of two implementations that drift.
+// ⚠ MOSTLY OBSOLETE. These existed for the catalog source that used to be link-compiled in
+// from KitveiHakodeshService: net10-shaped code made to build on net48. That engine now comes
+// from KitveiHakodesh.Core, which multi-targets net48 itself, so nothing here serves it.
 //
-// The rule: patch the gap HERE, never by editing the shared files. Anything added to the
-// shared source that needs a net48 equivalent gets its shim added below.
+// What is still LIVE: System.Index / System.Range, used by AppViewer.cs, and the MessagePack
+// attribute stand-ins, which CatalogTocHandler still carries. The rest is dead and goes with
+// the slice-11 cleanup; it is left in place rather than trimmed mid-migration.
 //
 // The gaps, all mechanical:
 //

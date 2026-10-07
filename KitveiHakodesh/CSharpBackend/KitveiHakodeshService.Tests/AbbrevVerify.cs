@@ -1,4 +1,3 @@
-using KitveiHakodeshService.Catalog;
 using Microsoft.Data.Sqlite;
 
 namespace KitveiHakodeshService.Tests;

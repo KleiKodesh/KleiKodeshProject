@@ -1,11 +1,8 @@
-// Global usings for the SHARED catalog source (Catalog\CatalogTocIndex.cs et al., linked in
-// from KitveiHakodeshService — see the csproj).
+// The SDK's implicit using set, reproduced for this old-style net48 csproj.
 //
-// The service project sets <ImplicitUsings>enable</ImplicitUsings>, so those files are written
-// without the usings the SDK injects for them. This project is an old-style net48 csproj with
-// no such feature, so the same source arrives here missing List<>, CancellationToken, Func<>,
-// and friends. Declaring them here reproduces the SDK's implicit set for this assembly instead
-// of editing ~2800 lines of shared source to carry usings only one leg needs.
+// It was introduced for the catalog source that used to be link-compiled in from the service;
+// that engine is now referenced as a library (KitveiHakodesh.Core), but this project's own
+// files have been written against these usings since, so the set stays.
 //
 // Global usings apply to the WHOLE assembly, not just the linked files, so this list is kept
 // to the minimum the shared source actually needs. Notably `System.Threading` is NOT here:
@@ -23,7 +20,5 @@ global using CancellationToken = System.Threading.CancellationToken;
 global using CancellationTokenSource = System.Threading.CancellationTokenSource;
 global using Interlocked = System.Threading.Interlocked;
 
-// DbCommand.AddWithValue, shared source (KitveiHakodeshService\Common\DbParameterExtensions.cs).
-// Global because the files that use it sit in two namespaces (KitveiHakodeshService.Catalog and
-// .Common) and an extension method is only found through a using of the namespace declaring it.
-global using KitveiHakodeshService.Common;
+// The catalog engine is now a referenced library (KitveiHakodesh.Core), so the extension-method
+// alias the link-compiled source needed is gone with it.

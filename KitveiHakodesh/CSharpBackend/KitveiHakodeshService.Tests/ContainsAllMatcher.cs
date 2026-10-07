@@ -4,7 +4,6 @@
 // fallback) as violations. See CatalogTocIndex.WordClause / VariantIndex for the real logic
 // this mirrors.
 using System.Collections.Generic;
-using KitveiHakodeshService.Catalog;
 
 namespace KitveiHakodeshService.Tests
 {

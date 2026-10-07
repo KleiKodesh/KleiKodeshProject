@@ -1,6 +1,7 @@
 using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Settings;
-using KitveiHakodeshService.Catalog;
+using CatalogTocIndex = KitveiHakodesh.Core.SeforimDbCatalog.SeforimDbCatalogIndex;
+using CatalogTocHit = KitveiHakodesh.Core.SeforimDbCatalog.CatalogTocHit;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -14,7 +15,7 @@ namespace KitveiHakodeshLib.Catalog
     /// <summary>
     /// Hosted (net48) front end for the catalog TOC Lucene search — the counterpart of
     /// KitveiHakodeshService's CatalogTocSearchService, over the SAME shared
-    /// <see cref="CatalogTocIndex"/> engine (linked into this project, see the csproj).
+    /// <see cref="CatalogTocIndex"/> engine — KitveiHakodesh.Core's, referenced as a library.
     ///
     /// Why this exists: the catalog search used to be service-only, so the hosted app fell
     /// back to a two-phase in-memory heuristic (book match + TOC keyword rules) that could
@@ -277,10 +278,11 @@ namespace KitveiHakodeshLib.Catalog
         /// <summary>
         /// Project the wire shape BY HAND rather than serialising CatalogTocHit directly.
         /// The hit carries internal ranking fields (IsLiteral, StructureId, QueryInOrder,
-        /// WordsFound, WordSpan) that the service keeps off the wire with [IgnoreMember];
-        /// System.Text.Json does not honour that attribute, so serialising the object would
-        /// silently start shipping them. Listing the four public fields keeps both legs
-        /// sending the same payload.
+        /// WordsFound, WordSpan, QuotedFormMatch, MatchesTitleOrAuthor) that the service keeps
+        /// off the wire with [IgnoreMember]; System.Text.Json does not honour that attribute, so
+        /// serialising the object would silently start shipping them. Listing the public fields
+        /// keeps both legs sending the same payload — and a ranking key added to Core lands here
+        /// as nothing at all, which is what it should be.
         /// </summary>
         private static List<object> ToWire(List<CatalogTocHit> hits)
         {

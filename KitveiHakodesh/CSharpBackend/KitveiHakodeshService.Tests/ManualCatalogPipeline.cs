@@ -1,4 +1,3 @@
-using KitveiHakodeshService.Catalog;
 
 namespace KitveiHakodeshService.Tests;
 

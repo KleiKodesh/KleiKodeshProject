@@ -2,6 +2,14 @@ namespace KitveiHakodeshService.Catalog;
 
 using KitveiHakodeshService.SeforimDb;
 
+// The index itself is Core's. The name is kept local because this file is the orchestration
+// around it — lifetime, the background rebuild, status and the superseded-search guard — and
+// that is all that stays on this side.
+// global:: because this project has its own KitveiHakodeshService.KitveiHakodesh namespace,
+// which would otherwise shadow the root one.
+using CatalogTocIndex = global::KitveiHakodesh.Core.SeforimDbCatalog.SeforimDbCatalogIndex;
+using CatalogTocHit = global::KitveiHakodesh.Core.SeforimDbCatalog.CatalogTocHit;
+
 /// <summary>
 /// Service wrapper around <see cref="CatalogTocIndex"/> — the disk-based Lucene index
 /// over full TOC paths behind the catalog search.
