@@ -128,6 +128,11 @@ namespace KitveiHakodeshLib.Search
                 // embellishment pass takes: the engine match, the finished hit, and the window
                 // word count that says whether the snippet is short enough to be worth
                 // re-rendering over its neighbours.
+                // Built per search rather than cached: the user can repoint the app at another
+                // library, and the enrichment queries must follow it.
+                var searcher = new KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsSearcher(
+                    new KitveiHakodesh.Core.SeforimDb.SeforimDbQueries(_state.GetDbPath()));
+
                 var pendingResults = new List<FtsLib.SeforimDb.SearchResult>(MemorySafetyCap);
                 var pendingHits    = new List<KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit>(MemorySafetyCap);
                 var pendingWindows = new List<int>(MemorySafetyCap);
@@ -144,7 +149,11 @@ namespace KitveiHakodeshLib.Search
 
                     var builtArray = new KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit[pendingHits.Count];
                     pendingHits.CopyTo(builtArray);
-                    KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsSearcher.EmbellishSnippets(
+                    // Embellishes the short snippets AND enriches every hit with its book id
+                    // and TOC path — the same tail the service's batches go through, so this
+                    // leg stopped shipping bookId 0 / empty tocText for the frontend to
+                    // resolve itself.
+                    searcher.FinishBatch(
                         index, pendingResults, builtArray, pendingWindows.ToArray(),
                         requireOrdered, contextWords, ct);
 

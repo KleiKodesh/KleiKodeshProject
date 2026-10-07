@@ -120,18 +120,17 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 }
             });
 
-            EmbellishShortSnippets(index, results, built, windowWords, requireOrdered, contextWords, cancellationToken);
+            // The tail — embellish the short snippets, then enrich — is the same work a host
+            // that batches on its own rhythm needs, so it lives in one place.
+            FinishBatch(index, results, built, windowWords, requireOrdered, contextWords,
+                        cancellationToken);
 
             var passing = new List<FtsHit>(results.Count);
             foreach (var hit in built)
                 if (hit != null) passing.Add(hit);
-
-            EnrichHits(passing);
             return passing;
         }
 
-        /// <summary>Generate the snippet, apply the match and word-distance filters, and shape
-        /// the hit. False when the hit does not pass.</summary>
         /// <summary>
         /// One engine match → one finished hit, or false when it does not pass the match and
         /// word-distance filters.
@@ -192,12 +191,15 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         /// <summary>
-        /// Embellishes the short snippets in a batch a caller assembled itself — the hosted
-        /// app's progressive flush does. Same work as the pass inside
-        /// <see cref="SearchInBatches"/>; the arrays are parallel, one entry per hit, and
-        /// <paramref name="windowWords"/> holds what <see cref="TryBuildHit"/> reported.
+        /// Finishes a batch a caller assembled itself — the hosted app's progressive flush
+        /// does. Exactly the tail of <see cref="SearchInBatches"/>: the batch's short snippets
+        /// are re-rendered over their neighbouring lines, then every hit is enriched with its
+        /// book id and TOC path, so hits leave Core COMPLETE however they were batched.
+        ///
+        /// The arrays are parallel, one entry per hit, and <paramref name="windowWords"/> holds
+        /// what <see cref="TryBuildHit"/> reported.
         /// </summary>
-        public static void EmbellishSnippets(
+        public void FinishBatch(
             SeforimIndex index,
             IReadOnlyList<SearchResult> results,
             FtsHit?[] built,
@@ -205,8 +207,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             bool requireOrdered,
             int contextWords,
             CancellationToken cancellationToken = default)
-            => EmbellishShortSnippets(index, results, built, windowWords, requireOrdered,
-                                      contextWords, cancellationToken);
+        {
+            EmbellishShortSnippets(index, results, built, windowWords, requireOrdered,
+                                   contextWords, cancellationToken);
+
+            var passing = new List<FtsHit>(built.Length);
+            foreach (var hit in built) if (hit != null) passing.Add(hit);
+            EnrichHits(passing);
+        }
 
         /// <summary>
         /// Re-renders the batch's SHORT snippets — those whose window holds fewer words than
