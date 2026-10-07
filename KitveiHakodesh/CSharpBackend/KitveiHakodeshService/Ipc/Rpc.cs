@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using KitveiHakodeshService.SeforimDb;
 
+
 namespace KitveiHakodeshService.Ipc;
 
 // ── Clean semantic RPC envelope ────────────────────────────────────────────────
@@ -254,20 +255,10 @@ public sealed class HbSearchArgs
     public int Limit { get; set; }
 }
 
-/// <summary>A HebrewBooks catalog row, in the exact shape the Vue app consumes
-/// (see hebrewBooksCatalog.ts HebrewBook).</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class HebrewBook
-{
-    public int Id { get; set; }
-    public string Title { get; set; } = "";
-    public string Author { get; set; } = "";
-    public string PrintingPlace { get; set; } = "";
-    public string PrintingYear { get; set; } = "";
-    public int? Pages { get; set; }
-    public string Categories { get; set; } = "";
-    public bool HasLocalFile { get; set; }
-}
+// A HebrewBooks catalog row is KitveiHakodesh.Core.HebrewBooks.HebrewBook — see the alias at
+// the top of this file. Core's type carries the same keyAsPropertyName MessagePack contract and
+// the same field names, so the bytes the Vue app receives are unchanged (hebrewBooksCatalog.ts
+// HebrewBook). The mirror that used to sit here was a duplicate, not a transport envelope.
 
 /// <summary>Result payload for <c>hbSearch</c>.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

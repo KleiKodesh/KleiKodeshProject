@@ -79,6 +79,8 @@ namespace KitveiHakodesh.Core.UserAnnotations
         /// </summary>
         public List<Dictionary<string, object?>> Query(string sql, IReadOnlyList<object?> parameters)
         {
+            UserAnnotationSqlGuard.Check(sql, write: false);
+
             using var connection = SqliteConnectionFactory.OpenUserData(_databasePath);
             using var command = connection.CreateCommand();
             command.CommandText = SqlPlaceholders.ToNamed(sql);
@@ -103,6 +105,8 @@ namespace KitveiHakodesh.Core.UserAnnotations
         /// </summary>
         public long Execute(string sql, IReadOnlyList<object?> parameters)
         {
+            UserAnnotationSqlGuard.Check(sql, write: true);
+
             using var connection = SqliteConnectionFactory.OpenUserData(_databasePath);
             using var command = connection.CreateCommand();
             command.CommandText = SqlPlaceholders.ToNamed(sql);

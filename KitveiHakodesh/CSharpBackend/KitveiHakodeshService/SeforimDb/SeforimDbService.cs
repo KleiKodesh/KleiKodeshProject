@@ -1,74 +1,36 @@
-using Microsoft.Data.Sqlite;
-using FtsLib.SeforimDb;
+using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodeshService.SeforimDb;
 
 /// <summary>
-/// Read-only access to the user's seforim.db (the large Torah-library content DB).
+/// Transport wrapper over <see cref="SeforimDbQueries"/> — read-only access to the user's
+/// seforim.db (the large Torah-library content database).
 ///
-/// The DB is NOT bundled — it's the user's file. In dev the path comes from the
-/// DB_PATH env var, which the Vite plugin forwards when it spawns this service
-/// (matching the dev-sqlite worker). Production path resolution (Zayit/Otzaria +
-/// registry) arrives with the later C# migration.
+/// Core owns the path resolution, the connection policy, the schema probing, the line-content
+/// codec and every one of the queries below, with their SQL in SeforimDbSqlStrings. The only
+/// thing this class adds is the service's ERROR POLICY: Core returns data or throws (it never
+/// swallows), and a service RPC answers an empty result with a logged error rather than taking
+/// the connection down. That decision belongs to a host, which is why it lives here.
 ///
-/// This file holds the connection/path plumbing; the query methods live in
-/// Sqlite.Queries.cs and the SQL strings in Sqlite.Strings.cs (SeforimSql).
+/// The row types are Core's and are serialized straight onto the wire; there are no mirrors.
 /// </summary>
-public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
+public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
 {
-    private readonly string? _dbPath = SeforimDbLocator.Resolve();
+    private readonly SeforimDbQueries _queries = new();
 
-    public bool HasDb => !string.IsNullOrWhiteSpace(_dbPath) && File.Exists(_dbPath);
-
-    private SqliteConnection Open()
-    {
-        var cs = new SqliteConnectionStringBuilder
-        {
-            DataSource = _dbPath,
-            Mode = SqliteOpenMode.ReadOnly,
-        }.ConnectionString;
-        var conn = new SqliteConnection(cs);
-        conn.Open();
-        return conn;
-    }
+    /// <summary>Whether there is a database to read — false when the user has chosen none, or
+    /// the one they chose has moved.</summary>
+    public bool HasDb => _queries.IsAvailable;
 
     /// <summary>
-    /// Where this database keeps line text and how to decode it, probed per connection.
-    /// Schema 6 moved the text into a `line_content` sidecar and compresses it with a
-    /// dictionary from the database itself, so this decides the SQL as well as how a value
-    /// is read. Shared with FtsLib rather than reimplemented here.
-    /// </summary>
-    private static SeforimLineContent LineContentFor(SqliteConnection connection)
-        => SeforimLineContent.ForConnection(connection);
-
-    /// <summary>True if <paramref name="table"/> has a column named <paramref name="column"/>.</summary>
-    private static bool ColumnExists(SqliteConnection conn, string table, string column)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"PRAGMA table_info({table})";
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-            if (string.Equals(r.GetString(1), column, StringComparison.Ordinal)) return true;
-        return false;
-    }
-
-    /// <summary>True if the DB has a table named <paramref name="table"/>. Whole tables
-    /// (not just columns) differ across seforim-DB schema versions — e.g. link_anchor
-    /// only exists from SeforimLibrary schema v2 on.</summary>
-    private static bool TableExists(SqliteConnection conn, string table)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = @t LIMIT 1";
-        cmd.Parameters.AddWithValue("@t", table);
-        return cmd.ExecuteScalar() != null;
-    }
-
-    /// <summary>
-    /// Client-triggered warm-up — called by an app when IT loads (never at service boot;
-    /// boot stays idle by design). Pays the one-time cold costs in the background so the
-    /// user's first real query doesn't: loads the SQLite native library, opens the first
-    /// pooled connection to the seforim DB, fills the static catalog cache, and JITs the
-    /// hot read paths with a tiny book+lines query. Fire-and-forget; best-effort.
+    /// Client-triggered warm-up — called by an app when IT loads (never at service boot; boot
+    /// stays idle by design). Pays the one-time cold costs in the background so the user's first
+    /// real query does not: loading the SQLite native library, opening the first pooled
+    /// connection, filling the static catalog cache and JITting the hot read paths.
+    ///
+    /// Fire-and-forget is the HOST's choice: Core's Warmup runs synchronously and throws what it
+    /// hits, precisely so the caller decides where it runs and what a failure means. Here it
+    /// means nothing — the first real query will warm instead.
     /// </summary>
     public void Warmup()
     {
@@ -77,25 +39,134 @@ public sealed partial class SeforimDbService(ILogger<SeforimDbService> logger)
         {
             try
             {
-                GetAllCategories();
-                GetAllBooks();
-                GetBookById(1);
-                GetLinesPaged(1, 1, 0);
+                _queries.Warmup();
                 logger.LogInformation("seforim DB warm-up complete (client-triggered)");
             }
             catch { /* best-effort — the first real query will warm instead */ }
         });
     }
 
-    /// <summary>Runs a query body guarded by DB availability + error logging.</summary>
-    private void Run(Action action, string op)
+    // ── Queries ───────────────────────────────────────────────────────────────────
+    //
+    // Every one of these is a straight delegation. Core holds the SQL and the row reading;
+    // Run supplies the "no database / failed" answer this transport wants.
+
+    public List<CategoryRow> GetAllCategories() =>
+        Run(() => _queries.GetAllCategories(), new List<CategoryRow>(), "getAllCategories");
+
+    public List<BookRow> GetAllBooks() =>
+        Run(() => _queries.GetAllBooks(), new List<BookRow>(), "getAllBooks");
+
+    public BookInfo? GetBookById(int id) =>
+        Run(() => _queries.GetBookById(id), null, "getBookById");
+
+    public List<BookVersionRow> GetBookVersions(int bookId) =>
+        Run(() => _queries.GetBookVersions(bookId), new List<BookVersionRow>(), "getBookVersions");
+
+    public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0) =>
+        Run(() => _queries.GetLinesPaged(bookId, limit, offset, versionId), new List<LineRow>(), "getLinesPaged");
+
+    public List<TocEntryRow> GetAllTocEntries(int bookId) =>
+        Run(() => _queries.GetAllTocEntries(bookId), new List<TocEntryRow>(), "getAllTocEntries");
+
+    public List<TocEntryRow> GetAllAltTocEntries(int structureId) =>
+        Run(() => _queries.GetAllAltTocEntries(structureId), new List<TocEntryRow>(), "getAllAltTocEntries");
+
+    public List<AltTocStructureRow> GetAltTocStructures(int bookId) =>
+        Run(() => _queries.GetAltTocStructures(bookId), new List<AltTocStructureRow>(), "getAltTocStructures");
+
+    public List<TocPrefixRow> GetTocEntryByTextPrefix(int bookId, string pattern) =>
+        Run(() => _queries.GetTocEntryByTextPrefix(bookId, pattern), new List<TocPrefixRow>(), "getTocEntryByTextPrefix");
+
+    public List<TocTitleRow> GetTocTitlesForBooks(List<int> bookIds, string? filterWord) =>
+        Run(() => _queries.GetTocTitlesForBooks(bookIds, filterWord), new List<TocTitleRow>(), "getTocTitlesForBooks");
+
+    public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds) =>
+        Run(() => _queries.GetCommentaryLinksForSourceLineRange(lineIds), new List<CommentaryLinkRow>(), "getCommentaryLinksForSourceLineRange");
+
+    public WordLinkAnchorsResult GetWordLinkAnchorsForLines(List<int> lineIds) =>
+        Run(() => _queries.GetWordLinkAnchorsForLines(lineIds), new WordLinkAnchorsResult(), "getWordLinkAnchorsForLines");
+
+    public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId) =>
+        Run(() => _queries.GetWordLinkAnchorTargetsForBook(bookId), new WordLinkTargetsResult(), "getWordLinkAnchorTargetsForBook");
+
+    public List<LineContentRow> GetLineContents(List<int> lineIds) =>
+        Run(() => _queries.GetLineContents(lineIds), new List<LineContentRow>(), "getLineContents");
+
+    public List<ConnectionTypeRow> GetAllConnectionTypes() =>
+        Run(() => _queries.GetAllConnectionTypes(), new List<ConnectionTypeRow>(), "getAllConnectionTypes");
+
+    public List<DefaultCommentatorRow> GetDefaultCommentators(int bookId) =>
+        Run(() => _queries.GetDefaultCommentators(bookId), new List<DefaultCommentatorRow>(), "getDefaultCommentators");
+
+    public List<ReverseLineRow> GetReverseLineData(List<int> lineIds, List<int> typeIds) =>
+        Run(() => _queries.GetReverseLineData(lineIds, typeIds), new List<ReverseLineRow>(), "getReverseLineData");
+
+    public List<ReverseBookRow> GetReverseBooks(int bookId, List<int> typeIds) =>
+        Run(() => _queries.GetReverseBooks(bookId, typeIds), new List<ReverseBookRow>(), "getReverseBooks");
+
+    public List<StaticFilterRow> GetStaticFilterBooks(int sourceBookId, List<int> typeIds) =>
+        Run(() => _queries.GetStaticFilterBooks(sourceBookId, typeIds), new List<StaticFilterRow>(), "getStaticFilterBooks");
+
+    public List<SectionNavRow> GetSectionWithCommentary(int mainBookId, int commentaryBookId, int lineIndex, bool next) =>
+        Run(() => _queries.GetSectionWithCommentary(mainBookId, commentaryBookId, lineIndex, next), new List<SectionNavRow>(), "getSectionWithCommentary");
+
+    public List<TocSectionRow> GetTocSectionWithCommentary(int mainBookId, int commentaryBookId, List<int> rangePairs, bool next) =>
+        Run(() => _queries.GetTocSectionWithCommentary(mainBookId, commentaryBookId, rangePairs, next), new List<TocSectionRow>(), "getTocSectionWithCommentary");
+
+    public List<LinkTargetRow> GetLinkTargetForSourceLineAndBook(int sourceLineId, int targetBookId) =>
+        Run(() => _queries.GetLinkTargetForSourceLineAndBook(sourceLineId, targetBookId), new List<LinkTargetRow>(), "getLinkTargetForSourceLineAndBook");
+
+    public List<TocPathRow> GetTocPathsForLines(List<int> lineIds) =>
+        Run(() => _queries.GetTocPathsForLines(lineIds), new List<TocPathRow>(), "getTocPathsForLines");
+
+    public List<EnclosingTocPathRow> GetEnclosingTocPathForLineRanges(List<int> triples) =>
+        Run(() => _queries.GetEnclosingTocPathForLineRanges(triples), new List<EnclosingTocPathRow>(), "getEnclosingTocPathForLineRanges");
+
+    public List<LineBookRow> GetBookIdsForLines(List<int> lineIds) =>
+        Run(() => _queries.GetBookIdsForLines(lineIds), new List<LineBookRow>(), "getBookIdsForLines");
+
+    public List<LineIndexRow> GetLineIndexFromLineId(int lineId) =>
+        Run(() => _queries.GetLineIndexFromLineId(lineId), new List<LineIndexRow>(), "getLineIndexFromLineId");
+
+    public List<BookIdRow> GetBookIdsByTitlePattern(string pattern) =>
+        Run(() => _queries.GetBookIdsByTitlePattern(pattern), new List<BookIdRow>(), "getBookIdsByTitlePattern");
+
+    public List<BookIdRow> GetBookIdByExactTitle(string title) =>
+        Run(() => _queries.GetBookIdByExactTitle(title), new List<BookIdRow>(), "getBookIdByExactTitle");
+
+    public List<BoldLineRow> GetLinesWithContentPatternForBooks(List<int> bookIds, string pattern) =>
+        Run(() => _queries.GetLinesWithContentPatternForBooks(bookIds, pattern), new List<BoldLineRow>(), "getLinesWithContentPatternForBooks");
+
+    public List<RawLineRow> GetLinesWithEitherContentPattern(int bookId, string p1, string p2) =>
+        Run(() => _queries.GetLinesWithEitherContentPattern(bookId, p1, p2), new List<RawLineRow>(), "getLinesWithEitherContentPattern");
+
+    public List<RawLineRow> GetLineByBookAndLineIndex(int bookId, int lineIndex) =>
+        Run(() => _queries.GetLineByBookAndLineIndex(bookId, lineIndex), new List<RawLineRow>(), "getLineByBookAndLineIndex");
+
+    public List<BookSourceNameRow> GetBookSourceName(int bookId) =>
+        Run(() => _queries.GetBookSourceName(bookId), new List<BookSourceNameRow>(), "getBookSourceName");
+
+    public List<SchemaMetaValueRow> GetLibraryDbVersion() =>
+        Run(() => _queries.GetLibraryDbVersion(), new List<SchemaMetaValueRow>(), "getLibraryDbVersion");
+
+    public List<LineRefRow> GetLineRefAndContent(int bookId, int lineIndex) =>
+        Run(() => _queries.GetLineRefAndContent(bookId, lineIndex), new List<LineRefRow>(), "getLineRefAndContent");
+    /// <summary>Runs one Core query under the service's error policy: no database, or a query
+    /// that threw, becomes <paramref name="whenUnavailable"/> plus a log line — never an
+    /// exception escaping into the RPC loop.</summary>
+    private T Run<T>(Func<T> query, T whenUnavailable, string op)
     {
         if (!HasDb)
         {
-            logger.LogWarning("seforim DB not available (DB_PATH={Path})", _dbPath ?? "<unset>");
-            return;
+            logger.LogWarning("seforim DB not available (path={Path})", _queries.DatabasePath ?? "<unset>");
+            return whenUnavailable;
         }
-        try { action(); }
-        catch (Exception ex) { logger.LogError(ex, "{Op} failed", op); }
+        try { return query(); }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "{Op} failed", op);
+            return whenUnavailable;
+        }
     }
 }

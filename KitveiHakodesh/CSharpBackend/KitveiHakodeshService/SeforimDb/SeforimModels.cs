@@ -1,3 +1,9 @@
+// The row types below are KitveiHakodesh.Core's — aliased, not redeclared. Core's models ARE
+// the wire types: they carry the same [MessagePackObject(keyAsPropertyName: true)] contract and
+// the same property names, so what reaches the frontend is unchanged, and there is no mirror set
+// to keep in step with a SELECT list. What remains in this file is the *Args / *Result ENVELOPES,
+// which shape RPC calls rather than data, and so belong to the transport.
+
 namespace KitveiHakodeshService.SeforimDb;
 
 // Result-row DTOs for the seforim DB, matching the Vue row shapes exactly
@@ -6,27 +12,6 @@ namespace KitveiHakodeshService.SeforimDb;
 // The frontend counterpart is vue-frontend/src/webview-host/queries.types.ts — the row
 // types live beside the SQL that produces them, so both sides of the wire point at the
 // same place. Keep the two files in step when a SELECT list changes.
-
-/// <summary>A category tree row — matches CategoryRow in webview-host/queries.types.ts.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class CategoryRow
-{
-    public int Id { get; set; }
-    public int? ParentId { get; set; }
-    public string Title { get; set; } = "";
-    public int Level { get; set; }
-}
-
-/// <summary>A catalog book row — matches BookRow in webview-host/queries.types.ts (query subset).</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BookRow
-{
-    public int Id { get; set; }
-    public int CategoryId { get; set; }
-    public string Title { get; set; } = "";
-    public int? HasTeamim { get; set; }
-    public string? Authors { get; set; }
-}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CategoriesResult
@@ -44,19 +29,6 @@ public sealed class BooksResult
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookByIdArgs { public int Id { get; set; } }
-
-/// <summary>Single-book metadata — matches BookInfo in webview-host/queries.types.ts.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BookInfo
-{
-    public int TotalLines { get; set; }
-    public int HasTeamim { get; set; }
-    public int HasTargumConnection { get; set; }
-    public int HasReferenceConnection { get; set; }
-    public int HasSourceConnection { get; set; }
-    public int HasCommentaryConnection { get; set; }
-    public int HasOtherConnection { get; set; }
-}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookByIdResult { public BookInfo? Book { get; set; } }
@@ -76,31 +48,8 @@ public sealed class LinesPagedArgs
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookVersionsArgs { public int BookId { get; set; } }
 
-/// <summary>One alternate version of a book — an overlay over the same line ids.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BookVersionRow
-{
-    public int Id { get; set; }
-    /// <summary>The upstream key, usually English. Stable; used for persistence.</summary>
-    public string VersionTitle { get; set; } = "";
-    /// <summary>Display name. Often absent, in which case the caller shows VersionTitle.</summary>
-    public string? HeVersionTitle { get; set; }
-    public string? VersionSource { get; set; }
-    public string? VersionNotes { get; set; }
-    public string? HeVersionNotes { get; set; }
-}
-
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookVersionsResult { public List<BookVersionRow> Rows { get; set; } = new(); }
-
-/// <summary>A streamed line row — matches { id, lineIndex, content } in fetchRange().</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LineRow
-{
-    public int Id { get; set; }
-    public int LineIndex { get; set; }
-    public string Content { get; set; } = "";
-}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LinesResult { public List<LineRow> Rows { get; set; } = new(); }
@@ -112,45 +61,11 @@ public sealed class TocByBookArgs { public int BookId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocByStructureArgs { public int StructureId { get; set; } }
 
-/// <summary>Main/alt TOC entry — matches TocEntry (TreeNodeItem + lineId/lineIndex).</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocEntryRow
-{
-    public int Id { get; set; }
-    public int? ParentId { get; set; }
-    public int Level { get; set; }
-    public int? LineId { get; set; }
-    public int HasChildren { get; set; }
-    public string Text { get; set; } = "";
-    public int? LineIndex { get; set; }
-}
-
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocEntriesResult { public List<TocEntryRow> Rows { get; set; } = new(); }
 
-/// <summary>Alt-TOC structure — matches AltTocStructure.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class AltTocStructureRow
-{
-    public int Id { get; set; }
-    public string Key { get; set; } = "";
-    public string? Title { get; set; }
-    public string? HeTitle { get; set; }
-}
-
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class AltTocStructuresResult { public List<AltTocStructureRow> Rows { get; set; } = new(); }
-
-/// <summary>TOC-search row — matches TocRow { id, parentId, bookId, text, lineIndex }.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocTitleRow
-{
-    public int Id { get; set; }
-    public int? ParentId { get; set; }
-    public int BookId { get; set; }
-    public string Text { get; set; } = "";
-    public int? LineIndex { get; set; }
-}
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocTitlesArgs
@@ -165,10 +80,6 @@ public sealed class TocTitlesResult { public List<TocTitleRow> Rows { get; set; 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocPrefixArgs { public int BookId { get; set; } public string Pattern { get; set; } = ""; }
 
-/// <summary>Daf-yomi prefix hit — matches { id, lineIndex }.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocPrefixRow { public int Id { get; set; } public int? LineIndex { get; set; } }
-
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocPrefixResult { public List<TocPrefixRow> Rows { get; set; } = new(); }
 
@@ -179,74 +90,15 @@ public sealed class LineIdsArgs { public List<int> LineIds { get; set; } = new()
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookIdArgs { public int BookId { get; set; } }
 
-/// <summary>Links-only commentary row — matches useCommentary's forward query shape.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class CommentaryLinkRow
-{
-    public int TargetBookId { get; set; }
-    public int TargetLineId { get; set; }
-    public int ConnectionTypeId { get; set; }
-    public int LineIndex { get; set; }
-}
-
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class CommentaryLinksResult { public List<CommentaryLinkRow> Rows { get; set; } = new(); }
 
-/// <summary>Word-level link anchor (link_anchor ⋈ link) for a source line. CharStart/CharEnd
-/// are visible-char offsets into the line's raw content (upstream countVisibleChars convention:
-/// tags = 0, entity = 1, everything else — including diacritics — = 1). CharEnd null = point
-/// anchor (inline marker); Label = the printed marker letter when the source declares one.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class WordLinkAnchorRow
-{
-    public int LineId { get; set; }
-    public int CharStart { get; set; }
-    public int? CharEnd { get; set; }
-    public string? Label { get; set; }
-    public int TargetBookId { get; set; }
-    public int TargetLineId { get; set; }
-    public int TargetLineIndex { get; set; }
-    public int SourceBookId { get; set; }
-}
-
-/// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class WordLinkAnchorsResult
-{
-    public bool Supported { get; set; }
-    public List<WordLinkAnchorRow> Rows { get; set; } = new();
-}
-
-/// <summary>One distinct (commentary book, anchor label) pair of a source book's word-link
-/// anchors. Feeds the frontend's per-book fallback-treatment ranking and its sign-vocabulary
-/// guard — see SeforimSql.GetWordLinkAnchorTargetsForBook.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class WordLinkTargetRow
-{
-    public int TargetBookId { get; set; }
-    public string? Label { get; set; }
-}
-
-/// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class WordLinkTargetsResult
-{
-    public bool Supported { get; set; }
-    public List<WordLinkTargetRow> Rows { get; set; } = new();
-}
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LineContentRow { public int Id { get; set; } public string Content { get; set; } = ""; }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineContentsResult { public List<LineContentRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class ConnectionTypeRow { public int Id { get; set; } public string Name { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ConnectionTypesResult { public List<ConnectionTypeRow> Rows { get; set; } = new(); }
 
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class DefaultCommentatorRow { public int CommentatorBookId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class DefaultCommentatorsResult { public List<DefaultCommentatorRow> Rows { get; set; } = new(); }
 
@@ -257,16 +109,6 @@ public sealed class ReverseLineDataArgs
 {
     public List<int> LineIds { get; set; } = new();
     public List<int> TypeIds { get; set; } = new();
-}
-
-/// <summary>Reverse-lookup source/targum line — matches the reverse-query row shape.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class ReverseLineRow
-{
-    public int SourceBookId { get; set; }
-    public int SourceLineId { get; set; }
-    public int LineIndex { get; set; }
-    public string Content { get; set; } = "";
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -280,8 +122,6 @@ public sealed class ReverseBooksArgs
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class ReverseBookRow { public int SourceBookId { get; set; } }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ReverseBooksResult { public List<ReverseBookRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -291,8 +131,6 @@ public sealed class StaticFilterArgs
     public List<int> TypeIds { get; set; } = new();
 }
 
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class StaticFilterRow { public int TargetBookId { get; set; } public int ConnectionTypeId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class StaticFilterResult { public List<StaticFilterRow> Rows { get; set; } = new(); }
 
@@ -308,8 +146,6 @@ public sealed class SectionNavArgs
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class SectionNavRow { public int Id { get; set; } public int LineIndex { get; set; } }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class SectionNavResult { public List<SectionNavRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
@@ -322,40 +158,31 @@ public sealed class TocSectionArgs
 }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocSectionRow { public int SectionStart { get; set; } }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocSectionResult { public List<TocSectionRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LinkTargetArgs { public int SourceLineId { get; set; } public int TargetBookId { get; set; } }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LinkTargetRow { public int TargetLineId { get; set; } public int LineIndex { get; set; } }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LinkTargetResult { public List<LinkTargetRow> Rows { get; set; } = new(); }
 
 // ── TOC paths & line→book/index helpers ────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class TocPathRow { public int LineId { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class TocPathsResult { public List<TocPathRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class EnclosingTocPathArgs { public List<int> Triples { get; set; } = new(); }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class EnclosingTocPathRow { public int GroupKey { get; set; } public int BookId { get; set; } public string TocPath { get; set; } = ""; }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class EnclosingTocPathResult { public List<EnclosingTocPathRow> Rows { get; set; } = new(); }
 
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LineBookRow { public int LineId { get; set; } public int BookId { get; set; } }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineBooksResult { public List<LineBookRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineIdArgs { public int LineId { get; set; } }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LineIndexRow { public int LineIndex { get; set; } public int BookId { get; set; } }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineIndexResult { public List<LineIndexRow> Rows { get; set; } = new(); }
 
@@ -365,22 +192,13 @@ public sealed class LineIndexResult { public List<LineIndexRow> Rows { get; set;
 public sealed class TitlePatternArgs { public string Pattern { get; set; } = ""; }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class ExactTitleArgs { public string Title { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BookIdRow { public int Id { get; set; } }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookIdsResult { public List<BookIdRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BoldLinesArgs { public List<int> BookIds { get; set; } = new(); public string Pattern { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BoldLineRow
-{
-    public string Content { get; set; } = "";
-    public string Title { get; set; } = "";
-    public int BookId { get; set; }
-    public int LineId { get; set; }
-    public int LineIndex { get; set; }
-}
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BoldLinesResult { public List<BoldLineRow> Rows { get; set; } = new(); }
 
@@ -388,8 +206,7 @@ public sealed class BoldLinesResult { public List<BoldLineRow> Rows { get; set; 
 public sealed class EitherPatternArgs { public int BookId { get; set; } public string P1 { get; set; } = ""; public string P2 { get; set; } = ""; }
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineByIndexArgs { public int BookId { get; set; } public int LineIndex { get; set; } }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class RawLineRow { public int Id { get; set; } public int LineIndex { get; set; } public string Content { get; set; } = ""; }
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class RawLinesResult { public List<RawLineRow> Rows { get; set; } = new(); }
 
@@ -398,24 +215,11 @@ public sealed class RawLinesResult { public List<RawLineRow> Rows { get; set; } 
 // the reported text came from, and the line's canonical reference.
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BookSourceNameRow { public string SourceName { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BookSourceNameResult { public List<BookSourceNameRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class SchemaMetaValueRow { public string Value { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class SchemaMetaValueResult { public List<SchemaMetaValueRow> Rows { get; set; } = new(); }
 
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class LineRefRow
-{
-    public int Id { get; set; }
-    public int LineIndex { get; set; }
-    /// <summary>Nullable in the database — structural lines carry no reference.</summary>
-    public string? HeRef { get; set; }
-    public string Content { get; set; } = "";
-}
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineRefResult { public List<LineRefRow> Rows { get; set; } = new(); }
 

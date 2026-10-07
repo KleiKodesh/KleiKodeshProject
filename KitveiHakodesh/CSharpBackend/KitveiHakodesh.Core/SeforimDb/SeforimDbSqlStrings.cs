@@ -213,24 +213,34 @@ namespace KitveiHakodesh.Core.SeforimDb
               AND l.sourceBookId != l.targetBookId
               -- Drop lateral citations: a book that merely QUOTES one line of this one is
               -- not its base text. Keep a link only when the data DECLARES the base
-              -- relationship (baseProvenance > 0), or both books sit in the same top-level
-              -- corpus. A responsum citing a targum crosses corpora and is not declared.
+              -- relationship (the declared-base column > 0), or both books sit in the same
+              -- top-level corpus AND the book being asked about is not itself a base text.
+              --
+              -- The corpus test alone only catches citations that cross corpora - a responsum
+              -- quoting a targum. It says nothing about the commonest case, because a
+              -- commentary on a tractate lives in the same corpus as the tractate: without the
+              -- isBaseBook guard, every unprovenanced commentary linking into Berachot would
+              -- be reported as Berachot's source. A book flagged as a base text has no base
+              -- text, so the corpus fallback does not apply to one. The declared branch is
+              -- deliberately left alone - if the data asserts the relationship, that outranks
+              -- any inference made here.
               AND (
-                l.baseProvenance > 0
-                OR (SELECT cc.ancestorId FROM book src
-                      JOIN category_closure cc ON cc.descendantId = src.categoryId
-                      JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                     WHERE src.id = l.sourceBookId)
-                 = (SELECT cc.ancestorId FROM book tb
-                      JOIN category_closure cc ON cc.descendantId = tb.categoryId
-                      JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                     WHERE tb.id = l.targetBookId)
+                l.{schema.DeclaredBaseColumn} > 0
+                OR ((SELECT cc.ancestorId FROM book src
+                       JOIN category_closure cc ON cc.descendantId = src.categoryId
+                       JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                      WHERE src.id = l.sourceBookId)
+                  = (SELECT cc.ancestorId FROM book tb
+                       JOIN category_closure cc ON cc.descendantId = tb.categoryId
+                       JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                      WHERE tb.id = l.targetBookId)
+                    AND (SELECT tb2.isBaseBook FROM book tb2 WHERE tb2.id = l.targetBookId) = 0)
               )";
 
         /// <summary>Reverse lookup: the base text(s) of the given book, best first. A declared base
         /// beats an inferred one, a book flagged as a base text beats one that is not, then catalogue
         /// order, then how much of this book the candidate covers.</summary>
-        public static string GetReverseBooks(int typeCount) => $@"
+        public static string GetReverseBooks(SeforimDbSchema schema, int typeCount) => $@"
             SELECT l.sourceBookId
             FROM link l
             JOIN book sb ON sb.id = l.sourceBookId
@@ -239,21 +249,31 @@ namespace KitveiHakodesh.Core.SeforimDb
               AND l.sourceBookId != l.targetBookId
               -- Drop lateral citations: a book that merely QUOTES one line of this one is
               -- not its base text. Keep a link only when the data DECLARES the base
-              -- relationship (baseProvenance > 0), or both books sit in the same top-level
-              -- corpus. A responsum citing a targum crosses corpora and is not declared.
+              -- relationship (the declared-base column > 0), or both books sit in the same
+              -- top-level corpus AND the book being asked about is not itself a base text.
+              --
+              -- The corpus test alone only catches citations that cross corpora - a responsum
+              -- quoting a targum. It says nothing about the commonest case, because a
+              -- commentary on a tractate lives in the same corpus as the tractate: without the
+              -- isBaseBook guard, every unprovenanced commentary linking into Berachot would
+              -- be reported as Berachot's source. A book flagged as a base text has no base
+              -- text, so the corpus fallback does not apply to one. The declared branch is
+              -- deliberately left alone - if the data asserts the relationship, that outranks
+              -- any inference made here.
               AND (
-                l.baseProvenance > 0
-                OR (SELECT cc.ancestorId FROM book src
-                      JOIN category_closure cc ON cc.descendantId = src.categoryId
-                      JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                     WHERE src.id = l.sourceBookId)
-                 = (SELECT cc.ancestorId FROM book tb
-                      JOIN category_closure cc ON cc.descendantId = tb.categoryId
-                      JOIN category c ON c.id = cc.ancestorId AND c.level = 0
-                     WHERE tb.id = l.targetBookId)
+                l.{schema.DeclaredBaseColumn} > 0
+                OR ((SELECT cc.ancestorId FROM book src
+                       JOIN category_closure cc ON cc.descendantId = src.categoryId
+                       JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                      WHERE src.id = l.sourceBookId)
+                  = (SELECT cc.ancestorId FROM book tb
+                       JOIN category_closure cc ON cc.descendantId = tb.categoryId
+                       JOIN category c ON c.id = cc.ancestorId AND c.level = 0
+                      WHERE tb.id = l.targetBookId)
+                    AND (SELECT tb2.isBaseBook FROM book tb2 WHERE tb2.id = l.targetBookId) = 0)
               )
             GROUP BY l.sourceBookId
-            ORDER BY MAX(l.baseProvenance) DESC,
+            ORDER BY MAX(l.{schema.DeclaredBaseColumn}) DESC,
                      sb.isBaseBook DESC,
                      sb.orderIndex,
                      COUNT(DISTINCT l.targetLineId) DESC";
@@ -429,6 +449,79 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// <summary>A single line from a book by its lineIndex.</summary>
         public static string GetLineByBookAndLineIndex(SeforimDbSchema schema) =>
             "SELECT l.id, l.lineIndex, " + C_ContentColumn(schema, "l")
+            + " FROM line l" + C_ContentJoin(schema, "l")
+            + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
+
+        /// <summary>
+        /// A page of lines as a specific version reads them.
+        ///
+        /// A version is an OVERLAY, not a separate book: version_line carries replacement
+        /// content keyed by the SAME line ids, so ids, lineIndex, the TOC, links and
+        /// highlights all stay valid when the text swaps underneath them.
+        ///
+        /// THREE cases, not two, and COALESCE cannot tell the last two apart:
+        ///
+        ///   no version_line row      the version does not cover this line  -> empty
+        ///   row with NULL content    schema 6 only: the version's text is IDENTICAL to the
+        ///                            base line, stored once rather than twice -> base text
+        ///   row with content         the version's own text
+        ///
+        /// Before schema 6 the column was NOT NULL, so NULL only ever meant "no row" and
+        /// COALESCE(vl.content, '') was right. In schema 6 it is nullable and 744 of 1542
+        /// versions are entirely NULL, so that same expression would render each of them as a
+        /// completely blank book. `vl.lineId IS NULL` is what distinguishes a missing row from
+        /// a present one, which is why the fallback is spelled out rather than coalesced.
+        ///
+        /// Structural lines (heRef IS NULL — headings and titles) keep the base text: a version
+        /// supplies body text, not the book's scaffolding. Body lines a partial version does not
+        /// cover come back EMPTY rather than falling back to the base, which would silently
+        /// interleave two different versions in one page and read as a single text. Partial
+        /// versions are real here — some cover 31 of 1584 lines.
+        /// </summary>
+        public static string GetVersionLinesPaged(SeforimDbSchema schema) => $@"
+            SELECT l.id, l.lineIndex,
+                   CASE WHEN l.heRef IS NULL  THEN {C_ContentExpression(schema, "l")}
+                        WHEN vl.lineId IS NULL THEN ''
+                        WHEN vl.content IS NULL THEN {C_ContentExpression(schema, "l")}
+                        ELSE vl.content END AS content
+            FROM line l{C_ContentJoin(schema, "l")}
+            LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
+            WHERE l.bookId = @bookId
+            ORDER BY l.lineIndex
+            LIMIT @limit OFFSET @offset";
+
+        // ── Book versions, provenance and schema stamp ───────────────────────────────
+
+        /// <summary>
+        /// The alternate versions of a book that actually carry text.
+        ///
+        /// hasContent = 0 rows are metadata-only records (edition provenance and licence) with
+        /// no version_line rows behind them — most version rows in the shipped database are
+        /// these, and offering one would open a blank book. Ordered by the publisher's
+        /// priority, then title, so the best-regarded edition heads the list.
+        ///
+        /// The caller probes for the table first: book_version arrives in a later library schema.
+        /// </summary>
+        public const string GetBookVersions = @"
+            SELECT id, versionTitle, heVersionTitle, versionSource, versionNotes, heVersionNotes
+            FROM book_version
+            WHERE bookId = @bookId AND hasContent = 1
+            ORDER BY priority DESC, versionTitle";
+
+        /// <summary>The upstream source a book came from.</summary>
+        public const string GetBookSourceName =
+            "SELECT s.name AS sourceName FROM book b JOIN source s ON s.id = b.sourceId WHERE b.id = @bookId";
+
+        /// <summary>
+        /// The library build, for STAMPING a report only. Schema detection goes by table
+        /// structure and never by this number — see SeforimDbSchema.
+        /// </summary>
+        public const string GetLibraryDbVersion =
+            "SELECT value FROM schema_meta WHERE key = 'db_version' LIMIT 1";
+
+        /// <summary>One line's canonical reference and stored text, for verifying a report.</summary>
+        public static string GetLineRefAndContent(SeforimDbSchema schema) =>
+            "SELECT l.id, l.lineIndex, l.heRef, " + C_ContentColumn(schema, "l")
             + " FROM line l" + C_ContentJoin(schema, "l")
             + " WHERE l.bookId = @bookId AND l.lineIndex = @lineIndex";
 

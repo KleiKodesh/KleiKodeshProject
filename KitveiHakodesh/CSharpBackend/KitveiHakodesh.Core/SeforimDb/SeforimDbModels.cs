@@ -14,6 +14,41 @@ namespace KitveiHakodesh.Core.SeforimDb
     // The *Args and {Rows} envelopes that used to sit alongside these stay with the
     // transport that shapes them — they describe RPC calls, not data.
 
+    /// <summary>An alternate text version of a book — the version overlay picker's rows.
+    /// Only versions that actually carry content are returned.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class BookVersionRow
+    {
+        public int Id { get; set; }
+        /// <summary>The upstream key, usually English. Stable; used for persistence.</summary>
+        public string VersionTitle { get; set; } = "";
+        /// <summary>Display name. Often absent, in which case the caller shows VersionTitle.</summary>
+        public string? HeVersionTitle { get; set; }
+        public string? VersionSource { get; set; }
+        public string? VersionNotes { get; set; }
+        public string? HeVersionNotes { get; set; }
+    }
+
+    /// <summary>The name of the upstream source a book came from.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class BookSourceNameRow { public string SourceName { get; set; } = ""; }
+
+    /// <summary>One value out of the library's schema_meta table.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class SchemaMetaValueRow { public string Value { get; set; } = ""; }
+
+    /// <summary>A line's canonical reference and stored text, for verifying a reported mistake
+    /// against what the library actually holds.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class LineRefRow
+    {
+        public int Id { get; set; }
+        public int LineIndex { get; set; }
+        /// <summary>Nullable in the database — structural lines carry no reference.</summary>
+        public string? HeRef { get; set; }
+        public string Content { get; set; } = "";
+    }
+
     /// <summary>A category tree row — matches CategoryRow in webview-host/queries.types.ts.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class CategoryRow

@@ -103,6 +103,11 @@
   <!-- The custom full-text search engine. FtsLib multi-targets net48;net10.0; the net10.0
        leg is referenced here so the service can run FTS searches in-process. -->
   <ItemGroup>
+    <!-- The shared backend library. Every data/domain operation lives here; the classes in
+         this project are thin transport wrappers that call into it. Core multi-targets
+         net48;net10.0-windows — the net10.0-windows leg is used here, and it is AOT-clean
+         (IsAotCompatible) because this project publishes native AOT. -->
+    <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj" />
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
     <!-- Document conversion (Word→PDF via AOT-safe COM; OOXML→HTML fallback with
          wiki-style footnotes). Multi-targets net48;net10.0 — the net10.0 leg is used here. -->

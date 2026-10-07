@@ -1,242 +1,120 @@
-using System.Text;
 using KitveiHakodeshService.Ipc;
-using Microsoft.Data.Sqlite;
+using CoreDictionary = KitveiHakodesh.Core.Dictionary;
 
 namespace KitveiHakodeshService.Dictionary;
 
 /// <summary>
-/// Dictionary lookups over the bundled KitveiHakodesh dictionary catalog
-/// (Dictionary/Dictionary.db). Ports every query that used to live in the Vue
-/// dictionaryDb.sql.ts, so the frontend no longer sends SQL for the dev path.
+/// Transport wrapper over <see cref="CoreDictionary.DictionaryDbQueries"/>. Every lookup is
+/// Core's; this class exists only to find the database once, to translate Core's models into
+/// the wire envelopes the frontend already expects, and to keep a Core failure from taking
+/// the RPC down.
 ///
-/// Tables: word(id, headword), sense(id, word_id, nikud, text, source_id),
-/// source_kind(id, name), link(word_id, target_id, kind_id),
-/// link_kind(id, name, explanation). Read-only, Microsoft.Data.Sqlite.
+/// The envelope property names (<c>Rows</c>, <c>IsExact</c>, <c>source_id</c>) are the
+/// FRONTEND CONTRACT and deliberately differ from Core's clearer names — that mapping is
+/// what this file is for. Do not "simplify" it by renaming either side.
 /// </summary>
-public sealed class DictionaryService(ILogger<DictionaryService> logger)
+public sealed class DictionaryService
 {
-    private static readonly string DbPath =
-        Path.Combine(AppContext.BaseDirectory, "Dictionary", "Dictionary.db");
+    private readonly ILogger<DictionaryService> _logger;
+    private readonly CoreDictionary.DictionaryDbQueries? _dictionary;
 
-    // Base sense projection shared by the exact/prefix/contains/abbrev queries.
-    private const string SenseSelect =
-        "SELECT w.headword, s.nikud, s.text, sk.name AS source, s.source_id " +
-        "FROM word w JOIN sense s ON s.word_id = w.id " +
-        "LEFT JOIN source_kind sk ON sk.id = s.source_id";
+    public DictionaryService(ILogger<DictionaryService> logger)
+    {
+        _logger = logger;
 
-    private const string LinkSelect =
-        "FROM link l " +
-        "JOIN word w1 ON w1.id = l.word_id " +
-        "JOIN word w2 ON w2.id = l.target_id " +
-        "JOIN link_kind lk ON lk.id = l.kind_id";
-
-    // Follows a spelling/inflection redirect: a variant word that has NO senses of
-    // its own but points (via a 'כתיב' link) at a base entry — resolve to the
-    // base's senses. Curated pairs only, so the resolved word is always the SAME
-    // word typed in a different spelling/inflection. Same column shape as SenseSelect.
-    private const string RedirectSelect =
-        "SELECT wbase.headword, s.nikud, s.text, sk.name AS source, s.source_id " +
-        "FROM word walias " +
-        "JOIN link l ON l.word_id = walias.id " +
-        "JOIN link_kind lk ON lk.id = l.kind_id AND lk.name = 'כתיב' " +
-        "JOIN word wbase ON wbase.id = l.target_id " +
-        "JOIN sense s ON s.word_id = wbase.id " +
-        "LEFT JOIN source_kind sk ON sk.id = s.source_id";
+        // Locate() returns null when the dictionary is not installed. That is a STATE, not a
+        // failure: every lookup below answers empty and the frontend shows "no entry".
+        string? path = CoreDictionary.DictionaryDbQueries.Locate();
+        if (path is null)
+            logger.LogWarning("Dictionary database not found — dictionary lookups will return empty.");
+        else
+            _dictionary = new CoreDictionary.DictionaryDbQueries(path);
+    }
 
     // ── Tier queries (driven by the frontend combinedLookup) ───────────────────
 
     public DictExactResult Exact(string term)
     {
-        var rows = QuerySenses(SenseSelect + " WHERE w.headword = @t LIMIT 100", ("@t", term));
-        if (rows.Count > 0) return new DictExactResult { Rows = rows, IsExact = true };
-        // No direct senses — follow a curated spelling/inflection redirect to the base entry.
-        var redirect = QuerySenses(RedirectSelect + " WHERE walias.headword = @t LIMIT 100", ("@t", term));
-        if (redirect.Count > 0) return new DictExactResult { Rows = redirect, IsExact = true };
-        bool exists = ScalarExists("SELECT 1 FROM word WHERE headword = @t LIMIT 1", ("@t", term));
-        return new DictExactResult { Rows = [], IsExact = exists };
+        var result = Query(d => d.Exact(term), "dictExact");
+        if (result is null) return new DictExactResult();
+        return new DictExactResult { Rows = ToSenseRows(result.Senses), IsExact = result.WordExists };
     }
 
-    public List<SenseRow> Prefix(string term) => QuerySenses(
-        SenseSelect + " WHERE w.headword LIKE @p AND w.headword != @t LIMIT 100",
-        ("@p", term + "%"), ("@t", term));
+    public List<SenseRow> Prefix(string term) =>
+        ToSenseRows(Query(d => d.Prefix(term), "dictPrefix"));
 
-    public List<SenseRow> Contains(string term) => QuerySenses(
-        SenseSelect + " WHERE w.headword LIKE @c AND w.headword NOT LIKE @p LIMIT 100",
-        ("@c", "%" + term + "%"), ("@p", term + "%"));
+    public List<SenseRow> Contains(string term) =>
+        ToSenseRows(Query(d => d.Contains(term), "dictContains"));
 
     // ── Related words ───────────────────────────────────────────────────────────
 
     public List<DictLink> Links(string term)
     {
-        var outp = new List<DictLink>();
-        Run(() =>
-        {
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText =
-                "SELECT lk.name AS kind, w2.headword AS word " + LinkSelect +
-                " WHERE w1.headword = @t AND lk.name != 'כתיב' ORDER BY lk.name, w2.headword";
-            cmd.Parameters.AddWithValue("@t", term);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                outp.Add(new DictLink { Kind = r.GetString(0), Word = r.GetString(1) });
-        }, "dictLinks");
+        var links = Query(d => d.Links(term), "dictLinks");
+        if (links is null) return [];
+
+        var outp = new List<DictLink>(links.Count);
+        foreach (var link in links)
+            outp.Add(new DictLink { Kind = link.Kind, Word = link.Word });
         return outp;
     }
 
-    public List<string> Synonyms(string term) => QueryStrings(
-        "SELECT w2.headword AS word " + LinkSelect +
-        " WHERE w1.headword = @t AND lk.name = 'נרדף' ORDER BY w2.headword", ("@t", term));
+    public List<string> Synonyms(string term) =>
+        Query(d => d.Synonyms(term), "dictSynonyms") ?? [];
 
-    public List<string> Variants(string term) => QueryStrings(
-        "SELECT w2.headword AS word " + LinkSelect +
-        " WHERE w1.headword = @t AND lk.name = 'כתיב' ORDER BY w2.headword", ("@t", term));
+    public List<string> Variants(string term) =>
+        Query(d => d.Variants(term), "dictVariants") ?? [];
 
     // ── Spelling suggestions ────────────────────────────────────────────────────
 
-    public List<string> SpellCandidates(string term)
-    {
-        var outp = new List<string>();
-        if (string.IsNullOrEmpty(term)) return outp;
-        var seen = new HashSet<string>();
-
-        string frag2 = term[..Math.Min(2, term.Length)];
-        foreach (var h in QueryStrings(
-            "SELECT headword FROM word WHERE headword LIKE @p LIMIT 400", ("@p", frag2 + "%")))
-            if (seen.Add(h)) outp.Add(h);
-
-        if (term.Length >= 3)
-        {
-            string frag3 = term[..3];
-            foreach (var h in QueryStrings(
-                "SELECT headword FROM word WHERE headword LIKE @p LIMIT 200", ("@p", frag3 + "%")))
-                if (seen.Add(h)) outp.Add(h);
-        }
-        return outp;
-    }
+    public List<string> SpellCandidates(string term) =>
+        Query(d => d.SpellingCandidates(term), "dictSpellCandidates") ?? [];
 
     // ── Abbreviation tooltip (book view) ────────────────────────────────────────
 
     public DictAbbrevResult AbbrevSenses(List<string>? candidates)
     {
-        if (candidates is null || candidates.Count == 0) return new DictAbbrevResult();
-
-        // Exact matches first, in candidate order.
-        foreach (var cand in candidates)
-        {
-            var rows = QuerySenses(SenseSelect + " WHERE w.headword = @t LIMIT 100", ("@t", cand));
-            if (rows.Count > 0) return new DictAbbrevResult { Matched = cand, Rows = rows };
-        }
-        // Then %candidate% contains fallbacks.
-        foreach (var cand in candidates)
-        {
-            var rows = QuerySenses(SenseSelect + " WHERE w.headword LIKE @c LIMIT 30", ("@c", "%" + cand + "%"));
-            if (rows.Count > 0) return new DictAbbrevResult { Matched = cand, Rows = rows };
-        }
-        return new DictAbbrevResult();
+        var match = Query(d => d.AbbreviationSenses(candidates), "dictAbbrevSenses");
+        if (match is null || !match.Found) return new DictAbbrevResult();
+        return new DictAbbrevResult { Matched = match.MatchedCandidate, Rows = ToSenseRows(match.Senses) };
     }
 
     // ── Ketiv (spelling) existence check ────────────────────────────────────────
 
-    public List<string> KetivVariants(List<string>? candidates)
-    {
-        var outp = new List<string>();
-        if (candidates is null || candidates.Count == 0) return outp;
-
-        var sb = new StringBuilder("SELECT headword FROM word WHERE headword IN (");
-        for (int i = 0; i < candidates.Count; i++)
-        {
-            if (i > 0) sb.Append(',');
-            sb.Append("@c").Append(i);
-        }
-        sb.Append(')');
-
-        Run(() =>
-        {
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = sb.ToString();
-            for (int i = 0; i < candidates.Count; i++)
-                cmd.Parameters.AddWithValue("@c" + i, candidates[i]);
-            using var r = cmd.ExecuteReader();
-            while (r.Read()) outp.Add(r.GetString(0));
-        }, "dictKetivVariants");
-        return outp;
-    }
+    public List<string> KetivVariants(List<string>? candidates) =>
+        Query(d => d.ExistingHeadwords(candidates), "dictKetivVariants") ?? [];
 
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
-    private SqliteConnection Open()
+    /// <summary>
+    /// Runs one Core lookup. Core throws on a real database failure (rule 4 — it never
+    /// swallows); this orchestrator is the layer that decides the user sees an empty result
+    /// rather than a broken pane, so the catch belongs HERE and nowhere lower.
+    /// Returns null when the dictionary is absent or the query failed.
+    /// </summary>
+    private T? Query<T>(Func<CoreDictionary.DictionaryDbQueries, T> lookup, string op) where T : class
     {
-        var cs = new SqliteConnectionStringBuilder
-        {
-            DataSource = DbPath,
-            Mode = SqliteOpenMode.ReadOnly,
-        }.ConnectionString;
-        var conn = new SqliteConnection(cs);
-        conn.Open();
-        return conn;
+        if (_dictionary is null) return null;
+        try { return lookup(_dictionary); }
+        catch (Exception ex) { _logger.LogError(ex, "{Op} failed", op); return null; }
     }
 
-    private void Run(Action action, string op)
+    private static List<SenseRow> ToSenseRows(List<CoreDictionary.DictionarySense>? senses)
     {
-        if (!File.Exists(DbPath)) { logger.LogWarning("Dictionary DB not found at {Path}", DbPath); return; }
-        try { action(); }
-        catch (Exception ex) { logger.LogError(ex, "{Op} failed", op); }
-    }
+        if (senses is null) return [];
 
-    private List<SenseRow> QuerySenses(string sql, params (string name, object value)[] ps)
-    {
-        var list = new List<SenseRow>();
-        Run(() =>
+        var rows = new List<SenseRow>(senses.Count);
+        foreach (var sense in senses)
         {
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = sql;
-            foreach (var (name, value) in ps) cmd.Parameters.AddWithValue(name, value);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
+            rows.Add(new SenseRow
             {
-                list.Add(new SenseRow
-                {
-                    Headword = r.IsDBNull(0) ? "" : r.GetString(0),
-                    Nikud = r.IsDBNull(1) ? null : r.GetString(1),
-                    Text = r.IsDBNull(2) ? "" : r.GetString(2),
-                    Source = r.IsDBNull(3) ? null : r.GetString(3),
-                    SourceId = r.IsDBNull(4) ? null : r.GetInt32(4),
-                });
-            }
-        }, "dict sense query");
-        return list;
-    }
-
-    private List<string> QueryStrings(string sql, params (string name, object value)[] ps)
-    {
-        var list = new List<string>();
-        Run(() =>
-        {
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = sql;
-            foreach (var (name, value) in ps) cmd.Parameters.AddWithValue(name, value);
-            using var r = cmd.ExecuteReader();
-            while (r.Read()) if (!r.IsDBNull(0)) list.Add(r.GetString(0));
-        }, "dict string query");
-        return list;
-    }
-
-    private bool ScalarExists(string sql, params (string name, object value)[] ps)
-    {
-        bool exists = false;
-        Run(() =>
-        {
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = sql;
-            foreach (var (name, value) in ps) cmd.Parameters.AddWithValue(name, value);
-            using var r = cmd.ExecuteReader();
-            exists = r.Read();
-        }, "dict scalar");
-        return exists;
+                Headword = sense.Headword,
+                Nikud = sense.Nikud,
+                Text = sense.Text,
+                Source = sense.Source,
+                SourceId = sense.SourceId,
+            });
+        }
+        return rows;
     }
 }

@@ -200,9 +200,14 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
 
     private void OnPossibleDbSwitch()
     {
-        string current;
+        string? current;
         try { current = SeforimDbLocator.Resolve(); }
         catch { return; }
+
+        // Nothing resolvable now (the user cleared the setting, or the file went away). That is
+        // not a SWITCH to act on: restarting would land in the same state, so wait for the next
+        // registry change instead.
+        if (current is null) return;
         if (string.Equals(current, _dbPath, StringComparison.OrdinalIgnoreCase)) return;
 
         _logger.LogInformation(

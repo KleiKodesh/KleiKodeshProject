@@ -1,5 +1,6 @@
 using System.Text.Json;
 using KitveiHakodeshService.Catalog;
+using KitveiHakodesh.Core.Settings;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Http;
@@ -278,12 +279,15 @@ public sealed class Dispatcher(
                 // rebuilt on startup via the fts.ver source-DB marker.
                 case "getSeforimDbPath":
                 {
-                    string p = SeforimDbLocator.Resolve();
+                    // Null = nothing found. Core no longer hands back a default path that is
+                    // known not to exist, so the settings page is told plainly that there is no
+                    // database rather than being shown a path it would report as missing.
+                    string? p = SeforimDbLocator.Resolve();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
-                        Path = p,
+                        Path = p ?? "",
                         IsCustom = SeforimDbLocator.IsCustom(),
-                        Exists = File.Exists(p),
+                        Exists = p is not null,
                     }));
                 }
 
@@ -328,11 +332,11 @@ public sealed class Dispatcher(
                 case "clearSeforimDbPath":
                 {
                     SeforimDbLocator.ClearRegistryPath();
-                    string p = SeforimDbLocator.Resolve();
+                    string? p = SeforimDbLocator.Resolve();
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
-                        Path = p, IsCustom = false, Exists = File.Exists(p), Restarting = true,
+                        Path = p ?? "", IsCustom = false, Exists = p is not null, Restarting = true,
                     }));
                 }
 
@@ -382,7 +386,7 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<HbDownloadArgs>(req.Args);
                     string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
                     if (!a.IsOnline)
                     {
                         // No connectivity — only a local/cache hit can satisfy; otherwise report offline.
@@ -437,7 +441,7 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<HbDownloadArgs>(req.Args);
                     string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: false, ct);
                     return RpcResponse.Ok(MsgPack.Ser(r.Path != null
                         ? new HbDownloadResult { Handle = localFileGrants.Grant(r.Path) }
@@ -448,7 +452,7 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<HbCheckLocalArgs>(req.Args);
                     string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
                     var existing = hebrewBooks.CheckLocalFiles(a.BookIds ?? new(), folder);
                     return RpcResponse.Ok(MsgPack.Ser(new HbCheckLocalResult { ExistingIds = existing }));
                 }
@@ -457,7 +461,7 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<HbDeleteLocalArgs>(req.Args);
                     string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHbLocalFolder() : a.LocalFolder!;
+                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
                     var (ok, notFound, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder);
                     return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, Error = error }));
                 }
@@ -465,13 +469,13 @@ public sealed class Dispatcher(
                 // HB local folder in the SHARED registry (same key the hosted AppSettings uses),
                 // so dev and the hosted app agree on where books are saved.
                 case "getHbLocalFolder":
-                    return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHbLocalFolder() }));
+                    return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHebrewBooksLocalFolder() }));
 
                 case "setHbLocalFolder":
                 {
                     var a = MsgPack.De<StringArg>(req.Args);
-                    AppSettingsRegistry.SetHbLocalFolder(a.Value ?? "");
-                    return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHbLocalFolder() }));
+                    AppSettingsRegistry.SetHebrewBooksLocalFolder(a.Value ?? "");
+                    return RpcResponse.Ok(MsgPack.Ser(new StringResult { Value = AppSettingsRegistry.GetHebrewBooksLocalFolder() }));
                 }
 
                 // Automatic update check, in the registry value SHARED with the hosted app and the

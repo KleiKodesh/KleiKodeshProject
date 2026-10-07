@@ -117,13 +117,21 @@ namespace KitveiHakodesh.Core.SeforimDb
             return book;
         }
 
-        public List<LineRow> GetLinesPaged(int bookId, int limit, int offset)
+        /// <param name="versionId">0 for the book's own text; a book_version id to read the
+        /// page through that version's overlay instead. See
+        /// <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/> for what an overlay does and
+        /// does not replace.</param>
+        public List<LineRow> GetLinesPaged(int bookId, int limit, int offset, int versionId = 0)
         {
             var list = new List<LineRow>();
             using var conn = Open();
             using var codec = CodecFor(conn);
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesPaged(SchemaOf(conn));
+            var schema = SchemaOf(conn);
+            cmd.CommandText = versionId > 0
+                ? SeforimDbSqlStrings.GetVersionLinesPaged(schema)
+                : SeforimDbSqlStrings.GetLinesPaged(schema);
+            if (versionId > 0) cmd.Parameters.AddWithValue("@versionId", versionId);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@limit", limit);
             cmd.Parameters.AddWithValue("@offset", offset);
@@ -427,7 +435,7 @@ namespace KitveiHakodesh.Core.SeforimDb
             if (typeIds is null || typeIds.Count == 0) return list;
             using var conn = Open();
             using var cmd = conn.CreateCommand();
-            cmd.CommandText = SeforimDbSqlStrings.GetReverseBooks(typeIds.Count);
+            cmd.CommandText = SeforimDbSqlStrings.GetReverseBooks(SchemaOf(conn), typeIds.Count);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             BindList(cmd, "c", typeIds);
             using var r = cmd.ExecuteReader();
@@ -660,6 +668,102 @@ namespace KitveiHakodesh.Core.SeforimDb
             using var r = cmd.ExecuteReader();
             while (r.Read())
                 list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = codec.DecodeColumnOrEmpty(r, 2) });
+            return list;
+        }
+
+        // ── Book versions, provenance and schema stamp ───────────────────────────────
+
+        /// <summary>Whether this database has the version-overlay tables at all. Probed once:
+        /// they arrive in a later library schema and a book view asks on every open.</summary>
+        private bool? _hasBookVersionTables;
+
+        /// <summary>
+        /// The alternate text versions of a book, best first. Empty on a library whose schema
+        /// predates the version tables — that is a shape, not a failure, so the caller simply
+        /// shows no version picker.
+        /// </summary>
+        public List<BookVersionRow> GetBookVersions(int bookId)
+        {
+            var list = new List<BookVersionRow>();
+            using var conn = Open();
+
+            _hasBookVersionTables ??= TableExists(conn, "book_version") && TableExists(conn, "version_line");
+            if (!_hasBookVersionTables.Value) return list;
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetBookVersions;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new BookVersionRow
+                {
+                    Id = r.GetInt32(0),
+                    VersionTitle = r.IsDBNull(1) ? "" : r.GetString(1),
+                    HeVersionTitle = r.IsDBNull(2) ? null : r.GetString(2),
+                    VersionSource = r.IsDBNull(3) ? null : r.GetString(3),
+                    VersionNotes = r.IsDBNull(4) ? null : r.GetString(4),
+                    HeVersionNotes = r.IsDBNull(5) ? null : r.GetString(5),
+                });
+            }
+            return list;
+        }
+
+        /// <summary>The upstream source a book came from, for crediting a report.</summary>
+        public List<BookSourceNameRow> GetBookSourceName(int bookId)
+        {
+            var list = new List<BookSourceNameRow>();
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetBookSourceName;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new BookSourceNameRow { SourceName = r.IsDBNull(0) ? "" : r.GetString(0) });
+            return list;
+        }
+
+        /// <summary>
+        /// The library build number, for stamping a report. Empty on a library with no
+        /// schema_meta table — nothing depends on the number, so there is nothing to fail.
+        /// </summary>
+        public List<SchemaMetaValueRow> GetLibraryDbVersion()
+        {
+            var list = new List<SchemaMetaValueRow>();
+            using var conn = Open();
+
+            if (!TableExists(conn, "schema_meta")) return list;
+
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = SeforimDbSqlStrings.GetLibraryDbVersion;
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new SchemaMetaValueRow { Value = r.IsDBNull(0) ? "" : r.GetString(0) });
+            return list;
+        }
+
+        /// <summary>One line's canonical reference and stored text, so a reported mistake can be
+        /// checked against what the library actually holds.</summary>
+        public List<LineRefRow> GetLineRefAndContent(int bookId, int lineIndex)
+        {
+            var list = new List<LineRefRow>();
+            using var conn = Open();
+            using var cmd = conn.CreateCommand();
+            using var codec = CodecFor(conn);
+            cmd.CommandText = SeforimDbSqlStrings.GetLineRefAndContent(SchemaOf(conn));
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            cmd.Parameters.AddWithValue("@lineIndex", lineIndex);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new LineRefRow
+                {
+                    Id = r.GetInt32(0),
+                    LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
+                    HeRef = r.IsDBNull(2) ? null : r.GetString(2),
+                    Content = codec.DecodeColumnOrEmpty(r, 3),
+                });
+            }
             return list;
         }
 
