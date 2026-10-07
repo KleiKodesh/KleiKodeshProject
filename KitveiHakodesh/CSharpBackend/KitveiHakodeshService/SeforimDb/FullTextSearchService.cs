@@ -223,18 +223,19 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // What stays here is this host's own bookkeeping: the generation guard that stops a
             // superseded build writing over the one that replaced it, and the progress fields
             // the RPC stream reads.
-            index.GetResumeState(out _, out long cachedTotal, out long cachedOffset);
-            long total = cachedTotal > 0 ? cachedTotal : SafeCountLines(index);
-            long resumeOffset = cachedOffset;
-            if (IsCurrentBuild(generation)) _total = (int)Math.Min(total, int.MaxValue);
-
             // Existing segments (resume) are already searchable.
             if (IsCurrentBuild(generation) && SegmentsExist()) _isReady = true;
 
-            logger.LogInformation("FTS build starting — index={Index} total≈{Total}", _indexPath, total);
+            logger.LogInformation("FTS build starting — index={Index}", _indexPath);
 
             bool ok = Indexer.Build(
                 index,
+                // Core's own count, so the status stream reports a real total even on a corpus
+                // too small to produce a single line tick.
+                onTotalKnown: counted =>
+                {
+                    if (IsCurrentBuild(generation)) _total = (int)Math.Min(counted, int.MaxValue);
+                },
                 onProgress: (indexed, totalLines) =>
                 {
                     // A reset that gave up waiting for this build leaves it running; its
@@ -567,12 +568,6 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         catch { /* OperationCanceledException / AggregateException on cancel */ }
         logger.LogInformation("FTS build stopped for graceful shutdown");
     }
-
-    private static long SafeCountLines(SeforimIndex idx)
-    {
-        try { return idx.CountLines(); } catch { return 0; }
-    }
-
     public FtsIndexStatus Status()
     {
         EnsureIndexing();

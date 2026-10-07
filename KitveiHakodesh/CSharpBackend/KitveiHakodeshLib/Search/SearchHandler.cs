@@ -124,6 +124,38 @@ namespace KitveiHakodeshLib.Search
                 FtsIndexState.DeleteFtsIndex();
 
             FtsIndexState.DeleteBloomIndexIfPresent();
+
+            // Validate whatever is on disk against the CURRENT database and clear anything that
+            // cannot be trusted. Core's check, and the same one the dev service runs, so the two
+            // legs agree about when an index is complete, resumable or stale.
+            //
+            // It MUST run here, before the SeforimIndex below is constructed: a wipe is a
+            // recursive directory delete, and an engine already open over that directory holds
+            // the write lock and segment handles, so the delete would fail or half-complete.
+            // StopAll above has already joined any in-flight build, so nothing else is holding
+            // it either.
+            //
+            // This replaces this leg's old app-version gate, which rebuilt on EVERY app update
+            // even when nothing about indexing had changed. The precise question — "did the
+            // indexing pipeline change?" — is Core's IndexFormatVersion, which is part of the
+            // stamp; a release that deliberately wants every user to reindex uses the
+            // installer's -p:DeleteFtsIndex switch instead.
+            KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsIndexPlan plan;
+            try
+            {
+                plan = new KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsIndexer(
+                    FtsIndexState.FtsIndexPath, dbPath).Prepare();
+            }
+            catch (Exception ex)
+            {
+                // Core throws when it cannot clear state it has judged untrustworthy — never
+                // build over that. Report it and leave search not-ready rather than resuming a
+                // watermark that may belong to another database.
+                Console.WriteLine("[SearchHandler] FTS stale-index wipe failed: " + ex.Message);
+                _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "wipe failed" });
+                return;
+            }
+
             // Opening the index runs crash recovery / live-state rebuild synchronously
             // here, and this is on the critical path to marking search "ready" — time it
             // so a slow startup can be attributed (see FtsLib.log / console).
@@ -167,61 +199,28 @@ namespace KitveiHakodeshLib.Search
                 $"SeforimIndex opened in {openSw.ElapsedMilliseconds} ms");
             _indexState.SetDatabase(dbPath, seforimIndex);
 
-            string stampedVersion = FtsIndexState.ReadVersionStamp();
-            if (stampedVersion != null)
+            if (plan.WipedStaleState)
             {
+                // No need to re-create the engine: the wipe happened BEFORE it was opened, so
+                // seforimIndex above was already constructed over the cleared directory.
+                Console.WriteLine("[SearchHandler] Index was built from a different DB "
+                    + "(or its provenance could not be verified) — rebuilding automatically");
+                _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db changed" });
+                StartBuildOrWatch(dbPath);
+                return;
+            }
+
+            if (plan.IsReady)
+            {
+                // A completed index can still be structurally broken (a truncated segment from
+                // a killed process), which the stamp cannot see — so it is still validated.
                 string validationError = FtsIndexState.ValidateFtsIndex();
                 if (validationError != null)
                 {
-                    Console.WriteLine("[SearchHandler] fts.ver present but index invalid ("
+                    Console.WriteLine("[SearchHandler] index stamped complete but invalid ("
                         + validationError + ") — deleting and rebuilding");
                     FtsIndexState.DeleteFtsIndex();
                     _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = validationError });
-                    StartBuildOrWatch(dbPath);
-                    return;
-                }
-
-                string installedVersion = FtsIndexState.GetInstalledAppVersion();
-                Console.WriteLine("[SearchHandler] Version check — installed="
-                    + installedVersion + " stamped=" + stampedVersion);
-
-                if (!string.IsNullOrEmpty(installedVersion) &&
-                    !string.Equals(installedVersion, stampedVersion,
-                                   StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine("[SearchHandler] DB changed (app version " + stampedVersion
-                        + " → " + installedVersion + ") — rebuilding index automatically");
-                    FtsIndexState.DeleteFtsIndex();
-                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db updated" });
-                    StartBuildOrWatch(dbPath);
-                    return;
-                }
-
-                // The app-version stamp misses a DB switched BETWEEN app runs (the
-                // in-memory dbPathChanged check above only covers switches within this
-                // process's lifetime). fts.src records the source DB's fingerprint at
-                // build time — a mismatch means this completed index answers for a
-                // different database. A missing fts.src (index built by an older app
-                // version) keeps today's behavior and self-heals on the next rebuild.
-                string builtFromDb = FtsIndexState.ReadSourceStamp();
-                string currentDbStamp = FtsIndexState.ComputeDbStamp(dbPath);
-                // A legacy-format stamp cannot be compared against a current one — it would
-                // always look like a different DB and wipe a good index on the first launch
-                // after the format change. Keep the index; the next build re-stamps it.
-                if (FtsIndexState.IsLegacySourceStamp(builtFromDb))
-                {
-                    Console.WriteLine("[SearchHandler] fts.src is an older stamp format ("
-                        + builtFromDb + ") — keeping the index, cannot verify provenance");
-                    builtFromDb = null;
-                }
-                if (builtFromDb != null && currentDbStamp != null &&
-                    !string.Equals(builtFromDb, currentDbStamp, StringComparison.OrdinalIgnoreCase))
-                {
-                    Console.WriteLine("[SearchHandler] Index was built from a different DB ("
-                        + builtFromDb + " → " + currentDbStamp + ") — rebuilding automatically");
-                    FtsIndexState.DeleteFtsIndex();
-                    _bridge.PushEvent(new { @event = "ftsIndexInvalidated", reason = "db changed" });
-                    _indexState.SetDatabase(dbPath, new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
                     StartBuildOrWatch(dbPath);
                     return;
                 }
@@ -259,37 +258,15 @@ namespace KitveiHakodeshLib.Search
                 }
                 catch { }
 
-                // Resume is only safe when the interrupted build came from the CURRENT
-                // DB. fts.src records the source DB's fingerprint at build start; if it
-                // is missing (build from an app version before fts.src existed) or no
-                // longer matches, the watermark belongs to another database — resuming
-                // would permanently skip every line below it (the segments would answer
-                // for the wrong content). Wipe and rebuild from scratch instead.
-                // Unlike the completed-index check above, a legacy-format stamp is NOT
-                // forgiven here: resuming needs positive proof that the watermark belongs
-                // to this DB, and an unverifiable stamp cannot provide it. Wiping costs a
-                // rebuild that was already in progress; resuming wrongly would silently
-                // skip every line below the watermark for good.
-                string resumeSourceStamp = FtsIndexState.ReadSourceStamp();
-                string resumeDbStamp = FtsIndexState.ComputeDbStamp(dbPath);
-                bool provenanceOk = resumeSourceStamp != null && resumeDbStamp != null &&
-                                    !FtsIndexState.IsLegacySourceStamp(resumeSourceStamp) &&
-                                    string.Equals(resumeSourceStamp, resumeDbStamp,
-                                                  StringComparison.OrdinalIgnoreCase);
-
-                if (segmentsExist && provenanceOk)
+                // Provenance was already settled by Prepare() above: it wipes any RESUMABLE
+                // state whose stamp does not positively match this database, precisely because
+                // resuming a foreign watermark would permanently skip every line below it. So a
+                // watermark that is still here has been proven to belong to this database, and
+                // the only question left is whether segments exist to resume into.
+                if (segmentsExist)
                 {
                     Console.WriteLine("[SearchHandler] Interrupted build detected — resuming from line id "
                         + resumeLineId);
-                }
-                else if (segmentsExist)
-                {
-                    Console.WriteLine("[SearchHandler] Interrupted build's source DB is unknown or changed ("
-                        + (resumeSourceStamp ?? "(no fts.src)") + " vs " + resumeDbStamp
-                        + ") — wiping instead of resuming");
-                    FtsIndexState.DeleteFtsIndex();
-                    _indexState.SetDatabase(dbPath,
-                        new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
                 }
                 else
                 {

@@ -163,6 +163,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// is the orchestrator.</param>
         /// <param name="onProgress">(linesIndexedSoFar, totalLines) — already resume-adjusted,
         /// reported every <see cref="ProgressReportInterval"/> lines.</param>
+        /// <param name="onTotalKnown">The corpus size, as soon as it is known and BEFORE any
+        /// indexing starts. A host that draws a progress bar needs it even when no line tick
+        /// ever fires — a corpus smaller than <see cref="ProgressReportInterval"/> finishes
+        /// without one, and the merge phase would then report a total of zero.</param>
         /// <param name="onSegmentFlushed">A segment just reached disk — from the first of
         /// these on, the index answers searches.</param>
         /// <param name="isStillCurrent">Asked once, after the build succeeds and BEFORE the
@@ -181,6 +185,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             Action<long, long>? onProgress = null,
             Action? onSegmentFlushed = null,
             Action<int, int>? onMergeProgress = null,
+            Action<long>? onTotalKnown = null,
             Func<bool>? isStillCurrent = null,
             CancellationToken cancellationToken = default)
         {
@@ -199,6 +204,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             // session so resuming never rescans the corpus just to size the progress bar.
             index.GetResumeState(out _, out long cachedTotal, out long resumeOffset);
             long total = cachedTotal > 0 ? cachedTotal : index.CountLines();
+            onTotalKnown?.Invoke(total);
 
             bool completed;
             for (int attempt = 0; ; attempt++)

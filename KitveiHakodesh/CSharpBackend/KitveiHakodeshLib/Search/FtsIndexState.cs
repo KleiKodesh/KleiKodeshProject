@@ -558,119 +558,22 @@ namespace KitveiHakodeshLib.Search
         internal static string FtsIndexPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex");
 
-        internal static string FtsVersionStampPath =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.ver");
-
-        internal static string FtsSourceStampPath =>
-            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "FtsIndex", "fts.src");
-
         internal static string BloomFolderPath =>
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "BloomFilters");
 
-        // ── Version stamp ─────────────────────────────────────────────────────────
-
-        internal static string GetInstalledAppVersion()
-        {
-            try
-            {
-                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\KleiKodesh"))
-                    return key?.GetValue("Version")?.ToString();
-            }
-            catch { return null; }
-        }
-
-        internal static string ReadVersionStamp()
-        {
-            try
-            {
-                return File.Exists(FtsVersionStampPath)
-                    ? File.ReadAllText(FtsVersionStampPath).Trim()
-                    : null;
-            }
-            catch { return null; }
-        }
-
-        internal static void WriteVersionStamp(string version)
-        {
-            try
-            {
-                Directory.CreateDirectory(FtsIndexPath);
-                File.WriteAllText(FtsVersionStampPath, version ?? "");
-            }
-            catch { }
-        }
-
-        // ── Source-DB stamp (build provenance) ───────────────────────────────────
-        // fts.ver (the app-version stamp above) is written only when a build COMPLETES,
-        // so an interrupted build used to carry no record of which DB it was indexing —
-        // resuming it after a DB switch permanently skipped every line below the old
-        // watermark. fts.src records a fingerprint of the source DB's CONTENT at build
-        // START; ExecuteOnDbReady refuses to resume (and invalidates a completed index)
-        // when it no longer matches the current DB.
+        // ── Stamps live in Core ───────────────────────────────────────────────────
         //
-        // The fingerprint deliberately describes the CONTENT, not the file. An earlier
-        // version used path + size + mtime + the -wal sidecar's size/mtime, which made
-        // the stamp track journal churn rather than content: anything that touched the
-        // file without changing a single row — a stray `PRAGMA journal_mode` on open, a
-        // copy, a restore, a reinstall — produced a mismatch and wiped the whole index
-        // on the next launch. The queries below are all index seeks or header reads, so
-        // this stays a startup-cheap check; COUNT(*) on `line` is a multi-second full
-        // scan and is deliberately NOT part of it.
+        // fts.ver / fts.src, the content fingerprint and the "is this stamp an older format"
+        // test were all implemented here AND in the dev service AND in Core. They are now
+        // Core's alone (SeforimDbFtsIndexer writes the stamps, SeforimDbContentFingerprint
+        // computes them), so the hosted leg and the service can no longer disagree about
+        // whether an index is complete, resumable or stale.
+        //
+        // The app-version stamp that used to live here is retired rather than moved. It forced
+        // a rebuild on EVERY app update even when nothing about indexing had changed; the
+        // precise question is Core's IndexFormatVersion, which is part of the stamp, and a
+        // release that deliberately wants every user to reindex uses the installer's
+        // -p:DeleteFtsIndex switch (see Build/Installer/Helpers/AddinInstaller.cs).
 
-        /// <summary>Content fingerprint of the seforim DB — KitveiHakodesh.Core's, so the
-        /// hosted leg and the service stamp an index identically and neither considers the
-        /// other's index stale. Path plus the identity of the `line` and `book` tables
-        /// (extremal ids and the schema cookie); read-only, and invariant under anything that
-        /// rewrites the file without changing its rows. Falls back to the file's size when the
-        /// DB cannot be queried, so a genuinely different DB still mismatches.
-        ///
-        /// The format tag moved from this project's "v2|" to Core's "c1|". An index stamped by
-        /// an older build therefore reads as a DIFFERENT FORMAT rather than a different
-        /// database — see <see cref="IsLegacySourceStamp"/> — which keeps a COMPLETED index and
-        /// re-stamps it on its next build. Nobody rebuilds because of the move.</summary>
-        internal static string ComputeDbStamp(string dbPath)
-        {
-            if (string.IsNullOrEmpty(dbPath)) return null;
-            try { return KitveiHakodesh.Core.SeforimDb.SeforimDbContentFingerprint.Compute(dbPath); }
-            catch { return null; }
-        }
-
-        /// <summary>True for an fts.src written by an app version whose stamp format
-        /// predates this one. Such a stamp can never compare equal to a current stamp, so
-        /// treating it as a mismatch would wipe a perfectly good index on the first launch
-        /// after every format change. Callers treat it as "provenance unknown" instead:
-        /// a completed index is kept (and re-stamped on its next build), while an
-        /// interrupted build is still wiped rather than resumed on an unverifiable
-        /// watermark.</summary>
-        internal static bool IsLegacySourceStamp(string stamp)
-        {
-            return KitveiHakodesh.Core.SeforimDb.SeforimDbContentFingerprint.IsLegacy(stamp);
-        }
-
-        // The content fingerprint itself is KitveiHakodesh.Core's (SeforimDbContentFingerprint).
-        // This project used to carry its own copy of the same queries — extremal line/book ids,
-        // the schema cookie, the last line's stored length — which is precisely the kind of
-        // "keep the two in sync" duplicate the Core migration exists to remove.
-
-        internal static string ReadSourceStamp()
-        {
-            try
-            {
-                return File.Exists(FtsSourceStampPath)
-                    ? File.ReadAllText(FtsSourceStampPath).Trim()
-                    : null;
-            }
-            catch { return null; }
-        }
-
-        internal static void WriteSourceStamp(string stamp)
-        {
-            try
-            {
-                Directory.CreateDirectory(FtsIndexPath);
-                File.WriteAllText(FtsSourceStampPath, stamp ?? "");
-            }
-            catch { }
-        }
     }
 }
