@@ -124,28 +124,40 @@ namespace KitveiHakodeshLib.Search
                 int doublingIndex = 0;          // index into doublingThresholds
                 bool useTimerOnly = false;
 
-                var     batch   = new List<PendingHit>(MemorySafetyCap);
+                // Hits are accumulated as parallel arrays because that is the shape Core's
+                // embellishment pass takes: the engine match, the finished hit, and the window
+                // word count that says whether the snippet is short enough to be worth
+                // re-rendering over its neighbours.
+                var pendingResults = new List<FtsLib.SeforimDb.SearchResult>(MemorySafetyCap);
+                var pendingHits    = new List<KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit>(MemorySafetyCap);
+                var pendingWindows = new List<int>(MemorySafetyCap);
                 int     skipped = 0;
                 var     timer   = new Stopwatch();
                 timer.Start();
 
                 // Embellish the batch's short snippets over their surrounding lines, then
-                // project to the frontend shape and post. Runs once per flush; a batch with
-                // no short lines pays no DB cost (see EmbellishShortSnippets).
-                void EmbellishAndPost(List<PendingHit> b)
+                // project to the frontend shape and post. Runs once per flush; a batch with no
+                // short lines pays no DB cost.
+                void EmbellishAndPost()
                 {
-                    if (b.Count == 0) return;
-                    EmbellishShortSnippets(index, b, requireOrdered, contextWords);
-                    var results = new object[b.Count];
-                    for (int i = 0; i < b.Count; i++)
+                    if (pendingHits.Count == 0) return;
+
+                    var builtArray = new KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit[pendingHits.Count];
+                    pendingHits.CopyTo(builtArray);
+                    KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsSearcher.EmbellishSnippets(
+                        index, pendingResults, builtArray, pendingWindows.ToArray(),
+                        requireOrdered, contextWords, ct);
+
+                    var results = new object[builtArray.Length];
+                    for (int i = 0; i < builtArray.Length; i++)
                     {
-                        var h = b[i];
+                        var h = builtArray[i];
                         results[i] = new
                         {
-                            lineId       = h.Result.LineId,
-                            bookId       = 0,
-                            bookTitle    = h.Result.BookTitle,
-                            tocText      = "",
+                            lineId       = h.LineId,
+                            bookId       = h.BookId,
+                            bookTitle    = h.BookTitle,
+                            tocText      = h.TocText,
                             score        = h.Score,
                             wordDistance = h.WordDistance,
                             snippet      = h.Snippet,
@@ -153,6 +165,10 @@ namespace KitveiHakodeshLib.Search
                         };
                     }
                     PostSearch(new { type = "searchBatch", searchId = searchId, results = results });
+
+                    pendingResults.Clear();
+                    pendingHits.Clear();
+                    pendingWindows.Clear();
                 }
 
                 foreach (var result in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
@@ -163,47 +179,36 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    var snippet = index.GenerateSnippet(result, requireOrdered,
-                                                        contextWords: contextWords);
-                    if (!snippet.IsMatch) continue;
-                    if (snippet.WordDistance > maxWordDistance) continue;
+                    // The per-hit work — snippet, match filter, word-distance filter, term
+                    // flattening — is Core's, and is the same code the dev service runs. Only
+                    // the FLUSH RHYTHM below is this leg's own.
+                    if (!KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsSearcher.TryBuildHit(
+                            index, result, requireOrdered, contextWords, maxWordDistance,
+                            out var builtHit, out int windowWords))
+                        continue;
                     if (skipped < skipCount) { skipped++; continue; }
 
-                    // Flatten MatchedGroups into a deduplicated list of concrete terms.
-                    var matchedTerms = new List<string>();
-                    foreach (var group in result.MatchedGroups)
-                        foreach (var term in group)
-                            if (!matchedTerms.Contains(term))
-                                matchedTerms.Add(term);
-
-                    batch.Add(new PendingHit
-                    {
-                        Result          = result,
-                        Score           = snippet.Score,
-                        WordDistance    = snippet.WordDistance,
-                        WindowWordCount = snippet.WindowWordCount,
-                        Snippet         = snippet.Html,
-                        MatchedTerms    = matchedTerms.ToArray()
-                    });
+                    pendingResults.Add(result);
+                    pendingHits.Add(builtHit);
+                    pendingWindows.Add(windowWords);
                     totalResults++;
 
                     bool shouldFlush;
                     if (useTimerOnly)
                     {
                         shouldFlush = timer.ElapsedMilliseconds >= TimerIntervalMs
-                                   || batch.Count >= MemorySafetyCap;
+                                   || pendingHits.Count >= MemorySafetyCap;
                     }
                     else
                     {
                         int threshold = doublingThresholds[doublingIndex];
-                        shouldFlush = batch.Count >= threshold
-                                   || batch.Count >= MemorySafetyCap;
+                        shouldFlush = pendingHits.Count >= threshold
+                                   || pendingHits.Count >= MemorySafetyCap;
                     }
 
                     if (shouldFlush)
                     {
-                        EmbellishAndPost(batch);
-                        batch.Clear();
+                        EmbellishAndPost();
                         timer.Restart();
 
                         if (!useTimerOnly)
@@ -215,8 +220,7 @@ namespace KitveiHakodeshLib.Search
                     }
                 }
 
-                if (batch.Count > 0)
-                    EmbellishAndPost(batch);
+                EmbellishAndPost();
 
                 Console.WriteLine($"[FtsSearchExecutor] Search {searchId} complete — query=\"{query}\" results={totalResults} skipped={skipped}");
                 PostSearch(new { type = "searchComplete", searchId = searchId });
@@ -246,59 +250,15 @@ namespace KitveiHakodeshLib.Search
 
         private void PostSearch(object payload) => _bridge.PushEvent(payload);
 
-        // ── Snippet embellishment ─────────────────────────────────────────────────
+        // ── Snippet embellishment lives in Core ───────────────────────────────────
+        //
+        // The short-snippet re-render (find the batch's short hits, fetch their neighbouring
+        // lines in one query, re-render only those) was implemented here AND in the dev
+        // service. It is Core's now — SeforimDbFtsSearcher.EmbellishSnippets — along with the
+        // per-hit snippet/filter/term work, so one query cannot be rendered differently in the
+        // two apps. What stays on this side is the FLUSH RHYTHM above: this leg flushes at
+        // 1, 2, 4, 8, 16 results and then on a timer, so the user sees the first result
+        // immediately, where the service streams fixed batches over a pipe.
 
-        // A hit held until flush so its snippet can be embellished with surrounding
-        // lines before being projected to the frontend shape. Score/WordDistance are
-        // the relevance keys computed on the matched line itself and never change;
-        // only Snippet (the HTML) is swapped for the richer, neighbor-aware render.
-        private sealed class PendingHit
-        {
-            public SearchResult Result;
-            public int          Score;
-            public int          WordDistance;
-            public int          WindowWordCount;
-            public string       Snippet;
-            public string[]     MatchedTerms;
-        }
-
-        // How many lines of context to pull on each side when embellishing (same book).
-        // Mirrors the service path; two lines fills the snippet's visual space and reaches
-        // about the requested per-side word context for prose.
-        private const int NeighborLineRadius = 2;
-
-        /// <summary>Re-render the batch's short snippets — those whose window spans fewer
-        /// words than the requested context (<paramref name="contextWords"/>), i.e. the
-        /// matched line was too short to fill it — over their surrounding lines. One batched
-        /// neighbor fetch for the whole batch; re-render runs across cores. No-op — and no
-        /// DB hit — when nothing is short.</summary>
-        private static void EmbellishShortSnippets(SeforimIndex index, List<PendingHit> batch,
-            bool requireOrdered, int contextWords)
-        {
-            List<PendingHit> shortHits = null;
-            List<int>        shortIds  = null;
-            foreach (var h in batch)
-            {
-                if (h.WindowWordCount >= contextWords) continue;
-                if (shortHits == null) { shortHits = new List<PendingHit>(); shortIds = new List<int>(); }
-                shortHits.Add(h);
-                shortIds.Add(h.Result.LineId);
-            }
-            if (shortHits == null) return; // nothing short — zero extra cost
-
-            var neighbors = index.FetchNeighborContext(shortIds, NeighborLineRadius);
-            if (neighbors.Count == 0) return;
-
-            Parallel.ForEach(shortHits, h =>
-            {
-                if (!neighbors.TryGetValue(h.Result.LineId, out var ctx)) return;
-                var re = index.GenerateSnippetWithNeighbors(
-                    h.Result, ctx.Prev, ctx.Next, requireOrdered, contextWords);
-                // Keep the original relevance keys; only swap in the richer snippet HTML.
-                // Guard against a failed re-render (shouldn't happen — same terms).
-                if (re.IsMatch && !string.IsNullOrEmpty(re.Html))
-                    h.Snippet = re.Html;
-            });
-        }
     }
 }

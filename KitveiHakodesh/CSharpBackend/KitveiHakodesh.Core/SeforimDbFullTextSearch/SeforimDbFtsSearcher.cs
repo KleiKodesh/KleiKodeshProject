@@ -112,7 +112,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             Parallel.For(0, results.Count, new ParallelOptions { CancellationToken = cancellationToken }, i =>
             {
-                if (TryBuildHit(index, results[i], requireOrdered, contextWords, maxWordDistance,
+                if (TryBuildHitCore(index, results[i], requireOrdered, contextWords, maxWordDistance,
                         out FtsHit? hit, out int words))
                 {
                     built[i] = hit;
@@ -132,7 +132,30 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         /// <summary>Generate the snippet, apply the match and word-distance filters, and shape
         /// the hit. False when the hit does not pass.</summary>
-        private static bool TryBuildHit(
+        /// <summary>
+        /// One engine match → one finished hit, or false when it does not pass the match and
+        /// word-distance filters.
+        ///
+        /// Public because a host may batch on a different rhythm than
+        /// <see cref="SearchInBatches"/>: the hosted app flushes at 1, 2, 4, 8, 16 results and
+        /// then on a timer, so the user sees the first result immediately. The per-hit WORK is
+        /// the same either way, and that is what must not exist twice.
+        ///
+        /// <paramref name="windowWordCount"/> is what decides whether the snippet is "short"
+        /// and worth embellishing — see <see cref="EmbellishSnippets"/>.
+        /// </summary>
+        public static bool TryBuildHit(
+            SeforimIndex index,
+            SearchResult hit,
+            bool requireOrdered,
+            int contextWords,
+            int maxWordDistance,
+            out FtsHit? built,
+            out int windowWordCount)
+            => TryBuildHitCore(index, hit, requireOrdered, contextWords, maxWordDistance,
+                               out built, out windowWordCount);
+
+        private static bool TryBuildHitCore(
             SeforimIndex index,
             SearchResult hit,
             bool requireOrdered,
@@ -167,6 +190,23 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             };
             return true;
         }
+
+        /// <summary>
+        /// Embellishes the short snippets in a batch a caller assembled itself — the hosted
+        /// app's progressive flush does. Same work as the pass inside
+        /// <see cref="SearchInBatches"/>; the arrays are parallel, one entry per hit, and
+        /// <paramref name="windowWords"/> holds what <see cref="TryBuildHit"/> reported.
+        /// </summary>
+        public static void EmbellishSnippets(
+            SeforimIndex index,
+            IReadOnlyList<SearchResult> results,
+            FtsHit?[] built,
+            int[] windowWords,
+            bool requireOrdered,
+            int contextWords,
+            CancellationToken cancellationToken = default)
+            => EmbellishShortSnippets(index, results, built, windowWords, requireOrdered,
+                                      contextWords, cancellationToken);
 
         /// <summary>
         /// Re-renders the batch's SHORT snippets — those whose window holds fewer words than
