@@ -1,8 +1,7 @@
-﻿using KitveiHakodeshLib.Db;
+using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.HebrewBooks;
-using KitveiHakodeshLib.Helpers;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Text.Json;
@@ -241,7 +240,7 @@ namespace KitveiHakodeshLib
             // WebMessageReceived fires on the UI thread, and a cold enumeration walks the
             // cmap of every system typeface — around a second on a font-heavy machine.
             // Task.Run keeps the window responsive; Reply marshals itself back.
-            var fonts = await Task.Run(() => FontsProvider.GetHebrewFonts());
+            var fonts = await Task.Run(() => KitveiHakodesh.Core.Common.HebrewFonts.GetHebrewFonts());
             _bridge.Reply(id, new { fonts });
         }
 

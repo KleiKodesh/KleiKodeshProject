@@ -230,7 +230,7 @@ public sealed class Dispatcher(
                 case "getFonts":
                     return RpcResponse.Ok(MsgPack.Ser(new FontsResult
                     {
-                        Fonts = LocalFiles.HebrewFontsProvider.GetHebrewFonts(),
+                        Fonts = global::KitveiHakodesh.Core.Common.HebrewFonts.GetHebrewFonts(),
                     }));
 
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
