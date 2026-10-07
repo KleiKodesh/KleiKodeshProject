@@ -45,6 +45,15 @@ namespace KitveiHakodeshLib
                     switch (action)
                     {
                         case "sql": await _db.HandleSql(root, id); break;
+                        // The TYPED seforim path: the page names an op, Core runs the query.
+                        // "sql" above is the old passthrough it replaces and is kept only until
+                        // every caller in seforimApi.ts has moved over.
+                        case "seforimQuery":
+                            if (_seforimQuery == null)
+                                _bridge.Reply(id, new { error = "No database loaded" });
+                            else
+                                await _seforimQuery.HandleAsync(root, id);
+                            break;
                         case "dict-sql": await HandleDictSql(root, id); break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;

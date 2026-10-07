@@ -677,6 +677,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// they arrive in a later library schema and a book view asks on every open.</summary>
         private bool? _hasBookVersionTables;
 
+
         /// <summary>
         /// The alternate text versions of a book, best first. Empty on a library whose schema
         /// predates the version tables — that is a shape, not a failure, so the caller simply

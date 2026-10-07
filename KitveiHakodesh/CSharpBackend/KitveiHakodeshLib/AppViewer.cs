@@ -109,6 +109,7 @@ namespace KitveiHakodeshLib
         private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
         private WebBridge _bridge;
         private DbHandler _db;
+        private SeforimQueryHandler _seforimQuery;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
         private SearchHandler _search;
@@ -577,6 +578,8 @@ namespace KitveiHakodeshLib
 
             _bridge = new WebBridge(_webView, this);
             _db = new DbHandler(_bridge, _webView, savedPath);
+            // Same database, typed access — see SeforimQueryHandler.
+            _seforimQuery = new SeforimQueryHandler(_bridge, savedPath);
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
