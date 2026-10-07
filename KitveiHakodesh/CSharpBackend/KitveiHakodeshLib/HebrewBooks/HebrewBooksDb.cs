@@ -1,15 +1,18 @@
 using System;
 using System.Collections.Generic;
-using System.Data.SQLite;
 using System.IO;
-using System.Linq;
 using System.Text.Json.Serialization;
-using Dapper;
+using CoreHebrewBooks = KitveiHakodesh.Core.HebrewBooks;
 
 namespace KitveiHakodeshLib.HebrewBooks
 {
     /// <summary>
-    /// Hebrew book database model for JSON serialization back to the Vue frontend.
+    /// A catalog row in the shape the page expects.
+    ///
+    /// Kept as its own type rather than serializing Core's HebrewBook directly: the bridge
+    /// serializes with no naming policy, so Core's PascalCase properties would reach the page
+    /// as Id/Title/HasLocalFile and every field would read back undefined. The
+    /// JsonPropertyName attributes below are that wire contract.
     /// </summary>
     public class HebrewBookInfo
     {
@@ -39,38 +42,16 @@ namespace KitveiHakodeshLib.HebrewBooks
     }
 
     /// <summary>
-    /// Internal Dapper row type — matches the hebrewBooks table columns exactly.
-    /// Named to match the SQLite column names so Dapper maps them without dynamic.
-    /// </summary>
-    internal class HbRow
-    {
-        public int id { get; set; }
-        public string title { get; set; }
-        public string author { get; set; }
-        public string placeOfPublication { get; set; }
-        public string year { get; set; }
-        public int? pageCount { get; set; }
-        public string categories { get; set; }
-
-        public HebrewBookInfo ToInfo()
-        {
-            return new HebrewBookInfo
-            {
-                Id = id,
-                Title = title ?? "",
-                Author = author ?? "",
-                PrintingPlace = placeOfPublication ?? "",
-                PrintingYear = year ?? "",
-                Pages = pageCount,
-                Categories = categories ?? "",
-            };
-        }
-    }
-
-    /// <summary>
-    /// Provides search and retrieval operations on the Hebrew Books SQLite database.
-    /// The database is deployed as a content file (Resources/HebrewBooksCatalog.db) and opened read-only.
-    /// A single shared connection is maintained for the lifetime of the app.
+    /// The hosted app's HebrewBooks catalog search.
+    ///
+    /// The catalog, its SQL and the per-word LIKE search are KitveiHakodesh.Core's
+    /// (<see cref="CoreHebrewBooks.HebrewBooksCatalogDbQueries"/>) — the same code the dev
+    /// service runs, so a query cannot rank differently between the two apps. This project used
+    /// to carry its own copy of that search, with its own Dapper row type and its own
+    /// concatenated-column LIKE builder.
+    ///
+    /// What stays here is the singleton the WebView2 handlers resolve against, and projecting
+    /// rows onto the wire shape above.
     /// </summary>
     public class HebrewBooksDb
     {
@@ -79,167 +60,65 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         public static HebrewBooksDb Instance => _instance.Value;
 
-        private readonly string _dbPath;
-        private SQLiteConnection _connection;
-        private bool _initialized = false;
+        /// <summary>Default result cap for a catalog search — Core's, so both apps agree.</summary>
+        public const int DefaultSearchResultLimit =
+            CoreHebrewBooks.HebrewBooksCatalogDbQueries.DefaultSearchLimit;
 
-        private HebrewBooksDb()
-        {
-            // BaseDirectory ends with a backslash, so use it directly.
-            _dbPath = Path.Combine(
-                AppDomain.CurrentDomain.BaseDirectory,
-                "Resources",
-                "HebrewBooksCatalog.db");
-        }
+        private CoreHebrewBooks.HebrewBooksCatalogDbQueries _catalog;
 
+        public bool IsInitialized => _catalog != null;
+
+        /// <summary>
+        /// Locates the bundled catalog. Idempotent, and non-fatal when the catalog is not
+        /// installed: searches then return empty, which is a STATE rather than a failure.
+        /// </summary>
         public void Initialize()
         {
-            if (_initialized) return;
+            if (_catalog != null) return;
 
-            lock (this)
+            string path = CoreHebrewBooks.HebrewBooksCatalogDbQueries.Locate();
+            if (string.IsNullOrEmpty(path) || !File.Exists(path))
             {
-                if (_initialized) return;
-
-                if (!File.Exists(_dbPath)) return;
-
-                try
-                {
-                    string cs = new SQLiteConnectionStringBuilder
-                    {
-                        DataSource = _dbPath,
-                        Version = 3,
-                        DefaultTimeout = 5,
-                        ReadOnly = true,
-                    }.ConnectionString;
-
-                    _connection = new SQLiteConnection(cs);
-                    _connection.Open();
-                    _initialized = true;
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] Failed to initialize: " + ex.Message);
-                }
+                System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] Catalog not found — search returns empty.");
+                return;
             }
-        }
 
-        public bool IsInitialized
-        {
-            get { return _initialized && _connection != null; }
-        }
-
-        private const string SelectColumns = @"
-            SELECT id, title, author, placeOfPublication, year, pageCount, categories
-            FROM hebrewBooks";
-
-        public const int DefaultSearchResultLimit = 200;
-
-        /// <summary>
-        /// Search for books whose title, author, or categories contain all of the query words.
-        /// Each word is pushed into SQLite as a LIKE clause against the concatenated search text,
-        /// so no rows are loaded into memory unless they match.
-        /// Returns up to <paramref name="limit"/> results sorted by title.
-        /// If <paramref name="localFolder"/> is non-empty, each result is stamped with
-        /// <see cref="HebrewBookInfo.HasLocalFile"/> = true when {localFolder}\{id}.pdf exists.
-        /// </summary>
-        public List<HebrewBookInfo> Search(string query, string localFolder = null, int limit = DefaultSearchResultLimit)
-        {
-            if (!IsInitialized) return new List<HebrewBookInfo>();
-            if (string.IsNullOrWhiteSpace(query)) return new List<HebrewBookInfo>();
-
-            string[] words = NormalizeText(query)
-                .Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-
-            if (words.Length == 0) return new List<HebrewBookInfo>();
-
-            bool checkLocalFolder = !string.IsNullOrWhiteSpace(localFolder);
-
-            try
-            {
-                // Build one AND clause per word using LIKE against a single concatenated
-                // search column so SQLite does the filtering, not C#.
-                // SQLite's LIKE is case-insensitive for ASCII but not for Hebrew — we
-                // store and search lowercased normalized text via a generated expression.
-                //
-                // The search expression normalizes on the fly:
-                //   lower(coalesce(title,'') || ' ' || coalesce(author,'') || ' ' || coalesce(categories,''))
-                // Each word becomes:  ... AND <expr> LIKE '%word%'
-                var whereParts = new List<string>(words.Length);
-                var parameters = new DynamicParameters();
-
-                string searchExpr = "lower(coalesce(title,'') || ' ' || coalesce(author,'') || ' ' || coalesce(categories,''))";
-
-                for (int i = 0; i < words.Length; i++)
-                {
-                    string paramName = "@w" + i;
-                    whereParts.Add(searchExpr + " LIKE " + paramName);
-                    parameters.Add(paramName, "%" + words[i] + "%");
-                }
-
-                string sql = SelectColumns
-                    + " WHERE " + string.Join(" AND ", whereParts)
-                    + " ORDER BY title"
-                    + " LIMIT " + limit;
-
-                List<HbRow> rows;
-                lock (_connection)
-                {
-                    rows = _connection.Query<HbRow>(sql, parameters).ToList();
-                }
-
-                var results = new List<HebrewBookInfo>(rows.Count);
-                foreach (HbRow row in rows)
-                {
-                    HebrewBookInfo info = row.ToInfo();
-                    if (checkLocalFolder)
-                    {
-                        try
-                        {
-                            info.HasLocalFile = File.Exists(
-                                Path.Combine(localFolder, info.Id + ".pdf"));
-                        }
-                        catch (Exception) { /* disconnected drive or permission error — leave false */ }
-                    }
-                    results.Add(info);
-                }
-
-                return results;
-            }
+            try { _catalog = new CoreHebrewBooks.HebrewBooksCatalogDbQueries(path); }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] Error searching: " + ex.Message);
-                return new List<HebrewBookInfo>();
+                System.Diagnostics.Debug.WriteLine("[HebrewBooksDb] Failed to open catalog: " + ex.Message);
             }
         }
 
         /// <summary>
-        /// Normalise Hebrew text for search comparison.
-        /// Strips nikudot (vowel points) and lowercases — mirrors the Vue normalizeText util.
+        /// Catalog search: every query word must appear somewhere in title, author or
+        /// categories. <paramref name="localFolder"/> stamps which results are already
+        /// downloaded.
         /// </summary>
-        private static string NormalizeText(string text)
+        public List<HebrewBookInfo> Search(
+            string query, string localFolder = null, int limit = DefaultSearchResultLimit)
         {
-            if (string.IsNullOrEmpty(text)) return "";
+            var results = new List<HebrewBookInfo>();
+            if (_catalog == null) return results;
 
-            text = text.ToLowerInvariant();
-
-            var sb = new System.Text.StringBuilder(text.Length);
-            foreach (char c in text)
+            foreach (var book in _catalog.Search(query, localFolder, limit))
             {
-                if (c >= '\u05B0' && c <= '\u05C2') continue;
-                sb.Append(c);
+                results.Add(new HebrewBookInfo
+                {
+                    Id = book.Id,
+                    Title = book.Title,
+                    Author = book.Author,
+                    PrintingPlace = book.PrintingPlace,
+                    PrintingYear = book.PrintingYear,
+                    Pages = book.Pages,
+                    Categories = book.Categories,
+                    HasLocalFile = book.HasLocalFile,
+                });
             }
-
-            return sb.ToString().Trim();
+            return results;
         }
 
-        public void Dispose()
-        {
-            if (_connection != null)
-            {
-                _connection.Dispose();
-                _connection = null;
-                _initialized = false;
-            }
-        }
+        /// <summary>Nothing is held open — Core opens a connection per search.</summary>
+        public void Dispose() => _catalog = null;
     }
 }

@@ -55,12 +55,6 @@
     <PlatformTarget>AnyCPU</PlatformTarget>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Dapper, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Dapper.2.1.72\lib\net461\Dapper.dll</HintPath>
-    </Reference>
-    <Reference Include="Dapper.SqlBuilder, Version=2.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\Dapper.SqlBuilder.2.1.66\lib\net461\Dapper.SqlBuilder.dll</HintPath>
-    </Reference>
     <Reference Include="DarkNet, Version=2.3.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\DarkNet.2.3.0\lib\net452\DarkNet.dll</HintPath>
     </Reference>
@@ -189,7 +183,6 @@
     </Compile>
     <Compile Include="Bridge\JsBridge.cs" />
     <Compile Include="Bridge\WebBridge.cs" />
-    <Compile Include="Db\DbAccess.cs" />
     <Compile Include="Db\DbHandler.cs" />
     <Compile Include="Db\SeforimQueryHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
@@ -216,7 +209,6 @@
     <Compile Include="Settings\ShellRegistration.cs" />
     <Compile Include="UserSettings\UserSettingsDbAccess.cs" />
     <Compile Include="UserSettings\UserSettingsDbHandler.cs" />
-    <Compile Include="Dictionary\DictionaryHandler.cs" />
     <Compile Include="Dictionary\DictionaryQueryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />

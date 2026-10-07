@@ -38,13 +38,12 @@ namespace KitveiHakodeshLib
                 {
                     var root = doc.RootElement;
                     id = root.GetProperty("id").GetString();
-                    string action = root.TryGetProperty("action", out var a)
-                        ? a.GetString()
-                        : root.TryGetProperty("sql", out _) ? "sql" : null;
+                    // No implicit "sql" fallback any more: a message without an action used to
+                    // mean the raw-SQL passthrough, which is retired.
+                    string action = root.TryGetProperty("action", out var a) ? a.GetString() : null;
 
                     switch (action)
                     {
-                        case "sql": await _db.HandleSql(root, id); break;
                         // The TYPED seforim path: the page names an op, Core runs the query.
                         // "sql" above is the old passthrough it replaces and is kept only until
                         // every caller in seforimApi.ts has moved over.
@@ -54,7 +53,6 @@ namespace KitveiHakodeshLib
                             else
                                 await _seforimQuery.HandleAsync(root, id);
                             break;
-                        case "dict-sql": await HandleDictSql(root, id); break;
                         // The TYPED dictionary path: the page names a lookup, Core runs it.
                         // "dict-sql" above is the passthrough it replaces.
                         case "dictQuery":
@@ -147,40 +145,6 @@ namespace KitveiHakodeshLib
             string word = root.TryGetProperty("word", out var w) ? w.GetString() : null;
             var groups = WordThesaurusProvider.GetSynonyms(word);
             _bridge.Reply(id, new { groups });
-        }
-
-        private async Task HandleDictSql(JsonElement root, string id)
-        {
-            if (!_dictionary.IsReady)
-            {
-                _bridge.Reply(id, new { error = "Dictionary database not available" });
-                return;
-            }
-            string sql = root.GetProperty("sql").GetString();
-            try
-            {
-                // Off-UI continuation — see DbHandler.HandleSql.
-                var rows = await Task.Run(() => _dictionary.Query(sql, DbHandler.ParseParamsStatic(root))).ConfigureAwait(false);
-                _bridge.Reply(id, new { rows });
-            }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
-        }
-
-        private async Task HandleWikiDictSql(JsonElement root, string id)
-        {
-            if (!_dictionary.IsWikiReady)
-            {
-                _bridge.Reply(id, new { error = "Wikidict database not available" });
-                return;
-            }
-            string sql = root.GetProperty("sql").GetString();
-            try
-            {
-                // Off-UI continuation — see DbHandler.HandleSql.
-                var rows = await Task.Run(() => _dictionary.QueryWiki(sql, DbHandler.ParseParamsStatic(root))).ConfigureAwait(false);
-                _bridge.Reply(id, new { rows });
-            }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         private void HandleTogglePopOut(string id)

@@ -16,7 +16,11 @@ namespace KitveiHakodeshLib.Db
     public class DbHandler
     {
         private readonly WebBridge _bridge;
-        private DbAccess _db;
+        // No connection is held here any more. This class kept a Dapper DbAccess open only to
+        // serve the raw-SQL passthrough the page no longer uses — seforim reads go through
+        // SeforimQueryHandler and Core. What is still needed is the CHECK that a chosen file
+        // is a usable database before its path is saved, and Core answers that without
+        // holding anything open.
         // Full detail of a startup DB-open failure. The constructor runs before the page
         // loads (no bridge listener yet), so the error is held here and attached to the
         // first "No database loaded" reply — that puts the real cause in the F12 console
@@ -30,36 +34,40 @@ namespace KitveiHakodeshLib.Db
             _bridge = bridge;
             if (File.Exists(savedPath))
             {
-                try { _db = new DbAccess(savedPath); }
-                catch (Exception ex)
+                if (!CanOpen(savedPath, out string startupError))
                 {
-                    _startupOpenError = "DbAccess failed at startup for \"" + savedPath + "\":\n" + ex;
+                    _startupOpenError = "Opening the seforim database failed at startup for \""
+                        + savedPath + "\":\n" + startupError;
                     System.Diagnostics.Debug.WriteLine("[DbHandler] " + _startupOpenError);
                 }
             }
         }
 
-        public bool IsReady => _db != null;
+        /// <summary>True when a readable seforim database is configured.</summary>
+        public bool IsReady => _startupOpenError == null;
 
-        public async Task HandleSql(JsonElement root, string id)
+        /// <summary>
+        /// Whether this file opens as a seforim database. Used to refuse a path BEFORE it is
+        /// saved, so a mistyped or corrupt file is reported when the user picks it rather than
+        /// as a broken app on the next launch. Opens read-only and closes immediately.
+        /// </summary>
+        private static bool CanOpen(string path, out string error)
         {
-            if (_db == null)
-            {
-                _bridge.Reply(id, new { error = "No database loaded" + (_startupOpenError != null ? "\n" + _startupOpenError : "") });
-                return;
-            }
-            string sql = root.GetProperty("sql").GetString();
+            error = null;
             try
             {
-                // ConfigureAwait(false): keep the continuation (JSON-serializing a
-                // potentially huge row set in Reply) OFF the WinForms UI thread —
-                // that thread also services WebView2 accelerator keys, and stalls
-                // there directly delay Ctrl+Tab / Ctrl+W / etc. reaching the page.
-                var rows = await Task.Run(() => _db.Query(sql, ParseParamsStatic(root))).ConfigureAwait(false);
-                _bridge.Reply(id, new { rows });
+                new KitveiHakodesh.Core.SeforimDb.SeforimDbQueries(path).GetAllCategories();
+                return true;
             }
-            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
+            catch (Exception ex)
+            {
+                error = ex.ToString();
+                return false;
+            }
         }
+        // HandleSql is gone with the raw-SQL passthrough it served. The page names typed
+        // operations now (SeforimQueryHandler), so nothing sends SQL text across the bridge.
+
 
         public void HandleResetSettings(string id)
         {
@@ -89,20 +97,12 @@ namespace KitveiHakodeshLib.Db
             // library the probe happened to pick and stopped it ever probing again.
             AppSettings.ClearDbPath();
             string defaultPath = AppSettings.ResolveDefaultDbPath();
-            if (_db != null) _db.Dispose();
-            if (File.Exists(defaultPath))
+            if (File.Exists(defaultPath) && !CanOpen(defaultPath, out string defaultError))
             {
-                try { _db = new DbAccess(defaultPath); }
-                catch (Exception ex)
-                {
-                    _db = null;
-                    // Full detail to the F12 console — this catch used to swallow silently.
-                    _bridge.PushEvent(new { @event = "dbOpenError", error = "DbAccess failed for default \"" + defaultPath + "\":\n" + ex });
-                }
-            }
-            else
-            {
-                _db = null;
+                // Full detail to the F12 console — this catch used to swallow silently.
+                _bridge.PushEvent(new { @event = "dbOpenError",
+                    error = "Opening the default seforim database failed for \""
+                            + defaultPath + "\":\n" + defaultError });
             }
             _bridge.Reply(id, new { path = defaultPath });
             OnDbPathPicked?.Invoke(defaultPath);
@@ -149,15 +149,12 @@ namespace KitveiHakodeshLib.Db
                 return;
             }
             AppSettings.SaveDbPath(path);
-            if (_db != null) _db.Dispose();
-            try
+            // Checked BEFORE saving: a file that cannot be opened must not become the
+            // persisted choice, or the app starts broken on the next launch.
+            if (!CanOpen(path, out string chosenError))
             {
-                _db = new DbAccess(path);
-            }
-            catch (Exception ex)
-            {
-                _db = null;
-                _bridge.Reply(id, new { error = "DbAccess failed for \"" + path + "\":\n" + ex });
+                _bridge.Reply(id, new { error = "Opening the seforim database failed for \""
+                                                + path + "\":\n" + chosenError });
                 return;
             }
             _bridge.Reply(id, new { path });
@@ -181,15 +178,11 @@ namespace KitveiHakodeshLib.Db
                         dlg.FileName = AppSettings.LoadDbPath();
                         if (dlg.ShowDialog() != DialogResult.OK) return;
                         AppSettings.SaveDbPath(dlg.FileName);
-                        if (_db != null) _db.Dispose();
-                        try
+                        if (!CanOpen(dlg.FileName, out string pickedError))
                         {
-                            _db = new DbAccess(dlg.FileName);
-                        }
-                        catch (Exception ex)
-                        {
-                            _db = null;
-                            _bridge.PushEvent(new { @event = "dbOpenError", error = "DbAccess failed for \"" + dlg.FileName + "\":\n" + ex });
+                            _bridge.PushEvent(new { @event = "dbOpenError",
+                                error = "Opening the seforim database failed for \""
+                                        + dlg.FileName + "\":\n" + pickedError });
                             return;
                         }
                         _bridge.PushEvent(new { @event = "dbPathPicked", path = dlg.FileName });
