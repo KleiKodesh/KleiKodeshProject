@@ -73,6 +73,16 @@ const KEYS = {
   SETTINGS_RESUME_LAST_READ: 'app.resumeLastRead',
   SETTINGS_TITLE_BAR_HIDDEN_BUTTONS: 'titleBar.hiddenButtons',
 
+  // Book-view chrome. These are reader preferences like any other, so they live here
+  // and get wiped by reset() — bookViewStore owned them until the settings reset left
+  // its refs holding stale values. The key strings are the ones it used, so an existing
+  // preference carries over.
+  SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
+  SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
+  SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
+  SETTINGS_SPLIT_VIEW: 'splitView.enabled',
+  SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
+
   // Per-feature preferences
   SETTINGS_BOOKS_VIEW: 'books.view',
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
@@ -99,6 +109,8 @@ import {
 } from '@/utils/censorDivineNames'
 
 export type NewTabPage = 'homepage' | 'openfile' | 'hebrewbooks' | 'search'
+/** Which edge of the book view the toolbar docks to. */
+export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
 /** Layout modes for the book catalog page. */
 export type BooksView = 'list' | 'tiles'
 // Legacy values from previous app name iterations — kept only for migrating old user data.
@@ -189,6 +201,13 @@ const DEFAULTS = {
   // class + per-element scroll activity tracking) is owned by
   // useUiChromeVisibility, not this store.
   scrollbarsHidden: false,
+  toolbarVisible: true,
+  toolbarPosition: 'top' as ToolbarPosition,
+  // Only a placeholder: both init() and reset() derive this from
+  // defaultAutoSyncCommentary rather than reading this value.
+  autoSelectTopLine: false,
+  splitViewEnabled: false,
+  splitViewFraction: 0.5,
   // The always-on icon rail beside the page (AppNavSidebar). On by default in the standalone
   // demo app, which has the width for it and no other chrome competing down that side; off in
   // the VSTO task pane (too narrow to give 44px away) and in the dev browser, which mirrors
@@ -291,6 +310,13 @@ export const useSettingsStore = defineStore('settings', () => {
   const commentaryMaxWidth = ref(DEFAULTS.commentaryMaxWidth)
   const titleBarHiddenButtons = ref<string[]>(DEFAULTS.titleBarHiddenButtons)
   const scrollbarsHidden = ref(DEFAULTS.scrollbarsHidden)
+  // Book-view chrome preferences. bookViewStore reads these; the per-pane fan-out
+  // (toolbar visible per pane, focused pane) stays there because it is session state.
+  const toolbarVisible = ref(DEFAULTS.toolbarVisible)
+  const toolbarPosition = ref<ToolbarPosition>(DEFAULTS.toolbarPosition)
+  const autoSelectTopLine = ref(DEFAULTS.autoSelectTopLine)
+  const splitViewEnabled = ref(DEFAULTS.splitViewEnabled)
+  const splitViewFraction = ref(DEFAULTS.splitViewFraction)
   // Per-pane rail visibility. Each pane owns its own: toggling one never moves the other,
   // and each persists separately, like every other per-pane value.
   const navSidebarVisibleByPane = ref<Record<1 | 2, boolean>>({
@@ -452,6 +478,14 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, commentaryMaxWidth)
     loadSetting(KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS, titleBarHiddenButtons)
     loadSetting(KEYS.SETTINGS_SCROLLBARS_HIDDEN, scrollbarsHidden)
+    loadSetting(KEYS.SETTINGS_TOOLBAR, toolbarVisible)
+    loadSetting(KEYS.SETTINGS_TOOLBAR_POSITION, toolbarPosition)
+    loadSetting(KEYS.SETTINGS_SPLIT_VIEW, splitViewEnabled)
+    loadSetting(KEYS.SETTINGS_SPLIT_VIEW_FRACTION, splitViewFraction)
+    // No stored value means "follow the commentary default" rather than the bare
+    // `false` — that fallback was bookViewStore.init()'s and has to survive the move.
+    const storedAutoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
+    autoSelectTopLine.value = storedAutoSelect ?? defaultAutoSyncCommentary.value
     const navSidebar1 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR)
     if (navSidebar1 != null) navSidebarVisibleByPane.value[1] = navSidebar1
     const navSidebar2 = lsGet<boolean>(KEYS.SETTINGS_NAV_SIDEBAR_PANE2)
@@ -513,6 +547,11 @@ export const useSettingsStore = defineStore('settings', () => {
   persistSetting(commentaryMaxWidth, KEYS.SETTINGS_COMMENTARY_MAX_WIDTH, applyCSSVariables)
   persistSetting(titleBarHiddenButtons, KEYS.SETTINGS_TITLE_BAR_HIDDEN_BUTTONS)
   persistSetting(scrollbarsHidden, KEYS.SETTINGS_SCROLLBARS_HIDDEN)
+  persistSetting(toolbarVisible, KEYS.SETTINGS_TOOLBAR)
+  persistSetting(toolbarPosition, KEYS.SETTINGS_TOOLBAR_POSITION)
+  persistSetting(autoSelectTopLine, KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
+  persistSetting(splitViewEnabled, KEYS.SETTINGS_SPLIT_VIEW)
+  persistSetting(splitViewFraction, KEYS.SETTINGS_SPLIT_VIEW_FRACTION)
   // Watched deeply because the two panes share one object; each writes its own key.
   watch(
     () => navSidebarVisibleByPane.value[1],
@@ -674,6 +713,14 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryMaxWidth.value = DEFAULTS.commentaryMaxWidth
     titleBarHiddenButtons.value = DEFAULTS.titleBarHiddenButtons
     scrollbarsHidden.value = DEFAULTS.scrollbarsHidden
+    toolbarVisible.value = DEFAULTS.toolbarVisible
+    toolbarPosition.value = DEFAULTS.toolbarPosition
+    // Mirrors the load-time rule (no stored value => follow defaultAutoSyncCommentary)
+    // rather than the bare default, so the state right after a reset matches the state
+    // after the reload that follows it. Assigned after defaultAutoSyncCommentary above.
+    autoSelectTopLine.value = defaultAutoSyncCommentary.value
+    splitViewEnabled.value = DEFAULTS.splitViewEnabled
+    splitViewFraction.value = DEFAULTS.splitViewFraction
     navSidebarVisibleByPane.value = {
       1: DEFAULTS.navSidebarVisible,
       2: DEFAULTS.navSidebarVisible,
@@ -699,6 +746,7 @@ export const useSettingsStore = defineStore('settings', () => {
     commentaryHeaderFont, commentaryTextFont, commentaryFontSize, commentaryFontWeight, commentaryLinePadding, wordLinkTooltipFontSize,
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
+    toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
     defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,

@@ -2,7 +2,6 @@ import { defineStore } from 'pinia'
 import { ref, reactive, computed, watch, nextTick } from 'vue'
 import { useTabStore } from './tabStore'
 import { useSettingsStore } from './settingsStore'
-import { lsGet, lsSet } from '@/utils/persistence'
 import {
   ZOOM_CONFIG,
   zoomIn as zoomInUtil,
@@ -13,16 +12,12 @@ import type { TocEntry } from '@/webview-host/queries.types'
 import { COMMENTARY_SLOTS } from '@/features/book-view/bookViewTypes'
 import type { CommentarySlot } from '@/features/book-view/bookViewTypes'
 
-/** Disk names for the book-view UI state this store owns. Nothing else reads them. */
-const KEYS = {
-  SETTINGS_TOOLBAR: 'bookView.toolbarVisible',
-  SETTINGS_TOOLBAR_POSITION: 'bookView.toolbarPosition',
-  SETTINGS_AUTO_SELECT_TOP_LINE: 'bookView.autoSelectTopLine',
-  SETTINGS_SPLIT_VIEW: 'splitView.enabled',
-  SETTINGS_SPLIT_VIEW_FRACTION: 'splitView.fraction',
-} as const
-
-export type ToolbarPosition = 'top' | 'bottom' | 'left' | 'right'
+// The toolbar/split-view preferences this store used to persist itself now live in
+// settingsStore, so one reset() covers them along with the fonts they sit beside in the
+// settings UI. This store reads them through that store and keeps only the session
+// state built on top (per-pane toolbar visibility, focused pane).
+export type { ToolbarPosition } from './settingsStore'
+import type { ToolbarPosition } from './settingsStore'
 
 /**
  * Bridge registered by each mounted book-view tab so the title bar can read
@@ -108,19 +103,28 @@ export interface PdfEditState {
 export const useBookViewStore = defineStore('bookView', () => {
   const tabStore = useTabStore()
 
-  // Per-pane toolbar visibility. Both panes start from the same persisted preference,
-  // but can be toggled independently once split view is active.
-  const toolbarVisibleByPane = ref<Map<1 | 2, boolean>>(new Map([[1, true], [2, true]]))
+  const settings = useSettingsStore()
+
+  // Per-pane toolbar visibility, as an OVERRIDE of the stored preference: a pane only
+  // gets an entry here once it has been toggled independently, which split view allows.
+  // Empty means "follow the preference" — so a settings reset takes effect immediately
+  // rather than leaving a stale copy behind, which a hardcoded fallback here would.
+  const toolbarVisibleByPane = ref<Map<1 | 2, boolean>>(new Map())
 
   function getToolbarVisible(paneId: 1 | 2): boolean {
-    return toolbarVisibleByPane.value.get(paneId) ?? true
+    return toolbarVisibleByPane.value.get(paneId) ?? settings.toolbarVisible
   }
 
   // Single computed for backward-compat consumers that don't pass a pane ID.
   // Always reflects pane 1.
   const toolbarVisible = computed(() => getToolbarVisible(1))
 
-  const toolbarPosition = ref<ToolbarPosition>('top')
+  // Writable pass-through so `v-model="toolbarPosition"` in the settings page keeps
+  // working — the value itself is settingsStore's.
+  const toolbarPosition = computed<ToolbarPosition>({
+    get: () => settings.toolbarPosition,
+    set: (pos) => { settings.toolbarPosition = pos },
+  })
   const toggleCommentaryPanelSignal = ref<{ count: number; paneId: 1 | 2; slot: CommentarySlot }>({
     count: 0,
     paneId: 1,
@@ -130,7 +134,10 @@ export const useBookViewStore = defineStore('bookView', () => {
   const toggleTocPanelSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const txtViewToggleSearchSignal = ref<{ count: number; paneId: 1 | 2 }>({ count: 0, paneId: 1 })
   const txtViewSearchVisible = ref(false)
-  const autoSelectTopLine = ref(false)
+  const autoSelectTopLine = computed<boolean>({
+    get: () => settings.autoSelectTopLine,
+    set: (value) => { settings.autoSelectTopLine = value },
+  })
 
   /**
    * Toggles ONE commentary panel of a pane. Ctrl+J targets 'bottom',
@@ -293,50 +300,46 @@ export const useBookViewStore = defineStore('bookView', () => {
     },
   })
 
-  // Synchronous — all bookView settings are in localStorage
-  function init() {
-    const toolbar = lsGet<boolean>(KEYS.SETTINGS_TOOLBAR)
-    if (toolbar != null) {
-      toolbarVisibleByPane.value.set(1, toolbar)
-      toolbarVisibleByPane.value.set(2, toolbar)
-    }
-    const pos = lsGet<ToolbarPosition>(KEYS.SETTINGS_TOOLBAR_POSITION)
-    if (pos != null) toolbarPosition.value = pos
-    const autoSelect = lsGet<boolean>(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE)
-    if (autoSelect != null) autoSelectTopLine.value = autoSelect
-    else autoSelectTopLine.value = useSettingsStore().defaultAutoSyncCommentary
-    const splitView = lsGet<boolean>(KEYS.SETTINGS_SPLIT_VIEW)
-    if (splitView != null) splitViewEnabled.value = splitView
-    const splitFraction = lsGet<number>(KEYS.SETTINGS_SPLIT_VIEW_FRACTION)
-    if (splitFraction != null) splitViewFraction.value = splitFraction
-  }
+  /**
+   * Nothing to load any more: every book-view preference lives in settingsStore and is
+   * read live. Kept because main.ts calls it and a later addition may need it again.
+   */
+  function init() {}
 
   function toggleToolbar(paneId: 1 | 2 = 1) {
     const next = !getToolbarVisible(paneId)
-    toolbarVisibleByPane.value.set(paneId, next)
-    // Persist using pane 1's value as the canonical preference.
-    if (paneId === 1) lsSet(KEYS.SETTINGS_TOOLBAR, next)
+    if (paneId === 1) {
+      // Pane 1 IS the canonical preference rather than an override of it, so it writes
+      // through and clears any entry instead of shadowing what it just stored.
+      toolbarVisibleByPane.value.delete(1)
+      settings.toolbarVisible = next
+    } else {
+      toolbarVisibleByPane.value.set(paneId, next)
+    }
   }
 
   function setToolbarPosition(pos: ToolbarPosition) {
     toolbarPosition.value = pos
-    lsSet(KEYS.SETTINGS_TOOLBAR_POSITION, pos)
   }
 
   function toggleAutoSelectTopLine() {
     autoSelectTopLine.value = !autoSelectTopLine.value
-    lsSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, autoSelectTopLine.value)
   }
 
   function setAutoSelectTopLine(value: boolean) {
     autoSelectTopLine.value = value
-    lsSet(KEYS.SETTINGS_AUTO_SELECT_TOP_LINE, value)
   }
 
   // ── Split view ─────────────────────────────────────────────────────────────
 
-  const splitViewEnabled = ref(false)
-  const splitViewFraction = ref(0.5)
+  const splitViewEnabled = computed<boolean>({
+    get: () => settings.splitViewEnabled,
+    set: (value) => { settings.splitViewEnabled = value },
+  })
+  const splitViewFraction = computed<number>({
+    get: () => settings.splitViewFraction,
+    set: (value) => { settings.splitViewFraction = value },
+  })
   const focusedPaneId = ref<1 | 2>(1)
 
   function setFocusedPane(paneId: 1 | 2) {
@@ -345,17 +348,14 @@ export const useBookViewStore = defineStore('bookView', () => {
 
   function toggleSplitView() {
     splitViewEnabled.value = !splitViewEnabled.value
-    lsSet(KEYS.SETTINGS_SPLIT_VIEW, splitViewEnabled.value)
   }
 
   function disableSplitView() {
     splitViewEnabled.value = false
-    lsSet(KEYS.SETTINGS_SPLIT_VIEW, false)
   }
 
   function setSplitViewFraction(fraction: number) {
     splitViewFraction.value = fraction
-    lsSet(KEYS.SETTINGS_SPLIT_VIEW_FRACTION, fraction)
   }
 
   // Resolve which tab's zoom a zoom action targets. Callers inside a pane pass
