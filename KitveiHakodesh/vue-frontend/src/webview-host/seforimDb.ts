@@ -52,41 +52,16 @@ export let hasSplitLineContent = false
 let _schemaDetected = false
 let _schemaDetecting: Promise<void> | null = null
 
-/** Lazy — only runs on first call. Safe to call multiple times. */
+/**
+ * Kept as a no-op so callers need not care which runtime they are in.
+ *
+ * It used to run three PRAGMA table_info round-trips at startup to decide which spelling of
+ * the hosted SQL to use — whether `category` has orderIndex, which column flags a declared
+ * base text, whether line content moved to a sidecar. C# answers all three from its own
+ * schema probe now, on both legs, so the page has nothing to detect.
+ */
 export function ensureCategorySchema(): Promise<void> {
-  if (_schemaDetected) return Promise.resolve()
-  // Dev routes the catalog through the service, which detects the orderIndex column
-  // itself — categoryHasOrderIndex is only consulted on the hosted (C#) SQL path.
-  if (typeof window.__webviewQuery !== 'function') {
-    _schemaDetected = true
-    return Promise.resolve()
-  }
-  if (_schemaDetecting) return _schemaDetecting
-  _schemaDetecting = Promise.all([
-    query<{ name: string }>('PRAGMA table_info(category)', []),
-    query<{ name: string }>('PRAGMA table_info(link)', []),
-    query<{ name: string }>('PRAGMA table_info(line)', []),
-  ])
-    .then(([categoryCols, linkCols, lineCols]) => {
-      categoryHasOrderIndex = categoryCols.some((c) => c.name === 'orderIndex')
-      if (linkCols.some((c) => c.name === 'baseProvenance')) declaredBaseColumn = 'baseProvenance'
-      // Both halves matter: a database part-way through a rebuild could have the sidecar
-      // while `line` still carries the old column, and then the old queries are the
-      // correct ones to run. `line` always exists, so an empty result means the probe
-      // failed rather than that the column is gone.
-      hasSplitLineContent = lineCols.length > 0 && !lineCols.some((c) => c.name === 'content')
-      _schemaDetected = true
-    })
-    .catch(() => {
-      // Schema detection failed — proceed with the safe default (no orderIndex)
-      categoryHasOrderIndex = false
-      hasSplitLineContent = false
-      _schemaDetected = true
-    })
-    .finally(() => {
-      _schemaDetecting = null
-    })
-  return _schemaDetecting
+  return Promise.resolve()
 }
 
 export async function onDbReady(path: string) {
