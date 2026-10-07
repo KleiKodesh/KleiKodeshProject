@@ -1,4 +1,4 @@
-﻿#if NET10_0_OR_GREATER
+#if NET10_0_OR_GREATER
 using System.Runtime.InteropServices;
 
 namespace DocConvertLib;
@@ -519,6 +519,13 @@ public static unsafe partial class AotWordConverter
     /// preserve the raw transport HRESULT, so a genuine disconnect arrives here intact. An error
     /// wrapped as DISP_E_EXCEPTION came from Word's APPLICATION layer — which means Word answered,
     /// so reading it as alive is correct.</summary>
+    // NOTE: KitveiHakodesh.Core.Common.RunningWordFinder has the same list, and that is NOT a
+    // duplicate to collapse. Core's Word files use the Office PIA and are <Compile Remove>d from
+    // its net10 leg, because ILC cannot load PIA interop metadata — so this project's modern leg
+    // cannot reach them even though it references Core. Keep the two in step by hand if a new
+    // severed-channel HRESULT ever has to be added; 0x80010005 is a BUSY, ALIVE Word and must
+    // never appear in either.
+
     private static bool IsDisconnected(int hr)
         // Verified against the Windows SDK winerror.h. A busy code listed here would be a false
         // "dead", which releases the user's own Word and starts a SECOND visible one beside it.
