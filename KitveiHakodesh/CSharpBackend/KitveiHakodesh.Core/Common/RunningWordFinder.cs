@@ -49,11 +49,28 @@ namespace KitveiHakodesh.Core.Common
         /// </summary>
         public static Word.Application? FindRunning()
         {
-            if (HostApplication != null) return HostApplication;
+            // The host is reused only if it still ANSWERS. HostApplication is captured once at
+            // add-in startup and cleared only at shutdown, so if the underlying proxy is severed
+            // while the add-in stays loaded — Word rebuilt its automation server, a
+            // crash-recovery cycle, an RPC channel reset — the reference is still non-null but
+            // every call on it throws RPC_E_DISCONNECTED forever. Trusting it blindly is what
+            // made a broken paste stay broken until the user restarted Word: this branch
+            // short-circuits the others, so nothing ever got the chance to rebind. Clearing a
+            // dead one is what makes the failure self-healing.
+            var host = HostApplication;
+            if (host != null)
+            {
+                if (IsAlive(host)) return host;
+                HostApplication = null;
+            }
 
             try
             {
-                return (Word.Application)Marshal.GetActiveObject("Word.Application");
+                var running = (Word.Application)Marshal.GetActiveObject("Word.Application");
+                // The running-object table can hand back an instance that is already tearing
+                // down, which then fails on first use rather than on binding.
+                if (running != null && IsAlive(running)) return running;
+                return null;
             }
             catch (COMException)
             {
@@ -67,16 +84,23 @@ namespace KitveiHakodesh.Core.Common
         /// <param name="source">Where it came from — decides whether the caller may quit it.</param>
         public static Word.Application Acquire(out Source source)
         {
-            if (HostApplication != null)
+            // Deliberately asks FindRunning rather than reading HostApplication directly, so the
+            // liveness probe cannot be bypassed on the path that actually drives Word.
+            var host = HostApplication;
+            if (host != null && IsAlive(host))
             {
                 source = Source.Host;
-                return HostApplication;
+                return host;
             }
 
             Word.Application? running = FindRunning();
             if (running != null)
             {
-                source = Source.AlreadyRunning;
+                // FindRunning returns the host when it is alive; distinguish so the caller knows
+                // whether the instance is theirs to release.
+                source = ReferenceEquals(running, HostApplication)
+                    ? Source.Host
+                    : Source.AlreadyRunning;
                 return running;
             }
 
@@ -86,6 +110,56 @@ namespace KitveiHakodesh.Core.Common
             var started = new Word.Application { Visible = false };
             started.DisplayAlerts = Word.WdAlertLevel.wdAlertsNone;
             return started;
+        }
+
+        /// <summary>
+        /// Whether this instance still answers. Reads one cheap property: a severed RPC channel
+        /// throws, a live one does not.
+        ///
+        /// ALIVE UNLESS PROVEN DEAD — deliberately inverted. Only a severed channel means the
+        /// instance is gone; a BUSY Word, or any other COM error, is a Word that is still there.
+        /// A false "dead" is the expensive direction, because it discards the user's own
+        /// instance and starts a second one beside it.
+        /// </summary>
+        public static bool IsAlive(Word.Application application)
+        {
+            if (application == null) return false;
+
+            try
+            {
+                var unused = application.Build;
+                return true;
+            }
+            catch (COMException ex)
+            {
+                return !IsDisconnected(ex.HResult);
+            }
+            catch (InvalidComObjectException)
+            {
+                return false;   // the RCW was already released
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Whether an HRESULT means the COM channel is severed, as opposed to merely busy.
+        ///
+        /// Verified against the Windows SDK winerror.h, and getting it wrong is not cosmetic: a
+        /// BUSY code listed here reads as a false "dead", which discards the user's Word and
+        /// starts a second one beside it. 0x80010005 is RPC_E_CANTCALLOUT_INEXTERNALCALL
+        /// ("inside a message filter") — a busy, ALIVE Word — and must never appear below.
+        /// </summary>
+        private static bool IsDisconnected(int hr)
+        {
+            return hr == unchecked((int)0x80010108)    // RPC_E_DISCONNECTED
+                || hr == unchecked((int)0x800706BA)    // RPC_S_SERVER_UNAVAILABLE
+                || hr == unchecked((int)0x800706BE)    // RPC_S_CALL_FAILED
+                || hr == unchecked((int)0x80010007)    // RPC_E_SERVER_DIED
+                || hr == unchecked((int)0x80010012)    // RPC_E_SERVER_DIED_DNE
+                || hr == unchecked((int)0x800401FD);   // CO_E_OBJNOTCONNECTED
         }
 
         /// <summary>

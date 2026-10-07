@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -336,7 +336,7 @@ namespace KitveiHakodeshLib
             Word.Application host = WordToPdfConverter.HostApplication;
             if (host != null)
             {
-                if (IsAlive(host)) return host;
+                if (KitveiHakodesh.Core.Common.RunningWordFinder.IsAlive(host)) return host;
                 WordToPdfConverter.HostApplication = null;
             }
 
@@ -347,7 +347,7 @@ namespace KitveiHakodeshLib
                 var running = (Word.Application)Marshal.GetActiveObject("Word.Application");
                 if (running != null)
                 {
-                    if (IsAlive(running)) return running;
+                    if (KitveiHakodesh.Core.Common.RunningWordFinder.IsAlive(running)) return running;
                     try { Marshal.ReleaseComObject(running); } catch { }
                 }
             }
@@ -360,60 +360,12 @@ namespace KitveiHakodeshLib
             return app;
         }
 
-        /// <summary>
-        /// True when the instance still answers automation. Reads one trivial property — the
-        /// point is whether the call completes at all, not what it returns.
-        ///
-        /// A BUSY Word counts as alive: RPC_E_CALL_REJECTED means Word is sitting on a dialog and
-        /// will answer again shortly, so discarding the reference (and starting a second Word)
-        /// would be the wrong response. Only a severed channel is treated as dead.
-        /// </summary>
-        private static bool IsAlive(Word.Application app)
-        {
-            try
-            {
-                var unused = app.Build;
-                return true;
-            }
-            catch (COMException ex)
-            {
-                // ALIVE UNLESS PROVEN DEAD — deliberately inverted. Only a severed channel means
-                // the instance is gone; a busy Word, or any other COM error, is a Word that is
-                // still there. A false "dead" is the expensive direction: it discards the user's
-                // own instance and starts a second one beside it.
-                return !IsDisconnected(ex.HResult);
-            }
-            catch (InvalidComObjectException) { return false; }   // RCW already released
-            catch (Exception) { return false; }
-        }
+        // IsAlive / IsDisconnected live in Core (Common.RunningWordFinder): the same "alive
+        // unless proven dead" rule, and the same audited list of severed-channel HRESULTs, is
+        // needed wherever Word is reused — this leg and any other. Keeping a second copy of that
+        // list is how one of them ends up listing a BUSY code and starting a second Word beside
+        // the user's own.
 
-        /// <summary>True for the HRESULTs that mean the Word instance itself is gone, rather than
-        /// merely busy. Everything else is treated as alive — see IsAlive.</summary>
-        private static bool IsDisconnected(int hr)
-        {
-            // Verified against the Windows SDK winerror.h. Getting these wrong is not cosmetic:
-            // a busy code listed here is a false "dead", which discards the user's own Word and
-            // starts a second one beside it. 0x80010005 is RPC_E_CANTCALLOUT_INEXTERNALCALL
-            // ("inside a message filter") — a BUSY, alive Word — and must never appear below.
-            return hr == unchecked((int)0x80010108)    // RPC_E_DISCONNECTED
-                || hr == unchecked((int)0x800706BA)    // RPC_S_SERVER_UNAVAILABLE
-                || hr == unchecked((int)0x800706BE)    // RPC_S_CALL_FAILED
-                || hr == unchecked((int)0x80010007)    // RPC_E_SERVER_DIED
-                || hr == unchecked((int)0x80010012)    // RPC_E_SERVER_DIED_DNE
-                || hr == unchecked((int)0x800401FD);   // CO_E_OBJNOTCONNECTED
-        }
-
-        /// <summary>
-        /// Releases every COM proxy taken inside one operation, in reverse order, exactly once.
-        ///
-        /// Word automation hands back a distinct RCW for every property hop, and each one pins an
-        /// object inside the Word PROCESS — which is why leaked proxies survive closing our app
-        /// and clear only when Word itself is restarted. Releasing them is not tidiness; it is
-        /// what keeps a once-off gesture from accumulating state in someone else's process.
-        ///
-        /// The host Application is deliberately never released: it belongs to the add-in, and
-        /// releasing it is how a task pane loses its Word for the rest of the session.
-        /// </summary>
         private sealed class ComScope : IDisposable
         {
             private readonly System.Collections.Generic.List<object> _tracked =
