@@ -48,14 +48,17 @@ namespace KitveiHakodesh.Core.Common
 
         /// <param name="databasePath">The database to watch. Its directory is watched, with a
         /// filter covering the file and its sidecars.</param>
-        /// <param name="onSettled">Called once per settle cycle, on a timer thread.</param>
+        /// <param name="onSettled">Called once per settle cycle, on a timer thread. Its argument
+        /// is true when the wait was cut short by <paramref name="maxDeferral"/> rather than the
+        /// file going quiet — i.e. the file is STILL being written. Callers that log will want
+        /// to say so; the work to do is the same either way.</param>
         /// <param name="settleWindow">How long the file must be quiet. Defaults to
         /// <see cref="DefaultSettleWindow"/>.</param>
         /// <param name="maxDeferral">How long to keep deferring a file that will not settle.
         /// Defaults to <see cref="DefaultMaxDeferral"/>.</param>
         public DbChangeWatcher(
             string databasePath,
-            Action onSettled,
+            Action<bool> onSettled,
             TimeSpan? settleWindow = null,
             TimeSpan? maxDeferral = null)
         {
@@ -76,8 +79,20 @@ namespace KitveiHakodesh.Core.Common
         /// (changes get picked up on the next launch instead), not an error, so the caller
         /// decides whether to mention it.
         /// </summary>
-        public bool TryStart()
+        public bool TryStart() => TryStart(out _);
+
+        /// <summary>
+        /// As <see cref="TryStart()"/>, but hands back WHY it could not start.
+        ///
+        /// <paramref name="error"/> is null when the folder simply is not there — an ordinary,
+        /// expected state — and carries the exception when the OS refused an otherwise valid
+        /// watch. The two deserve different log levels, and this class cannot pick one: it has
+        /// no logger, deliberately. Swallowing the exception entirely would make "live updates
+        /// quietly stopped working" undiagnosable, which is the one failure this subsystem has.
+        /// </summary>
+        public bool TryStart(out Exception? error)
         {
+            error = null;
             string? folder = Path.GetDirectoryName(_databasePath);
             string name = Path.GetFileName(_databasePath);
             if (string.IsNullOrEmpty(folder) || !Directory.Exists(folder)) return false;
@@ -98,13 +113,29 @@ namespace KitveiHakodesh.Core.Common
                 _watcher = watcher;
                 return true;
             }
-            catch (Exception)
+            catch (Exception ex)
             {
+                error = ex;
                 return false;
             }
         }
 
         private void OnFileSystemEvent(object sender, FileSystemEventArgs e) => _settle.Poke();
+
+        /// <summary>
+        /// Reports activity by hand, exactly as a filesystem event does: re-arm the quiet
+        /// window, do not fire.
+        ///
+        /// This exists so the settle-and-confirm timing is TESTABLE. Going through
+        /// <see cref="TryStart"/> cannot reach the confirm step on purpose: a real write raises
+        /// an event that re-arms the timer before the window expires, so the debounce always
+        /// handles it and the "timer elapsed on a file that moved since the baseline" branch
+        /// never runs. Driving the window directly is the only way to land on it, and that
+        /// branch is what stops a rebuild from reading a half-written database.
+        ///
+        /// A caller watching a real file never needs this — <see cref="TryStart"/> pokes for it.
+        /// </summary>
+        public void Poke() => _settle.Poke();
 
         public void Dispose()
         {
@@ -121,7 +152,7 @@ namespace KitveiHakodesh.Core.Common
         private sealed class SettleDetector : IDisposable
         {
             private readonly string _databasePath;
-            private readonly Action _onSettled;
+            private readonly Action<bool> _onSettled;
             private readonly TimeSpan _settleWindow;
             private readonly TimeSpan _maxDeferral;
 
@@ -130,7 +161,7 @@ namespace KitveiHakodesh.Core.Common
             private string? _lastSeenFingerprint;
             private DateTime _deferStartedUtc;
 
-            public SettleDetector(string databasePath, Action onSettled,
+            public SettleDetector(string databasePath, Action<bool> onSettled,
                 TimeSpan settleWindow, TimeSpan maxDeferral)
             {
                 _databasePath = databasePath;
@@ -157,6 +188,7 @@ namespace KitveiHakodesh.Core.Common
             private void Tick()
             {
                 string current = SafeFingerprint();
+                bool forced;
 
                 lock (_gate)
                 {
@@ -173,12 +205,18 @@ namespace KitveiHakodesh.Core.Common
                         return;
                     }
 
+                    // Settling because the cap ran out rather than because the file went quiet
+                    // means we are about to act on a file that is STILL being written. That is
+                    // the deliberate escape hatch, but it is worth saying out loud, so the
+                    // caller is told which of the two happened.
+                    forced = !stable;
+
                     _timer?.Dispose();
                     _timer = null;
                     _lastSeenFingerprint = null;
                 }
 
-                _onSettled();
+                _onSettled(forced);
             }
 
             /// <summary>An unreadable file yields "", which never compares equal to a real
