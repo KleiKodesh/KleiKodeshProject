@@ -27,7 +27,7 @@ public static class SeforimDbCatalogTextNormalizer
         ["שלחן"] = "שולחן",
     };
 
-    /// <summary>The abbreviation map (generated from Catalog/catalog_abbreviations.json).
+    /// <summary>The abbreviation map (hand-edited, in SeforimDbCatalogAbbreviations).
     /// Key = an abbreviation with EVERY QUOTE GLYPH STRIPPED (ט"ז is keyed as טז); value =
     /// alternatives, each an ordered word list that is AND-matched. More than one
     /// alternative = an ambiguous abbreviation that OR-expands (only used on the QUERY
@@ -40,8 +40,8 @@ public static class SeforimDbCatalogTextNormalizer
 
     /// <summary>Every quote-ish glyph an abbreviation may be written with: ASCII quote and
     /// apostrophe, Hebrew gershayim/geresh, and the curly forms. Stripped from both the
-    /// map keys (at generation time) and every lookup candidate, so a token matches
-    /// regardless of which mark — if any — was typed.</summary>
+    /// map keys (by hand, enforced by SeforimDbCatalogAbbreviationsCheck) and every lookup
+    /// candidate, so a token matches regardless of which mark — if any — was typed.</summary>
     private static bool IsQuoteGlyph(char c) =>
         c is '"' or '\'' or '״' or '׳' or '“' or '”' or '‘' or '’';
 
@@ -110,7 +110,7 @@ public static class SeforimDbCatalogTextNormalizer
     }
 
     /// <summary>Largest key word-count in <see cref="Abbrev"/> — the lookahead window
-    /// for greedy multi-word matching. Computed once from the generated map.</summary>
+    /// for greedy multi-word matching. Computed once from the map.</summary>
     private static readonly int MaxKeyWords = ComputeMaxKeyWords();
 
     /// <summary>The abbreviation map as (key, alternatives) pairs — exposed for

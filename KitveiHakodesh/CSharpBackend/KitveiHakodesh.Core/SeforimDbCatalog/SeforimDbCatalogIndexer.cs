@@ -155,7 +155,7 @@ public sealed partial class SeforimDbCatalogIndex : IDisposable
     /// the acronym and the expanded author name match.
     ///
     /// NOTE for future edits: the change stamp covers the seforim DB + this version string
-    /// only — it does NOT fingerprint catalog_abbreviations.json. Editing the map therefore
+    /// only — it does NOT fingerprint the abbreviation map. Editing the map therefore
     /// does NOT invalidate an existing index; bump this version or the stale index keeps
     /// serving tokens normalized under the OLD map.
     /// v19: audited every entry against the DB's raw vocabulary and fixed what the audit

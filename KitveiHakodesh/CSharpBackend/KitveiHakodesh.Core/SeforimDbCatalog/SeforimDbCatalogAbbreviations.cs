@@ -1,13 +1,15 @@
-// HAND-EDITED SOURCE OF TRUTH (was generated from catalog_abbreviations.json — now edit HERE, nowhere else.
-//   The csv/json/generator pipeline is retired with the migration; the two invariants the
-//   generator enforced (no quote glyph in a key; no colliding keys) become unit tests.
+// HAND-EDITED SOURCE OF TRUTH — edit HERE, nowhere else.
+//   The csv/json/generator pipeline that used to produce this file is gone (deleted with the
+//   migration). The two invariants the generator enforced are now checked by
+//   SeforimDbCatalogAbbreviationsCheck, which KitveiHakodeshService.Tests runs on every mode:
+//   no quote glyph in a key, and no two keys colliding once stripped.
 //   Keys are QUOTE-STRIPPED; the lookup strips quote glyphs before probing.
-// (file was CatalogAbbreviations.g.cs)
 namespace KitveiHakodesh.Core.SeforimDbCatalog;
 
-/// <summary>Compiled catalog-search abbreviation map. Key = a typed abbreviation
-/// (one quote flavour per entry); value = alternatives, each an ordered word list
-/// that is AND-matched. More than one alternative => OR-union at query time.</summary>
+/// <summary>Compiled catalog-search abbreviation map. Key = an abbreviation with every
+/// quote glyph stripped, so ONE entry serves every quote flavour; value = alternatives,
+/// each an ordered word list that is AND-matched. More than one alternative => OR-union
+/// at query time.</summary>
 internal static class SeforimDbCatalogAbbreviations
 {
     internal static readonly System.Collections.Generic.Dictionary<string, string[][]> Map = new(System.StringComparer.Ordinal)

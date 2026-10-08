@@ -48,10 +48,24 @@ for (int i = 0; i < args.Length; i++)
     }
 }
 
+// The abbreviation table's two invariants, checked on EVERY run and before every mode:
+// it is pure data, needs no database, and both failure modes are silent at runtime (an
+// entry that can never match, or one that shadows another). A code generator used to
+// enforce these at build time; the table is hand-edited now, so this is the guard.
+var abbrevProblems = KitveiHakodesh.Core.SeforimDbCatalog.SeforimDbCatalogAbbreviationsCheck.Verify();
+if (abbrevProblems.Count > 0)
+{
+    Console.Error.WriteLine($"FAIL  abbreviation map: {abbrevProblems.Count} problem(s)");
+    foreach (var problem in abbrevProblems) Console.Error.WriteLine("  " + problem);
+    return 3;
+}
+
 if (watcherMode)
     return WatcherE2E.Run() == 0 ? 0 : 1;
 if (variantMode)
-    return VariantVerify.Run();
+    // Normalised to 0/1 like the line above: Run() returns a failure COUNT, and an
+    // unnormalised 3 failures would be indistinguishable from the abbreviation-map exit.
+    return VariantVerify.Run() == 0 ? 0 : 1;
 
 dbPath ??= Environment.GetEnvironmentVariable("DB_PATH");
 if (string.IsNullOrWhiteSpace(dbPath))
