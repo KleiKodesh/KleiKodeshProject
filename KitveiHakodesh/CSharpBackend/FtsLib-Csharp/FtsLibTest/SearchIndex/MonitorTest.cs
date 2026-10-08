@@ -83,7 +83,7 @@ namespace FtsLibTest
             // Search
             try
             {
-                var index   = new SeforimIndex(indexDir, dbPath);
+                var index   = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
                 var sw      = Stopwatch.StartNew();
                 var results = new List<SearchResult>();
                 foreach (var r in index.Search(Query)) results.Add(r);

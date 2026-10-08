@@ -1,14 +1,20 @@
 # SeforimIndex — Public API
 
-Full-text search over the seforim SQLite database. Three methods, no internals exposed.
+Full-text search over documents the CALLER supplies. Three methods, no internals exposed.
 
 ## Setup
 
 ```csharp
-var index = new SeforimIndex(indexPath, dbPath);
+var index = new SeforimIndex(indexPath, () => new MyCorpus(...));
 ```
 
-Both paths are caller-supplied. `indexPath` is the directory where segment files are stored. `dbPath` is the seforim SQLite database file.
+`indexPath` is the directory where segment files are stored. The second argument is a
+`Func<IFtsCorpus>` — the documents to index and fetch back.
+
+This engine opens **no content database of its own** and knows no corpus schema. It used to:
+an older `SeforimIndex(indexPath, dbPath)` constructor created a built-in reader for the
+seforim database. Both are gone — see `IFtsCorpus` for the contract, and why it takes a
+factory rather than an instance (lazy result sequences, and one connection per operation).
 
 ---
 
@@ -117,5 +123,6 @@ SeforimDb/
   IndexingPipeline.cs     ← build logic
   SearchPipeline.cs       ← query parsing + search execution
   SnippetPipeline.cs      ← snippet generation
-  ZayitDb.cs              ← SQLite DB access
 ```
+
+Content access is NOT here — the caller supplies it through `IFtsCorpus` (one level up).

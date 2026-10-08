@@ -61,7 +61,7 @@ namespace FtsLibTest
 
             // Warm up the DB page cache
             Console.WriteLine("║  Warming up DB cache…");
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             int warmCount = 0;
             var swWarm = Stopwatch.StartNew();
             foreach (var _ in index.Search("תורה")) warmCount++;

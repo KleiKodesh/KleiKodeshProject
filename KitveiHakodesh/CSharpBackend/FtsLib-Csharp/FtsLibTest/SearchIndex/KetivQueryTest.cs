@@ -51,7 +51,7 @@ namespace FtsLibTest
             Console.WriteLine($"╔══ KETIV QUERY: \"{query}\"  [{label.ToUpper()}] ══");
             Console.WriteLine($"║  Index : {indexDir}");
 
-            var index   = new SeforimIndex(indexDir, dbPath);
+            var index   = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             var results = new List<SearchResult>();
             var sw      = Stopwatch.StartNew();
             foreach (var r in index.Search(query, cap: 0, expandKetiv: true))

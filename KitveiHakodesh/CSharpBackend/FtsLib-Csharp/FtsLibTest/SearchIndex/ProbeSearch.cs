@@ -79,7 +79,7 @@ namespace FtsLibTest
             var openSw = Stopwatch.StartNew();
             try
             {
-                index = new SeforimIndex(indexDir, dbPath);
+                index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             }
             catch (Exception ex)
             {

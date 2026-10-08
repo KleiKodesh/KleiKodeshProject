@@ -172,11 +172,11 @@ namespace FtsLibTest
         {
             Section($"B: fresh build ({limit:N0} lines)");
 
-            var index = new SeforimIndex(IndexDirA, dbPath);
+            var index = new SeforimIndex(IndexDirA, () => new ZayitDb(dbPath));
             index.BuildIndex(limit: limit);
             index.DeleteBuildProgressFile(); // completed build — finalized state
 
-            var seforim = new SeforimIndex(IndexDirA, dbPath);
+            var seforim = new SeforimIndex(IndexDirA, () => new ZayitDb(dbPath));
             VerifySegmentRows(seforim, "B1");
 
             // Rows across all live segments must tile [1..N] exactly (library
@@ -237,7 +237,7 @@ namespace FtsLibTest
             // segments this sets up a MIXED index; with exactly 1 it sets up an
             // ALL-legacy index — both are real upgrade states worth covering,
             // and phase M adapts its merged-rows expectation accordingly.
-            var seforim = new SeforimIndex(IndexDirA, dbPath);
+            var seforim = new SeforimIndex(IndexDirA, () => new ZayitDb(dbPath));
             List<(string dat, string db)> live;
             using (seforim.AcquireSearchLease(out live)) { }
             _droppedAllSegments = live.Count == 1;
@@ -246,7 +246,7 @@ namespace FtsLibTest
             Console.WriteLine($"║    dropped doc_source from {Path.GetFileName(firstDb)}" +
                 (_droppedAllSegments ? " (only segment — ALL-legacy mode)" : ""));
 
-            var reopened = new SeforimIndex(IndexDirA, dbPath);
+            var reopened = new SeforimIndex(IndexDirA, () => new ZayitDb(dbPath));
 
             // Search results must be UNCHANGED — the dropped span resolves
             // through the identity fallback, which is the same mapping.
@@ -274,7 +274,7 @@ namespace FtsLibTest
         {
             Section("M: force merge carries doc_source (incl. legacy gap)");
 
-            var seforim = new SeforimIndex(IndexDirA, dbPath);
+            var seforim = new SeforimIndex(IndexDirA, () => new ZayitDb(dbPath));
             seforim.ForceMerge();
 
             List<(string dat, string db)> live;
@@ -329,7 +329,7 @@ namespace FtsLibTest
                 writer.Purge();
             }
 
-            var seforim = new SeforimIndex(IndexDirA, dbPath);
+            var seforim = new SeforimIndex(IndexDirA, () => new ZayitDb(dbPath));
             var ids     = seforim.SearchIds(q0).ToList();
             Check("P1 deleted ids gone", !ids.Any(toKill.Contains) &&
                 ids.Count == baseline[q0].Count - toKill.Count,
@@ -368,7 +368,7 @@ namespace FtsLibTest
 
             // Phase 1: cancel after the first flush completes.
             var cts   = new CancellationTokenSource();
-            var index = new SeforimIndex(IndexDirB, dbPath);
+            var index = new SeforimIndex(IndexDirB, () => new ZayitDb(dbPath));
             try
             {
                 index.BuildIndex(limit: limit, onFlush: () => cts.Cancel(), ct: cts.Token);
@@ -384,14 +384,14 @@ namespace FtsLibTest
             // `limit` counts lines read THIS session, so the resume pass must ask
             // only for the remainder — library line ids are dense from 1, so the
             // resume line id equals the number of lines already indexed.
-            var resumed  = new SeforimIndex(IndexDirB, dbPath);
+            var resumed  = new SeforimIndex(IndexDirB, () => new ZayitDb(dbPath));
             int resumeAt = resumed.GetResumeLineId();
             Check("I0b resume point recorded", resumeAt > 0 && resumeAt < limit,
                 $"resumeAt={resumeAt}");
             resumed.BuildIndex(limit: limit - resumeAt);
             resumed.DeleteBuildProgressFile();
 
-            var reopened = new SeforimIndex(IndexDirB, dbPath);
+            var reopened = new SeforimIndex(IndexDirB, () => new ZayitDb(dbPath));
             VerifySegmentRows(reopened, "I1");
 
             var allRows = CollectAllRows(reopened);

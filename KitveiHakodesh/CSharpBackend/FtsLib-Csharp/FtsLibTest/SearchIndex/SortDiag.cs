@@ -65,7 +65,7 @@ namespace FtsLibTest
                 return;
             }
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // Collect every hit with its snippet-derived WordDistance/Score — exactly the two
             // fields the C# hit ships to the frontend (see FtsHit.WordDistance / .Score).

@@ -44,7 +44,7 @@ namespace FtsLibTest
             Console.WriteLine($"Checking: {string.Join(", ", wantIds)}");
             Console.WriteLine();
 
-            var index   = new SeforimIndex(indexDir, dbPath);
+            var index   = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             var found   = new HashSet<int>();
             int total   = 0;
 

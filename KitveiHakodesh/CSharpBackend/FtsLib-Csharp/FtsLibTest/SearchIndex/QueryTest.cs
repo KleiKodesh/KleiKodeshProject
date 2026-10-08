@@ -81,7 +81,7 @@ namespace FtsLibTest
             Console.WriteLine($"╔══ QUERY: \"{query}\"  [{tierLabel.ToUpper()}] ══");
             Console.WriteLine($"║  Index : {indexDir}");
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // ── Search ────────────────────────────────────────────────
             report.AddSection("Search Results");

@@ -56,7 +56,7 @@ namespace FtsLibTest
             Console.WriteLine();
             Console.WriteLine($"╔══ SNIPPET DIAG: \"{query}\"  [{label.ToUpper()}] ══");
 
-            var index   = new SeforimIndex(indexDir, dbPath);
+            var index   = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             var results = new List<SearchResult>();
             foreach (var r in index.Search(query))
             {

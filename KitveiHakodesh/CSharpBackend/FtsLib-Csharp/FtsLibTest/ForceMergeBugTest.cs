@@ -38,10 +38,10 @@ namespace FtsLibTest
             if (Directory.Exists(indexDir)) { try { Directory.Delete(indexDir, true); } catch { } }
 
             // 1) Fresh build, NO force merge → many live segments across levels.
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             Console.WriteLine("[forcemergebug] building (no force merge)...");
             index.BuildIndex(limit: t.Limit, forceMergeOnComplete: false);
-            index = new SeforimIndex(indexDir, dbPath); // reopen clean
+            index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath)); // reopen clean
 
             int segsBefore = Directory.GetFiles(indexDir, "seg_*.dat").Length;
             var before = Queries.ToDictionary(q => q, q => index.SearchIds(q).Count());

@@ -8,18 +8,17 @@ namespace FtsLib
     /// The documents this engine indexes and fetches back — supplied by the caller, so the
     /// engine never opens a content database of its own.
     ///
-    /// WHY THIS EXISTS. FtsLib shipped with a seforim-specific reader built in
-    /// (<c>SeforimDb/ZayitDb.cs</c>), which meant a library named after full-text search knew
-    /// the schema of one particular corpus, and that corpus had three independent readers across
-    /// the solution. This interface is the seam that ends that — WITHOUT a rewrite:
+    /// WHY THIS EXISTS. FtsLib shipped with a seforim-specific reader built in, which meant a
+    /// library named after full-text search knew the schema of one particular corpus, and that
+    /// corpus had three independent readers across the solution. This interface is the seam that
+    /// ended that, and the migration behind it is now COMPLETE:
     ///
-    ///   • The built-in reader implements it, so every existing caller keeps working unchanged.
-    ///     <c>SeforimIndex(indexPath, dbPath)</c> still opens the database itself.
-    ///   • A caller with its own data access implements it instead and passes it in, and the
-    ///     engine reads nothing.
-    ///
-    /// Both routes are live at once, which is what makes the migration gradual: the hosted app
-    /// and the service can move over one at a time, and neither has to move for the other to.
+    ///   • Supplying a corpus is the ONLY way in. The old <c>SeforimIndex(indexPath, dbPath)</c>
+    ///     constructor and the built-in reader it created are gone, so the engine opens no
+    ///     content database and knows no corpus schema.
+    ///   • The caller owns the data access. KitveiHakodesh.Core supplies the library corpus;
+    ///     FtsLib's own test suite carries a reader for the same database (FtsLibTest/Corpus/)
+    ///     purely so the tests have something to index.
     ///
     /// TERMINOLOGY. "Document" here is whatever unit the caller indexes — a line of a book, a
     /// paragraph, a record. Ids are the caller's own and must be positive and ascending; the

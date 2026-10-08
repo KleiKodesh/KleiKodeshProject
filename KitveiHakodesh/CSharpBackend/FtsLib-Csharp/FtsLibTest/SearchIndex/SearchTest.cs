@@ -196,7 +196,7 @@ namespace FtsLibTest
             Console.WriteLine($"║  Index : {indexDir}");
             Console.WriteLine($"║  Mode  : FULL validation — every result checked");
 
-            var index = existingIndex ?? new SeforimIndex(indexDir, dbPath);
+            var index = existingIndex ?? new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // ── Warm-up ───────────────────────────────────────────────
             Console.WriteLine("║  Warm-up…");

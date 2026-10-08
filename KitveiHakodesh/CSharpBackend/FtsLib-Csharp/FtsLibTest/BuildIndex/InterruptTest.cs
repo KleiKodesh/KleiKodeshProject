@@ -123,7 +123,7 @@ namespace FtsLibTest
                 }
 
                 // ── Phase 2: Simulate next-launch by constructing a fresh SeforimIndex ──
-                // This is exactly what the app does: new SeforimIndex(indexPath, dbPath)
+                // This is exactly what the app does: new SeforimIndex(indexPath, () => new ZayitDb(dbPath))
                 // runs recovery in its constructor.
                 FtsLog.Separator($"CYCLE {cycle} — RECOVERY (simulated next launch)");
                 ProbeResult result = RunProbeAfterRecovery(dbPath);
@@ -195,7 +195,7 @@ namespace FtsLibTest
             FtsLog.Write("InterruptTest.RunInterruptedBuild",
                 $"starting build — killAfterFlushes={killAfterFlushes} mode={mode}");
 
-            var index = new SeforimIndex(IndexDir, dbPath);
+            var index = new SeforimIndex(IndexDir, () => new ZayitDb(dbPath));
 
             var buildTask = Task.Run(() =>
             {
@@ -307,7 +307,7 @@ namespace FtsLibTest
             SeforimIndex index;
             try
             {
-                index = new SeforimIndex(IndexDir, dbPath);
+                index = new SeforimIndex(IndexDir, () => new ZayitDb(dbPath));
             }
             catch (Exception ex)
             {

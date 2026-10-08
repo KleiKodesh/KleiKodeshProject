@@ -121,7 +121,7 @@ var bands = new (string Name, List<string> Words)[]
     ("hyper(800+)",         Band(800, int.MaxValue, 12)),
 };
 
-var index = new SeforimIndex(IndexPath, SeforimDb);
+var index = new SeforimIndex(IndexPath, () => new StressCorpus(SeforimDb));
 
 (long Count, double Ms) RunSearch(string q, int timeBudgetMs = 30000)
 {
@@ -286,3 +286,56 @@ foreach (var x in blowups.Where(x => x.A >= 0 && x.B > 0)
     Console.WriteLine($"  {Mask(x.W)}: {x.A:N0} -> {x.B:N0}  (x{(double)x.B / Math.Max(1, x.A):F0}, {x.MsA:F0} -> {x.MsB:F0} ms)");
 
 Console.WriteLine("\ndone.");
+
+// ── corpus ──────────────────────────────────────────────────────────────────
+// FtsLib no longer ships a reader for this database: the engine takes documents
+// through IFtsCorpus and knows no corpus schema. This spike only SEARCHES a
+// prebuilt index, so only the fetch-side members are real; the build-side ones
+// throw rather than quietly returning nothing, which would look like an empty
+// corpus instead of an unsupported call.
+//
+// Matches this spike's own SQL above: flat `line.content`, read-only.
+sealed class StressCorpus : FtsLib.IFtsCorpus
+{
+    private readonly SqliteConnection _con;
+
+    public StressCorpus(string dbPath)
+    {
+        _con = new SqliteConnection($"Data Source={dbPath};Mode=ReadOnly");
+        _con.Open();
+    }
+
+    public string? GetDocumentText(int id)
+    {
+        using var cmd = _con.CreateCommand();
+        cmd.CommandText = "SELECT content FROM line WHERE id = $id";
+        cmd.Parameters.AddWithValue("$id", id);
+        return cmd.ExecuteScalar() as string;
+    }
+
+    public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
+    {
+        foreach (int id in ids)
+        {
+            string? text = GetDocumentText(id);
+            if (text != null) yield return (id, text, string.Empty);
+        }
+    }
+
+    public IDictionary<int, (string Previous, string Next)> FetchNeighbourText(
+        IReadOnlyList<int> ids, int radius)
+    {
+        var map = new Dictionary<int, (string, string)>();
+        foreach (int id in ids) map[id] = (string.Empty, string.Empty);
+        return map;
+    }
+
+    public long CountDocuments() => throw new NotSupportedException("build-only");
+    public long CountDocumentsUpTo(int upToId) => throw new NotSupportedException("build-only");
+    public IEnumerable<(int Id, string Text)> ReadDocuments(int limit, CancellationToken ct = default)
+        => throw new NotSupportedException("build-only");
+    public IEnumerable<(int Id, string Text)> ReadDocumentsAfter(int afterId, int limit = 0, CancellationToken ct = default)
+        => throw new NotSupportedException("build-only");
+
+    public void Dispose() => _con.Dispose();
+}

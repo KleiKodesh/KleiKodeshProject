@@ -217,7 +217,7 @@ namespace FtsLibTest
 
                 Console.WriteLine($"╠══ FULL QUERY SEARCH ════════════════════════════════════════");
 
-                var index = new SeforimIndex(indexDir, dbPath);
+                var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
                 var swFull = Stopwatch.StartNew();
                 var results = new List<SearchResult>();
                 foreach (var r in index.Search(query)) results.Add(r);

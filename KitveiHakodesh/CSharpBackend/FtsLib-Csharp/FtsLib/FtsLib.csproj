@@ -28,21 +28,18 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
-  <!-- Microsoft.VisualBasic is part of the shared framework on the modern leg but is an
-       assembly reference on .NET Framework. ZayitDb reads the Zayit app's saved library path
-       through Interaction.GetSetting, which is where that setting lives. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <Reference Include="Microsoft.VisualBasic" />
+  <ItemGroup>
+    <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict).
+         This is for the engine's OWN segment files (the index), not for any content database:
+         the engine reads content only through IFtsCorpus, which the caller supplies. -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
   </ItemGroup>
 
-  <ItemGroup>
-    <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict). -->
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
-    <!-- Seforim databases from SeforimLibrary schema 6 on store line content zstd-compressed
-         with a dictionary shipped inside the database. Pure-C# port: nothing native to
-         package, and it resolves on both this leg and the net48 twin. -->
-    <PackageReference Include="ZstdSharp.Port" Version="0.8.6" />
-  </ItemGroup>
+  <!-- ZstdSharp.Port and the net48 Microsoft.VisualBasic reference used to live here for the
+       built-in seforim reader (ZayitDb + SeforimLineContent). That reader moved to
+       FtsLibTest/Corpus/ when the engine stopped knowing any corpus schema, and the two
+       dependencies moved with it — see FtsLibTest.Net10.csproj. -->
+
 
   <!-- The related-forms expansion artifact (research/word-association, FINDINGS
        26/27). ONE canonical copy shared by every FtsLib flavour lives in

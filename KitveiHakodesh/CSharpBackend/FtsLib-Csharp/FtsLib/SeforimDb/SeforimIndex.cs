@@ -36,17 +36,6 @@ namespace FtsLib.SeforimDb
         private readonly Func<IFtsCorpus> _openCorpus;
         private          SegmentStore     _store;
 
-        /// <summary>The built-in seforim reader, opened fresh per operation. Kept private: a
-        /// caller that wants this behaviour asks for it with the (indexPath, dbPath) constructor,
-        /// and a caller supplying its own corpus never needs to know this type exists.</summary>
-        private static Func<IFtsCorpus> MakeSeforimCorpusFactory(string dbPath)
-        {
-            if (string.IsNullOrWhiteSpace(dbPath))
-                throw new ArgumentException("dbPath must not be empty.", nameof(dbPath));
-
-            return () => new ZayitDb(dbPath);
-        }
-
         /// <summary>Default visible-character budget for the snippet window.</summary>
         public const int DefaultSnippetLength = SnippetPipeline.DefaultContextWords; // kept for binary compat
 
@@ -54,22 +43,13 @@ namespace FtsLib.SeforimDb
         public const int DefaultContextWords = SnippetPipeline.DefaultContextWords;
 
         /// <summary>
-        /// Opens an index over the seforim database at <paramref name="dbPath"/>, read by this
-        /// library's own built-in reader. UNCHANGED BEHAVIOUR — every existing caller uses this.
-        /// </summary>
-        public SeforimIndex(string indexPath, string dbPath)
-            : this(indexPath, MakeSeforimCorpusFactory(dbPath))
-        {
-        }
-
-        /// <summary>
-        /// Opens an index over documents the CALLER supplies, so this library reads no content
-        /// database of its own. See <see cref="IFtsCorpus"/> for why the parameter is a factory
+        /// Opens an index over documents the CALLER supplies. This library reads no content
+        /// database of its own — see <see cref="IFtsCorpus"/> for why the parameter is a factory
         /// rather than an instance.
         ///
-        /// This is the route that lets the corpus live outside the engine; the other constructor
-        /// stays for as long as anything still uses the built-in reader. Both are live at once on
-        /// purpose — callers move over one at a time.
+        /// This is now the ONLY way in. The old <c>(indexPath, dbPath)</c> constructor and the
+        /// built-in seforim reader behind it are gone: the engine no longer knows the schema of
+        /// any particular corpus, which is the whole point of the seam.
         /// </summary>
         public SeforimIndex(string indexPath, Func<IFtsCorpus> openCorpus)
         {

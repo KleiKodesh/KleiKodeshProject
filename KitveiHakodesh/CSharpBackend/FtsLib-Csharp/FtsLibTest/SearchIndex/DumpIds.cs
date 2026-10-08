@@ -32,7 +32,7 @@ namespace FtsLibTest
             string query    = args[3];
 
             string dbPath = BuildTest.ResolveDbPath();
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // Warm-up pass so timings compare the steady state, not cold caches.
             int warm = 0;

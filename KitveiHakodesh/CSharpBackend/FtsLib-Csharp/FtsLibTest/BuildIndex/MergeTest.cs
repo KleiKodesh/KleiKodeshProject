@@ -96,7 +96,7 @@ namespace FtsLibTest
                 Console.WriteLine("║");
                 Console.WriteLine("║  ── STEP 1: Reusing existing index (skip build)");
                 FtsLog.Write("MergeTest", "reusing existing index — skipping build");
-                index = new SeforimIndex(indexDir, dbPath);
+                index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
                 LogSegmentState("after open", indexDir);
             }
             else
@@ -109,7 +109,7 @@ namespace FtsLibTest
                     Directory.Delete(indexDir, recursive: true);
                 Directory.CreateDirectory(indexDir);
 
-                index = new SeforimIndex(indexDir, dbPath);
+                index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
                 long   linesIndexed = 0;
                 long   lastReport   = 0;
@@ -227,7 +227,7 @@ namespace FtsLibTest
             FtsLog.Separator("STEP 5: SEARCH AFTER MERGE");
 
             // Re-open the index so it sees the new merged segment state
-            index = new SeforimIndex(indexDir, dbPath);
+            index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             var (afterCount, afterFound, afterMs) = RunProbe(index, "AFTER");
 

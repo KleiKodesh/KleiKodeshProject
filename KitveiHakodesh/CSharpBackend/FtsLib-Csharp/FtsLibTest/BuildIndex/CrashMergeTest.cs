@@ -103,7 +103,7 @@ namespace FtsLibTest
             Console.WriteLine("║  Computing expected result sets from backup...");
             var expected = new Dictionary<string, HashSet<int>>();
             {
-                var backupIndex = new SeforimIndex(BackupDir, dbPath);
+                var backupIndex = new SeforimIndex(BackupDir, () => new ZayitDb(dbPath));
                 foreach (var q in ProbeQueries)
                 {
                     var sw = Stopwatch.StartNew();
@@ -210,7 +210,7 @@ namespace FtsLibTest
             SeforimIndex index;
             try
             {
-                index = new SeforimIndex(workDir, dbPath);
+                index = new SeforimIndex(workDir, () => new ZayitDb(dbPath));
                 FtsLog.Write("CrashMergeTest", $"[{sc.Id}] SeforimIndex constructed OK");
                 LogDirState(sc.Id, workDir, "after recovery");
             }
@@ -449,7 +449,7 @@ namespace FtsLibTest
                 // ── A: No crash at all — clean state, run ForceMerge normally ──
                 new Scenario("A", "Clean state — no WAL, run ForceMerge normally", (dir, db) =>
                 {
-                    var index = new SeforimIndex(dir, db);
+                    var index = new SeforimIndex(dir, () => new ZayitDb(db));
                     index.ForceMerge();
                 }),
 
@@ -663,7 +663,7 @@ namespace FtsLibTest
                 // ── T: ForceMerge then verify single merged segment ──────────
                 new Scenario("T", "Normal ForceMerge + verify on merged single-segment result", (dir, db) =>
                 {
-                    var index = new SeforimIndex(dir, db);
+                    var index = new SeforimIndex(dir, () => new ZayitDb(db));
                     index.ForceMerge();
                     var dats = Directory.GetFiles(dir, "seg_*.dat");
                     if (dats.Length != 1)
@@ -674,7 +674,7 @@ namespace FtsLibTest
                 // ── U: Two consecutive ForceMerges (idempotent) ──────────────
                 new Scenario("U", "Two consecutive ForceMerges — must be idempotent", (dir, db) =>
                 {
-                    var index = new SeforimIndex(dir, db);
+                    var index = new SeforimIndex(dir, () => new ZayitDb(db));
                     index.ForceMerge();
                     index.ForceMerge();
                 }),
@@ -711,7 +711,7 @@ namespace FtsLibTest
                 // ── Z: All merges done, END_FORCE_MERGE missing ──────────────
                 new Scenario("Z", "All level merges committed, END_FORCE_MERGE missing", (dir, db) =>
                 {
-                    var index = new SeforimIndex(dir, db);
+                    var index = new SeforimIndex(dir, () => new ZayitDb(db));
                     index.ForceMerge();
                     var dats  = Directory.GetFiles(dir, "seg_*.dat");
                     var parts = Path.GetFileNameWithoutExtension(dats[0]).Split('_');

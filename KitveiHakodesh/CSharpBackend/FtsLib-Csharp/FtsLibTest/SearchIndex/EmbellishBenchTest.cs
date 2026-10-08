@@ -63,7 +63,7 @@ namespace FtsLibTest
             Console.WriteLine($" runtime = {Environment.Version}   cores = {Environment.ProcessorCount}");
             Console.WriteLine("========================================================");
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // `embellishbench 500k dump` — correctness spot-check: print the first short
             // lines' plain vs embellished snippet so neighbor pull-in + highlights are visible.

@@ -15,6 +15,11 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- For Corpus/SeforimLineContent.cs: schema 6 of the seforim database stores line content
+         zstd-compressed with a dictionary shipped inside the database. This belongs HERE, not in
+         the engine — the test suite is what reads that corpus now. Pure-C# port, nothing native
+         to package. -->
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.6" />
   </ItemGroup>
 
   <ItemGroup>

@@ -33,7 +33,7 @@ namespace FtsLibTest
             Console.WriteLine($"DB       : {dbPath}");
             Console.WriteLine();
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             var searchIds = new HashSet<int>();
             foreach (var id in index.SearchIds(query)) searchIds.Add(id);

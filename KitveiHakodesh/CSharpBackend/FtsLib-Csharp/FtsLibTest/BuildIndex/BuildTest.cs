@@ -110,7 +110,7 @@ namespace FtsLibTest
             Console.WriteLine($"║  {"Lines",12}  {"Elapsed",10}  {"Rate",12}  {"Δ lines",10}  {"Δ time",8}");
             Console.WriteLine($"║  {new string('─', 12)}  {new string('─', 10)}  {new string('─', 12)}  {new string('─', 10)}  {new string('─', 8)}");
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             try
             {

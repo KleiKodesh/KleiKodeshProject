@@ -45,7 +45,7 @@ namespace FtsLibTest
             Directory.CreateDirectory(indexDir);
 
             Console.WriteLine($"Building fresh index (no merge): {indexDir}");
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             var sw    = Stopwatch.StartNew();
             long n    = 0;
             index.BuildIndex(limit: limit, onProgress: c => n = c);

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 
 namespace FtsLib.SeforimDb
 {
-    internal sealed class ZayitDb : IDisposable, IFtsCorpus
+    public sealed class ZayitDb : IDisposable, IFtsCorpus
     {
         private readonly SqliteConnection _connection;
 

@@ -64,7 +64,7 @@ namespace FtsLibTest
             Console.WriteLine($"║  Index : {indexDir}");
             Console.WriteLine();
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // Warm up caches so timings compare configurations, not cold IO.
             int warm = index.SearchIds("תורה").Count();

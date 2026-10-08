@@ -56,8 +56,10 @@ namespace FtsLibTest
                     // fresh build into the same topology as a production
                     // (post-forceMergeOnComplete) index before perf comparisons.
                     string tier = args.Length > 1 ? args[1] : "full";
+                    string forceMergeDb = BuildTest.ResolveDbPath();
                     var idx = new FtsLib.SeforimDb.SeforimIndex(
-                        TestHelpers.IndexDir(tier), BuildTest.ResolveDbPath());
+                        TestHelpers.IndexDir(tier),
+                        () => new FtsLib.SeforimDb.ZayitDb(forceMergeDb));
                     idx.ForceMerge();
                     Console.WriteLine("Force merge complete.");
                     return;
@@ -98,7 +100,7 @@ namespace FtsLibTest
                     }
                     string indexDir = args[1];
                     string dbPath   = args[2];
-                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, () => new FtsLib.SeforimDb.ZayitDb(dbPath));
                     var sw = System.Diagnostics.Stopwatch.StartNew();
                     idx.ForceMerge();
                     sw.Stop();
@@ -119,7 +121,7 @@ namespace FtsLibTest
                     }
                     string indexDir = args[1];
                     string dbPath   = args[2];
-                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, () => new FtsLib.SeforimDb.ZayitDb(dbPath));
                     for (int i = 3; i < args.Length; i++)
                     {
                         string q = args[i];
@@ -190,7 +192,7 @@ namespace FtsLibTest
                     string indexDir = args[1];
                     string dbPath   = args[2];
                     int cap = int.Parse(args[3]);
-                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, () => new FtsLib.SeforimDb.ZayitDb(dbPath));
                     for (int i = 4; i < args.Length; i++)
                     {
                         string q = args[i];
@@ -214,7 +216,7 @@ namespace FtsLibTest
                     }
                     string indexDir = args[1];
                     string dbPath   = args[2];
-                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, dbPath);
+                    var idx = new FtsLib.SeforimDb.SeforimIndex(indexDir, () => new FtsLib.SeforimDb.ZayitDb(dbPath));
                     for (int i = 3; i < args.Length; i++)
                     {
                         string q = args[i];

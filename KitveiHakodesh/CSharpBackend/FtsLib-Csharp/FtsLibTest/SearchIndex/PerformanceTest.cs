@@ -296,7 +296,7 @@ namespace FtsLibTest
             Console.WriteLine($"║  First-batch size: {FirstBatchSize}");
             Console.WriteLine();
 
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             // ── Warm-up ───────────────────────────────────────────────
             Console.WriteLine("║  Warming up (תורה)…");

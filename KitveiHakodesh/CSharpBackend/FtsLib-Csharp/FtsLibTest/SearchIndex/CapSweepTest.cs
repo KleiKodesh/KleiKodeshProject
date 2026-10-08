@@ -83,7 +83,7 @@ namespace FtsLibTest
             }
 
             string dbPath = BuildTest.ResolveDbPath();
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             if (defaultsOnly)
             {

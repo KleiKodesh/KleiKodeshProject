@@ -61,7 +61,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 lock (_lock)
                 {
                     if (_disposed) throw new ObjectDisposedException(nameof(SeforimDbFtsEngine));
-                    return _index ?? (_index = new SeforimIndex(_indexPath, _seforimDbPath));
+                    // Core supplies the corpus; the engine opens no database of its own. The
+                    // factory (not an instance) is what IFtsCorpus requires: a search returns a
+                    // LAZY sequence that must outlive this call, and concurrent searches cannot
+                    // share one connection — so the engine opens one per operation and disposes it.
+                    return _index ?? (_index = new SeforimIndex(
+                        _indexPath,
+                        () => new SeforimDbFtsCorpus(_seforimDbPath)));
                 }
             }
         }

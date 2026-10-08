@@ -79,7 +79,7 @@ namespace FtsLibTest
             foreach (var f in Directory.GetFiles(BackupDir))
                 File.Copy(f, Path.Combine(WorkDir, Path.GetFileName(f)));
 
-            var index = new SeforimIndex(WorkDir, dbPath);
+            var index = new SeforimIndex(WorkDir, () => new ZayitDb(dbPath));
 
             // 2. Expected sets (pre-merge truth; merge must not change content)
             var expected = new Dictionary<string, HashSet<int>>();

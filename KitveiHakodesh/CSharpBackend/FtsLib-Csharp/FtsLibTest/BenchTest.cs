@@ -61,7 +61,7 @@ namespace FtsLibTest
             }
 
             bool haveIndex = Directory.Exists(indexDir) && Directory.GetFiles(indexDir, "seg_*.dat").Length > 0;
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             if (!haveIndex)
             {
@@ -72,7 +72,7 @@ namespace FtsLibTest
                 bsw.Stop();
                 double secs = bsw.Elapsed.TotalSeconds;
                 Console.WriteLine($"[BUILD] {last:N0} lines in {secs:F2}s = {(secs > 0 ? last / secs : 0):N0} lines/s");
-                index = new SeforimIndex(indexDir, dbPath);
+                index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
             }
             else
             {

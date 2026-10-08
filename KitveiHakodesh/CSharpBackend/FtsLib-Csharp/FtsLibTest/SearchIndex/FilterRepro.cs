@@ -37,7 +37,7 @@ namespace FtsLibTest
             { Console.WriteLine($"No index at: {indexDir}"); return; }
 
             string dbPath = BuildTest.ResolveDbPath();
-            var index = new SeforimIndex(indexDir, dbPath);
+            var index = new SeforimIndex(indexDir, () => new ZayitDb(dbPath));
 
             Console.WriteLine($"Query: \"{query}\"");
 
