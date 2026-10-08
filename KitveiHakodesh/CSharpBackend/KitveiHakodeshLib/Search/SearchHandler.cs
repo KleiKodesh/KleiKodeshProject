@@ -1,4 +1,3 @@
-using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -7,6 +6,8 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
 
 namespace KitveiHakodeshLib.Search
 {
@@ -158,12 +159,12 @@ namespace KitveiHakodeshLib.Search
 
             // Opening the index runs crash recovery / live-state rebuild synchronously
             // here, and this is on the critical path to marking search "ready" — time it
-            // so a slow startup can be attributed (see FtsLib.log / console).
+            // so a slow startup can be attributed (console).
             var openSw = System.Diagnostics.Stopwatch.StartNew();
-            SeforimIndex seforimIndex;
+            SeforimDbFtsEngine seforimIndex;
             try
             {
-                seforimIndex = new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath);
+                seforimIndex = new SeforimDbFtsEngine(FtsIndexState.FtsIndexPath, dbPath);
             }
             catch (Exception ex)
             {
@@ -173,18 +174,18 @@ namespace KitveiHakodeshLib.Search
                 // nothing ever re-queued, so search stayed "not ready" until the app was
                 // restarted. A corrupt-on-open index is exactly what a clean wipe fixes, so
                 // wipe and try once more before giving up.
-                Console.WriteLine("[SearchHandler] SeforimIndex open failed (" + ex.Message
+                Console.WriteLine("[SearchHandler] search engine open failed (" + ex.Message
                     + ") — wiping the index directory and retrying once");
                 FtsIndexState.DeleteFtsIndex();
                 try
                 {
-                    seforimIndex = new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath);
+                    seforimIndex = new SeforimDbFtsEngine(FtsIndexState.FtsIndexPath, dbPath);
                 }
                 catch (Exception retryEx)
                 {
                     // Still failing: tell the frontend instead of leaving it on a silent
                     // spinner. The next OnDbReady (DB switch, reload) retries from scratch.
-                    Console.WriteLine("[SearchHandler] SeforimIndex open failed again: " + retryEx);
+                    Console.WriteLine("[SearchHandler] search engine open failed again: " + retryEx);
                     _bridge.PushEvent(new
                     {
                         @event = "ftsIndexInvalidated",
@@ -194,9 +195,7 @@ namespace KitveiHakodeshLib.Search
                 }
             }
             openSw.Stop();
-            Console.WriteLine($"[SearchHandler] SeforimIndex opened in {openSw.ElapsedMilliseconds} ms");
-            FtsLib.Indexing.FtsLog.Write("SearchHandler.ExecuteOnDbReady",
-                $"SeforimIndex opened in {openSw.ElapsedMilliseconds} ms");
+            Console.WriteLine($"[SearchHandler] search engine opened in {openSw.ElapsedMilliseconds} ms");
             _indexState.SetDatabase(dbPath, seforimIndex);
 
             if (plan.WipedStaleState)
@@ -292,7 +291,7 @@ namespace KitveiHakodeshLib.Search
                         "(reinstall or leftover index) — wiping index for clean rebuild");
                     FtsIndexState.DeleteFtsIndex();
                     _indexState.SetDatabase(_indexState.GetDbPath(),
-                        new SeforimIndex(FtsIndexState.FtsIndexPath, dbPath));
+                        new SeforimDbFtsEngine(FtsIndexState.FtsIndexPath, dbPath));
                 }
                 else
                 {

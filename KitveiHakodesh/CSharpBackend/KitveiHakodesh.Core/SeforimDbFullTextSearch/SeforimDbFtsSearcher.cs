@@ -37,6 +37,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// </summary>
         private const int NeighborLineRadius = 2;
 
+        /// <summary>
+        /// Words of context a snippet shows per side when the caller does not say. The engine's
+        /// default, surfaced here so a host can offer it without referencing the engine.
+        /// </summary>
+        public const int DefaultContextWords = SeforimIndex.DefaultContextWords;
+
         private readonly SeforimDbQueries _queries;
 
         /// <param name="queries">For enrichment — hits leave here carrying their book id and
@@ -53,8 +59,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// Query expansion is the caller's step (see SeforimDbFtsRelatedFormExpander) — by the
         /// time a query reaches here it is final.
         /// </summary>
-        /// <param name="index">The engine. Passed in, not owned: one instance serves searches
-        /// and the background build concurrently, and its owner is the orchestrator.</param>
+        /// <param name="engine">Core's engine handle. One instance serves searches and the
+        /// background build concurrently — see <see cref="SeforimDbFtsEngine"/>, which owns it
+        /// so a host never has to reference the engine library.</param>
         /// <param name="maxWordDistance">Hits whose tightest window is looser than this are
         /// dropped — the "how close must my words be" search setting.</param>
         /// <param name="requireOrdered">Only match windows where the query words appear in
@@ -62,7 +69,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// <param name="contextWords">Words of context requested per side of the match.</param>
         /// <param name="expandKetiv">Engine-side ketiv/qere expansion.</param>
         public IEnumerable<List<FtsHit>> SearchInBatches(
-            SeforimIndex index,
+            SeforimDbFtsEngine engine,
             string query,
             int maxWordDistance,
             bool requireOrdered,
@@ -70,7 +77,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             bool expandKetiv,
             CancellationToken cancellationToken = default)
         {
-            if (index == null) throw new ArgumentNullException(nameof(index));
+            if (engine == null) throw new ArgumentNullException(nameof(engine));
+            var index = engine.Index;
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
             var batch = new List<SearchResult>(SnippetBatchSize);
@@ -122,13 +130,113 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             // The tail — embellish the short snippets, then enrich — is the same work a host
             // that batches on its own rhythm needs, so it lives in one place.
-            FinishBatch(index, results, built, windowWords, requireOrdered, contextWords,
-                        cancellationToken);
+            FinishBatchCore(index, results, built, windowWords, requireOrdered, contextWords,
+                            cancellationToken);
 
             var passing = new List<FtsHit>(results.Count);
             foreach (var hit in built)
                 if (hit != null) passing.Add(hit);
             return passing;
+        }
+
+        /// <summary>
+        /// The engine's matches, with its mid-merge refusal translated into Core's own type so
+        /// a host never has to name an engine exception.
+        /// </summary>
+        private static IEnumerable<SearchResult> Matches(
+            SeforimIndex index, string query, bool expandKetiv, CancellationToken cancellationToken)
+        {
+            IEnumerator<SearchResult> walker;
+            try
+            {
+                walker = index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken)
+                              .GetEnumerator();
+            }
+            catch (FtsLib.Indexing.IndexMergingException ex)
+            {
+                throw new SeforimDbFtsIndexMergingException(
+                    "The full-text index is merging and cannot answer searches right now.", ex);
+            }
+
+            using (walker)
+            {
+                while (true)
+                {
+                    try
+                    {
+                        if (!walker.MoveNext()) yield break;
+                    }
+                    catch (FtsLib.Indexing.IndexMergingException ex)
+                    {
+                        throw new SeforimDbFtsIndexMergingException(
+                            "The full-text index is merging and cannot answer searches right now.", ex);
+                    }
+                    yield return walker.Current;
+                }
+            }
+        }
+
+        /// <summary>
+        /// A hit on its way to a caller that batches on its own rhythm: the finished hit, plus
+        /// the two things <see cref="FinishPendingBatch"/> still needs to complete it — the
+        /// engine match it came from and its window word count.
+        ///
+        /// Core's own type, so the engine's result type never crosses into a host.
+        /// </summary>
+        public readonly struct PendingHit
+        {
+            internal PendingHit(SearchResult match, FtsHit hit, int windowWords)
+            {
+                Match = match;
+                Hit = hit;
+                WindowWords = windowWords;
+            }
+
+            /// <summary>Internal: the engine match, needed only to re-render a short snippet.</summary>
+            internal SearchResult Match { get; }
+
+            /// <summary>The finished hit. Still missing book id and TOC path until the batch
+            /// it belongs to is finished.</summary>
+            public FtsHit Hit { get; }
+
+            internal int WindowWords { get; }
+        }
+
+        /// <summary>
+        /// Streams finished hits ONE AT A TIME, in engine order, for a host that batches on its
+        /// own rhythm — the hosted app flushes at 1, 2, 4, 8, 16 results and then on a timer, so
+        /// the first result reaches the user immediately.
+        ///
+        /// Hits that fail the match or word-distance filters are skipped, so a caller only sees
+        /// keepers. Each one still needs <see cref="FinishBatch"/> run over whatever batch the
+        /// caller assembles — that is where short snippets are re-rendered and every hit gets
+        /// its book id and TOC path.
+        ///
+        /// The engine's own result type never leaves Core — see <see cref="PendingHit"/>.
+        /// </summary>
+        public IEnumerable<PendingHit> SearchHitByHit(
+            SeforimDbFtsEngine engine,
+            string query,
+            int maxWordDistance,
+            bool requireOrdered,
+            int contextWords,
+            bool expandKetiv,
+            CancellationToken cancellationToken = default)
+        {
+            if (engine == null) throw new ArgumentNullException(nameof(engine));
+            if (string.IsNullOrWhiteSpace(query)) yield break;
+
+            var index = engine.Index;
+            // IndexMergingException is translated below, at the one place a host would see it.
+            foreach (var match in Matches(index, query, expandKetiv, cancellationToken))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (TryBuildHitCore(index, match, requireOrdered, contextWords, maxWordDistance,
+                                    out FtsHit? hit, out int windowWords))
+                {
+                    yield return new PendingHit(match, hit!, windowWords);
+                }
+            }
         }
 
         /// <summary>
@@ -144,14 +252,14 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// and worth embellishing — see <see cref="EmbellishSnippets"/>.
         /// </summary>
         public static bool TryBuildHit(
-            SeforimIndex index,
+            SeforimDbFtsEngine engine,
             SearchResult hit,
             bool requireOrdered,
             int contextWords,
             int maxWordDistance,
             out FtsHit? built,
             out int windowWordCount)
-            => TryBuildHitCore(index, hit, requireOrdered, contextWords, maxWordDistance,
+            => TryBuildHitCore(engine.Index, hit, requireOrdered, contextWords, maxWordDistance,
                                out built, out windowWordCount);
 
         private static bool TryBuildHitCore(
@@ -200,13 +308,54 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// what <see cref="TryBuildHit"/> reported.
         /// </summary>
         public void FinishBatch(
-            SeforimIndex index,
+            SeforimDbFtsEngine engine,
             IReadOnlyList<SearchResult> results,
             FtsHit?[] built,
             int[] windowWords,
             bool requireOrdered,
             int contextWords,
             CancellationToken cancellationToken = default)
+            => FinishBatchCore(engine.Index, results, built, windowWords, requireOrdered,
+                               contextWords, cancellationToken);
+
+        /// <summary>
+        /// Finishes a batch a host assembled from <see cref="SearchHitByHit"/>: re-renders the
+        /// short snippets over their neighbouring lines, then gives every hit its book id and
+        /// TOC path. The hits are completed IN PLACE.
+        /// </summary>
+        public void FinishPendingBatch(
+            SeforimDbFtsEngine engine,
+            IReadOnlyList<PendingHit> pending,
+            bool requireOrdered,
+            int contextWords,
+            CancellationToken cancellationToken = default)
+        {
+            if (engine == null) throw new ArgumentNullException(nameof(engine));
+            if (pending == null || pending.Count == 0) return;
+
+            var matches = new SearchResult[pending.Count];
+            var built = new FtsHit?[pending.Count];
+            var windowWords = new int[pending.Count];
+            for (int i = 0; i < pending.Count; i++)
+            {
+                matches[i] = pending[i].Match;
+                built[i] = pending[i].Hit;
+                windowWords[i] = pending[i].WindowWords;
+            }
+
+            FinishBatchCore(engine.Index, matches, built, windowWords, requireOrdered,
+                            contextWords, cancellationToken);
+        }
+
+        /// <summary>The same tail, for callers inside Core that already hold the engine.</summary>
+        private void FinishBatchCore(
+            SeforimIndex index,
+            IReadOnlyList<SearchResult> results,
+            FtsHit?[] built,
+            int[] windowWords,
+            bool requireOrdered,
+            int contextWords,
+            CancellationToken cancellationToken)
         {
             EmbellishShortSnippets(index, results, built, windowWords, requireOrdered,
                                    contextWords, cancellationToken);

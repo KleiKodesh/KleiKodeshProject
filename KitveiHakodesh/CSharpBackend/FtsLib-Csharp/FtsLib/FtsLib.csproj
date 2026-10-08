@@ -1,11 +1,22 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <!-- net10-ONLY. The .NET Framework build now lives in the separate FtsLib.Net48
-         project (reverted to System.Data.SQLite) used by the hosted KitveiHakodeshLib /
-         DemoApp. THIS project is the forward, net10-optimized FTS engine used by
-         KitveiHakodeshService — free to use hardware intrinsics net48 can't. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <!--
+      ONE engine, two legs. There used to be a second project, FtsLib.Net48, holding a
+      byte-for-byte revert of this library on System.Data.SQLite — so every fix had to be made
+      twice, and the two copies had already drifted. Both legs build from THIS source now.
+
+        net48      — the Word VSTO add-in and anything else .NET Framework reaches Core from.
+        net10.0    — the dev service.
+
+      The net10-only fast paths are kept and guarded with #if, not dropped: a preprocessor
+      branch costs nothing at runtime, because only the taken branch is compiled into each
+      leg's assembly. Today that is TrigramIndex alone (RandomAccess / File.OpenHandle are
+      net6+); everything else here compiles unchanged on both.
+    -->
+    <TargetFrameworks>net48;net10.0</TargetFrameworks>
+    <!-- One source tree, two legs: do not let net48 fall back to its C# 7.3 default. -->
+    <LangVersion>latest</LangVersion>
     <RootNamespace>FtsLib</RootNamespace>
     <AssemblyName>FtsLib</AssemblyName>
     <!-- Keep the hand-written Properties\AssemblyInfo.cs (holds InternalsVisibleTo("FtsLibTest")). -->
@@ -16,6 +27,13 @@
     <!-- For SIMD hot-path optimizations (Vector256/512 loads, hardware popcount). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <!-- Microsoft.VisualBasic is part of the shared framework on the modern leg but is an
+       assembly reference on .NET Framework. ZayitDb reads the Zayit app's saved library path
+       through Interaction.GetSetting, which is where that setting lives. -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <Reference Include="Microsoft.VisualBasic" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Pinned to 10.0.9 to match KitveiHakodeshService (avoids a diamond version conflict). -->

@@ -181,7 +181,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// phase-start signal, sent before the first pass; passesExpected is an estimate that
         /// moves as the merger discovers how much work is left.</param>
         public bool Build(
-            SeforimIndex index,
+            SeforimDbFtsEngine engine,
             Action<long, long>? onProgress = null,
             Action? onSegmentFlushed = null,
             Action<int, int>? onMergeProgress = null,
@@ -189,7 +189,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             Func<bool>? isStillCurrent = null,
             CancellationToken cancellationToken = default)
         {
-            if (index == null) throw new ArgumentNullException(nameof(index));
+            if (engine == null) throw new ArgumentNullException(nameof(engine));
+            var index = engine.Index;
 
             Directory.CreateDirectory(_indexPath);
 
@@ -234,6 +235,15 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                 catch (IndexWriteLockException) when (attempt < WriteLockRetries)
                 {
                     Thread.Sleep(WriteLockRetryDelay);
+                }
+                catch (IndexWriteLockException ex)
+                {
+                    // Retries exhausted. Rethrown as Core's own type so a host can decide what
+                    // to do — re-arm and resume later, typically — without having to reference
+                    // the engine library to name the exception.
+                    throw new SeforimDbFtsIndexLockedException(
+                        "The full-text index write lock is still held after " + WriteLockRetries
+                        + " retries.", ex);
                 }
             }
 

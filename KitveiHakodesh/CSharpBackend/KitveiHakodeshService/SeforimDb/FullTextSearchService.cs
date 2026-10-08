@@ -1,8 +1,6 @@
 using System.Collections.Concurrent;
 using KitveiHakodesh.Core.SeforimDb;
 using KitveiHakodesh.Core.SeforimDbFullTextSearch;
-using FtsLib.Indexing;
-using FtsLib.SeforimDb;
 
 namespace KitveiHakodeshService.SeforimDb;
 
@@ -53,7 +51,9 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     private readonly bool _external = !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("FTS_INDEX_PATH"));
 
     private readonly object _lock = new();
-    private SeforimIndex? _index;
+    /// <summary>Core owns the engine; this host only holds the handle. Replaced on a wipe
+    /// via Invalidate, which is why it is not readonly.</summary>
+    private SeforimDbFtsEngine? _engine;
     private Task? _buildTask;
     /// <summary>Cancels the background build. INVARIANT: only ResetIndex and Shutdown may
     /// cancel this, and ResetIndex must bump <see cref="_buildGeneration"/> first. A
@@ -142,9 +142,9 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         catch { return false; }
     }
 
-    private SeforimIndex GetIndex()
+    private SeforimDbFtsEngine GetEngine()
     {
-        lock (_lock) { return _index ??= new SeforimIndex(_indexPath, _dbPath!); }
+        lock (_lock) { return _engine ??= new SeforimDbFtsEngine(_indexPath, _dbPath!); }
     }
 
     /// <summary>
@@ -195,7 +195,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             {
                 logger.LogInformation(
                     "FTS index is stale (seforim DB changed or provenance unknown) — wiping for rebuild");
-                _index = null; // never let an already-open store answer over the wiped directory
+                _engine?.Invalidate(); // never let an already-open engine answer over the wiped directory
             }
 
             // A completed service-owned build against the CURRENT DB → ready, no rebuild.
@@ -223,7 +223,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     {
         try
         {
-            var index = GetIndex();
+            var engine = GetEngine();
 
             // Everything mechanical about a build — the at-start and at-completion stamps, the
             // resume state, the write-lock retry, background priority, the force merge and
@@ -237,7 +237,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             logger.LogInformation("FTS build starting — index={Index}", _indexPath);
 
             bool ok = Indexer.Build(
-                index,
+                engine,
                 // Core's own count, so the status stream reports a real total even on a corpus
                 // too small to produce a single line tick.
                 onTotalKnown: counted =>
@@ -301,7 +301,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         {
             logger.LogInformation("FTS build cancelled (reset)");
         }
-        catch (IndexWriteLockException ex)
+        catch (SeforimDbFtsIndexLockedException ex)
         {
             // Retries exhausted — the write lock is still held (unusually long-lived prior
             // instance, or a genuinely concurrent writer). Re-arm the build latch so a later
@@ -478,11 +478,11 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             //    through it (as this used to) blocked every status stream, Status() call, and
             //    search for the whole delete — they all enter EnsureIndexing, which takes the
             //    lock. Nothing can repopulate _index while the delete runs: searches bail on
-            //    !_isReady before ever calling GetIndex, and EnsureIndexing is latched out by
+            //    !_isReady before ever calling GetEngine, and EnsureIndexing is latched out by
             //    the _buildStarted ResetIndex set.
             lock (_lock)
             {
-                _index = null; // drop the SegmentStore so it holds no file references
+                _engine?.Invalidate(); // drop the SegmentStore so it holds no file references
                 // Step 1 guarantees no build is running by now, and the generation bump in
                 // ResetIndex stopped a superseded one from writing these fields at all.
                 // This re-asserts against the narrow case of a build that had already
@@ -605,7 +605,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // it gets exactly the same parallel snippeting, short-snippet embellishment and
             // enrichment as the streaming path, from the same code the hosted app runs.
             foreach (var built in Searcher.SearchInBatches(
-                         GetIndex(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv))
+                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv))
             {
                 result.Results.AddRange(built);
                 if (cap > 0 && result.Results.Count >= cap) break;
@@ -725,7 +725,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         // Backpressure is why this awaits per batch rather than collecting: each batch is
         // written to the caller's pipe before the next one is built.
         foreach (var built in Searcher.SearchInBatches(
-                     GetIndex(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct))
         {
             await onBatch(built);
         }

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="..\packages\SQLite.3.13.0\build\net45\SQLite.props" Condition="Exists('..\packages\SQLite.3.13.0\build\net45\SQLite.props')" />
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
@@ -105,9 +105,10 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FtsLib.Net48\FtsLib.Net48.csproj">
-      <Project>{76f9daa9-374f-40f9-8511-3239fb6e846e}</Project>
-      <Name>FtsLib.Net48</Name>
+    <!-- The net48 leg of the ONE FtsLib. This suite is .NET Framework, so it picks up that
+         leg automatically; FtsLibTest.Net10 exercises the same source on the modern one. -->
+    <ProjectReference Include="..\FtsLib\FtsLib.csproj">
+      <Name>FtsLib</Name>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

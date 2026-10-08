@@ -153,6 +153,19 @@ namespace FtsLib.Search
         }
 
         // ── Read (seek+read, no mmap) ─────────────────────────────────
+        // ── Read (seek+read, no mmap) ─────────────────────────────────
+        //
+        // TWO implementations of one reader, and the ONLY place in this library that needs
+        // them. The on-disk FORMAT is identical either way — same magic, hash, fingerprint,
+        // slot layout and delta+varint postings — so a sidecar built by either runtime is
+        // readable by the other.
+        //
+        // The difference is purely which file API exists: RandomAccess / File.OpenHandle are
+        // net6+, and they read at an offset without a shared cursor, so concurrent searches
+        // need no lock. .NET Framework has neither, so its reader serialises Seek+Read on a
+        // FileStream behind a lock. Choosing at COMPILE time means neither leg pays for the
+        // other: only the taken branch is in each assembly.
+#if NET6_0_OR_GREATER
         internal sealed class Reader : IDisposable
         {
             readonly SafeFileHandle _h; readonly int _m; readonly uint _mask; readonly long _postBase;
@@ -223,5 +236,102 @@ namespace FtsLib.Search
 
             public void Dispose() => _h.Dispose();
         }
+#else
+        internal sealed class Reader : IDisposable
+        {
+            readonly FileStream _fs; readonly object _lock = new object();
+            readonly int _m; readonly uint _mask; readonly long _postBase;
+
+            /// <summary>Content-binding fingerprint stored at build time — see
+            /// <see cref="TrigramIndex.ComputeBinding"/>. 0 in pre-binding sidecars.</summary>
+            public uint Binding { get; private set; }
+
+            public Reader(string path)
+            {
+                _fs = new FileStream(path, FileMode.Open, FileAccess.Read,
+                                     FileShare.Read | FileShare.Delete, 4096, false);
+                var hdr = new byte[16];
+                ReadAt(0, hdr, 0, 16);
+                if (BitConverter.ToUInt32(hdr, 0) != Magic) throw new InvalidDataException("TrigramIndex: bad magic");
+                _m = BitConverter.ToInt32(hdr, 4); _mask = (uint)(_m - 1);
+                Binding = BitConverter.ToUInt32(hdr, 12);
+                _postBase = 16 + (long)_m * 16;
+            }
+
+            // Positioned read, serialised like SegmentHandle.ReadBytes so concurrent searches
+            // sharing this Reader don't race the shared FileStream position.
+            void ReadAt(long offset, byte[] buffer, int bufOff, int count)
+            {
+                lock (_lock)
+                {
+                    _fs.Seek(offset, SeekOrigin.Begin);
+                    int total = 0;
+                    while (total < count)
+                    {
+                        int read = _fs.Read(buffer, bufOff + total, count - total);
+                        if (read == 0) break;
+                        total += read;
+                    }
+                }
+            }
+
+            /// <summary>
+            /// Sorted term-ids whose term contains <paramref name="trigram"/>, or empty.
+            ///
+            /// Collects EVERY fingerprint-matching slot on the probe path (up to the
+            /// terminating empty slot), not just the first: two different trigrams can
+            /// share both a probe path and a 32-bit fingerprint (~2⁻³² per pair), and
+            /// returning only the first match let the earlier entry SHADOW the true
+            /// one — its false-positive ids are LIKE-confirmed away downstream, but
+            /// the shadowed trigram's ids were silently lost (false negatives). The
+            /// union is a superset, which the caller's LIKE confirm already handles.
+            /// </summary>
+            public int[] Lookup(string trigram)
+            {
+                int slot = (int)(Hash(trigram) & _mask); uint fg = Finger(trigram);
+                var rec = new byte[16];
+                int[] first = null; List<int[]> more = null;
+                for (int probe = 0; probe < _m; probe++)
+                {
+                    ReadAt(16 + (long)slot * 16, rec, 0, 16);
+                    uint cnt = BitConverter.ToUInt32(rec, 8);
+                    if (cnt == 0) break;                                    // empty slot ⇒ end of probe path
+                    if (BitConverter.ToUInt32(rec, 0) == fg)
+                    {
+                        uint off = BitConverter.ToUInt32(rec, 4);
+                        uint blen = BitConverter.ToUInt32(rec, 12);
+                        var pb = new byte[blen]; ReadAt(_postBase + off, pb, 0, (int)blen);
+                        var ids = new int[cnt]; int pos = 0, prev = 0;
+                        for (int k = 0; k < cnt; k++) { prev += (int)VarInt.Read(pb, ref pos, pb.Length); ids[k] = prev; }
+                        if (first == null) first = ids;
+                        else
+                        {
+                            if (more == null) { more = new List<int[]>(); more.Add(first); }
+                            more.Add(ids);
+                        }
+                    }
+                    slot = (int)((slot + 1) & _mask);
+                }
+
+                if (more == null) return first ?? EmptyInts;
+
+                // Fingerprint collision on the probe path — vanishingly rare, so a
+                // simple concat + sort + dedup is fine.
+                int total = 0; foreach (var a in more) total += a.Length;
+                var merged = new int[total]; int w = 0;
+                foreach (var a in more) { Array.Copy(a, 0, merged, w, a.Length); w += a.Length; }
+                Array.Sort(merged);
+                int u = 0;
+                for (int k = 0; k < merged.Length; k++)
+                    if (k == 0 || merged[k] != merged[k - 1]) merged[u++] = merged[k];
+                if (u != merged.Length) Array.Resize(ref merged, u);
+                return merged;
+            }
+
+            static readonly int[] EmptyInts = new int[0];
+
+            public void Dispose() => _fs.Dispose();
+        }
+#endif
     }
 }

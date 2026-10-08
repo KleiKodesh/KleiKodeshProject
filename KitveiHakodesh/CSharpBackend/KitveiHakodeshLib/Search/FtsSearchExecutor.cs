@@ -1,5 +1,3 @@
-using FtsLib.Indexing;
-using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.Collections.Concurrent;
@@ -8,6 +6,8 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
 
 namespace KitveiHakodeshLib.Search
 {
@@ -38,12 +38,12 @@ namespace KitveiHakodeshLib.Search
             int    skipCount    = root.TryGetProperty("1", out var s) ? s.GetInt32() : 0;
             int    maxWordDist  = root.TryGetProperty("2", out var d) ? d.GetInt32() : 10;
             bool   reqOrdered   = root.TryGetProperty("3", out var o) && o.GetBoolean();
-            int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimIndex.DefaultContextWords;
+            int    contextWords = root.TryGetProperty("4", out var cw) ? cw.GetInt32() : SeforimDbFtsSearcher.DefaultContextWords;
             bool   expandKetiv  = root.TryGetProperty("5", out var ek) && ek.GetBoolean();
             bool   expandRelated = root.TryGetProperty("6", out var er) && er.GetBoolean();
 
             bool         ready = _state.IsReady;
-            SeforimIndex index = _state.GetIndex();
+            SeforimDbFtsEngine index = _state.GetIndex();
 
             if (string.IsNullOrWhiteSpace(query))
             {
@@ -91,7 +91,7 @@ namespace KitveiHakodeshLib.Search
         private void RunSearch(string searchId, string query, int skipCount,
                                int maxWordDistance, bool requireOrdered, int contextWords,
                                bool expandKetiv, bool expandRelated,
-                               SeforimIndex index, CancellationToken ct)
+                               SeforimDbFtsEngine index, CancellationToken ct)
         {
             int totalResults = 0;
             try
@@ -133,9 +133,9 @@ namespace KitveiHakodeshLib.Search
                 var searcher = new KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsSearcher(
                     new KitveiHakodesh.Core.SeforimDb.SeforimDbQueries(_state.GetDbPath()));
 
-                var pendingResults = new List<FtsLib.SeforimDb.SearchResult>(MemorySafetyCap);
-                var pendingHits    = new List<KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit>(MemorySafetyCap);
-                var pendingWindows = new List<int>(MemorySafetyCap);
+                // Core's PendingHit carries the finished hit plus what Core still needs to
+                // complete it, so the engine's own result type never reaches this project.
+                var pending = new List<SeforimDbFtsSearcher.PendingHit>(MemorySafetyCap);
                 int     skipped = 0;
                 var     timer   = new Stopwatch();
                 timer.Start();
@@ -145,22 +145,18 @@ namespace KitveiHakodeshLib.Search
                 // short lines pays no DB cost.
                 void EmbellishAndPost()
                 {
-                    if (pendingHits.Count == 0) return;
+                    if (pending.Count == 0) return;
 
-                    var builtArray = new KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsHit[pendingHits.Count];
-                    pendingHits.CopyTo(builtArray);
                     // Embellishes the short snippets AND enriches every hit with its book id
                     // and TOC path — the same tail the service's batches go through, so this
                     // leg stopped shipping bookId 0 / empty tocText for the frontend to
-                    // resolve itself.
-                    searcher.FinishBatch(
-                        index, pendingResults, builtArray, pendingWindows.ToArray(),
-                        requireOrdered, contextWords, ct);
+                    // resolve itself. Completes the hits in place.
+                    searcher.FinishPendingBatch(index, pending, requireOrdered, contextWords, ct);
 
-                    var results = new object[builtArray.Length];
-                    for (int i = 0; i < builtArray.Length; i++)
+                    var results = new object[pending.Count];
+                    for (int i = 0; i < pending.Count; i++)
                     {
-                        var h = builtArray[i];
+                        var h = pending[i].Hit;
                         results[i] = new
                         {
                             lineId       = h.LineId,
@@ -175,12 +171,15 @@ namespace KitveiHakodeshLib.Search
                     }
                     PostSearch(new { type = "searchBatch", searchId = searchId, results = results });
 
-                    pendingResults.Clear();
-                    pendingHits.Clear();
-                    pendingWindows.Clear();
+                    pending.Clear();
                 }
 
-                foreach (var result in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: ct))
+                // The per-hit work — snippet, match filter, word-distance filter, term
+                // flattening — is Core's, and is the same code the dev service runs. Hits that
+                // fail those filters never arrive here. Only the FLUSH RHYTHM below is this
+                // leg's own.
+                foreach (var hit in searcher.SearchHitByHit(
+                             index, query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct))
                 {
                     if (ct.IsCancellationRequested)
                     {
@@ -188,31 +187,22 @@ namespace KitveiHakodeshLib.Search
                         return;
                     }
 
-                    // The per-hit work — snippet, match filter, word-distance filter, term
-                    // flattening — is Core's, and is the same code the dev service runs. Only
-                    // the FLUSH RHYTHM below is this leg's own.
-                    if (!KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsSearcher.TryBuildHit(
-                            index, result, requireOrdered, contextWords, maxWordDistance,
-                            out var builtHit, out int windowWords))
-                        continue;
                     if (skipped < skipCount) { skipped++; continue; }
 
-                    pendingResults.Add(result);
-                    pendingHits.Add(builtHit);
-                    pendingWindows.Add(windowWords);
+                    pending.Add(hit);
                     totalResults++;
 
                     bool shouldFlush;
                     if (useTimerOnly)
                     {
                         shouldFlush = timer.ElapsedMilliseconds >= TimerIntervalMs
-                                   || pendingHits.Count >= MemorySafetyCap;
+                                   || pending.Count >= MemorySafetyCap;
                     }
                     else
                     {
                         int threshold = doublingThresholds[doublingIndex];
-                        shouldFlush = pendingHits.Count >= threshold
-                                   || pendingHits.Count >= MemorySafetyCap;
+                        shouldFlush = pending.Count >= threshold
+                                   || pending.Count >= MemorySafetyCap;
                     }
 
                     if (shouldFlush)
@@ -239,7 +229,7 @@ namespace KitveiHakodeshLib.Search
                 Console.WriteLine($"[FtsSearchExecutor] Search {searchId} cancelled — query=\"{query}\" results so far={totalResults}");
                 PostSearch(new { type = "searchCancelled", searchId = searchId });
             }
-            catch (IndexMergingException)
+            catch (SeforimDbFtsIndexMergingException)
             {
                 Console.WriteLine($"[FtsSearchExecutor] Search {searchId} rejected — index is merging");
                 PostSearch(new { type = "searchError", searchId = searchId,

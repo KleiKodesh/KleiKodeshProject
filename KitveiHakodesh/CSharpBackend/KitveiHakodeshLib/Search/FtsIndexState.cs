@@ -1,9 +1,10 @@
-using FtsLib.SeforimDb;
 using Microsoft.Win32;
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
 
 namespace KitveiHakodeshLib.Search
 {
@@ -222,7 +223,9 @@ namespace KitveiHakodeshLib.Search
 
         private State                   _state = State.Idle;
         private string                  _dbPath;
-        private SeforimIndex            _index;
+        // Core's engine handle, not the engine itself: this project no longer references the
+        // engine library. See KitveiHakodesh.Core.SeforimDbFullTextSearch.SeforimDbFtsEngine.
+        private SeforimDbFtsEngine       _index;
         private Task                    _indexingTask;
         private CancellationTokenSource _indexingCts;
 
@@ -257,7 +260,7 @@ namespace KitveiHakodeshLib.Search
         /// reference for a long operation should capture this once — the field may be
         /// replaced by a concurrent SetDatabase call on the actor thread.
         /// </summary>
-        internal SeforimIndex GetIndex()  { lock (_lock) { return _index; } }
+        internal SeforimDbFtsEngine GetIndex()  { lock (_lock) { return _index; } }
         internal string       GetDbPath() { lock (_lock) { return _dbPath; } }
 
         // ── State transitions (single writer — all field mutations live here) ─────
@@ -266,7 +269,7 @@ namespace KitveiHakodeshLib.Search
         /// Sets the DB path and index object atomically. Called by the actor thread
         /// during OnDbReady before any state transition.
         /// </summary>
-        internal void SetDatabase(string dbPath, SeforimIndex index)
+        internal void SetDatabase(string dbPath, SeforimDbFtsEngine index)
         {
             lock (_lock) { _dbPath = dbPath; _index = index; }
         }

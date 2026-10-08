@@ -29,7 +29,9 @@ namespace FtsLib.Snippets
         /// ReadOnlySpan&lt;char&gt; WITHOUT allocating a per-token string — the dominant cost of
         /// snippet generation over result-heavy queries.
         /// </summary>
+#if NET9_0_OR_GREATER
         private readonly Dictionary<string, int[]>.AlternateLookup<System.ReadOnlySpan<char>> _spanLookup;
+#endif
 
         /// <summary>
         /// Number of AND groups the sliding window must cover. For literal-term
@@ -45,7 +47,9 @@ namespace FtsLib.Snippets
         {
             _termToGroups = termToGroups;
             GroupCount    = groupCount;
+#if NET9_0_OR_GREATER
             _spanLookup   = termToGroups.GetAlternateLookup<System.ReadOnlySpan<char>>();
+#endif
         }
 
         /// <summary>Group indices for <paramref name="term"/>, or false when the term
@@ -53,18 +57,33 @@ namespace FtsLib.Snippets
         public bool TryGetGroups(string term, out int[] groups)
             => _termToGroups.TryGetValue(term, out groups);
 
-        /// <summary>Span overload — allocation-free membership for the snippet scan path.</summary>
+        /// <summary>
+        /// Span overload for the snippet scan path.
+        ///
+        /// Allocation-free on net9+, where a dictionary can be probed by span directly. The
+        /// .NET Framework leg has no such API, so it materialises the key — correct, just
+        /// paying the per-token string this overload exists to avoid. Keeping ONE signature
+        /// means the snippet path is written once for both legs.
+        /// </summary>
         public bool TryGetGroups(System.ReadOnlySpan<char> term, out int[] groups)
+#if NET9_0_OR_GREATER
             => _spanLookup.TryGetValue(term, out groups);
+#else
+            => _termToGroups.TryGetValue(term.ToString(), out groups);
+#endif
 
         /// <summary>True when <paramref name="term"/> is one of the query's terms —
         /// the highlight-membership test.</summary>
         public bool ContainsTerm(string term)
             => _termToGroups.ContainsKey(term);
 
-        /// <summary>Span overload — allocation-free highlight-membership test.</summary>
+        /// <summary>Span overload for the highlight-membership test — see TryGetGroups.</summary>
         public bool ContainsTerm(System.ReadOnlySpan<char> term)
+#if NET9_0_OR_GREATER
             => _spanLookup.ContainsKey(term);
+#else
+            => _termToGroups.ContainsKey(term.ToString());
+#endif
 
         // ── Factories ─────────────────────────────────────────────────
 

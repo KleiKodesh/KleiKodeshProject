@@ -235,10 +235,6 @@
     <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj">
       <Name>KitveiHakodesh.Core</Name>
     </ProjectReference>
-    <ProjectReference Include="..\FtsLib-Csharp\FtsLib.Net48\FtsLib.Net48.csproj">
-      <Project>{76f9daa9-374f-40f9-8511-3239fb6e846e}</Project>
-      <Name>FtsLib.Net48</Name>
-    </ProjectReference>
     <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
       <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
       <Name>DocumentLocator.Client</Name>

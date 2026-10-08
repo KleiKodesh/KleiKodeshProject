@@ -1,9 +1,10 @@
-using FtsLib.SeforimDb;
 using KitveiHakodeshLib.Bridge;
 using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+
+using KitveiHakodesh.Core.SeforimDbFullTextSearch;
 
 namespace KitveiHakodeshLib.Search
 {
@@ -31,12 +32,12 @@ namespace KitveiHakodeshLib.Search
             if (!_state.TryStartBuilding(out cts))
                 return;
 
-            SeforimIndex index = _state.GetIndex();
+            SeforimDbFtsEngine index = _state.GetIndex();
             Task task = Task.Run(() => RunBuild(cts, index));
             _state.SetIndexingTask(task);
         }
 
-        private void RunBuild(CancellationTokenSource cts, SeforimIndex index)
+        private void RunBuild(CancellationTokenSource cts, SeforimDbFtsEngine index)
         {
             // The cross-process lock is taken HERE, not by StartIndexing, because a Windows
             // mutex is owned by a THREAD: only the thread that waited on it may release it.
@@ -66,7 +67,7 @@ namespace KitveiHakodeshLib.Search
             }
         }
 
-        private void RunBuildCore(CancellationTokenSource cts, SeforimIndex index)
+        private void RunBuildCore(CancellationTokenSource cts, SeforimDbFtsEngine index)
         {
             // Everything mechanical about the build belongs to Core's SeforimDbFtsIndexer, and
             // is the SAME code the dev service runs: the at-start and at-completion stamps, the

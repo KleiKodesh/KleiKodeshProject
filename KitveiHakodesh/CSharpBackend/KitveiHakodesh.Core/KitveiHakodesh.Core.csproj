@@ -85,14 +85,11 @@
     <Compile Remove="Common/WordExporter.cs" />
   </ItemGroup>
 
-  <!-- The FTS engine, one leg each. Same namespace and assembly name (FtsLib) on both, so
-       Core's code is identical across legs; only the project providing it differs. Core feeds
-       it through IFtsCorpus (SeforimDbFtsCorpus) — the engine's built-in corpus reader is not
-       used from here. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <ProjectReference Include="..\FtsLib-Csharp\FtsLib.Net48\FtsLib.Net48.csproj" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
+  <!-- The FTS engine. ONE project now, multi-targeted the same way this one is, so there is
+       no longer a per-leg reference and no second copy of the engine to keep in step. Core
+       feeds it through IFtsCorpus (SeforimDbFtsCorpus) — the engine's built-in corpus reader
+       is not used from here. -->
+  <ItemGroup>
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
   </ItemGroup>
 
