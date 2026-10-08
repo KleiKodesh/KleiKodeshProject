@@ -1,4 +1,4 @@
-﻿using KitveiHakodeshLib.Bridge;
+using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -12,6 +12,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+
+using KitveiHakodesh.Core.HebrewBooks;
 
 namespace KitveiHakodeshLib.HebrewBooks
 {
@@ -29,6 +31,14 @@ namespace KitveiHakodeshLib.HebrewBooks
     {
         private static readonly string HbCacheDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "hebrewbooks-cache");
+
+        /// <summary>
+        /// The acquisition pipeline — KitveiHakodesh.Core's, the same one the dev service uses.
+        /// Pointed at THIS leg's cache folder explicitly: the page reaches cached books through
+        /// a WebView2 virtual host mapped to that exact directory, so it is not Core's to pick.
+        /// </summary>
+        private static readonly KitveiHakodesh.Core.HebrewBooks.HebrewBooksDownloader _downloader =
+            new KitveiHakodesh.Core.HebrewBooks.HebrewBooksDownloader(_http, HbCacheDir);
 
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
@@ -415,27 +425,11 @@ namespace KitveiHakodeshLib.HebrewBooks
 
             return "http://" + hostName + "/" + bookId + ".pdf";
         }
+        // The download URL and the courtesy headers live in Core now, with the rest of the
+        // acquisition — see HebrewBooksDownloader.
 
-        // ── Download ────────────────────────────────────────────────────────────────
-        //
-        // Downloads run over HttpClient, in this process. They used to run by pointing the
-        // WebView2 at the download endpoint and intercepting DownloadStarting — but that
-        // WebView2 is the one rendering the whole app, so a navigation that failed (offline,
-        // DNS, reset) replaced the UI with the WebView error page: no tabs, no close button,
-        // no way to open a window. Fetching the bytes ourselves cannot take the app down with
-        // it, and it is how KitveiHakodeshService has always done it.
-        //
-        // A UA header is all the endpoint wants; it does not require a real browser.
 
-        private const string DownloadUrlFormat =
-            "https://download.hebrewbooks.org/downloadhandler.ashx?req={0}";
 
-        /// <summary>Enough bytes for the %PDF- signature. A book that is not on the server comes
-        /// back as an HTML message page with a 200, so the status code alone cannot tell us
-        /// whether this is really a PDF.</summary>
-        private const int PdfSignatureLength = 5;
-
-        private const int CopyBufferBytes = 1 << 16;
 
         /// <summary>One client for the process. A new HttpClient per download exhausts sockets;
         /// the UA header is what keeps the endpoint from treating us as a bot.</summary>
@@ -545,82 +539,69 @@ namespace KitveiHakodeshLib.HebrewBooks
             try
             {
                 CancellationToken token = cancellation.Token;
-                string url = string.Format(DownloadUrlFormat, bookId);
 
-                using (var response = await _http
-                    .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token)
-                    .ConfigureAwait(false))
+                // THE ACQUISITION IS CORE'S — the same code the dev service runs. It writes to a
+                // .part and moves it into place only once complete, peeks the %PDF- signature
+                // (a missing book answers with an HTML page, not a 404), and evicts the app
+                // cache down to its cap. This project used to reimplement all of that.
+                //
+                // Progress is POLLED off Core rather than pushed from inside the copy loop:
+                // Core records bytes as they land, and this leg pushes them to the page on its
+                // own cadence. The service polls the same source for its progress op.
+                var pump = PumpProgressAsync(bookId, token);
+
+                var result = await _downloader
+                    .AcquireAsync(bookId, localFolder, allowDownload: true, token)
+                    .ConfigureAwait(false);
+
+                try { await pump.ConfigureAwait(false); } catch (OperationCanceledException) { }
+
+                if (!result.Succeeded)
                 {
-                    if (!response.IsSuccessStatusCode)
+                    // Core answers with a typed failure; this leg words it for the page.
+                    switch (result.Failure)
                     {
-                        Log("Download failed for " + bookId + ": HTTP " + (int)response.StatusCode);
-                        PushCancelled(tabId, notFound: response.StatusCode == HttpStatusCode.NotFound, bookId: bookId);
-                        return;
-                    }
-
-                    long total = response.Content.Headers.ContentLength ?? 0; // 0 = server didn't say
-                    SetProgress(bookId, 0, total);
-
-                    using (var body = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
-                    {
-                        // Peek the signature WITHOUT buffering the body — a missing book answers
-                        // with an HTML message page rather than a 404.
-                        byte[] signature = new byte[PdfSignatureLength];
-                        int signatureLength = await ReadFullyAsync(body, signature, token).ConfigureAwait(false);
-                        if (!IsPdfSignature(signature, signatureLength))
-                        {
+                        case HebrewBookAcquireFailure.NotFoundUpstream:
+                        case HebrewBookAcquireFailure.InvalidBookId:
                             Log("Download for " + bookId + " was not a PDF — treating as not found");
                             PushCancelled(tabId, notFound: true, bookId: bookId);
-                            return;
-                        }
-
-                        bool intoLocalFolder;
-                        string destination = ChooseDestination(localFolder, bookId, out intoLocalFolder);
-
-                        // Written to a .part first and moved into place only once complete, so a
-                        // failed or cancelled download can never leave a truncated PDF that the
-                        // cache-hit check would later trust.
-                        partPath = destination + ".part";
-                        long received = signatureLength;
-
-                        using (var file = new FileStream(
-                            partPath, FileMode.Create, FileAccess.Write, FileShare.None,
-                            CopyBufferBytes, useAsync: true))
-                        {
-                            await file.WriteAsync(signature, 0, signatureLength, token).ConfigureAwait(false);
-                            SetProgress(bookId, received, total);
-
-                            byte[] buffer = new byte[CopyBufferBytes];
-                            int read;
-                            while ((read = await body.ReadAsync(buffer, 0, buffer.Length, token).ConfigureAwait(false)) > 0)
-                            {
-                                await file.WriteAsync(buffer, 0, read, token).ConfigureAwait(false);
-                                received += read;
-                                SetProgress(bookId, received, total);
-                            }
-                        }
-
-                        MoveIntoPlace(partPath, destination);
-                        partPath = null;
-                        if (!intoLocalFolder) EvictCache(keepBookId: bookId);
-
-                        // Registering the virtual host touches the WebView2, so it has to happen
-                        // on the UI thread — as does the push, to stay ordered with it.
-                        var joined = TakeWaitingTabs(bookId);
-                        InvokeOnOwner(() =>
-                        {
-                            string resultUrl = intoLocalFolder
-                                ? RegisterLocalBookHost(destination, bookId)
-                                : CacheUrl(bookId);
-                            _bridge.PushEvent(new { @event = "hbPdfReady", url = resultUrl, bookId, bookTitle, tabId });
-                            // Tabs that asked for this same book while it was downloading get the
-                            // very same file, under their own tab id and title.
-                            if (joined != null)
-                                foreach (var w in joined)
-                                    _bridge.PushEvent(new { @event = "hbPdfReady", url = resultUrl, bookId, bookTitle = w.BookTitle, tabId = w.TabId });
-                        });
+                            break;
+                        case HebrewBookAcquireFailure.Cancelled:
+                            Log("Download cancelled for " + bookId);
+                            PushCancelled(tabId, cancelled: true, bookId: bookId);
+                            break;
+                        case HebrewBookAcquireFailure.Network:
+                            Log("Download network error for " + bookId + ": " + result.Detail);
+                            PushCancelled(tabId, noInternet: true, bookId: bookId);
+                            break;
+                        default:
+                            Log("Download error for " + bookId + ": " + result.Detail);
+                            PushCancelled(tabId, bookId: bookId);
+                            break;
                     }
+                    return;
                 }
+
+                // Where it landed decides how the page reaches it: a book in the user's own
+                // folder is served through a per-file virtual host, one in the app cache through
+                // the cache host. Both touch the WebView2, so both happen on the UI thread — as
+                // does the push, to stay ordered with the registration.
+                string destination = result.Path;
+                bool intoLocalFolder = !destination.StartsWith(HbCacheDir, StringComparison.OrdinalIgnoreCase);
+
+                var joined = TakeWaitingTabs(bookId);
+                InvokeOnOwner(() =>
+                {
+                    string resultUrl = intoLocalFolder
+                        ? RegisterLocalBookHost(destination, bookId)
+                        : CacheUrl(bookId);
+                    _bridge.PushEvent(new { @event = "hbPdfReady", url = resultUrl, bookId, bookTitle, tabId });
+                    // Tabs that asked for this same book while it was downloading get the very
+                    // same file, under their own tab id and title.
+                    if (joined != null)
+                        foreach (var w in joined)
+                            _bridge.PushEvent(new { @event = "hbPdfReady", url = resultUrl, bookId, bookTitle = w.BookTitle, tabId = w.TabId });
+                });
             }
             catch (OperationCanceledException) when (cancellation.IsCancellationRequested)
             {
@@ -679,63 +660,31 @@ namespace KitveiHakodeshLib.HebrewBooks
             }
         }
 
-        private static void SetProgress(string bookId, long received, long total)
+        /// <summary>
+        /// Mirrors Core's byte counts into this leg's progress map while a download runs, so the
+        /// page's progress poll keeps answering. Ends when the download does.
+        ///
+        /// Polled rather than pushed from inside the copy loop: Core owns the loop now, and a
+        /// callback per buffer would be a finer cadence than a UI poll can use anyway.
+        /// </summary>
+        private static async Task PumpProgressAsync(string bookId, CancellationToken token)
         {
-            lock (_downloadStateLock)
+            try
             {
-                if (_downloads.ContainsKey(bookId))
-                    _progress[bookId] = new HbProgress { Received = received, Total = total };
-            }
-        }
-
-        /// <summary>The user's folder when it is set and we can create it, else the app cache.
-        /// Creating it is the writability test: a folder we cannot make is one we cannot write a
-        /// PDF into either — which is what a disconnected external drive looks like.</summary>
-        private static string ChooseDestination(string localFolder, string bookId, out bool intoLocalFolder)
-        {
-            if (!string.IsNullOrWhiteSpace(localFolder))
-            {
-                try
+                while (!token.IsCancellationRequested)
                 {
-                    Directory.CreateDirectory(localFolder);
-                    intoLocalFolder = true;
-                    return Path.Combine(localFolder, bookId + ".pdf");
-                }
-                catch (Exception ex)
-                {
-                    Log("Local folder unavailable, falling back to cache: " + ex.Message);
+                    var p = _downloader.Progress(bookId);
+                    if (p != null) SetProgress(bookId, p.Received, p.Total);
+                    await Task.Delay(ProgressPollMs, token).ConfigureAwait(false);
                 }
             }
-
-            intoLocalFolder = false;
-            Directory.CreateDirectory(HbCacheDir);
-            return GetCachePath(bookId);
+            catch (OperationCanceledException) { /* the download ended — nothing to report */ }
         }
 
-        private static void MoveIntoPlace(string partPath, string destination)
-        {
-            try { if (File.Exists(destination)) File.Delete(destination); } catch (Exception) { }
-            File.Move(partPath, destination);
-        }
+        /// <summary>How often the progress map is refreshed from Core. Fine enough for a bar
+        /// that a human watches, coarse enough to cost nothing.</summary>
+        private const int ProgressPollMs = 150;
 
-        /// <summary>Reads until the buffer is full or the stream ends — one ReadAsync is not
-        /// guaranteed to return all 5 signature bytes.</summary>
-        private static async Task<int> ReadFullyAsync(Stream stream, byte[] buffer, CancellationToken token)
-        {
-            int filled = 0;
-            while (filled < buffer.Length)
-            {
-                int read = await stream.ReadAsync(buffer, filled, buffer.Length - filled, token).ConfigureAwait(false);
-                if (read == 0) break;
-                filled += read;
-            }
-            return filled;
-        }
-
-        private static bool IsPdfSignature(byte[] buffer, int length) =>
-            length >= PdfSignatureLength &&
-            buffer[0] == (byte)'%' && buffer[1] == (byte)'P' && buffer[2] == (byte)'D' &&
-            buffer[3] == (byte)'F' && buffer[4] == (byte)'-';
 
         /// <summary>Reports a download that will not produce a file, to the tab that started it
         /// and to any that joined it — none of them are getting a PDF, so none may be left on the
@@ -756,6 +705,15 @@ namespace KitveiHakodeshLib.HebrewBooks
                     foreach (var w in joined)
                         _bridge.PushEvent(new { @event = "hbPdfCancelled", tabId = w.TabId, notFound, noInternet, cancelled = false });
             });
+        }
+
+        private static void SetProgress(string bookId, long received, long total)
+        {
+            lock (_downloadStateLock)
+            {
+                if (_downloads.ContainsKey(bookId))
+                    _progress[bookId] = new HbProgress { Received = received, Total = total };
+            }
         }
 
         /// <summary>Takes the tabs that joined this book's in-flight download, clearing the list.
@@ -807,26 +765,6 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         private static string CacheUrl(string bookId) =>
             "http://KitveiHakodesh-vue-app/hebrewbooks-cache/" + bookId + ".pdf";
-
-        /// <param name="keepBookId">A book that must survive this pass — the one just downloaded,
-        /// whose URL is about to be handed to the frontend. NTFS has last-access updates off by
-        /// default, so the existing files' stamps are stale and a fresh arrival can sort oldest
-        /// and be deleted before it is ever opened.</param>
-        private static void EvictCache(string keepBookId = null)
-        {
-            if (!Directory.Exists(HbCacheDir)) return;
-            var files = new DirectoryInfo(HbCacheDir).GetFiles("*.pdf");
-            if (files.Length <= 10) return;
-            Array.Sort(files, (a, b) => a.LastAccessTimeUtc.CompareTo(b.LastAccessTimeUtc));
-            string keepName = keepBookId == null ? null : keepBookId + ".pdf";
-            int over = files.Length - 10;
-            for (int i = 0; i < files.Length && over > 0; i++)
-            {
-                if (keepName != null && string.Equals(files[i].Name, keepName, StringComparison.OrdinalIgnoreCase)) continue;
-                try { files[i].Delete(); } catch { }
-                over--;
-            }
-        }
 
         private static string MakeSafeFileName(string name)
         {
