@@ -1,9 +1,10 @@
-using Microsoft.Win32;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+
+using KitveiHakodesh.Core.Common;
 
 namespace KitveiHakodeshLib.Diagnostics
 {
@@ -34,8 +35,6 @@ namespace KitveiHakodeshLib.Diagnostics
             CollectOs(d);
             CollectDotNet(d);
             CollectOffice(d);
-            CollectSqliteInterop(d);
-            CollectLoadedSqliteModules(d);
             CollectAssemblyPaths(d);
 
             return d;
@@ -43,308 +42,66 @@ namespace KitveiHakodeshLib.Diagnostics
 
         // ── process ───────────────────────────────────────────────────────────────
 
+        // ── process, OS, .NET runtime, Word ───────────────────────────────────────
+        //
+        // All four are KitveiHakodesh.Core's probes. They used to be re-implemented here, which
+        // is how two copies of "which bitness is Word?" end up disagreeing. Core answers each
+        // one as TYPED data; shaping it into this flat string dictionary is the report's job,
+        // and that is what stays on this side.
+
         private static void CollectProcess(Dictionary<string, string> d)
         {
-            d["process.bitness"]     = IntPtr.Size == 8 ? "64-bit" : "32-bit";
-            d["process.is64bit"]     = Environment.Is64BitProcess.ToString();
-            d["process.executable"]  = SafeGet(() => System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName);
+            d["process.bitness"]    = ProcessBitnessProbe.Bitness;
+            d["process.is64bit"]    = ProcessBitnessProbe.Is64Bit.ToString();
+            d["process.executable"] = SafeGet(() =>
+                System.Diagnostics.Process.GetCurrentProcess().MainModule.FileName) ?? "unknown";
         }
-
-        // ── OS ────────────────────────────────────────────────────────────────────
 
         private static void CollectOs(Dictionary<string, string> d)
         {
-            d["os.is64bit"]  = Environment.Is64BitOperatingSystem.ToString();
-            d["os.bitness"]  = Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit";
-            d["os.version"]  = Environment.OSVersion.VersionString;
-            d["os.platform"] = Environment.OSVersion.Platform.ToString();
+            d["os.is64bit"]  = OperatingSystemProbe.Is64Bit.ToString();
+            d["os.bitness"]  = OperatingSystemProbe.Bitness;
+            d["os.version"]  = OperatingSystemProbe.Version;
+            d["os.platform"] = OperatingSystemProbe.Platform;
         }
-
-        // ── .NET runtime ──────────────────────────────────────────────────────────
 
         private static void CollectDotNet(Dictionary<string, string> d)
         {
-            d["dotnet.version"]     = Environment.Version.ToString();
-            d["dotnet.clrVersion"]  = RuntimeEnvironment.GetSystemVersion();
-            d["dotnet.runtimeDir"]  = SafeGet(() => RuntimeEnvironment.GetRuntimeDirectory());
+            d["dotnet.version"]     = DotNetRuntimeProbe.Version;
+            d["dotnet.description"] = DotNetRuntimeProbe.Description;
         }
-
-        // ── Office / Word installation ────────────────────────────────────────────
 
         private static void CollectOffice(Dictionary<string, string> d)
         {
-            // Word bitness is stored in the registry under the ClickToRun or MSI install key.
-            // We check both the 64-bit and 32-bit registry hives to cover all install types.
+            var word = WordInstallProbe.Detect();
 
-            string wordVersion  = null;
-            string wordBitness  = null;
-            string wordPath     = null;
-            string installType  = null;
+            // "not found" rather than an empty string: the report is read by a person, and a
+            // blank cell does not say whether the probe ran.
+            d["office.installType"] = word.Kind?.ToString() ?? "not found";
+            d["office.wordVersion"] = word.Version ?? "not found";
+            d["office.wordBitness"] = word.Bitness ?? "not found";
+            d["office.wordPath"]    = word.InstallPath ?? "not found";
 
-            // ── ClickToRun (Microsoft 365 / Office 2019+) ────────────────────────
-            // HKLM\SOFTWARE\Microsoft\Office\ClickToRun\Configuration
-            wordBitness = SafeGet(() =>
+            // The registry says what was INSTALLED; the PE header says what is actually on disk.
+            // They disagree on a repaired or hand-copied install, which is exactly the case this
+            // report exists to show.
+            string winword = WordInstallProbe.FindWinword(word.InstallPath);
+            if (winword != null)
             {
-                using (var key = Registry.LocalMachine.OpenSubKey(
-                    @"SOFTWARE\Microsoft\Office\ClickToRun\Configuration"))
-                {
-                    if (key == null) return null;
-                    installType = "ClickToRun";
-                    wordVersion = key.GetValue("VersionToReport") as string;
-                    wordPath    = key.GetValue("InstallationPath") as string;
-                    return key.GetValue("Platform") as string; // "x86" or "x64"
-                }
-            });
-
-            // ── MSI install (Office 2016 and earlier) ────────────────────────────
-            // Check both hives: 64-bit Office writes to the native hive,
-            // 32-bit Office on 64-bit Windows writes to Wow6432Node.
-            if (wordBitness == null)
-            {
-                wordBitness = SafeGet(() =>
-                {
-                    // 64-bit Office on 64-bit OS
-                    using (var key = Registry.LocalMachine.OpenSubKey(
-                        @"SOFTWARE\Microsoft\Office\16.0\Word\InstallRoot"))
-                    {
-                        if (key != null)
-                        {
-                            installType = "MSI-64";
-                            wordPath    = key.GetValue("Path") as string;
-                            return "x64";
-                        }
-                    }
-                    return null;
-                });
+                d["office.winwordExe"]       = winword;
+                d["office.winwordPeBitness"] = WordInstallProbe.WinwordPeBitness(winword) ?? "unreadable";
             }
-
-            if (wordBitness == null)
+            else if (word.InstallPath != null)
             {
-                wordBitness = SafeGet(() =>
-                {
-                    // 32-bit Office on 64-bit OS (Wow6432Node)
-                    using (var key = Registry.LocalMachine.OpenSubKey(
-                        @"SOFTWARE\Wow6432Node\Microsoft\Office\16.0\Word\InstallRoot"))
-                    {
-                        if (key != null)
-                        {
-                            installType = "MSI-32";
-                            wordPath    = key.GetValue("Path") as string;
-                            return "x86";
-                        }
-                    }
-                    return null;
-                });
-            }
-
-            // ── Office 2013 (version 15.0) ───────────────────────────────────────
-            if (wordBitness == null)
-            {
-                wordBitness = SafeGet(() =>
-                {
-                    using (var key = Registry.LocalMachine.OpenSubKey(
-                        @"SOFTWARE\Microsoft\Office\15.0\Word\InstallRoot"))
-                    {
-                        if (key != null) { installType = "MSI-64-2013"; wordPath = key.GetValue("Path") as string; return "x64"; }
-                    }
-                    using (var key = Registry.LocalMachine.OpenSubKey(
-                        @"SOFTWARE\Wow6432Node\Microsoft\Office\15.0\Word\InstallRoot"))
-                    {
-                        if (key != null) { installType = "MSI-32-2013"; wordPath = key.GetValue("Path") as string; return "x86"; }
-                    }
-                    return null;
-                });
-            }
-
-            d["office.wordBitness"]  = wordBitness  ?? "not found";
-            d["office.wordVersion"]  = wordVersion  ?? "not found";
-            d["office.wordPath"]     = wordPath     ?? "not found";
-            d["office.installType"]  = installType  ?? "not found";
-
-            // Verify the actual WINWORD.EXE PE header bitness as ground truth
-            if (!string.IsNullOrEmpty(wordPath))
-            {
-                string winword = Path.Combine(wordPath.TrimEnd('\\', '/'), "WINWORD.EXE");
-                if (!File.Exists(winword))
-                    winword = Path.Combine(wordPath.TrimEnd('\\', '/'), "root", "Office16", "WINWORD.EXE");
-                if (File.Exists(winword))
-                {
-                    string peBitness = SafeGet(() => ReadPeMachine(winword));
-                    d["office.winwordExe"]        = winword;
-                    d["office.winwordPeBitness"]  = peBitness ?? "unreadable";
-                }
-                else
-                {
-                    d["office.winwordExe"] = "not found at " + wordPath;
-                }
+                d["office.winwordExe"] = "not found at " + word.InstallPath;
             }
         }
 
-        // ── SQLite.Interop.dll ────────────────────────────────────────────────────
+        // The SQLite.Interop.dll probes that used to live here are GONE, not moved. They
+        // diagnosed System.Data.SQLite's native loader — the provider this app no longer uses.
+        // Everything here now reaches SQLite through Microsoft.Data.Sqlite, which has no
+        // per-architecture interop DLL to go missing, so there is nothing left for them to find.
 
-        private static void CollectSqliteInterop(Dictionary<string, string> d)
-        {
-            // ── 1. Directory from executing assembly location (may be shadow-copy temp under VSTO)
-            string asmDir = SafeGet(() => Path.GetDirectoryName(
-                Assembly.GetExecutingAssembly().Location));
-
-            // ── 2. AppDomain base directory (the real install dir, even under VSTO)
-            string appDomainDir = SafeGet(() => AppDomain.CurrentDomain.BaseDirectory);
-
-            // ── 3. PreLoadSQLite_BaseDirectory env var (what SQLite itself uses first)
-            string envDir = SafeGet(() =>
-                System.Environment.GetEnvironmentVariable("PreLoadSQLite_BaseDirectory"));
-
-            d["sqlite.baseDir.assembly"]  = asmDir       ?? "unknown";
-            d["sqlite.baseDir.appDomain"] = appDomainDir ?? "unknown";
-            d["sqlite.baseDir.envVar"]    = string.IsNullOrEmpty(envDir) ? "(not set)" : envDir;
-
-            // Treat SafeGet "error: ..." returns as unusable paths.
-            bool IsUsableDir(string s) =>
-                !string.IsNullOrEmpty(s) && !s.StartsWith("error:", StringComparison.Ordinal);
-
-            // Check all three base directories so we can see exactly where SQLite
-            // will (or won't) find the interop DLL.
-            var dirsToCheck = new[]
-            {
-                ("assembly",  asmDir),
-                ("appDomain", appDomainDir),
-                ("envVar",    envDir),
-            };
-
-            foreach (var (label, dir) in dirsToCheck)
-            {
-                if (!IsUsableDir(dir)) continue;
-
-                foreach (string arch in new[] { "x86", "x64" })
-                {
-                    string prefix = $"sqlite.interop.{label}.{arch}";
-                    string path   = SafeGet(() => Path.Combine(dir, arch, "SQLite.Interop.dll"));
-                    if (path == null || path.StartsWith("error:", StringComparison.Ordinal))
-                    {
-                        d[prefix + ".present"] = "false";
-                        continue;
-                    }
-
-                    bool exists = SafeFileExists(path);
-                    d[prefix + ".present"] = exists.ToString().ToLowerInvariant();
-                    d[prefix + ".path"]    = path;
-                    if (exists)
-                    {
-                        d[prefix + ".size"]      = SafeGet(() => new FileInfo(path).Length.ToString()) ?? "?";
-                        d[prefix + ".peMachine"] = SafeGet(() => ReadPeMachine(path)) ?? "unreadable";
-                    }
-                }
-
-                // Also check flat (wrong layout — no arch subfolder)
-                string flat = SafeGet(() => Path.Combine(dir, "SQLite.Interop.dll"));
-                if (flat != null && !flat.StartsWith("error:", StringComparison.Ordinal))
-                {
-                    bool flatExists = SafeFileExists(flat);
-                    d[$"sqlite.interop.{label}.flat.present"] = flatExists.ToString().ToLowerInvariant();
-                    if (flatExists)
-                        d[$"sqlite.interop.{label}.flat.peMachine"] =
-                            SafeGet(() => ReadPeMachine(flat)) ?? "unreadable";
-                }
-            }
-
-            // ── Check System.Data.SQLite.dll itself
-            foreach (var (label, dir) in dirsToCheck)
-            {
-                if (!IsUsableDir(dir)) continue;
-                string managedDll = SafeGet(() => Path.Combine(dir, "System.Data.SQLite.dll"));
-                if (managedDll == null || managedDll.StartsWith("error:", StringComparison.Ordinal))
-                    continue;
-
-                bool exists = SafeFileExists(managedDll);
-                d[$"sqlite.managed.{label}.present"] = exists.ToString().ToLowerInvariant();
-                if (exists)
-                {
-                    d[$"sqlite.managed.{label}.size"] =
-                        SafeGet(() => new FileInfo(managedDll).Length.ToString()) ?? "?";
-                    d[$"sqlite.managed.{label}.version"] = SafeGet(() =>
-                        System.Diagnostics.FileVersionInfo
-                            .GetVersionInfo(managedDll).FileVersion) ?? "?";
-                }
-            }
-        }
-
-        // ── loaded SQLite modules (ground truth) ──────────────────────────────────
-
-        /// <summary>
-        /// Reports which SQLite native module is ACTUALLY loaded in this process.
-        /// The on-disk checks above say where SQLite *could* load from; this says
-        /// what won. Native modules are process-wide, so inside WINWORD.EXE another
-        /// add-in's SQLite.Interop.dll can be the one our P/Invokes bind to — an
-        /// EntryPointNotFoundException on a version-mangled export (e.g. SI…) means
-        /// the loaded module below is a different System.Data.SQLite release than
-        /// the managed assembly reported in sqlite.loaded.managed.*.
-        /// </summary>
-        private static void CollectLoadedSqliteModules(Dictionary<string, string> d)
-        {
-            // Native modules whose file name mentions sqlite: SQLite.Interop.dll,
-            // e_sqlite3.dll, winsqlite3.dll, sqlite3.dll — whoever loaded them.
-            int found = 0;
-            try
-            {
-                foreach (System.Diagnostics.ProcessModule m in
-                         System.Diagnostics.Process.GetCurrentProcess().Modules)
-                {
-                    string name;
-                    try { name = m.ModuleName; } catch { continue; }
-                    if (name == null ||
-                        name.IndexOf("sqlite", StringComparison.OrdinalIgnoreCase) < 0)
-                        continue;
-
-                    string prefix = $"sqlite.loaded.native.{found}";
-                    d[prefix + ".name"]    = name;
-                    d[prefix + ".path"]    = SafeGet(() => m.FileName) ?? "?";
-                    d[prefix + ".version"] = SafeGet(() => m.FileVersionInfo.FileVersion) ?? "?";
-                    d[prefix + ".size"]    = SafeGet(() => m.ModuleMemorySize.ToString()) ?? "?";
-                    found++;
-                }
-            }
-            catch (Exception ex)
-            {
-                d["sqlite.loaded.native.error"] = ex.Message;
-            }
-            d["sqlite.loaded.native.count"] = found.ToString();
-
-            // The managed System.Data.SQLite assembly this AppDomain resolved —
-            // its version must match the loaded interop's version exactly.
-            try
-            {
-                foreach (Assembly a in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    string asmName;
-                    try { asmName = a.GetName().Name; } catch { continue; }
-                    if (!string.Equals(asmName, "System.Data.SQLite", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    d["sqlite.loaded.managed.location"] = SafeGet(() => a.Location) ?? "?";
-                    d["sqlite.loaded.managed.version"]  = SafeGet(() => a.GetName().Version.ToString()) ?? "?";
-                    d["sqlite.loaded.managed.fileVersion"] = SafeGet(() =>
-                        System.Diagnostics.FileVersionInfo.GetVersionInfo(a.Location).FileVersion) ?? "?";
-                    break;
-                }
-            }
-            catch (Exception ex)
-            {
-                d["sqlite.loaded.managed.error"] = ex.Message;
-            }
-            if (!d.ContainsKey("sqlite.loaded.managed.location") &&
-                !d.ContainsKey("sqlite.loaded.managed.error"))
-                d["sqlite.loaded.managed.location"] = "(not loaded in this AppDomain)";
-        }
-
-        /// <summary>Returns true if the file exists; false on any exception.</summary>
-        private static bool SafeFileExists(string path)
-        {
-            try { return File.Exists(path); }
-            catch { return false; }
-        }
-
-        // ── assembly load paths ───────────────────────────────────────────────────
 
         private static void CollectAssemblyPaths(Dictionary<string, string> d)
         {
