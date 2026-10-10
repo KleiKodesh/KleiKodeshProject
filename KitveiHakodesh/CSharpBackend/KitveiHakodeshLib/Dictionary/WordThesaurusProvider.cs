@@ -1,70 +1,44 @@
 using Microsoft.Office.Interop.Word;
-using System;
 using System.Collections.Generic;
+using CoreCommon = KitveiHakodesh.Core.Common;
 
 namespace KitveiHakodeshLib.Dictionary
 {
     /// <summary>
-    /// Thin wrapper around the Word Application thesaurus (SynonymInfo).
-    /// Only active inside the VSTO environment — HostApplication must be set
-    /// during ThisAddIn_Startup. When null (e.g. standalone / dev), all calls
-    /// return empty results so the feature degrades gracefully.
+    /// The hosted app's name for Word's thesaurus. Core's
+    /// <see cref="CoreCommon.WordThesaurus"/> underneath.
     ///
-    /// This class is intentionally self-contained 
+    /// This used to be a second copy of the SynonymInfo walk — the same Hebrew language
+    /// constant, the same meaning loop, the same deliberate avoidance of `dynamic` — differing
+    /// only in where it got the Word application from. Core asks
+    /// <see cref="CoreCommon.RunningWordFinder"/>, which is the better answer: it checks the
+    /// host instance is still ALIVE before using it (a severed COM proxy otherwise throws on
+    /// every call for the rest of the session) and can bind to a running Word when there is no
+    /// host at all, so synonyms work outside the add-in too.
+    ///
+    /// The name and the signatures stay because the add-in and the message handler use them.
     /// </summary>
     public static class WordThesaurusProvider
     {
         /// <summary>
-        /// Set once in ThisAddIn_Startup. Null outside the VSTO host.
+        /// Set once in ThisAddIn_Startup; null outside the VSTO host.
+        ///
+        /// Forwards to <see cref="CoreCommon.RunningWordFinder.HostApplication"/> — that is
+        /// where the lookup reads it from, so keeping a private copy here would leave the
+        /// add-in silently falling back to binding whatever Word happened to be running.
         /// </summary>
-        public static Application HostApplication { get; set; }
+        public static Application HostApplication
+        {
+            get => CoreCommon.RunningWordFinder.HostApplication;
+            set => CoreCommon.RunningWordFinder.HostApplication = value;
+        }
 
         /// <summary>
-        /// Returns synonym lists for <paramref name="word"/> grouped by meaning.
-        /// Each element in the outer list is one meaning; the inner list is its synonyms.
-        /// Returns an empty list when not running inside Word or when no synonyms are found.
+        /// Synonym lists for <paramref name="word"/>, grouped by meaning: each element of the
+        /// outer list is one meaning, the inner list its synonyms. Empty when Word cannot be
+        /// reached or the word has no entry.
         /// </summary>
-        public static List<List<string>> GetSynonyms(string word)
-        {
-            var result = new List<List<string>>();
-
-            if (HostApplication == null || string.IsNullOrWhiteSpace(word))
-                return result;
-
-            try
-            {
-                object langId = WdLanguageID.wdHebrew;
-                SynonymInfo syn = HostApplication.get_SynonymInfo(word, ref langId);
-
-                if (!syn.Found || syn.MeaningCount == 0)
-                    return result;
-
-                for (int i = 1; i <= syn.MeaningCount; i++)
-                {
-                    object index = i;
-                    // SynonymList returns a Variant array — use Array to avoid dynamic dispatch
-                    object raw = syn.get_SynonymList(ref index);
-                    Array arr = raw as Array;
-                    if (arr == null) continue;
-
-                    var group = new List<string>();
-                    foreach (object item in arr)
-                    {
-                        string s = item as string;
-                        if (!string.IsNullOrWhiteSpace(s))
-                            group.Add(s);
-                    }
-
-                    if (group.Count > 0)
-                        result.Add(group);
-                }
-            }
-            catch
-            {
-                // Thesaurus not available for this language / Word version — degrade silently.
-            }
-
-            return result;
-        }
+        public static List<List<string>> GetSynonyms(string word) =>
+            CoreCommon.WordThesaurus.Synonyms(word);
     }
 }

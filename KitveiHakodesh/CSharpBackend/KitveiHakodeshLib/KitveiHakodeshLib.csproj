@@ -203,7 +203,6 @@
     <Compile Include="Catalog\NetFxCompat.cs" />
     <Compile Include="Catalog\CatalogTocHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
-    <Compile Include="Settings\ShellRegistration.cs" />
     <Compile Include="UserSettings\UserSettingsDbAccess.cs" />
     <Compile Include="UserSettings\UserSettingsDbHandler.cs" />
     <Compile Include="Dictionary\DictionaryQueryHandler.cs" />
