@@ -261,8 +261,12 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// Book ids are numeric upstream. Anything else could steer the request URL or escape
         /// the folder the {id}.pdf name is built in, so it never gets that far. EVERY entry
         /// point that turns a caller's id into a path or a URL checks this first.
+        ///
+        /// Public because a host checks it BEFORE calling in — the hosted app answers an
+        /// invalid id with its own wire error rather than starting a download — and a second
+        /// copy of "what is a book id" on that side is exactly the kind of rule that drifts.
         /// </summary>
-        private static bool IsValidBookId(string? bookId)
+        public static bool IsValidBookId(string? bookId)
         {
             if (string.IsNullOrWhiteSpace(bookId)) return false;
             foreach (char c in bookId!)
@@ -270,7 +274,15 @@ namespace KitveiHakodesh.Core.HebrewBooks
             return true;
         }
 
-        private static string? LocalFolderHit(string? localFolder, string bookId)
+        /// <summary>
+        /// The full path to {bookId}.pdf in the user's folder when it is there and reachable,
+        /// else null. Swallows I/O errors — a disconnected drive, a malformed path — so the
+        /// caller falls through to downloading instead of failing.
+        ///
+        /// Public for the same reason as <see cref="IsValidBookId"/>: a host asks "do I already
+        /// have this?" before deciding whether to serve the local file or start a download.
+        /// </summary>
+        public static string? LocalFolderHit(string? localFolder, string bookId)
         {
             if (string.IsNullOrWhiteSpace(localFolder)) return null;
             try

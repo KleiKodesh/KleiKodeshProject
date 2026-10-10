@@ -358,38 +358,38 @@ namespace KitveiHakodeshLib.HebrewBooks
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
-        /// <summary>
-        /// Book ids are numeric on hebrewbooks.org. Anything else could steer the download URL
-        /// or escape the folder we build the {id}.pdf filename in, so it never gets that far.
-        /// Same guard as the service's HebrewBooksService.IsValidBookId - the two legs must
-        /// agree on what a book id is.
-        /// </summary>
-        private static bool IsValidBookId(string bookId)
-        {
-            if (string.IsNullOrWhiteSpace(bookId)) return false;
-            foreach (char c in bookId) if (c < '0' || c > '9') return false;
-            return true;
-        }
+        // What a book id is, and whether the user already has the file, are Core's answers —
+        // the same ones AcquireAsync / WhichAreDownloaded / DeleteDownloaded use when this
+        // handler calls in. They are asked HERE first because this leg decides between serving
+        // a local file and starting a download before it calls Core at all; a second copy of
+        // either rule on this side is one that silently drifts from the one that matters.
+        private static bool IsValidBookId(string bookId) =>
+            KitveiHakodesh.Core.HebrewBooks.HebrewBooksDownloader.IsValidBookId(bookId);
 
-        /// <summary>
-        /// Returns the full path to {bookId}.pdf inside the configured local folder if it
-        /// exists and is accessible, otherwise null. Swallows I/O errors (e.g. disconnected
-        /// flash drive) and returns null so the caller falls back to the download path.
-        /// </summary>
         private static string GetLocalFolderPath(string localFolder, string bookId)
         {
-            if (string.IsNullOrWhiteSpace(localFolder)) return null;
-            try
+            string hit = KitveiHakodesh.Core.HebrewBooks.HebrewBooksDownloader
+                .LocalFolderHit(localFolder, bookId);
+            if (hit != null) return hit;
+
+            // Core answers null for "not there" and for "could not look" alike, which is the
+            // right contract for it — both mean fall back to downloading. But the second case
+            // is worth a line here: a configured folder whose DIRECTORY has gone (unplugged
+            // drive, stale network path) makes every book re-download with nothing to explain
+            // why. Checked only on the null path, so the common hit costs nothing.
+            if (!string.IsNullOrWhiteSpace(localFolder))
             {
-                string candidate = Path.Combine(localFolder, bookId + ".pdf");
-                return File.Exists(candidate) ? candidate : null;
+                try
+                {
+                    if (!Directory.Exists(localFolder))
+                        Log("local folder is configured but unreachable: \"" + localFolder + "\"");
+                }
+                catch (Exception ex)
+                {
+                    Log("local folder check failed for \"" + localFolder + "\": " + ex.Message);
+                }
             }
-            catch (Exception ex)
-            {
-                // Drive disconnected, path invalid, permission denied — fall back to download.
-                Log("GetLocalFolderPath error for \"" + localFolder + "\": " + ex.Message);
-                return null;
-            }
+            return null;
         }
 
         /// <summary>
