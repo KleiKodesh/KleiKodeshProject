@@ -95,6 +95,32 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public void DeleteBuildProgressFile() => Index.DeleteBuildProgressFile();
 
         /// <summary>
+        /// Whether a build is running against this index directory — in THIS process or any
+        /// other.
+        ///
+        /// Asks the lock every builder actually takes, which is the only answer that holds
+        /// across processes. A host that tracks its own builds knows nothing about the other
+        /// leg's, and a host that keeps a named mutex only learns about hosts that agreed to
+        /// use the same mutex — the hosted app had one the service never took, so a service
+        /// build looked like no build at all.
+        ///
+        /// ADVISORY. The lock can change hands the instant after this returns, so use it to
+        /// decide what to SHOW — a progress bar for someone else's build — never whether it is
+        /// safe to start one. For that, start it and let the lock refuse.
+        /// </summary>
+        public bool IsBuildInProgress() => IsBuildInProgress(_indexPath);
+
+        /// <summary>
+        /// As <see cref="IsBuildInProgress()"/>, for an index directory with no engine open.
+        ///
+        /// Static because asking must never CONSTRUCT one: opening an engine runs crash
+        /// recovery and self-heals sidecars, which is a great deal of work for a caller that
+        /// only wants to decide whether to show a progress bar.
+        /// </summary>
+        public static bool IsBuildInProgress(string indexPath) =>
+            SeforimIndex.IsBuildInProgress(indexPath);
+
+        /// <summary>
         /// Drops the open engine so the next caller opens a fresh one.
         ///
         /// Call this BEFORE deleting the index directory. The engine holds file handles under

@@ -71,6 +71,46 @@ namespace FtsLib.Indexing
             }
         }
 
+        /// <summary>
+        /// Whether something — this process or another — currently holds the write lock on
+        /// <paramref name="indexPath"/>, WITHOUT taking it.
+        ///
+        /// This is the honest answer to "is a build running?", because it asks the lock every
+        /// builder actually takes. A host that keeps its own flag only knows about its own
+        /// builds, and a host that keeps a named mutex only knows about the hosts that agreed
+        /// to use it.
+        ///
+        /// Advisory, not a reservation: the lock can be taken or dropped the instant after this
+        /// returns. Use it to decide what to SHOW, never to decide whether it is safe to build —
+        /// for that, take the lock and let it fail.
+        /// </summary>
+        public static bool IsHeld(string indexPath)
+        {
+            string lockFilePath = Path.Combine(indexPath, LockFileName);
+            if (!File.Exists(lockFilePath)) return false;
+
+            try
+            {
+                // Opening with FileShare.None succeeds only when nobody else has it open, so a
+                // successful open means NOT held. Closing immediately leaves the file in place
+                // — an unheld lock file is normal, and deleting it here could race a builder
+                // that is between creating it and locking it.
+                using (new FileStream(lockFilePath, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                {
+                    return false;
+                }
+            }
+            catch (IOException)
+            {
+                return true; // someone holds it
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Cannot open it for reasons other than the lock. Not evidence of a build.
+                return false;
+            }
+        }
+
         public void Dispose()
         {
             try

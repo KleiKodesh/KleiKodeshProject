@@ -274,6 +274,25 @@ namespace FtsLib.SeforimDb
 
         public void DeleteBuildProgressFile() => IndexingPipeline.DeleteProgressFile(_indexPath);
 
+        /// <summary>
+        /// Whether a build is running against this index directory — in THIS process or any
+        /// other — without taking the lock.
+        ///
+        /// Advisory. It answers what to show the user, never whether it is safe to build: the
+        /// lock can change hands the instant after this returns, so a builder still takes it
+        /// and handles the failure.
+        /// </summary>
+        public bool IsBuildInProgress() => IsBuildInProgress(_indexPath);
+
+        /// <summary>
+        /// As <see cref="IsBuildInProgress()"/>, for an index directory that has not been
+        /// opened. Static so asking the question never constructs an engine — a caller that
+        /// only wants to show someone else's progress should not pay for one, and opening runs
+        /// crash recovery.
+        /// </summary>
+        public static bool IsBuildInProgress(string indexPath) =>
+            FtsLib.Indexing.IndexWriteLock.IsHeld(indexPath);
+
         public long CountLines()
         {
             using (var corpus = _openCorpus())
