@@ -10,8 +10,8 @@ using System.Threading.Tasks;
 // The GitHub release model is KitveiHakodesh.Core's: the same shape, the same JsonPropertyName
 // mapping, and serialized through Core's source-generated context so the AOT leg never needs the
 // reflection path. This project used to declare its own identical copy.
-using GitHubRelease = KitveiHakodesh.Core.Updates.GithubRelease;
-using GitHubReleaseAsset = KitveiHakodesh.Core.Updates.GithubReleaseAsset;
+using GitHubRelease = UpdateCheckerLib.GithubRelease;
+using GitHubReleaseAsset = UpdateCheckerLib.GithubReleaseAsset;
 
 namespace UpdateCheckerLib
 {
@@ -42,11 +42,11 @@ namespace UpdateCheckerLib
         /// %LOCALAPPDATA%\KleiKodesh and registers the Word add-in. Doing that from a
         /// portable copy would install software the user never asked to install.
         /// </summary>
-        public static bool IsInstalled() => KitveiHakodesh.Core.Updates.UpdateChecker.IsInstalled();
+        public static bool IsInstalled() => UpdateCheckRules.IsInstalled();
 
         /// <summary>The installed version from the registry, or null for a portable copy.
         /// KitveiHakodesh.Core's — the same read the rest of the app does.</summary>
-        public static string GetCurrentVersionFromRegistry() => KitveiHakodesh.Core.Updates.UpdateChecker.InstalledVersion();
+        public static string GetCurrentVersionFromRegistry() => UpdateCheckRules.InstalledVersion();
 
         /// <summary>
         /// Records the installed version as seen, so LastSeenVersion tracks the version
@@ -169,7 +169,7 @@ namespace UpdateCheckerLib
         /// agrees about what "newer" means — including the field-count rule that treats a
         /// 4-component version as newer than a 3-component one.</summary>
         public static int CompareVersions(string githubVersion, string registryVersion)
-            => KitveiHakodesh.Core.Updates.UpdateChecker.CompareVersions(githubVersion, registryVersion);
+            => UpdateCheckRules.CompareVersions(githubVersion, registryVersion);
 
         /// <summary>
         /// Background-only task: hits the GitHub API and silently downloads a newer

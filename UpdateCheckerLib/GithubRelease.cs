@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace KitveiHakodesh.Core.Updates
+namespace UpdateCheckerLib
 {
     /// <summary>
     /// A release as the GitHub API reports it.
@@ -11,9 +11,6 @@ namespace KitveiHakodesh.Core.Updates
     /// re-encoding OUR payloads as JSON — it does not ask us to pretend an external API speaks
     /// MessagePack.
     ///
-    /// Serialization is SOURCE-GENERATED through <see cref="GithubJsonContext"/>, because the
-    /// reflection-based path cannot run under native AOT and would fail at the moment an update
-    /// check happens rather than at build time.
     /// </summary>
     public sealed class GithubRelease
     {
@@ -54,13 +51,5 @@ namespace KitveiHakodesh.Core.Updates
 
         [JsonPropertyName("browser_download_url")]
         public string BrowserDownloadUrl { get; set; } = "";
-    }
-
-    /// <summary>Source-generated serialization for the GitHub response. Without this, native AOT
-    /// has no way to read it.</summary>
-    [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-    [JsonSerializable(typeof(GithubRelease))]
-    internal sealed partial class GithubJsonContext : JsonSerializerContext
-    {
     }
 }

@@ -10,6 +10,8 @@
     <RootNamespace>UpdateCheckerLib</RootNamespace>
     <AssemblyName>UpdateCheckerLib</AssemblyName>
     <TargetFrameworkVersion>v4.8</TargetFrameworkVersion>
+    <!-- UpdateCheckRules.cs came from KitveiHakodesh.Core and is written in current C#. -->
+    <LangVersion>latest</LangVersion>
     <FileAlignment>512</FileAlignment>
     <Deterministic>true</Deterministic>
     <TargetFrameworkProfile />
@@ -95,6 +97,8 @@
     </Compile>
     <Compile Include="DownloadManager.cs" />
     <Compile Include="UpdateChecker.cs" />
+    <Compile Include="UpdateCheckRules.cs" />
+    <Compile Include="GithubRelease.cs" />
     <Compile Include="UpdateException.cs" />
     <Compile Include="UpdateNotificationForm.cs">
       <SubType>Form</SubType>
@@ -103,15 +107,6 @@
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
 
-  <!-- The portable half of update checking — the GitHub release model, version comparison and
-       the installed-version registry read — lives in KitveiHakodesh.Core, which multi-targets
-       net48. The UI in this project (the progress and notification forms) stays here, and so
-       does launching the downloaded installer. -->
-  <ItemGroup>
-    <ProjectReference Include="..\KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj">
-      <Name>KitveiHakodesh.Core</Name>
-    </ProjectReference>
-  </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>

@@ -7,7 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Win32;
 
-namespace KitveiHakodesh.Core.Updates
+namespace UpdateCheckerLib
 {
     /// <summary>
     /// Decides whether a newer release exists and which file to fetch for it.
@@ -22,7 +22,7 @@ namespace KitveiHakodesh.Core.Updates
     /// <see cref="IsInstalled"/> gates everything: doing that from a portable copy the user
     /// unzipped would install software they never asked to install.
     /// </summary>
-    public static class UpdateChecker
+    public static class UpdateCheckRules
     {
         private const string RegistryKeyPath = @"SOFTWARE\KleiKodesh";
         private const string LatestReleaseApiUrl =
@@ -35,6 +35,11 @@ namespace KitveiHakodesh.Core.Updates
         private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(2);
 
         private static readonly HttpClient Http = CreateClient();
+
+        /// <summary>GitHub spells its fields in snake_case; the model maps them by attribute and
+        /// tolerates casing drift. Reflection-based: this library never runs under native AOT.</summary>
+        private static readonly JsonSerializerOptions GithubJsonOptions =
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
 
         private static HttpClient CreateClient()
         {
@@ -163,7 +168,7 @@ namespace KitveiHakodesh.Core.Updates
                 try
                 {
                     string json = await Http.GetStringAsync(LatestReleaseApiUrl).ConfigureAwait(false);
-                    GithubRelease? release = JsonSerializer.Deserialize(json, GithubJsonContext.Default.GithubRelease);
+                    GithubRelease? release = JsonSerializer.Deserialize<GithubRelease>(json, GithubJsonOptions);
                     if (release != null) return release;
 
                     lastFailure = new InvalidOperationException("the release response was empty");

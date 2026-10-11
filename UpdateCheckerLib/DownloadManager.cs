@@ -86,7 +86,7 @@ namespace UpdateCheckerLib
         /// this machine's installer variant — e.g. "KleiKodeshSetup-v8.7.2-x64.exe".
         /// </summary>
         internal static string GetInstallerAssetName(string version) =>
-            KitveiHakodesh.Core.Updates.UpdateChecker.InstallerAssetName(version);
+            UpdateCheckRules.InstallerAssetName(version);
 
         // The installer VARIANT (x64 / x86 / AnyCPU) and the asset-name suffix it implies are
         // KitveiHakodesh.Core's (UpdateChecker.InstallerVariant / InstallerAssetName). They were
