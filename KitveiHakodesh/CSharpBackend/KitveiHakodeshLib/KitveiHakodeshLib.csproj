@@ -204,6 +204,63 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+
+  <!--
+    The KitveiHakodesh service ships WITH this library, always. Everything this library does
+    with data goes through that service, so anything built on it - the Word add-in, the
+    standalone app, the portable zip, the installer payload - must carry it, and the only way
+    to guarantee that is to make it part of this project's own output:
+
+      <output>\KitveiHakodeshService\KitveiHakodeshService.exe (+ its data files)
+
+    PublishKitveiHakodeshService publishes the service (native AOT, win-x64) when its sources
+    changed (Inputs/Outputs: the service, Core, FtsLib, DocConvertLib). AddKitveiHakodeshService
+    then lists the publish output as Content copied to the output folder; Content of a
+    referenced project flows to every project that references it, which is how the add-in and
+    the standalone app receive it. ILC's link step needs vswhere.exe on PATH, hence the prefix.
+  -->
+  <PropertyGroup>
+    <KhsCSharpBackend>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)..'))</KhsCSharpBackend>
+    <KhsProject>$(KhsCSharpBackend)\KitveiHakodeshService\KitveiHakodeshService.csproj</KhsProject>
+    <KhsPublishDir>$(KhsCSharpBackend)\KitveiHakodeshService\bin\LibPayload\win-x64\</KhsPublishDir>
+    <KhsPublishedExe>$(KhsPublishDir)KitveiHakodeshService.exe</KhsPublishedExe>
+  </PropertyGroup>
+  <ItemGroup>
+    <KhsPublishInput Include="$(KhsCSharpBackend)\KitveiHakodeshService\**\*.cs;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.csproj;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.db;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.json;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.manifest"
+                     Exclude="$(KhsCSharpBackend)\KitveiHakodeshService\bin\**;$(KhsCSharpBackend)\KitveiHakodeshService\obj\**" />
+    <KhsPublishInput Include="$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.cs;$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.csproj"
+                     Exclude="$(KhsCSharpBackend)\KitveiHakodesh.Core\bin\**;$(KhsCSharpBackend)\KitveiHakodesh.Core\obj\**" />
+    <KhsPublishInput Include="$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\**\*.cs;$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\**\*.csproj"
+                     Exclude="$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\bin\**;$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\obj\**" />
+    <!-- FtsLib's search-expansion artifact ships with the service as Content. -->
+    <KhsPublishInput Include="$(KhsCSharpBackend)\FtsLib-Csharp\SearchExpansion\**\*.db" />
+    <KhsPublishInput Include="$(KhsCSharpBackend)\DocConvertLib\**\*.cs;$(KhsCSharpBackend)\DocConvertLib\**\*.csproj"
+                     Exclude="$(KhsCSharpBackend)\DocConvertLib\bin\**;$(KhsCSharpBackend)\DocConvertLib\obj\**" />
+  </ItemGroup>
+
+  <!-- Not in Visual Studio's background (design-time) builds: those run AssignTargetPaths too,
+       and a multi-minute AOT publish on every keystroke in a service file is not wanted. -->
+  <Target Name="PublishKitveiHakodeshService" Inputs="@(KhsPublishInput)" Outputs="$(KhsPublishedExe)"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' != 'false'">
+    <Message Text="Publishing KitveiHakodeshService (native AOT, win-x64) into the library payload..." Importance="high" />
+    <Exec Command="set &quot;PATH=%PATH%;C:\Program Files (x86)\Microsoft Visual Studio\Installer&quot; &amp;&amp; dotnet publish &quot;$(KhsProject)&quot; -c Release -r win-x64 -p:PublishDir=&quot;$(KhsPublishDir.TrimEnd('\'))&quot; --nologo -v quiet" />
+    <!-- dotnet publish may leave an unchanged exe's timestamp alone; touch it so the
+         Inputs/Outputs check sees the publish as up to date. -->
+    <Touch Files="$(KhsPublishedExe)" />
+  </Target>
+
+  <Target Name="AddKitveiHakodeshService" BeforeTargets="AssignTargetPaths" DependsOnTargets="PublishKitveiHakodeshService"
+          Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' != 'false'">
+    <Error Condition="!Exists('$(KhsPublishedExe)')" Text="KitveiHakodeshService was not published to $(KhsPublishDir) - the library cannot ship without it." />
+    <ItemGroup>
+      <KhsPayloadFile Include="$(KhsPublishDir)**\*.*" Exclude="$(KhsPublishDir)**\*.pdb" />
+      <Content Include="@(KhsPayloadFile)">
+        <Link>KitveiHakodeshService\%(RecursiveDir)%(Filename)%(Extension)</Link>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Visible>false</Visible>
+      </Content>
+    </ItemGroup>
+  </Target>
   <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
     <PropertyGroup>
       <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them. The missing file is {0}.</ErrorText>

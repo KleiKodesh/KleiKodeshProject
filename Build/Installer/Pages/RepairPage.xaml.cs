@@ -153,6 +153,9 @@ namespace KleiKodeshVstoInstallerWpf
             ProgressBar.Value = 100;
             AppendLog("\n▶ מתחיל התקנה מחדש...");
 
+            // A repair re-registers the service even when its registration looks current: a
+            // broken one (disabled, wrong permissions) is part of what a repair is for.
+            KitveiHakodeshServiceHelper.ForceRegistration = true;
             await System.Threading.Tasks.Task.Delay(800);
             _host.NavigateToInstall(true);
         }

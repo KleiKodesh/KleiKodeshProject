@@ -76,6 +76,13 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             progress.Report((0, "בודק תהליכים..."));
             await Task.Run(() => KillWord());
 
+            // The services run from the install folder and hold files there open; stop them before
+            // the folder is deleted. The new one stops itself over its pipe; the legacy
+            // DocumentLocatorSvc gets its own cooperative shutdown (and, on an elevated run, is
+            // deregistered). The repair's reinstall then registers the service afresh.
+            await KitveiHakodeshServiceHelper.StopServiceAsync();
+            await LegacyServiceRetirement.RetireAllAsync(null);
+
             progress.Report((10, "מוחק תיקיות התקנה..."));
             await CleanFileSystem(result, detailLog);
 

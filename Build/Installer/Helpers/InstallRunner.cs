@@ -41,10 +41,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // happens to already be elevated. It never prompts.
             await LegacyServiceRetirement.RetireAllAsync(status);
 
-            // Ask a running KitveiHakodesh service to exit now, so its exit window runs in the
-            // background while we extract other files. AddinInstaller waits for the remainder
-            // of that window (if any) before it overwrites KitveiHakodeshService.exe.
-            _ = KitveiHakodeshServiceHelper.SendShutdownAsync();
+            // Stop the running KitveiHakodesh service and WAIT until it is gone: it holds its exe
+            // and its databases under KitveiHakodeshService open, and extraction overwrites them.
+            await KitveiHakodeshServiceHelper.StopServiceAsync();
 
             status?.Report("מחלץ קבצים...");
             await AddinInstaller.ExtractAsync(progress);

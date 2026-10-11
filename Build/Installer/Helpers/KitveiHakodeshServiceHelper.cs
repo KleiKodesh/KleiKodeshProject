@@ -58,9 +58,57 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         // ── Registration ─────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Registers the service when the package deployed it and the registration is missing
-        /// or points elsewhere. False when the user declined the prompt or registration failed;
-        /// also false when the package does not ship the service at all.
+        /// Set by the repair flow: re-register the service even when the registration looks
+        /// current, because "looks current" is exactly what a broken install can fake (a
+        /// registration that is disabled, or whose permissions were changed). Cleared only by a
+        /// successful registration, so declining the prompt and retrying still re-registers.
+        /// </summary>
+        public static bool ForceRegistration { get; set; }
+
+        /// <summary>
+        /// Stops whatever runs the service from this install and waits until it is gone, so the
+        /// files under KitveiHakodeshService\ (its exe and the databases it holds open) can be
+        /// overwritten or deleted. Used before extraction and before the repair's clean-up.
+        ///   1. the "shutdown" pipe op - the installed service stops itself (no admin needed);
+        ///   2. wait, bounded, until no instance listens on the pipe;
+        ///   3. end any console copy still running from the install folder (a portable-style
+        ///      instance this user started; a SYSTEM one cannot be ended here and has already
+        ///      stopped in step 1).
+        /// Best effort: a stuck service never blocks the install; the copy step retries.
+        /// </summary>
+        public static async Task StopServiceAsync()
+        {
+            await SendShutdownAsync().ConfigureAwait(false);
+
+            // Gone means the pipe is closed AND, for the registered service, Windows reports it
+            // stopped: the process can still hold its exe and databases for a moment after it
+            // closes the pipe. Reading the status needs no elevation.
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline && (IsPipeListening() || IsRegisteredServiceStillUp()))
+                await Task.Delay(StartupPollMs).ConfigureAwait(false);
+
+            string serviceFolder = Path.Combine(AddinInstaller.InstallPath, ServiceFolder);
+            foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(ServiceExeName)))
+            {
+                try
+                {
+                    string path = process.MainModule?.FileName ?? "";
+                    if (path.StartsWith(serviceFolder, StringComparison.OrdinalIgnoreCase))
+                    {
+                        process.Kill();
+                        process.WaitForExit(5_000);
+                    }
+                }
+                catch { /* not ours to end (SYSTEM), or already gone */ }
+                finally { process.Dispose(); }
+            }
+        }
+
+        /// <summary>
+        /// Registers the service when the package deployed it and the registration is missing,
+        /// points elsewhere, is disabled, or a repair asked for it. False when the user declined
+        /// the prompt or registration failed; also false when the package does not ship the
+        /// service at all.
         /// </summary>
         public static async Task<bool> EnsureServiceInstalledAsync()
         {
@@ -68,8 +116,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             if (!File.Exists(serviceExe)) return false;
             // The elevated --install run does BOTH halves of the switch: registers this service
             // and retires DocumentLocatorSvc. So it is needed when either is outstanding - one
-            // prompt, never two.
-            if (IsServiceInstalledAndCurrent(serviceExe) && !IsLegacyServiceRegistered()) return true;
+            // prompt, never two. A registration that points here but is disabled is not current,
+            // and the repair flow re-registers regardless.
+            bool force = ForceRegistration || IsServiceDisabled();
+            if (!force && IsServiceInstalledAndCurrent(serviceExe) && !IsLegacyServiceRegistered()) return true;
 
             var psi = new ProcessStartInfo
             {
@@ -82,8 +132,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             try
             {
+                // Generous: re-registering waits for a running instance to stop and retires
+                // DocumentLocatorSvc, each bounded at 30 s inside the service.
                 using (var proc = Process.Start(psi))
-                    proc?.WaitForExit(30_000);
+                    proc?.WaitForExit(120_000);
             }
             catch (System.ComponentModel.Win32Exception ex)
                 when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED: the user clicked No
@@ -94,10 +146,35 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             var deadline = DateTime.UtcNow.AddSeconds(10);
             while (DateTime.UtcNow < deadline)
             {
-                if (IsServiceInstalledAndCurrent(serviceExe)) return true;
+                if (IsServiceInstalledAndCurrent(serviceExe) && !IsServiceDisabled())
+                {
+                    ForceRegistration = false;
+                    return true;
+                }
                 await Task.Delay(300).ConfigureAwait(false);
             }
             return IsServiceInstalled();
+        }
+
+        /// <summary>The registered service has not reached Stopped yet (false when it is not
+        /// registered, or its state cannot be read).</summary>
+        private static bool IsRegisteredServiceStillUp()
+        {
+            try
+            {
+                using (var controller = new System.ServiceProcess.ServiceController(ServiceName))
+                    return controller.Status != System.ServiceProcess.ServiceControllerStatus.Stopped;
+            }
+            catch { return false; }
+        }
+
+        /// <summary>The registration exists but is disabled (Start = 4): Windows will refuse to
+        /// start it, so it must be registered again.</summary>
+        private static bool IsServiceDisabled()
+        {
+            using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Services\" + ServiceName))
+                return key?.GetValue("Start") is int start && start == 4;
         }
 
         /// <summary>DocumentLocatorSvc, the service this one replaces, is still registered.

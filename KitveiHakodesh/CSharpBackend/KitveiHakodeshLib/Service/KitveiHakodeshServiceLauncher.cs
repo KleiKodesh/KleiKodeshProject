@@ -274,10 +274,26 @@ namespace KitveiHakodeshLib.Service
             }
         }
 
-        /// <summary>The service exe the installer put beside the app, or null (dev / portable).</summary>
+        /// <summary>
+        /// The service exe of the INSTALLED product, or null (dev / portable). Every build of this
+        /// library carries the service in a KitveiHakodeshService folder, so the exe being present
+        /// proves nothing; what makes a copy the installed product is running from the install
+        /// root, %LocalAppData%\KleiKodesh (the installer's AddinInstaller.InstallPath). Only that
+        /// copy may register a Windows service - a dev build or an unzipped portable copy must
+        /// never ask for admin rights.
+        /// </summary>
         private static string InstalledExecutable()
         {
-            string candidate = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, InstalledServiceFolder, ExecutableName);
+            string installRoot = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KleiKodesh");
+            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
+            if (!string.Equals(
+                    Path.GetFullPath(baseDirectory).TrimEnd('\\'),
+                    Path.GetFullPath(installRoot).TrimEnd('\\'),
+                    StringComparison.OrdinalIgnoreCase))
+                return null;
+
+            string candidate = Path.Combine(baseDirectory, InstalledServiceFolder, ExecutableName);
             return File.Exists(candidate) ? candidate : null;
         }
 
