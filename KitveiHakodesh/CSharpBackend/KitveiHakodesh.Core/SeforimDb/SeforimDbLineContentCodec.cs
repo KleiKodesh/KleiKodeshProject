@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data.Common;
+using System.Globalization;
+using System.IO;
 using System.Text;
 using ZstdSharp;
 
@@ -74,37 +77,52 @@ namespace KitveiHakodesh.Core.SeforimDb
         public bool IsCompressed => _decompressorsByDictionaryId != null;
 
         /// <summary>
+        /// The dictionary BYTES of each database that has them, so the `zstd_dict` read happens
+        /// once per database file rather than once per connection.
+        ///
+        /// Bytes, not decompressors: a `Decompressor` holds a reusable working buffer and must
+        /// stay with the one codec that owns it, but the dictionary it is loaded from is
+        /// immutable and costs a table read and a multi-megabyte copy to fetch. Caching that
+        /// half is both safe to share and the part worth saving - building a decompressor from
+        /// bytes already in memory is microseconds. An empty array marks a database with no
+        /// `zstd_dict` table, so repeat opens of a legacy file skip the probe too.
+        ///
+        /// The key carries the file's write time and length as well as its path, so a library
+        /// update that replaces the database IN PLACE misses the cache instead of decoding new
+        /// frames with the old dictionary. Nothing has to remember to invalidate.
+        /// </summary>
+        private static readonly ConcurrentDictionary<string, byte[][]> DictionaryBytesByDatabase =
+            new ConcurrentDictionary<string, byte[][]>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
         /// Builds the codec for an open connection: loads every dictionary from `zstd_dict`,
         /// or returns <see cref="Plain"/> when the table is absent (legacy Otzaria, Zayit).
+        ///
+        /// Call this once per connection, at creation, rather than lazily at the first
+        /// compressed line: the dictionaries are what every later read depends on, and
+        /// discovering a broken `zstd_dict` table mid-page would surface as a half-rendered
+        /// book instead of a failed open.
         /// </summary>
         public static SeforimDbLineContentCodec Create(DbConnection connection)
         {
             if (connection == null) throw new ArgumentNullException(nameof(connection));
-            if (!SeforimDbSchema.TableExists(connection, "zstd_dict")) return Plain;
+
+            var dictionaries = DictionariesFor(connection);
+            if (dictionaries.Length == 0) return Plain;
 
             var decompressorsByDictionaryId = new Dictionary<uint, Decompressor>();
             try
             {
-                using (var command = connection.CreateCommand())
+                foreach (var dictionaryBytes in dictionaries)
                 {
-                    command.CommandText = "SELECT dict FROM zstd_dict";
-                    using (var reader = command.ExecuteReader())
-                    {
-                        while (reader.Read())
-                        {
-                            if (reader.IsDBNull(0)) continue;
-                            var dictionaryBytes = (byte[])reader.GetValue(0);
+                    // The id the frames reference is the one zstd stamped into the
+                    // dictionary, NOT the table's `id` column - which is just a
+                    // primary key and is never mentioned by a frame.
+                    uint dictionaryId = ReadDictionaryId(dictionaryBytes);
 
-                            // The id the frames reference is the one zstd stamped into the
-                            // dictionary, NOT the table's `id` column - which is just a
-                            // primary key and is never mentioned by a frame.
-                            uint dictionaryId = ReadDictionaryId(dictionaryBytes);
-
-                            var decompressor = new Decompressor();
-                            decompressor.LoadDictionary(dictionaryBytes);
-                            decompressorsByDictionaryId[dictionaryId] = decompressor;
-                        }
-                    }
+                    var decompressor = new Decompressor();
+                    decompressor.LoadDictionary(dictionaryBytes);
+                    decompressorsByDictionaryId[dictionaryId] = decompressor;
                 }
             }
             catch
@@ -113,14 +131,85 @@ namespace KitveiHakodesh.Core.SeforimDb
                 throw;
             }
 
+            return new SeforimDbLineContentCodec(decompressorsByDictionaryId);
+        }
+
+        /// <summary>
+        /// Every dictionary in the database behind <paramref name="connection"/>, read once per
+        /// file and cached. An empty array means the database stores plain text.
+        /// </summary>
+        private static byte[][] DictionariesFor(DbConnection connection)
+        {
+            // An in-memory database has no file to key on, and two of them share a connection
+            // string while holding different data - so never cache one.
+            string? cacheKey = CacheKeyFor(connection);
+            if (cacheKey != null && DictionaryBytesByDatabase.TryGetValue(cacheKey, out var cached))
+                return cached;
+
+            var dictionaries = ReadDictionaries(connection);
+            if (cacheKey != null) DictionaryBytesByDatabase[cacheKey] = dictionaries;
+            return dictionaries;
+        }
+
+        private static byte[][] ReadDictionaries(DbConnection connection)
+        {
+            if (!SeforimDbSchema.TableExists(connection, "zstd_dict")) return Array.Empty<byte[]>();
+
+            var dictionaries = new List<byte[]>();
+            using (var command = connection.CreateCommand())
+            {
+                command.CommandText = "SELECT dict FROM zstd_dict";
+                using (var reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        if (reader.IsDBNull(0)) continue;
+                        dictionaries.Add((byte[])reader.GetValue(0));
+                    }
+                }
+            }
+
             // A `zstd_dict` table with no usable rows is a broken database, not a plain one:
             // the content column will still hold frames that nothing can decode.
-            if (decompressorsByDictionaryId.Count == 0)
+            if (dictionaries.Count == 0)
                 throw new SeforimDbContentCodecException(
                     "The database has a zstd_dict table but no dictionaries in it, so its " +
                     "compressed line content cannot be decoded.");
 
-            return new SeforimDbLineContentCodec(decompressorsByDictionaryId);
+            return dictionaries.ToArray();
+        }
+
+        /// <summary>
+        /// A cache key identifying both the database file and its current contents, or null
+        /// when there is no file to key on (an in-memory database, or a provider that does not
+        /// name its source).
+        ///
+        /// Write time and length are part of the key, not just the path: a library update
+        /// replaces `seforim.db` in place, and new frames decoded with the previous file's
+        /// dictionary would be garbage. Keying on what the file IS rather than where it sits
+        /// means a replaced database simply misses the cache.
+        /// </summary>
+        private static string? CacheKeyFor(DbConnection connection)
+        {
+            string? dataSource = connection.DataSource;
+            if (string.IsNullOrWhiteSpace(dataSource)) return null;
+            if (string.Equals(dataSource, ":memory:", StringComparison.OrdinalIgnoreCase)) return null;
+
+            try
+            {
+                var file = new FileInfo(dataSource!);
+                if (!file.Exists) return null;
+
+                return file.FullName
+                     + "|" + file.LastWriteTimeUtc.Ticks.ToString(CultureInfo.InvariantCulture)
+                     + "|" + file.Length.ToString(CultureInfo.InvariantCulture);
+            }
+            catch
+            {
+                // Not a usable path - a URI source, or characters the path API rejects. Skip
+                // the cache rather than keying on something that could collide.
+                return null;
+            }
         }
 
         /// <summary>
@@ -134,7 +223,18 @@ namespace KitveiHakodesh.Core.SeforimDb
         {
             if (value == null || value == DBNull.Value) return null;
 
-            if (value is string text) return text;
+            if (value is string text)
+            {
+                // A compressed database legitimately holds plain text in this column too, so
+                // a string is not wrong by itself - most of them ARE the line. But some rows
+                // in the shipped library hold the frame as BASE64 TEXT rather than as a blob,
+                // and returning one verbatim prints base64 in the middle of the page. Recover
+                // those; anything else is the text it claims to be.
+                if (_decompressorsByDictionaryId != null && TryDecodeBase64Frame(text, out var recovered))
+                    return recovered;
+
+                return text;
+            }
 
             if (value is byte[] frame)
             {
@@ -229,6 +329,50 @@ namespace KitveiHakodesh.Core.SeforimDb
                     destination.Length + " bytes its frame header allowed for.");
 
             return Encoding.UTF8.GetString(destination, 0, written);
+        }
+
+        /// <summary>
+        /// Recovers a frame stored as base64 TEXT instead of as a blob, which some rows of the
+        /// shipped library do.
+        ///
+        /// WHY THIS IS SAFE RATHER THAN A GUESS: the test is not "does this look like base64"
+        /// - plenty of short strings do. It is that the string decodes to bytes whose first
+        /// four are the zstd frame magic AND that those bytes then decompress with one of this
+        /// database's own dictionaries. Hebrew line text cannot satisfy that by accident, and
+        /// a string that fails any step is returned untouched as the text it claims to be.
+        ///
+        /// The prefix check runs first and rejects every ordinary line on its first character,
+        /// so the cost on the common path is one comparison.
+        /// </summary>
+        private bool TryDecodeBase64Frame(string text, out string? decoded)
+        {
+            decoded = null;
+
+            // Base64 of the frame magic 28 B5 2F FD always begins "KLUv", whatever follows.
+            if (text.Length < 8 || !text.StartsWith("KLUv", StringComparison.Ordinal)) return false;
+
+            byte[] frame;
+            try
+            {
+                frame = Convert.FromBase64String(text);
+            }
+            catch (FormatException)
+            {
+                // Begins with those four characters but is not base64 - genuinely just text.
+                return false;
+            }
+
+            try
+            {
+                decoded = DecodeFrame(frame);
+                return true;
+            }
+            catch (SeforimDbContentCodecException)
+            {
+                // Decoded to bytes that are not a frame this database can read. Treat the
+                // value as the text it claimed to be rather than failing the whole page.
+                return false;
+            }
         }
 
         /// <summary>
