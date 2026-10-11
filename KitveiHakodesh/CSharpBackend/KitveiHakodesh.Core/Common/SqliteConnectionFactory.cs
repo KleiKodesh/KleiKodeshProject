@@ -49,6 +49,18 @@ namespace KitveiHakodesh.Core.Common
         private const int UserDataBusyTimeoutSeconds = 5;
 
         /// <summary>
+        /// How long a write to a SHIPPED database waits for a reader to finish.
+        ///
+        /// Longer than the user-data timeout because the contention is different in kind. A
+        /// search streams its rows while building results, which holds a read transaction for
+        /// as long as that takes; a catalog update writing underneath it gets "database is
+        /// locked" (verified — a reader that is merely OPEN does not block, one that is
+        /// mid-enumeration does). The update is a slow background job that nobody is waiting
+        /// on, so waiting out a search is exactly the right trade.
+        /// </summary>
+        private const int BundledWriteBusyTimeoutSeconds = 15;
+
+        /// <summary>
         /// A shipped, read-only database. Opens read-only and applies the read pragmas.
         /// </summary>
         public static SqliteConnection OpenCorpusRead(string dbPath)
@@ -122,10 +134,24 @@ namespace KitveiHakodesh.Core.Common
                 DataSource = dbPath,
                 Mode = SqliteOpenMode.ReadWrite,  // never Create: a missing catalog is a bug, not a blank one
                 Pooling = false,
+                DefaultTimeout = BundledWriteBusyTimeoutSeconds,
             }.ConnectionString;
 
             var connection = new SqliteConnection(connectionString);
             connection.Open();
+
+            // WAIT for a reader rather than failing against it. Without this a catalog update
+            // that lands while a search is streaming its rows throws "database is locked" and
+            // loses that book. Covers one writer against readers, not writer against writer —
+            // see the timeout constant's remarks. NOT journal_mode: see this method's remarks
+            // for why WAL must never be set here.
+            //
+            // Belt and braces, deliberately: DefaultTimeout above already drives the provider's
+            // own SQLITE_BUSY retry loop and seeds sqlite3_busy_timeout at Open. Setting the
+            // PRAGMA explicitly costs nothing and keeps the intent visible at the call site.
+            Execute(connection,
+                "PRAGMA busy_timeout=" + (BundledWriteBusyTimeoutSeconds * 1000) + ";");
+
             return connection;
         }
 

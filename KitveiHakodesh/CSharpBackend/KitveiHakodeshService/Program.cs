@@ -47,6 +47,10 @@ builder.Services.AddHostedService<OwnerWatcher>();
 builder.Services.AddHostedService<FtsIndexingStarter>();
 builder.Services.AddHostedService<CatalogTocIndexingStarter>();
 builder.Services.AddHostedService<IdleMemoryTrimmer>();
+// Grows the bundled HebrewBooks catalog in the background. Checks twice a day and almost
+// always finds nothing to do - the interval between actual walks is a stamp inside the
+// catalog file, not a schedule here.
+builder.Services.AddHostedService<HebrewBooksCatalogUpdateService>();
 // Watches the seforim DB WHILE the service runs and rebuilds both indexes on an
 // in-place DB change (startup uses the one-shot stamp check; this covers live updates).
 builder.Services.AddHostedService<DbChangeWatcher>();

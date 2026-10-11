@@ -111,9 +111,19 @@ namespace KitveiHakodesh.Core.HebrewBooks
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class HebrewBooksCatalogUpdateResult
     {
-        /// <summary>False when the run did not happen at all — see <see cref="SkipReason"/>.</summary>
+        /// <summary>
+        /// False when the walk never started — see <see cref="SkipReason"/>.
+        ///
+        /// TRUE DOES NOT MEAN IT FINISHED. A walk that starts and then stops early sets this
+        /// true AND a <see cref="SkipReason"/>, so a caller reporting an outcome must check
+        /// the reason either way rather than treating it as the "did not run" branch.
+        /// <see cref="HebrewBooksCatalogUpdateSkip.NoConnection"/> is the case that reaches
+        /// here: ids were probed, nothing was concluded, and the run was left unstamped.
+        /// </summary>
         public bool Ran { get; set; }
 
+        /// <summary>Why the run did not happen, or why it stopped early. See
+        /// <see cref="Ran"/> — a reason can be set even when the walk started.</summary>
         public HebrewBooksCatalogUpdateSkip SkipReason { get; set; }
 
         /// <summary>New rows written to the catalog.</summary>
@@ -147,5 +157,14 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// <summary>The catalog file cannot be written — a read-only install or medium. The
         /// bundled catalog still serves searches; it just cannot grow here.</summary>
         CatalogNotWritable,
+
+        /// <summary>
+        /// Upstream could not be reached, so the walk stopped early rather than spending its
+        /// whole missing-id budget on requests that were always going to fail.
+        ///
+        /// NOT an error: a laptop that is offline is the ordinary case, not a fault. The run
+        /// is deliberately left UNSTAMPED so the next due check tries again.
+        /// </summary>
+        NoConnection,
     }
 }
