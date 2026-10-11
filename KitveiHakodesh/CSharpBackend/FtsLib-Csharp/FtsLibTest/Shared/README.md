@@ -8,7 +8,6 @@ Test utilities and helpers.
 |---|---|
 | `TestHelpers.cs` | Common test utilities |
 | `HtmlReport.cs` | Generate HTML test reports |
-| `DiffIds.cs` | Compare document ID lists |
 
 ## TestHelpers
 
@@ -60,34 +59,6 @@ var report = new HtmlReport();
 report.AddSection("Query Performance", queryData);
 report.AddChart("Latency Distribution", latencies);
 report.Save("results.html");
-```
-
-## DiffIds
-
-Compares document ID lists:
-
-### Purpose
-- Verify search results match expected
-- Detect regressions
-- Compare different query strategies
-
-### Methods
-| Method | Purpose |
-|---|---|
-| `Compare(expected, actual)` | Compare two ID lists |
-| `FindMissing(expected, actual)` | IDs in expected but not actual |
-| `FindExtra(expected, actual)` | IDs in actual but not expected |
-| `GenerateDiffReport()` | Human-readable diff |
-
-### Usage
-```csharp
-var expected = File.ReadAllLines("expected_ids.txt").Select(int.Parse);
-var actual = index.SearchIds("test query");
-
-var diff = DiffIds.Compare(expected, actual);
-if (diff.HasDifferences) {
-    Console.WriteLine(diff.Report);
-}
 ```
 
 ## Conventions

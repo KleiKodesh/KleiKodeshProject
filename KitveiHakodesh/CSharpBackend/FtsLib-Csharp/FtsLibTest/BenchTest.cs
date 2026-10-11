@@ -9,10 +9,7 @@ using System.Threading.Tasks;
 namespace FtsLibTest
 {
     /// <summary>
-    /// Cross-runtime FTS benchmark. Uses ONLY the high-level SeforimIndex API (no SQLite
-    /// types) so the exact same source compiles for the net48 (System.Data.SQLite) and
-    /// net10 (Microsoft.Data.Sqlite) builds — letting us quantify the net10 gain on the
-    /// SAME index with the SAME work.
+    /// FTS benchmark through the high-level SeforimIndex API only (no SQLite types).
     ///
     /// For each query it separates the three real costs and times snippet generation both
     /// sequentially and in parallel (snippet gen is per-hit, independent, CPU-bound):

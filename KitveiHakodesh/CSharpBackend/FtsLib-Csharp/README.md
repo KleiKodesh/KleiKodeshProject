@@ -137,8 +137,7 @@ Total lines in the DB. Useful for progress percentage during build.
 ## Building
 
 ```powershell
-$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
-& $msbuild FtsLib.slnx /p:Configuration=Release /v:minimal
+dotnet build FtsLib.slnx -c Release
 ```
 
-`dotnet build` does not work — this solution uses classic `.csproj` format with WPF.
+Both projects are SDK-style. `FtsLib` builds net48 and net10.0; `FtsLibTest` is a net10.0 console app.

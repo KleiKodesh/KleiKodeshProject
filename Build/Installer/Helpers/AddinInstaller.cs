@@ -183,24 +183,14 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// </summary>
         private static readonly string[] StaleFiles =
         {
-            // The SQLite interop binaries. NOTE these are NOT obsolete: the VSTO still
-            // ships them (KleiKodeshVsto.csproj links x64\ and x86\ SQLite.Interop.dll,
-            // and FtsLib.Net48 uses System.Data.SQLite), so on a normal install the
-            // payloadPaths guard skips every entry below and this list does nothing.
+            // The SQLite interop binaries. The add-in stopped shipping System.Data.SQLite
+            // and SQLite.Interop.dll in 79bb8a98, so these entries now remove leftovers
+            // from older installs. Before that, a stale wrong-architecture interop copy
+            // could win System.Data.SQLite's native probe and throw
+            // EntryPointNotFoundException inside Word.
             //
-            // They are listed for the ONE case the guard lets through: switching
-            // installer variant. An x64 payload ships only x64\SQLite.Interop.dll, so
-            // the x86 copy left by a previous x86 install is not in payloadPaths and
-            // gets deleted here — which is the point. System.Data.SQLite resolves the
-            // native interop by probing, so a stale wrong-architecture copy can win
-            // that probe and throw EntryPointNotFoundException inside Word (this is
-            // what EnvironmentDiagnostics' sqlite.loaded.native.* probe was added to
-            // diagnose).
-            //
-            // The payloadPaths guard in PurgeStaleFiles is therefore load-bearing, not
-            // redundant: without it every install would delete the interop DLL it just
-            // extracted. Do not remove it, and do not "clean up" these entries on the
-            // grounds that the payload still ships them.
+            // The payloadPaths guard in PurgeStaleFiles stays as a general safety net:
+            // a file the current payload itself delivers is never deleted.
             @"x64\SQLite.Interop.dll",
             @"x86\SQLite.Interop.dll",
             "SQLite.Interop.dll",

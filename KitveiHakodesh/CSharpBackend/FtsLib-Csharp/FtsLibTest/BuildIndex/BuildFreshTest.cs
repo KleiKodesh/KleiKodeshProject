@@ -8,7 +8,7 @@ namespace FtsLibTest
 {
     /// <summary>
     /// Builds a fresh multi-segment index (no force-merge) into index_{tier}_fresh.
-    /// This index is the stable input for concurrentmerge — it is never auto-wiped.
+    /// It is never auto-wiped.
     ///
     /// Usage:
     ///   FtsLibTest.exe buildfresh [tier]
@@ -58,7 +58,6 @@ namespace FtsLibTest
             foreach (var f in segs)
                 Console.WriteLine($"  {Path.GetFileName(f),22}  {new FileInfo(f).Length / 1_048_576.0:F1} MB");
 
-            Console.WriteLine("Ready for: FtsLibTest.exe concurrentmerge " + label);
         }
     }
 }

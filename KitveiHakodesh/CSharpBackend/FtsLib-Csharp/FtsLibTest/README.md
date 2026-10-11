@@ -13,8 +13,10 @@ FtsLibTest/
 ├── BuildIndex/          ← Index building tests
 ├── SearchIndex/         ← Search and query tests
 ├── Shared/              ← Test utilities
-├── Program.cs           ← Test runner entry point
-├── DbQuery.cs           ← Database query helpers
+├── Benchmarks/          ← Micro-benchmarks and the trigram/sidecar harnesses
+├── Corpus/              ← Reader for the seforim database used as test corpus
+├── Program.cs           ← Test runner entry point (command dispatch)
+├── FtsLibTest.csproj    ← net10.0 console app
 └── Specs.md             ← Test specifications
 ```
 
@@ -38,8 +40,6 @@ Tests for search functionality:
 | `SearchTest.cs` | Basic search validation |
 | `QueryTest.cs` | Query parsing tests |
 | `QueryParserTest.cs` | Parser edge cases |
-| `WildcardDiag.cs` | Wildcard expansion diagnostics |
-| `FstSizeDiag.cs` | FST size analysis |
 | `KetivExpanderTest.cs` | Ketiv/qere expansion |
 | `KetivQueryTest.cs` | Ketiv in queries |
 | `WordDistanceTest.cs` | Proximity filtering |
@@ -49,10 +49,6 @@ Tests for search functionality:
 | `SpeedTest.cs` | Speed measurements |
 | `MonitorTest.cs` | Resource monitoring |
 | `VerifyTest.cs` | Index verification |
-| `ExpandDiag.cs` | Expansion diagnostics |
-| `FileLoadDiag.cs` | File loading diagnostics |
-| `LookupDiag.cs` | Dictionary lookup diagnostics |
-| `PrefixLenDiag.cs` | Prefix length analysis |
 | `ProbeSearch.cs` | Search probing tool |
 | `SnippetDiag.cs` | Snippet diagnostics |
 
@@ -64,31 +60,19 @@ Test utilities:
 |---|---|
 | `TestHelpers.cs` | Common test utilities |
 | `HtmlReport.cs` | Generate HTML test reports |
-| `DiffIds.cs` | Compare document ID lists |
 
 ## Running Tests
-
-### From Visual Studio
-
-1. Set `FtsLibTest` as startup project
-2. Run with F5 or Ctrl+F5
 
 ### From Command Line
 
 ```powershell
-cd FtsLibTest
-.\bin\Release\FtsLibTest.exe
+dotnet build FtsLibTest -c Release
+.\FtsLibTest\bin\Release\net10.0\FtsLibTest.exe <command> [args]
 ```
 
-### Individual Test Selection
-
-Modify `Program.cs` to run specific tests:
-```csharp
-// Uncomment the test you want to run
-// BuildFreshTest.Run();
-// SearchTest.Run();
-PerformanceTest.Run();
-```
+The first argument picks the test (see the `switch` in `Program.cs`). An unknown
+command prints the list. Test indexes are written next to the exe
+(`bin\Release\net10.0\index_<tier>`).
 
 ## Test Data
 
@@ -97,11 +81,11 @@ Tests expect:
 - Index directory for test indexes
 - Reference results for regression testing
 
-Configure paths in `Program.cs` or `App.config`.
+The seforim database path is resolved in `BuildTest.ResolveDbPath()`; index directories in `Shared/TestHelpers.cs`.
 
 ## Diagnostic Tools
 
-Many `*Diag.cs` files are diagnostic tools rather than automated tests:
+The `*Diag.cs` files and `Benchmarks/` are diagnostic tools rather than automated tests:
 - Output statistics about index structure
 - Analyze query expansion behavior
 - Measure performance characteristics
@@ -115,18 +99,3 @@ Test specifications and expected behaviors:
 - Query syntax requirements
 - Performance targets
 - Output formats
-
-## Configuration
-
-`App.config` contains:
-- Database connection strings
-- Index paths
-- Test parameters
-
-Example:
-```xml
-<appSettings>
-    <add key="TestDbPath" value="C:\\TestData\\seforim.db" />
-    <add key="TestIndexPath" value="C:\\TestData\\index" />
-</appSettings>
-```

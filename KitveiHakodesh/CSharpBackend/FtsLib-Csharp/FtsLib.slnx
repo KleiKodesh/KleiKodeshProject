@@ -1,7 +1,5 @@
 <Solution>
-  <!-- ONE engine project, multi-targeted net48;net10.0 — there is no longer a FtsLib.Net48.
-       FtsLibTest.Net10 source-links the whole suite from FtsLibTest/, so the same tests run
-       against the modern leg; the old net48 harness retired with the second engine project. -->
+  <!-- ONE engine project, multi-targeted net48;net10.0, and ONE test project (net10.0). -->
   <Project Path="FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
-  <Project Path="FtsLibTest.Net10/FtsLibTest.Net10.csproj" />
+  <Project Path="FtsLibTest/FtsLibTest.csproj" />
 </Solution>

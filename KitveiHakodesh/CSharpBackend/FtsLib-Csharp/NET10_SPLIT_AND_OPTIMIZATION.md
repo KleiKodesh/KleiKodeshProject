@@ -1,5 +1,8 @@
 # FtsLib net48/net10 split + net10 search optimization
 
+> **Historical.** The two-project split described here is gone: there is now ONE `FtsLib`
+> project multi-targeting net48 and net10.0, and ONE test project, `FtsLibTest` (net10.0).
+
 _Branch: `net10-fts-split-and-optimize`. Overnight work session._
 
 ## What you asked for

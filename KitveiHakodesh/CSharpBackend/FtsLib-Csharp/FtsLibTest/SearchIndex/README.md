@@ -29,12 +29,6 @@ Search and query tests.
 
 | File | Purpose |
 |---|---|
-| `WildcardDiag.cs` | Wildcard expansion analysis |
-| `FstSizeDiag.cs` | Term dictionary size analysis |
-| `ExpandDiag.cs` | Term expansion diagnostics |
-| `FileLoadDiag.cs` | Segment loading analysis |
-| `LookupDiag.cs` | Dictionary lookup diagnostics |
-| `PrefixLenDiag.cs` | Prefix length statistics |
 | `ProbeSearch.cs` | Search behavior probing |
 | `SnippetDiag.cs` | Snippet generation diagnostics |
 | `VerifyTest.cs` | Index integrity verification |

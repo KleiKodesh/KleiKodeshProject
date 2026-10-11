@@ -357,10 +357,9 @@ The backend is **not** uniformly net48 — the language rules depend on which pr
 | --- | --- | --- |
 | `KitveiHakodeshLib`, `KitveiHakodeshDemoApp` | net48 | C# 7.3 — the restrictions below apply |
 | `DocumentLocator.Client`, `.Service`, `.Tests`, `.Demo` | net48 | C# 7.3 — the restrictions below apply |
-| `FtsLib.Net48`, `FtsLibTest` | net48 | C# 7.3 — the restrictions below apply |
 | `KitveiHakodeshService` | net10.0-windows | modern C#, AOT-published |
-| `KitveiHakodeshService.Tests`, `FtsLibTest.Net10` | net10.0 | modern C# |
-| `FtsLib` | net10.0 | modern C# |
+| `KitveiHakodeshService.Tests`, `FtsLibTest` | net10.0 | modern C# |
+| `FtsLib` | net48 + net10.0 | multi-targeted, `LangVersion` latest — most modern syntax compiles on both legs; features needing runtime types (`init`, records, ranges/indices) and net10-only APIs need `#if` or polyfills |
 | `DocumentLocator` (library) | net48 + net10.0-windows | multi-targeted — code must compile under BOTH, so guard modern syntax with `#if` |
 | `DocConvertLib` | net48 + net10.0 | multi-targeted — same constraint |
 
