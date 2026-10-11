@@ -1,46 +1,31 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using KitveiHakodeshService.Ipc;
+using KitveiHakodesh.Core.LocalFiles;
 
 namespace KitveiHakodeshService.LocalFiles;
 
 /// <summary>
-/// File-system search backed by the DocumentLocator <see cref="DocumentLocator.PathIndex"/>
-/// running in-process. No named pipe, no JSON serialization — results are typed
-/// <see cref="FileHit"/> objects fed directly into the MessagePack response.
+/// File-system search backed by Core's <see cref="LocalFileIndex"/> (NTFS MFT + USN journal,
+/// directory-walk fallback) running in-process. Results are typed <see cref="FileHit"/>
+/// objects fed directly into the MessagePack response. If the index does not exist yet it is
+/// built on first use (a minute or so on a cold machine; the page says "building the index").
 ///
-/// The index directory defaults to the same path the standalone DocumentLocator
-/// Windows service uses so both consumers share the same on-disk index. If the
-/// index doesn't exist yet it is built on first use (the build can take a minute
-/// on a cold machine; Vue's loading animation covers the wait).
-///
-/// Lifecycle: one <see cref="DocumentLocator.PathIndex"/> instance is created per
+/// Lifecycle: one <see cref="LocalFileIndex"/> instance is created per
 /// service lifetime and disposed on shutdown. The index is thread-safe for reads;
 /// the background build task holds the single writer lock.
 /// </summary>
-public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logger) : IDisposable
+public sealed class LocalFileIndexService(ILogger<LocalFileIndexService> logger) : IDisposable
 {
     // ── Index path ────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// The on-disk Lucene index directory, and the excluded-folders list beside it.
-    ///
-    /// Resolved from <see cref="DocumentLocator.PathIndex.DefaultIndexPath"/> — the same
-    /// constant the standalone DocumentLocator.Service.exe uses — rather than a path
-    /// spelled out here. That is the point: this used to hard-code
-    /// %ProgramData%\DocumentLocator\filesystemindex, a third location neither host
-    /// agreed on, while claiming in a comment that it matched the net48 host.
-    ///
-    /// It does NOT follow that both hosts land in the same directory. DefaultIndexPath is
-    /// AppDomain.CurrentDomain.BaseDirectory + "filesystemindex", which is per-process:
-    /// the net48 service resolves it to the install folder, while this service resolves it
-    /// to its own bin folder. This host is dev-only today (it is not in the installer
-    /// payload; vite.config.ts spawns it from bin), so nothing user-facing depends on the
-    /// two agreeing. If it ever ships, KitveiHakodesh.Core's AppFileLocator is the piece
-    /// that would make them genuinely agree — wire it in here rather than re-spelling a
-    /// literal path.
+    /// The on-disk Lucene index directory, and the excluded-folders list beside it:
+    /// <see cref="LocalFileIndex.DefaultIndexPath"/>, i.e. "filesystemindex" beside this exe. For
+    /// the installed service that is the KitveiHakodeshService folder under the install root,
+    /// which the installer leaves alone on update.
     /// </summary>
-    private static string IndexPath => DocumentLocator.PathIndex.DefaultIndexPath;
+    private static string IndexPath => LocalFileIndex.DefaultIndexPath;
 
     /// <summary>
     /// How often to rescan when there is no live USN watcher (i.e. not elevated).
@@ -54,25 +39,23 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
     private static readonly TimeSpan RescanInterval = TimeSpan.FromHours(24);
 
     // ── Excluded folders ──────────────────────────────────────────────────────
-    // Storage AND filtering both live in the library's ExcludedFoldersPersistence, so
-    // this host, the net48 DocumentLocator.Service, and the Vue settings dialog all share
-    // one implementation and one excluded_folders.json format. These are thin pass-throughs
+    // Storage AND filtering both live in Core's LocalFileIndexExcludedFolders. These are thin pass-throughs
     // — never re-implement the prefix test here. Read on every search (never cached) so an
     // edit takes effect immediately with no reindex.
 
     /// <summary>The user-defined excluded folder list, freshly read from disk.</summary>
     public List<string> GetExcludedFolders()
-        => DocumentLocator.ExcludedFoldersPersistence.Load(IndexPath);
+        => LocalFileIndexExcludedFolders.Load(IndexPath);
 
     /// <summary>Persist the excluded folder list. Takes effect on the next search.</summary>
     public void SetExcludedFolders(IEnumerable<string> folders)
-        => DocumentLocator.ExcludedFoldersPersistence.Save(IndexPath, folders);
+        => LocalFileIndexExcludedFolders.Save(IndexPath, folders);
 
     // ── Index instance ────────────────────────────────────────────────────────
 
-    private DocumentLocator.PathIndex? _index;
+    private LocalFileIndex? _index;
     private readonly SemaphoreSlim _buildGate = new(1, 1);
-    private Task<DocumentLocator.PathIndex>? _buildTask;
+    private Task<LocalFileIndex>? _buildTask;
 
     // ── Build status ──────────────────────────────────────────────────────────
 
@@ -114,7 +97,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
 
         // The TASK is what says whether a build is running — not the progress message.
         // Deriving it from the message instead would strand the flag on when a build dies
-        // before it can publish anything (the PathIndex ctor can throw on a held write
+        // before it can publish anything (the LocalFileIndex ctor can throw on a held write
         // lock), and would strand it off whenever an outgoing build's cleanup cleared a
         // message its successor had already posted.
         return new LocalFileIndexStatusResult
@@ -134,11 +117,11 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
     /// by closing their tab. <paramref name="ct"/> cancels only this caller's WAIT. The index
     /// instance is owned by the build task, so an abandoned wait leaks nothing.</para>
     /// </summary>
-    private async Task<DocumentLocator.PathIndex> EnsureIndexAsync(CancellationToken ct)
+    private async Task<LocalFileIndex> EnsureIndexAsync(CancellationToken ct)
     {
         if (_index is not null) return _index;
 
-        Task<DocumentLocator.PathIndex> build;
+        Task<LocalFileIndex> build;
         await _buildGate.WaitAsync(ct);
         try
         {
@@ -156,7 +139,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             _buildGate.Release();
         }
 
-        DocumentLocator.PathIndex built;
+        LocalFileIndex built;
         try
         {
             built = await build.WaitAsync(ct);
@@ -198,9 +181,9 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
 
     /// <summary>Opens and builds the index, then starts the live/periodic update loops. Runs
     /// exactly once per index instance, memoized in <c>_buildTask</c>.</summary>
-    private DocumentLocator.PathIndex BuildIndex()
+    private LocalFileIndex BuildIndex()
     {
-        var index = new DocumentLocator.PathIndex(IndexPath);
+        var index = new LocalFileIndex(IndexPath);
         try
         {
             return BuildAndStartWatchers(index);
@@ -216,7 +199,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         }
     }
 
-    private DocumentLocator.PathIndex BuildAndStartWatchers(DocumentLocator.PathIndex index)
+    private LocalFileIndex BuildAndStartWatchers(LocalFileIndex index)
     {
         // Publish the crawler's progress so GetIndexStatus can report "building" to the UI.
         // The flag was already raised by EnsureIndexAsync when it queued this build; here we
@@ -228,7 +211,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
                 msg =>
                 {
                     _buildStatusMessage = msg;
-                    logger.LogDebug("[DocumentLocator] {Message}", msg);
+                    logger.LogDebug("[LocalFileIndex] {Message}", msg);
                 },
                 CancellationToken.None);
         }
@@ -236,7 +219,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         {
             // A failed crawl still leaves a usable (if incomplete) index — searches return
             // whatever was written. Only the failures below are fatal to the instance.
-            logger.LogError(ex, "[DocumentLocator] Index build failed");
+            logger.LogError(ex, "[LocalFileIndex] Index build failed");
         }
         finally
         {
@@ -250,9 +233,9 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         index.StartLiveUpdates(CancellationToken.None, (message, ex) =>
         {
             if (ex != null)
-                logger.LogWarning(ex, "[DocumentLocator] {Message}", message);
+                logger.LogWarning(ex, "[LocalFileIndex] {Message}", message);
             else
-                logger.LogInformation("[DocumentLocator] {Message} — triggering rebuild", message);
+                logger.LogInformation("[LocalFileIndex] {Message} — triggering rebuild", message);
 
             // Reset and rebuild: dispose the stale index, clear state, kick off a fresh build.
             _ = Task.Run(async () =>
@@ -260,7 +243,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
                 try { await ReindexAsync(CancellationToken.None); }
                 catch (Exception rebuildEx)
                 {
-                    logger.LogError(rebuildEx, "[DocumentLocator] Rebuild after live-update failure failed");
+                    logger.LogError(rebuildEx, "[LocalFileIndex] Rebuild after live-update failure failed");
                 }
             });
         });
@@ -275,8 +258,8 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         index.StartPeriodicRescan(
             RescanInterval,
             CancellationToken.None,
-            message => logger.LogInformation("[DocumentLocator] {Message}", message),
-            (message, ex) => logger.LogError(ex, "[DocumentLocator] {Message}", message));
+            message => logger.LogInformation("[LocalFileIndex] {Message}", message),
+            (message, ex) => logger.LogError(ex, "[LocalFileIndex] {Message}", message));
 
         return index;
     }
@@ -295,7 +278,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
 
         // Apply user-defined folder exclusions AFTER the Lucene query, via the library so
         // this matches the net48 host exactly. Adjusts `total` for the dropped entries.
-        entries = DocumentLocator.ExcludedFoldersPersistence.Filter(
+        entries = LocalFileIndexExcludedFolders.Filter(
             entries, GetExcludedFolders(), ref total);
 
         var result = new LocateDocumentsResult { Total = total };
@@ -303,7 +286,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         {
             ct.ThrowIfCancellationRequested();
 
-            // PathIndex stores paths lower-cased; preserve that for display.
+            // LocalFileIndex stores paths lower-cased; preserve that for display.
             string path = entry.Path ?? "";
             if (string.IsNullOrEmpty(path)) continue;
 
@@ -358,7 +341,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
         _ = Task.Run(async () =>
         {
             try { await EnsureIndexAsync(CancellationToken.None); }
-            catch (Exception ex) { logger.LogError(ex, "[DocumentLocator] Rebuild after reindex failed"); }
+            catch (Exception ex) { logger.LogError(ex, "[LocalFileIndex] Rebuild after reindex failed"); }
         });
     }
 
@@ -373,7 +356,7 @@ public sealed class DocumentLocatorService(ILogger<DocumentLocatorService> logge
             try { await EnsureIndexAsync(CancellationToken.None); }
             catch (Exception ex)
             {
-                logger.LogDebug(ex, "[DocumentLocator] Warmup failed (non-fatal)");
+                logger.LogDebug(ex, "[LocalFileIndex] Warmup failed (non-fatal)");
             }
         });
     }

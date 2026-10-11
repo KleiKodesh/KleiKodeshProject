@@ -1,4 +1,0 @@
-[submodule "KitveiHakodesh/CSharpBackend/DocumentLocator"]
-	path = KitveiHakodesh/CSharpBackend/DocumentLocator
-	url = https://github.com/KleiKodesh/DocumentLocator.git
-	branch = main

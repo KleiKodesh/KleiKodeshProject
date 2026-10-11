@@ -10,11 +10,8 @@
     host-only pieces that lived on the net48 leg (Word COM finder + thesaurus, the environment
     probes) moved to KitveiHakodeshLib; the update-check rules moved to UpdateCheckerLib.
 
-    net10.0-windows, NOT plain net10.0: DocumentLocator's modern leg is net10.0-windows and a
-    plain net10.0 project cannot reference it. Registry access needs Windows anyway.
-
-    Settings follow DocumentLocator.csproj, the working precedent in this repo -
-    see MIGRATION-PLAN.md "csproj pattern to copy" for why each one is here rather than default.
+    net10.0-windows, NOT plain net10.0: registry access, the NTFS MFT/USN calls of the local
+    file index (LocalFiles/) and the Windows pipe ACLs all need Windows.
   -->
 
   <PropertyGroup>
@@ -42,7 +39,7 @@
   </PropertyGroup>
 
   <!-- Explicit, platform-suffixed output paths. The SDK default (bin\<Platform>\<Configuration>\)
-       produced CS1566 for DocumentLocator when the solution built it per platform. -->
+       produced CS1566 for multi-platform solution builds (seen first in the old DocumentLocator). -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' And '$(Platform)' == 'AnyCPU'">
     <OutputPath>bin\Release\</OutputPath>
   </PropertyGroup>

@@ -16,7 +16,7 @@ namespace KitveiHakodeshService.Ipc;
 /// each future capability adds one case here.
 /// </summary>
 public sealed class Dispatcher(
-    DocumentLocatorService locator,
+    LocalFileIndexService locator,
     HebrewBooksService hebrewBooks,
     DictionaryService dictionary,
     SeforimDbService seforim,
@@ -170,7 +170,7 @@ public sealed class Dispatcher(
 
                 // Excluded folders for file search — persisted in excluded_folders.json BESIDE
                 // the index directory (a reindex deletes that directory) via the SAME shared
-                // ExcludedFoldersPersistence the hosted DocumentLocator service uses, so the
+                // LocalFileIndexExcludedFolders the hosted DocumentLocator service uses, so the
                 // file format and the exclusion semantics are identical. The DIRECTORY is not:
                 // each host resolves it from its own base directory, so this dev-only service
                 // keeps its own list rather than editing the installed one. Applied at search

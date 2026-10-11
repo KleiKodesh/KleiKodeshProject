@@ -42,11 +42,6 @@ $projects = @(
     # KitveiHakodesh backend
     "KitveiHakodesh/CSharpBackend/FtsLib-Csharp/FtsLib/FtsLib.csproj",
     "KitveiHakodesh/CSharpBackend/FtsLib-Csharp/FtsLibTest/FtsLibTest.csproj",
-    "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator/DocumentLocator.csproj",
-    "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Client/DocumentLocator.Client.csproj",
-    "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Service/DocumentLocator.Service.csproj",
-    "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Demo/DocumentLocator.Demo.csproj",
-    "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Tests/DocumentLocator.Tests.csproj",
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj",
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj",
     

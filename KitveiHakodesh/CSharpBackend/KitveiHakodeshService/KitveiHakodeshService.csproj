@@ -89,9 +89,5 @@
     <!-- Document conversion (Word→PDF via AOT-safe COM; OOXML→HTML fallback with
          wiki-style footnotes). Multi-targets net48;net10.0 — the net10.0 leg is used here. -->
     <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
-    <!-- DocumentLocator index library — multi-targets net48;net10.0-windows.
-         The net10.0-windows leg is used here so DocumentLocatorService can call
-         PathIndex directly in-process instead of going through the named pipe + JSON. -->
-    <ProjectReference Include="..\DocumentLocator\DocumentLocator\DocumentLocator.csproj" />
   </ItemGroup>
 </Project>

@@ -61,7 +61,7 @@ internal static partial class Program
             client.DefaultRequestHeaders.UserAgent.ParseAdd("KitveiHakodesh/1.0");
             return client;
         });
-        builder.Services.AddSingleton<DocumentLocatorService>();
+        builder.Services.AddSingleton<LocalFileIndexService>();
         builder.Services.AddSingleton<HebrewBooksService>();
         builder.Services.AddSingleton<DictionaryService>();
         builder.Services.AddSingleton<SeforimDbService>();
