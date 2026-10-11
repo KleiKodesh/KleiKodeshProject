@@ -2,7 +2,6 @@ using Dark.Net;
 using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
-using KitveiHakodeshLib.FileSystemSearch;
 using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.LocalFile;
 using KitveiHakodeshLib.Settings;
@@ -111,7 +110,6 @@ namespace KitveiHakodeshLib
         private ServiceRpcRelay _serviceRelay;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
-        private FileSystemSearchHandler _fileSystemSearch;
         private string _dbInjectionScriptId;
 
         // A file path queued before the Vue app has finished mounting.
@@ -569,8 +567,6 @@ namespace KitveiHakodeshLib
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
-            _fileSystemSearch = new FileSystemSearchHandler(_bridge);
-            _fileSystemSearch.UiControl = this;
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
@@ -624,7 +620,6 @@ namespace KitveiHakodeshLib
                 _localFile?.DisposeAllHosts();
                 _serviceRelay?.Detach();
 
-                _fileSystemSearch?.Dispose();
             }
             base.Dispose(disposing);
         }

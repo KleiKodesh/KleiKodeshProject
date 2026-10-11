@@ -432,11 +432,10 @@ export async function resetHostApp(): Promise<void> {
   // to, so the rebuild cannot overtake the wipe. The other two each own their own index
   // directory and gate readers behind their own readiness check, so nothing they race with
   // can observe a half-wiped state. Do not add a fourth step here assuming a shared queue.
-  // The service owns the FTS index, the saved database path and the HebrewBooks folder in
-  // both runtimes; only the file-search index (DocumentLocator) and the host-side window and
-  // theme settings are still the WebView2 host's to reset.
+  // The service owns every index and data setting in both runtimes; only the host-side
+  // window and theme settings are still the WebView2 host's to reset.
   await withTimeout(serviceCall('ftsResetIndex'), RESET_STEP_TIMEOUT_MS)
-  await withTimeout(action('ResetDocumentLocatorIndex'), RESET_STEP_TIMEOUT_MS)
+  await withTimeout(serviceCall('resetDocumentLocatorIndex'), RESET_STEP_TIMEOUT_MS)
   await withTimeout(serviceCall('clearSeforimDbPath'), RESET_STEP_TIMEOUT_MS)
   await withTimeout(clearHbLocalFolder(), RESET_STEP_TIMEOUT_MS)
   await withTimeout(action('resetSettings'), RESET_STEP_TIMEOUT_MS)
@@ -517,43 +516,15 @@ export async function resetCatalogTocIndex(): Promise<void> {
  * localFileIndexStatus() reports that a build is in progress.
  */
 export async function resetDocumentLocatorIndex(): Promise<void> {
-  if (typeof window.__webviewAction !== 'function') {
-    await serviceCall('resetDocumentLocatorIndex').catch(() => {}) // dev: via KitveiHakodesh service
-    return
-  }
-  await action('ResetDocumentLocatorIndex').catch(() => {})
+  await serviceCall('resetDocumentLocatorIndex').catch(() => {})
 }
 
 /**
- * Open the excluded folders manager dialog (WinForms, shown by C#).
- * The dialog lets the user add/remove folders excluded from the file-system index.
- * Returns { saved: true } when the user confirms changes, { saved: false } on cancel,
- * or null on error.
- */
-export async function openExcludedFoldersManager(): Promise<{ saved: boolean } | null> {
-  if (typeof window.__webviewAction !== 'function') return null
-  try {
-    const result = await action<{ saved?: boolean; error?: string }>('openExcludedFoldersManager')
-    if (result.error) return null
-    return { saved: result.saved ?? false }
-  } catch {
-    return null
-  }
-}
-
-/**
- * Read/write the excluded folders list in dev. The service persists it to
- * excluded_folders.json beside the file-search index directory using the same shared
- * ExcludedFoldersPersistence the hosted DocumentLocator service uses, and applies it at
- * search time — so a change takes effect immediately with no reindex. Same format and
- * semantics as hosted, but the dev service resolves the directory from its own bin
- * folder, so this edits a dev-local list rather than the installed one.
- *
- * Hosted mode does not use these: it opens the native WinForms manager instead
- * (openExcludedFoldersManager), which owns both the UI and the persistence.
+ * Read/write the excluded folders list. The service persists it to excluded_folders.json
+ * beside the file-search index and applies it at search time, so a change takes effect
+ * immediately with no reindex. One Vue dialog (SettingsExcludedFoldersDialog) in both runtimes.
  */
 export async function getExcludedFolders(): Promise<string[]> {
-  if (typeof window.__webviewAction === 'function') return []
   try {
     const result = await serviceCall<{ folders?: string[] }>('getExcludedFolders')
     return result?.folders ?? []
@@ -564,7 +535,6 @@ export async function getExcludedFolders(): Promise<string[]> {
 
 /** Persist the full replacement list. Returns the list as it stands on disk afterwards. */
 export async function setExcludedFolders(folders: string[]): Promise<string[]> {
-  if (typeof window.__webviewAction === 'function') return []
   const result = await serviceCall<{ folders?: string[]; error?: string }>('setExcludedFolders', {
     folders,
   })
@@ -629,12 +599,7 @@ export function hbSearch(
  * the service will likely already be running and the index ready.
  */
 export function fileSystemSearchWarmup(): void {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev mode: warm up the DocumentLocator via the KitveiHakodesh service.
-    serviceCallVoid('locateDocumentsWarmup')
-    return
-  }
-  action('fileSystemSearchWarmup').catch(() => {})
+  serviceCallVoid('locateDocumentsWarmup')
 }
 
 export interface FileSystemSearchHit {
@@ -658,17 +623,13 @@ export function fileSystemSearch(
   total?: number
   error?: string
 }> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev mode: query the KitveiHakodesh service for documents. The service owns
-    // the DocumentLocator delegation and the result shaping; we just ask for it.
-    return serviceCall<{
-      results: FileSystemSearchHit[]
-      total: number
-    }>('locateDocuments', { query, max }).catch((err) => ({
-      error: err instanceof Error ? err.message : 'Search error',
-    }))
-  }
-  return action('fileSystemSearch', { query, max })
+  // The service owns the file index (DocumentLocator in-process) and the result shaping.
+  return serviceCall<{
+    results: FileSystemSearchHit[]
+    total: number
+  }>('locateDocuments', { query, max }).catch((err) => ({
+    error: err instanceof Error ? err.message : 'Search error',
+  }))
 }
 
 /**
@@ -684,14 +645,9 @@ export function fileSystemSearch(
  * what surfaces real errors.
  */
 export function localFileIndexStatus(): Promise<{ isBuilding: boolean; message?: string }> {
-  if (typeof window.__webviewAction !== 'function') {
-    return serviceCall<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(
-      () => ({ isBuilding: false }),
-    )
-  }
-  return action<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(() => ({
-    isBuilding: false,
-  }))
+  return serviceCall<{ isBuilding: boolean; message?: string }>('localFileIndexStatus').catch(
+    () => ({ isBuilding: false }),
+  )
 }
 
 /**

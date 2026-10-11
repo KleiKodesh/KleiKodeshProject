@@ -87,6 +87,8 @@
       <HintPath>..\packages\System.Buffers.4.6.1\lib\net462\System.Buffers.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
+    <!-- Starts the installed KitveiHakodesh Windows service through the SCM (Service\KitveiHakodeshServiceLauncher). -->
+    <Reference Include="System.ServiceProcess" />
     <Reference Include="System.IO.Pipelines, Version=10.0.0.5, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.IO.Pipelines.10.0.5\lib\net462\System.IO.Pipelines.dll</HintPath>
     </Reference>
@@ -177,8 +179,6 @@
     <Compile Include="Service\KitveiHakodeshServiceSelfStartingChannel.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
-    <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
-    <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
     <Compile Include="Settings\AppSettings.cs" />
@@ -198,10 +198,6 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
-      <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>
-      <Name>DocumentLocator.Client</Name>
-    </ProjectReference>
     <ProjectReference Include="..\..\..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
       <Name>FluentChromeTabs</Name>
     </ProjectReference>

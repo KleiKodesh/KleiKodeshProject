@@ -75,11 +75,6 @@ namespace KitveiHakodeshLib
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         case "getFonts": await HandleGetFonts(id); break;
-                        case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
-                        case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
-                        case "localFileIndexStatus": _fileSystemSearch.HandleIndexStatus(id); break;
-                        case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
-                        case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
                         case "exportToWord": await HandleExportToWord(root, id); break;
                         case "pasteIntoWord": await HandlePasteIntoWord(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;

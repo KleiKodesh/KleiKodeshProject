@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.ServiceProcess;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,13 +10,13 @@ namespace KitveiHakodeshLib.Service
     /// <summary>
     /// Starts the KitveiHakodesh service when no instance is listening on the pipe.
     ///
-    /// The service is a hard dependency of every hosted process, and today nothing installs
-    /// it as a Windows service: it is a native executable that the first host to need it
-    /// spawns, exactly as the dev server does. The spawned instance is tied to this process
-    /// (KHS_OWNER_PID) so it exits with it; a second host that is still running simply starts
-    /// a fresh one on its next call. Hosts in one session therefore share one instance on the
-    /// default pipe name, and a service that restarts itself (after a database-path change) is
-    /// brought back by whoever calls next.
+    /// The service is a hard dependency of every hosted process. The installed product
+    /// registers it as a Windows service (KitveiHakodeshSvc, LocalSystem, demand start), and
+    /// starting that needs no prompt. Without a registration - a dev checkout, a portable
+    /// copy - the executable is spawned instead, exactly as the dev server does; that instance
+    /// is tied to this process (KHS_OWNER_PID) so it exits with it, and a second host that is
+    /// still running starts a fresh one on its next call. Either way a service that stopped
+    /// itself (it restarts after a database-path change) is brought back by whoever calls next.
     ///
     /// A machine-wide mutex serialises the spawn so two hosts starting together do not race
     /// into two instances.
@@ -52,6 +53,16 @@ namespace KitveiHakodeshLib.Service
         {
             if (IsListening()) return;
 
+            // The product: the installer registered the exe as a Windows service (LocalSystem,
+            // demand start, start granted to every user), and that is what owns the file index.
+            // Only the default pipe can be the installed service's; a private pipe name means a
+            // spawner asked for an instance of its own.
+            if (_pipeName == KitveiHakodeshServicePipeChannel.DefaultPipeName && TryStartInstalledService())
+            {
+                await WaitForPipeAsync(cancellationToken).ConfigureAwait(false);
+                return;
+            }
+
             string executable = FindExecutable();
             if (executable == null)
                 throw new KitveiHakodeshServiceUnavailableException(
@@ -75,6 +86,55 @@ namespace KitveiHakodeshLib.Service
                 finally
                 {
                     if (held) launchGate.ReleaseMutex();
+                }
+            }
+        }
+
+        /// <summary>The name the installer registers the service under (ServiceRegistration in the service).</summary>
+        public const string InstalledServiceName = "KitveiHakodeshSvc";
+
+        /// <summary>
+        /// Starts the installed Windows service when there is one. False when it is not
+        /// registered on this machine (dev checkout, portable copy) - the caller then spawns
+        /// the exe. Starting needs no elevation: the registration grants SERVICE_START to
+        /// authenticated users.
+        /// </summary>
+        private static bool TryStartInstalledService()
+        {
+            ServiceController controller;
+            ServiceControllerStatus status;
+            try
+            {
+                controller = new ServiceController(InstalledServiceName);
+                status = controller.Status; // throws when not registered
+            }
+            catch (InvalidOperationException)
+            {
+                return false; // not registered: a dev checkout or portable copy - spawn instead
+            }
+
+            // Registered: from here on the installed service is THE instance. Never fall back
+            // to spawning a console copy on the same pipe name - the two would end up serving
+            // one pipe. A start that cannot happen right now is "unavailable", and the caller
+            // retries.
+            using (controller)
+            {
+                try
+                {
+                    if (status == ServiceControllerStatus.Running || status == ServiceControllerStatus.StartPending)
+                        return true;
+                    if (status == ServiceControllerStatus.StopPending)
+                        controller.WaitForStatus(ServiceControllerStatus.Stopped, TimeSpan.FromSeconds(15));
+                    controller.Start();
+                    return true;
+                }
+                catch (Exception ex) when (
+                    ex is InvalidOperationException ||
+                    ex is System.ServiceProcess.TimeoutException ||
+                    ex is System.ComponentModel.Win32Exception)
+                {
+                    throw new KitveiHakodeshServiceUnavailableException(
+                        "The installed KitveiHakodesh service could not be started.", ex);
                 }
             }
         }

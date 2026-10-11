@@ -46,8 +46,19 @@ namespace KitveiHakodeshLib.Service
         {
             using (NamedPipeClientStream pipe = await ConnectAsync(cancellationToken).ConfigureAwait(false))
             {
-                await KitveiHakodeshServiceFrameProtocol.WriteFrameAsync(pipe, requestEnvelope, cancellationToken).ConfigureAwait(false);
-                byte[] response = await KitveiHakodeshServiceFrameProtocol.ReadFrameAsync(pipe, cancellationToken).ConfigureAwait(false);
+                byte[] response;
+                try
+                {
+                    await KitveiHakodeshServiceFrameProtocol.WriteFrameAsync(pipe, requestEnvelope, cancellationToken).ConfigureAwait(false);
+                    response = await KitveiHakodeshServiceFrameProtocol.ReadFrameAsync(pipe, cancellationToken).ConfigureAwait(false);
+                }
+                catch (IOException ex)
+                {
+                    // The service went away mid-request (it restarts itself after a database-path
+                    // change): the same "not there" the caller retries, not a protocol failure.
+                    throw new KitveiHakodeshServiceUnavailableException(
+                        "The KitveiHakodesh service dropped the connection.", ex);
+                }
                 if (response == null)
                     throw new KitveiHakodeshServiceUnavailableException(
                         "The KitveiHakodesh service closed the connection without answering.");
@@ -62,6 +73,12 @@ namespace KitveiHakodeshLib.Service
             {
                 await KitveiHakodeshServiceFrameProtocol.WriteFrameAsync(pipe, requestEnvelope, cancellationToken).ConfigureAwait(false);
                 return pipe;
+            }
+            catch (IOException ex)
+            {
+                pipe.Dispose();
+                throw new KitveiHakodeshServiceUnavailableException(
+                    "The KitveiHakodesh service dropped the connection.", ex);
             }
             catch
             {

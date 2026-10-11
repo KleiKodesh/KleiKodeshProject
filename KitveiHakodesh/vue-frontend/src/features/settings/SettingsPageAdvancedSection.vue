@@ -11,7 +11,6 @@ import {
   pickFolder,
   clearDbPath,
   clearHbLocalFolder,
-  openExcludedFoldersManager,
   getTurnOffUpdates,
   setTurnOffUpdates,
   getDbPathInfo,
@@ -80,22 +79,13 @@ async function resetDbPath() {
 }
 
 // ── Excluded folders ──────────────────────────────────────────────────────────
-// Hosted: the C# host shows the native WinForms manager, which owns its own persistence.
-// Dev: the Vue dialog below mirrors it and persists through the service to an
-// excluded_folders.json beside the file-search index directory — same format, but the
-// dev service resolves that directory from its own bin folder, not the install folder.
+// One Vue dialog in both runtimes; the service persists the list to excluded_folders.json
+// beside its file-search index and applies it at search time.
 
-// The excluded-folders manager is still the hosted WinForms dialog (DocumentLocator stays
-// host-side until its own migration leg); the browser gets the Vue dialog below.
-const isDev = typeof window.__webviewAction !== 'function'
 const isExcludedFoldersDialogOpen = ref(false)
 
-async function openExcludedFolders() {
-  if (isDev) {
-    isExcludedFoldersDialogOpen.value = true
-    return
-  }
-  await openExcludedFoldersManager()
+function openExcludedFolders() {
+  isExcludedFoldersDialogOpen.value = true
 }
 
 // ── Automatic updates ─────────────────────────────────────────────────────────
