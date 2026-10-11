@@ -1,52 +1,55 @@
-using Microsoft.Win32.SafeHandles;
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.MemoryMappedFiles;
 using System.Numerics;
 
 namespace FtsLibTest
 {
     /// <summary>
     /// PROTOTYPE FM-index over a segment's term dictionary — a candidate replacement for the
-    /// trigram sidecar (<c>seg.tgm</c>) for infix (<c>*x*</c>) and suffix (<c>*x</c>) wildcards.
-    /// Returns the EXACT matching term rowids for any pattern length, fully on disk
-    /// (positioned reads, no mmap, only a few hundred bytes of metadata in memory).
+    /// trigram sidecar (<c>seg.tgm</c>) for infix (<c>*x*</c>), suffix (<c>*x</c>) and fuzzy
+    /// (Levenshtein) lookups. Returns EXACT matching term rowids. Read through a memory map.
     ///
     /// Text: <c>SEP t0 SEP t1 ... SEP t(k-1) SEP END</c>, one code per char
     /// (END=0, SEP=1, real chars 2.. in ordinal order).
     ///
     /// Suffix order: compare codes up to and including the first SEP/END ("stop"); if equal,
     /// by text position. The position tie-break keeps backward search valid when the pattern
-    /// ends with SEP (suffix queries), and backward search never steps through any other SEP.
+    /// ends with SEP (suffix and fuzzy queries), and backward search never steps through any
+    /// other SEP. Rows whose preceding char is SEP are term starts; they sort by term content,
+    /// so Occ(SEP, row) - 1 is the term's lexicographic rank (row 0 is the END suffix).
     ///
-    /// Two parts:
+    /// Parts:
     ///   * BWT as a Huffman-shaped binary wavelet tree ("FM-index for Dummies", Grabowski et
     ///     al. 2015): one bitvector per internal node, each split into 64-byte rank blocks =
-    ///     u32 ones-before-block + 480 data bits, so one rank costs ONE 64-byte read. Frequent
-    ///     letters have short codes, so the tree costs ~H0 bits per char plus 6.7%.
-    ///     Used only by backward search: Occ = one read per code bit, per pattern char.
+    ///     u32 ones-before-block + 480 data bits. ~H0 bits per char plus 6.7%.
     ///   * Row → rowid section: for every suffix-array row, the rowid of the term its suffix
-    ///     starts in, bit-packed at ceil(log2(maxRowId+1)) bits. A match is a contiguous row
-    ///     range, so locating ALL matches is one sequential read.
+    ///     starts in, bit-packed. A match is a contiguous row range → one sequential pass.
+    ///   * Rank → rowid table, only when rowids are not already rank + 1 (force-merged
+    ///     segments write terms in sorted order, so normally absent).
     ///
     /// File layout (little-endian):
-    ///   header  : magic 'FMI2' u32, textLength u32, sigma u32, termCount u32,
-    ///             internalNodes u32, rowIdBits u32, bitvectorBytes u64, reserved u64  [40 B]
+    ///   header  : magic 'FMI3' u32, textLength u32, sigma u32, termCount u32,
+    ///             internalNodes u32, rowIdBits u32, bitvectorBytes u64,
+    ///             flags u32 (bit 0: rowid == rank + 1), reserved u32                 [40 B]
     ///   chars   : sigma x u16 (code -> char; 0 for END/SEP)
     ///   C       : (sigma + 1) x u32
     ///   nodes   : internalNodes x { left i32, right i32, bitLength u32, pad u32, offset u64 }
     ///             child &gt;= 0 = internal node index, child &lt; 0 = leaf symbol -(code+1)
     ///   bitvectors : bitvectorBytes
     ///   rowIds  : textLength x rowIdBits, packed, + 8 zero bytes of padding
+    ///   rankToRowId : termCount x u32, only when flags bit 0 is clear
     /// </summary>
     internal static class FmIndex
     {
-        public const uint Magic = 0x32494D46; // 'FMI2'
+        public const uint Magic = 0x33494D46; // 'FMI3'
         public const byte EndCode = 0, SeparatorCode = 1;
         const int HeaderBytes = 40, NodeBytes = 24;
         const int RankBlockBytes = 64, RankBlockDataBits = (RankBlockBytes - 4) * 8; // 480
         const int CodesPerSortKey = 10; // 6 bits each → 60 bits
+        const uint FlagRowIdIsRankPlusOne = 1;
 
         // ── Build ─────────────────────────────────────────────────────
 
@@ -98,6 +101,16 @@ namespace FtsLibTest
             var c = new int[sigma + 1];
             for (int s = 0; s < sigma; s++) c[s + 1] = c[s] + (int)symbolCount[s];
 
+            // Rank (lexicographic order of the terms) → rowid.
+            var byOrdinal = new int[terms.Count];
+            for (int i = 0; i < byOrdinal.Length; i++) byOrdinal[i] = i;
+            Array.Sort(byOrdinal, (a, b) => string.CompareOrdinal(terms[a], terms[b]));
+            for (int r = 1; r < byOrdinal.Length; r++)
+                if (terms[byOrdinal[r]] == terms[byOrdinal[r - 1]]) throw new InvalidDataException("FmIndex: duplicate term");
+            bool rowIdIsRankPlusOne = true;
+            for (int r = 0; r < byOrdinal.Length; r++)
+                if (rowIds[byOrdinal[r]] != r + 1) { rowIdIsRankPlusOne = false; break; }
+
             // Huffman-shaped wavelet tree.
             var tree = HuffmanTree.Build(symbolCount);
             var nodeBits = new BitWriter[tree.Left.Count];
@@ -123,7 +136,8 @@ namespace FtsLibTest
                 }
 
                 bw.Write(Magic); bw.Write(n); bw.Write(sigma); bw.Write(terms.Count);
-                bw.Write(nodeBits.Length); bw.Write(rowIdBits); bw.Write(bitvectorBytes); bw.Write(0L);
+                bw.Write(nodeBits.Length); bw.Write(rowIdBits); bw.Write(bitvectorBytes);
+                bw.Write(rowIdIsRankPlusOne ? FlagRowIdIsRankPlusOne : 0u); bw.Write(0u);
                 foreach (char ch in charOf) bw.Write((ushort)ch);
                 foreach (int v in c) bw.Write(v);
                 for (int i = 0; i < nodeBits.Length; i++)
@@ -133,12 +147,14 @@ namespace FtsLibTest
                 }
                 foreach (var bits in nodeBits) WriteRankBlocks(bw, bits);
 
-                // Row → rowid, packed.
                 var packed = new BitWriter();
                 for (int row = 0; row < n; row++)
                     packed.AppendValue((uint)rowIdAtPosition[suffixArray[row]], rowIdBits);
                 bw.Write(packed.ToBytes());
                 bw.Write(0L); // padding: the reader decodes with 8-byte loads
+
+                if (!rowIdIsRankPlusOne)
+                    foreach (int i in byOrdinal) bw.Write(rowIds[i]);
             }
             if (File.Exists(path)) File.Delete(path);
             File.Move(tmp, path);
@@ -283,75 +299,92 @@ namespace FtsLibTest
             return suffixArray;
         }
 
-        // ── Read (on disk: positioned reads, no mmap) ─────────────────
+        // ── Read (memory-mapped) ──────────────────────────────────────
 
-        internal sealed class Reader : IDisposable
+        internal sealed unsafe class Reader : IDisposable
         {
-            readonly SafeFileHandle _file;
+            readonly MemoryMappedFile _map;
+            readonly MemoryMappedViewAccessor _view;
+            readonly byte* _base;
+            bool _pointerAcquired, _disposed;
             readonly int _textLength, _rowIdBits;
             readonly int[] _c;
             readonly byte[] _codeOf = new byte[65536]; // 0 = char not in alphabet
-            readonly long[] _nodeOffset;               // absolute file offset of each node's rank blocks
+            readonly int[] _left, _right;
+            readonly int _rootNode;
+            readonly long[] _nodeOffset;               // file offset of each node's rank blocks
             readonly int[][] _pathNodes; readonly bool[][] _pathBits;
-            readonly long _rowIdsOffset;
+            readonly long _rowIdsOffset, _rankTableOffset; // _rankTableOffset < 0: rowid == rank + 1
 
             public long FileBytes { get; }
-            public long RowIdSectionBytes => FileBytes - _rowIdsOffset;
+            public long RowIdSectionBytes { get; }
 
             public Reader(string path)
             {
                 FileBytes = new FileInfo(path).Length;
-                _file = File.OpenHandle(path, FileMode.Open, FileAccess.Read, FileShare.Read, FileOptions.RandomAccess);
+                var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
                 try
                 {
-                    var h = new byte[HeaderBytes];
-                    RandomAccess.Read(_file, h, 0);
+                    _map = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, HandleInheritability.None, leaveOpen: false);
+                }
+                catch { fs.Dispose(); throw; }
+                try
+                {
+                    _view = _map.CreateViewAccessor(0, 0, MemoryMappedFileAccess.Read);
+                    byte* p = null;
+                    _view.SafeMemoryMappedViewHandle.AcquirePointer(ref p);
+                    _pointerAcquired = true;
+                    _base = p + _view.PointerOffset;
+                    var h = new ReadOnlySpan<byte>(_base, HeaderBytes);
                     if (BinaryPrimitives.ReadUInt32LittleEndian(h) != Magic) throw new InvalidDataException("FmIndex: bad magic");
-                    _textLength = BinaryPrimitives.ReadInt32LittleEndian(h.AsSpan(4));
-                    int sigma = BinaryPrimitives.ReadInt32LittleEndian(h.AsSpan(8));
-                    int internalNodes = BinaryPrimitives.ReadInt32LittleEndian(h.AsSpan(16));
-                    _rowIdBits = BinaryPrimitives.ReadInt32LittleEndian(h.AsSpan(20));
-                    long bitvectorBytes = BinaryPrimitives.ReadInt64LittleEndian(h.AsSpan(24));
+                    _textLength = BinaryPrimitives.ReadInt32LittleEndian(h.Slice(4));
+                    int sigma = BinaryPrimitives.ReadInt32LittleEndian(h.Slice(8));
+                    int internalNodes = BinaryPrimitives.ReadInt32LittleEndian(h.Slice(16));
+                    _rowIdBits = BinaryPrimitives.ReadInt32LittleEndian(h.Slice(20));
+                    long bitvectorBytes = BinaryPrimitives.ReadInt64LittleEndian(h.Slice(24));
+                    uint flags = BinaryPrimitives.ReadUInt32LittleEndian(h.Slice(32));
 
-                    var meta = new byte[sigma * 2 + (sigma + 1) * 4 + internalNodes * NodeBytes];
-                    RandomAccess.Read(_file, meta, HeaderBytes);
-                    var s = meta.AsSpan();
-                    int pos = 0;
+                    long pos = HeaderBytes;
                     for (int code = 0; code < sigma; code++, pos += 2)
-                        if (code > SeparatorCode) _codeOf[BinaryPrimitives.ReadUInt16LittleEndian(s.Slice(pos))] = (byte)code;
+                        if (code > SeparatorCode) _codeOf[ReadU16(pos)] = (byte)code;
                     _c = new int[sigma + 1];
-                    for (int i = 0; i <= sigma; i++, pos += 4) _c[i] = BinaryPrimitives.ReadInt32LittleEndian(s.Slice(pos));
+                    for (int i = 0; i <= sigma; i++, pos += 4) _c[i] = ReadI32(pos);
 
-                    long bitvectorsStart = HeaderBytes + meta.Length;
+                    long bitvectorsStart = pos + (long)internalNodes * NodeBytes;
                     var tree = new HuffmanTree();
                     _nodeOffset = new long[internalNodes];
                     for (int i = 0; i < internalNodes; i++, pos += NodeBytes)
                     {
-                        tree.Left.Add(BinaryPrimitives.ReadInt32LittleEndian(s.Slice(pos)));
-                        tree.Right.Add(BinaryPrimitives.ReadInt32LittleEndian(s.Slice(pos + 4)));
-                        _nodeOffset[i] = bitvectorsStart + BinaryPrimitives.ReadInt64LittleEndian(s.Slice(pos + 16));
+                        tree.Left.Add(ReadI32(pos)); tree.Right.Add(ReadI32(pos + 4));
+                        _nodeOffset[i] = bitvectorsStart + ReadI64(pos + 16);
                     }
-                    tree.Root = internalNodes - 1;
+                    tree.Root = _rootNode = internalNodes - 1;
                     tree.ComputePaths(sigma);
+                    _left = tree.Left.ToArray(); _right = tree.Right.ToArray();
                     _pathNodes = tree.PathNodes; _pathBits = tree.PathBits;
                     _rowIdsOffset = bitvectorsStart + bitvectorBytes;
+                    long packedBytes = ((long)_textLength * _rowIdBits + 7) / 8;
+                    RowIdSectionBytes = packedBytes + 8;
+                    _rankTableOffset = (flags & FlagRowIdIsRankPlusOne) != 0 ? -1 : _rowIdsOffset + packedBytes + 8;
                 }
-                catch { _file.Dispose(); throw; }
+                catch { Dispose(); throw; }
             }
 
-            /// <summary>Ones in the node's bitvector before position i — one 64-byte read.</summary>
+            ushort ReadU16(long offset) => BinaryPrimitives.ReadUInt16LittleEndian(new ReadOnlySpan<byte>(_base + offset, 2));
+            int ReadI32(long offset) => BinaryPrimitives.ReadInt32LittleEndian(new ReadOnlySpan<byte>(_base + offset, 4));
+            long ReadI64(long offset) => BinaryPrimitives.ReadInt64LittleEndian(new ReadOnlySpan<byte>(_base + offset, 8));
+
+            /// <summary>Ones in the node's bitvector before position i — one 64-byte block.</summary>
             int Rank1(int node, int i)
             {
                 int block = i / RankBlockDataBits, within = i - block * RankBlockDataBits;
-                Span<byte> buf = stackalloc byte[RankBlockBytes];
-                RandomAccess.Read(_file, buf, _nodeOffset[node] + (long)block * RankBlockBytes);
-                int ones = BinaryPrimitives.ReadInt32LittleEndian(buf);
-                var data = buf.Slice(4);
-                int fullBytes = within >> 3, k = 0;
-                for (; k + 8 <= fullBytes; k += 8) ones += BitOperations.PopCount(BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(k)));
-                for (; k < fullBytes; k++) ones += BitOperations.PopCount((uint)data[k]);
-                int rest = within & 7;
-                if (rest != 0) ones += BitOperations.PopCount((uint)(data[fullBytes] & ((1 << rest) - 1)));
+                byte* b = _base + _nodeOffset[node] + (long)block * RankBlockBytes;
+                int ones = *(int*)b;
+                ulong* words = (ulong*)(b + 4);
+                int fullWords = within >> 6;
+                for (int k = 0; k < fullWords; k++) ones += BitOperations.PopCount(words[k]);
+                int rest = within & 63;
+                if (rest != 0) ones += BitOperations.PopCount(words[fullWords] & ((1UL << rest) - 1));
                 return ones;
             }
 
@@ -366,6 +399,8 @@ namespace FtsLibTest
                 }
                 return row;
             }
+
+            int RowIdOfRank(int rank) => _rankTableOffset < 0 ? rank + 1 : ReadI32(_rankTableOffset + rank * 4L);
 
             /// <summary>Backward search. Returns false when the pattern does not occur.</summary>
             bool FindRowRange(string pattern, bool mustEndTerm, out int first, out int end)
@@ -385,24 +420,20 @@ namespace FtsLibTest
 
             /// <summary>
             /// Sorted distinct rowids of terms containing <paramref name="pattern"/>
-            /// (<paramref name="mustEndTerm"/>: terms ending with it). Backward search, then ONE
-            /// sequential read of the packed row → rowid entries for the whole match range.
+            /// (<paramref name="mustEndTerm"/>: terms ending with it). Backward search, then one
+            /// pass over the packed row → rowid entries of the whole match range.
             /// </summary>
             public int[] FindRowIds(string pattern, bool mustEndTerm)
             {
                 if (pattern.Length == 0 || !FindRowRange(pattern, mustEndTerm, out int first, out int end))
                     return Array.Empty<int>();
                 int rows = end - first;
-                long firstBit = (long)first * _rowIdBits;
-                long startByte = firstBit >> 3;
-                long endByte = ((long)end * _rowIdBits + 7) >> 3;
-                var raw = new byte[endByte - startByte + 8];  // + padding for 8-byte loads
-                RandomAccess.Read(_file, raw, _rowIdsOffset + startByte);
                 ulong mask = (1UL << _rowIdBits) - 1;
                 var ids = new int[rows];
-                long bit = firstBit - (startByte << 3);
+                long bit = (long)first * _rowIdBits;
+                byte* section = _base + _rowIdsOffset;
                 for (int i = 0; i < rows; i++, bit += _rowIdBits)
-                    ids[i] = (int)((BinaryPrimitives.ReadUInt64LittleEndian(raw.AsSpan((int)(bit >> 3))) >> (int)(bit & 7)) & mask);
+                    ids[i] = (int)((*(ulong*)(section + (bit >> 3)) >> (int)(bit & 7)) & mask);
                 Array.Sort(ids);
                 int distinct = 0;
                 for (int i = 0; i < ids.Length; i++)
@@ -411,7 +442,114 @@ namespace FtsLibTest
                 return ids;
             }
 
-            public void Dispose() => _file.Dispose();
+            // ── Fuzzy ─────────────────────────────────────────────────
+
+            /// <summary>
+            /// Every term within Levenshtein distance <paramref name="maxDistance"/> of
+            /// <paramref name="query"/>, as (rowid, distance), sorted by rowid.
+            ///
+            /// Backward search from SEP walks a trie of the REVERSED terms: the range for the
+            /// string "x SEP" holds every term ending with x, and its children are the distinct
+            /// BWT symbols in that range (found by descending the wavelet tree once). One
+            /// Levenshtein DP row per trie level, against the reversed query (edit distance is
+            /// unchanged by reversing both strings); a branch dies when its row minimum exceeds
+            /// the limit. A SEP child means x itself is a term.
+            /// </summary>
+            public List<(int RowId, int Distance)> FindFuzzy(string query, int maxDistance)
+            {
+                int m = query.Length;
+                var reversedQuery = new byte[m];
+                for (int j = 0; j < m; j++)
+                {
+                    byte code = _codeOf[query[m - 1 - j]];
+                    reversedQuery[j] = code == 0 ? (byte)255 : code; // 255 never equals a BWT symbol
+                }
+                var search = new FuzzySearch(this, reversedQuery, maxDistance);
+                var firstRow = new int[m + 1];
+                for (int j = 0; j <= m; j++) firstRow[j] = j;
+                search.Visit(_c[SeparatorCode], _c[SeparatorCode + 1], firstRow, depth: 0);
+                search.Results.Sort((a, b) => a.RowId.CompareTo(b.RowId));
+                return search.Results;
+            }
+
+            sealed class FuzzySearch
+            {
+                readonly Reader _reader; readonly byte[] _query; readonly int _maxDistance, _m;
+                public readonly List<(int RowId, int Distance)> Results = new List<(int, int)>();
+                // Per-depth scratch, reused across siblings: child symbols with their Occ ranges,
+                // and the DP rows handed down to each child.
+                // Depth never exceeds m + maxDistance: row[0] == depth, so deeper rows are pruned.
+                readonly List<(byte Code, int OccLo, int OccHi)>[] _children;
+                readonly int[][] _rows;
+
+                public FuzzySearch(Reader reader, byte[] query, int maxDistance)
+                {
+                    _reader = reader; _query = query; _maxDistance = maxDistance; _m = query.Length;
+                    _children = new List<(byte, int, int)>[_m + maxDistance + 2];
+                    _rows = new int[_m + maxDistance + 3][];
+                }
+
+                public void Visit(int lo, int hi, int[] row, int depth)
+                {
+                    var children = _children[depth] ??= new List<(byte, int, int)>(64);
+                    children.Clear();
+                    EnumerateSymbols(_reader._rootNode, lo, hi, children);
+                    var next = _rows[depth + 1] ??= new int[_m + 1];
+
+                    foreach (var (code, occLo, occHi) in children)
+                    {
+                        if (code == SeparatorCode)
+                        {
+                            // x is a complete term (exactly one: terms are distinct).
+                            if (depth > 0 && row[_m] <= _maxDistance)
+                                Results.Add((_reader.RowIdOfRank(occLo - 1), row[_m])); // -1: END row 0
+                            continue;
+                        }
+                        if (code == EndCode) continue;
+
+                        next[0] = row[0] + 1;
+                        int min = next[0];
+                        for (int j = 1; j <= _m; j++)
+                        {
+                            int v = row[j - 1] + (_query[j - 1] == code ? 0 : 1);
+                            int delete = row[j] + 1, insert = next[j - 1] + 1;
+                            if (delete < v) v = delete;
+                            if (insert < v) v = insert;
+                            next[j] = v;
+                            if (v < min) min = v;
+                        }
+                        if (min > _maxDistance) continue;
+
+                        // The child's own children overwrite _rows[depth + 2], never this row,
+                        // and siblings are processed after the child returns — so next is safe.
+                        Visit(_reader._c[code] + occLo, _reader._c[code] + occHi, next, depth + 1);
+                    }
+                }
+
+                /// <summary>Distinct symbols in BWT[lo, hi) with their Occ at lo and hi.</summary>
+                void EnumerateSymbols(int node, int lo, int hi, List<(byte, int, int)> into)
+                {
+                    int onesLo = _reader.Rank1(node, lo), onesHi = _reader.Rank1(node, hi);
+                    int zerosLo = lo - onesLo, zerosHi = hi - onesHi;
+                    if (zerosHi > zerosLo) Descend(_reader._left[node], zerosLo, zerosHi, into);
+                    if (onesHi > onesLo) Descend(_reader._right[node], onesLo, onesHi, into);
+                }
+
+                void Descend(int child, int lo, int hi, List<(byte, int, int)> into)
+                {
+                    if (child < 0) into.Add(((byte)(-child - 1), lo, hi));
+                    else EnumerateSymbols(child, lo, hi, into);
+                }
+            }
+
+            public void Dispose()
+            {
+                if (_disposed) return;
+                _disposed = true;
+                if (_pointerAcquired) _view.SafeMemoryMappedViewHandle.ReleasePointer();
+                _view?.Dispose();
+                _map?.Dispose();
+            }
         }
     }
 }

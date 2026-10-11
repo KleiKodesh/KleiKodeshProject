@@ -18,7 +18,7 @@ namespace FtsLibTest
     ///   likeScan      — full SQLite LIKE scan (production fallback)
     ///   trigramRouted — production routing: trigram candidates + SQLite rowid-IN LIKE confirm,
     ///                   or likeScan when the run is &lt; 3 chars or candidates &gt; 8000
-    ///   fmIds         — FM-index ON DISK (seek+read, no mmap): backward search + one read
+    ///   fmIds         — FM-index, memory-mapped: backward search + one pass over
     ///                   of the packed row→rowid range; exact rowids
     ///   fmFetch       — fmIds + fetching the production columns by rowid IN (...)
     /// Every method's rowid set is checked against a brute-force ordinal scan. Output is
@@ -28,7 +28,7 @@ namespace FtsLibTest
     internal static class FmIndexBench
     {
         const int TrigramCandidateCap = 8000; // same as HebrewWildcardExpander
-        const string Columns = "SELECT rowid, term, skip_offset, skip_count, offset, length, count FROM term_index WHERE ";
+        internal const string Columns = "SELECT rowid, term, skip_offset, skip_count, offset, length, count FROM term_index WHERE ";
 
         public static void Run(string[] args)
         {
@@ -217,7 +217,7 @@ namespace FtsLibTest
             return ReadRowIds(cmd);
         }
 
-        static int[] FetchByRowIds(SqliteConnection conn, int[] rowIds)
+        internal static int[] FetchByRowIds(SqliteConnection conn, int[] rowIds)
         {
             if (rowIds.Length == 0) return rowIds;
             using var cmd = conn.CreateCommand();
@@ -227,7 +227,7 @@ namespace FtsLibTest
 
         /// <summary>Reads every production column (like the expander's consume loop) and
         /// returns the sorted rowids.</summary>
-        static int[] ReadRowIds(SqliteCommand cmd)
+        internal static int[] ReadRowIds(SqliteCommand cmd)
         {
             var ids = new List<int>();
             using var r = cmd.ExecuteReader();
@@ -242,7 +242,7 @@ namespace FtsLibTest
 
         // ── Helpers ───────────────────────────────────────────────────
 
-        static SqliteConnection Open(string dbPath)
+        internal static SqliteConnection Open(string dbPath)
         {
             var csb = new SqliteConnectionStringBuilder { DataSource = dbPath, Mode = SqliteOpenMode.ReadOnly, Pooling = false };
             var c = new SqliteConnection(csb.ConnectionString); c.Open(); return c;
@@ -255,9 +255,9 @@ namespace FtsLibTest
             return r.ToArray();
         }
 
-        static bool Same(int[] a, int[] b) => a.AsSpan().SequenceEqual(b);
-        static double Mb(long bytes) => bytes / 1048576.0;
-        static double Pct(double[] sorted, double q) => sorted[Math.Min(sorted.Length - 1, (int)(q * sorted.Length))];
-        static string Fmt(double ms) => ms < 10 ? ms.ToString("F2") : ms.ToString("F0");
+        internal static bool Same(int[] a, int[] b) => a.AsSpan().SequenceEqual(b);
+        internal static double Mb(long bytes) => bytes / 1048576.0;
+        internal static double Pct(double[] sorted, double q) => sorted[Math.Min(sorted.Length - 1, (int)(q * sorted.Length))];
+        internal static string Fmt(double ms) => ms < 10 ? ms.ToString("F2") : ms.ToString("F0");
     }
 }
