@@ -26,6 +26,7 @@ public sealed class Dispatcher(
     HttpHostState httpState,
     LocalFileGrants localFileGrants,
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
+    KitveiHakodeshService.Http.OwnerRegistry owners,
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
@@ -271,6 +272,15 @@ public sealed class Dispatcher(
                 // cancels the build cleanly (aborts any merge, releases the index lock)
                 // before the process exits. The dev killer calls this before taskkill so
                 // a restart never hard-kills a build in progress (index-corruption path).
+                // A host using this console instance says hello / goodbye (Http/OwnerWatcher). The
+                // installed Windows service ignores both.
+                case "registerOwner":
+                    owners.Register(MsgPack.De<OwnerArgs>(req.Args).Pid);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+                case "releaseOwner":
+                    owners.Release(MsgPack.De<OwnerArgs>(req.Args).Pid);
+                    return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
+
                 case "shutdown":
                     // Stop AFTER the reply has gone out: stopping cancels the pipe server's token,
                     // and the installer that asked reads the acknowledgement.

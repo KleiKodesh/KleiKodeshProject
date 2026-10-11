@@ -72,13 +72,14 @@ internal static partial class Program
         builder.Services.AddSingleton<HttpHostState>();
         builder.Services.AddSingleton<LocalFileGrants>();
         builder.Services.AddSingleton<KitveiHakodeshService.Pdf.WordConversionService>();
+        builder.Services.AddSingleton<OwnerRegistry>();
         builder.Services.AddSingleton<Dispatcher>();
         builder.Services.AddHostedService<PipeServer>();
         if (!WindowsServiceMode.IsWindowsService)
         {
             // The loopback HTTP host is the dev browser's door; a Windows service has no dev
-            // browser and should open no port. The owner watcher only matters for a spawned
-            // process (no-op without KHS_OWNER_PID either way).
+            // browser and should open no port. The owner watcher stops a console instance once no
+            // program that uses it is running any more (Http/OwnerWatcher).
             builder.Services.AddHostedService<HttpHostServer>();
             builder.Services.AddHostedService<OwnerWatcher>();
         }

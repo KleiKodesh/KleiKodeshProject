@@ -363,6 +363,14 @@ public sealed class StringResult
     public string Value { get; set; } = "";
 }
 
+/// <summary>Args for <c>registerOwner</c> / <c>releaseOwner</c>: a host process using this console
+/// instance (see Http/OwnerWatcher).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class OwnerArgs
+{
+    public int Pid { get; set; }
+}
+
 /// <summary>Generic single-bool arg (e.g. <c>setTurnOffUpdates</c>).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class BoolArg

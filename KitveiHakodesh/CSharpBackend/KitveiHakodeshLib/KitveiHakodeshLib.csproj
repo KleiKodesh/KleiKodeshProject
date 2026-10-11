@@ -177,6 +177,7 @@
     <Compile Include="Service\KitveiHakodeshServicePipeChannel.cs" />
     <Compile Include="Service\KitveiHakodeshServiceLauncher.cs" />
     <Compile Include="Service\KitveiHakodeshServiceSelfStartingChannel.cs" />
+    <Compile Include="Service\KitveiHakodeshServiceOwnership.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />

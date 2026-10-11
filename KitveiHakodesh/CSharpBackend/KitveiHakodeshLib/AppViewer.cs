@@ -568,9 +568,19 @@ namespace KitveiHakodeshLib
             // find it listening instead of paying the start on the hot path. Never with a UAC
             // prompt: one popping up unasked while the window opens lands behind Word; the
             // install / repair prompt waits for a real request or the banner's "try again".
+            // A console instance of the service (dev, portable) lives as long as some program uses
+            // it: this window counts until it closes (Service/KitveiHakodeshServiceOwnership). The
+            // plain pipe channel, not the self-starting one: a heartbeat must not revive a
+            // service nobody is using.
+            KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowOpened(
+                new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500));
             _ = Task.Run(async () =>
             {
-                try { await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false); }
+                try
+                {
+                    await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false);
+                    KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.RegisterNow();
+                }
                 catch { /* the page's first request reports it */ }
             });
 
@@ -628,6 +638,7 @@ namespace KitveiHakodeshLib
                 // handles after the process exits.
                 _localFile?.DisposeAllHosts();
                 _serviceRelay?.Detach();
+                if (_serviceRelay != null) KitveiHakodeshLib.Service.KitveiHakodeshServiceOwnership.WindowClosed();
 
             }
             base.Dispose(disposing);
