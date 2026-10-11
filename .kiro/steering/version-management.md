@@ -68,12 +68,18 @@ Build → AddinInstaller.cs (const Version)
 
 ## Update Checker
 
-`UpdateCheckerLib/UpdateChecker.cs` is the active updater:
+The **KitveiHakodesh service** is the updater (`KitveiHakodeshService/KitveiHakodesh/Updater.cs` +
+`UpdaterService.cs`, since 2026-10-11). UpdateCheckerLib is deleted; Word and the standalone app no
+longer check, download or launch anything.
 
-- Reads current version from `HKCU\SOFTWARE\KleiKodesh\Version`
+- Only the installed Windows service updates, once a week (a stamp in `KitveiHakodeshService\updates\`)
+- Reads current version from `HKCU\SOFTWARE\KleiKodesh\Version` (the served user's hive)
 - Fetches latest from `https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest`
-- Triggered from `TaskPaneManager` on first taskpane open (unless user disabled it)
-- **Variant selection** (`UpdateChecker.ResolveInstallerAsset`): picks the release asset matching the
+- Downloads the installer into `KitveiHakodeshService\updates\` (reused when already there) and launches
+  it at once as the logged-on user, unelevated, with no arguments; the installer itself asks to close
+  Word and the app
+- Skipped while the shared "turn off automatic updates" switch is on
+- **Variant selection** (`Updater.ResolveInstallerAsset`): picks the release asset matching the
   machine's installed variant per `HKCU\SOFTWARE\KleiKodesh\InstallerVariant` ("x64" → `-x64`,
   "x86" → `-x86`, "AnyCPU"/missing → unsuffixed). If the release didn't publish that variant, it
   **falls back to the unsuffixed AnyCPU asset**. Each variant installer re-stamps `InstallerVariant`

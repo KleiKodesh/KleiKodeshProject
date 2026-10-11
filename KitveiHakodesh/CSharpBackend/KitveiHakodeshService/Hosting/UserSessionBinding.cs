@@ -51,6 +51,7 @@ public sealed class UserSessionBinding(
             }
 
             WindowsIdentity user = CaptureClient(firstConnection);
+            UserSessionProcess.ServedSessionId = UserSessionProcess.SessionOfPipeClient(firstConnection);
             UserProfile.BindToUser(user.AccessToken);
             logger.LogInformation("Serving {User}; profile bound (AppData {AppData})", user.Name, UserProfile.RoamingAppData);
         }

@@ -92,6 +92,10 @@ internal static partial class Program
         // Watches the seforim DB WHILE the service runs and rebuilds both indexes on an
         // in-place DB change (startup uses the one-shot stamp check; this covers live updates).
         builder.Services.AddHostedService<DbChangeWatcher>();
+        // Weekly self-update: check GitHub, download, launch the installer as the user. Only the
+        // installed Windows service acts (UpdaterService returns at once in a console instance).
+        builder.Services.AddSingleton<KitveiHakodeshService.KitveiHakodesh.Updater>();
+        builder.Services.AddHostedService<KitveiHakodeshService.KitveiHakodesh.UpdaterService>();
 
         return builder.Build();
     }

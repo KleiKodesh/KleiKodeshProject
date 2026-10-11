@@ -198,24 +198,6 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
-        /// Whether this installer variant can host KitveiHakodeshService, the
-        /// successor to DocumentLocatorSvc.
-        ///
-        /// That service is published as a native x64 AOT binary — there is no x86 or
-        /// architecture-neutral build of it, and there will not be one. So the x86 and
-        /// AnyCPU installer variants must never deploy or register it: on x86 the
-        /// binary cannot load at all, and AnyCPU makes no guarantee about the host
-        /// bitness it would end up running under.
-        ///
-        /// Retirement of the old service is deliberately NOT gated on this. Dropping a
-        /// stale DocumentLocatorSvc is correct on every variant, including the ones
-        /// that get no replacement — leaving a dead service registered would be worse
-        /// than having no indexing service.
-        /// </summary>
-        public static bool SupportsKitveiHakodeshService =>
-            string.Equals(AddinInstaller.InstallerVariant, "x64", StringComparison.OrdinalIgnoreCase);
-
-        /// <summary>
         /// Returns true if any retired service is still registered — useful for
         /// deciding whether this install needs to run elevated at all.
         /// Reads HKLM only; requires no elevation.

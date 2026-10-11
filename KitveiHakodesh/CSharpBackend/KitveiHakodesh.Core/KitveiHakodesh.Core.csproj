@@ -8,7 +8,7 @@
     named pipe now (KitveiHakodesh.ServiceClient) and reference nothing in here - which is the
     point: SQLite, Lucene, FtsLib and MessagePack are referenced by the service alone. The
     host-only pieces that lived on the net48 leg (Word COM finder + thesaurus, the environment
-    probes) moved to KitveiHakodeshLib; the update-check rules moved to UpdateCheckerLib.
+    probes) moved to KitveiHakodeshLib; self-update is the service's (KitveiHakodeshService/KitveiHakodesh/Updater*).
 
     net10.0-windows, NOT plain net10.0: registry access, the NTFS MFT/USN calls of the local
     file index (LocalFiles/) and the Windows pipe ACLs all need Windows.

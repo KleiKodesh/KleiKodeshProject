@@ -4,7 +4,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using UpdateCheckerLib;
 using DockPosition = Microsoft.Office.Core.MsoCTPDockPosition;
 using Word = Microsoft.Office.Interop.Word;
 
@@ -12,7 +11,6 @@ namespace KleiKodesh.Helpers
 {
     public static class TaskPaneManager
     {
-        private static bool _updateCheckDone = false;
 
         // The pane the user most recently opened or brought forward. VSTO exposes no
         // "active pane", and insertion order is not a stand-in for one: with several
@@ -277,8 +275,6 @@ namespace KleiKodesh.Helpers
         {
             try
             {
-                CheckForUpdates();
-
                 var panes = Globals.ThisAddIn.CustomTaskPanes;
                 var type = userControl.GetType();
                 var pane = panes.Add(userControl, title);
@@ -309,53 +305,6 @@ namespace KleiKodesh.Helpers
             {
                 MessageBox.Show(ex.ToString(), "Error");
                 return null;
-            }
-        }
-
-        static void CheckForUpdates()
-        {
-            try
-            {
-                if (_updateCheckDone) return;
-                _updateCheckDone = true;
-
-                // Keep LastSeenVersion current. There is no longer an "עודכן בהצלחה"
-                // notice here: updates run the installer visibly now, so the user has
-                // already watched it finish and does not need to be told on next launch.
-                UpdateChecker.RecordCurrentVersionAsSeen();
-
-                if (SettingsManager.GetBool("UpdateChecker", "TurnOffUpdates", false)) return;
-
-                // ── Step 1: sync disk check — no network, no threading ──────────────
-                // Reads %TEMP%\KleiKodeshSetup.exe version and compares to registry.
-                // Arms RunPendingInstaller() and returns the version if newer.
-                // Deletes the file if it's stale or already installed.
-                var readyVersion = UpdateChecker.GetReadyUpdateVersion();
-                if (readyVersion != null)
-                {
-                    // Sets the expectation for what actually happens now: closing Word
-                    // launches the installer, and the user runs it. Saying "יותקן
-                    // אוטומטית" would be wrong — the install is no longer silent.
-                    UpdateNotificationForm.Show(
-                        $"עדכון זמין לגרסה {readyVersion}.\nעם סגירת וורד ייפתח חלון ההתקנה."
-                    );
-                }
-
-                // ── Step 2: async GitHub check — always runs regardless of Step 1 ──
-                // Downloads a newer installer silently if one exists.
-                // No UI. PendingInstallerPath is never touched here.
-                _ = Task.Run(async () =>
-                {
-                    try { await UpdateChecker.CheckForUpdateAsync(); }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] Update check failed: {ex.Message}");
-                    }
-                });
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine($"[TaskPaneManager] CheckForUpdates failed: {ex.Message}");
             }
         }
 

@@ -11,6 +11,5 @@
   <Project Path="KleiKodeshVsto/Nakdan/Nakdan/Nakdan.csproj" Id="fb53810f-e350-4554-9f5b-d8f42fbe1e9d" />
   <Project Path="KleiKodeshVsto/RegexInWord/RegexFindLib/RegexFindLib.csproj" Id="c3d4e5f6-a7b8-9012-cdef-123456789abc" />
   <Project Path="KleiKodeshVsto/WebSitesLib/WebSitesLib/WebSitesLib.csproj" Id="8100c454-b34e-45a2-98b5-7f766487c9ff" />
-  <Project Path="UpdateCheckerLib/UpdateCheckerLib.csproj" Id="b8f3e2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b" />
   <Project Path="WpfLib/WpfLib.csproj" Id="494b02c1-54f2-4244-9a90-23c9984970e7" />
 </Solution>

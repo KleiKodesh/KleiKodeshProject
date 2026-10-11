@@ -128,10 +128,6 @@
       <Project>{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}</Project>
       <Name>KitveiHakodeshLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\..\..\UpdateCheckerLib\UpdateCheckerLib.csproj">
-      <Project>{B8F3E2A1-4C5D-4E6F-8A9B-1C2D3E4F5A6B}</Project>
-      <Name>UpdateCheckerLib</Name>
-    </ProjectReference>
     <ProjectReference Include="..\..\..\ChromeTabs\FluentChromeTabs\FluentChromeTabs.csproj">
       <Name>FluentChromeTabs</Name>
     </ProjectReference>

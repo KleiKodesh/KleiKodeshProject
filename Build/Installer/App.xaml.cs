@@ -120,9 +120,9 @@ namespace KleiKodeshVstoInstallerWpf
             //      hidden process it had no visible parent and appeared minutes after the
             //      user closed Word, so it read as a dialog from nowhere and got dismissed.
             //
-            // The flag is still accepted, and the updater still passes it, because the exe
-            // on disk is always an OLDER release than the code launching it — DownloadManager
-            // must not pass arguments older builds don't understand. So the meaning changed
+            // The flag is still accepted because older updaters passed it; the self-updater is
+            // now the KitveiHakodesh service, which launches the installer with NO arguments
+            // (the exe it runs is a different release - never pass flags it may not know). So the meaning changed
             // here, in the installer, rather than by adding a flag old builds would ignore.
             //
             // Net effect: --silent takes the same path as a manual launch. Do not

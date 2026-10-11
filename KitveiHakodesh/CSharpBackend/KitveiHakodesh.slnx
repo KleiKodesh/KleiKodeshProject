@@ -1,6 +1,5 @@
 <Solution>
   <Project Path="../../ChromeTabs/FluentChromeTabs/FluentChromeTabs.csproj" />
-  <Project Path="../../UpdateCheckerLib/UpdateCheckerLib.csproj" Id="b8f3e2a1-4c5d-4e6f-8a9b-1c2d3e4f5a6b" />
   <Project Path="FtsLib-Csharp/FtsLib/FtsLib.csproj" Id="76f9daa9-374f-40f9-8511-3239fb6e846e" />
   <Project Path="KitveiHakodesh.Core/KitveiHakodesh.Core.csproj" Id="d94b9d83-0308-46e0-aebb-c06aeedcd28a" />
   <Project Path="KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj" Id="2b6e5acb-2062-4281-aacb-c46681fcfe42" />

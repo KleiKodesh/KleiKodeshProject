@@ -5,7 +5,6 @@ using System;
 using System.Drawing;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using UpdateCheckerLib;
 
 namespace KitveiHakodeshDemoApp
 {
@@ -85,81 +84,18 @@ namespace KitveiHakodeshDemoApp
                 _viewer.OpenFileFromPath(request);
         }
 
-        private bool _updateCheckDone = false;
-
-        /// <summary>
-        /// Set on load when this copy was installed by the KleiKodesh installer.
-        /// Stays false for a portable copy, which never checks for, downloads, or
-        /// launches an update.
-        /// </summary>
-        private bool _updatesEnabled = false;
-
         private void MainForm_Load(object sender, EventArgs e)
         {
             FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
             _lastNormalBounds = Bounds;
             if (AppSettings.LoadMainWindowMaximized())
                 WindowState = FormWindowState.Maximized;
-
-            if (_updateCheckDone) return;
-            _updateCheckDone = true;
-
-            // Portable copy — the updater is not ours to run. It downloads and launches
-            // the KleiKodesh installer, which installs into %LOCALAPPDATA%\KleiKodesh
-            // and registers the Word add-in; doing that from a copy the user merely
-            // unzipped would install software they never asked to install. Only an
-            // installed copy updates, proven by the installer's own registry stamp.
-            // Checked once here so every branch below — including
-            // RunPendingInstaller() on close — stays disarmed.
-            if (!UpdateChecker.IsInstalled()) return;
-
-            _updatesEnabled = true;
-
-            // Keep LastSeenVersion current. There is no longer an "עודכן בהצלחה" notice
-            // here: updates run the installer visibly now, so the user has already watched
-            // it finish and does not need to be told on next launch.
-            UpdateChecker.RecordCurrentVersionAsSeen();
-
-            // Respect the shared "turn off automatic updates" toggle (same registry key
-            // as the KleiKodesh Word add-in — set from the Vue settings "מתקדם" card).
-            // When on, skip the network/GitHub check entirely. RunPendingInstaller() on
-            // close is intentionally NOT gated — an already-downloaded update still applies.
-            if (AppSettings.LoadTurnOffUpdates()) return;
-
-            // ── Step 1: sync disk check — no network, instant ────────────────────
-            // Reads %TEMP%\KleiKodeshSetup.exe version and compares to registry.
-            // Arms RunPendingInstaller() and returns the version if newer.
-            // Deletes the file if it's stale or already installed.
-            var readyVersion = UpdateChecker.GetReadyUpdateVersion();
-            if (readyVersion != null)
-            {
-                // Sets the expectation for what actually happens now: closing the app
-                // launches the installer, and the user runs it. Saying "יותקן אוטומטית"
-                // would be wrong — the install is no longer silent.
-                UpdateNotificationForm.Show(
-                    $"עדכון זמין לגרסה {readyVersion}.\nעם סגירת האפליקציה ייפתח חלון ההתקנה."
-                );
-            }
-
-            // ── Step 2: async GitHub check — always runs regardless of Step 1 ────
-            // Downloads a newer installer silently if one exists.
-            // No UI. PendingInstallerPath is never touched here.
-            _ = Task.Run(async () =>
-            {
-                try { await UpdateChecker.CheckForUpdateAsync(); }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"[MainForm] Update check failed: {ex.Message}");
-                }
-            });
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
             AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
-            if (_updatesEnabled)
-                UpdateChecker.RunPendingInstaller();
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)

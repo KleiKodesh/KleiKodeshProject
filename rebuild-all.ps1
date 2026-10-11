@@ -17,7 +17,6 @@ $msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Curren
 $projects = @(
     # Shared libraries (no dependencies)
     "WpfLib/WpfLib.csproj",
-    "UpdateCheckerLib/UpdateCheckerLib.csproj",
     
     # DocDesign (depends on WpfLib)
     "KleiKodeshVsto/DocDesign/DocDesignLib/DocDesignLib.csproj",

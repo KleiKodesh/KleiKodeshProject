@@ -408,10 +408,6 @@
       <Project>{74e59bc0-41e5-475a-85cb-eacdc2ef6415}</Project>
       <Name>DocDesignLib</Name>
     </ProjectReference>
-    <ProjectReference Include="..\UpdateCheckerLib\UpdateCheckerLib.csproj">
-      <Project>{B8F3E2A1-4C5D-4E6F-8A9B-1C2D3E4F5A6B}</Project>
-      <Name>UpdateCheckerLib</Name>
-    </ProjectReference>
     <ProjectReference Include="Kiwix\KiwixLib\KiwixLib.csproj">
       <Project>{235001E0-16C9-4AEA-9260-99CF489A79C2}</Project>
       <Name>KiwixLib</Name>

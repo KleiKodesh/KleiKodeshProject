@@ -1,7 +1,6 @@
 ﻿using KitveiHakodeshLib.Dictionary;
 using KleiKodesh.Ribbon;
 using KitveiHakodeshLib.Pdf;
-using UpdateCheckerLib;
 using Office = Microsoft.Office.Core;
 using System;
 
@@ -23,8 +22,6 @@ namespace KleiKodesh
         private void ThisAddIn_Shutdown(object sender, System.EventArgs e)
         {
             WordToPdfConverter.CancelHostConversions();
-            // Run any pending installer that was deferred during update process
-            UpdateChecker.RunPendingInstaller();
         }
 
         #region VSTO generated code
