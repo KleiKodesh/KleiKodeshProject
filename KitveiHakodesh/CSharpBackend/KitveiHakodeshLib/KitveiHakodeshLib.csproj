@@ -253,7 +253,10 @@
           Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' != 'false'">
     <Error Condition="!Exists('$(KhsPublishedExe)')" Text="KitveiHakodeshService was not published to $(KhsPublishDir) - the library cannot ship without it." />
     <ItemGroup>
-      <KhsPayloadFile Include="$(KhsPublishDir)**\*.*" Exclude="$(KhsPublishDir)**\*.pdb" />
+      <!-- Not shipped: debug symbols, and the two files that only configure a dev run
+           (appsettings.Development.json) or a non-AOT build (runtimeconfig.template.json). -->
+      <KhsPayloadFile Include="$(KhsPublishDir)**\*.*"
+                      Exclude="$(KhsPublishDir)**\*.pdb;$(KhsPublishDir)appsettings.Development.json;$(KhsPublishDir)runtimeconfig.template.json" />
       <Content Include="@(KhsPayloadFile)">
         <Link>KitveiHakodeshService\%(RecursiveDir)%(Filename)%(Extension)</Link>
         <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

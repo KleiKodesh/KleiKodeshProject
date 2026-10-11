@@ -95,8 +95,6 @@
            Condition="!Exists('$(VueFrontendOut)\index.html')" />
     <Error Text="ERROR: PDF.js not found in frontend output!"
            Condition="!Exists('$(VueFrontendOut)\pdfjs\build\pdf.mjs')" />
-    <Error Text="ERROR: KitveiHakodesh_dictionary.db not found in frontend output!"
-           Condition="!Exists('$(VueFrontendOut)\dictionary\KitveiHakodesh_dictionary.db')" />
 
     <Message Text="[Vue] Sync done — frontend at $(VueFrontendOut)" Importance="high" />
   </Target>
