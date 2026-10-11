@@ -4,7 +4,7 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace KitveiHakodesh.ServiceClient
+namespace KitveiHakodeshLib.Service
 {
     /// <summary>
     /// The named-pipe channel to a running KitveiHakodesh service. Mirrors the service's

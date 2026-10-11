@@ -4,12 +4,13 @@ import { detectFontsByCanvas } from './fontsCanvasProbe'
 /**
  * Real system font families that can render Hebrew, sorted alphabetically.
  *
- * The KitveiHakodesh service enumerates them via DirectWrite (`getFonts`) in both runtimes,
- * so the picker offers the machine's ACTUAL Hebrew fonts.
+ * Both runtimes ask the OS through DirectWrite, so the picker offers the machine's ACTUAL
+ * Hebrew fonts: the WebView2 host enumerates in its own process (`getFonts` host action —
+ * nothing about fonts needs the service or an external library), the dev browser asks the
+ * service, which runs the same enumerator.
  *
- * fontsCanvasProbe is the last resort when the service is unreachable. It can only confirm
- * fonts its own CANDIDATES list names, so it under-reports — but a plausible subset beats an
- * empty picker, and the real enumerator is what normally answers.
+ * fontsCanvasProbe is the last resort when neither answers. It can only confirm fonts its own
+ * CANDIDATES list names, so it under-reports — but a plausible subset beats an empty picker.
  *
  * Lives here rather than in utils/ because it is entirely host I/O. A util may not invoke a
  * host action.
@@ -60,10 +61,13 @@ let _fontsCache: Promise<string[]> | null = null
 
 async function fetchFonts(): Promise<string[]> {
   try {
-    const result = await serviceCall<{ fonts?: string[] }>('getFonts')
+    const result =
+      typeof window.__webviewAction === 'function'
+        ? ((await window.__webviewAction('getFonts')) as { fonts?: string[] })
+        : await serviceCall<{ fonts?: string[] }>('getFonts')
     if (Array.isArray(result?.fonts) && result.fonts.length > 0) return withBundledFirst(result.fonts)
   } catch {
-    // Service unreachable — fall through to the canvas probe.
+    // Host or service unreachable — fall through to the canvas probe.
   }
   return withBundledFirst(await detectFontsByCanvas())
 }

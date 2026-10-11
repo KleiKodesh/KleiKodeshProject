@@ -1,4 +1,4 @@
-using KitveiHakodesh.ServiceClient;
+using KitveiHakodeshLib.Service;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Collections.Concurrent;

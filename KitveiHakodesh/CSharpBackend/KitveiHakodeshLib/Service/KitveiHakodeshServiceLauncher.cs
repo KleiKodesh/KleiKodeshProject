@@ -4,7 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace KitveiHakodesh.ServiceClient
+namespace KitveiHakodeshLib.Service
 {
     /// <summary>
     /// Starts the KitveiHakodesh service when no instance is listening on the pipe.

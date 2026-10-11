@@ -557,11 +557,11 @@ namespace KitveiHakodeshLib
             // listening (KitveiHakodeshServiceLauncher) and retries the call once. A short
             // connect timeout: when the pipe is absent, net48's Connect spins for the whole
             // timeout before failing, and the page's client retries several times.
-            var serviceLauncher = new KitveiHakodesh.ServiceClient.KitveiHakodeshServiceLauncher();
+            var serviceLauncher = new KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher();
             _serviceRelay = new ServiceRpcRelay(
                 _webView.CoreWebView2, _bridge,
-                new KitveiHakodesh.ServiceClient.KitveiHakodeshServiceSelfStartingChannel(
-                    new KitveiHakodesh.ServiceClient.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
+                new KitveiHakodeshLib.Service.KitveiHakodeshServiceSelfStartingChannel(
+                    new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
                     serviceLauncher));
             // Start it now rather than on the first data call, so the page's first requests
             // find it listening instead of paying the spawn on the hot path.

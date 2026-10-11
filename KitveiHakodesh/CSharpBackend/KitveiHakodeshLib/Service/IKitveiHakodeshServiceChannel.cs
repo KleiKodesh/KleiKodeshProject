@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace KitveiHakodesh.ServiceClient
+namespace KitveiHakodeshLib.Service
 {
     /// <summary>
     /// A channel to the KitveiHakodesh service. Carries request and response envelopes as

@@ -3,7 +3,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace KitveiHakodesh.ServiceClient
+namespace KitveiHakodeshLib.Service
 {
     /// <summary>
     /// Length-prefixed framing of the KitveiHakodesh service pipe, byte-for-byte the service's

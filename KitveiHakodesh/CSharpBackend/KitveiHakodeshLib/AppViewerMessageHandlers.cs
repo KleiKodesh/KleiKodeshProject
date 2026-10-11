@@ -74,6 +74,7 @@ namespace KitveiHakodeshLib
                         case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
+                        case "getFonts": await HandleGetFonts(id); break;
                         case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "localFileIndexStatus": _fileSystemSearch.HandleIndexStatus(id); break;
@@ -248,6 +249,16 @@ namespace KitveiHakodeshLib
                 _pendingOpenBook = null;
                 PushOpenBook(link);
             }
+        }
+
+        /// <summary>The Hebrew-capable font families on THIS machine, enumerated in this process
+        /// through DirectWrite (Common/HebrewFonts, linked from Core): the picker needs no service
+        /// round trip for something the window already knows. A cold enumeration walks the cmap of
+        /// every typeface, so it runs off the UI thread; Reply marshals itself back.</summary>
+        private async Task HandleGetFonts(string id)
+        {
+            var fonts = await Task.Run(() => KitveiHakodesh.Core.Common.HebrewFonts.GetHebrewFonts());
+            _bridge.Reply(id, new { fonts });
         }
 
         private void HandleGetDiagnostics(string id)

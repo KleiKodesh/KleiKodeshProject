@@ -2,7 +2,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace KitveiHakodesh.ServiceClient
+namespace KitveiHakodeshLib.Service
 {
     /// <summary>
     /// A channel that starts the service when it is not there. Wraps the pipe channel: a call
