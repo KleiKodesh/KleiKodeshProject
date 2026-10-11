@@ -1,7 +1,7 @@
-using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.HebrewBooks;
+using KitveiHakodeshLib.Settings;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Text.Json;
@@ -47,13 +47,9 @@ namespace KitveiHakodeshLib
                     // switch is for what only the host process can do (window, Word, files, chrome).
                     switch (action)
                     {
-                        case "setDbPath": _db.HandleSetDbPath(root, id); break;
-                        case "pickDbPath": _db.HandlePickDbPath(id, this); break;
-                        case "clearDbPath": _db.HandleClearDbPath(id); break;
-                        case "clearHbLocalFolder": _db.HandleClearHbLocalFolder(id); break;
-                        case "getTurnOffUpdates": _db.HandleGetTurnOffUpdates(id); break;
-                        case "setTurnOffUpdates": _db.HandleSetTurnOffUpdates(root, id); break;
-                        case "resetSettings": _db.HandleResetSettings(id); break;
+                        // The dialog only: the chosen path goes to the service from the page.
+                        case "pickDbPath": HandlePickDbPathDialog(id); break;
+                        case "resetSettings": HandleResetSettings(id); break;
                         // Replies before reloading on purpose, unlike DeleteFtsIndex: the caller
                         // cannot meaningfully await a navigation that destroys the page making the
                         // call, so the reply exists only to settle the promise. Both frontend
@@ -72,32 +68,17 @@ namespace KitveiHakodeshLib
                         case "readTxtFileContent": await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
-                        case "restoreHbPdf": _hb.HandleRestoreHbPdf(root, id); break;
-                        case "triggerHbDownload": _hb.HandleTriggerHbDownload(root, id); break;
                         case "triggerHbSaveAs": _hb.HandleTriggerHbSaveAs(root, id); break;
-                        case "deleteHbLocalFile": _hb.HandleDeleteHbLocalFile(root, id); break;
-                        case "checkHbLocalFiles": _hb.HandleCheckHbLocalFiles(root, id); break;
                         case "revealHbLocalFile": _hb.HandleRevealHbLocalFile(root, id); break;
-                        case "hbDownloadProgress": _hb.HandleHbDownloadProgress(root, id); break;
-                        case "cancelHbDownload": _hb.HandleCancelHbDownload(root, id); break;
-                        case "hbSearch": HandleHebrewBooksSearch(root, id); break;
-                        case "GetFtsIndexingProgress": _search.HandleGetProgress(id); break;
-                        case "FtsSearchStart": _search.HandleSearchStart(root, id); break;
-                        case "FtsSearchCancel": _search.HandleSearchCancel(root, id); break;
-                        case "DeleteFtsIndex": _search.HandleDeleteIndex(id); break;
-                        case "ResetFtsIndex": _search.HandleResetFtsIndex(id); break;
                         case "TogglePopOut": HandleTogglePopOut(id); break;
                         case "toggleFullscreen": HandleToggleFullscreen(id); break;
                         case "getWordSynonyms": HandleGetWordSynonyms(root, id); break;
-                        case "getFonts": await HandleGetFonts(id); break;
                         case "getDiagnostics": HandleGetDiagnostics(id); break;
                         case "fileSystemSearchWarmup": _fileSystemSearch.HandleWarmup(id); break;
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "localFileIndexStatus": _fileSystemSearch.HandleIndexStatus(id); break;
                         case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
                         case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
-                        case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
-                        case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;
                         case "exportToWord": await HandleExportToWord(root, id); break;
                         case "pasteIntoWord": await HandlePasteIntoWord(root, id); break;
                         case "copyImageToClipboard": HandleCopyImageToClipboard(root, id); break;
@@ -113,7 +94,7 @@ namespace KitveiHakodeshLib
             {
                 // Full exception (type + message + stack + inner exceptions), not just
                 // ex.Message — this is the only place a handler that throws before its
-                // own try/catch (e.g. SaveDbPath inside setDbPath) gets reported, and
+                // own try/catch gets reported, and
                 // the truncated form made those failures undiagnosable from the field.
                 if (id != null) _bridge.Reply(id, new { error = ex.ToString() });
             }
@@ -195,13 +176,54 @@ namespace KitveiHakodeshLib
             }
         }
 
-        private async Task HandleGetFonts(string id)
+        /// <summary>
+        /// The native open-file dialog for a seforim database. Only the dialog: the page hands
+        /// the chosen path to the service (setSeforimDbPath), which validates, persists and
+        /// restarts. An installed service may have no desktop to show a dialog on, which is
+        /// why this one stays with the window.
+        /// </summary>
+        private void HandlePickDbPathDialog(string id)
         {
-            // WebMessageReceived fires on the UI thread, and a cold enumeration walks the
-            // cmap of every system typeface — around a second on a font-heavy machine.
-            // Task.Run keeps the window responsive; Reply marshals itself back.
-            var fonts = await Task.Run(() => KitveiHakodesh.Core.Common.HebrewFonts.GetHebrewFonts());
-            _bridge.Reply(id, new { fonts });
+            BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    using (var dlg = new OpenFileDialog())
+                    {
+                        dlg.Title  = SeforimDbPickerTexts.DialogTitle;
+                        dlg.Filter = SeforimDbPickerTexts.Filter;
+                        dlg.CheckFileExists = true;
+                        if (dlg.ShowDialog(this) != DialogResult.OK)
+                        {
+                            _bridge.Reply(id, new { cancelled = true });
+                            return;
+                        }
+                        _bridge.Reply(id, new { path = dlg.FileName });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _bridge.Reply(id, new { error = ex.ToString() });
+                }
+            }));
+        }
+
+        /// <summary>
+        /// Wipes the host's whole KitveiHakodesh settings subtree (window geometry, pop-out
+        /// bounds, the theme mirror). The data settings are reset through the service by the
+        /// page before it calls this. Clearing the persisted dark mode means the app comes back
+        /// light, so the title bar goes light at once to match the theme Vue applies after the
+        /// reload that follows.
+        /// </summary>
+        private void HandleResetSettings(string id)
+        {
+            try { Microsoft.VisualBasic.Interaction.DeleteSetting("KitveiHakodesh"); } catch { }
+            if (InvokeRequired)
+                Invoke(new Action(() => ApplyTitleBarTheme(false)));
+            else
+                ApplyTitleBarTheme(false);
+            ApplySplashTheme(false);
+            _bridge.Reply(id, new { });
         }
 
         private void HandleAppReady(string id)
@@ -311,28 +333,5 @@ namespace KitveiHakodeshLib
             return ok;
         }
 
-        private void HandleHebrewBooksSearch(JsonElement root, string id)
-        {
-            if (!_hebrewBooksDb.IsInitialized)
-            {
-                _bridge.Reply(id, new { error = "Hebrew Books database not available" });
-                return;
-            }
-            string query = root.TryGetProperty("query", out var q) ? (q.GetString() ?? "") : "";
-            string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
-            int limit = root.TryGetProperty("limit", out var lim) && lim.TryGetInt32(out int limVal)
-                ? limVal
-                : HebrewBooksDb.DefaultSearchResultLimit;
-            if (string.IsNullOrWhiteSpace(localFolder)) localFolder = KitveiHakodeshLib.Settings.AppSettings.LoadHbLocalFolder();
-            try
-            {
-                var results = _hebrewBooksDb.Search(query, localFolder, limit);
-                _bridge.Reply(id, new { books = results });
-            }
-            catch (Exception ex)
-            {
-                _bridge.Reply(id, new { error = ex.Message });
-            }
-        }
     }
 }

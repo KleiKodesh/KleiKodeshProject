@@ -147,27 +147,29 @@
     <Compile Include="ChromeTabsMirror.cs" />
     <Compile Include="HostLink.cs" />
     <Compile Include="Diagnostics\EnvironmentDiagnostics.cs" />
+    <!-- Host-only helpers that used to live in KitveiHakodesh.Core's net48 leg: the Word COM
+         finder + thesaurus (this process shares Word with the VSTO add-in) and the
+         environment probes the diagnostics report is made of. -->
+    <Compile Include="Common\RunningWordFinder.cs" />
+    <Compile Include="Common\WordThesaurus.cs" />
+    <Compile Include="Common\DotNetRuntimeProbe.cs" />
+    <Compile Include="Common\OperatingSystemProbe.cs" />
+    <Compile Include="Common\ProcessBitnessProbe.cs" />
+    <Compile Include="Common\WordInstallProbe.cs" />
     <Compile Include="SplashOverlay.cs">
       <SubType>Component</SubType>
     </Compile>
     <Compile Include="Bridge\JsBridge.cs" />
     <Compile Include="Bridge\WebBridge.cs" />
     <Compile Include="Bridge\ServiceRpcRelay.cs" />
-    <Compile Include="Db\DbHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
-    <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
+    <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
     <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
     <Compile Include="FileSystemSearch\FileSystemSearchHandler.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
-    <Compile Include="Search\FtsIndexState.cs" />
-    <Compile Include="Search\FtsIndexBuilder.cs" />
-    <Compile Include="Search\FtsSearchExecutor.cs" />
-    <Compile Include="Search\RelatedFormExpander.cs" />
-    <Compile Include="Search\SearchHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
-    <Compile Include="UserSettings\UserSettingsDbAccess.cs" />
-    <Compile Include="UserSettings\UserSettingsDbHandler.cs" />
+    <Compile Include="Settings\SeforimDbPickerTexts.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -175,11 +177,6 @@
   <ItemGroup>
     <None Include="app.config" />
     <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="Resources\HebrewBooksCatalog.db">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="..\..\..\KleiKodeshVsto\Resources\KitveiHakodesh.png">
@@ -193,12 +190,6 @@
          database, search engine or wire DTO of its own. -->
     <ProjectReference Include="..\KitveiHakodesh.ServiceClient\KitveiHakodesh.ServiceClient.csproj">
       <Name>KitveiHakodesh.ServiceClient</Name>
-    </ProjectReference>
-    <!-- Core is on its way OUT of this project: every data handler that still reaches into it
-         is being replaced by the relay above, slice by slice. When the last one goes, so does
-         this reference, and with it SQLite, Lucene and FtsLib. -->
-    <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj">
-      <Name>KitveiHakodesh.Core</Name>
     </ProjectReference>
     <ProjectReference Include="..\DocumentLocator\DocumentLocator.Client\DocumentLocator.Client.csproj">
       <Project>{E7B8C9D0-E1F2-43AB-B5C6-D7E8F9A0B1C2}</Project>

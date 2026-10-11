@@ -4,7 +4,7 @@ using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
-using KitveiHakodesh.Core.Common;
+using KitveiHakodeshLib.Common;
 
 namespace KitveiHakodeshLib.Diagnostics
 {
@@ -44,7 +44,7 @@ namespace KitveiHakodeshLib.Diagnostics
 
         // ── process, OS, .NET runtime, Word ───────────────────────────────────────
         //
-        // All four are KitveiHakodesh.Core's probes. They used to be re-implemented here, which
+        // All four are the probes in Common/ (moved here from Core). They used to be re-implemented, which
         // is how two copies of "which bitness is Word?" end up disagreeing. Core answers each
         // one as TYPED data; shaping it into this flat string dictionary is the report's job,
         // and that is what stays on this side.

@@ -2,7 +2,7 @@ using System;
 using System.Runtime.InteropServices;
 using Word = Microsoft.Office.Interop.Word;
 
-namespace KitveiHakodesh.Core.Common
+namespace KitveiHakodeshLib.Common
 {
     /// <summary>
     /// Finds a Word instance to work with, in this order: the one hosting us, then one already

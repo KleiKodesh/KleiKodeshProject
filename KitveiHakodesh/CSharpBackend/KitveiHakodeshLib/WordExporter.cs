@@ -336,7 +336,7 @@ namespace KitveiHakodeshLib
             Word.Application host = WordToPdfConverter.HostApplication;
             if (host != null)
             {
-                if (KitveiHakodesh.Core.Common.RunningWordFinder.IsAlive(host)) return host;
+                if (KitveiHakodeshLib.Common.RunningWordFinder.IsAlive(host)) return host;
                 WordToPdfConverter.HostApplication = null;
             }
 
@@ -347,7 +347,7 @@ namespace KitveiHakodeshLib
                 var running = (Word.Application)Marshal.GetActiveObject("Word.Application");
                 if (running != null)
                 {
-                    if (KitveiHakodesh.Core.Common.RunningWordFinder.IsAlive(running)) return running;
+                    if (KitveiHakodeshLib.Common.RunningWordFinder.IsAlive(running)) return running;
                     try { Marshal.ReleaseComObject(running); } catch { }
                 }
             }

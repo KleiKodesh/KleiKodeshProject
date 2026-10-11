@@ -1,7 +1,5 @@
 using KitveiHakodeshLib.Bridge;
-using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Settings;
-using KitveiHakodeshLib.UserSettings;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.IO;
@@ -150,49 +148,12 @@ namespace KitveiHakodeshLib
             if (clearBrowsingData)
                 await ClearWebViewBrowsingDataAsync();
 
-            // Remove the stale db-path injection script and register a fresh one
-            // with the current registry values before navigating.
+            // Re-register the host-facts script with the current values (the persisted dark
+            // mode may have changed) before navigating.
             if (_dbInjectionScriptId != null)
                 _webView.CoreWebView2.RemoveScriptToExecuteOnDocumentCreated(_dbInjectionScriptId);
-
-            string savedPath = AppSettings.LoadDbPath();
-            bool dbReady = File.Exists(savedPath);
-            string escapedPath = savedPath.Replace("\\", "\\\\");
-            string hbLocalFolder = AppSettings.LoadHbLocalFolder();
-            string escapedHbFolder = hbLocalFolder.Replace("\\", "\\\\");
-            string dbScript =
-                "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";" +
-                "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                JsBridge.Script + "\n" + dbScript);
-
-            // Re-init the DB handler; keep the existing search handler and its index state.
-            _db = new DbHandler(_bridge, _webView, savedPath);
-            // Shared with the constructor's wiring, not re-listed here: this copy used to
-            // omit the catalog-index invalidation, so after any reload (the app reset
-            // included) picking a new seforim DB left the catalog TOC index answering for
-            // the OLD database — wrong book ids, and no self-heal because its hash check is
-            // latched off once a build has started.
-            _db.OnDbPathPicked = HandleDbPathPicked;
-            _db.ResetTitleBarToLight = () =>
-            {
-                if (InvokeRequired)
-                    Invoke(new Action(() => ApplyTitleBarTheme(false)));
-                else
-                    ApplyTitleBarTheme(false);
-                ApplySplashTheme(false);
-            };
-
-            // Re-init user settings DB for the (possibly changed) seforim DB path.
-            _userSettings?.Dispose();
-            _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
-
-            // Always call OnDbReady — if the file doesn't exist it pushes ftsDbNotFound
-            // to the frontend; if it does exist it starts or resumes indexing.
-            _search.OnDbReady(savedPath);
+                JsBridge.Script + "\n" + HostFactsScript());
 
             _webView.CoreWebView2.Navigate(AppShellUrl);
         }

@@ -1,36 +1,44 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    The shared Core library: one source tree, two legs.
+    The data core: the seforim database, the dictionary, the HebrewBooks catalog, the FTS and
+    catalog indexes. ONE consumer: KitveiHakodeshService, which publishes native AOT.
 
-      net48            — consumed by KitveiHakodeshLib (WebView2 host), the Word VSTO add-in
-                         and KitveiHakodeshDemoApp. Non-negotiable: VSTO supports nothing else.
-      net10.0-windows  — consumed by KitveiHakodeshService. NOT plain net10.0: DocumentLocator's
-                         modern leg is net10.0-windows and a plain net10.0 project cannot
-                         reference it. Registry access needs Windows anyway.
+    This used to multi-target net48 as well, for the WebView2 host (KitveiHakodeshLib), the
+    Word VSTO add-in and KitveiHakodeshDemoApp. Those reach the data through the service's
+    named pipe now (KitveiHakodesh.ServiceClient) and reference nothing in here - which is the
+    point: SQLite, Lucene, FtsLib and MessagePack are referenced by the service alone. The
+    host-only pieces that lived on the net48 leg (Word COM finder + thesaurus, the environment
+    probes) moved to KitveiHakodeshLib; the update-check rules moved to UpdateCheckerLib.
 
-    Settings follow DocumentLocator.csproj, the working multi-target precedent in this repo —
+    net10.0-windows, NOT plain net10.0: DocumentLocator's modern leg is net10.0-windows and a
+    plain net10.0 project cannot reference it. Registry access needs Windows anyway.
+
+    Settings follow DocumentLocator.csproj, the working precedent in this repo -
     see MIGRATION-PLAN.md "csproj pattern to copy" for why each one is here rather than default.
   -->
 
   <PropertyGroup>
-    <TargetFrameworks>net48;net10.0-windows</TargetFrameworks>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <OutputType>Library</OutputType>
     <RootNamespace>KitveiHakodesh.Core</RootNamespace>
     <AssemblyName>KitveiHakodesh.Core</AssemblyName>
     <Deterministic>true</Deterministic>
-    <!-- One source tree compiles on both legs, so the language level must not drop to the
-         net48 default (C# 7.3) on one of them. -->
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
     <!-- Pure managed code: stay architecture-neutral even when the solution builds this
          project under Platform=x64/x86, or a host of the other bitness loading it throws
          BadImageFormatException. -->
     <PlatformTarget>AnyCPU</PlatformTarget>
-    <!-- net48 lands in bin\<cfg>\net48\, net10.0-windows in bin\<cfg>\net10.0-windows\. -->
+    <!-- Output stays in bin\<cfg>\net10.0-windows\, where the service's reference expects it. -->
     <AppendTargetFrameworkToOutputPath>true</AppendTargetFrameworkToOutputPath>
     <!-- DbFileFingerprint reads NTFS ChangeTime and the per-file USN through two kernel32
          calls that take raw pointers. It is the only unsafe code here. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The Service publishes native AOT and references this project, so ILC compiles
+         everything in it. IsAotCompatible surfaces an AOT-hostile construct as a warning HERE,
+         at Core's own build, instead of at the Service's link step. See MIGRATION-PLAN rule 0d. -->
+    <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 
   <!-- Explicit, platform-suffixed output paths. The SDK default (bin\<Platform>\<Configuration>\)
@@ -45,94 +53,38 @@
     <OutputPath>bin\Debug\</OutputPath>
   </PropertyGroup>
 
-  <!-- The Service publishes native AOT and references this leg, so ILC compiles everything in
-       it. IsAotCompatible surfaces an AOT-hostile construct as a warning HERE, at Core's own
-       build, instead of at the Service's link step. See MIGRATION-PLAN rule 0d. -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0-windows'">
-    <IsAotCompatible>true</IsAotCompatible>
-    <Nullable>enable</Nullable>
-  </PropertyGroup>
-
-  <!-- net48 rejects the nullable annotations the modern leg is written with; keep the
-       annotation context off there rather than annotating for two dialects. -->
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
-    <Nullable>annotations</Nullable>
-    <NoWarn>$(NoWarn);CS8600;CS8601;CS8602;CS8603;CS8604;CS8605;CS8625</NoWarn>
-  </PropertyGroup>
-
-  <!-- ONE SQLite provider on BOTH legs. Microsoft.Data.Sqlite ships netstandard2.0 and
-       SQLitePCLRaw ships net461, so net48 resolves fine; Lib's old System.Data.SQLite +
-       Dapper are dropped (Dapper emits IL at runtime and cannot survive native AOT —
-       MIGRATION-PLAN rule 0d).
-
-       PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
-       SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
-       fails with a sharing violation. Matches the version KitveiHakodeshService already uses. -->
-  <!-- The Word automation files use the Office PIA, which native AOT cannot load at all
-       (it is COM interop metadata resolved at runtime). They compile on the net48 leg only;
-       the modern leg reaches Word through DocConvertLib's manual COM/IDispatch code.
-       EmbedInteropTypes means no Interop assembly has to ship beside the app. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <Reference Include="Microsoft.Office.Interop.Word, Version=15.0.0.0, Culture=neutral, PublicKeyToken=71e9bce111e9429c, processorArchitecture=MSIL">
-      <HintPath>../packages/Microsoft.Office.Interop.Word.15.0.4797.1003/lib/net20/Microsoft.Office.Interop.Word.dll</HintPath>
-      <EmbedInteropTypes>True</EmbedInteropTypes>
-    </Reference>
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
-    <Compile Remove="Common/RunningWordFinder.cs" />
-    <Compile Remove="Common/WordThesaurus.cs" />
-    <Compile Remove="Common/WordExporter.cs" />
-  </ItemGroup>
-
-  <!-- The FTS engine. ONE project now, multi-targeted the same way this one is, so there is
-       no longer a per-leg reference and no second copy of the engine to keep in step. Core
-       feeds it through IFtsCorpus (SeforimDbFtsCorpus) — the engine's built-in corpus reader
-       is not used from here. -->
+  <!-- The FTS engine. Core feeds it through IFtsCorpus (SeforimDbFtsCorpus) - the engine's
+       built-in corpus reader is not used from here. -->
   <ItemGroup>
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
   </ItemGroup>
 
-  <!-- The GitHub releases API is JSON — somebody else's wire format, which rule 0e does not
-       ask us to pretend is MessagePack. net48 has no System.Text.Json in the framework; the
-       modern leg has it built in, and both use the SOURCE GENERATOR (GithubJsonContext) so the
-       AOT leg never needs the reflection path. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <PackageReference Include="System.Text.Json" Version="10.0.0" />
-  </ItemGroup>
-
-  <!-- Codepage 1255 (Hebrew ANSI) is built into net48 but not into the modern runtime, where
-       Encoding.GetEncoding(1255) throws without this provider. TextEncodingDetector registers
-       it; without the package that registration would not compile. -->
-  <ItemGroup Condition="'$(TargetFramework)' != 'net48'">
-    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
-  </ItemGroup>
-
-  <!-- HttpClient is in the framework on net48 but not in the default reference set, so the
-       HebrewBooks downloader and catalog updater do not compile there without this. -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
-    <Reference Include="System.Net.Http" />
-  </ItemGroup>
-
   <ItemGroup>
+    <!-- Codepage 1255 (Hebrew ANSI) is not built into the modern runtime, where
+         Encoding.GetEncoding(1255) throws without this provider. TextEncodingDetector
+         registers it. -->
+    <PackageReference Include="System.Text.Encoding.CodePages" Version="10.0.0" />
+    <!-- PINNED 10.0.9, NOT 11.x: FtsLib's segment writer does File.Move on a just-written
+         SQLite file, and 11.x keeps the handle open after Dispose (pooling), so the move
+         fails with a sharing violation. Matches the version KitveiHakodeshService uses. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <!-- Line content in SeforimLibrary schema 6+ is zstd-compressed with a dictionary that
          ships inside the database. ZstdSharp.Port is a pure-C# port: no native libzstd.dll
          to package per architecture, nothing for the per-user installer to place, and
          nothing for ILC to choke on. Decode of a ~1 KB line is microseconds either way;
          the one path where a native binding could win is a full FTS index rebuild, which
-         is measurable if it ever matters. netstandard2.0, so both legs resolve it. -->
+         is measurable if it ever matters. -->
     <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
     <!-- HebrewBooksCatalogUpdater parses upstream book pages. VERIFIED AOT-CLEAN: a native-AOT
          console app calling LoadHtml + GetElementbyId + SelectNodes published with no ILC
          warnings and ran correctly. The reflection in this package lives in HtmlWeb and the
          object-encapsulator APIs, which nothing here touches and ILC trims away. -->
     <PackageReference Include="HtmlAgilityPack" Version="1.12.4" />
-    <!-- Core's models ARE the wire types: one shared set, serialized directly by both
+    <!-- Core's models ARE the wire types: one shared set, serialized directly by the service
          transports, with no mirror types and no mapping layer. The version matches the
          Service's. Its source generator emits a formatter per [MessagePackObject] type in
          THIS compilation, which is why Core declares its own resolver (CoreMessagePackResolver)
-         rather than relying on the Service's — a generator cannot see across assemblies. -->
+         rather than relying on the Service's - a generator cannot see across assemblies. -->
     <PackageReference Include="MessagePack" Version="3.1.8" />
     <!-- The catalog index (SeforimDbCatalog/). Same version as the Service. NOTE FOR AOT
          PUBLISHERS: Lucene discovers codecs via reflection (NamedSPILoader +

@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.InteropServices;
 
-namespace KitveiHakodesh.Core.Common
+namespace KitveiHakodeshLib.Common
 {
     /// <summary>
     /// Which runtime is executing, and from where?

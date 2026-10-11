@@ -1,6 +1,6 @@
 using System;
 
-namespace KitveiHakodesh.Core.Common
+namespace KitveiHakodeshLib.Common
 {
     /// <summary>
     /// Which Windows is this, and is it 64-bit?

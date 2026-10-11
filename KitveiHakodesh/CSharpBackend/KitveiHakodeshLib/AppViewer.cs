@@ -1,14 +1,11 @@
 using Dark.Net;
 using KitveiHakodeshLib.Bridge;
-using KitveiHakodeshLib.Db;
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.FileSystemSearch;
 using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.LocalFile;
-using KitveiHakodeshLib.Search;
 using KitveiHakodeshLib.Settings;
-using KitveiHakodeshLib.UserSettings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -112,13 +109,9 @@ namespace KitveiHakodeshLib
         // this relay (serviceClient.ts -> http://kitvei-service -> the service pipe). Nothing in
         // this process answers a data op any more.
         private ServiceRpcRelay _serviceRelay;
-        private DbHandler _db;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
-        private SearchHandler _search;
-        private HebrewBooksDb _hebrewBooksDb;
         private FileSystemSearchHandler _fileSystemSearch;
-        private UserSettingsDbHandler _userSettings;
         private string _dbInjectionScriptId;
 
         // A file path queued before the Vue app has finished mounting.
@@ -134,10 +127,6 @@ namespace KitveiHakodeshLib
         // True once Vue has sent 'appReady' — prevents re-queueing after first mount.
         private bool _appReady;
 
-        // Reference count for active AppViewer instances — used to know when the
-        // last instance is disposed so the shared user settings DB can be closed.
-        private static int _instanceCount;
-        private bool _instanceCounted;
 
         // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -317,8 +306,6 @@ namespace KitveiHakodeshLib
             ParentChanged += OnParentChanged;
             Controls.Add(_webView);
             _InitSplash();
-            System.Threading.Interlocked.Increment(ref _instanceCount);
-            _instanceCounted = true;
             _ = InitAsync();
         }
 
@@ -545,24 +532,12 @@ namespace KitveiHakodeshLib
             _webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "KitveiHakodesh-vue-app", AppDir, CoreWebView2HostResourceAccessKind.Allow);
 
-            string savedPath = AppSettings.LoadDbPath();
-            bool dbReady = File.Exists(savedPath);
-            string escapedPath = savedPath.Replace("\\", "\\\\");
-            string hbLocalFolder = AppSettings.LoadHbLocalFolder();
-            string escapedHbFolder = hbLocalFolder.Replace("\\", "\\\\");
-
             // Merge both scripts into one AddScriptToExecuteOnDocumentCreatedAsync call —
             // each call is a browser-process round-trip, so one call is faster than two.
-            string dbScript =
-                "window.__webviewDbPath=\"" + escapedPath + "\";" +
-                "window.__webviewDbReady=" + (dbReady ? "true" : "false") + ";" +
-                "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-                "window.__webviewHbLocalFolder=\"" + escapedHbFolder + "\";" +
-                // Persisted dark mode — lets Vue sync its theme to the title bar on
-                // startup, so both always agree regardless of which host last saved.
-                "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
+            // Only HOST facts are injected; the database path and folder settings are the
+            // service's and the page asks it for them.
             _dbInjectionScriptId = await _webView.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(
-                JsBridge.Script + "\n" + dbScript);
+                JsBridge.Script + "\n" + HostFactsScript());
 
             // IframeScrollScript runs in every frame including local file iframes.
             // It is registered separately because it must not share the same document-created
@@ -578,34 +553,24 @@ namespace KitveiHakodeshLib
                 JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
 
             _bridge = new WebBridge(_webView, this);
-            // A short connect timeout: when the pipe is absent, net48's Connect spins for the
-            // whole timeout before failing, and the page's client retries several times.
+            // The service is a hard dependency: the channel starts it when no instance is
+            // listening (KitveiHakodeshServiceLauncher) and retries the call once. A short
+            // connect timeout: when the pipe is absent, net48's Connect spins for the whole
+            // timeout before failing, and the page's client retries several times.
+            var serviceLauncher = new KitveiHakodesh.ServiceClient.KitveiHakodeshServiceLauncher();
             _serviceRelay = new ServiceRpcRelay(
                 _webView.CoreWebView2, _bridge,
-                new KitveiHakodesh.ServiceClient.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500));
-            _db = new DbHandler(_bridge, _webView, savedPath);
+                new KitveiHakodesh.ServiceClient.KitveiHakodeshServiceSelfStartingChannel(
+                    new KitveiHakodesh.ServiceClient.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
+                    serviceLauncher));
+            // Start it now rather than on the first data call, so the page's first requests
+            // find it listening instead of paying the spawn on the hot path.
+            _ = Task.Run(() => serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None));
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
-            _search = new SearchHandler(_bridge, _webView);
-            _hebrewBooksDb = HebrewBooksDb.Instance;
-            _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
             _fileSystemSearch.UiControl = this;
-            _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
-
-            _db.OnDbPathPicked = HandleDbPathPicked;
-
-            _db.ResetTitleBarToLight = () =>
-            {
-                // After a full settings reset, restore the title bar to light immediately
-                // so it matches the light theme Vue will apply after the subsequent reload.
-                if (InvokeRequired)
-                    Invoke(new Action(() => ApplyTitleBarTheme(false)));
-                else
-                    ApplyTitleBarTheme(false);
-                ApplySplashTheme(false);
-            };
 
             _webView.CoreWebView2.WebMessageReceived += OnMessageReceived;
             _webView.CoreWebView2.DownloadStarting += OnDownloadStarting;
@@ -617,20 +582,16 @@ namespace KitveiHakodeshLib
             // Safety net: if NavigationCompleted never fires (e.g. WebView2 runtime issue),
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
-            _search.OnDbReady(savedPath);
         }
 
         /// <summary>
-        /// Everything that must happen when the user picks a different seforim DB. ONE
-        /// method because there are two wiring sites — here and HandleReload — and the
-        /// reload copy silently omitted the catalog step, so a DB switch after any reload
-        /// left catalog search answering from the previous database.
+        /// The facts only the host knows, injected before the page loads: whether the pop-out
+        /// button belongs in the menu (VSTO task pane), and the persisted dark mode so Vue can
+        /// sync its theme to the title bar on startup, whichever host last saved it.
         /// </summary>
-        private void HandleDbPathPicked(string path)
-        {
-            _search.ResetAndReindex(path);
-            _userSettings.UpdateSeforimDbPath(path);
-        }
+        private string HostFactsScript() =>
+            "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
+            "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
 
         // ── Dispose ─────────────────────────────────────────────────────────────────
 
@@ -661,20 +622,9 @@ namespace KitveiHakodeshLib
                 // Release all virtual host mappings so WebView2 does not hold folder
                 // handles after the process exits.
                 _localFile?.DisposeAllHosts();
-                _hb?.DisposeAllHosts();
                 _serviceRelay?.Detach();
 
                 _fileSystemSearch?.Dispose();
-                _userSettings?.Dispose();
-
-                // Decrement the shared instance count. When the last AppViewer is
-                // disposed, close the shared user settings DB connection.
-                if (_instanceCounted)
-                {
-                    _instanceCounted = false;
-                    if (System.Threading.Interlocked.Decrement(ref _instanceCount) <= 0)
-                        UserSettingsDbAccess.DisposeShared();
-                }
             }
             base.Dispose(disposing);
         }

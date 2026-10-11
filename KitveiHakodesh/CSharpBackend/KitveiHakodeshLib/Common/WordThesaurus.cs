@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Word = Microsoft.Office.Interop.Word;
 
-namespace KitveiHakodesh.Core.Common
+namespace KitveiHakodeshLib.Common
 {
     /// <summary>
     /// Word's own thesaurus, for a word.

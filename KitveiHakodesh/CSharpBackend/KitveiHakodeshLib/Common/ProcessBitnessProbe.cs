@@ -1,7 +1,7 @@
 using System;
 using System.Diagnostics;
 
-namespace KitveiHakodesh.Core.Common
+namespace KitveiHakodeshLib.Common
 {
     /// <summary>
     /// Is this process 32- or 64-bit, and which executable is it?

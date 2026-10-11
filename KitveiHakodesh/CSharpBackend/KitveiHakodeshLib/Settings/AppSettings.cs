@@ -1,124 +1,88 @@
+using Microsoft.Win32;
 using System;
-using CoreSettings = KitveiHakodesh.Core.Settings;
+using System.Globalization;
 
 namespace KitveiHakodeshLib.Settings
 {
     /// <summary>
-    /// The hosted app's names for its persisted settings. Every one of them is Core's
-    /// <see cref="CoreSettings.AppSettingsRegistry"/> underneath.
+    /// The HOST's persisted settings: window geometry and the native chrome's theme mirror,
+    /// plus two shared values the host still reads (the HebrewBooks folder for "reveal in
+    /// Explorer", and the update-check switch for the demo app's startup).
     ///
-    /// This used to be a second implementation: the same registry keys, the same defaults, the
-    /// same "True"/"False" casing for the shared VSTO value, reached through
-    /// Microsoft.VisualBasic's Interaction helpers instead of Core's raw Registry access. Two
-    /// implementations of one store is how the two drift — and one already had: this side read
-    /// the popout bounds with int.Parse, which THROWS on a corrupt or empty registry value,
-    /// where Core uses TryParse and falls back. That crash is gone with the duplicate.
-    ///
-    /// What stays is the naming. The app says LoadDarkMode where Core says GetDarkMode, and
-    /// roughly forty call sites across this library and the demo app read better for it, so the
-    /// facade is kept and the bodies delegate.
+    /// Everything about the DATA - the seforim database path, the HebrewBooks folder as a
+    /// setting, the update switch as a setting - is the KitveiHakodesh service's; the page
+    /// reads and writes those through it. This class only touches the registry, under the
+    /// same keys the service uses, so the two never disagree on a value they both read.
     /// </summary>
     public static class AppSettings
     {
-        // ── Database path ─────────────────────────────────────────────────────────
+        private const string AppKitveiHakodesh = "KitveiHakodesh";
+        private const string AppKleiKodesh = "KleiKodesh";
 
-        /// <summary>
-        /// The default seforim database: the known install locations probed in priority order,
-        /// Otzaria first, then Zayit. Returns the first that exists, or the Otzaria path as the
-        /// ultimate fallback so the settings UI still shows something meaningful when neither
-        /// is installed.
-        ///
-        /// IGNORES any saved user choice, as the name says. Core's Resolve() would honour one,
-        /// which is right for "which database should I open" but wrong here: the caller is
-        /// asking what the default WOULD be. Probing directly keeps that true no matter when it
-        /// is called, rather than only while the setting happens to be cleared.
-        /// </summary>
-        public static string ResolveDefaultDbPath()
+        private static string SubKey(string app, string section) =>
+            @"Software\VB and VBA Program Settings\" + app + @"\" + section;
+
+        private static string Get(string app, string section, string key, string fallback)
         {
-            string[] defaults = CoreSettings.SeforimDbPathResolver.DefaultLocations();
-            foreach (string candidate in defaults)
+            try
             {
-                try { if (System.IO.File.Exists(candidate)) return candidate; }
-                catch { /* unreachable drive — treat as absent and keep probing */ }
+                using (RegistryKey registryKey = Registry.CurrentUser.OpenSubKey(SubKey(app, section)))
+                    return registryKey?.GetValue(key) as string ?? fallback;
             }
-
-            // Nothing installed. Return the first location anyway (Otzaria, the primary
-            // supported source) so the settings UI has a meaningful path to show.
-            return defaults.Length > 0 ? defaults[0] : "";
+            catch
+            {
+                return fallback;
+            }
         }
 
-        /// <summary>
-        /// The database to use: the user's explicit choice when they made one, otherwise the
-        /// probe. An empty stored value means "no choice" and falls back, same as a missing
-        /// one — which is the state <see cref="ClearDbPath"/> leaves behind.
-        /// </summary>
-        public static string LoadDbPath()
+        private static void Set(string app, string section, string key, string value)
         {
-            string saved = CoreSettings.SeforimDbPathResolver.GetSavedPath();
-            return string.IsNullOrWhiteSpace(saved) ? ResolveDefaultDbPath() : saved;
+            using (RegistryKey registryKey = Registry.CurrentUser.CreateSubKey(SubKey(app, section)))
+                registryKey?.SetValue(key, value ?? "");
         }
 
-        public static void SaveDbPath(string path) =>
-            CoreSettings.SeforimDbPathResolver.SavePath(path);
+        private static int ReadInt(string section, string key, int fallback) =>
+            int.TryParse(Get(AppKitveiHakodesh, section, key, ""),
+                         NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsed)
+                ? parsed
+                : fallback;
 
-        /// <summary>
-        /// Forgets the user's explicit database choice, so <see cref="LoadDbPath"/> falls back
-        /// to the probe and Otzaria-first decides again.
-        ///
-        /// Resetting must CLEAR this rather than save the probed path back: a stored value reads
-        /// as a deliberate choice everywhere else (the resolver returns it without probing, and
-        /// the settings UI shows the path as custom), so writing the default into it would pin
-        /// whichever library happened to win today and stop any later probe.
-        /// </summary>
-        public static void ClearDbPath() =>
-            CoreSettings.SeforimDbPathResolver.ClearSavedPath();
+        private static void WriteInt(string section, string key, int value) =>
+            Set(AppKitveiHakodesh, section, key, value.ToString(CultureInfo.InvariantCulture));
 
         // ── Window state ──────────────────────────────────────────────────────────
 
         public static void SaveMainWindowMaximized(bool isMaximized) =>
-            CoreSettings.AppSettingsRegistry.SetMainWindowMaximized(isMaximized);
+            Set(AppKitveiHakodesh, "MainWindow", "Maximized", isMaximized ? "1" : "0");
 
         public static bool LoadMainWindowMaximized() =>
-            CoreSettings.AppSettingsRegistry.GetMainWindowMaximized();
+            Get(AppKitveiHakodesh, "MainWindow", "Maximized", "0") == "1";
 
-        public static System.Drawing.Rectangle LoadPopoutBounds()
+        public static System.Drawing.Rectangle LoadPopoutBounds() =>
+            new System.Drawing.Rectangle(
+                ReadInt("Popout", "X", -1), ReadInt("Popout", "Y", -1),
+                ReadInt("Popout", "W", 900), ReadInt("Popout", "H", 750));
+
+        public static void SavePopoutBounds(System.Drawing.Rectangle bounds)
         {
-            var (x, y, width, height) = CoreSettings.AppSettingsRegistry.GetPopoutBounds();
-            return new System.Drawing.Rectangle(x, y, width, height);
+            WriteInt("Popout", "X", bounds.X);
+            WriteInt("Popout", "Y", bounds.Y);
+            WriteInt("Popout", "W", bounds.Width);
+            WriteInt("Popout", "H", bounds.Height);
         }
 
-        public static void SavePopoutBounds(System.Drawing.Rectangle bounds) =>
-            CoreSettings.AppSettingsRegistry.SetPopoutBounds(
-                bounds.X, bounds.Y, bounds.Width, bounds.Height);
+        // ── Shared values the host still reads ────────────────────────────────────
 
-        // ── HebrewBooks ───────────────────────────────────────────────────────────
-
-        public static DateTime LoadHbCsvLastUpdated() =>
-            CoreSettings.AppSettingsRegistry.GetHebrewBooksCatalogUpdatedUtc();
-
-        public static void SaveHbCsvLastUpdated(DateTime utcDate) =>
-            CoreSettings.AppSettingsRegistry.SetHebrewBooksCatalogUpdatedUtc(utcDate);
-
+        /// <summary>The HebrewBooks local folder (the service persists it; "reveal in
+        /// Explorer" falls back to it when the page sends none).</summary>
         public static string LoadHbLocalFolder() =>
-            CoreSettings.AppSettingsRegistry.GetHebrewBooksLocalFolder();
+            Get(AppKitveiHakodesh, "HebrewBooks", "LocalFolder", "");
 
-        public static void SaveHbLocalFolder(string path) =>
-            CoreSettings.AppSettingsRegistry.SetHebrewBooksLocalFolder(path);
-
-        // ── Automatic update check ────────────────────────────────────────────────
-        //
-        // Shared with the KleiKodesh Word VSTO add-in: both read and write the SAME registry
-        // value, so one toggle governs the automatic update check in both. The app name is
-        // "KleiKodesh", NOT "KitveiHakodesh", and the stored form is "True"/"False" so the
-        // VSTO's bool.TryParse round-trips it. Core holds that detail now; changing it there
-        // would fork the setting.
-
-        /// <summary>True when the user has turned OFF the automatic update check.</summary>
-        public static bool LoadTurnOffUpdates() =>
-            CoreSettings.AppSettingsRegistry.GetTurnOffUpdates();
-
-        public static void SaveTurnOffUpdates(bool turnedOff) =>
-            CoreSettings.AppSettingsRegistry.SetTurnOffUpdates(turnedOff);
+        /// <summary>True when the user has turned OFF the automatic update check. Shared with
+        /// the KleiKodesh Word add-in: app name "KleiKodesh", stored as "True"/"False".</summary>
+        public static bool LoadTurnOffUpdates() => string.Equals(
+            Get(AppKleiKodesh, "UpdateChecker", "TurnOffUpdates", "False"), "True",
+            StringComparison.OrdinalIgnoreCase);
 
         // ── Appearance ────────────────────────────────────────────────────────────
         //
@@ -127,30 +91,21 @@ namespace KitveiHakodeshLib.Settings
         // message. Empty when no theme was ever sent.
 
         public static void SaveDarkMode(bool isDark) =>
-            CoreSettings.AppSettingsRegistry.SetDarkMode(isDark);
+            Set(AppKitveiHakodesh, "Appearance", "DarkMode", isDark ? "1" : "0");
 
         public static bool LoadDarkMode() =>
-            CoreSettings.AppSettingsRegistry.GetDarkMode();
+            Get(AppKitveiHakodesh, "Appearance", "DarkMode", "0") == "1";
 
         /// <summary>The Vue theme's title-bar background colour (hex, e.g. "#2d2d2d").</summary>
-        public static void SaveChromeColor(string hex) =>
-            CoreSettings.AppSettingsRegistry.SetChromeColor(hex ?? "");
+        public static void SaveChromeColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "ChromeColor", hex ?? "");
+        public static string LoadChromeColor() => Get(AppKitveiHakodesh, "Appearance", "ChromeColor", "");
 
-        public static string LoadChromeColor() =>
-            CoreSettings.AppSettingsRegistry.GetChromeColor();
+        /// <summary>Accent colour (hex) - the native tab-list dropdown's active indicator.</summary>
+        public static void SaveAccentColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "AccentColor", hex ?? "");
+        public static string LoadAccentColor() => Get(AppKitveiHakodesh, "Appearance", "AccentColor", "");
 
-        /// <summary>Accent colour (hex) — the native tab-list dropdown's active indicator.</summary>
-        public static void SaveAccentColor(string hex) =>
-            CoreSettings.AppSettingsRegistry.SetAccentColor(hex ?? "");
-
-        public static string LoadAccentColor() =>
-            CoreSettings.AppSettingsRegistry.GetAccentColor();
-
-        /// <summary>Border colour (hex) — the native strip's split divider.</summary>
-        public static void SaveBorderColor(string hex) =>
-            CoreSettings.AppSettingsRegistry.SetBorderColor(hex ?? "");
-
-        public static string LoadBorderColor() =>
-            CoreSettings.AppSettingsRegistry.GetBorderColor();
+        /// <summary>Border colour (hex) - the native strip's split divider.</summary>
+        public static void SaveBorderColor(string hex) => Set(AppKitveiHakodesh, "Appearance", "BorderColor", hex ?? "");
+        public static string LoadBorderColor() => Get(AppKitveiHakodesh, "Appearance", "BorderColor", "");
     }
 }

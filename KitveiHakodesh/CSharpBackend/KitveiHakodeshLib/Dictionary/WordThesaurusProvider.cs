@@ -1,6 +1,6 @@
 using Microsoft.Office.Interop.Word;
 using System.Collections.Generic;
-using CoreCommon = KitveiHakodesh.Core.Common;
+using CoreCommon = KitveiHakodeshLib.Common;
 
 namespace KitveiHakodeshLib.Dictionary
 {
