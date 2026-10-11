@@ -30,11 +30,36 @@ namespace KitveiHakodeshLib.Service
         Task<Stream> OpenStreamAsync(byte[] requestEnvelope, CancellationToken cancellationToken);
     }
 
+    /// <summary>Why the service could not be reached - the page shows a message per reason.
+    /// The names travel to the page as text (the relay's X-KHS-Unavailable header), so they
+    /// are part of the contract with serviceClient.ts.</summary>
+    public enum KitveiHakodeshServiceUnavailableReason
+    {
+        /// <summary>Not listening right now; usually transient (it is restarting).</summary>
+        NotRunning,
+        /// <summary>No installed service and no executable to run.</summary>
+        NotInstalled,
+        /// <summary>The user declined the UAC prompt that installs or repairs it.</summary>
+        InstallDeclined,
+        /// <summary>The elevated install / repair ran and failed.</summary>
+        InstallFailed,
+        /// <summary>Installed, but Windows will not start it (or it never opened its pipe).</summary>
+        StartFailed,
+    }
+
     /// <summary>The service could not be reached. The service is a hard dependency of every
     /// hosted process, so callers surface this to the user rather than working around it.</summary>
     public sealed class KitveiHakodeshServiceUnavailableException : Exception
     {
-        public KitveiHakodeshServiceUnavailableException(string message) : base(message) { }
-        public KitveiHakodeshServiceUnavailableException(string message, Exception inner) : base(message, inner) { }
+        public KitveiHakodeshServiceUnavailableReason Reason { get; }
+
+        public KitveiHakodeshServiceUnavailableException(string message)
+            : this(KitveiHakodeshServiceUnavailableReason.NotRunning, message) { }
+        public KitveiHakodeshServiceUnavailableException(string message, Exception inner)
+            : this(KitveiHakodeshServiceUnavailableReason.NotRunning, message, inner) { }
+        public KitveiHakodeshServiceUnavailableException(KitveiHakodeshServiceUnavailableReason reason, string message)
+            : base(message) { Reason = reason; }
+        public KitveiHakodeshServiceUnavailableException(KitveiHakodeshServiceUnavailableReason reason, string message, Exception inner)
+            : base(message, inner) { Reason = reason; }
     }
 }

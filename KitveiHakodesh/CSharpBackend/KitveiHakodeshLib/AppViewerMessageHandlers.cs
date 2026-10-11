@@ -50,6 +50,9 @@ namespace KitveiHakodeshLib
                         // The dialog only: the chosen path goes to the service from the page.
                         case "pickDbPath": HandlePickDbPathDialog(id); break;
                         case "resetSettings": HandleResetSettings(id); break;
+                        // The page's "try again" after the service was unavailable: allow one more
+                        // install / repair prompt and bring the service up.
+                        case "retryService": await HandleRetryService(id); break;
                         // Replies before reloading on purpose, unlike DeleteFtsIndex: the caller
                         // cannot meaningfully await a navigation that destroys the page making the
                         // call, so the reply exists only to settle the promise. Both frontend
@@ -169,6 +172,20 @@ namespace KitveiHakodeshLib
 
                 hostForm.FormBorderStyle = FormBorderStyle.None;
                 hostForm.WindowState = FormWindowState.Maximized;
+            }
+        }
+
+        private async Task HandleRetryService(string id)
+        {
+            KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher.AllowAnotherRepairAttempt();
+            try
+            {
+                await Task.Run(() => _serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None));
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (KitveiHakodeshLib.Service.KitveiHakodeshServiceUnavailableException ex)
+            {
+                _bridge.Reply(id, new { ok = false, reason = ex.Reason.ToString(), detail = ex.Message });
             }
         }
 

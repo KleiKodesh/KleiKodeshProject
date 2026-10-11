@@ -108,6 +108,8 @@ namespace KitveiHakodeshLib
         // this relay (serviceClient.ts -> http://kitvei-service -> the service pipe). Nothing in
         // this process answers a data op any more.
         private ServiceRpcRelay _serviceRelay;
+        // Installs, repairs or starts the service when it is not there (see the launcher).
+        private KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher _serviceLauncher;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
         private string _dbInjectionScriptId;
@@ -555,15 +557,22 @@ namespace KitveiHakodeshLib
             // listening (KitveiHakodeshServiceLauncher) and retries the call once. A short
             // connect timeout: when the pipe is absent, net48's Connect spins for the whole
             // timeout before failing, and the page's client retries several times.
-            var serviceLauncher = new KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher();
+            _serviceLauncher = new KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher();
+            var serviceLauncher = _serviceLauncher;
             _serviceRelay = new ServiceRpcRelay(
                 _webView.CoreWebView2, _bridge,
                 new KitveiHakodeshLib.Service.KitveiHakodeshServiceSelfStartingChannel(
                     new KitveiHakodeshLib.Service.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500),
                     serviceLauncher));
             // Start it now rather than on the first data call, so the page's first requests
-            // find it listening instead of paying the spawn on the hot path.
-            _ = Task.Run(() => serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None));
+            // find it listening instead of paying the start on the hot path. Never with a UAC
+            // prompt: one popping up unasked while the window opens lands behind Word; the
+            // install / repair prompt waits for a real request or the banner's "try again".
+            _ = Task.Run(async () =>
+            {
+                try { await serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None, allowElevation: false); }
+                catch { /* the page's first request reports it */ }
+            });
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);

@@ -22,6 +22,14 @@
  */
 import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
 import { onWebviewEvent } from './seforimDb'
+import {
+  isPersistentReason,
+  markServiceAvailable,
+  markServiceUnavailable,
+  parseUnavailableReason,
+  ServiceUnavailableError,
+  type ServiceUnavailableReason,
+} from './serviceAvailability'
 
 // Cached endpoint of the service's HTTP host — base URL + the per-instance bearer token every
 // data request must carry (the host 401s without it) — discovered once from /khs-endpoint and
@@ -67,7 +75,8 @@ function getEndpoint(): Promise<KhsEndpoint> {
  * same ArrayBuffer body safely (it is not a consumed stream).
  */
 async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Promise<Response> {
-  let lastErr: unknown
+  let lastReason: ServiceUnavailableReason = 'NotRunning'
+  let lastDetail = ''
   for (let attempt = 0; attempt < 6; attempt++) {
     // Checked at the top of every attempt, not only around the fetch: the caller can abort
     // while we are in a backoff delay or inside endpoint discovery's own retry loop.
@@ -83,21 +92,28 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
       })
       if (res.status === 401 || res.status === 503) {
         // 401: stale token (service restarted onto the same port) — re-discover and retry.
-        // 503: the hosted relay could not reach the pipe — the service is restarting; retry.
+        // 503: the hosted relay could not reach the service. X-KHS-Unavailable says why; only
+        // NotRunning (it is restarting) is worth retrying - the others need the user to act.
         khsEndpoint = null
-        lastErr = new Error(res.status === 401 ? 'service rejected the token (401)' : await res.text())
+        lastReason = res.status === 503 ? parseUnavailableReason(res.headers.get('X-KHS-Unavailable')) : 'NotRunning'
+        lastDetail = res.status === 401 ? 'service rejected the token (401)' : await res.text()
+        if (isPersistentReason(lastReason)) break
         await new Promise((r) => setTimeout(r, 60 + attempt * 80))
         continue
       }
+      markServiceAvailable()
       return res
     } catch (err) {
       if (signal?.aborted) throw err // a real cancel, not a transient outage — don't retry
-      lastErr = err
+      lastReason = 'NotRunning'
+      lastDetail = err instanceof Error ? err.message : String(err)
       khsEndpoint = null // force re-discovery — port/token may have changed on a respawn
       await new Promise((r) => setTimeout(r, 60 + attempt * 80))
     }
   }
-  throw lastErr
+  // Out of attempts: one banner for the whole app says what is wrong (ServiceUnavailableBanner).
+  markServiceUnavailable(lastReason)
+  throw new ServiceUnavailableError(lastReason, lastDetail)
 }
 
 const lowerFirst = (k: string) => (k ? k.charAt(0).toLowerCase() + k.slice(1) : k)

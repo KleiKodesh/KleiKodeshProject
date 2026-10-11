@@ -3,6 +3,7 @@ import AppShell from '@/layout/AppShell.vue'
 import ClockWidget from '@/components/ClockWidget.vue'
 import GlobalContextMenu from '@/components/GlobalContextMenu.vue'
 import ToastBanner from '@/components/ToastBanner.vue'
+import ServiceUnavailableBanner from '@/components/ServiceUnavailableBanner.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import SetupWizard from '@/features/settings/SetupWizard.vue'
 import { ref, computed, watch } from 'vue'
@@ -184,6 +185,7 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     <SetupWizard v-if="!setupDone" />
     <GlobalContextMenu />
     <ToastBanner />
+    <ServiceUnavailableBanner />
     <ConfirmDialog
       v-if="pdfClosePending"
       title="שינויים שלא נשמרו"

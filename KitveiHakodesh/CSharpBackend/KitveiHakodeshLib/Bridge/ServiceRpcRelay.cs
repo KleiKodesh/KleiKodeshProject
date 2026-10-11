@@ -47,7 +47,8 @@ namespace KitveiHakodeshLib.Bridge
         private const string CorsHeaders =
             "Access-Control-Allow-Origin: *\r\n" +
             "Access-Control-Allow-Methods: POST, OPTIONS\r\n" +
-            "Access-Control-Allow-Headers: Content-Type, X-KHS-Token\r\n";
+            "Access-Control-Allow-Headers: Content-Type, X-KHS-Token\r\n" +
+            "Access-Control-Expose-Headers: X-KHS-Unavailable\r\n";
 
         private readonly CoreWebView2 _core;
         private readonly WebBridge _bridge;
@@ -106,7 +107,10 @@ namespace KitveiHakodeshLib.Bridge
             {
                 // 503 is what serviceClient.ts retries, so a service restart (it restarts itself
                 // after a database-path change) is ridden out exactly as in dev.
-                e.Response = TextResponse(503, "Service Unavailable", ex.Message);
+                // X-KHS-Unavailable names the reason (not installed, declined, will not start) so
+                // the page can show a message that says what is wrong.
+                e.Response = TextResponse(503, "Service Unavailable", ex.Message,
+                    "X-KHS-Unavailable: " + ex.Reason + "\r\n");
             }
             catch (Exception ex)
             {
@@ -220,12 +224,12 @@ namespace KitveiHakodeshLib.Bridge
             }
         }
 
-        private CoreWebView2WebResourceResponse TextResponse(int status, string reason, string text)
+        private CoreWebView2WebResourceResponse TextResponse(int status, string reason, string text, string extraHeaders = "")
         {
             byte[] bytes = Encoding.UTF8.GetBytes(text ?? "");
             return _core.Environment.CreateWebResourceResponse(
                 new MemoryStream(bytes), status, reason,
-                CorsHeaders +
+                CorsHeaders + extraHeaders +
                 "Content-Type: text/plain; charset=utf-8\r\n" +
                 "Content-Length: " + bytes.Length);
         }
