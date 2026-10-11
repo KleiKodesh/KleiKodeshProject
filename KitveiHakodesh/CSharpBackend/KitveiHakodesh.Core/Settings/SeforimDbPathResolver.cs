@@ -120,7 +120,7 @@ namespace KitveiHakodesh.Core.Settings
         /// </summary>
         public static string[] DefaultLocations()
         {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            string appData = UserProfile.RoamingAppData;
             return new[]
             {
                 Path.Combine(appData, "otzaria", "books", "seforim.db"),

@@ -35,7 +35,7 @@ namespace KitveiHakodesh.Core.Common
         /// Mirrors AddinInstaller.InstallPath — change both together.</summary>
         public static string UserInstallRoot =>
             Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                KitveiHakodesh.Core.Settings.UserProfile.LocalAppData,
                 "KleiKodesh");
 
         /// <summary>

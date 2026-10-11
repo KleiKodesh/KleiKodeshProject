@@ -45,6 +45,11 @@ public sealed class Dispatcher(
         if (req is null || string.IsNullOrEmpty(req.Op))
             return RpcResponse.Err("Missing 'op'.");
 
+        // A Windows service lives in session 0: no desktop, no user Word, no shell. The hosts do
+        // those themselves; a request that still arrives here is answered, not left to hang.
+        if (Hosting.WindowsServiceMode.IsWindowsService && Hosting.WindowsServiceMode.IsDesktopOnlyOp(req.Op))
+            return RpcResponse.Err(Hosting.WindowsServiceMode.DesktopOnlyOpError(req.Op));
+
         try
         {
             switch (req.Op)

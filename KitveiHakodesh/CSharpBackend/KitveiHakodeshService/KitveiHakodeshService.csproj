@@ -59,6 +59,9 @@
     <PackageReference Include="MessagePack" Version="3.1.8" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
+    <!-- Windows-service lifetime (SCM start/stop) for the installed service; a no-op when the
+         exe is spawned as a console process (dev, portable). -->
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="10.0.9" />
     <!-- Catalog TOC-path search (Catalog/CatalogTocIndex). 4.8 beta — the only line. -->
     <PackageReference Include="Lucene.Net" Version="4.8.0-beta00018" />
   </ItemGroup>

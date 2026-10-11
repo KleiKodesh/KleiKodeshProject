@@ -116,11 +116,11 @@ namespace KitveiHakodesh.Core.Common
 
             while (true)
             {
-                RegistryKey? key = Registry.CurrentUser.OpenSubKey(path);
+                RegistryKey? key = KitveiHakodesh.Core.Settings.UserProfile.Hive.OpenSubKey(path);
                 if (key != null) return key;
 
                 int cut = path.LastIndexOf('\\');
-                if (cut < 0) return Registry.CurrentUser.OpenSubKey("Software");
+                if (cut < 0) return KitveiHakodesh.Core.Settings.UserProfile.Hive.OpenSubKey("Software");
 
                 path = path.Substring(0, cut);
                 watchSubtree = true; // an ancestor watch must see the subtree to catch creation

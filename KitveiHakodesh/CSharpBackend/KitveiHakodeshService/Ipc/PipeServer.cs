@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using KitveiHakodeshService.Hosting;
 
 namespace KitveiHakodeshService.Ipc;
 
@@ -9,11 +10,9 @@ namespace KitveiHakodeshService.Ipc;
 /// DocumentLocator.Service/IndexService.cs. The pipe carries the clean
 /// <see cref="Rpc"/> envelope, framed by <see cref="FrameProtocol"/>.
 ///
-/// In dev the service runs as a plain console process (spawned by the Vite dev
-/// plugin) under the developer's own account, so the default pipe ACL — which
-/// grants the creating user access — is sufficient. When this later runs as an
-/// installed Windows service under LocalSystem, an authenticated-user ACL will
-/// be added via NamedPipeServerStreamAcl.
+/// Every instance is created with the access list in <see cref="WindowsServiceMode.PipeSecurity"/>:
+/// as a Windows service this process is SYSTEM, whose default pipe DACL would admit no
+/// logged-on user; as a console process the list changes nothing for its own user.
 /// </summary>
 public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger) : BackgroundService
 {
@@ -23,8 +22,10 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
     // KHS_PIPE_NAME so each spawned instance has its own private pipe — that's how a client
     // reaches ITS instance's HTTP port (getHttpPort) instead of some other instance sharing a
     // fixed name. Falls back to the fixed default for the installed-service / standalone case.
-    private readonly string _pipeName =
+    public static string ResolvePipeName() =>
         Environment.GetEnvironmentVariable("KHS_PIPE_NAME") is { Length: > 0 } n ? n : DefaultPipeName;
+
+    private readonly string _pipeName = ResolvePipeName();
 
     // Keep several listener instances armed at once. A single serial acceptor has a
     // brief window with NO listening instance — between accepting one client and
@@ -54,7 +55,7 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
             NamedPipeServerStream? pipe = null;
             try
             {
-                pipe = CreatePipe(_pipeName);
+                pipe = WindowsServiceMode.CreatePipe(_pipeName);
                 await pipe.WaitForConnectionAsync(stoppingToken);
 
                 // Hand off to a detached task so this loop can immediately accept the
@@ -80,15 +81,6 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
             }
         }
     }
-
-    private static NamedPipeServerStream CreatePipe(string pipeName) =>
-        new(pipeName,
-            PipeDirection.InOut,
-            NamedPipeServerStream.MaxAllowedServerInstances,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous,
-            inBufferSize: 4096,
-            outBufferSize: 4096);
 
     private async Task HandleClientAsync(NamedPipeServerStream pipe, CancellationToken ct)
     {
