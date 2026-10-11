@@ -42,6 +42,7 @@ namespace FtsLibTest
                 case "trgmfull":          TrgmFull.Run(args); return;
                 case "fmbench":           FmIndexBench.Run(args); return;
                 case "fuzzybench":        FuzzyBench.Run(args); return;
+                case "fts5engine":        Fts5Engine.Fts5EngineBench.Run(args); return;
                 case "sortdiag":          SortDiag.Run(args); return;
                 case "ketivtest":         KetivExpanderTest.Run(args); return;
                 case "ketivquery":        KetivQueryTest.Run(args); return;
@@ -236,7 +237,7 @@ namespace FtsLibTest
                     Console.WriteLine("Tests: build buildfresh runall search speed perf query parsertest orderedtest worddist snippettest snippetdiag sortdiag ketivtest ketivquery verify filtertest filterrepro capsweep probe dumpids monitor docsource forcemerge forcemergebug interrupttest mergetest crashmergetest searchduringmerge");
                     Console.WriteLine("Benchmarks: bench embellishbench tokdiag tokbench charbench decodebench snipbench trgmbench trgmidx trgmlive trgmfull fmbench fuzzybench");
                     Console.WriteLine("Explicit-path commands (index dir + db path given on the command line): buildat forcemergeat queryat queryidsat querycapat");
-                    Console.WriteLine("SQLite FTS5 comparison: fts5buildat fts5queryat fts5trigramat");
+                    Console.WriteLine("SQLite FTS5 comparison: fts5buildat fts5queryat fts5trigramat fts5engine");
                     Console.WriteLine("Tiers: 500k | 1m | 3m | full");
                     return;
             }

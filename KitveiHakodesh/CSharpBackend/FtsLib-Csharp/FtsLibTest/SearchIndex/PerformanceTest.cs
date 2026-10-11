@@ -46,7 +46,7 @@ namespace FtsLibTest
         // maxWordDistance = int.MaxValue means "no filter" (UI default is 10,
         // but for perf tests we want to see raw throughput).
 
-        private static readonly PerfCase[] Cases =
+        internal static readonly PerfCase[] Cases =
         {
             // ── Single-word literals ──────────────────────────────────
             new PerfCase("literal / single common word",
@@ -598,7 +598,7 @@ namespace FtsLibTest
 
         // ── Value types ───────────────────────────────────────────────
 
-        private sealed class PerfCase
+        internal sealed class PerfCase
         {
             public readonly string Label;
             public readonly string Query;
