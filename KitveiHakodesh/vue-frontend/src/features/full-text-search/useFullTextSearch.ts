@@ -1,85 +1,28 @@
 /**
- * Full-text search composable — wraps C# streaming search (FtsLib backend).
+ * Full-text search composable.
  *
- * C# sends search stream events (searchBatch, searchComplete, etc.) via
- * PostWebMessageAsJson → JsBridge → window.__onWebviewEvent → onWebviewEvent().
- * C# sends indexing progress the same way via the ftsIndexProgress event.
- *
- * Falls back to sample data in dev when the C# host is not present.
+ * ONE path, both runtimes: the KitveiHakodesh service PUSHES result frames continuously over
+ * one connection (`ftsSearchStream`) until the search finishes. In dev that connection is the
+ * service's loopback HTTP host; in the hosted app it is the C# relay in front of the service's
+ * named pipe. Aborting the stream is the cancel signal, and the service itself supersedes the
+ * previous search when a new one starts. Hits arrive fully enriched (bookId + tocText).
  */
 import { ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { hasHostBridge, onWebviewEvent } from '@/webview-host/seforimDb'
-import { getTocPathsForLines, getBookIdsForLines } from '@/webview-host/seforimApi'
 import { serviceStream } from '@/webview-host/serviceClient'
-import { callBridgeAction } from '@/webview-host/bridge'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
-
-// ── chrome.webview message listener (search stream events from C#) ────────────
-// C# sends search events via window.__onWebviewEvent (routed through JsBridge).
-// We maintain a single shared listener and route by searchId.
-
-type SearchListeners = {
-  onBatch: (results: FullTextSearchResult[]) => Promise<void>
-  onComplete: () => Promise<void>
-  onCancelled: () => void
-  onError: (reason: SearchFailReason, detail?: string) => void
-}
-
-// Tracks in-flight onBatch promises so onComplete waits for all enrichment to finish
-const _pendingBatches = new Map<string, Promise<void>>()
-const _searchListeners = new Map<string, SearchListeners>()
-
-// Single module-level listener registered once — routes all search stream events
-onWebviewEvent((msg) => {
-  const searchId = msg.searchId as string | undefined
-  if (!msg.type || !searchId) return
-  const listener = _searchListeners.get(searchId)
-  if (!listener) return
-  switch (msg.type) {
-    case 'searchBatch': {
-      const prev = _pendingBatches.get(searchId) ?? Promise.resolve()
-      const next = prev.then(() => listener.onBatch((msg.results as FullTextSearchResult[]) ?? []))
-      _pendingBatches.set(searchId, next)
-      break
-    }
-    case 'searchComplete':
-      ;(_pendingBatches.get(searchId) ?? Promise.resolve())
-        .then(() => {
-          _pendingBatches.delete(searchId)
-          _searchListeners.delete(searchId)
-          return listener.onComplete()
-        })
-        .catch((err) => console.error('[useFullTextSearch] onComplete failed:', err))
-      break
-    case 'searchCancelled':
-      _pendingBatches.delete(searchId)
-      listener.onCancelled()
-      _searchListeners.delete(searchId)
-      break
-    case 'searchError':
-      _pendingBatches.delete(searchId)
-      listener.onError(
-        (msg.failReason as SearchFailReason) ?? 'searchFailed',
-        (msg.errorMessage as string | undefined) ?? (msg.error as string | undefined),
-      )
-      _searchListeners.delete(searchId)
-      break
-  }
-})
-
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
 // O(n) for the array copy AND makes @tanstack/vue-virtual rebuild its ENTIRE measurements
 // array (memoized on `count`; when the viewport is at the top `min` is 0, so it recomputes
 // every row 0..count — see virtual-core getMeasurements). Flushing every 150ms while the
-// set grows into the hundreds-of-thousands (e.g. a high-frequency word like "כי") makes
-// that O(n²) and freezes the page. So: flush fast while the list is small (snappy first
-// paint), then back off sharply so the expensive rebuilds happen only a handful of times.
+// set grows into the hundreds-of-thousands (a high-frequency word) makes that O(n²) and
+// freezes the page. So: flush fast while the list is small (snappy first paint), then back
+// off sharply so the expensive rebuilds happen only a handful of times.
 // Results are never capped — everything still streams in; only the paint cadence changes.
 function _flushDelayFor(count: number): number {
   if (count < 5_000) return 150
@@ -87,48 +30,12 @@ function _flushDelayFor(count: number): number {
   return 2000
 }
 
-// FTS results are never capped, so the line-id list handed to enrichment can be
-// huge (tens of thousands). SQLite caps parameters per statement (~32766), so a
-// single IN(...) query silently returns nothing past that — split into chunks.
-const ENRICH_CHUNK = 20000
-async function chunkByLineIds<T>(ids: number[], fn: (chunk: number[]) => Promise<T[]>): Promise<T[]> {
-  if (ids.length <= ENRICH_CHUNK) return fn(ids)
-  const out: T[] = []
-  for (let i = 0; i < ids.length; i += ENRICH_CHUNK) out.push(...(await fn(ids.slice(i, i + ENRICH_CHUNK))))
-  return out
-}
-
-async function enrichTocPaths(batch: FullTextSearchResult[]): Promise<void> {
-  const lineIds = [...new Set(batch.map((r) => r.lineId))]
-  if (!lineIds.length) return
-  try {
-    const rows = await chunkByLineIds(lineIds, getTocPathsForLines)
-    const dataMap = new Map(rows.map((r) => [r.lineId, { bookId: r.bookId, tocPath: r.tocPath }]))
-    for (const r of batch) {
-      const data = dataMap.get(r.lineId)
-      if (data) {
-        r.bookId = data.bookId
-        r.tocText = data.tocPath
-      }
-    }
-
-    // Fallback for lines with no line_toc entry (e.g. custom books with negative IDs).
-    // The TOC path query joins through line_toc → tocEntry and returns nothing for
-    // such lines, leaving bookId as 0. Fetch bookId directly from the line table.
-    const unenrichedIds = batch.filter((r) => !r.bookId).map((r) => r.lineId)
-    if (unenrichedIds.length > 0) {
-      const fallbackRows = await chunkByLineIds(unenrichedIds, getBookIdsForLines)
-      const fallbackMap = new Map(fallbackRows.map((r) => [r.lineId, r.bookId]))
-      for (const r of batch) {
-        if (r.bookId === 0) {
-          const bookId = fallbackMap.get(r.lineId)
-          if (bookId != null) r.bookId = bookId
-        }
-      }
-    }
-  } catch (err) {
-    console.error('[useFullTextSearch] enrichTocPaths failed:', err)
-  }
+/** One frame of the `ftsSearchStream` op. */
+interface SearchStreamChunk {
+  ready: boolean
+  results: FullTextSearchResult[]
+  done: boolean
+  error?: string
 }
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
@@ -167,51 +74,16 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     ]
       .filter(Boolean)
       .join('|')
-  }  const results = shallowRef<FullTextSearchResult[]>([])
+  }
+
+  const results = shallowRef<FullTextSearchResult[]>([])
   const isSearching = ref(false)
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
-  let currentSearchId: string | null = null
-  let resultsReadyResolve: (() => void) | null = null
-  // Dev: the in-flight ftsSearchStream — aborting it closes the connection, which is
-  // the service's cancel signal (no cancel op, no polling).
-  let _devStreamAbort: AbortController | null = null
-
-  // Accumulation buffer — batches are held here and flushed to `results` on an
-  // adaptive cadence (see _flushDelayFor). This prevents Vue from re-rendering on
-  // every C# batch, and backs off as the set grows so large searches don't freeze.
-  let _pendingBuffer: FullTextSearchResult[] = []
-  let _flushTimer: ReturnType<typeof setTimeout> | null = null
-
-  // Safety timeout — if the C# search stream goes silent (no complete/error/cancel
-  // event arrives within this window), we assume the search thread crashed or the
-  // bridge dropped the message and reset to a recoverable state automatically.
-  const SEARCH_TIMEOUT_MS = 60_000
-  let _searchTimeoutTimer: ReturnType<typeof setTimeout> | null = null
-
-  function _scheduleFlush() {
-    if (_flushTimer !== null) return
-    _flushTimer = setTimeout(() => {
-      _flushTimer = null
-      if (_pendingBuffer.length === 0) return
-      const flushed = _pendingBuffer
-      _pendingBuffer = []
-      results.value = [...results.value, ...flushed]
-    }, _flushDelayFor(results.value.length + _pendingBuffer.length))
-  }
-
-  function _flushNow() {
-    if (_flushTimer !== null) {
-      clearTimeout(_flushTimer)
-      _flushTimer = null
-    }
-    if (_pendingBuffer.length > 0) {
-      const flushed = _pendingBuffer
-      _pendingBuffer = []
-      results.value = [...results.value, ...flushed]
-    }
-  }
+  // The in-flight stream — aborting it closes the connection, which is the service's
+  // cancel signal (no cancel op, no polling).
+  let _streamAbort: AbortController | null = null
 
   // Apply the current relevancy sort to the fully-collected result set. Called only
   // once the search has completed — sorting mid-stream would fight the incremental
@@ -264,7 +136,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Books with neither an author year nor one of the three trusted era categories carry
       // year = Infinity and sort LAST — an honest "unknown" at the end rather than a
       // fabricated position mid-list. Tree order keeps same-key books in their curated
-      // catalog sequence — תנ"ך in canonical book order, the שס in seder order — instead of
+      // catalog sequence (Tanach in canonical book order, Mishna in seder order) instead of
       // alphabetical. Keys are cached per bookId because the comparator runs O(n log n)
       // times and the author-year lookup normalizes name strings.
       const bookMap = booksStore.allBooksMap
@@ -313,162 +185,18 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     void finalizeSort().catch((err) => console.error('[useFullTextSearch] sort failed:', err))
   })
 
-  function _startSearchTimeout(searchId: string) {
-    _clearSearchTimeout()
-    _searchTimeoutTimer = setTimeout(() => {
-      _searchTimeoutTimer = null
-      // Only reset if this specific search is still in-flight
-      if (currentSearchId !== searchId) return
-      console.warn('[useFullTextSearch] Search timed out — resetting state for recovery')
-      _flushNow()
-      isSearching.value = false
-      searchError.value = 'searchFailed'
-      _cleanup()
-    }, SEARCH_TIMEOUT_MS)
-  }
-
-  function _clearSearchTimeout() {
-    if (_searchTimeoutTimer !== null) {
-      clearTimeout(_searchTimeoutTimer)
-      _searchTimeoutTimer = null
-    }
-  }
-
-  function _cleanup() {
-    _clearSearchTimeout()
-    if (_flushTimer !== null) {
-      clearTimeout(_flushTimer)
-      _flushTimer = null
-    }
-    _pendingBuffer = []
-    if (currentSearchId) {
-      _searchListeners.delete(currentSearchId)
-      _pendingBatches.delete(currentSearchId)
-      currentSearchId = null
-    }
-  }
-
   async function cancelSearch() {
-    // Dev: closing the stream IS the cancel — the service sees the broken pipe.
-    if (_devStreamAbort) {
-      _devStreamAbort.abort()
-      _devStreamAbort = null
-      isSearching.value = false
-      _cleanup() // drop the pending flush timer / buffer too
+    // Closing the stream IS the cancel — the service sees the broken connection.
+    if (_streamAbort) {
+      _streamAbort.abort()
+      _streamAbort = null
     }
-    if (!currentSearchId) return
-    const id = currentSearchId
-    _cleanup()
     isSearching.value = false
-    try {
-      await callBridgeAction('FtsSearchCancel', id)
-    } catch {
-      /* ignore */
-    }
   }
 
-  // Start the C# search stream and wire up listeners.
-  // skipCount: number of results already in cache — C# will skip that many before streaming.
-  async function _startStream(normalizedQuery: string, skipCount: number, cacheKey?: string) {
-    const reply = await callBridgeAction<{ searchId: string; failReason: SearchFailReason | null }>(
-      'FtsSearchStart',
-      normalizedQuery,
-      skipCount,
-      settings.searchMaxWordDistance,
-      settings.searchRequireOrdered,
-      settings.searchContextMarginWords,
-      settings.searchExpandKetiv,
-      settings.searchExpandRelated,
-    )
-    const searchId = reply?.searchId
-    if (!searchId) {
-      searchError.value = reply?.failReason ?? 'indexNotReady'
-      isSearching.value = false
-      return
-    }
-    currentSearchId = searchId
-    _startSearchTimeout(searchId)
-
-    // Create a promise that resolves when the first batch arrives
-    let firstBatchReady = false
-    const resultsReady = new Promise<void>((resolve) => {
-      resultsReadyResolve = () => {
-        if (!firstBatchReady) {
-          firstBatchReady = true
-          resolve()
-        }
-      }
-    })
-
-    _searchListeners.set(searchId, {
-      onBatch: async (batch) => {
-        if (currentSearchId !== searchId) return
-        resultsReadyResolve?.()
-        _startSearchTimeout(searchId) // reset the watchdog on every batch
-        await enrichTocPaths(batch)
-        // Re-check after the async enrichment — currentSearchId may have changed
-        // while enrichTocPaths was awaiting the SQL query.
-        if (currentSearchId !== searchId) return
-        _pendingBuffer.push(...batch)
-        _scheduleFlush()
-        // Only persist to IDB when the index is fully built — partial results
-        // from a mid-build search would be cached as complete and served stale.
-        if (!isIndexing?.()) {
-          try {
-            await cache.appendBatch(cacheKey ?? normalizedQuery, batch)
-          } catch {
-            /* non-fatal — cache is best-effort */
-          }
-        }
-      },
-      onComplete: async () => {
-        if (currentSearchId !== searchId) return
-        _flushNow()
-        await finalizeSort()
-        isSearching.value = false
-        if (!isIndexing?.()) {
-          try {
-            await cache.markComplete(cacheKey ?? normalizedQuery, false)
-          } catch {
-            /* non-fatal */
-          }
-        }
-        _cleanup()
-      },
-      onCancelled: () => {
-        if (currentSearchId !== searchId) return
-        isSearching.value = false
-        _cleanup()
-      },
-      onError: (reason, detail) => {
-        console.error('[useFullTextSearch] search error:', reason, ...(detail ? [detail] : []))
-        if (currentSearchId !== searchId) return
-        _flushNow()
-        searchError.value = reason
-        isSearching.value = false
-        // Delete the partial cache entry so it is never served as a resumable
-        // result on the next session. The stream didn't complete, so whatever
-        // was written by appendBatch is an incomplete and potentially corrupt
-        // snapshot (e.g. index was merging mid-stream).
-        if (cacheKey) {
-          cache.remove(cacheKey).catch(() => {/* non-fatal */})
-        }
-        _cleanup()
-      },
-    })
-
-    // Wait for the first batch to arrive so results are ready before returning
-    await resultsReady
-  }
-
-  // How many times to auto-retry on indexMerging before giving up
-  const MERGE_RETRY_DELAY_MS = 1500
-  const MERGE_RETRY_MAX = 4
-
-  async function executeSearch(q: string, _mergeRetryCount = 0) {
+  async function executeSearch(q: string) {
     if (!q.trim()) return
-
-    if (currentSearchId) await cancelSearch()
+    await cancelSearch()
 
     isSearching.value = true
     hasSearched.value = true
@@ -477,116 +205,84 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     searchError.value = null
     executedQuery.value = q
 
-    // Dev path — no C# bridge in the browser; the service PUSHES result frames
-    // continuously over one connection (ftsSearchStream) until the search finishes.
-    // No polling: aborting the stream is the cancel signal, and the service itself
-    // supersedes the previous search when a new one starts.
-    if (!hasHostBridge) {
-      const normalizedQuery = q.trim().toLowerCase()
-      // Abort the previous stream (if any) and own a fresh controller for this one.
-      _devStreamAbort?.abort()
-      const abort = new AbortController()
-      _devStreamAbort = abort
-      try {
-        const acc: FullTextSearchResult[] = []
-        const stream = serviceStream<{
-          ready: boolean
-          results: FullTextSearchResult[]
-          done: boolean
-          error?: string
-        }>('ftsSearchStream', {
-          query: _buildQueryToSend(normalizedQuery),
-          maxWordDistance: settings.searchMaxWordDistance,
-          requireOrdered: settings.searchRequireOrdered,
-          contextWords: settings.searchContextMarginWords,
-          expandKetiv: settings.searchExpandKetiv,
-          expandRelated: settings.searchExpandRelated,
-        }, abort.signal)
-
-        // Flush the accumulator into the reactive ref on the adaptive cadence
-        // (_flushDelayFor). Each flush copies the whole accumulator (a new array is
-        // required to trigger reactivity) and forces a full virtualizer measurement
-        // rebuild, so flushing on every pushed frame is O(n²) over the stream and
-        // freezes the page for high-frequency words (e.g. "כי"). Backing off as the set
-        // grows bounds those rebuilds; `dirty` tracks pending hits so the last isn't lost.
-        let lastFlushAt = 0
-        let dirty = false
-        const flushDev = () => {
-          results.value = acc.slice()
-          dirty = false
-          lastFlushAt = performance.now()
-        }
-
-        for await (const chunk of stream) {
-          if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
-          if (chunk.ready === false) {
-            searchError.value = 'indexNotReady'
-            return
-          }
-          const hits = chunk.results ?? []
-          if (hits.length) {
-            // Hits arrive fully enriched (bookId + tocText) from the service — no
-            // client-side enrichment round-trip.
-            for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
-            dirty = true
-            if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flushDev()
-          }
-          if (chunk.error) {
-            if (dirty) flushDev() // surface whatever streamed before the error
-            if (!acc.length) searchError.value = 'searchFailed'
-            break
-          }
-          if (chunk.done) {
-            if (dirty) flushDev() // final trailing flush before sorting
-            // Search complete — apply the sort now (no-op for 'lineId').
-            // Done here rather than in `finally` so it runs only on genuine completion,
-            // not when the loop exits early via supersession/error.
-            await finalizeSort()
-            break
-          }
-        }
-        // Safety: if the iterator completed without a done/error frame, surface any
-        // hits that were still pending under the flush throttle.
-        if (dirty && executedQuery.value === q) flushDev()
-      } catch (err) {
-        // An aborted stream is a cancel (new search / navigation), not a failure.
-        if (!abort.signal.aborted) {
-          console.error('[useFullTextSearch] dev FTS failed:', err)
-          searchError.value = 'searchFailed'
-        }
-      } finally {
-        if (_devStreamAbort === abort) _devStreamAbort = null
-        if (executedQuery.value === q) isSearching.value = false
-      }
-      return
-    }
-
     const normalizedQuery = q.trim().toLowerCase()
+    const cacheKey = _buildCacheKey(normalizedQuery)
+    // The IndexedDB cache serves session restore and tab switching (see loadCachedResults),
+    // never a user-initiated search. Only a search run against a fully built index is
+    // cached — partial results from a mid-build search would be served as complete and stale.
+    const cacheable = !isIndexing?.()
+    if (cacheable) await cache.init(cacheKey, q, false).catch(() => {/* best-effort */})
 
-    // Always run a fresh search — the cache is only used for session restore
-    // and tab switching (see loadCachedResults), never for a user-initiated search.
+    const abort = new AbortController()
+    _streamAbort = abort
     try {
-      const cacheKey = _buildCacheKey(normalizedQuery)
-      if (!isIndexing?.()) await cache.init(cacheKey, q, false)
-      await _startStream(_buildQueryToSend(normalizedQuery), 0, cacheKey)
-    } catch (err) {
-      console.error('[useFullTextSearch] failed to start search:', err)
-      isSearching.value = false
-    }
+      const acc: FullTextSearchResult[] = []
+      const stream = serviceStream<SearchStreamChunk>('ftsSearchStream', {
+        query: _buildQueryToSend(normalizedQuery),
+        maxWordDistance: settings.searchMaxWordDistance,
+        requireOrdered: settings.searchRequireOrdered,
+        contextWords: settings.searchContextMarginWords,
+        expandKetiv: settings.searchExpandKetiv,
+        expandRelated: settings.searchExpandRelated,
+      }, abort.signal)
 
-    // Auto-retry on indexMerging — the merge is transient and typically resolves
-    // within a few seconds. Retry up to MERGE_RETRY_MAX times with a short delay.
-    if (searchError.value === 'indexMerging' && _mergeRetryCount < MERGE_RETRY_MAX) {
-      console.warn(
-        `[useFullTextSearch] indexMerging — retrying in ${MERGE_RETRY_DELAY_MS}ms (attempt ${_mergeRetryCount + 1}/${MERGE_RETRY_MAX})`,
-      )
-      searchError.value = null
-      isSearching.value = true
-      await new Promise((resolve) => setTimeout(resolve, MERGE_RETRY_DELAY_MS))
-      // Check the query hasn't changed while we were waiting
-      if (executedQuery.value === q) {
-        await executeSearch(q, _mergeRetryCount + 1)
+      // Flush the accumulator into the reactive ref on the adaptive cadence
+      // (_flushDelayFor). Each flush copies the whole accumulator (a new array is
+      // required to trigger reactivity) and forces a full virtualizer measurement
+      // rebuild, so flushing on every pushed frame is O(n²) over the stream and
+      // freezes the page for high-frequency words. Backing off as the set grows bounds
+      // those rebuilds; `dirty` tracks pending hits so the last isn't lost.
+      let lastFlushAt = 0
+      let dirty = false
+      const flush = () => {
+        results.value = acc.slice()
+        dirty = false
+        lastFlushAt = performance.now()
       }
+
+      for await (const chunk of stream) {
+        if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
+        if (chunk.ready === false) {
+          searchError.value = 'indexNotReady'
+          return
+        }
+        const hits = chunk.results ?? []
+        if (hits.length) {
+          for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
+          dirty = true
+          if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()
+          if (cacheable) await cache.appendBatch(cacheKey, hits).catch(() => {/* best-effort */})
+        }
+        if (chunk.error) {
+          if (dirty) flush() // surface whatever streamed before the error
+          if (!acc.length) searchError.value = 'searchFailed'
+          // The stream did not complete: whatever was appended is an incomplete snapshot.
+          if (cacheable) cache.remove(cacheKey).catch(() => {/* non-fatal */})
+          break
+        }
+        if (chunk.done) {
+          if (dirty) flush() // final trailing flush before sorting
+          // Search complete — apply the sort now (no-op for 'lineId').
+          // Done here rather than in `finally` so it runs only on genuine completion,
+          // not when the loop exits early via supersession/error.
+          await finalizeSort()
+          if (cacheable) await cache.markComplete(cacheKey, false).catch(() => {/* non-fatal */})
+          break
+        }
+      }
+      // Safety: if the iterator completed without a done/error frame, surface any
+      // hits that were still pending under the flush throttle.
+      if (dirty && executedQuery.value === q) flush()
+    } catch (err) {
+      // An aborted stream is a cancel (new search / navigation), not a failure.
+      if (!abort.signal.aborted) {
+        console.error('[useFullTextSearch] FTS stream failed:', err)
+        searchError.value = 'searchFailed'
+        if (cacheable) cache.remove(cacheKey).catch(() => {/* non-fatal */})
+      }
+    } finally {
+      if (_streamAbort === abort) _streamAbort = null
+      if (executedQuery.value === q) isSearching.value = false
     }
   }
 
@@ -602,22 +298,24 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     cache.remove(_buildCacheKey(normalizedQuery)).catch(() => {/* non-fatal */})
   }
 
+  /**
+   * Session restore / tab switch: show the cached result set when one exists. A cache
+   * entry that never completed cannot be resumed mid-stream (the service streams a whole
+   * search or nothing), so it is re-run from the start instead.
+   */
   async function loadCachedResults(q: string): Promise<boolean> {
     if (isIndexing?.()) return false
     const normalizedQuery = q.trim().toLowerCase()
     const cacheKey = _buildCacheKey(normalizedQuery)
     const cached = await cache.get(cacheKey, q)
     if (!cached || cached.results.length === 0) return false
+    if (!cached.complete) {
+      executeSearch(q).catch((err) => console.error('[useFullTextSearch] re-run after tab restore failed:', err))
+      return true
+    }
     results.value = cached.results
     executedQuery.value = q
     hasSearched.value = true
-    if (!cached.complete) {
-      isSearching.value = true
-      _startStream(_buildQueryToSend(normalizedQuery), cached.results.length, cacheKey).catch((err) => {
-        console.error('[useFullTextSearch] failed to resume stream after tab restore:', err)
-        isSearching.value = false
-      })
-    }
     return true
   }
 

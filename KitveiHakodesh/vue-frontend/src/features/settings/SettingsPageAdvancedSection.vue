@@ -5,8 +5,7 @@ import SettingRow from './SettingRow.vue'
 import SettingsPagePathField from './SettingsPagePathField.vue'
 import SettingsExcludedFoldersDialog from './SettingsExcludedFoldersDialog.vue'
 import ToggleGroup from './ToggleGroup.vue'
-import { onDbReady } from '@/webview-host/seforimDb'
-import { clearStaleBookData } from '@/webview-host/dbSwitchCleanup'
+import { onDbPathChanged } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import {
   pickFolder,
@@ -16,82 +15,38 @@ import {
   getTurnOffUpdates,
   setTurnOffUpdates,
   getDbPathInfo,
-  setDbPathDev,
-  pickDbPathDev,
+  setDbPath,
+  pickDbPath as pickDbPathWithDialog,
 } from '@/webview-host/bridge'
 
 // ── Database path ─────────────────────────────────────────────────────────────
-// Hosted: the C# host owns the setting (native file picker + __webviewSetDbPath).
-// Dev: the KitveiHakodesh service owns it — same registry value, so both modes
-// read/write one setting. In dev the path is typed into the editable field (no
-// native dialog in a browser); the service validates, persists and restarts.
+// The KitveiHakodesh service owns the setting: it validates, persists (one registry
+// value for every runtime) and restarts on the new DB. The page then reloads.
 
-const isDev = typeof window.__webviewAction !== 'function'
-const dbPath = ref(window.__webviewDbPath ?? '')
+const dbPath = ref('')
 
 onMounted(async () => {
-  if (!dbPath.value) {
-    const info = await getDbPathInfo()
-    if (info) dbPath.value = info.path
-  }
+  const info = await getDbPathInfo()
+  if (info) dbPath.value = info.path
 })
 
 async function pickDbPath() {
-  if (isDev) {
-    // The service shows the native dialog and persists the choice, then restarts on the
-    // new DB. Reload so every store refetches from it; /khs waits for the respawn.
-    const picked = await pickDbPathDev()
-    if (!picked) return
-    const previous = dbPath.value
-    dbPath.value = picked
-    await forgetStaleBookData(previous, picked)
-    setTimeout(() => window.location.reload(), 800)
-    return
-  }
-  window.__webviewPickDbPath?.()
-}
-
-/**
- * Drop the book-id-keyed state (recent books, last-read, tabs, caches) when the dev
- * routes below change library. Hosted mode gets this inside `onDbReady`; in dev the
- * service owns the path and the page reloads directly, so the wipe is called here —
- * always BEFORE the reload, or a store would write its stale copy back out.
- *
- * Same-path and first-time cases are skipped, so setting up the library for the first
- * time or re-picking the same folder keeps the reader's history.
- */
-async function forgetStaleBookData(previousPath: string, newPath: string) {
-  if (!previousPath || previousPath === newPath) return
-  await clearStaleBookData()
+  const picked = await pickDbPathWithDialog()
+  if (!picked) return
+  const previous = dbPath.value
+  dbPath.value = picked
+  await onDbPathChanged(previous, picked)
 }
 
 async function commitDbPath(newPath: string) {
-  if (isDev) {
-    const prev = dbPath.value
-    try {
-      await setDbPathDev(newPath)
-      dbPath.value = newPath
-      await forgetStaleBookData(prev, newPath)
-      // The service restarts on the new DB (and rebuilds a stale FTS index).
-      // Reload so every store refetches from it; /khs waits for the respawn.
-      setTimeout(() => window.location.reload(), 800)
-    } catch (err) {
-      console.error('[settings] setDbPathDev failed:', err)
-      dbPath.value = prev
-    }
-    return
-  }
-  if (!window.__webviewSetDbPath) return
+  const prev = dbPath.value
   try {
-    await window.__webviewSetDbPath(newPath)
+    await setDbPath(newPath)
     dbPath.value = newPath
-    await onDbReady(newPath)
+    await onDbPathChanged(prev, newPath)
   } catch (err) {
-    // The rejection carries the host's FULL exception (type + stack). This catch
-    // used to swallow it, so the field silently snapping back to the injected
-    // path was all a user ever saw of the failure — log it for debugging.
     console.error('[settings] setDbPath failed:', err)
-    dbPath.value = window.__webviewDbPath ?? ''
+    dbPath.value = prev
   }
 }
 
@@ -120,15 +75,7 @@ async function resetDbPath() {
   const defaultPath = await clearDbPath()
   if (defaultPath !== null) {
     dbPath.value = defaultPath
-    if (isDev) {
-      await forgetStaleBookData(previous, defaultPath)
-      // Service restarted on the default DB — reload so stores refetch.
-      setTimeout(() => window.location.reload(), 800)
-      return
-    }
-    // Hosted: onDbReady does the same comparison against the path being left, so
-    // clearing back to the default drops the stale state exactly as a pick does.
-    await onDbReady(defaultPath)
+    await onDbPathChanged(previous, defaultPath)
   }
 }
 
@@ -138,6 +85,9 @@ async function resetDbPath() {
 // excluded_folders.json beside the file-search index directory — same format, but the
 // dev service resolves that directory from its own bin folder, not the install folder.
 
+// The excluded-folders manager is still the hosted WinForms dialog (DocumentLocator stays
+// host-side until its own migration leg); the browser gets the Vue dialog below.
+const isDev = typeof window.__webviewAction !== 'function'
 const isExcludedFoldersDialogOpen = ref(false)
 
 async function openExcludedFolders() {
@@ -188,7 +138,7 @@ async function applyTurnOffUpdates(value: boolean) {
 
     <SettingRow
       label="הגדר נתיב למסד הנתונים"
-      :hint="isDev ? 'שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך.' : undefined"
+      hint="שינוי הנתיב יפעיל מחדש את שירות הנתונים ויבנה מחדש את אינדקס החיפוש אם צריך."
     >
       <SettingsPagePathField
         :value="dbPath"

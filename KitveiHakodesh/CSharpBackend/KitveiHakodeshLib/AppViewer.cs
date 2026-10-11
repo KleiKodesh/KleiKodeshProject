@@ -108,15 +108,16 @@ namespace KitveiHakodeshLib
 
         private readonly WebView2 _webView = new WebView2 { Dock = DockStyle.Fill };
         private WebBridge _bridge;
+        // Seforim and dictionary data: the page calls the KitveiHakodesh service itself through
+        // this relay (serviceClient.ts -> http://kitvei-service -> the service pipe). Nothing in
+        // this process answers a data op any more.
+        private ServiceRpcRelay _serviceRelay;
         private DbHandler _db;
-        private SeforimQueryHandler _seforimQuery;
         private LocalFileHandler _localFile;
         private HebrewBooksHandler _hb;
         private SearchHandler _search;
-        private DictionaryQueryHandler _dictionaryQuery;
         private HebrewBooksDb _hebrewBooksDb;
         private FileSystemSearchHandler _fileSystemSearch;
-        private KitveiHakodeshLib.Catalog.CatalogTocHandler _catalogToc;
         private UserSettingsDbHandler _userSettings;
         private string _dbInjectionScriptId;
 
@@ -577,21 +578,20 @@ namespace KitveiHakodeshLib
                 JsBridge.IframeScrollScript + "\n" + JsBridge.OtzariaAddinBridgeStubScript);
 
             _bridge = new WebBridge(_webView, this);
+            // A short connect timeout: when the pipe is absent, net48's Connect spins for the
+            // whole timeout before failing, and the page's client retries several times.
+            _serviceRelay = new ServiceRpcRelay(
+                _webView.CoreWebView2, _bridge,
+                new KitveiHakodesh.ServiceClient.KitveiHakodeshServicePipeChannel(connectTimeoutMilliseconds: 1500));
             _db = new DbHandler(_bridge, _webView, savedPath);
-            // Same database, typed access — see SeforimQueryHandler.
-            _seforimQuery = new SeforimQueryHandler(_bridge, savedPath);
 
             _localFile = new LocalFileHandler(_bridge, _webView);
             _hb = new HebrewBooksHandler(_bridge, _webView, this);
             _search = new SearchHandler(_bridge, _webView);
-            // Same dictionary, typed access — see DictionaryQueryHandler.
-            _dictionaryQuery = new DictionaryQueryHandler(
-                _bridge, System.IO.Path.Combine(AppDir, "dictionary", "KitveiHakodesh_dictionary.db"));
             _hebrewBooksDb = HebrewBooksDb.Instance;
             _hebrewBooksDb.Initialize();
             _fileSystemSearch = new FileSystemSearchHandler(_bridge);
             _fileSystemSearch.UiControl = this;
-            _catalogToc = new KitveiHakodeshLib.Catalog.CatalogTocHandler(_bridge);
             _userSettings = new UserSettingsDbHandler(_bridge, this, savedPath);
 
             _db.OnDbPathPicked = HandleDbPathPicked;
@@ -618,11 +618,6 @@ namespace KitveiHakodeshLib
             // hide the splash after 8 seconds so the user isn't stuck on a blank screen.
             _ = Task.Delay(8000).ContinueWith(_ => _HideSplash());
             _search.OnDbReady(savedPath);
-            // Open (and, if stale/missing, background-build) the catalog TOC index now rather
-            // than on the first search: EnsureIndex is cheap when the index is current, and
-            // doing it here means the first catalog query is answered from a warm reader.
-            // Off the UI thread — the first build walks the whole seforim DB.
-            _ = Task.Run(() => _catalogToc.EnsureIndex());
         }
 
         /// <summary>
@@ -635,9 +630,6 @@ namespace KitveiHakodeshLib
         {
             _search.ResetAndReindex(path);
             _userSettings.UpdateSeforimDbPath(path);
-            // The catalog index is built from the seforim DB, so a new DB makes the
-            // existing index answer for the wrong database.
-            _catalogToc.OnDbPathChanged();
         }
 
         // ── Dispose ─────────────────────────────────────────────────────────────────
@@ -670,12 +662,9 @@ namespace KitveiHakodeshLib
                 // handles after the process exits.
                 _localFile?.DisposeAllHosts();
                 _hb?.DisposeAllHosts();
+                _serviceRelay?.Detach();
 
                 _fileSystemSearch?.Dispose();
-                // Cancels an in-flight catalog build and waits briefly so Lucene's writer
-                // closes cleanly. An interrupted build writes no ver file, so it is simply
-                // treated as stale and rebuilt next run.
-                _catalogToc?.Dispose();
                 _userSettings?.Dispose();
 
                 // Decrement the shared instance count. When the last AppViewer is

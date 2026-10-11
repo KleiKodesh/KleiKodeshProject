@@ -459,11 +459,6 @@ export const useSettingsStore = defineStore('settings', () => {
       copyAsSourceWithQuotation.value = repaired.copyAsSourceWithQuotation
     }
     loadSetting(KEYS.SETTINGS_HB_LOCAL_FOLDER, hebrewBooksLocalFolder)
-    // If the WPF installer configured a local folder but localStorage has nothing yet,
-    // seed it from the injected value so the settings page reflects it immediately.
-    if (!hebrewBooksLocalFolder.value && window.__webviewHbLocalFolder) {
-      hebrewBooksLocalFolder.value = window.__webviewHbLocalFolder
-    }
     // In dev, the HB folder lives in the SHARED registry (HKCU\...\KitveiHakodesh\HebrewBooks\
     // LocalFolder) so dev and the hosted app agree. Seed from there when localStorage is empty;
     // the persist watcher below writes user changes back to the same registry value.

@@ -1,13 +1,16 @@
 /**
- * Dev-only clean client for the KitveiHakodesh service.
+ * The ONE client for the KitveiHakodesh service, dev and hosted alike.
  *
  * The app asks the service for *what it needs* by op name — it never constructs SQL, opens
- * sockets, or knows which backend answers. In dev the browser talks DIRECTLY to the service's
- * loopback HTTP host at `<base>/rpc`. That base is discovered at runtime from the dev server's
- * `/khs-endpoint` route: the service's port is PRIVATE (handed to the dev server over an ACL'd
- * named pipe, never a file), and the dev server relays only the port — not the data. In hosted
- * mode the C# host is the courier instead, so this module is never used there (callers guard on
- * `window.__webviewAction`).
+ * sockets, or knows which backend answers. Only the base URL differs per runtime:
+ *
+ *   dev     — the browser talks DIRECTLY to the service's loopback HTTP host at `<base>/rpc`.
+ *             That base is discovered at runtime from the dev server's `/khs-endpoint` route:
+ *             the service's port is PRIVATE (handed to the dev server over an ACL'd named pipe,
+ *             never a file), and the dev server relays only the port — not the data.
+ *   hosted  — the same `/rpc` and `/rpc-stream` POSTs go to `http://kitvei-service`, a virtual
+ *             host the C# host (KitveiHakodeshLib ServiceRpcRelay) answers by relaying the
+ *             bytes to the service's named pipe. No token: the pipe's ACL is the boundary.
  *
  * Wire format: **MessagePack** (compact binary — smaller + faster than JSON, which matters
  * most for the large FTS result sets).
@@ -18,6 +21,7 @@
  * transforms keys transparently so the rest of the app stays camelCase.
  */
 import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+import { onWebviewEvent } from './seforimDb'
 
 // Cached endpoint of the service's HTTP host — base URL + the per-instance bearer token every
 // data request must carry (the host 401s without it) — discovered once from /khs-endpoint and
@@ -41,7 +45,11 @@ async function discoverEndpoint(): Promise<KhsEndpoint> {
   }
 }
 
+/** The virtual host KitveiHakodeshLib relays to the service pipe (ServiceRpcRelay.BaseUrl). */
+const HOSTED_RELAY_ENDPOINT: KhsEndpoint = { base: 'http://kitvei-service', token: '' }
+
 function getEndpoint(): Promise<KhsEndpoint> {
+  if (typeof window.__webviewAction === 'function') return Promise.resolve(HOSTED_RELAY_ENDPOINT)
   if (khsEndpoint) return Promise.resolve(khsEndpoint)
   return (khsEndpointPending ??= discoverEndpoint().then((e) => {
     khsEndpoint = e
@@ -73,10 +81,11 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
         body,
         signal,
       })
-      if (res.status === 401) {
-        // Stale token (service restarted onto the same port) — re-discover and retry.
+      if (res.status === 401 || res.status === 503) {
+        // 401: stale token (service restarted onto the same port) — re-discover and retry.
+        // 503: the hosted relay could not reach the pipe — the service is restarting; retry.
         khsEndpoint = null
-        lastErr = new Error('service rejected the token (401)')
+        lastErr = new Error(res.status === 401 ? 'service rejected the token (401)' : await res.text())
         await new Promise((r) => setTimeout(r, 60 + attempt * 80))
         continue
       }
@@ -151,6 +160,73 @@ export function serviceCallVoid(op: string, args: object = {}): void {
 }
 
 /**
+ * The hosted leg of serviceStream. WebView2 cannot deliver a response body progressively, so
+ * the C# relay (ServiceRpcRelay) does not answer `/rpc-stream` with the frames: it pushes each
+ * frame to the page as a `serviceStreamFrame` message (base64 of the pipe frame's envelope)
+ * and finishes with `serviceStreamEnd`. The stream id is chosen HERE and sent with the POST,
+ * so the listener below is registered before the first frame can possibly arrive. Aborting
+ * posts `/rpc-stream-cancel`, which closes the pipe — the service's cancel signal.
+ */
+async function* hostedRelayStream<T>(
+  op: string,
+  args: object,
+  signal?: AbortSignal,
+): AsyncGenerator<T, void, void> {
+  const streamId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+  const queue: Uint8Array[] = []
+  let ended = false
+  let endError: string | null = null
+  let wake: (() => void) | null = null
+  const notify = () => { wake?.(); wake = null }
+
+  const unregister = onWebviewEvent((msg) => {
+    if (msg.streamId !== streamId) return
+    if (msg.event === 'serviceStreamFrame') {
+      const b64 = String(msg.frame ?? '')
+      const bin = atob(b64)
+      const bytes = new Uint8Array(bin.length)
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+      queue.push(bytes)
+      notify()
+    } else if (msg.event === 'serviceStreamEnd') {
+      ended = true
+      endError = msg.error ? String(msg.error) : null
+      notify()
+    }
+  })
+  const onAbort = () => { ended = true; notify() }
+  signal?.addEventListener('abort', onAbort, { once: true })
+
+  try {
+    const res = await postRpc(`/rpc-stream?id=${encodeURIComponent(streamId)}`, encodeRequest(op, args), signal)
+    if (!res.ok) throw new Error(`service '${op}' stream failed: ${res.status} ${res.statusText}`)
+    for (;;) {
+      while (queue.length) {
+        const frame = queue.shift()!
+        const env = mpDecode(frame) as Envelope
+        if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
+        if (env.Result && env.Result.length > 0)
+          yield transformKeys(mpDecode(env.Result), decodeKey) as T
+      }
+      if (signal?.aborted) return
+      if (ended) {
+        if (endError) throw new Error(endError)
+        return
+      }
+      await new Promise<void>((resolve) => { wake = resolve })
+    }
+  } finally {
+    unregister()
+    signal?.removeEventListener('abort', onAbort)
+    // Closing early (abort, or the consumer broke out of the loop) must close the pipe, or the
+    // service keeps streaming into nobody. A stream that ended on its own is already closed.
+    if (!ended || signal?.aborted)
+      fetch(`${HOSTED_RELAY_ENDPOINT.base}/rpc-stream-cancel?id=${encodeURIComponent(streamId)}`, { method: 'POST' })
+        .catch(() => {})
+  }
+}
+
+/**
  * Call a STREAMING service op: the service pushes many result frames over one
  * connection (via the /khs-stream courier) and this generator yields each decoded
  * frame as it arrives — no polling anywhere. Frames on the wire keep the pipe's
@@ -163,6 +239,10 @@ export async function* serviceStream<T = unknown>(
   args: object = {},
   signal?: AbortSignal,
 ): AsyncGenerator<T, void, void> {
+  if (typeof window.__webviewAction === 'function') {
+    yield* hostedRelayStream<T>(op, args, signal)
+    return
+  }
   const res = await postRpc('/rpc-stream', encodeRequest(op, args), signal)
   if (!res.ok || !res.body) throw new Error(`service '${op}' stream failed: ${res.status} ${res.statusText}`)
 

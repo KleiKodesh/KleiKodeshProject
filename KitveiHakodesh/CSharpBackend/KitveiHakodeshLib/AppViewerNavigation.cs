@@ -171,8 +171,6 @@ namespace KitveiHakodeshLib
 
             // Re-init the DB handler; keep the existing search handler and its index state.
             _db = new DbHandler(_bridge, _webView, savedPath);
-            // Same database, typed access — see SeforimQueryHandler.
-            _seforimQuery = new SeforimQueryHandler(_bridge, savedPath);
             // Shared with the constructor's wiring, not re-listed here: this copy used to
             // omit the catalog-index invalidation, so after any reload (the app reset
             // included) picking a new seforim DB left the catalog TOC index answering for

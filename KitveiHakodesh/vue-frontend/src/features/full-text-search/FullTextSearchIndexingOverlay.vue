@@ -19,7 +19,6 @@ defineProps<{ state: IndexingState }>()
         <template v-else>
           {{ Math.round(state.percentage) }}%
           <template v-if="state.processedChunks > 0"> · {{ state.processedChunks.toLocaleString('he-IL') }}</template>
-          <span v-if="state.eta"> · {{ state.eta }}</span>
         </template>
       </span>
     </div>
@@ -28,11 +27,6 @@ defineProps<{ state: IndexingState }>()
         class="progress-fill"
         :class="{ merging: state.isMerging }"
         :style="state.isMerging ? undefined : { width: `${state.percentage}%` }"
-      />
-      <div
-        v-if="state.latestSegmentPct !== null"
-        class="segment-marker"
-        :style="{ left: `${100 - state.latestSegmentPct}%` }"
       />
     </div>
   </div>
@@ -103,15 +97,5 @@ defineProps<{ state: IndexingState }>()
   to {
     background-position: -40% 0;
   }
-}
-.segment-marker {
-  position: absolute;
-  top: 50%;
-  transform: translate(50%, -50%);
-  width: 3px;
-  height: 10px;
-  border-radius: 1px;
-  background: var(--bg-secondary);
-  pointer-events: none;
 }
 </style>

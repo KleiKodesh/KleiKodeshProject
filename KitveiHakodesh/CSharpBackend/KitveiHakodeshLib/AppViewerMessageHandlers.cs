@@ -42,25 +42,11 @@ namespace KitveiHakodeshLib
                     // mean the raw-SQL passthrough, which is retired.
                     string action = root.TryGetProperty("action", out var a) ? a.GetString() : null;
 
+                    // No data op is answered here. Seforim and dictionary queries go from the
+                    // page straight to the KitveiHakodesh service through ServiceRpcRelay; this
+                    // switch is for what only the host process can do (window, Word, files, chrome).
                     switch (action)
                     {
-                        // The TYPED seforim path: the page names an op, Core runs the query.
-                        // "sql" above is the old passthrough it replaces and is kept only until
-                        // every caller in seforimApi.ts has moved over.
-                        case "seforimQuery":
-                            if (_seforimQuery == null)
-                                _bridge.Reply(id, new { error = "No database loaded" });
-                            else
-                                await _seforimQuery.HandleAsync(root, id);
-                            break;
-                        // The TYPED dictionary path: the page names a lookup, Core runs it.
-                        // "dict-sql" above is the passthrough it replaces.
-                        case "dictQuery":
-                            if (_dictionaryQuery == null)
-                                _bridge.Reply(id, new { error = "Dictionary database not available" });
-                            else
-                                await _dictionaryQuery.HandleAsync(root, id);
-                            break;
                         case "setDbPath": _db.HandleSetDbPath(root, id); break;
                         case "pickDbPath": _db.HandlePickDbPath(id, this); break;
                         case "clearDbPath": _db.HandleClearDbPath(id); break;
@@ -109,13 +95,6 @@ namespace KitveiHakodeshLib
                         case "fileSystemSearch": _fileSystemSearch.HandleSearch(root, id); break;
                         case "localFileIndexStatus": _fileSystemSearch.HandleIndexStatus(id); break;
                         case "ResetDocumentLocatorIndex": _fileSystemSearch.HandleReindex(id); break;
-                        // Catalog TOC (Lucene) search. Hosted used to have no equivalent — the
-                        // frontend fell back to in-memory heuristics here while dev used the
-                        // service's index — so these three run the SAME engine, from source
-                        // shared with KitveiHakodeshService (see the csproj's linked Catalog files).
-                        case "catalogTocSearch": _catalogToc.HandleSearch(root, id); break;
-                        case "catalogTocStatus": _catalogToc.HandleStatus(id); break;
-                        case "catalogTocResetIndex": _catalogToc.HandleResetIndex(id); break;
                         case "openExcludedFoldersManager": _fileSystemSearch.HandleOpenExcludedFoldersManager(id); break;
                         case "userSettingsQuery": await _userSettings.HandleQuery(root, id); break;
                         case "userSettingsExecute": await _userSettings.HandleExecute(root, id); break;

@@ -45,6 +45,7 @@ $projects = @(
     "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Service/DocumentLocator.Service.csproj",
     "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Demo/DocumentLocator.Demo.csproj",
     "KitveiHakodesh/CSharpBackend/DocumentLocator/DocumentLocator.Tests/DocumentLocator.Tests.csproj",
+    "KitveiHakodesh/CSharpBackend/KitveiHakodesh.ServiceClient/KitveiHakodesh.ServiceClient.csproj",
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshLib/KitveiHakodeshLib.csproj",
     "KitveiHakodesh/CSharpBackend/KitveiHakodeshDemoApp/KitveiHakodeshDemoApp.csproj",
     
@@ -88,7 +89,8 @@ Write-Host "  Removed $cleaned folders" -ForegroundColor Gray
 # SDK-style projects that need dotnet restore (project.assets.json lives in obj)
 $sdkProjects = @(
     "Build/scripts/SvgToPng/SvgToPng.csproj",
-    "Build/Installer/KleiKodeshVstoInstallerWpf.csproj"
+    "Build/Installer/KleiKodeshVstoInstallerWpf.csproj",
+    "KitveiHakodesh/CSharpBackend/KitveiHakodesh.ServiceClient/KitveiHakodesh.ServiceClient.csproj"
 )
 
 Write-Host "`nRestoring SDK-style projects..." -ForegroundColor Yellow

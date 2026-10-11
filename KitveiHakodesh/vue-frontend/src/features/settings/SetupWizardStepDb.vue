@@ -1,34 +1,32 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
-import { dbReady, onWebviewEvent, onDbReady } from '@/webview-host/seforimDb'
-import { getDbPathInfo, setDbPathDev } from '@/webview-host/bridge'
+import { ref, onMounted } from 'vue'
+import { onDbPathChanged } from '@/webview-host/seforimDb'
+import { getDbPathInfo, setDbPath, pickDbPath as pickDbPathWithDialog } from '@/webview-host/bridge'
 import {
   IconFolderOpen20Regular,
   IconArrowDownload20Regular,
 } from '@iconify-prerendered/vue-fluent'
 
-// Dev (browser + service): no native file dialog — the path is typed instead.
-// The service validates it, persists it to the SAME registry value the hosted
-// app uses, and restarts on the new DB (rebuilding a stale search index).
-const isDev = typeof window.__webviewAction !== 'function'
-const dbPath = ref(dbReady.value ? (window.__webviewDbPath ?? '') : '')
+// The KitveiHakodesh service owns the path: it shows the native dialog (or validates a
+// typed path), persists it to the registry and restarts on the new DB (rebuilding a
+// stale search index). Either way the page reloads afterwards.
+const dbPath = ref('')
 const devInput = ref('')
 const devError = ref('')
 
 onMounted(() => {
-  const unregister = onWebviewEvent((msg) => {
-    if (msg.event === 'dbPathPicked') dbPath.value = msg.path as string
+  getDbPathInfo().then((info) => {
+    if (info?.exists) dbPath.value = info.path
+    if (info) devInput.value = info.path
   })
-  onUnmounted(unregister)
-  if (isDev) {
-    getDbPathInfo().then((info) => {
-      if (info) devInput.value = info.path
-    })
-  }
 })
 
-function pickDbPath() {
-  window.__webviewPickDbPath?.()
+async function pickDbPath() {
+  const previous = (await getDbPathInfo())?.path ?? ''
+  const picked = await pickDbPathWithDialog()
+  if (!picked) return
+  dbPath.value = picked
+  await onDbPathChanged(previous, picked)
 }
 
 async function applyDevPath() {
@@ -36,17 +34,11 @@ async function applyDevPath() {
   if (!p) return
   devError.value = ''
   try {
-    // Asked BEFORE the switch, because in dev nothing sets window.__webviewDbPath —
-    // only C# injects it — so onDbReady's own comparison would see no previous path
-    // and skip the wipe. The service is the authority on the path in use.
+    // Asked BEFORE the switch: the service is the authority on the path in use.
     const previous = (await getDbPathInfo())?.path ?? ''
-    await setDbPathDev(p)
+    await setDbPath(p)
     dbPath.value = p
-    if (previous && previous !== p) {
-      const { clearStaleBookData } = await import('@/webview-host/dbSwitchCleanup')
-      await clearStaleBookData()
-    }
-    await onDbReady(p)
+    await onDbPathChanged(previous, p)
   } catch (err) {
     devError.value = err instanceof Error && /not found/i.test(err.message)
       ? 'הקובץ לא נמצא בנתיב שצוין'
@@ -75,13 +67,12 @@ function downloadOtzaria() {
     <IconArrowDownload20Regular class="db-card-icon" />
     <span class="db-card-path placeholder">הורד את זית</span>
   </button>
-  <button v-if="!isDev" class="db-pick-card" @click="pickDbPath">
+  <button class="db-pick-card" @click="pickDbPath">
     <IconFolderOpen20Regular class="db-card-icon" />
     <span class="db-card-path" :class="{ placeholder: !dbPath }">
       {{ dbPath || 'בחר קובץ מסד נתונים' }}
     </span>
   </button>
-  <template v-else>
     <div class="db-pick-card db-dev-row">
       <IconFolderOpen20Regular class="db-card-icon" />
       <input
@@ -95,7 +86,6 @@ function downloadOtzaria() {
     </div>
     <p v-if="devError" class="db-dev-error">{{ devError }}</p>
     <p v-if="dbPath && !devError" class="db-dev-ok">✓ {{ dbPath }}</p>
-  </template>
 </template>
 
 <style scoped>

@@ -22,9 +22,6 @@
  *             Converts matched TOC nodes into SearchFsItem objects for the UI.
  */
 
-import { query } from '@/webview-host/seforimDb'
-import { SQL } from '@/webview-host/queries.sql'
-import { isDbHosted } from '@/webview-host/seforimApi'
 import { serviceCall } from '@/webview-host/serviceClient'
 import { SegmentSearchTree } from '@/utils/segmentSearchTree'
 // The only remaining cross-feature import here. `stripTocTitleRoots` carries a
@@ -91,36 +88,6 @@ export function splitQueryIntoBookAndTocParts(
 // ─── Stage 2: Fetch TOC rows for candidate books ──────────────────────────────
 
 /**
- * Splits an array of IDs into roughly sqrt(n)-sized batches.
- * Keeps individual SQL IN-clauses from growing too large while minimising
- * round-trips for small sets.
- */
-function splitIntoBatches(ids: number[]): number[][] {
-  const batchSize = Math.max(1, Math.ceil(Math.sqrt(ids.length)))
-  const batches: number[][] = []
-  for (let offset = 0; offset < ids.length; offset += batchSize) {
-    batches.push(ids.slice(offset, offset + batchSize))
-  }
-  return batches
-}
-
-// ─── SQL prefilter guard ──────────────────────────────────────────────────────
-//
-// The prefiltered query matches TOC texts with a substring LIKE on the last
-// TOC word. That is a strict superset of the scorer's token-prefix match
-// (tokens are contiguous substrings of the raw text) — provided LIKE's
-// case-insensitivity covers the tokenizer's toLowerCase. SQLite's LIKE is
-// case-insensitive for ASCII only, so the prefilter is used only when the
-// word consists of ASCII + Hebrew-block characters (Hebrew has no case).
-// Any other character (e.g. accented Latin) falls back to the full fetch.
-const LIKE_SAFE_WORD_RE = /^[ -~֐-׿]+$/
-
-/** Escape LIKE wildcards so the word is matched literally (ESCAPE '\'). */
-function escapeLikeWord(word: string): string {
-  return word.replace(/[\\%_]/g, (ch) => `\\${ch}`)
-}
-
-/**
  * Stage 2 — fetchTocRowsForBooks
  *
  * Loads the TOC entries of the given books that can participate in scoring,
@@ -159,26 +126,10 @@ export async function fetchTocRowsForBooks(
     .map((book) => book.id)
 
   const filterWord = lastTocWord?.toLowerCase() ?? ''
-  const usePrefilter = filterWord.length > 0 && LIKE_SAFE_WORD_RE.test(filterWord)
 
-  // Dev routes through the service (which owns the prefilter/escape/batch logic);
-  // hosted keeps the SQL here (prefiltered query, or parallel batches by book id).
-  let rawRows: TocRow[]
-  if (!isDbHosted()) {
-    rawRows = (await serviceCall<{ rows: TocRow[] }>('getTocTitlesForBooks', { bookIds, filterWord })).rows
-  } else if (usePrefilter) {
-    rawRows = await query<TocRow>(SQL.GET_TOC_TITLES_MATCHING_FOR_BOOKS(bookIds.length), [
-      ...bookIds,
-      escapeLikeWord(filterWord),
-    ])
-  } else {
-    const batches = await Promise.all(
-      splitIntoBatches(bookIds).map((batch) =>
-        query<TocRow>(SQL.GET_TOC_TITLES_FOR_BOOKS(batch.length), batch),
-      ),
-    )
-    rawRows = batches.flat()
-  }
+  // The service owns the prefilter, LIKE-escaping and batching; both runtimes ask it.
+  const rawRows: TocRow[] =
+    (await serviceCall<{ rows: TocRow[] }>('getTocTitlesForBooks', { bookIds, filterWord })).rows
   if (isCancelled()) return null
 
   // Group rows per book, then strip redundant roots per book.

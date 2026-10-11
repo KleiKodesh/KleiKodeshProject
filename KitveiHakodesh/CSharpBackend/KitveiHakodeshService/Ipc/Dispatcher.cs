@@ -300,6 +300,7 @@ public sealed class Dispatcher(
                     if (!File.Exists(p))
                         return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = p, Error = "file not found" }));
 
+                    UserSettingsCarryOver.CopyIfDestinationMissing(SeforimDbLocator.Resolve(), p, logger);
                     SeforimDbLocator.SaveRegistryPath(p);
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
@@ -321,6 +322,7 @@ public sealed class Dispatcher(
                     if (!File.Exists(picked))
                         return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = picked, Error = "file not found" }));
 
+                    UserSettingsCarryOver.CopyIfDestinationMissing(SeforimDbLocator.Resolve(), picked, logger);
                     SeforimDbLocator.SaveRegistryPath(picked);
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
@@ -393,10 +395,10 @@ public sealed class Dispatcher(
                         var offline = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: false, ct);
                         return RpcResponse.Ok(MsgPack.Ser(offline.Path is null
                             ? new HbDownloadResult { NoInternet = true }
-                            : new HbDownloadResult { Handle = localFileGrants.Grant(offline.Path) }));
+                            : new HbDownloadResult { Handle = localFileGrants.Grant(offline.Path), Path = offline.Path }));
                     }
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: true, ct);
-                    if (r.Path != null) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Handle = localFileGrants.Grant(r.Path) }));
+                    if (r.Path != null) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Handle = localFileGrants.Grant(r.Path), Path = r.Path }));
                     if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true }));
                     if (r.Error == "cancelled") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Cancelled = true }));
                     if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true }));
@@ -444,7 +446,7 @@ public sealed class Dispatcher(
                         ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: false, ct);
                     return RpcResponse.Ok(MsgPack.Ser(r.Path != null
-                        ? new HbDownloadResult { Handle = localFileGrants.Grant(r.Path) }
+                        ? new HbDownloadResult { Handle = localFileGrants.Grant(r.Path), Path = r.Path }
                         : new HbDownloadResult { Redownload = true }));
                 }
 

@@ -1,8 +1,7 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { dbReady } from '@/webview-host/seforimDb'
-import { getDbPathInfo } from '@/webview-host/bridge'
 import { resetting } from './appResetState'
 import { useSettings } from './useSettingsPage'
 import SetupWizardStepDb from './SetupWizardStepDb.vue'
@@ -36,19 +35,11 @@ type Step =
   | 'commentary-display'
   | 'shortcuts'
 
-// Dev (browser + service): the db step is shown when the service reports the
-// resolved seforim DB doesn't exist on disk — same purpose as the hosted
-// !dbReady signal, owned by the service instead of the C# host.
-const devDbMissing = ref(false)
-onMounted(async () => {
-  if (typeof window.__webviewAction === 'function') return // hosted — dbReady covers it
-  const info = await getDbPathInfo()
-  if (info && !info.exists) devDbMissing.value = true
-})
-
+// The db step is shown when the service reports that the resolved seforim DB does
+// not exist on disk (dbReady is the same probe, kept current by seforimDb).
 const steps = computed<Step[]>(() => {
   const s: Step[] = ['welcome']
-  if (!dbReady.value || devDbMissing.value) s.push('db')
+  if (!dbReady.value) s.push('db')
   s.push('theme', 'general', 'book-display', 'commentary-display', 'shortcuts')
   return s
 })

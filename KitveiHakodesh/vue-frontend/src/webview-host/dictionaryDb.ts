@@ -1,7 +1,6 @@
 // Dictionary DB query layer for KitveiHakodesh_dictionary.db.
-// Hosted (C#) still runs the SQL from dictionaryDb.sql.ts via the dict-sql bridge.
-// Dev routes through the KitveiHakodesh service (serviceCall), which owns the SQL —
-// the browser dev build no longer sends dictionary SQL.
+// Every lookup names an op and the KitveiHakodesh service runs it (serviceCall) — dev over
+// its HTTP host, hosted over its pipe through the C# relay. No SQL leaves the page.
 // Seforim DB queries (מצודת ציון, מלבי"ם, מחברת מנחם) live in dictionarySeforimDb.ts.
 
 import { serviceCall } from './serviceClient'
@@ -28,32 +27,11 @@ export interface DictLink {
 
 export type { MetzudatRow, MenchemRow, AruchRow, MicropediaRow } from './dictionarySeforimDb'
 
-declare global {
-  interface Window {
-    __webviewDictQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
-  }
-}
-
 // ── Query transport ───────────────────────────────────────────────────────────
 
-/** True when the C# bridge is present (hosted). Dev falls to the service. */
-const isDictHosted = (): boolean => typeof window.__webviewAction === 'function'
-
-/**
- * Runs a named dictionary lookup on whichever leg is present. Both answer the same op names
- * with the same shapes — dev through the service, hosted through the WebView2 bridge into
- * KitveiHakodesh.Core — so a lookup cannot behave differently between the two apps.
- *
- * Arguments are NESTED under `params`: __webviewAction flattens whatever it is given onto the
- * message root, where `id` is already the bridge's correlation id.
- */
+/** Runs a named dictionary lookup on the service. One call per lookup, no branch. */
 function dictOp<T>(op: string, args: object = {}): Promise<T> {
-  if (!isDictHosted()) return serviceCall<T>(op, args)
-  return (window.__webviewAction!('dictQuery', { op, params: args }) as Promise<{ error?: string } & T>)
-    .then((reply) => {
-      if (reply && reply.error) throw new Error(String(reply.error))
-      return reply as T
-    })
+  return serviceCall<T>(op, args)
 }
 
 // ── Dictionary tier queries ───────────────────────────────────────────────────

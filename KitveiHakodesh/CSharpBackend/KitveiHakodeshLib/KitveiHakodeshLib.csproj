@@ -87,34 +87,6 @@
       <HintPath>..\packages\System.Buffers.4.6.1\lib\net462\System.Buffers.dll</HintPath>
     </Reference>
     <Reference Include="System.Core" />
-    <!-- Catalog TOC search engine. Pinned to the SAME Lucene build as KitveiHakodeshService
-         (4.8.0-beta00018), NOT the beta00016 that DocumentLocator uses. These are betas of a
-         port whose index internals still moved between releases, and the catalogtoc.ver stamp
-         records only the format version and the DB rows — not the Lucene build — so a skew
-         between the two legs would have nothing to force a rebuild. Same source AND same
-         engine version, or the shared-source guarantee is only half true. -->
-    <Reference Include="Lucene.Net, Version=4.0.0.0, Culture=neutral, PublicKeyToken=85089178b9ac3181">
-      <HintPath>..\packages\Lucene.Net.4.8.0-beta00018\lib\net462\Lucene.Net.dll</HintPath>
-    </Reference>
-    <!-- Lucene.Net's own dependency: its Analyzer/TokenStream types surface J2N's
-         ICharSequence and IAppendable, so subclassing them needs this referenced directly.
-         Package 2.1.0 is what beta00018 requires ([2.1.0, 3.0.0)); its ASSEMBLY version is
-         still 2.0.0.0, which is what the Include must say — J2N keeps the assembly version
-         fixed across 2.x so the binding never needs a redirect. -->
-    <Reference Include="J2N, Version=2.0.0.0, Culture=neutral, PublicKeyToken=f39447d697a969af">
-      <HintPath>..\packages\J2N.2.1.0\lib\net462\J2N.dll</HintPath>
-    </Reference>
-    <!-- Also Lucene.Net's, and NOT optional despite nothing here referencing them in source:
-         Lucene.Net.Util.Constants reads its configuration in a STATIC initializer, so without
-         these every Lucene call — not just a configured one — dies with a
-         TypeInitializationException wrapping a FileNotFoundException. The project compiles
-         perfectly without them, which is exactly what makes the failure runtime-only. -->
-    <Reference Include="Microsoft.Extensions.Configuration.Abstractions, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60">
-      <HintPath>..\packages\Microsoft.Extensions.Configuration.Abstractions.8.0.0\lib\net462\Microsoft.Extensions.Configuration.Abstractions.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Extensions.Primitives, Version=8.0.0.0, Culture=neutral, PublicKeyToken=adb9793829ddae60">
-      <HintPath>..\packages\Microsoft.Extensions.Primitives.8.0.0\lib\net462\Microsoft.Extensions.Primitives.dll</HintPath>
-    </Reference>
     <Reference Include="System.IO.Pipelines, Version=10.0.0.5, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\System.IO.Pipelines.10.0.5\lib\net462\System.IO.Pipelines.dll</HintPath>
     </Reference>
@@ -180,8 +152,8 @@
     </Compile>
     <Compile Include="Bridge\JsBridge.cs" />
     <Compile Include="Bridge\WebBridge.cs" />
+    <Compile Include="Bridge\ServiceRpcRelay.cs" />
     <Compile Include="Db\DbHandler.cs" />
-    <Compile Include="Db\SeforimQueryHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksHandler.cs" />
     <Compile Include="HebrewBooks\HebrewBooksDb.cs" />
     <Compile Include="FileSystemSearch\DocumentLocatorAdapter.cs" />
@@ -193,19 +165,9 @@
     <Compile Include="Search\FtsSearchExecutor.cs" />
     <Compile Include="Search\RelatedFormExpander.cs" />
     <Compile Include="Search\SearchHandler.cs" />
-    <!-- Catalog TOC (Lucene) search now comes from KitveiHakodesh.Core, which multi-targets
-         net48 natively — so this leg consumes the SAME engine as the service by referencing a
-         library rather than by link-compiling net10-shaped source through compatibility shims.
-         The freshness stamp comes with it (SeforimDbContentFingerprint): if the two legs
-         computed it differently they would each consider the other's index stale and rebuild
-         it on every switch between them. -->
-    <Compile Include="Catalog\GlobalUsings.cs" />
-    <Compile Include="Catalog\NetFxCompat.cs" />
-    <Compile Include="Catalog\CatalogTocHandler.cs" />
     <Compile Include="Settings\AppSettings.cs" />
     <Compile Include="UserSettings\UserSettingsDbAccess.cs" />
     <Compile Include="UserSettings\UserSettingsDbHandler.cs" />
-    <Compile Include="Dictionary\DictionaryQueryHandler.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -226,9 +188,15 @@
     </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
-    <!-- Everything this project needs from the backend comes through Core: the data layer,
-         the search engine, the shared probes. It references neither FtsLib nor a SQLite
-         provider of its own. -->
+    <!-- The service pipe client: the ONLY road to seforim data. Lib carries bytes between the
+         WebView2 page and the KitveiHakodesh service (Bridge\ServiceRpcRelay) and holds no
+         database, search engine or wire DTO of its own. -->
+    <ProjectReference Include="..\KitveiHakodesh.ServiceClient\KitveiHakodesh.ServiceClient.csproj">
+      <Name>KitveiHakodesh.ServiceClient</Name>
+    </ProjectReference>
+    <!-- Core is on its way OUT of this project: every data handler that still reaches into it
+         is being replaced by the relay above, slice by slice. When the last one goes, so does
+         this reference, and with it SQLite, Lucene and FtsLib. -->
     <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj">
       <Name>KitveiHakodesh.Core</Name>
     </ProjectReference>

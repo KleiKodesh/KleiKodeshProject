@@ -8,7 +8,7 @@ import { useBookViewStore } from './stores/bookViewStore'
 import { useSettingsStore } from './stores/settingsStore'
 import { useThemeStore } from './theme/themeStore'
 import { initPdfThemeObserver } from './theme/themes'
-import { dbReady, hasHostBridge } from './webview-host/seforimDb'
+import { dbReady, hasHostBridge, probeDbReady } from './webview-host/seforimDb'
 import { initTabMirror } from './webview-host/tabMirror'
 import { useBooksDataStore } from './stores/booksDataStore'
 import { useLocalFileStore } from './stores/localFileStore'
@@ -64,7 +64,9 @@ function warmBooksDataInBackground() {
     void useBooksDataStore().ensureLoaded()
   })
 }
-warmBooksDataInBackground()
+// The service says whether the resolved DB exists; the catalog warm-up waits for that
+// answer so a missing library does not fire queries that can only fail.
+void probeDbReady().then(warmBooksDataInBackground)
 
 // Restore persisted local file tabs after mount so the UI paints immediately.
 // PDF/HTML tabs render their loading placeholder right away; the virtual URL

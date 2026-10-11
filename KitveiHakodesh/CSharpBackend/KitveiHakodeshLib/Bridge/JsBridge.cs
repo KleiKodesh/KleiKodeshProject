@@ -3,11 +3,8 @@ namespace KitveiHakodeshLib.Bridge
     /// <summary>
     /// JavaScript injected before the Vue app loads.
     /// Exposes Promise-based functions on window:
-    ///   __webviewQuery(sql, params)        — run a SQL query against the main DB
-    ///   __webviewDictQuery(sql, params)    — run a SQL query against KitveiHakodesh_dictionary.db
-    ///   __webviewSetDbPath(path)           — set the DB path programmatically
-    ///   __webviewPickDbPath()              — open the native DB file picker (push event)
-    ///   __webviewAction(action, args)      — generic bridge for all other actions
+    ///   __webviewAction(action, args)      — the bridge for every host action (window, Word,
+    ///                                        files, chrome). Data goes to the service, not here.
     /// Push events (no pending id) are dispatched via window.__onWebviewEvent(msg).
     /// </summary>
     public static class JsBridge
@@ -46,13 +43,7 @@ namespace KitveiHakodeshLib.Bridge
         });
     }
 
-    window.__webviewQuery          = function (sql, params) { return post({ sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
-    window.__webviewDictQuery      = function (sql, params) { return post({ action: 'dict-sql', sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
-    window.__webviewSetDbPath      = function (path)         { return post({ action: 'setDbPath', path: path }); };
-    window.__webviewPickDbPath     = function ()             { window.chrome.webview.postMessage({ id: '0', action: 'pickDbPath' }); };
     window.__webviewAction         = function (action, args) { return post(Object.assign({ action: action }, args || {})); };
-    window.__webviewUserSettingsQuery   = function (sql, params) { return post({ action: 'userSettingsQuery',   sql: sql, params: params || [] }).then(function (m) { return { rows: m.rows }; }); };
-    window.__webviewUserSettingsExecute = function (sql, params) { return post({ action: 'userSettingsExecute', sql: sql, params: params || [] }).then(function (m) { return { lastInsertId: m.lastInsertId }; }); };
 })();";
 
         /// <summary>

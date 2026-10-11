@@ -13,14 +13,8 @@ import { showToast } from '@/composables/useToast'
 
 declare global {
   interface Window {
-    __webviewQuery?: (sql: string, params: unknown[]) => Promise<{ rows: unknown[] }>
-    __webviewPickDbPath?: () => void
-    __webviewSetDbPath?: (path: string) => Promise<{ path: string }>
     __webviewAction?: (action: string, args?: object) => Promise<unknown>
-    __webviewDbPath?: string
-    __webviewDbReady?: boolean
     __webviewShowPopOut?: boolean
-    __webviewHbLocalFolder?: string
     __onWebviewEvent?: ((msg: Record<string, unknown>) => void) | null
   }
 }
@@ -63,16 +57,6 @@ function action<T>(name: string, args?: object): Promise<T> {
   if (typeof window.__webviewAction !== 'function')
     return Promise.reject(new Error('bridge not available'))
   return window.__webviewAction(name, args) as Promise<T>
-}
-
-/**
- * Call a C# bridge action with positional params (used by search/indexing).
- * The bridge receives params as an array, not a named object.
- */
-export function callBridgeAction<T>(name: string, ...params: unknown[]): Promise<T> {
-  if (typeof window.__webviewAction !== 'function')
-    return Promise.reject(new Error('bridge not available'))
-  return window.__webviewAction(name, params as unknown as object) as Promise<T>
 }
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -327,8 +311,24 @@ export async function readTxtFileContent(filePath: string): Promise<string | nul
 }
 
 /**
+ * A served PDF result from the service (`triggerHbDownload` / `restoreHbPdf`): the URL the
+ * viewer can load. Dev loads it through the same-origin `/khs-file` proxy by capability
+ * handle; the hosted page has no HTTP host, so the C# host serves the file's PATH from a
+ * WebView2 virtual host instead (the same `restoreLocalFile` action every local file uses).
+ */
+async function servedPdfUrl(r: { handle?: string; path?: string }): Promise<string | null> {
+  if (!r.handle) return null
+  if (typeof window.__webviewAction !== 'function') return `/khs-file/${r.handle}`
+  if (!r.path) return null
+  const hosted = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath: r.path })
+  return hosted.url || null
+}
+
+/**
  * Restore a HebrewBooks PDF tab from a persisted book ID.
- * C# checks the local folder first, then the cache; if neither has it, re-downloads.
+ * The service checks the local folder first, then its cache (no download). A miss returns
+ * redownload — and, like the download flow, the re-download is kicked off here and finishes
+ * through the hbPdfReady / hbPdfCancelled events so the store's converting tab is resolved.
  * Returns null on failure.
  */
 export async function restoreHbPdf(
@@ -337,37 +337,21 @@ export async function restoreHbPdf(
   tabId: string,
   localFolder?: string,
 ): Promise<{ url: string } | { redownload: true } | null> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev: local/cache-only lookup via the service (no download). A miss returns redownload —
-    // and, matching the hosted HandleRestoreHbPdf (which self-initiates the re-download and
-    // finishes via an hbPdfReady push), we kick off the in-service download here and replay the
-    // hbPdfReady/hbPdfCancelled events so the store's _converting tab is resolved.
-    try {
-      const r = await serviceCall<{ handle?: string; redownload?: boolean; error?: string }>(
-        'restoreHbPdf',
-        { bookId, localFolder: localFolder || '' },
-      )
-      if (r?.handle) return { url: `/khs-file/${r.handle}` }
-      if (r?.redownload) {
-        // The service builds its own download URL from the book id, so the url arg is unused here.
-        triggerHbDownload(bookId, bookTitle, '', tabId, localFolder, navigator.onLine)
-        return { redownload: true }
-      }
-      return null
-    } catch {
-      return null
+  try {
+    const r = await serviceCall<{ handle?: string; path?: string; redownload?: boolean; error?: string }>(
+      'restoreHbPdf',
+      { bookId, localFolder: localFolder || '' },
+    )
+    const url = await servedPdfUrl(r)
+    if (url) return { url }
+    if (r?.redownload) {
+      triggerHbDownload(bookId, bookTitle, '', tabId, localFolder, navigator.onLine)
+      return { redownload: true }
     }
+    return null
+  } catch {
+    return null
   }
-  const res = await action<{ url?: string; redownload?: boolean; error?: string }>('restoreHbPdf', {
-    bookId,
-    bookTitle,
-    tabId,
-    localFolder: localFolder || '',
-  })
-  if (res.error) return null
-  if (res.redownload) return { redownload: true }
-  if (res.url) return { url: res.url }
-  return null
 }
 
 /**
@@ -448,10 +432,13 @@ export async function resetHostApp(): Promise<void> {
   // to, so the rebuild cannot overtake the wipe. The other two each own their own index
   // directory and gate readers behind their own readiness check, so nothing they race with
   // can observe a half-wiped state. Do not add a fourth step here assuming a shared queue.
-  await withTimeout(action('DeleteFtsIndex'), RESET_STEP_TIMEOUT_MS)
-  // Hosted mode used to skip the file-search index that dev resets, so the same button
-  // wiped a different set of indexes depending on which mode the app ran in.
+  // The service owns the FTS index, the saved database path and the HebrewBooks folder in
+  // both runtimes; only the file-search index (DocumentLocator) and the host-side window and
+  // theme settings are still the WebView2 host's to reset.
+  await withTimeout(serviceCall('ftsResetIndex'), RESET_STEP_TIMEOUT_MS)
   await withTimeout(action('ResetDocumentLocatorIndex'), RESET_STEP_TIMEOUT_MS)
+  await withTimeout(serviceCall('clearSeforimDbPath'), RESET_STEP_TIMEOUT_MS)
+  await withTimeout(clearHbLocalFolder(), RESET_STEP_TIMEOUT_MS)
   await withTimeout(action('resetSettings'), RESET_STEP_TIMEOUT_MS)
   // clearBrowsingData is set ONLY here. The same action is sent by seforimDb.onDbReady after
   // a DB-path change, where clearing would wipe tabs and last-read positions the user never
@@ -504,42 +491,21 @@ export type CatalogTocSearchResult = {
 
 /**
  * Search the catalog TOC (Lucene) index — book titles and full TOC paths in one query.
- *
- * Both modes run the SAME engine: dev reaches the service over serviceCall, hosted goes
- * through the C# host, whose CatalogTocHandler is compiled from the service's own engine
- * source. Before that handler existed this was service-only, so the hosted app fell back to
- * in-memory heuristics and ranked the same query differently.
- *
- * Both transports already deliver camelCase keys — the service client transforms msgpack's
- * PascalCase, and the hosted handler emits camelCase directly — so the result needs no
- * per-mode normalisation.
+ * The KitveiHakodesh service owns the index in both runtimes; serviceClient delivers
+ * camelCase keys, so the result needs no per-mode normalisation.
  */
 export async function catalogTocSearch(query: string): Promise<CatalogTocSearchResult> {
-  if (typeof window.__webviewAction === 'function')
-    return action<CatalogTocSearchResult>('catalogTocSearch', { query })
   return serviceCall<CatalogTocSearchResult>('catalogTocSearch', { query })
 }
 
 /**
  * Wipe the catalog TOC (Lucene) index so it is rebuilt from the seforim DB.
  *
- * Both transports, matching catalogTocSearch. The hosted branch matters: routing this
- * through serviceCall in hosted mode did not merely fail, it HUNG — serviceClient discovers
- * the service via the dev server's /khs-endpoint route, which does not exist there, so every
- * attempt gets a non-ok response and discovery runs its full 82-attempt loop (~77s at the 1s
- * backoff cap) before throwing, once per each of postRpc's 6 attempts. As the first awaited
- * step of the app reset, that alone stalled the whole reset for minutes before failing, which
- * is what made the reset look like it did nothing.
- *
  * Normally self-healing — the index carries a DB content stamp and rebuilds whenever the
  * seforim DB or the index format version changes — so this exists for the case a stamp
  * cannot catch: an index corrupted in place.
  */
 export async function resetCatalogTocIndex(): Promise<void> {
-  if (typeof window.__webviewAction === 'function') {
-    await action('catalogTocResetIndex').catch(() => {})
-    return
-  }
   await serviceCall('catalogTocResetIndex').catch(() => {})
 }
 
@@ -607,14 +573,10 @@ export async function setExcludedFolders(folders: string[]): Promise<string[]> {
 }
 
 /**
- * Reset the FTS search index on the C# side.
+ * Wipe the FTS index so the service rebuilds it from the seforim DB.
  */
 export async function resetSearchIndex(): Promise<void> {
-  if (typeof window.__webviewAction !== 'function') {
-    await serviceCall('ftsResetIndex').catch(() => {}) // dev: via KitveiHakodesh service
-    return
-  }
-  await action('ResetFtsIndex').catch(() => {})
+  await serviceCall('ftsResetIndex').catch(() => {})
 }
 
 /**
@@ -656,13 +618,9 @@ export function hbSearch(
   limit?: number,
 ): Promise<{ books?: unknown[]; error?: string }> {
   const args = { query, localFolder: localFolder || '', ...(limit !== undefined ? { limit } : {}) }
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev mode: query the KitveiHakodesh service's bundled catalog.
-    return serviceCall<{ books: unknown[] }>('hbSearch', args).catch((err) => ({
-      error: err instanceof Error ? err.message : 'Search error',
-    }))
-  }
-  return action<{ books?: unknown[]; error?: string }>('hbSearch', args)
+  return serviceCall<{ books: unknown[] }>('hbSearch', args).catch((err) => ({
+    error: err instanceof Error ? err.message : 'Search error',
+  }))
 }
 
 /**
@@ -920,60 +878,50 @@ export function notifyTabIcons(icons: { key: string; png: string }[]): void {
 }
 
 /**
- * Trigger a HebrewBooks PDF download to the cache, then open it.
- * If localFolder is provided, C# will first check for {localFolder}\{bookId}.pdf
- * before falling back to the download flow.
+ * Trigger a HebrewBooks PDF download, then open it. The service checks {localFolder}\{bookId}.pdf
+ * and its cache first, otherwise downloads the PDF ENTIRELY in C# (HttpClient) and answers
+ * once it is on disk. The store's tab is finished through the hbPdfReady / hbPdfCancelled
+ * events (emitWebviewEvent), so the listeners in localFileStore run the same way whatever
+ * started the download. The `url` argument is unused: the service builds its own URL from
+ * the book id.
  */
 export function triggerHbDownload(
   bookId: string,
   bookTitle: string,
-  url: string,
+  _url: string,
   tabId: string,
   localFolder?: string,
   isOnline?: boolean,
 ): Promise<{ ok?: boolean }> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev: the service downloads the PDF ENTIRELY in C# (HttpClient — no browser download
-    // interception) and returns a GET /file capability handle. The hosted app finishes this
-    // flow with an hbPdfReady/hbPdfCancelled PUSH; dev has no C# push channel, so we replay
-    // the same events locally (emitWebviewEvent) after the round-trip. localFileStore's
-    // finishHbDownload/cancelHbDownload listeners then run unchanged.
-    ;(async () => {
-      try {
-        const r = await serviceCall<{
-          handle?: string
-          notFound?: boolean
-          noInternet?: boolean
-          cancelled?: boolean
-          error?: string
-        }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
-        if (r?.handle) {
-          emitWebviewEvent({ event: 'hbPdfReady', url: `/khs-file/${r.handle}`, bookId, bookTitle, tabId })
-        } else if (r?.cancelled) {
-          // User pressed ביטול — the tab was already reset by cancelConversion; nothing to show.
-          emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
-        } else {
-          emitWebviewEvent({
-            event: 'hbPdfCancelled',
-            tabId,
-            notFound: !!r?.notFound,
-            noInternet: !!r?.noInternet,
-          })
-        }
-      } catch {
-        emitWebviewEvent({ event: 'hbPdfCancelled', tabId, noInternet: !navigator.onLine })
+  ;(async () => {
+    try {
+      const r = await serviceCall<{
+        handle?: string
+        path?: string
+        notFound?: boolean
+        noInternet?: boolean
+        cancelled?: boolean
+        error?: string
+      }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
+      const url = await servedPdfUrl(r)
+      if (url) {
+        emitWebviewEvent({ event: 'hbPdfReady', url, bookId, bookTitle, tabId })
+      } else if (r?.cancelled) {
+        // The user aborted the download; the tab was already reset, nothing to show.
+        emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
+      } else {
+        emitWebviewEvent({
+          event: 'hbPdfCancelled',
+          tabId,
+          notFound: !!r?.notFound,
+          noInternet: !!r?.noInternet,
+        })
       }
-    })()
-    return Promise.resolve({ ok: true })
-  }
-  return action<{ ok?: boolean }>('triggerHbDownload', {
-    bookId,
-    bookTitle,
-    url,
-    tabId,
-    localFolder: localFolder || '',
-    isOnline: isOnline !== false,
-  })
+    } catch {
+      emitWebviewEvent({ event: 'hbPdfCancelled', tabId, noInternet: !navigator.onLine })
+    }
+  })()
+  return Promise.resolve({ ok: true })
 }
 
 /**
@@ -987,16 +935,10 @@ export async function getHbDownloadProgress(
 ): Promise<{ active: boolean; received: number; total: number } | null> {
   if (!bookId) return null
   try {
-    const r =
-      typeof window.__webviewAction === 'function'
-        ? await action<{ active?: boolean; received?: number; total?: number }>(
-            'hbDownloadProgress',
-            { bookId },
-          )
-        : await serviceCall<{ active?: boolean; received?: number; total?: number }>(
-            'hbDownloadProgress',
-            { bookId },
-          )
+    const r = await serviceCall<{ active?: boolean; received?: number; total?: number }>(
+      'hbDownloadProgress',
+      { bookId },
+    )
     if (!r) return null
     return { active: !!r.active, received: r.received || 0, total: r.total || 0 }
   } catch {
@@ -1010,10 +952,6 @@ export async function getHbDownloadProgress(
  */
 export function cancelHbDownload(bookId: string): void {
   if (!bookId) return
-  if (typeof window.__webviewAction === 'function') {
-    action('cancelHbDownload', { bookId }).catch(() => {})
-    return
-  }
   serviceCallVoid('cancelHbDownload', { bookId })
 }
 
@@ -1035,16 +973,10 @@ export function checkHbLocalFiles(
   bookIds: string[],
   localFolder: string,
 ): Promise<{ existingIds?: string[]; error?: string }> {
-  if (typeof window.__webviewAction !== 'function') {
-    return serviceCall<{ existingIds?: string[]; error?: string }>('checkHbLocalFiles', {
-      bookIds,
-      localFolder,
-    }).catch(() => ({ existingIds: [] }))
-  }
-  return action<{ existingIds?: string[]; error?: string }>('checkHbLocalFiles', {
+  return serviceCall<{ existingIds?: string[]; error?: string }>('checkHbLocalFiles', {
     bookIds,
     localFolder,
-  })
+  }).catch(() => ({ existingIds: [] }))
 }
 
 /**
@@ -1056,13 +988,7 @@ export function deleteHbLocalFile(
   bookId: string,
   localFolder: string,
 ): Promise<{ ok?: boolean; notFound?: boolean; error?: string }> {
-  if (typeof window.__webviewAction !== 'function') {
-    return serviceCall<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
-      bookId,
-      localFolder,
-    })
-  }
-  return action<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
+  return serviceCall<{ ok?: boolean; notFound?: boolean; error?: string }>('deleteHbLocalFile', {
     bookId,
     localFolder,
   })
@@ -1093,13 +1019,10 @@ export function revealHbLocalFile(
 }
 
 /**
- * Get/set the HebrewBooks local download folder in the SHARED registry
- * (HKCU\...\KitveiHakodesh\HebrewBooks\LocalFolder — the exact key the hosted app's AppSettings
- * uses). This keeps dev and the hosted app agreeing on the folder. Hosted mode reads the value
- * injected as window.__webviewHbLocalFolder and persists via the C# host, so these are dev-only.
+ * Get/set the HebrewBooks local download folder. The service persists it in the SHARED
+ * registry value (HKCU\...\KitveiHakodesh\HebrewBooks\LocalFolder) for both runtimes.
  */
 export async function getHbLocalFolderFromRegistry(): Promise<string> {
-  if (typeof window.__webviewAction === 'function') return window.__webviewHbLocalFolder || ''
   try {
     const r = await serviceCall<{ value?: string }>('getHbLocalFolder')
     return r?.value || ''
@@ -1109,7 +1032,6 @@ export async function getHbLocalFolderFromRegistry(): Promise<string> {
 }
 
 export function setHbLocalFolderInRegistry(path: string): void {
-  if (typeof window.__webviewAction === 'function') return
   serviceCallVoid('setHbLocalFolder', { value: path })
 }
 
@@ -1167,9 +1089,10 @@ export async function pickFolder(title?: string): Promise<string | null> {
 }
 
 // ── Seforim DB path (settings page + setup wizard) ─────────────────────────────
-// Hosted: the C# host owns the setting. Dev: the KitveiHakodesh service owns it —
-// BOTH persist to the same registry value (KitveiHakodesh\Database\Path), so the
-// choice made in either mode is the one the app and the service agree on.
+// The KitveiHakodesh service owns the setting in both runtimes (registry value
+// KitveiHakodesh\Database\Path) and restarts itself on every change so the DB, the user
+// settings and the search indexes all re-resolve. The page reloads afterwards; the
+// service client rides out the restart.
 
 export interface DbPathInfo {
   path: string
@@ -1179,26 +1102,29 @@ export interface DbPathInfo {
 
 /** Current seforim DB path (+ whether user-set and whether the file exists). */
 export async function getDbPathInfo(): Promise<DbPathInfo | null> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev — ask the service.
-    try {
-      return await serviceCall<DbPathInfo>('getSeforimDbPath')
-    } catch {
-      return null
-    }
+  try {
+    return await serviceCall<DbPathInfo>('getSeforimDbPath')
+  } catch {
+    return null
   }
-  const p = window.__webviewDbPath
-  return p ? { path: p, isCustom: true, exists: true } : null
 }
 
 /**
- * Show a native open-file dialog for the seforim DB and persist the choice (dev only).
- * The hosted app has `window.__webviewPickDbPath`; a browser has no equivalent, so the
- * service shows the real dialog on its desktop, writes the same registry value, and
- * restarts. Returns the chosen path, or null when the user cancelled or it failed.
+ * Show the native open-file dialog for the seforim DB and persist the choice. Returns the
+ * chosen path, or null when the user cancelled or it failed.
+ *
+ * Hosted: the WebView2 host owns the dialog (an installed service may run in a session with
+ * no desktop to show one on), then the path goes to the service like a typed one. Dev: the
+ * service shows the dialog on its own desktop and persists in one step.
  */
-export async function pickDbPathDev(): Promise<string | null> {
+export async function pickDbPath(): Promise<string | null> {
   try {
+    if (typeof window.__webviewAction === 'function') {
+      const picked = await action<{ path?: string; cancelled?: boolean; error?: string }>('pickDbPath')
+      if (picked?.cancelled || picked?.error || !picked?.path) return null
+      await setDbPath(picked.path)
+      return picked.path
+    }
     const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string }>(
       'pickSeforimDbPath',
     )
@@ -1210,70 +1136,44 @@ export async function pickDbPathDev(): Promise<string | null> {
 }
 
 /**
- * Persist a new seforim DB path. Dev: the service writes the registry value and
- * restarts itself to re-resolve everything (DB, user settings, FTS — a stale FTS
- * index is auto-detected and rebuilt); throws when the file doesn't exist.
+ * Persist a typed seforim DB path. The service writes the registry value and restarts
+ * itself; throws when the file doesn't exist.
  */
-export async function setDbPathDev(path: string): Promise<void> {
+export async function setDbPath(path: string): Promise<void> {
   const res = await serviceCall<{ path: string; error?: string }>('setSeforimDbPath', { path })
   if (res.error) throw new Error(res.error)
 }
 
 /**
- * Reset the database path to the auto-resolved default (Zayit / Otzaria).
- * Hosted: C# reopens the DB and resets the search index if the path changed.
- * Dev: the service clears the registry value and restarts.
- * Returns the resolved default path so the frontend can update its display.
+ * Reset the database path to the auto-resolved default (Zayit / Otzaria). The service
+ * clears the registry value and restarts. Returns the resolved default path so the
+ * frontend can update its display.
  */
 export async function clearDbPath(): Promise<string | null> {
-  if (typeof window.__webviewAction !== 'function') {
-    try {
-      const res = await serviceCall<{ path: string }>('clearSeforimDbPath')
-      return res.path ?? null
-    } catch {
-      return null
-    }
+  try {
+    const res = await serviceCall<{ path: string }>('clearSeforimDbPath')
+    return res.path ?? null
+  } catch {
+    return null
   }
-  const result = await action<{ path?: string; error?: string }>('clearDbPath')
-  // Log the host's full error before collapsing to null — callers only show a
-  // generic failure, and the detail is what field debugging needs.
-  if (result.error) console.error('[bridge] clearDbPath failed:\n' + result.error)
-  if (result.error || !result.path) return null
-  return result.path
 }
 
 /**
  * Clear the persisted HebrewBooks local folder setting (saves an empty string to the registry).
  */
 export async function clearHbLocalFolder(): Promise<void> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev: clear the shared registry value (empty string) so the hosted app agrees.
-    setHbLocalFolderInRegistry('')
-    return
-  }
-  await action('clearHbLocalFolder').catch(() => {})
+  setHbLocalFolderInRegistry('')
 }
 
 /**
  * Read whether the automatic update check is turned off. Backed by the SAME registry
  * key the KleiKodesh Word add-in uses (HKCU\...\KleiKodesh\UpdateChecker\TurnOffUpdates),
- * so one toggle governs both apps. Returns null in dev/browser (no host).
+ * so one toggle governs both apps. Returns null when the service cannot answer.
  */
 export async function getTurnOffUpdates(): Promise<boolean | null> {
-  if (typeof window.__webviewAction !== 'function') {
-    // Dev: the service reads the same shared registry value, so the toggle agrees with
-    // the hosted app and the Word add-in.
-    try {
-      const res = await serviceCall<{ value?: boolean }>('getTurnOffUpdates')
-      return res?.value ?? false
-    } catch {
-      return null
-    }
-  }
   try {
-    const res = await action<{ value?: boolean; error?: string }>('getTurnOffUpdates')
-    if (res.error) return null
-    return res.value ?? false
+    const res = await serviceCall<{ value?: boolean }>('getTurnOffUpdates')
+    return res?.value ?? false
   } catch {
     return null
   }
@@ -1283,9 +1183,5 @@ export async function getTurnOffUpdates(): Promise<boolean | null> {
  * Persist the "turn off automatic updates" flag to the shared VSTO registry key.
  */
 export async function setTurnOffUpdates(value: boolean): Promise<void> {
-  if (typeof window.__webviewAction !== 'function') {
-    await serviceCallVoid('setTurnOffUpdates', { value })
-    return
-  }
-  await action('setTurnOffUpdates', { value }).catch(() => {})
+  serviceCallVoid('setTurnOffUpdates', { value })
 }

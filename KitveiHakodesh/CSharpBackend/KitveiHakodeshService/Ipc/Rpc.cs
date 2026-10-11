@@ -286,6 +286,10 @@ public sealed class HbDownloadArgs
 public sealed class HbDownloadResult
 {
     public string Handle { get; set; } = "";
+    /// <summary>The PDF's path on disk, set whenever <see cref="Handle"/> is. The dev page loads
+    /// the file through <c>GET /file/{Handle}</c>; the hosted page has no HTTP host and asks its
+    /// WebView2 host to serve this path from a virtual host instead.</summary>
+    public string Path { get; set; } = "";
     public bool NotFound { get; set; }
     public bool NoInternet { get; set; }
     public bool Redownload { get; set; }

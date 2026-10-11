@@ -1,5 +1,6 @@
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
-import { pickLocalFile } from '@/webview-host/bridge'
+import { pickLocalFile, pickDbPath, getDbPathInfo } from '@/webview-host/bridge'
+import { onDbPathChanged } from '@/webview-host/seforimDb'
 import { useLocalFileStore } from '@/stores/localFileStore'
 import type { TabRoute } from '@/stores/tabStore'
 
@@ -53,7 +54,12 @@ export function useAppNavigation() {
   }
 
   function handleDbPicker(): void {
-    window.__webviewPickDbPath?.()
+    void (async () => {
+      // Asked BEFORE the pick: a real library switch drops the book-id-keyed state.
+      const previous = (await getDbPathInfo())?.path ?? ''
+      const picked = await pickDbPath()
+      if (picked) await onDbPathChanged(previous, picked)
+    })()
   }
 
   // ── Public navigation functions ───────────────────────────────────────────

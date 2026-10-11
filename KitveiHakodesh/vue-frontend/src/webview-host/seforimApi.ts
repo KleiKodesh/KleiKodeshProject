@@ -1,10 +1,9 @@
 // Semantic seforim-DB access layer.
 //
-// BOTH legs now name an operation and let C# run the query: dev goes through the
-// KitveiHakodesh service (serviceCall), hosted goes through the WebView2 bridge
-// (hostQuery → SeforimQueryHandler). Neither sends SQL text, and both end up in
-// the same KitveiHakodesh.Core query methods, so a capability cannot behave
-// differently depending on which app is running it.
+// Every capability names an operation and the KitveiHakodesh service runs it — in dev over
+// its loopback HTTP host, in the hosted app over its named pipe through the C# relay. Same
+// client (serviceClient.ts), same op names, same shapes, so a capability cannot behave
+// differently depending on which app is running it. Nothing here sends SQL text.
 //
 // The SQL in queries.sql.ts is what this replaced. Anything still importing it is
 // a caller that has not been moved over yet.
@@ -16,55 +15,9 @@ import type {
   LineRow, BookVersionRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
-/** True when the C# seforim bridge is present (hosted). Dev falls to the service. */
-export const isDbHosted = (): boolean => typeof window.__webviewAction === 'function'
-
-/**
- * Names a seforim operation for the HOSTED leg; C# runs it through Core and replies with the
- * same shape the dev service uses for that op. The counterpart of serviceCall.
- *
- * Arguments go in a NESTED `params` object rather than being spread onto the message.
- * __webviewAction flattens whatever it is given onto the message root, where `id` is already
- * the bridge's correlation id — so a spread `{ id }` argument (getBookById has one) would
- * overwrite it, and the reply could never be routed back. Nesting keeps every argument name
- * legal, including the three the envelope uses.
- */
-async function hostQuery<T>(op: string, args: object = {}): Promise<T> {
-  if (typeof window.__webviewAction !== 'function') throw new Error('bridge not available')
-  const reply = (await window.__webviewAction('seforimQuery', { op, params: args })) as
-    { error?: string } & Record<string, unknown>
-  if (reply && reply.error) throw new Error(String(reply.error))
-  return camelCaseKeys(reply) as T
-}
-
-/**
- * C# serializes Core's row models with their PascalCase property names, but the row types in
- * queries.types.ts are camelCase — the SQL this replaced selected camelCase column aliases, so
- * the page never had to convert. The dev transport already does exactly this on decode (see
- * serviceClient.ts), and this is the hosted counterpart; without it every field would read
- * back undefined.
- */
-function camelCaseKeys(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(camelCaseKeys)
-  if (value === null || typeof value !== 'object') return value
-
-  const out: Record<string, unknown> = {}
-  for (const [key, inner] of Object.entries(value as Record<string, unknown>)) {
-    // SenseRow.SourceId is snake_case on the wire by [JsonPropertyName]; the same exception
-    // serviceClient.ts makes, so both transports hand consumers one spelling.
-    const name = key === 'SourceId' ? 'source_id' : key.charAt(0).toLowerCase() + key.slice(1)
-    out[name] = camelCaseKeys(inner)
-  }
-  return out
-}
-
-/**
- * Runs a named seforim operation on whichever leg is present. Both answer the same op names
- * with the same shapes — dev through the service, hosted through the WebView2 bridge into
- * KitveiHakodesh.Core — so every capability below is now ONE call rather than a branch.
- */
+/** Runs a named seforim operation on the service. One call per capability, no branch. */
 function seforimOp<T>(op: string, args: object = {}): Promise<T> {
-  return isDbHosted() ? hostQuery<T>(op, args) : serviceCall<T>(op, args)
+  return serviceCall<T>(op, args)
 }
 
 // ── Catalog ─────────────────────────────────────────────────────────────────
