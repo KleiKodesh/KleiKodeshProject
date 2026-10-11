@@ -19,7 +19,7 @@
          zstd-compressed with a dictionary shipped inside the database. This belongs HERE, not in
          the engine — the test suite is what reads that corpus now. Pure-C# port, nothing native
          to package. -->
-    <PackageReference Include="ZstdSharp.Port" Version="0.8.6" />
+    <PackageReference Include="ZstdSharp.Port" Version="0.8.8" />
   </ItemGroup>
 
   <ItemGroup>
