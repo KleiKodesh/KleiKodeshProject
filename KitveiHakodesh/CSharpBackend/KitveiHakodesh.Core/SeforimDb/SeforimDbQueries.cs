@@ -128,10 +128,11 @@ namespace KitveiHakodesh.Core.SeforimDb
             using var codec = CodecFor(conn);
             using var cmd = conn.CreateCommand();
             var schema = SchemaOf(conn);
-            cmd.CommandText = versionId > 0
+            bool isVersionRead = versionId > 0;
+            cmd.CommandText = isVersionRead
                 ? SeforimDbSqlStrings.GetVersionLinesPaged(schema)
                 : SeforimDbSqlStrings.GetLinesPaged(schema);
-            if (versionId > 0) cmd.Parameters.AddWithValue("@versionId", versionId);
+            if (isVersionRead) cmd.Parameters.AddWithValue("@versionId", versionId);
             cmd.Parameters.AddWithValue("@bookId", bookId);
             cmd.Parameters.AddWithValue("@limit", limit);
             cmd.Parameters.AddWithValue("@offset", offset);
@@ -142,10 +143,41 @@ namespace KitveiHakodesh.Core.SeforimDb
                 {
                     Id = r.GetInt32(0),
                     LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1),
-                    Content = codec.DecodeColumnOrEmpty(r, 2),
+                    Content = isVersionRead
+                        ? ReadVersionLineContent(r, codec)
+                        : codec.DecodeColumnOrEmpty(r, 2),
                 });
             }
             return list;
+        }
+
+        /// <summary>
+        /// The text of one row of <see cref="SeforimDbSqlStrings.GetVersionLinesPaged"/>.
+        ///
+        /// That statement hands back BOTH candidate columns plus a discriminator rather than
+        /// choosing in SQL, because a CASE that mixes a BLOB arm with a text arm makes SQLite
+        /// coerce the blob to TEXT and the compressed frame arrives as unreadable bytes. The
+        /// choice is made here instead, where each column keeps its own type and goes through
+        /// the codec intact.
+        /// </summary>
+        private static string ReadVersionLineContent(SqliteDataReader r, SeforimDbLineContentCodec codec)
+        {
+            const int BaseContentOrdinal = 2;
+            const int VersionContentOrdinal = 3;
+            const int ContentSourceOrdinal = 4;
+
+            int contentSource = r.IsDBNull(ContentSourceOrdinal)
+                ? SeforimDbSqlStrings.VersionLineContentSource.Uncovered
+                : r.GetInt32(ContentSourceOrdinal);
+
+            return contentSource switch
+            {
+                SeforimDbSqlStrings.VersionLineContentSource.Base
+                    => codec.DecodeColumnOrEmpty(r, BaseContentOrdinal),
+                SeforimDbSqlStrings.VersionLineContentSource.Version
+                    => codec.DecodeColumnOrEmpty(r, VersionContentOrdinal),
+                _ => string.Empty,
+            };
         }
 
         // ── TOC ──────────────────────────────────────────────────────────────────

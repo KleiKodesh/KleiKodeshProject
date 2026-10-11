@@ -477,18 +477,45 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// cover come back EMPTY rather than falling back to the base, which would silently
         /// interleave two different versions in one page and read as a single text. Partial
         /// versions are real here — some cover 31 of 1584 lines.
+        ///
+        /// WHY TWO COLUMNS RATHER THAN ONE CASE: on schema 6 both `line_content.content` and
+        /// `version_line.content` hold zstd BLOBs, and SQLite applies ONE affinity to a CASE
+        /// expression as a whole. Mixing a BLOB arm with the `''` arm coerced the chosen BLOB
+        /// to TEXT, so the reader received the frame's raw bytes as a string, the codec's type
+        /// dispatch passed it through as already-decoded text, and the page rendered base64.
+        /// Selecting each candidate in its own column keeps both BLOBs intact; the reader picks
+        /// between them, where the choice costs nothing and no affinity is imposed.
         /// </summary>
         public static string GetVersionLinesPaged(SeforimDbSchema schema) => $@"
             SELECT l.id, l.lineIndex,
-                   CASE WHEN l.heRef IS NULL  THEN {C_ContentExpression(schema, "l")}
-                        WHEN vl.lineId IS NULL THEN ''
-                        WHEN vl.content IS NULL THEN {C_ContentExpression(schema, "l")}
-                        ELSE vl.content END AS content
+                   {C_RawContentExpression(schema, "l")} AS baseContent,
+                   vl.content AS versionContent,
+                   CASE WHEN l.heRef IS NULL  THEN 0
+                        WHEN vl.lineId IS NULL THEN 1
+                        WHEN vl.content IS NULL THEN 0
+                        ELSE 2 END AS contentSource
             FROM line l{C_ContentJoin(schema, "l")}
             LEFT JOIN version_line vl ON vl.versionId = @versionId AND vl.lineId = l.id
             WHERE l.bookId = @bookId
             ORDER BY l.lineIndex
             LIMIT @limit OFFSET @offset";
+
+        /// <summary>
+        /// What <c>contentSource</c> in <see cref="GetVersionLinesPaged"/> says to read.
+        /// Kept beside the SQL that produces it so the two cannot drift.
+        /// </summary>
+        public static class VersionLineContentSource
+        {
+            /// <summary>Read `baseContent` — a structural line, or a version row that stores
+            /// NULL to mean "identical to the base".</summary>
+            public const int Base = 0;
+
+            /// <summary>Read neither — this version does not cover the line.</summary>
+            public const int Uncovered = 1;
+
+            /// <summary>Read `versionContent` — the version's own replacement text.</summary>
+            public const int Version = 2;
+        }
 
         // ── Book versions, provenance and schema stamp ───────────────────────────────
 
@@ -653,6 +680,9 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         private static string C_ContentJoin(SeforimDbSchema schema, string lineAlias)
             => SeforimDbLineContentSql.ContentJoin(schema, lineAlias);
+
+        private static string C_RawContentExpression(SeforimDbSchema schema, string lineAlias)
+            => SeforimDbLineContentSql.RawContentExpression(schema, lineAlias);
 
         internal static string InPlaceholders(string prefix, int count)
         {
