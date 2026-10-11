@@ -25,18 +25,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         public const string VstoFileName    = "KleiKodesh.vsto";
 
         /// <summary>
-        /// Which installer variant this binary is — baked in at build time via
-        /// -p:InstallerVariant=x64|x86|AnyCPU (DefineConstants in the csproj).
-        /// Saved to registry by SaveVersion() so the update checker can download
-        /// the same variant on the next update.
+        /// The installer's platform, stamped into HKCU\SOFTWARE\KleiKodesh\InstallerVariant by
+        /// SaveVersion(). Always AnyCPU since 2026-10-11 (the x64 / x86 installers are gone);
+        /// re-stamping it overwrites an older "x64" / "x86" left by a previous install.
         /// </summary>
-#if INSTALLER_VARIANT_X64
-        public const string InstallerVariant = "x64";
-#elif INSTALLER_VARIANT_X86
-        public const string InstallerVariant = "x86";
-#else
         public const string InstallerVariant = "AnyCPU";
-#endif
 
         public static string InstallPath =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), InstallFolderName);

@@ -102,7 +102,7 @@ UninstallIcon "..\Installer\KleiKodesh_Main.ico"
   !define OUTPUT_DIR "releases"
 !endif
 
-; Filename suffix - passed from build script: "" | "-x64" | "-x86"
+; Filename suffix - always "" now (one AnyCPU installer); kept so the script can pass it
 !ifndef OUTPUT_SUFFIX
   !define OUTPUT_SUFFIX ""
 !endif

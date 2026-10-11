@@ -3,90 +3,37 @@ inclusion: fileMatch
 fileMatchPattern: "Build/**"
 ---
 
-# Build Variants — Three-Installer Pipeline
+# Build — One Installer (AnyCPU)
 
-## The Three Variants
+## Since 2026-10-11 there is ONE installer
 
-The build script (`Build/scripts/build-installer.ps1`) produces three installer variants by building `KleiKodeshVsto.csproj` with:
-
-| Variant | Platform | VSTO OutputPath | Installer suffix |
-|---------|----------|-----------------|-----------------|
-| x64 | `Release\|x64` | `bin\Release-x64\` | `-x64` |
-| x86 | `Release\|x86` | `bin\Release-x86\` | `-x86` |
-| AnyCPU | `Release\|AnyCPU` | `bin\Release\` | _(none)_ |
-
-## Current Dependency Chain
-
-Every library in the chain must support all three variants:
+The build script (`Build/scripts/build-installer.ps1`) builds `KleiKodeshVsto.csproj` as
+`Release|AnyCPU` (output `bin\Release\`) and produces one installer:
 
 ```
-WpfLib
-RegexFindLib
-DocDesignLib
-UpdateCheckerLib
-FtsLib
-KitveiHakodeshLib  ←── KitveiHakodeshDemoApp (standalone host, also in chain)
-KiwixLib
-WebSitesLib
+KleiKodeshSetup-{version}.exe
+```
+
+The x64 and x86 installers (`-x64` / `-x86` suffixes, `bin\Release-x64\` / `bin\Release-x86\`)
+are gone. Do not reintroduce them:
+
+- The Word add-in and its libraries are pure managed code, AnyCPU, and load in 32-bit or
+  64-bit Office alike. The per-bitness variants existed for the native SQLite interop DLLs,
+  and the add-in no longer ships any SQLite (all data goes through the KitveiHakodesh service).
+- The KitveiHakodesh service is a separate native-AOT **x64** process, shipped in the one
+  installer (`KitveiHakodeshService\`). 32-bit Windows is not supported.
+- The installer stamps `HKCU\SOFTWARE\KleiKodesh\InstallerVariant = AnyCPU` and the service's
+  updater downloads the unsuffixed release asset.
+
+## Rules for projects in the add-in chain
+
+```
+WpfLib  RegexFindLib  DocDesignLib  KiwixLib  WebSitesLib
+KitveiHakodeshLib  ←── KitveiHakodeshDemoApp
   └─→ KleiKodeshVsto
 ```
 
-## Requirement for New Projects
-
-**Any project added to the `KleiKodeshVsto` dependency chain must define all three Release platform configurations with the correct output paths.**
-
-Required `PropertyGroup` blocks in every library `.csproj`:
-
-```xml
-<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-  <PlatformTarget>AnyCPU</PlatformTarget>
-  <DebugType>pdbonly</DebugType>
-  <Optimize>true</Optimize>
-  <OutputPath>bin\Release\</OutputPath>
-  <DefineConstants>TRACE</DefineConstants>
-  <ErrorReport>prompt</ErrorReport>
-  <WarningLevel>4</WarningLevel>
-</PropertyGroup>
-<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x64' ">
-  <PlatformTarget>AnyCPU</PlatformTarget>
-  <DebugType>pdbonly</DebugType>
-  <Optimize>true</Optimize>
-  <OutputPath>bin\Release-x64\</OutputPath>
-  <DefineConstants>TRACE</DefineConstants>
-  <ErrorReport>prompt</ErrorReport>
-  <WarningLevel>4</WarningLevel>
-</PropertyGroup>
-<PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|x86' ">
-  <PlatformTarget>AnyCPU</PlatformTarget>
-  <DebugType>pdbonly</DebugType>
-  <Optimize>true</Optimize>
-  <OutputPath>bin\Release-x86\</OutputPath>
-  <DefineConstants>TRACE</DefineConstants>
-  <ErrorReport>prompt</ErrorReport>
-  <WarningLevel>4</WarningLevel>
-</PropertyGroup>
-```
-
-**Key rules:**
-- `OutputPath` must be `bin\Release\`, `bin\Release-x64\`, `bin\Release-x86\` — never the same path for all three.
-- `PlatformTarget` is always `AnyCPU` — all libraries in this chain are pure managed code.
-- Debug configs (`Debug|AnyCPU`, `Debug|x64`, `Debug|x86`) can all share `bin\Debug\`.
-
-## Verification
-
-To confirm a new library is correctly configured, build it standalone for all three variants:
-
-```powershell
-$msbuild = "C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe"
-foreach ($platform in @("AnyCPU", "x64", "x86")) {
-    & $msbuild "path\to\MyLib.csproj" /p:Configuration=Release /p:Platform=$platform /nologo /verbosity:minimal
-}
-```
-
-Each should output to a distinct `bin\Release*\` folder.
-
-## Standalone Dev Tools — Exempt
-
-Projects that are **not** in the `KleiKodeshVsto` dependency chain (demo apps, test harnesses) only need `Debug|AnyCPU` and `Release|AnyCPU`. Examples: `FtsLib-Csharp`'s `FtsLibDemo`, `FtsLibTest`, `DocDesignDemo`, `RegexFindDemo`, `KiwixDemoApp`, `WebSitesDemo`.
-
-Note: `KitveiHakodeshDemoApp` **is** in the chain (it references `KitveiHakodeshLib` and is built as part of the VSTO output) so it requires all three variants.
+- `Debug|AnyCPU` → `bin\Debug\`, `Release|AnyCPU` → `bin\Release\`.
+- `PlatformTarget` is always `AnyCPU`.
+- Existing `Release|x64` / `Release|x86` configurations in older csproj files are harmless
+  leftovers; nothing builds them any more, and new projects do not need them.

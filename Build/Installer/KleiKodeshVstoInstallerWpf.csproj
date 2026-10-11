@@ -29,16 +29,6 @@
     <NoWarn>$(NoWarn);NU1902</NoWarn>
   </PropertyGroup>
 
-  <!-- Installer variant — set by build script via -p:InstallerVariant=x64|x86|AnyCPU.
-       Baked into the binary so SaveVersion() can record which variant was installed. -->
-  <PropertyGroup Condition="'$(InstallerVariant)' == 'x64'">
-    <DefineConstants>$(DefineConstants);INSTALLER_VARIANT_X64</DefineConstants>
-  </PropertyGroup>
-  <PropertyGroup Condition="'$(InstallerVariant)' == 'x86'">
-    <DefineConstants>$(DefineConstants);INSTALLER_VARIANT_X86</DefineConstants>
-  </PropertyGroup>
-  <!-- AnyCPU (default) — no extra define needed; AddinInstaller falls through to "AnyCPU" -->
-
   <!-- DeleteFtsIndex — set by build script via -p:DeleteFtsIndex=true.
        When set, the installer deletes the FTS index directory before extracting
        the VSTO package, forcing a full reindex on every user's machine. -->

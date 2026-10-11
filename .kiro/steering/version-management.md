@@ -79,13 +79,10 @@ longer check, download or launch anything.
   it at once as the logged-on user, unelevated, with no arguments; the installer itself asks to close
   Word and the app
 - Skipped while the shared "turn off automatic updates" switch is on
-- **Variant selection** (`Updater.ResolveInstallerAsset`): picks the release asset matching the
-  machine's installed variant per `HKCU\SOFTWARE\KleiKodesh\InstallerVariant` ("x64" → `-x64`,
-  "x86" → `-x86`, "AnyCPU"/missing → unsuffixed). If the release didn't publish that variant, it
-  **falls back to the unsuffixed AnyCPU asset**. Each variant installer re-stamps `InstallerVariant`
-  on install (baked in at build time via `-p:InstallerVariant`), so the chain sustains across updates.
-- Downloads the resolved asset to `%TEMP%\KleiKodeshSetup.exe` (via `.partial` + exact asset-size check)
-- Schedules it to run on Word/app shutdown via `RunPendingInstaller()`
+- **One asset** (`Updater.ResolveInstallerAsset`): `KleiKodeshSetup-{tag}.exe`, the AnyCPU installer
+  (the only one since 2026-10-11; see build-variants.md). Older installs still running the old
+  host-side updater look for `-x64` / `-x86` first and fall back to this same unsuffixed asset.
+- Download via `.part` + exact asset-size check; no host schedules anything on shutdown any more
 
 ### WPF Installer CLI Args
 

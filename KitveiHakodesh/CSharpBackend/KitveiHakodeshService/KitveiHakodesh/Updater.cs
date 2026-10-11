@@ -13,7 +13,7 @@ namespace KitveiHakodeshService.KitveiHakodesh;
 /// The rules are the ones UpdateCheckerLib applied inside the hosts until the service took
 /// this over: the installed version is the installer's own stamp (HKCU\SOFTWARE\KleiKodesh
 /// Version - read through <see cref="UserProfile"/>, because this runs as SYSTEM serving the
-/// logged-on user), the installer variant picks the asset (x64 / x86 / AnyCPU), and the
+/// logged-on user), the single AnyCPU installer asset, and the
 /// "longer version string wins" comparison.
 /// </summary>
 internal sealed class Updater(HttpClient http, ILogger<Updater> logger)
@@ -121,27 +121,14 @@ internal sealed class Updater(HttpClient http, ILogger<Updater> logger)
     private static GithubReleaseAsset? ResolveInstallerAsset(GithubRelease release)
     {
         if (release.Assets is null || string.IsNullOrEmpty(release.TagName)) return null;
-        return FindAsset(release, "KleiKodeshSetup-" + release.TagName + VariantSuffix() + ".exe")
-            ?? FindAsset(release, "KleiKodeshSetup-" + release.TagName + ".exe");
+        // One installer since 2026-10-11: AnyCPU, no platform suffix.
+        return FindAsset(release, "KleiKodeshSetup-" + release.TagName + ".exe");
     }
 
     private static GithubReleaseAsset? FindAsset(GithubRelease release, string name) =>
         release.Assets.FirstOrDefault(a =>
             string.Equals(a.Name, name, StringComparison.OrdinalIgnoreCase)
             && a.Size > 0 && !string.IsNullOrEmpty(a.BrowserDownloadUrl));
-
-    private static string VariantSuffix()
-    {
-        try
-        {
-            using var key = UserProfile.Hive.OpenSubKey(RegistryKeyPath);
-            string? variant = key?.GetValue("InstallerVariant")?.ToString();
-            if (variant == "x64") return "-x64";
-            if (variant == "x86") return "-x86";
-        }
-        catch { /* the AnyCPU asset */ }
-        return "";
-    }
 
     /// <summary>Installers of the version already installed (or older) are done with:
     /// about 100 MB each, they would otherwise sit here until the next release.</summary>
@@ -150,7 +137,7 @@ internal sealed class Updater(HttpClient http, ILogger<Updater> logger)
         if (!Directory.Exists(DownloadFolder)) return;
         foreach (string file in Directory.EnumerateFiles(DownloadFolder, "KleiKodeshSetup-*.exe"))
         {
-            // "KleiKodeshSetup-v8.7.3-x64.exe" -> "v8.7.3"
+            // "KleiKodeshSetup-v8.7.3.exe" -> "v8.7.3" (an older "-x64" / "-x86" suffix is cut too)
             string tag = Path.GetFileNameWithoutExtension(file).Substring("KleiKodeshSetup-".Length);
             int variantDash = tag.IndexOf('-');
             if (variantDash > 0) tag = tag.Substring(0, variantDash);

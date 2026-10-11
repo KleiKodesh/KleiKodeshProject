@@ -17,8 +17,7 @@ param(
     [switch]$NoRelease,                 # skip GitHub release
     [switch]$NoClean,                   # skip solution clean step
     [switch]$DeleteFtsIndex,            # delete FTS index on install (forces reindex on user machines)
-    [switch]$ForceCleanInstall,         # wipe + reinstall on launch (התקן behaves like תיקון)
-    [switch]$AnyCpuOnly                 # build only the AnyCPU variant (skip x64 and x86)
+    [switch]$ForceCleanInstall          # wipe + reinstall on launch (התקן behaves like תיקון)
 )
 
 . "$PSScriptRoot\build-helpers.ps1"
@@ -44,7 +43,7 @@ Write-Host "Notes source : $ReleaseNotesSource" -ForegroundColor Gray
 Write-Host "GitHub rel.  : $(if ($NoRelease) { 'skip' } else { 'yes' })" -ForegroundColor Gray
 Write-Host "FTS index    : $(if ($DeleteFtsIndex) { 'DELETE on install (force reindex)' } else { 'preserve' })" -ForegroundColor Gray
 Write-Host "Clean install: $(if ($ForceCleanInstall) { 'yes (wipe + reinstall)' } else { 'no' })" -ForegroundColor Gray
-Write-Host "Platforms    : $(if ($AnyCpuOnly) { 'AnyCPU only' } else { 'x64, x86, AnyCPU' })" -ForegroundColor Gray
+Write-Host "Platform     : AnyCPU (the only installer)" -ForegroundColor Gray
 Write-Host ""
 
 # ── 0. Delete Vue build stamp (forces fresh Vue rebuild every release build) ──
@@ -59,8 +58,8 @@ if (Test-Path $vueStamp) {
 Get-ChildItem -Path (Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend") -Filter "*.tsbuildinfo" -Recurse -ErrorAction SilentlyContinue |
     ForEach-Object { Remove-Item $_.FullName -Force; Write-Host "Deleted $($_.Name)" -ForegroundColor Gray }
 
-# ── 1. Wipe VSTO Release folders (ensures clean VSTO output for all variants) ─
-foreach ($folder in @("bin\Release", "bin\Release-x64", "bin\Release-x86")) {
+# ── 1. Wipe the VSTO Release folder (ensures clean VSTO output) ─────────────
+foreach ($folder in @("bin\Release")) {
     $path = Join-Path $ProjectRoot "KleiKodeshVsto\$folder"
     if (Test-Path $path) {
         Remove-Item $path -Recurse -Force
@@ -123,14 +122,12 @@ elseif (-not $ManualVersion -and $version -eq $versionBefore) {
 # ── 3. Clean ──────────────────────────────────────────────────────────────────
 if (-not $NoClean) { Invoke-SolutionClean }
 
-# ── 4. Build three VSTO+installer variants ───────────────────────────────────
+# ── 4. Build the installer (AnyCPU - the ONLY installer since 2026-10-11) ────
 #
-# Each variant builds the VSTO at the given platform, packs it into KleiKodesh.zip
-# (via the pre-build target), then wraps it with NSIS.
-# The three output files are:
-#   KleiKodeshSetup-{version}-x64.exe   — for 64-bit Word (most users)
-#   KleiKodeshSetup-{version}-x86.exe   — for 32-bit Word
-#   KleiKodeshSetup-{version}.exe       — AnyCPU fallback (both native folders)
+# Builds the VSTO AnyCPU, packs it (pre-build target), wraps it with NSIS:
+#   KleiKodeshSetup-{version}.exe
+# The x64 / x86 variants are gone: the add-in is AnyCPU and runs in either Office
+# bitness, and the KitveiHakodesh service is a separate x64 process.
 
 $nsisExe = @(
     "C:\Program Files (x86)\NSIS\makensis.exe",
@@ -144,22 +141,18 @@ if (-not $nsisExe) {
 
 if (-not (Test-Path $ReleasesDir)) { New-Item -ItemType Directory -Path $ReleasesDir -Force | Out-Null }
 
-# Helper: build one variant and produce its NSIS installer
+# Helper: build the installer and wrap it with NSIS. Called once, for AnyCPU.
 function Build-Variant {
     param(
-        [string]$Platform,      # AnyCPU | x64 | x86
-        [string]$Suffix         # "" | "-x64" | "-x86"
+        [string]$Platform,      # AnyCPU
+        [string]$Suffix         # ""
     )
 
     Write-Host ""
     Write-Host "Building WPF installer (Release|$Platform)..." -ForegroundColor Yellow
 
     # SDK-style projects ignore PropertyGroup conditions — must pass OutputPath explicitly
-    $outputPath = switch ($Platform) {
-        "x64"    { "bin\Release-x64\net48\" }
-        "x86"    { "bin\Release-x86\net48\" }
-        "AnyCPU" { "bin\Release\net48\" }
-    }
+    $outputPath = "bin\Release\net48\"
 
     dotnet build $WpfProjectPath -c Release `
         -p:VstoConfiguration=Release -p:VstoPlatform=$Platform `
@@ -201,21 +194,11 @@ function Build-Variant {
     $script:LastBuiltInstaller = $outFile
 }
 
-if (-not $AnyCpuOnly) {
-    Build-Variant -Platform "x64"    -Suffix "-x64"
-    $installerX64 = $script:LastBuiltInstaller
-
-    Build-Variant -Platform "x86"    -Suffix "-x86"
-    $installerX86 = $script:LastBuiltInstaller
-} else {
-    $installerX64 = $null
-    $installerX86 = $null
-}
 Build-Variant -Platform "AnyCPU" -Suffix ""
 $installerAny = $script:LastBuiltInstaller
 
 Write-Host ""
-Write-Host "All variants built successfully." -ForegroundColor Green
+Write-Host "Installer built successfully." -ForegroundColor Green
 
 # ── 4b. Build KitveiHakodeshPortable (DemoApp, Release|AnyCPU) + zip ─────────
 Write-Host ""
@@ -288,7 +271,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-foreach ($asset in @($installerX64, $installerX86, $installerAny, $portableZip) | Where-Object { $_ }) {
+foreach ($asset in @($installerAny, $portableZip) | Where-Object { $_ }) {
     Write-Host "Uploading $(Split-Path -Leaf $asset)..." -ForegroundColor Yellow
     gh release upload $version $asset --repo KleiKodesh/KleiKodeshProject --clobber
     if ($LASTEXITCODE -ne 0) {

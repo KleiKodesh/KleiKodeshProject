@@ -25,14 +25,8 @@ The wrapper never extracts files itself — the WPF installer handles all file o
 
 ## Output
 
-Build produces three installer executables:
-| File | Platform | Target |
-|------|----------|--------|
-| `KleiKodeshSetup-vX.Y.Z-x64.exe` | x64 | 64-bit Office |
-| `KleiKodeshSetup-vX.Y.Z-x86.exe` | x86 | 32-bit Office |
-| `KleiKodeshSetup-vX.Y.Z.exe` | AnyCPU | Auto-detect at runtime |
-
-Each is a self-extracting NSIS archive containing the WPF installer + prerequisites check.
+Build produces ONE installer, `KleiKodeshSetup-vX.Y.Z.exe` (AnyCPU; the x64 / x86 variants were
+dropped 2026-10-11). It is a self-extracting NSIS archive containing the WPF installer + prerequisites check.
 
 ## Build
 
