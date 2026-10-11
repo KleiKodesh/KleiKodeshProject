@@ -34,13 +34,21 @@ public sealed class UserSessionBinding(
         byte[]? firstRequest;
         try
         {
-            firstConnection = WindowsServiceMode.CreatePipe(pipeName);
-            await firstConnection.WaitForConnectionAsync(stoppingToken);
+            while (true)
+            {
+                firstConnection = WindowsServiceMode.CreatePipe(pipeName);
+                await firstConnection.WaitForConnectionAsync(stoppingToken);
 
-            // The request must be READ before the client can be impersonated: Windows refuses
-            // ImpersonateNamedPipeClient until data has arrived on the pipe (error 1368).
-            firstRequest = await FrameProtocol.ReadFrameAsync(firstConnection, stoppingToken);
-            if (firstRequest is null) throw new IOException("the first client closed before sending a request");
+                // The request must be READ before the client can be impersonated: Windows refuses
+                // ImpersonateNamedPipeClient until data has arrived on the pipe (error 1368).
+                firstRequest = await FrameProtocol.ReadFrameAsync(firstConnection, stoppingToken);
+                if (firstRequest is not null) break;
+
+                // A probe that connected and left without a request (an existence check, a
+                // cancelled client): not a user to bind to. Wait for the next one.
+                firstConnection.Dispose();
+                firstConnection = null;
+            }
 
             WindowsIdentity user = CaptureClient(firstConnection);
             UserProfile.BindToUser(user.AccessToken);

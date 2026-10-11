@@ -52,9 +52,58 @@ internal static class ServiceRegistration
             finally { CloseServiceHandle(svc); }
 
             Console.WriteLine("Service installed: " + WindowsServiceMode.ServiceName);
+
+            // The other half of the switch, in the same elevated run so the user sees ONE prompt:
+            // the service this one replaces. Best effort - a failure here never fails the install.
+            RetireLegacyService(scm, LegacyServiceName, LegacyServiceExeName);
             return 0;
         }
         finally { CloseServiceHandle(scm); }
+    }
+
+    /// <summary>DocumentLocatorSvc - the file-index service this one replaces.</summary>
+    public const string LegacyServiceName = "DocumentLocatorSvc";
+    private const string LegacyServiceExeName = "DocumentLocator.Service.exe";
+
+    /// <summary>
+    /// Stops and deletes a retired service, but only when its registration points at OUR exe
+    /// name - never an unrelated service that happens to share the name. Waits for STOPPED
+    /// first, because DeleteService only marks a running service.
+    /// </summary>
+    private static void RetireLegacyService(IntPtr scm, string serviceName, string exeName)
+    {
+        try
+        {
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(
+                @"SYSTEM\CurrentControlSet\Services\" + serviceName);
+            string imagePath = (key?.GetValue("ImagePath") as string ?? "").Trim().Trim('"');
+            if (imagePath.Length == 0 ||
+                !Path.GetFileName(imagePath).Equals(exeName, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            IntPtr svc = OpenService(scm, serviceName, SERVICE_ALL_ACCESS);
+            if (svc == IntPtr.Zero) return;
+            try
+            {
+                var status = new SERVICE_STATUS();
+                ControlService(svc, SERVICE_CONTROL_STOP, ref status);
+                DateTime deadline = DateTime.UtcNow.AddSeconds(30);
+                while (DateTime.UtcNow < deadline &&
+                       QueryServiceStatus(svc, ref status) && status.dwCurrentState != SERVICE_STOPPED)
+                    Thread.Sleep(250);
+                DeleteService(svc);
+            }
+            finally { CloseServiceHandle(svc); }
+
+            // The exe itself, when it sits beside ours in the install root (it may be the
+            // retired copy the extraction left; the installer's stale-file purge also covers it).
+            try { File.Delete(imagePath); } catch { /* locked or gone - harmless */ }
+            Console.WriteLine("Retired legacy service: " + serviceName);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine("Could not retire " + serviceName + ": " + ex.Message);
+        }
     }
 
     public static int Uninstall()

@@ -67,7 +67,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             {
                 try
                 {
-                    string ftsPath = Path.Combine(InstallPath, "FtsIndex");
+                    string ftsPath = Path.Combine(InstallPath, KitveiHakodeshServiceHelper.ServiceFolder, "FtsIndex");
                     if (Directory.Exists(ftsPath))
                     {
                         Directory.Delete(ftsPath, recursive: true);
@@ -124,12 +124,12 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
                         Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
 
-                        // DocumentLocator.Service.exe may be locked by the running Windows
-                        // service. DocumentLocatorHelper.SendShutdownAsync() was fired at the
+                        // KitveiHakodeshService.exe may be locked by the running Windows
+                        // service. KitveiHakodeshServiceHelper.SendShutdownAsync() was fired at the
                         // start of installation; TryCopyServiceExeAsync() waits for the
                         // remainder of the 1 500 ms exit window, then retries up to 3 times.
                         // On permanent failure the existing file is left in place (silent skip).
-                        if (DocumentLocatorHelper.IsServiceExe(entry.Path))
+                        if (KitveiHakodeshServiceHelper.IsServiceExe(entry.Path))
                         {
                             // Buffer this entry in memory: TryCopyServiceExeAsync seeks back
                             // to the start between retries, and the LZMA body stream cannot
@@ -139,7 +139,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                             {
                                 PayloadArchive.CopyExactly(body, buffer, entry.Length);
                                 buffer.Seek(0, SeekOrigin.Begin);
-                                await DocumentLocatorHelper.TryCopyServiceExeAsync(buffer, fullPath)
+                                await KitveiHakodeshServiceHelper.TryCopyServiceExeAsync(buffer, fullPath)
                                     .ConfigureAwait(false);
                             }
                         }
@@ -191,6 +191,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             //
             // The payloadPaths guard in PurgeStaleFiles stays as a general safety net:
             // a file the current payload itself delivers is never deleted.
+            // The retired DocumentLocatorSvc binary (its registration goes through
+            // LegacyServiceRetirement; the file itself is no longer in the payload).
+            @"DocumentLocator.Service.exe",
+            @"DocumentLocator.Service.pdb",
             @"x64\SQLite.Interop.dll",
             @"x86\SQLite.Interop.dll",
             "SQLite.Interop.dll",
@@ -294,6 +298,16 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             // Bloom filter search index (rebuilt on version mismatch)
             if (normalized.StartsWith("BloomFilters\\", StringComparison.OrdinalIgnoreCase))
+                return true;
+
+            // The KitveiHakodesh service's indexes and caches: built at runtime, never shipped,
+            // and expensive to rebuild. A reindex happens on a version stamp, not on install.
+            if (normalized.StartsWith("KitveiHakodeshService\\FtsIndex\\", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("KitveiHakodeshService\\CatalogTocIndex\\", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("KitveiHakodeshService\\filesystemindex\\", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("KitveiHakodeshService\\hb-cache\\", StringComparison.OrdinalIgnoreCase) ||
+                normalized.StartsWith("KitveiHakodeshService\\convert-cache\\", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(normalized, "KitveiHakodeshService\\excluded_folders.json", StringComparison.OrdinalIgnoreCase))
                 return true;
 
             // DocumentLocator NTFS index — runtime-generated, never overwrite on update.

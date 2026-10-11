@@ -272,7 +272,9 @@ public sealed class Dispatcher(
                 // before the process exits. The dev killer calls this before taskkill so
                 // a restart never hard-kills a build in progress (index-corruption path).
                 case "shutdown":
-                    lifetime.StopApplication();
+                    // Stop AFTER the reply has gone out: stopping cancels the pipe server's token,
+                    // and the installer that asked reads the acknowledgement.
+                    _ = Task.Run(async () => { await Task.Delay(150); lifetime.StopApplication(); });
                     return RpcResponse.Ok(MsgPack.Ser(new ShuttingDownResult()));
 
                 // ── Seforim DB location (settings page / setup wizard) ─────────

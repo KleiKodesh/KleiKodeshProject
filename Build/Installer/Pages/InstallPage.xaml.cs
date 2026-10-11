@@ -68,7 +68,7 @@ namespace KleiKodeshVstoInstallerWpf
                         MessageBoxImage.Warning);
 
                     if (retry == MessageBoxResult.Yes)
-                        await DocumentLocatorHelper.EnsureServiceInstalledAsync();
+                        await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync();
                 }
 
                 while (ProgressBar.Value < ProgressBar.Maximum)

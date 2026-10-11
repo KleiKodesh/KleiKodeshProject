@@ -18,7 +18,7 @@ Build/
 │   ├── Helpers/
 │   │   ├── AddinInstaller.cs           — Extract VSTO zip, register add-in, version management
 │   │   ├── AdminHelper.cs              — UAC elevation & re-launch
-│   │   ├── DocumentLocatorHelper.cs    — Service shutdown/restart for file-locking
+│   │   ├── KitveiHakodeshServiceHelper.cs    — Service shutdown/restart for file-locking
 │   │   ├── FullSystemCleaner.cs        — Full uninstall cleanup
 │   │   ├── KitveiHakodeshHelper.cs     — KitveiHakodesh DB path handling
 │   │   ├── SettingsManager.cs          — Registry-backed settings

@@ -104,6 +104,20 @@
 
     <Copy SourceFiles="@(VstoFiles)" DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
 
+    <!-- The KitveiHakodesh service: native AOT x64, published here and shipped in EVERY variant.
+         32-bit Office on 64-bit Windows runs it as a separate process; 32-bit Windows is not
+         supported. ILC's link step needs vswhere.exe on PATH, hence the PATH prefix. -->
+    <PropertyGroup>
+      <KhsProject>$(MSBuildProjectDirectory)\..\..\KitveiHakodesh\CSharpBackend\KitveiHakodeshService\KitveiHakodeshService.csproj</KhsProject>
+      <KhsPublishDir>$(MSBuildProjectDirectory)\..\..\KitveiHakodesh\CSharpBackend\KitveiHakodeshService\bin\Release\net10.0-windows\win-x64\publish</KhsPublishDir>
+    </PropertyGroup>
+    <Message Text="Publishing KitveiHakodeshService (native AOT, win-x64)..." Importance="high" />
+    <Exec Command="set &quot;PATH=%PATH%;C:\Program Files (x86)\Microsoft Visual Studio\Installer&quot; &amp;&amp; dotnet publish &quot;$(KhsProject)&quot; -c Release -r win-x64 -p:PublishDir=&quot;$(KhsPublishDir)&quot; --nologo -v quiet" ContinueOnError="false" />
+    <ItemGroup>
+      <KhsFiles Include="$(KhsPublishDir)\**\*.*" Exclude="$(KhsPublishDir)\**\*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(KhsFiles)" DestinationFolder="$(TempPackageDir)\KitveiHakodeshService\%(RecursiveDir)" />
+
     <!--
       The payload is packed here with SOLID LZMA into KleiKodesh.pkg, and NSIS is set
       to `SetCompressor zlib` so it does NOT compress it again.

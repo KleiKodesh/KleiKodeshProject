@@ -44,7 +44,7 @@ Build/Installer/
 ├── Helpers/
 │   ├── AddinInstaller.cs              — Extract, register, whitelist, version; holds Version const
 │   ├── AdminHelper.cs                 — UAC elevation & re-launch
-│   ├── DocumentLocatorHelper.cs       — Service shutdown/restart for file-locking
+│   ├── KitveiHakodeshServiceHelper.cs       — Service shutdown/restart for file-locking
 │   ├── FullSystemCleaner.cs           — Full uninstall cleanup
 │   ├── KitveiHakodeshHelper.cs        — KitveiHakodesh DB path handling
 │   ├── SettingsManager.cs             — Registry-backed settings (ribbon visibility etc.)

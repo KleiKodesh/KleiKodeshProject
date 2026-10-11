@@ -13,7 +13,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     public static class InstallRunner
     {
         /// <summary>
-        /// Returns true when the DocumentLocator service ended up registered — or was
+        /// Returns true when the KitveiHakodesh service ended up registered — or was
         /// not part of the package, which is equally fine. False means the package
         /// ships the service but registration failed (typically a declined UAC
         /// prompt): the add-in itself installed, only file search is missing, so the
@@ -33,23 +33,18 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // Retire services this product no longer ships, before extraction — a
             // registered service holds a lock on its exe that would fail the extract.
             //
-            // Currently a no-op: nothing is on the retirement list. DocumentLocatorSvc
-            // used to be, which was wrong — EnsureServiceInstalledAsync below installs
-            // that same service, so the two steps fought and left it registered but
-            // unstartable. Do not re-add it without also dropping the exe from the
-            // package and the install call below.
+            // DocumentLocatorSvc is on that list: KitveiHakodeshSvc owns the file index now and
+            // the package no longer ships DocumentLocator.Service.exe, so nothing re-registers it.
             //
             // Note this installer is asInvoker, NOT elevated (per-user install — see
             // app.manifest), so retirement can only deregister on the repair flow that
             // happens to already be elevated. It never prompts.
             await LegacyServiceRetirement.RetireAllAsync(status);
 
-            // Send pipe shutdown to DocumentLocator service immediately so the
-            // 1 500 ms exit window runs in the background while we extract other
-            // files. AddinInstaller will wait for the remainder of that window
-            // (if any) before it tries to overwrite DocumentLocator.Service.exe.
-            // Harmless once DocumentLocator is retired: the pipe simply isn't there.
-            _ = DocumentLocatorHelper.SendShutdownAsync();
+            // Ask a running KitveiHakodesh service to exit now, so its exit window runs in the
+            // background while we extract other files. AddinInstaller waits for the remainder
+            // of that window (if any) before it overwrites KitveiHakodeshService.exe.
+            _ = KitveiHakodeshServiceHelper.SendShutdownAsync();
 
             status?.Report("מחלץ קבצים...");
             await AddinInstaller.ExtractAsync(progress);
@@ -69,21 +64,21 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // this is the app opening its own links.
             ShellRegistrationHelper.RegisterProtocol();
 
-            // Register (or re-register) the DocumentLocator Windows Service.
+            // Register (or re-register) the KitveiHakodesh Windows service.
             // Normally a no-op on updates (already registered at the same path);
             // when registration IS needed it surfaces one UAC prompt.
             status?.Report("מתקין שירות אינדקס...");
-            bool serviceRegistered = await DocumentLocatorHelper.EnsureServiceInstalledAsync();
+            bool serviceRegistered = await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync();
 
             // Trigger a background reindex of the file-system search service
             // so it reflects any new files from this install. Fire-and-forget —
             // the service acks immediately and rebuilds without blocking us.
-            _ = DocumentLocatorHelper.EnsureServiceRunningAndReindexAsync();
+            _ = KitveiHakodeshServiceHelper.EnsureServiceRunningAndReindexAsync();
 
             // EnsureServiceInstalledAsync returns false both for "registration failed"
             // and for "the package doesn't ship the service at all". Only the former
             // is a problem worth telling the user about.
-            return serviceRegistered || !DocumentLocatorHelper.IsServiceDeployed;
+            return serviceRegistered || !KitveiHakodeshServiceHelper.IsServiceDeployed;
         }
     }
 }

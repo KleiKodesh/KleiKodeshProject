@@ -36,11 +36,22 @@ namespace KitveiHakodeshLib.Service
             _pipeName = !string.IsNullOrEmpty(pipeName) ? pipeName : KitveiHakodeshServicePipeChannel.ResolvePipeName();
         }
 
-        /// <summary>True when a service instance is listening on the pipe right now.</summary>
+        /// <summary>
+        /// True when a service instance is listening on the pipe right now - checked WITHOUT
+        /// connecting. File.Exists on a pipe path opens the pipe, and the installed service
+        /// takes its very first connection as the user it serves; a probe that connects and
+        /// leaves must never be that connection. Listing the pipe directory does not connect.
+        /// </summary>
         public bool IsListening()
         {
-            try { return File.Exists(@"\\.\pipe\" + _pipeName); }
-            catch { return false; }
+            try
+            {
+                foreach (string pipe in Directory.EnumerateFiles(@"\\.\pipe\"))
+                    if (string.Equals(Path.GetFileName(pipe), _pipeName, StringComparison.OrdinalIgnoreCase))
+                        return true;
+            }
+            catch { /* listing refused - treat as not listening */ }
+            return false;
         }
 
         /// <summary>

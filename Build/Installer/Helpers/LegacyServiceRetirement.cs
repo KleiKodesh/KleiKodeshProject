@@ -11,17 +11,15 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     /// <summary>
     /// Removes Windows services that this product used to ship but no longer does.
     ///
-    /// DORMANT — the <see cref="Retired"/> list is empty, so this is a no-op on every
-    /// install. It was written for a DocumentLocatorSvc → KitveiHakodeshService migration
-    /// that has not happened: the package still ships DocumentLocator.Service.exe and
-    /// InstallRunner still registers it, so retiring it here fought the install two steps
-    /// later. See the commented entry in <see cref="Retired"/> for the full account.
+    /// Since 2026-10-11 the list holds DocumentLocatorSvc: KitveiHakodeshSvc owns the file
+    /// index, the package no longer ships DocumentLocator.Service.exe, and nothing re-registers
+    /// it. The mechanism is SCM-direct deletion that needs no cooperation from the retired
+    /// binary. The installer is asInvoker, so this step deletes only on an already-elevated
+    /// run; the normal path is KitveiHakodeshService.exe --install, which retires
+    /// DocumentLocatorSvc in the SAME elevated run that registers the new service (one UAC
+    /// prompt for the whole switch - see KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync).
     ///
-    /// Kept because the mechanism is correct and hard to re-derive — SCM-direct deletion
-    /// that needs no cooperation from the retired binary. Populate the list when a service
-    /// is genuinely dropped from the package.
-    ///
-    /// Why this exists separately from <see cref="DocumentLocatorHelper"/>:
+    /// Why this exists separately from <see cref="KitveiHakodeshServiceHelper"/>:
     /// that helper delegates registration to the service exe itself
     /// (<c>DocumentLocator.Service.exe --install</c>). That approach cannot retire a
     /// service, because on the very update that drops a service the exe is no longer
@@ -75,29 +73,9 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// </summary>
         private static readonly RetiredService[] Retired =
         {
-            // Nothing is retired right now, so RetireAllAsync is a no-op that does not
-            // even probe the registry.
-            //
-            // DocumentLocatorSvc was listed here on the assumption that
-            // KitveiHakodeshService would index paths in-process and replace it. That
-            // migration has not happened: KleiKodesh.zip still ships
-            // DocumentLocator.Service.exe, and InstallRunner still registers it via
-            // DocumentLocatorHelper.EnsureServiceInstalledAsync two steps after this ran.
-            //
-            // Those two steps contradicted each other. On an elevated run this deleted a
-            // registration the same install then re-created, and because DeleteService
-            // only MARKS a service for deletion while a handle is open, the intermediate
-            // state is a service that still has a registry key but refuses to start —
-            // which the SCM reports as error 1058, the same code as a genuinely disabled
-            // service. That is why file search showed "the service is disabled, start it
-            // via services.msc" on a machine where the registration looked correct.
-            //
-            // Kept commented rather than deleted: if the in-process migration does land,
-            // restoring this line is the whole retirement step. Re-enable it only
-            // together with dropping DocumentLocator.Service.exe from the package AND
-            // removing the EnsureServiceInstalledAsync call, never on its own.
-            //
-            // new RetiredService("DocumentLocatorSvc", "DocumentLocator.Service.exe"),
+            // Retired 2026-10-11: KitveiHakodeshService (KitveiHakodeshSvc) owns the file index now,
+            // the package no longer ships DocumentLocator.Service.exe, and nothing re-registers it.
+            new RetiredService("DocumentLocatorSvc", "DocumentLocator.Service.exe"),
         };
 
         private sealed class RetiredService
@@ -284,18 +262,32 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         }
 
         /// <summary>
-        /// Sends the DocumentLocator-style <c>{"type":"shutdown"}</c> frame if the
-        /// service still exposes its named pipe. Unknown/absent pipes are ignored.
-        ///
-        /// This reuses <see cref="DocumentLocatorHelper.SendShutdownAsync"/> for the
-        /// one service whose protocol we know, rather than duplicating frame I/O.
-        /// Future retired services can add their own branch here, or simply rely on
-        /// the SCM stop below if they have no cooperative shutdown channel.
+        /// Sends the retired service's own cooperative shutdown if it still exposes its pipe.
+        /// DocumentLocatorSvc spoke JSON frames ([int32 LE length][UTF-8 body]) on the pipe
+        /// "DocumentLocator"; that protocol lives nowhere else any more, so the one frame we
+        /// still need is written here. Absent pipes are ignored; the SCM stop below covers
+        /// a service that does not answer.
         /// </summary>
         private static async Task SendCooperativeShutdownAsync(string serviceName)
         {
-            if (string.Equals(serviceName, "DocumentLocatorSvc", StringComparison.OrdinalIgnoreCase))
-                await DocumentLocatorHelper.SendShutdownAsync().ConfigureAwait(false);
+            if (!string.Equals(serviceName, "DocumentLocatorSvc", StringComparison.OrdinalIgnoreCase)) return;
+            await Task.Run(() =>
+            {
+                try
+                {
+                    using (var pipe = new System.IO.Pipes.NamedPipeClientStream(".", "DocumentLocator", System.IO.Pipes.PipeDirection.InOut))
+                    {
+                        pipe.Connect(2_000);
+                        byte[] body = System.Text.Encoding.UTF8.GetBytes("{\"type\":\"shutdown\"}");
+                        pipe.Write(BitConverter.GetBytes(body.Length), 0, 4);
+                        pipe.Write(body, 0, body.Length);
+                        pipe.Flush();
+                        byte[] ack = new byte[4];
+                        pipe.Read(ack, 0, 4); // wait for the acknowledgement frame to start
+                    }
+                }
+                catch { /* not running, or the pipe is gone - nothing to shut down */ }
+            }).ConfigureAwait(false);
         }
 
         /// <summary>

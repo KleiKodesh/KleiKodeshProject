@@ -395,23 +395,25 @@ Section Uninstall
   ; Check if Word is running after user confirms uninstall
   Call un.HandleWordRunning
 
-  ; ── DocumentLocator Windows Service ──────────────────────────────────────────
-  ; Must happen before file removal — the service exe must be on disk for
-  ; sc.exe to stop and delete it. The uninstaller itself runs unelevated
-  ; (RequestExecutionLevel user — see the note above), and SCM stop/delete needs
-  ; admin, so just these two commands run through a single elevated cmd.exe
-  ; (one UAC prompt). Skipped entirely when the service was never registered.
-  ; If the user declines the prompt, the service is left behind (best effort)
-  ; and the rest of the uninstall continues.
-  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\DocumentLocatorSvc" "ImagePath"
-  StrCmp $0 "" DocLocatorSvcDone
-  DetailPrint "עוצר ומסיר שירות DocumentLocator..."
-  ; ping -n 4 ≈ 3s pause between stop and delete so the service reaches STOPPED
-  ; and releases its exe lock before file removal below.
-  ExecShellWait "runas" "$SYSDIR\cmd.exe" "/C sc stop DocumentLocatorSvc & ping -n 4 127.0.0.1 >nul & sc delete DocumentLocatorSvc" SW_HIDE
-  ; Small grace period for the service process to fully exit.
+  ; ── Windows services ──────────────────────────────────────────────────────────
+  ; Must happen before file removal — the service exe must be on disk for sc.exe to
+  ; stop and delete it. The uninstaller runs unelevated (RequestExecutionLevel user —
+  ; see the note above) and SCM stop/delete needs admin, so the commands run through
+  ; ONE elevated cmd.exe (one UAC prompt), covering the product's service
+  ; (KitveiHakodeshSvc) and the legacy DocumentLocatorSvc an older install may have
+  ; left. Skipped entirely when neither is registered. If the user declines the
+  ; prompt the services are left behind (best effort) and the uninstall continues.
+  ReadRegStr $0 HKLM "SYSTEM\CurrentControlSet\Services\KitveiHakodeshSvc" "ImagePath"
+  ReadRegStr $1 HKLM "SYSTEM\CurrentControlSet\Services\DocumentLocatorSvc" "ImagePath"
+  StrCmp $0 "" 0 ServicesRemove
+  StrCmp $1 "" ServicesDone
+  ServicesRemove:
+  DetailPrint "Stopping the Kitvei Hakodesh service..."
+  ; ping -n 4 ≈ 3s pause between stop and delete so the services reach STOPPED
+  ; and release their exe locks before file removal below.
+  ExecShellWait "runas" "$SYSDIR\cmd.exe" "/C sc stop KitveiHakodeshSvc & sc stop DocumentLocatorSvc & ping -n 4 127.0.0.1 >nul & sc delete KitveiHakodeshSvc & sc delete DocumentLocatorSvc" SW_HIDE
   Sleep 500
-  DocLocatorSvcDone:
+  ServicesDone:
 
   ; Show progress with hardcoded Hebrew messages
   DetailPrint "מתחיל הסרת כלי קודש..."
