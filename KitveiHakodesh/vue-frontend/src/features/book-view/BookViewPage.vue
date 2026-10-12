@@ -5,6 +5,9 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { exportToWord as bridgeExportToWord } from '@/webview-host/bridge'
+import { useBooksDataStore } from '@/stores/booksDataStore'
+import { showToast } from '@/composables/useToast'
+import { isExportRestricted } from './exportRestriction'
 import BookViewToolbar from './BookViewToolbar.vue'
 import SplitPane from '@/components/SplitPane.vue'
 import BookViewLinesContent from './lines/BookViewLinesContent.vue'
@@ -28,6 +31,9 @@ const tocTreeDockedRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
 const tocTreeOverlayRef = ref<InstanceType<typeof BookViewTocTree> | null>(null)
 const bookViewRoot = ref<HTMLElement | null>(null)
 const bookViewStore = useBookViewStore()
+const booksDataStore = useBooksDataStore()
+// Shown when a publisher-restricted book's export is attempted anyway (see exportRestriction.ts).
+const EXPORT_RESTRICTED_MESSAGE = 'ספר זה אינו ניתן לייצוא לוורד לפי בקשת המול״ל. ניתן לעיין בו ולהדפיסו כרגיל.'
 const paneId = inject<1 | 2>('paneId', 1)
 
 // Track the shell's own width instead of the viewport width so that in split
@@ -134,6 +140,7 @@ const toolbarProps = computed(() => ({
   tabId,
   bookId,
   bookHasTeamim: bookHasTeamim.value,
+  exportRestricted: exportRestricted.value,
   filterGroups: staticFilterGroups.value,
   relatedBooksLoaded: staticFilterGroupsLoaded.value,
   versions: versions.value,
@@ -283,11 +290,26 @@ function toggleCommentaryPanel(slot: CommentarySlot) {
   panels[slot].visible.value = !panels[slot].visible.value
 }
 
+// Matched on the catalog title rather than the tab's: the tab title is whatever the
+// opener passed (a search result's bookTitle, a related-books row), and the restriction
+// list is keyed by library title. The tab title is only the fallback for a book the
+// catalog has not loaded yet.
+const exportRestricted = computed(() =>
+  isExportRestricted((bookId != null && booksDataStore.allBooksMap.get(bookId)?.title) || bookTitle),
+)
+
 // Works in both modes — hosted drives Word through the Office PIA, dev through the
 // service. There is deliberately no isHosted guard: isHosted is TRUE in dev, so it
 // never blocked anything here, and the bridge call it let through could only reject
 // (silently, via the catch) until dev got a real export path.
+//
+// Checked here as well as hiding the button, so no second entry point to the export
+// can get past the restriction.
 async function onExportToWord() {
+  if (exportRestricted.value) {
+    showToast(EXPORT_RESTRICTED_MESSAGE, { variant: 'error' })
+    return
+  }
   const html = buildExportHtml()
   await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
 }

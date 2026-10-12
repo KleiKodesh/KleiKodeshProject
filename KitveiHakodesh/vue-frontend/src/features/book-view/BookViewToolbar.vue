@@ -48,6 +48,8 @@ const props = defineProps<{
   tabId?: string
   bookId: number | undefined
   bookHasTeamim: boolean
+  // Set for books whose publisher forbids an editable export; the button is not rendered.
+  exportRestricted?: boolean
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
   // The book's alternate versions. Empty for most books, which hides the control.
@@ -225,11 +227,13 @@ const wordLinkMarkersPresent = ref(false)
 
 /** The collapsible controls this book renders, in collapse order. */
 const presentOverflowKeys = computed<ToolbarOverflowKey[]>(() =>
-  // Export to Word, the diacritics cycle and the zoom pair are on every book; only the
-  // commentary sync depends on the book having commentaries at all.
-  TOOLBAR_OVERFLOW_ORDER.filter((key) =>
-    key === 'sync-commentaries' ? props.hasCommentaries : true,
-  ),
+  // The diacritics cycle and the zoom pair are on every book; the commentary sync depends
+  // on the book having commentaries at all, and export to Word on it not being restricted.
+  TOOLBAR_OVERFLOW_ORDER.filter((key) => {
+    if (key === 'sync-commentaries') return props.hasCommentaries
+    if (key === 'export-to-word') return !props.exportRestricted
+    return true
+  }),
 )
 
 /**
@@ -445,6 +449,7 @@ defineExpose({ tocBtnRef })
     />
 
     <button
+      v-if="!exportRestricted"
       class="collapsible"
       :class="{ collapsed: !toolbarButtonVisible('export-to-word') }"
       :inert="!toolbarButtonVisible('export-to-word')"
