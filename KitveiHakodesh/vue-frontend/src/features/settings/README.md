@@ -4,7 +4,7 @@ App settings UI and first-launch setup wizard.
 
 ## Page structure
 
-`SettingsPage.vue` is the page shell. It owns the layout (side nav + scroll body), the sticky search bar, the narrow-screen nav dropdown, and section scroll navigation. It renders four section components in order, with no business logic of its own.
+`SettingsPage.vue` is the page shell. It owns the layout (side nav + scroll body), the sticky search bar, the narrow-screen nav dropdown, and section scroll navigation. It renders the section components in order, with no business logic of its own.
 
 The section components are independent — each imports the stores it needs directly. The `[data-section]` / `data-section-label` attributes on every section root are picked up automatically by `useSettingsSearch`; no manual registration needed.
 
@@ -18,7 +18,9 @@ The section components are independent — each imports the stores it needs dire
 
 **SettingsPageCalendarSection.vue** — Hebrew calendar and zmanim location settings.
 
-**SettingsPageAdvancedSection.vue** — HebrewBooks local folder, database path, file-search excluded folders, and the automatic-update toggle. Every control here is backed by a Windows registry value or an on-disk file shared with the hosted app, never by localStorage — so the setting is the same one in dev and hosted. Hosted mode routes through the C# bridge; dev routes through the KitveiHakodesh service, which reads and writes the identical registry values. Branch on `isDev` (`typeof window.__webviewAction !== 'function'`), never on `isHosted` — `isHosted` is TRUE in dev and will silently disable working controls.
+**SettingsPageUpdatesSection.vue** — installed version (row hidden when the service reports none, e.g. a dev copy), update status line, check-now button (hidden while updates are turned off or an update is already ready; the check can take minutes), install button when an update is ready, and the turn-off-automatic-updates toggle (shared VSTO registry value via `getTurnOffUpdates` / `setTurnOffUpdates`). All update calls go through `useSelfUpdate` in `src/composables/`, the same path `UpdateAvailablePrompt.vue` uses — never call the update RPCs directly here. When the service is unreachable the status line says so.
+
+**SettingsPageAdvancedSection.vue** — HebrewBooks local folder, database path, and file-search excluded folders. Every control here is backed by a Windows registry value or an on-disk file shared with the hosted app, never by localStorage — so the setting is the same one in dev and hosted. Hosted mode routes through the C# bridge; dev routes through the KitveiHakodesh service, which reads and writes the identical registry values. Branch on `isDev` (`typeof window.__webviewAction !== 'function'`), never on `isHosted` — `isHosted` is TRUE in dev and will silently disable working controls.
 
 **SettingsPageResetSection.vue** — the four reset actions (settings, search index, document locator index, full app reset) with their `ConfirmDialog`. Completely self-contained — no props.
 

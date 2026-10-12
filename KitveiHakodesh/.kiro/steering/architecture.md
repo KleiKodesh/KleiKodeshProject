@@ -325,6 +325,7 @@ App settings across three tabs: general, reading, and advanced. Also contains th
 - `SettingsPageThemeAndApplicationSection.vue` — theme, dark mode, zoom, toolbar position, new-tab destination, chrome options
 - `SettingsPageReadingAndBookDisplaySection.vue` — reading preferences, book display fonts/sizes, commentary overrides
 - `SettingsPageCalendarSection.vue` — calendar city picker, clock toggle
+- `SettingsPageUpdatesSection.vue` — installed version, update status, check-now and install buttons, turn-off-automatic-updates toggle; all via `composables/useSelfUpdate.ts`
 - `SettingsPageAdvancedSection.vue` — database/index paths, excluded folders, diagnostics
 - `SettingsPageResetSection.vue` — all reset actions
 - `SettingsPageKeyboardShortcutsSection.vue` + `ShortcutsReferenceList.vue` — shortcuts reference; keep in sync with `layout/useAppTitleBarShortcuts.ts`
@@ -538,6 +539,8 @@ Two plain modules live in `src/stores/` alongside the Pinia stores. They hold no
 **useAutofill.ts** — autofill/history suggestions for search inputs; pairs with `common/AutofillDropdown.vue`.
 
 **useToast.ts** — transient message queue rendered by `ToastBanner.vue`. Use this instead of any browser dialog.
+
+**useSelfUpdate.ts** — the app's self-update (status read, check now, install), shared by `UpdateAvailablePrompt.vue` and the settings updates section.
 
 ## Host Layer (`src/webview-host/`)
 

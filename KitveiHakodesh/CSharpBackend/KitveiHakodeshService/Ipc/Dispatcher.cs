@@ -27,6 +27,7 @@ public sealed class Dispatcher(
     LocalFileGrants localFileGrants,
     KitveiHakodeshService.Pdf.WordConversionService wordConversion,
     KitveiHakodeshService.Http.OwnerRegistry owners,
+    KitveiHakodeshService.KitveiHakodesh.Updater updater,
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
@@ -271,11 +272,30 @@ public sealed class Dispatcher(
                 // Self-update, the user's decision: the app asks whether a downloaded update is ready,
                 // asks the user, and on "install now" the service starts the installer as the user.
                 case "getUpdateStatus":
+                    return RpcResponse.Ok(MsgPack.Ser(ReadUpdateStatus()));
+
+                // The settings page's "check now": the weekly pass, run on demand (download included,
+                // so it can take minutes). Only the installed service updates - see UpdaterService.
+                case "checkForUpdateNow":
                 {
-                    var ready = KitveiHakodeshService.KitveiHakodesh.Updater.ReadyInstaller();
-                    return RpcResponse.Ok(MsgPack.Ser(ready is null
-                        ? new UpdateStatusResult()
-                        : new UpdateStatusResult { Ready = true, Version = ready.Value.Version }));
+                    string checkError = "";
+                    if (!Hosting.WindowsServiceMode.IsWindowsService)
+                        checkError = "updates are checked only by the installed service";
+                    else if (AppSettingsRegistry.GetTurnOffUpdates())
+                        checkError = "automatic updates are turned off";
+                    else
+                    {
+                        try { await updater.FindOrDownloadNewerInstallerAsync(ct); }
+                        catch (OperationCanceledException) { throw; }
+                        catch (Exception ex)
+                        {
+                            logger.LogWarning(ex, "Update check (on demand) failed");
+                            checkError = ex.Message;
+                        }
+                    }
+                    UpdateStatusResult status = ReadUpdateStatus();
+                    status.CheckError = checkError;
+                    return RpcResponse.Ok(MsgPack.Ser(status));
                 }
                 case "installUpdate":
                 {
@@ -869,6 +889,17 @@ public sealed class Dispatcher(
             try { lifetime.StopApplication(); }
             catch (Exception ex) { logger.LogError(ex, "restart after DB path change failed"); }
         });
+
+    private static UpdateStatusResult ReadUpdateStatus()
+    {
+        var ready = KitveiHakodeshService.KitveiHakodesh.Updater.ReadyInstaller();
+        return new UpdateStatusResult
+        {
+            Ready = ready is not null,
+            Version = ready?.Version ?? "",
+            InstalledVersion = KitveiHakodeshService.KitveiHakodesh.Updater.InstalledVersion() ?? "",
+        };
+    }
 
     private static string Term(byte[]? args) => MsgPack.De<DictTermArgs>(args).Term ?? "";
 

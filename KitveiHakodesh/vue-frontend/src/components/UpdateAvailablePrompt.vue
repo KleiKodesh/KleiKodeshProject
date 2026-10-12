@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { serviceCall } from '@/webview-host/serviceClient'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { useSelfUpdate } from '@/composables/useSelfUpdate'
 import {
   UPDATE_PROMPT_TITLE,
   updatePromptBody,
@@ -11,54 +11,33 @@ import {
 
 // Asks the user before an update is installed. The KitveiHakodesh service checks for updates
 // once a week and downloads them in the background, but never launches the installer on its
-// own: this prompt asks the service whether a downloaded update is ready (getUpdateStatus) and,
-// only when the user agrees, asks it to start the installer (installUpdate) - which then asks
-// to close Word and the app. "Later" hides the prompt until the app is opened again.
-// Mount ONCE at the app root.
+// own: this prompt asks the service whether a downloaded update is ready and, only when the
+// user agrees, asks it to start the installer (useSelfUpdate, shared with the settings
+// page) - which then asks to close Word and the app. "Later" hides the prompt until the app
+// is opened again. Mount ONCE at the app root.
 
 const FIRST_CHECK_DELAY_MS = 30_000
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000
 
-const readyVersion = ref<string | null>(null)
-const isInstalling = ref(false)
-const failed = ref(false)
-let dismissedVersion: string | null = null
+// An unreachable service is covered by the service banner, so the prompt ignores it.
+const { readyVersion, isInstalling, hasInstallFailed, loadUpdateStatus, installUpdate } =
+  useSelfUpdate()
+
+const dismissedVersion = ref<string | null>(null)
+const promptedVersion = computed(() =>
+  readyVersion.value && readyVersion.value !== dismissedVersion.value ? readyVersion.value : null,
+)
+
 let firstTimer: ReturnType<typeof setTimeout> | null = null
 let intervalTimer: ReturnType<typeof setInterval> | null = null
 
-async function check() {
-  try {
-    const status = await serviceCall<{ ready?: boolean; version?: string }>('getUpdateStatus')
-    const version = status?.ready ? status.version ?? '' : null
-    readyVersion.value = version && version !== dismissedVersion ? version : null
-  } catch {
-    /* the service banner covers an unreachable service */
-  }
-}
-
-async function install() {
-  if (isInstalling.value) return
-  isInstalling.value = true
-  failed.value = false
-  try {
-    const reply = await serviceCall<{ ok?: boolean }>('installUpdate')
-    if (reply?.ok) readyVersion.value = null
-    else failed.value = true
-  } catch {
-    failed.value = true
-  } finally {
-    isInstalling.value = false
-  }
-}
-
 function later() {
-  dismissedVersion = readyVersion.value
-  readyVersion.value = null
+  dismissedVersion.value = readyVersion.value
 }
 
 onMounted(() => {
-  firstTimer = setTimeout(check, FIRST_CHECK_DELAY_MS)
-  intervalTimer = setInterval(check, CHECK_INTERVAL_MS)
+  firstTimer = setTimeout(loadUpdateStatus, FIRST_CHECK_DELAY_MS)
+  intervalTimer = setInterval(loadUpdateStatus, CHECK_INTERVAL_MS)
 })
 
 onBeforeUnmount(() => {
@@ -70,14 +49,14 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <Transition name="update-prompt">
-      <div v-if="readyVersion" class="update-prompt" role="dialog" aria-live="polite">
+      <div v-if="promptedVersion" class="update-prompt" role="dialog" aria-live="polite">
         <div class="update-prompt-text">
           <strong>{{ UPDATE_PROMPT_TITLE }}</strong>
-          <span>{{ updatePromptBody(readyVersion) }}</span>
-          <span v-if="failed" class="update-prompt-error">{{ UPDATE_INSTALL_FAILED }}</span>
+          <span>{{ updatePromptBody(promptedVersion) }}</span>
+          <span v-if="hasInstallFailed" class="update-prompt-error">{{ UPDATE_INSTALL_FAILED }}</span>
         </div>
         <div class="update-prompt-actions">
-          <button class="update-prompt-install" :disabled="isInstalling" @click="install">
+          <button class="update-prompt-install" :disabled="isInstalling" @click="installUpdate">
             {{ UPDATE_INSTALL_LABEL }}
           </button>
           <button class="update-prompt-later" :disabled="isInstalling" @click="later">

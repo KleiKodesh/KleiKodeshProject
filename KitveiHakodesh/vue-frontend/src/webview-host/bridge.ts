@@ -1139,5 +1139,77 @@ export async function getTurnOffUpdates(): Promise<boolean | null> {
  * Persist the "turn off automatic updates" flag to the shared VSTO registry key.
  */
 export async function setTurnOffUpdates(value: boolean): Promise<void> {
-  serviceCallVoid('setTurnOffUpdates', { value })
+  // Awaited, not fire-and-forget: the settings page re-reads the update status right after.
+  try {
+    await serviceCall('setTurnOffUpdates', { value })
+  } catch {
+    /* the service banner covers an unreachable service */
+  }
+}
+
+/**
+ * The self-update state the service reports. Every field is '' when it does not apply:
+ * readyVersion — a newer installer already downloaded and ready to run;
+ * installedVersion — the installed copy's version ('' when this is not an installed copy);
+ * checkError — why the last check could not run or failed ('' when it ran).
+ */
+export interface UpdateStatus {
+  readyVersion: string
+  installedVersion: string
+  checkError: string
+}
+
+interface UpdateStatusReply {
+  ready?: boolean
+  version?: string
+  installedVersion?: string
+  checkError?: string
+}
+
+function toUpdateStatus(reply: UpdateStatusReply | undefined): UpdateStatus {
+  return {
+    readyVersion: reply?.ready ? reply.version ?? '' : '',
+    installedVersion: reply?.installedVersion ?? '',
+    checkError: reply?.checkError ?? '',
+  }
+}
+
+/**
+ * Ask the service whether a newer installer is already downloaded and ready. The service
+ * checks once a week and downloads in the background; it never installs on its own.
+ * readyVersion is '' while updates are turned off. Returns null when the service cannot answer.
+ */
+export async function getUpdateStatus(): Promise<UpdateStatus | null> {
+  try {
+    return toUpdateStatus(await serviceCall<UpdateStatusReply>('getUpdateStatus'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Run the service's update check (and download, ~100 MB when a newer release exists) right
+ * now instead of waiting for the weekly one. Can take MINUTES. A non-empty checkError means
+ * the check could not run (dev/console instance) or failed (offline etc.). Returns null when
+ * the service cannot answer.
+ */
+export async function checkForUpdateNow(): Promise<UpdateStatus | null> {
+  try {
+    return toUpdateStatus(await serviceCall<UpdateStatusReply>('checkForUpdateNow'))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Ask the service to start the downloaded installer (as the user, no arguments). The
+ * installer itself asks to close Word and the app. Returns false when it could not start.
+ */
+export async function installReadyUpdate(): Promise<boolean> {
+  try {
+    const reply = await serviceCall<{ ok?: boolean }>('installUpdate')
+    return reply?.ok === true
+  } catch {
+    return false
+  }
 }

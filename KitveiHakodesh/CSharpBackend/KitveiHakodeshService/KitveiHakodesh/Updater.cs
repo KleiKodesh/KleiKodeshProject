@@ -16,8 +16,12 @@ namespace KitveiHakodeshService.KitveiHakodesh;
 /// logged-on user), the single AnyCPU installer asset, and the
 /// "longer version string wins" comparison.
 /// </summary>
-internal sealed class Updater(HttpClient http, ILogger<Updater> logger)
+public sealed class Updater(HttpClient http, ILogger<Updater> logger)
 {
+    /// <summary>One pass at a time: the weekly pass and a "check now" from the settings page
+    /// must not download the same installer side by side.</summary>
+    private readonly SemaphoreSlim passGate = new(1, 1);
+
     private const string RegistryKeyPath = @"SOFTWARE\KleiKodesh";
     private const string LatestReleaseApiUrl =
         "https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest";
@@ -67,6 +71,13 @@ internal sealed class Updater(HttpClient http, ILogger<Updater> logger)
     /// fails - the caller logs it and tries again next week.
     /// </summary>
     public async Task<string?> FindOrDownloadNewerInstallerAsync(CancellationToken ct)
+    {
+        await passGate.WaitAsync(ct);
+        try { return await FindOrDownloadNewerInstallerUnguardedAsync(ct); }
+        finally { passGate.Release(); }
+    }
+
+    private async Task<string?> FindOrDownloadNewerInstallerUnguardedAsync(CancellationToken ct)
     {
         string? installed = InstalledVersion();
         if (string.IsNullOrEmpty(installed)) return null;
