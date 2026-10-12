@@ -30,7 +30,9 @@ namespace KitveiHakodeshLib.Service
             }
             catch (KitveiHakodeshServiceUnavailableException)
             {
-                await _launcher.EnsureRunningAsync(cancellationToken).ConfigureAwait(false);
+                // Never with an admin prompt: a data request only STARTS the service. Installing or
+                // repairing it asks the user first - the page's banner, then host action retryService.
+                await _launcher.EnsureRunningAsync(cancellationToken, allowElevation: false).ConfigureAwait(false);
                 return await _inner.CallAsync(requestEnvelope, cancellationToken).ConfigureAwait(false);
             }
         }
@@ -43,7 +45,9 @@ namespace KitveiHakodeshLib.Service
             }
             catch (KitveiHakodeshServiceUnavailableException)
             {
-                await _launcher.EnsureRunningAsync(cancellationToken).ConfigureAwait(false);
+                // Never with an admin prompt: a data request only STARTS the service. Installing or
+                // repairing it asks the user first - the page's banner, then host action retryService.
+                await _launcher.EnsureRunningAsync(cancellationToken, allowElevation: false).ConfigureAwait(false);
                 return await _inner.OpenStreamAsync(requestEnvelope, cancellationToken).ConfigureAwait(false);
             }
         }

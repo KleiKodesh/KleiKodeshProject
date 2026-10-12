@@ -7,15 +7,14 @@ namespace KitveiHakodeshService.KitveiHakodesh;
 /// Self-update, owned by the service (the hosts no longer check or download anything).
 ///
 /// Once a week: ask GitHub for the latest release; when it is newer than the installed
-/// version, download its installer (or reuse it when that exact file is already here) and
-/// launch it at once, as the logged-on user on their desktop. The installer itself waits
-/// for Word and the standalone app to close and asks the user to close them if needed, so
-/// launching while they run is safe.
+/// version, download its installer (or reuse it when that exact file is already here). It is
+/// NOT launched here: the app asks the service whether an update is ready (getUpdateStatus),
+/// asks the user, and on "install now" the service starts the installer as the logged-on user
+/// on their desktop (installUpdate). The installer then asks to close Word and the app.
 ///
 /// Only the INSTALLED Windows service does this. A console instance (dev, a portable copy,
 /// one spawned per host) never updates: the installer installs into the user's profile and
-/// registers the Word add-in, which a copy someone merely unzipped must never trigger, and
-/// several console instances would each launch it.
+/// registers the Word add-in, which a copy someone merely unzipped must never trigger.
 ///
 /// The service is demand-start and may not run for days, so "weekly" is a stamp on disk,
 /// not a timer: every start (and every few hours while running) compares it with now.
@@ -56,16 +55,13 @@ internal sealed class UpdaterService(Updater updater, ILogger<UpdaterService> lo
 
         try
         {
+            // Download only. Installing is the user's decision: the app asks the service whether
+            // an update is ready (getUpdateStatus), asks the user, and only then installUpdate
+            // launches the installer.
             string? installer = await updater.FindOrDownloadNewerInstallerAsync(ct);
             if (installer is not null)
-            {
-                logger.LogInformation("Launching installer {Installer}", installer);
-                // No arguments, ever: the downloaded installer is a release of its own, and a flag
-                // it does not know (or reads differently) has wedged updates before.
-                UserSessionProcess.Launch(installer);
-            }
-            // Stamped only once the pass fully succeeded: a launch that failed (the user logged
-            // off, no interactive session) retries at the next wake, not in a week.
+                logger.LogInformation("Update ready to install: {Installer}", installer);
+            // Stamped only once the pass fully succeeded; a failed one retries at the next wake.
             WriteStamp();
         }
         catch (OperationCanceledException) { }

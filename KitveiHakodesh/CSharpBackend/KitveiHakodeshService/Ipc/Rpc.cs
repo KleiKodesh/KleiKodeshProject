@@ -363,6 +363,14 @@ public sealed class StringResult
     public string Value { get; set; } = "";
 }
 
+/// <summary>Result of <c>getUpdateStatus</c>: a newer release is downloaded and ready to install.</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class UpdateStatusResult
+{
+    public bool Ready { get; set; }
+    public string Version { get; set; } = "";
+}
+
 /// <summary>Args for <c>registerOwner</c> / <c>releaseOwner</c>: a host process using this console
 /// instance (see Http/OwnerWatcher).</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

@@ -26,6 +26,30 @@ internal sealed class Updater(HttpClient http, ILogger<Updater> logger)
     /// leaves alone on update.</summary>
     public static string DownloadFolder => Path.Combine(AppContext.BaseDirectory, "updates");
 
+    /// <summary>
+    /// The downloaded installer of the newest release that is newer than the installed version,
+    /// or null. Read from disk every time (downloads land complete - a partial one stays
+    /// ".part"), so it survives service restarts and needs no state. Null while automatic
+    /// updates are turned off, so a user who turned them off is not asked.
+    /// </summary>
+    public static (string Path, string Version)? ReadyInstaller()
+    {
+        if (AppSettingsRegistry.GetTurnOffUpdates()) return null;
+        string? installed = InstalledVersion();
+        if (string.IsNullOrEmpty(installed) || !Directory.Exists(DownloadFolder)) return null;
+
+        (string Path, string Version)? best = null;
+        foreach (string file in Directory.EnumerateFiles(DownloadFolder, "KleiKodeshSetup-*.exe"))
+        {
+            string tag = Path.GetFileNameWithoutExtension(file).Substring("KleiKodeshSetup-".Length);
+            int variantDash = tag.IndexOf('-');
+            if (variantDash > 0) tag = tag.Substring(0, variantDash);
+            if (CompareVersions(tag, installed) <= 0) continue;
+            if (best is null || CompareVersions(tag, best.Value.Version) > 0) best = (file, tag);
+        }
+        return best;
+    }
+
     /// <summary>The installer's own stamp; null when this is not an installed copy.</summary>
     public static string? InstalledVersion()
     {

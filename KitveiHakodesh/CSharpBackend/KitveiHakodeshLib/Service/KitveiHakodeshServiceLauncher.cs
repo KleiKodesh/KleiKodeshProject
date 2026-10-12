@@ -23,9 +23,11 @@ namespace KitveiHakodeshLib.Service
     ///   4. Neither (a dev checkout, a portable copy): spawn the exe as a console process tied to
     ///      this one (KHS_OWNER_PID), exactly as the dev server does. No prompt ever.
     ///
-    /// UAC is asked at most ONCE per process, and never twice at the same time: every caller
-    /// goes through one gate, and after a declined or failed attempt the calls fail fast with
-    /// the reason until <see cref="AllowAnotherRepairAttempt"/> (the page's "try again" button).
+    /// The UAC prompt is never raised unasked: data requests and the startup warm-up call with
+    /// allowElevation false and only START the service; when it needs installing or repairing
+    /// they fail with the reason, the page's banner asks the user, and its button (host action
+    /// retryService -> <see cref="AllowAnotherRepairAttempt"/>) runs the elevated step. Never
+    /// two prompts at once: one gate in this process, a machine-wide mutex across processes.
     /// The failure carries a <see cref="KitveiHakodeshServiceUnavailableReason"/> so the page can
     /// say what is wrong.
     /// </summary>
@@ -152,9 +154,10 @@ namespace KitveiHakodeshLib.Service
                         "The KitveiHakodesh service is not installed and " + ExecutableName + " was not found.");
                 await SpawnAsync(executable, cancellationToken).ConfigureAwait(false);
             }
-            // Only a real request records it: the no-prompt warm-up failing must not keep the
-            // first real request from offering the install / repair.
-            catch (KitveiHakodeshServiceUnavailableException ex) when (allowElevation && ex.Reason == KitveiHakodeshServiceUnavailableReason.StartFailed)
+            // Every failed start is remembered, so queued data requests fail fast instead of each
+            // waiting out the start timeout. The banner's repair button clears it
+            // (AllowAnotherRepairAttempt), so it never blocks the repair.
+            catch (KitveiHakodeshServiceUnavailableException ex) when (ex.Reason == KitveiHakodeshServiceUnavailableReason.StartFailed)
             {
                 _lastStartFailureUtc = DateTime.UtcNow;
                 throw;

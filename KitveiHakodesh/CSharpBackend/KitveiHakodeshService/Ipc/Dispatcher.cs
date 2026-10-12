@@ -268,10 +268,26 @@ public sealed class Dispatcher(
                         : new PasteIntoWordResult { Error = error }));
                 }
 
-                // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
-                // cancels the build cleanly (aborts any merge, releases the index lock)
-                // before the process exits. The dev killer calls this before taskkill so
-                // a restart never hard-kills a build in progress (index-corruption path).
+                // Self-update, the user's decision: the app asks whether a downloaded update is ready,
+                // asks the user, and on "install now" the service starts the installer as the user.
+                case "getUpdateStatus":
+                {
+                    var ready = KitveiHakodeshService.KitveiHakodesh.Updater.ReadyInstaller();
+                    return RpcResponse.Ok(MsgPack.Ser(ready is null
+                        ? new UpdateStatusResult()
+                        : new UpdateStatusResult { Ready = true, Version = ready.Value.Version }));
+                }
+                case "installUpdate":
+                {
+                    var ready = KitveiHakodeshService.KitveiHakodesh.Updater.ReadyInstaller();
+                    if (ready is null)
+                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Ok = false, Error = "no update is ready" }));
+                    // No arguments, ever: the installer is a release of its own (a flag it does not
+                    // know has wedged updates before). It asks to close Word and the app itself.
+                    Hosting.UserSessionProcess.Launch(ready.Value.Path);
+                    return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Ok = true }));
+                }
+
                 // A host using this console instance says hello / goodbye (Http/OwnerWatcher). The
                 // installed Windows service ignores both.
                 case "registerOwner":
@@ -281,6 +297,10 @@ public sealed class Dispatcher(
                     owners.Release(MsgPack.De<OwnerArgs>(req.Args).Pid);
                     return RpcResponse.Ok(MsgPack.Ser(new PongResult()));
 
+                // Graceful shutdown: triggers host stop → FtsIndexingStarter.StopAsync
+                // cancels the build cleanly (aborts any merge, releases the index lock)
+                // before the process exits. The dev killer calls this before taskkill so
+                // a restart never hard-kills a build in progress (index-corruption path).
                 case "shutdown":
                     // Stop AFTER the reply has gone out: stopping cancels the pipe server's token,
                     // and the installer that asked reads the acknowledgement.

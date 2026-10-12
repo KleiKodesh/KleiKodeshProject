@@ -5,12 +5,13 @@ import {
   isRetryingService,
   retryService,
 } from '@/webview-host/serviceAvailability'
-import { SERVICE_UNAVAILABLE_TEXTS, SERVICE_RETRY_LABEL, SERVICE_RETRYING_LABEL } from './serviceUnavailableTexts'
+import { SERVICE_UNAVAILABLE_TEXTS, SERVICE_ACTION_LABELS, SERVICE_RETRYING_LABEL } from './serviceUnavailableTexts'
 
 // The one place the app says the KitveiHakodesh service cannot be reached, and why. Every data
 // op goes through the service, so instead of each feature failing on its own, serviceClient
 // records the failure (serviceAvailability.ts) and this banner explains it with a
-// "try again" that installs / repairs / restarts the service. Mount ONCE at the app root.
+// button that asks before it acts: only a click on it may raise the Windows admin prompt
+// (install / repair when needed) - no data request ever does. Mount ONCE at the app root.
 const texts = computed(() =>
   serviceUnavailableReason.value ? SERVICE_UNAVAILABLE_TEXTS[serviceUnavailableReason.value] : null,
 )
@@ -34,7 +35,7 @@ const texts = computed(() =>
           :disabled="isRetryingService"
           @click="retryService"
         >
-          {{ isRetryingService ? SERVICE_RETRYING_LABEL : SERVICE_RETRY_LABEL }}
+          {{ isRetryingService ? SERVICE_RETRYING_LABEL : SERVICE_ACTION_LABELS[serviceUnavailableReason!] }}
         </button>
       </div>
     </Transition>
@@ -43,15 +44,21 @@ const texts = computed(() =>
 
 <style scoped>
 .service-banner {
+  /* Pinned 16px from both edges and centred by auto margins - NOT left:50% + translate,
+     which caps a shrink-to-fit box at HALF the viewport and, in a narrow Word task pane,
+     broke the text after every word. */
   position: fixed;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: 640px;
   z-index: 10002;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  max-width: min(640px, calc(100vw - 32px));
+  gap: 8px 12px;
   padding: 12px 16px;
   direction: rtl;
   font-family: var(--header-font);
@@ -71,7 +78,8 @@ const texts = computed(() =>
 }
 
 .service-banner-text {
-  flex: 1;
+  /* At least ~16 em of text before the button wraps onto its own line. */
+  flex: 1 1 16em;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -80,6 +88,7 @@ const texts = computed(() =>
 
 .service-banner-retry {
   flex-shrink: 0;
+  margin-inline-start: auto;
   padding: 6px 14px;
   font: inherit;
   color: var(--text-on-accent, #fff);
@@ -100,6 +109,6 @@ const texts = computed(() =>
 .service-banner-enter-from,
 .service-banner-leave-to {
   opacity: 0;
-  transform: translate(-50%, -12px);
+  transform: translateY(-12px);
 }
 </style>
