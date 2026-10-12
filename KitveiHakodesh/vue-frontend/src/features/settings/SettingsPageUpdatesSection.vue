@@ -8,7 +8,6 @@ import {
   UPDATE_INSTALL_LABEL,
   UPDATE_INSTALL_FAILED,
 } from '@/components/updateAvailableTexts'
-import { getTurnOffUpdates, setTurnOffUpdates } from '@/webview-host/bridge'
 
 // The KitveiHakodesh service checks for updates once a week and downloads them in the
 // background; it never installs on its own. This section shows the installed version and
@@ -24,34 +23,21 @@ const {
   hasCheckFailed,
   isInstalling,
   hasInstallFailed,
+  isAutomaticUpdateTurnedOff,
   loadUpdateStatus,
   checkForUpdateNow,
   installUpdate,
+  loadAutomaticUpdateTurnedOff,
+  applyAutomaticUpdateTurnedOff,
 } = useSelfUpdate()
 
 const isUpdateStatusLoaded = ref(false)
 
-// ── Automatic updates ─────────────────────────────────────────────────────────
-// Backed by the shared VSTO registry key (KleiKodesh\UpdateChecker\TurnOffUpdates),
-// read/written directly via the host bridge — not the settings store (which persists
-// to localStorage). true = the automatic update check is turned OFF.
-
-const turnOffUpdates = ref(false)
-
 onMounted(async () => {
-  const value = await getTurnOffUpdates()
-  if (value !== null) turnOffUpdates.value = value
+  await loadAutomaticUpdateTurnedOff()
   await loadUpdateStatus()
   isUpdateStatusLoaded.value = true
 })
-
-// The service reports no ready update while updates are turned off, so the status is
-// read again after every change.
-async function applyTurnOffUpdates(value: boolean) {
-  turnOffUpdates.value = value
-  await setTurnOffUpdates(value)
-  await loadUpdateStatus()
-}
 
 // ── Update status line ────────────────────────────────────────────────────────
 
@@ -59,7 +45,7 @@ const updateStatusText = computed(() => {
   if (!isUpdateStatusLoaded.value) return 'טוען...'
   if (isUpdateStatusUnavailable.value) return 'לא ניתן לקבל את מצב העדכונים כרגע — שירות הנתונים אינו זמין.'
   if (readyVersion.value) return updatePromptBody(readyVersion.value)
-  if (turnOffUpdates.value) return 'בדיקת העדכונים האוטומטית כבויה.'
+  if (isAutomaticUpdateTurnedOff.value) return 'בדיקת העדכונים האוטומטית כבויה.'
   if (isCheckingForUpdate.value) return 'בודק אם יש גרסה חדשה. אם יש, היא תורד עכשיו — זה עשוי לקחת כמה דקות.'
   if (hasCheckFailed.value) return 'לא ניתן היה לבדוק אם יש עדכון. נא לנסות שוב מאוחר יותר.'
   if (hasCheckedForUpdate.value) return 'הגרסה המותקנת היא העדכנית ביותר.'
@@ -68,7 +54,7 @@ const updateStatusText = computed(() => {
 
 // Hidden while updates are turned off, and once an update is ready (install is the next step).
 const isCheckNowVisible = computed(
-  () => isUpdateStatusLoaded.value && !turnOffUpdates.value && !readyVersion.value,
+  () => isUpdateStatusLoaded.value && !isAutomaticUpdateTurnedOff.value && !readyVersion.value,
 )
 </script>
 
@@ -111,12 +97,12 @@ const isCheckNowVisible = computed(
       hint="בבחירת 'כן' התוכנה לא תבדוק אם יש גרסה חדשה ולא תוריד אותה. ההגדרה משותפת עם התוסף לוורד."
     >
       <ToggleGroup
-        :model-value="turnOffUpdates"
+        :model-value="isAutomaticUpdateTurnedOff"
         :options="[
           { label: 'כן', value: true },
           { label: 'לא', value: false },
         ]"
-        @update:model-value="applyTurnOffUpdates"
+        @update:model-value="applyAutomaticUpdateTurnedOff"
       />
     </SettingRow>
   </div>

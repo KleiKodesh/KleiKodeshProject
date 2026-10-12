@@ -3,18 +3,23 @@ import {
   getUpdateStatus,
   checkForUpdateNow as runUpdateCheckNow,
   installReadyUpdate,
+  getTurnOffUpdates,
+  setTurnOffUpdates,
   type UpdateStatus,
 } from '@/webview-host/bridge'
 
 /**
  * The app's self-update, shared by UpdateAvailablePrompt (app root) and the settings page's
- * updates section: read the status, run a check now, and install a downloaded update. Each
- * caller gets its own state.
+ * updates section: read the status, run a check now, install a downloaded update, and read or
+ * change the turn-off-automatic-updates flag. Each caller gets its own state.
  *
  * readyVersion — the version of the downloaded installer waiting to run, or null.
  * installedVersion — the installed copy's version ('' when unknown / not an installed copy).
  * isUpdateStatusUnavailable — the last status read failed (service unreachable).
  * hasCheckedForUpdate — a check-now has finished in this view (with or without a result).
+ * isAutomaticUpdateTurnedOff — the TurnOffUpdates registry value shared with the Word add-in,
+ *   read and written through the service, never the settings store. Only callers that show
+ *   the toggle load it (loadAutomaticUpdateTurnedOff).
  */
 export function useSelfUpdate() {
   const readyVersion = ref<string | null>(null)
@@ -25,6 +30,7 @@ export function useSelfUpdate() {
   const hasCheckFailed = ref(false)
   const isInstalling = ref(false)
   const hasInstallFailed = ref(false)
+  const isAutomaticUpdateTurnedOff = ref(false)
 
   // Keeps the last known answer when the service cannot reply; a ready version does not
   // vanish because one read failed.
@@ -61,6 +67,20 @@ export function useSelfUpdate() {
     isInstalling.value = false
   }
 
+  // Left unchanged when the service cannot answer.
+  async function loadAutomaticUpdateTurnedOff() {
+    const value = await getTurnOffUpdates()
+    if (value !== null) isAutomaticUpdateTurnedOff.value = value
+  }
+
+  // The service reports no ready update while updates are turned off, so the status is
+  // read again after every change.
+  async function applyAutomaticUpdateTurnedOff(value: boolean) {
+    isAutomaticUpdateTurnedOff.value = value
+    await setTurnOffUpdates(value)
+    await loadUpdateStatus()
+  }
+
   return {
     readyVersion,
     installedVersion,
@@ -70,8 +90,11 @@ export function useSelfUpdate() {
     hasCheckFailed,
     isInstalling,
     hasInstallFailed,
+    isAutomaticUpdateTurnedOff,
     loadUpdateStatus,
     checkForUpdateNow,
     installUpdate,
+    loadAutomaticUpdateTurnedOff,
+    applyAutomaticUpdateTurnedOff,
   }
 }
