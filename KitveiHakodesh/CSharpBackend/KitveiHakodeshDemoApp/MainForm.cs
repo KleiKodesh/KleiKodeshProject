@@ -32,10 +32,11 @@ namespace KitveiHakodeshDemoApp
             RightToLeftLayout = true;
             RightToLeft = RightToLeft.Yes;
 
-            // Slightly taller than the Vue app-shell title bar (compact density: 32 CSS px,
-            // which WebView2 scales by DPI and app zoom). Logical px — scaled for DPI.
-            StripHeight = 34;
-            TabHeight = 26;
+            // Firefox Nova compact density: 28px tabs with 4px above and below. Normal
+            // density (the library default, 44/32) would tower over the Vue app-shell title
+            // bar (compact: 32 CSS px). Logical px — scaled for DPI.
+            StripHeight = 36;
+            TabHeight = 28;
             // Tab-list dropdown in the slot just before the tab strip (visual right in RTL) —
             // lists all open tabs; picking one activates it (mirrored back into Vue).
             ShowTabListButton = true;
