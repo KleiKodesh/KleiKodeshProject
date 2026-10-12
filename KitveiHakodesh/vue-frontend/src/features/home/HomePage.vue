@@ -263,7 +263,7 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
 
    A container query, not a media query, so a split pane is judged on ITS OWN
    width — half a wide monitor is a narrow pane and gets the top layout. */
-@container (min-width: 720px) {
+@container (min-width: 480px) {
   .home-inner {
     justify-content: safe center;
   }
