@@ -110,7 +110,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// the prompt or registration failed; also false when the package does not ship the
         /// service at all.
         /// </summary>
-        public static async Task<bool> EnsureServiceInstalledAsync()
+        public static async Task<bool> EnsureServiceInstalledAsync(IProgress<string> status = null)
         {
             string serviceExe = ServiceExePath;
             if (!File.Exists(serviceExe)) return false;
@@ -121,6 +121,10 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             bool force = ForceRegistration || IsServiceDisabled();
             if (!force && IsServiceInstalledAndCurrent(serviceExe) && !IsLegacyServiceRegistered()) return true;
 
+            // Windows can take several seconds to show the prompt (it checks the freshly written
+            // exe first); without a word here the user takes the installer for finished or stuck.
+            status?.Report(ApprovalPromptStatus);
+
             var psi = new ProcessStartInfo
             {
                 FileName        = serviceExe,
@@ -128,14 +132,24 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 Verb            = "runas",
                 UseShellExecute = true,
                 WindowStyle     = ProcessWindowStyle.Hidden,
+                // .NET Framework passes this window to ShellExecuteEx only when ErrorDialog is
+                // set. With an owner the prompt comes up in front of the installer; without one
+                // Windows opens it in the background, as a flashing taskbar button.
+                ErrorDialog              = true,
+                ErrorDialogParentHandle  = InstallerWindowHandle(),
             };
 
             try
             {
+                // Off the UI thread: a "runas" start blocks until the prompt is answered, and on
+                // the UI thread that froze the window ("not responding") the whole time.
                 // Generous: re-registering waits for a running instance to stop and retires
                 // DocumentLocatorSvc, each bounded at 30 s inside the service.
-                using (var proc = Process.Start(psi))
-                    proc?.WaitForExit(120_000);
+                await Task.Run(() =>
+                {
+                    using (var proc = Process.Start(psi))
+                        proc?.WaitForExit(120_000);
+                }).ConfigureAwait(false);
             }
             catch (System.ComponentModel.Win32Exception ex)
                 when (ex.NativeErrorCode == 1223) // ERROR_CANCELLED: the user clicked No
@@ -154,6 +168,25 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 await Task.Delay(300).ConfigureAwait(false);
             }
             return IsServiceInstalled();
+        }
+
+        /// <summary>Status line shown while Windows prepares the admin prompt.</summary>
+        private const string ApprovalPromptStatus = "Windows תבקש אישור בעוד רגע - נא ללחוץ 'כן'...";
+
+        /// <summary>The installer's main window, as the owner of the admin prompt; zero when
+        /// there is none (the prompt then still appears, only possibly in the background).</summary>
+        private static IntPtr InstallerWindowHandle()
+        {
+            try
+            {
+                var app = System.Windows.Application.Current;
+                if (app == null) return IntPtr.Zero;
+                return app.Dispatcher.Invoke(() =>
+                    app.MainWindow == null
+                        ? IntPtr.Zero
+                        : new System.Windows.Interop.WindowInteropHelper(app.MainWindow).Handle);
+            }
+            catch { return IntPtr.Zero; }
         }
 
         /// <summary>The registered service has not reached Stopped yet (false when it is not

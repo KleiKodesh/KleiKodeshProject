@@ -67,7 +67,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // Normally a no-op on updates (already registered at the same path);
             // when registration IS needed it surfaces one UAC prompt.
             status?.Report("מתקין שירות אינדקס...");
-            bool serviceRegistered = await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync();
+            bool serviceRegistered = await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync(status);
 
             // Trigger a background reindex of the file-system search service
             // so it reflects any new files from this install. Fire-and-forget —
