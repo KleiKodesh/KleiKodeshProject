@@ -84,11 +84,14 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<CommentaryLinkRow> GetCommentaryLinksForSourceLineRange(List<int> lineIds) =>
         Run(() => _queries.GetCommentaryLinksForSourceLineRange(lineIds), new List<CommentaryLinkRow>(), "getCommentaryLinksForSourceLineRange");
 
+    // A failed or DB-less call answers Supported = true with no rows. Supported = false means
+    // "this schema has no link_anchor", which the page caches until it reloads — a transient
+    // failure must not switch word links off for the rest of the session.
     public WordLinkAnchorsResult GetWordLinkAnchorsForLines(List<int> lineIds) =>
-        Run(() => _queries.GetWordLinkAnchorsForLines(lineIds), new WordLinkAnchorsResult(), "getWordLinkAnchorsForLines");
+        Run(() => _queries.GetWordLinkAnchorsForLines(lineIds), new WordLinkAnchorsResult { Supported = true }, "getWordLinkAnchorsForLines");
 
     public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId) =>
-        Run(() => _queries.GetWordLinkAnchorTargetsForBook(bookId), new WordLinkTargetsResult(), "getWordLinkAnchorTargetsForBook");
+        Run(() => _queries.GetWordLinkAnchorTargetsForBook(bookId), new WordLinkTargetsResult { Supported = true }, "getWordLinkAnchorTargetsForBook");
 
     public List<LineContentRow> GetLineContents(List<int> lineIds) =>
         Run(() => _queries.GetLineContents(lineIds), new List<LineContentRow>(), "getLineContents");

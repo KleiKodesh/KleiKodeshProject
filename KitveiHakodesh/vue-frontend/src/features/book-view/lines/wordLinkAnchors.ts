@@ -43,6 +43,23 @@ export function parseWordLinkData(raw: string | null): WordLinkTarget | null {
   return { bookId, lineIndex, lineId }
 }
 
+/**
+ * Citation links some databases (Zayit) carry INSIDE the line text itself:
+ * `<a class="ref" href="seforim://line/<lineId>">`. They need no splicing — only the
+ * same hover/click handling as `[data-wl]`. The href names the target line alone, so
+ * its book and index are looked up on use.
+ */
+export const INLINE_REF_SELECTOR = 'a.ref[href^="seforim://line/"]'
+
+/** Every element the hover/click handlers treat as a link. */
+export const WORD_LINK_SELECTOR = `[data-wl], ${INLINE_REF_SELECTOR}`
+
+/** The target line id of an inline `seforim://line/<id>` ref, or null. */
+export function parseInlineRefLineId(href: string | null): number | null {
+  const match = href?.match(/^seforim:\/\/line\/(\d+)$/)
+  return match ? Number(match[1]) : null
+}
+
 function escapeAttr(value: string): string {
   return value
     .replace(/&/g, '&amp;')

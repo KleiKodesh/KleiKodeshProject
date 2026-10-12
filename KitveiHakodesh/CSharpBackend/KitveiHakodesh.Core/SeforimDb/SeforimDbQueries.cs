@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
+using System.Linq;
 using Microsoft.Data.Sqlite;
 using KitveiHakodesh.Core.Settings;
 
@@ -330,25 +332,24 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
-        // Whether the link_anchor table exists (SeforimLibrary schema v2+; neither current
-        // Zayit nor Otzaria v1 DB has it). Detected once — the seforim DB is static for the
-        // life of the process (see _linkHasTargetLineIndex).
+        // Whether the link_anchor table exists (Otzaria has it; Zayit does not, and its word
+        // links come from the inline commentator markers instead). Detected once — the seforim
+        // DB is static for the life of the process (see _linkHasTargetLineIndex).
         private bool? _hasLinkAnchorTable;
 
-        /// <summary>Word-level link anchors for a batch of source lines. Returns Supported=false
-        /// (and no rows) on DBs whose schema predates link_anchor, so callers can stop asking.</summary>
+        /// <summary>Word-level link anchors for a batch of source lines — from link_anchor, or on
+        /// a database without it, from the inline commentator markers. Always Supported.</summary>
         public WordLinkAnchorsResult GetWordLinkAnchorsForLines(List<int> lineIds)
         {
-            var result = new WordLinkAnchorsResult();
-            if (lineIds is null || lineIds.Count == 0)
-            {
-                result.Supported = _hasLinkAnchorTable ?? true; // unknown yet — don't tell callers to stop
-                return result;
-            }
+            var result = new WordLinkAnchorsResult { Supported = true };
+            if (lineIds is null || lineIds.Count == 0) return result;
             using var conn = Open();
             _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
-            result.Supported = _hasLinkAnchorTable.Value;
-            if (!result.Supported) return result;
+            if (!_hasLinkAnchorTable.Value)
+            {
+                result.Rows = GetInlineMarkerAnchorsForLines(conn, lineIds);
+                return result;
+            }
             _linkHasTargetLineIndex ??= ColumnExists(conn, "link", "targetLineIndex");
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetWordLinkAnchorsForLines(lineIds.Count, _linkHasTargetLineIndex.Value);
@@ -372,14 +373,18 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>Distinct word-link targets (commentary book id + anchor label) for one source
-        /// book. Returns Supported=false (and no rows) on DBs whose schema predates link_anchor.</summary>
+        /// book — from link_anchor, or from the inline commentator markers. Always Supported.</summary>
         public WordLinkTargetsResult GetWordLinkAnchorTargetsForBook(int bookId)
         {
             var result = new WordLinkTargetsResult();
             using var conn = Open();
             _hasLinkAnchorTable ??= TableExists(conn, "link_anchor");
-            result.Supported = _hasLinkAnchorTable.Value;
-            if (!result.Supported) return result;
+            result.Supported = true;
+            if (!_hasLinkAnchorTable.Value)
+            {
+                result.Rows = InlineMarkerResolutionFor(conn, bookId).Targets;
+                return result;
+            }
             using var cmd = conn.CreateCommand();
             cmd.CommandText = SeforimDbSqlStrings.GetWordLinkAnchorTargetsForBook;
             cmd.Parameters.AddWithValue("@bookId", bookId);
@@ -393,6 +398,99 @@ namespace KitveiHakodesh.Core.SeforimDb
                 });
             }
             return result;
+        }
+
+        // Per source book: what its inline commentator-marker names resolve to. Static for the
+        // life of the process, like the rest of this database.
+        private readonly ConcurrentDictionary<int, SeforimDbInlineCommentatorMarkers.BookResolution> _inlineMarkerBooks = new();
+
+        /// <summary>Word-link anchors built from the inline commentator markers in the line text —
+        /// the stand-in for link_anchor on databases that lack it. See
+        /// <see cref="SeforimDbInlineCommentatorMarkers"/>.</summary>
+        private List<WordLinkAnchorRow> GetInlineMarkerAnchorsForLines(SqliteConnection conn, List<int> lineIds)
+        {
+            var rows = new List<WordLinkAnchorRow>();
+
+            var markerLines = new List<(int LineId, int BookId, List<SeforimDbInlineCommentatorMarkers.Marker> Markers)>();
+            using (var codec = CodecFor(conn))
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetLineBookIdsAndContents(SchemaOf(conn), lineIds.Count);
+                BindList(cmd, "p", lineIds);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    var markers = SeforimDbInlineCommentatorMarkers.Parse(codec.DecodeColumnOrEmpty(r, 2));
+                    if (markers.Count > 0) markerLines.Add((r.GetInt32(0), r.GetInt32(1), markers));
+                }
+            }
+            if (markerLines.Count == 0) return rows;
+
+            var withMarkers = markerLines.Select(l => l.LineId).ToList();
+            var linkedLines = new Dictionary<int, List<SeforimDbInlineCommentatorMarkers.LinkedLine>>();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetLinkedLinesForLines(withMarkers.Count);
+                BindList(cmd, "p", withMarkers);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    int lineId = r.GetInt32(0);
+                    if (!linkedLines.TryGetValue(lineId, out var list)) linkedLines[lineId] = list = new();
+                    list.Add(new SeforimDbInlineCommentatorMarkers.LinkedLine(r.GetInt32(1), r.GetInt32(2), r.GetInt32(3)));
+                }
+            }
+
+            foreach (var line in markerLines)
+            {
+                if (!linkedLines.TryGetValue(line.LineId, out var linked)) continue;
+                var resolution = InlineMarkerResolutionFor(conn, line.BookId);
+                rows.AddRange(SeforimDbInlineCommentatorMarkers.AnchorsForLine(
+                    line.LineId, line.BookId, line.Markers, linked, resolution));
+            }
+            rows.Sort((a, b) => a.LineId != b.LineId ? a.LineId.CompareTo(b.LineId) : a.CharStart.CompareTo(b.CharStart));
+            return rows;
+        }
+
+        /// <summary>Resolves one source book's marker names, once: reads every line of the book
+        /// and the books each line is linked with.</summary>
+        private SeforimDbInlineCommentatorMarkers.BookResolution InlineMarkerResolutionFor(SqliteConnection conn, int bookId)
+        {
+            if (_inlineMarkerBooks.TryGetValue(bookId, out var cached)) return cached;
+
+            var markersByLine = new Dictionary<int, List<SeforimDbInlineCommentatorMarkers.Marker>>();
+            using (var codec = CodecFor(conn))
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetBookLineContents(SchemaOf(conn));
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    var markers = SeforimDbInlineCommentatorMarkers.Parse(codec.DecodeColumnOrEmpty(r, 1));
+                    if (markers.Count > 0) markersByLine[r.GetInt32(0)] = markers;
+                }
+            }
+
+            var linkedBooks = new Dictionary<int, HashSet<int>>();
+            if (markersByLine.Count > 0)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = SeforimDbSqlStrings.GetLinkedBooksForBookLines;
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    int lineId = r.GetInt32(0);
+                    if (!markersByLine.ContainsKey(lineId)) continue;
+                    if (!linkedBooks.TryGetValue(lineId, out var set)) linkedBooks[lineId] = set = new();
+                    set.Add(r.GetInt32(1));
+                }
+            }
+
+            var resolution = SeforimDbInlineCommentatorMarkers.ResolveBook(
+                markersByLine.Select(kv => (kv.Value, linkedBooks.TryGetValue(kv.Key, out var set) ? set : new HashSet<int>())));
+            return _inlineMarkerBooks.GetOrAdd(bookId, resolution);
         }
 
         public List<LineContentRow> GetLineContents(List<int> lineIds)

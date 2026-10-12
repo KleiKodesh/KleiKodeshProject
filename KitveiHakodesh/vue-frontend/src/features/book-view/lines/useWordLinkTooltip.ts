@@ -1,6 +1,7 @@
 /**
  * Hover preview + click navigation for word-level link markup (`[data-wl]` spans
- * and markers spliced by wordLinkAnchors.ts).
+ * and markers spliced by wordLinkAnchors.ts, plus the inline `a.ref` citations some
+ * databases carry in the line text — see INLINE_REF_SELECTOR).
  *
  * Delegated listeners on the scroller (one set per view, not per line):
  *   hover  — 250ms intent delay, then the target's enclosing TOC section is fetched
@@ -28,9 +29,14 @@
  */
 import { onScopeDispose, ref, type Ref } from 'vue'
 import { useEventListener } from '@vueuse/core'
-import { getLineContents, getTocPathsForLines } from '@/webview-host/seforimApi'
+import { getLineContents, getLineIndexFromLineId, getTocPathsForLines } from '@/webview-host/seforimApi'
 import { hasActiveTextSelection } from '@/composables/useContextMenuLongPress'
-import { parseWordLinkData, type WordLinkTarget } from './wordLinkAnchors'
+import {
+  parseInlineRefLineId,
+  parseWordLinkData,
+  WORD_LINK_SELECTOR,
+  type WordLinkTarget,
+} from './wordLinkAnchors'
 import { loadWordLinkSection, loadSectionTocEntries } from './wordLinkSection'
 import type { TocEntry } from '@/webview-host/queries.types'
 
@@ -180,13 +186,34 @@ export function useWordLinkTooltip(
 
   function findLinkEl(event: Event): Element | null {
     const target = event.target as HTMLElement | null
-    const el = target?.closest?.('[data-wl]')
+    const el = target?.closest?.(WORD_LINK_SELECTOR)
     return el && scrollerEl.value?.contains(el) ? el : null
   }
 
+  /** What identifies one link across its fragments — a range anchor split over tags
+   *  repeats its data-wl; an inline ref is one element, so its href serves. */
+  function linkKey(el: Element): string | null {
+    return el.getAttribute('data-wl') ?? el.getAttribute('href')
+  }
+
+  /** The navigation target of a link element. An inline ref names only the line, so its
+   *  book and index cost one lookup. */
+  async function resolveTarget(el: Element): Promise<WordLinkTarget | null> {
+    if (el.hasAttribute('data-wl')) return parseWordLinkData(el.getAttribute('data-wl'))
+    const lineId = parseInlineRefLineId(el.getAttribute('href'))
+    if (lineId == null) return null
+    const row = (await getLineIndexFromLineId(lineId))[0]
+    return row ? { bookId: row.bookId, lineIndex: row.lineIndex, lineId } : null
+  }
+
   async function show(el: Element, token: number) {
-    const target = parseWordLinkData(el.getAttribute('data-wl'))
-    if (!target) return
+    let target: WordLinkTarget | null
+    try {
+      target = await resolveTarget(el)
+    } catch {
+      return
+    }
+    if (!target || token !== hoverToken) return
     // Nothing is cached or prefetched: the links are painted in the lines view
     // from their own markup, and the preview's content and TOC path are fetched
     // here, for this one hover, and live only as long as the tooltip does.
@@ -270,8 +297,8 @@ export function useWordLinkTooltip(
     // A range anchor crossing tag boundaries is emitted as several fragments
     // sharing one data-wl, so compare the value, not element identity — moving
     // between fragments of the same link never leaves it.
-    const relatedLink = related?.closest?.('[data-wl]')
-    if (relatedLink && relatedLink.getAttribute('data-wl') === hoverEl.getAttribute('data-wl')) {
+    const relatedLink = related?.closest?.(WORD_LINK_SELECTOR)
+    if (relatedLink && linkKey(relatedLink) === linkKey(hoverEl)) {
       hoverEl = relatedLink
       return
     }
@@ -310,12 +337,16 @@ export function useWordLinkTooltip(
     // A drag to select text ends with a click too — don't hijack it (same guard
     // as the line-click handler).
     if (hasActiveTextSelection()) return
-    const target = parseWordLinkData(el.getAttribute('data-wl'))
-    if (!target) return
+    // Claimed synchronously: an inline ref's target resolves after an await, by which
+    // time the browser would already have followed its seforim:// href.
     event.preventDefault()
     event.stopPropagation()
     closeWordLinkTooltip()
-    opts.onNavigate(target)
+    void resolveTarget(el)
+      .then((target) => {
+        if (target) opts.onNavigate(target)
+      })
+      .catch(() => {})
   }
 
   useEventListener(scrollerEl, 'mouseover', onMouseOver)

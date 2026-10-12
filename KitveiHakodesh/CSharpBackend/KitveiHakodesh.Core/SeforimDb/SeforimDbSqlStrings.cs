@@ -190,6 +190,41 @@ namespace KitveiHakodesh.Core.SeforimDb
               AND (la.charEnd IS NULL OR la.charEnd <= la.charStart)
             ORDER BY l.targetBookId";
 
+        // ── Inline commentator markers (DBs without link_anchor) ─────────────────────
+        // See SeforimDbInlineCommentatorMarkers for why these exist.
+
+        /// <summary>Book id and content of a batch of lines.</summary>
+        public static string GetLineBookIdsAndContents(SeforimDbSchema schema, int count) =>
+            $"SELECT l.id, l.bookId, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
+            $" FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}" +
+            $" WHERE l.id IN ({InPlaceholders("p", count)})";
+
+        /// <summary>Every line of one book, with its content.</summary>
+        public static string GetBookLineContents(SeforimDbSchema schema) =>
+            $"SELECT l.id, {SeforimDbLineContentSql.ContentColumn(schema, "l")}" +
+            $" FROM line l{SeforimDbLineContentSql.ContentJoin(schema, "l")}" +
+            " WHERE l.bookId = @bookId";
+
+        /// <summary>For every line of one book, the OTHER books it is linked with — in either
+        /// direction, since a commentary link may be stored from either end.</summary>
+        public const string GetLinkedBooksForBookLines = @"
+            SELECT sourceLineId, targetBookId FROM link
+            WHERE sourceBookId = @bookId AND targetBookId <> @bookId
+            UNION ALL
+            SELECT targetLineId, sourceBookId FROM link
+            WHERE targetBookId = @bookId AND sourceBookId <> @bookId";
+
+        /// <summary>The lines linked with each of a batch of lines, in either direction, with
+        /// the linked line's book and index.</summary>
+        public static string GetLinkedLinesForLines(int count) => $@"
+            SELECT l.sourceLineId, l.targetBookId, l.targetLineId, t.lineIndex
+            FROM link l JOIN line t ON t.id = l.targetLineId
+            WHERE l.sourceLineId IN ({InPlaceholders("p", count)})
+            UNION ALL
+            SELECT l.targetLineId, l.sourceBookId, l.sourceLineId, s.lineIndex
+            FROM link l JOIN line s ON s.id = l.sourceLineId
+            WHERE l.targetLineId IN ({InPlaceholders("p", count)})";
+
         /// <summary>All connection type ids and names.</summary>
         public const string GetAllConnectionTypes = "SELECT id, name FROM connection_type";
 
