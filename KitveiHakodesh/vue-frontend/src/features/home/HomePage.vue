@@ -315,7 +315,9 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   gap: 6px;
   width: 100%;
   height: 30px;
-  padding: 0 10px;
+  /* The end side matches the button's 3px top/bottom inset (28px inner height,
+     22px button), so the round button sits evenly inside the pill's round end. */
+  padding-inline: 12px 3px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 999px;
@@ -354,16 +356,21 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   padding: 0;
-  border-radius: 4px;
+  /* Round, to echo the pill's own round end. */
+  border-radius: 50%;
   color: var(--text-secondary);
-  opacity: 0.6;
+}
+
+.home-search-bar__search-button svg {
+  width: 16px;
+  height: 16px;
 }
 
 .home-search-bar__search-button:hover {
-  opacity: 1;
+  color: var(--text-primary);
   background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 </style>
