@@ -127,7 +127,8 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         if (!string.IsNullOrWhiteSpace(env)) return env;
         // Next to the service binary (same convention as the hosted app) so deleting
         // the service folder removes the index along with it.
-        return Path.Combine(AppContext.BaseDirectory, "FtsIndex");
+        // TEMPORARY (FTS5 trial): its own folder, so the FtsLib index in "FtsIndex" stays intact.
+        return Path.Combine(AppContext.BaseDirectory, "FtsIndexFts5");
     }
 
     private bool HasDb => !string.IsNullOrWhiteSpace(_dbPath) && File.Exists(_dbPath);
@@ -138,7 +139,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
 
     private bool SegmentsExist()
     {
-        try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, "seg_*.dat").Length > 0; }
+        try { return Directory.Exists(_indexPath) && Directory.GetFiles(_indexPath, FtsLib.Fts5.Fts5SeforimIndex.IndexFileName).Length > 0; } // TEMPORARY (FTS5 trial): was "seg_*.dat"
         catch { return false; }
     }
 

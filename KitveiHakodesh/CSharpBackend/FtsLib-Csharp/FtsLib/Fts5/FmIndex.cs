@@ -1,3 +1,4 @@
+#if NET6_0_OR_GREATER
 using System;
 using System.Buffers.Binary;
 using System.Collections.Generic;
@@ -5,7 +6,7 @@ using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Numerics;
 
-namespace FtsLibTest
+namespace FtsLib.Fts5
 {
     /// <summary>
     /// PROTOTYPE FM-index over a segment's term dictionary — a candidate replacement for the
@@ -171,8 +172,15 @@ namespace FtsLibTest
                 long start = b * RankBlockDataBits;
                 long end = Math.Min(bits.Count, start + RankBlockDataBits);
                 uint ones = 0;
-                for (long i = start; i < end; i++)
-                    if (bits.Get(i)) { int j = (int)(i - start); data[j >> 3] |= (byte)(1 << (j & 7)); ones++; }
+                // 64 bits at a time: the block's 480 data bits are 7 full words and a half.
+                for (int k = 0; start + k * 64L < end; k++)
+                {
+                    int width = (int)Math.Min(64, end - (start + k * 64L));
+                    ulong word = bits.GetBits(start + k * 64L, width);
+                    ones += (uint)BitOperations.PopCount(word);
+                    for (int byteIndex = 0; byteIndex < 8 && k * 8 + byteIndex < data.Length; byteIndex++)
+                        data[k * 8 + byteIndex] = (byte)(word >> (byteIndex * 8));
+                }
                 bw.Write(onesBefore); bw.Write(data);
                 onesBefore += ones;
             }
@@ -190,12 +198,28 @@ namespace FtsLibTest
                 Count++;
             }
 
+            /// <summary>Appends the low <paramref name="bits"/> bits of value (bits ≤ 32).</summary>
             public void AppendValue(uint value, int bits)
             {
-                for (int k = 0; k < bits; k++) Append(((value >> k) & 1) != 0);
+                if (((Count + bits) >> 6) + 1 >= _words.Length) Array.Resize(ref _words, _words.Length * 2);
+                ulong v = bits == 64 ? value : value & ((1UL << bits) - 1);
+                int offset = (int)(Count & 63);
+                _words[Count >> 6] |= v << offset;
+                if (offset + bits > 64) _words[(Count >> 6) + 1] |= v >> (64 - offset);
+                Count += bits;
             }
 
             public bool Get(long i) => (_words[i >> 6] >> (int)(i & 63) & 1) != 0;
+
+            /// <summary><paramref name="width"/> bits (1..64) starting at bit <paramref name="start"/>, LSB first.</summary>
+            public ulong GetBits(long start, int width)
+            {
+                int offset = (int)(start & 63);
+                long w = start >> 6;
+                ulong value = _words[w] >> offset;
+                if (offset != 0 && w + 1 < _words.Length) value |= _words[w + 1] << (64 - offset);
+                return width == 64 ? value : value & ((1UL << width) - 1);
+            }
 
             public byte[] ToBytes()
             {
@@ -553,3 +577,4 @@ namespace FtsLibTest
         }
     }
 }
+#endif

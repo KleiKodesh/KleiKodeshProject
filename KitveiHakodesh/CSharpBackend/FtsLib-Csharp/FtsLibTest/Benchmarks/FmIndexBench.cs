@@ -1,3 +1,4 @@
+using FtsLib.Fts5;
 using FtsLib.Search;
 using Microsoft.Data.Sqlite;
 using System;

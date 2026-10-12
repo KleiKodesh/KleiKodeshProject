@@ -1,3 +1,4 @@
+#if NET6_0_OR_GREATER
 using FtsLib;
 using FtsLib.Indexing;
 using FtsLib.Search;
@@ -8,7 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 
-namespace FtsLibTest.Fts5Engine
+namespace FtsLib.Fts5
 {
     /// <summary>
     /// PROTOTYPE search over an <see cref="Fts5Index"/>, with the same semantics as FtsLib's
@@ -22,37 +23,86 @@ namespace FtsLibTest.Fts5Engine
     ///     pulls; filterIds is applied to the stream;
     ///   * leading-star wildcards (*x, *x*) and fuzzy: candidates from the FM-index sidecar,
     ///     then FtsLib's own budget / cap rules; other wildcard shapes and grammar use the
-    ///     production expanders over terms.db.
+    ///     production expanders over terms.db;
+    ///   * while a build is still running there is no terms.db yet: expansion runs the same
+    ///     way over every live per-batch dictionary (Fts5TermDictionaries), counts summed —
+    ///     exactly as FtsLib's expanders sum counts across its segments.
     /// Not thread-safe: one engine per thread (it holds one connection).
     /// </summary>
     internal sealed class Fts5SearchEngine : IDisposable
     {
         readonly Func<IFtsCorpus> _openCorpus;
         readonly SqliteConnection _lines;
-        readonly SegmentHandle _terms;
+        /// <summary>A term dictionary: term_index (term, count; rowid = ordinal rank) + FM-index.</summary>
+        sealed class TermDictionary : IDisposable
+        {
+            public SegmentHandle Handle;
+            public FmIndex.Reader Fm;          // null when the dictionary is empty
+            public SqliteCommand TermsByRowId;
+            public void Dispose() { TermsByRowId?.Dispose(); Fm?.Dispose(); Handle?.Dispose(); }
+        }
+
+        readonly List<TermDictionary> _dictionaries = new List<TermDictionary>();
         readonly SegmentHandle[] _termSegments;
-        readonly FmIndex.Reader _fm;
-        readonly SqliteCommand _termsByRowId;
 
         public Fts5SearchEngine(string dir, Func<IFtsCorpus> openCorpus)
         {
             _openCorpus = openCorpus;
+            // ReadWrite (only ever read): the line table is in WAL mode, and a read-only
+            // connection cannot create the shared-memory file WAL readers need.
             _lines = new SqliteConnection(new SqliteConnectionStringBuilder
-            { DataSource = Fts5Index.LinesDb(dir), Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ConnectionString);
+            { DataSource = Fts5Index.LinesDb(dir), Mode = SqliteOpenMode.ReadWrite, Pooling = false }.ConnectionString);
             try
             {
                 _lines.Open();
-                _terms = new SegmentHandle(Fts5Index.TermsDat(dir), Fts5Index.TermsDb(dir));
-                _termSegments = new[] { _terms };
-                // The FM sidecar is keyed by terms.db rowids: rebuild it when missing or older.
-                string fmi = Fts5Index.TermsFmi(dir);
-                if (!System.IO.File.Exists(fmi) ||
-                    System.IO.File.GetLastWriteTimeUtc(fmi) < System.IO.File.GetLastWriteTimeUtc(Fts5Index.TermsDb(dir)))
-                    Fts5Index.BuildFmSidecar(dir);
-                _fm = new FmIndex.Reader(fmi);
-                _termsByRowId = _terms.Conn.CreateCommand();
+                // A build can publish terms.db, or merge and delete dictionaries, between deciding
+                // what to open and opening it: then the whole decision is simply made again.
+                for (int attempt = 0; ; attempt++)
+                {
+                    try
+                    {
+                        if (System.IO.File.Exists(Fts5Index.TermsDb(dir)))
+                        {
+                            // Finished build: the single terms.db + FM sidecar.
+                            // The FM sidecar is keyed by terms.db rowids: rebuild it when missing or older.
+                            string fmi = Fts5Index.TermsFmi(dir);
+                            if (!System.IO.File.Exists(fmi) ||
+                                System.IO.File.GetLastWriteTimeUtc(fmi) < System.IO.File.GetLastWriteTimeUtc(Fts5Index.TermsDb(dir)))
+                                Fts5Index.BuildFmSidecar(dir);
+                            OpenDictionary(Fts5Index.TermsDat(dir), Fts5Index.TermsDb(dir), fmi);
+                        }
+                        else
+                        {
+                            // Build running: every dictionary the manifest lists right now. They are
+                            // never empty, so a missing .fmi means a merge deleted it: retry.
+                            foreach (var (name, _) in Fts5TermDictionaries.Read(dir).Dictionaries)
+                            {
+                                string fmi = Fts5TermDictionaries.Fmi(dir, name);
+                                if (!System.IO.File.Exists(fmi)) throw new System.IO.FileNotFoundException("merged away", fmi);
+                                OpenDictionary(Fts5TermDictionaries.Dat(dir, name), Fts5TermDictionaries.Db(dir, name), fmi);
+                            }
+                        }
+                        break;
+                    }
+                    catch (Exception ex) when (attempt < 10 && (ex is System.IO.IOException || ex is SqliteException))
+                    {
+                        foreach (var d in _dictionaries) d.Dispose();
+                        _dictionaries.Clear();
+                        Thread.Sleep(50);
+                    }
+                }
+                _termSegments = _dictionaries.ConvertAll(d => d.Handle).ToArray();
             }
             catch { Dispose(); throw; }
+        }
+
+        void OpenDictionary(string datPath, string dbPath, string fmiPath)
+        {
+            var d = new TermDictionary();
+            _dictionaries.Add(d);
+            d.Handle = new SegmentHandle(datPath, dbPath);
+            if (System.IO.File.Exists(fmiPath)) d.Fm = new FmIndex.Reader(fmiPath);
+            d.TermsByRowId = d.Handle.Conn.CreateCommand();
         }
 
         // ── Public API (mirrors SeforimIndex) ─────────────────────────
@@ -216,17 +266,30 @@ namespace FtsLibTest.Fts5Engine
         {
             if (maxDistance > FuzzyExpander.MaxAllowedDistance) maxDistance = FuzzyExpander.MaxAllowedDistance;
             if (maxDistance < 1) maxDistance = 1;
-            var hits = _fm.FindFuzzy(pattern, maxDistance);
-            var distanceOf = new Dictionary<int, int>(hits.Count);
-            foreach (var h in hits) distanceOf[h.RowId] = h.Distance;
-            var terms = TermsByRowId(distanceOf.Keys);
+            // Union over the dictionaries: a term's distance is the same everywhere; its
+            // document count is the sum, as FtsLib sums counts across segments.
+            var found = new Dictionary<string, (int Distance, long Count)>(StringComparer.Ordinal);
+            foreach (var d in _dictionaries)
+            {
+                if (d.Fm == null) continue;
+                var hits = d.Fm.FindFuzzy(pattern, maxDistance);
+                var distanceOf = new Dictionary<int, int>(hits.Count);
+                foreach (var h in hits) distanceOf[h.RowId] = h.Distance;
+                foreach (var t in TermsByRowId(d, distanceOf.Keys))
+                {
+                    found.TryGetValue(t.Term, out var prior);
+                    found[t.Term] = (distanceOf[t.RowId], prior.Count + t.Count);
+                }
+            }
+            var terms = new List<(string Term, int Distance, long Count)>(found.Count);
+            foreach (var kv in found) terms.Add((kv.Key, kv.Value.Distance, kv.Value.Count));
 
             int cap = FuzzyExpander.MaxExpandedTerms;
             if (cap > 0 && terms.Count > cap)
             {
                 terms.Sort((a, b) =>
                 {
-                    int c = distanceOf[a.RowId].CompareTo(distanceOf[b.RowId]);
+                    int c = a.Distance.CompareTo(b.Distance);
                     if (c != 0) return c;
                     c = a.Term.Length.CompareTo(b.Term.Length);
                     if (c != 0) return c;
@@ -263,8 +326,16 @@ namespace FtsLibTest.Fts5Engine
             int budget = suffixOnly ? HebrewWildcardExpander.MaxPrefixWildcardChars
                                     : HebrewWildcardExpander.MaxPrefixWildcardChars + HebrewWildcardExpander.MaxSuffixWildcardChars;
             var kept = new Dictionary<string, long>(StringComparer.Ordinal);
-            foreach (var t in TermsByRowId(_fm.FindRowIds(core, suffixOnly)))
-                if (t.Term.Length - core.Length <= budget) kept[t.Term] = t.Count;
+            foreach (var d in _dictionaries)
+            {
+                if (d.Fm == null) continue;
+                foreach (var t in TermsByRowId(d, d.Fm.FindRowIds(core, suffixOnly)))
+                    if (t.Term.Length - core.Length <= budget)
+                    {
+                        kept.TryGetValue(t.Term, out long prior);
+                        kept[t.Term] = prior + t.Count;
+                    }
+            }
 
             int cap = HebrewWildcardExpander.MaxExpandedTerms;
             if (cap <= 0 || kept.Count <= cap) return new List<string>(kept.Keys);
@@ -273,23 +344,23 @@ namespace FtsLibTest.Fts5Engine
             return entries.GetRange(0, cap).ConvertAll(e => e.Key);
         }
 
-        List<(int RowId, string Term, long Count)> TermsByRowId(IEnumerable<int> rowIds)
+        static List<(int RowId, string Term, long Count)> TermsByRowId(TermDictionary d, IEnumerable<int> rowIds)
         {
             var result = new List<(int, string, long)>();
             var batch = new List<int>(5000);
             foreach (int id in rowIds)
             {
                 batch.Add(id);
-                if (batch.Count == 5000) { ReadTerms(batch, result); batch.Clear(); }
+                if (batch.Count == 5000) { ReadTerms(d, batch, result); batch.Clear(); }
             }
-            if (batch.Count > 0) ReadTerms(batch, result);
+            if (batch.Count > 0) ReadTerms(d, batch, result);
             return result;
         }
 
-        void ReadTerms(List<int> batch, List<(int, string, long)> into)
+        static void ReadTerms(TermDictionary d, List<int> batch, List<(int, string, long)> into)
         {
-            _termsByRowId.CommandText = "SELECT rowid, term, count FROM term_index WHERE rowid IN (" + string.Join(",", batch) + ")";
-            using var r = _termsByRowId.ExecuteReader();
+            d.TermsByRowId.CommandText = "SELECT rowid, term, count FROM term_index WHERE rowid IN (" + string.Join(",", batch) + ")";
+            using var r = d.TermsByRowId.ExecuteReader();
             while (r.Read()) into.Add(((int)r.GetInt64(0), r.GetString(1), r.GetInt64(2)));
         }
 
@@ -370,10 +441,9 @@ namespace FtsLibTest.Fts5Engine
 
         public void Dispose()
         {
-            _termsByRowId?.Dispose();
-            _fm?.Dispose();
+            foreach (var d in _dictionaries) d.Dispose();
             _lines?.Dispose();
-            _terms?.Dispose();
         }
     }
 }
+#endif

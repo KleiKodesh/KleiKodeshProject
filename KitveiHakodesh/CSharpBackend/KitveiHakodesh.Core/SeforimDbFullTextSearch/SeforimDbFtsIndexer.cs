@@ -3,6 +3,9 @@ using System.IO;
 using System.Threading;
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
+// TEMPORARY (FTS5 trial): Core runs on SQLite FTS5 instead of FtsLib's own index.
+// Delete this alias to switch back. See FtsLib/Fts5/Fts5SeforimIndex.cs.
+using SeforimIndex = FtsLib.Fts5.Fts5SeforimIndex;
 using KitveiHakodesh.Core.SeforimDb;
 
 namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
@@ -49,7 +52,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";
         private const string ResumeWatermarkFileName = "build.progress";
-        private const string SegmentFilePattern = "seg_*.dat";
+        // TEMPORARY (FTS5 trial): FtsLib's pattern is "seg_*.dat".
+        private const string SegmentFilePattern = SeforimIndex.IndexFileName;
 
         /// <summary>Progress is reported every this-many lines — often enough for a live
         /// percentage, rare enough that the callback never becomes the build's cost.</summary>
