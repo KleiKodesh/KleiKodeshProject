@@ -53,6 +53,12 @@ namespace KitveiHakodeshLib.Bridge
         private readonly CoreWebView2 _core;
         private readonly WebBridge _bridge;
         private readonly IKitveiHakodeshServiceChannel _channel;
+        // The WebView's UI thread. Every CoreWebView2 call must run there, and the request handler
+        // resumes after the pipe round-trip wherever its await captured. The standalone app's
+        // message loop installs a context; inside Word there is none on the thread, so the
+        // handler resumed on the thread pool and WebView2 threw - every request failed ("cannot
+        // reach the service"), and the error path's own WebView2 call took Word down.
+        private readonly SynchronizationContext _uiContext;
         private readonly ConcurrentDictionary<string, Stream> _openStreams = new ConcurrentDictionary<string, Stream>();
         // Ids cancelled while their pipe was still being opened: the open completes, sees the
         // id here, and closes at once instead of pumping into a page that stopped listening.
@@ -63,6 +69,10 @@ namespace KitveiHakodeshLib.Bridge
             _core = core;
             _bridge = bridge;
             _channel = channel;
+            // Built on the UI thread (the calls below require it), so a fresh WinForms context
+            // posts back to this thread.
+            _uiContext = SynchronizationContext.Current as System.Windows.Forms.WindowsFormsSynchronizationContext
+                ?? new System.Windows.Forms.WindowsFormsSynchronizationContext();
             // SourceKinds.All: the two-argument filter raises the event for document navigations
             // only, and these are fetch() calls from the page.
             _core.AddWebResourceRequestedFilter(
@@ -96,8 +106,12 @@ namespace KitveiHakodeshLib.Bridge
             if (!Uri.TryCreate(e.Request.Uri, UriKind.Absolute, out Uri uri)) return;
             if (!uri.Host.Equals(HostName, StringComparison.OrdinalIgnoreCase)) return;
 
-            // The event fires on the UI thread and the awaits below resume there, so touching
-            // e.Response after the pipe round-trip is safe; the deferral keeps the request open.
+            // The event fires on the UI thread. Make sure the awaits below resume there too (see
+            // _uiContext), so touching e.Response after the pipe round-trip is safe; the deferral
+            // keeps the request open.
+            // A bare base SynchronizationContext posts to the thread pool, same as none.
+            if (!(SynchronizationContext.Current is System.Windows.Forms.WindowsFormsSynchronizationContext))
+                SynchronizationContext.SetSynchronizationContext(_uiContext);
             CoreWebView2Deferral deferral = e.GetDeferral();
             try
             {
@@ -109,16 +123,18 @@ namespace KitveiHakodeshLib.Bridge
                 // after a database-path change) is ridden out exactly as in dev.
                 // X-KHS-Unavailable names the reason (not installed, declined, will not start) so
                 // the page can show a message that says what is wrong.
-                e.Response = TextResponse(503, "Service Unavailable", ex.Message,
-                    "X-KHS-Unavailable: " + ex.Reason + "\r\n");
+                TrySetResponse(e, () => TextResponse(503, "Service Unavailable", ex.Message,
+                    "X-KHS-Unavailable: " + ex.Reason + "\r\n"));
             }
             catch (Exception ex)
             {
-                e.Response = TextResponse(502, "Bad Gateway", ex.ToString());
+                TrySetResponse(e, () => TextResponse(502, "Bad Gateway", ex.ToString()));
             }
             finally
             {
-                deferral.Complete();
+                // This handler is async void: anything thrown here ends the host process - which,
+                // in the Word add-in, is Word.
+                try { deferral.Complete(); } catch { }
             }
         }
 
@@ -222,6 +238,13 @@ namespace KitveiHakodeshLib.Bridge
                 content.CopyTo(buffer);
                 return buffer.ToArray();
             }
+        }
+
+        /// <summary>Answers with an error response; if even that fails (the WebView is gone), the
+        /// request is left to fail on its own rather than the exception escaping async void.</summary>
+        private static void TrySetResponse(CoreWebView2WebResourceRequestedEventArgs e, Func<CoreWebView2WebResourceResponse> build)
+        {
+            try { e.Response = build(); } catch { }
         }
 
         private CoreWebView2WebResourceResponse TextResponse(int status, string reason, string text, string extraHeaders = "")
