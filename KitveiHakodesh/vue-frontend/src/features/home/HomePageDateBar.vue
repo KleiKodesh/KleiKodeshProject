@@ -10,6 +10,8 @@ import { storeToRefs } from 'pinia'
 import NextZmanPopup from './NextZmanPopup.vue'
 import { useNextZman } from './useNextZman'
 import { useHomeDateBarFit } from './useHomeDateBarFit'
+import { computeBarPopupAnchor, type BarPopupAnchor } from './homeBarPopupAnchor'
+import HomeWorldClockDropdown from './HomeWorldClockDropdown.vue'
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
 
@@ -89,9 +91,6 @@ const zmanPopupEl = computed<HTMLElement | null>(
   () => (zmanPopupRef.value?.$el as HTMLElement) ?? null,
 )
 
-// Fixed-position anchor: centered over the trigger, then clamped so it never
-// escapes the viewport, and pinned just above the bottom bar.
-const ZMAN_POPUP_MARGIN = 8
 const zmanPopupLeft = ref(0)
 const zmanPopupBottom = ref(0)
 const zmanPopupMaxHeight = ref(0)
@@ -100,27 +99,6 @@ const zmanPopupStyle = computed(() => ({
   bottom: `${zmanPopupBottom.value}px`,
   maxHeight: `${zmanPopupMaxHeight.value}px`,
 }))
-
-interface BarPopupAnchor {
-  left: number
-  bottom: number
-  maxHeight: number
-}
-
-function computeBarPopupAnchor(button: HTMLElement, popupWidth: number): BarPopupAnchor {
-  const rect = button.getBoundingClientRect()
-  const center = rect.left + rect.width / 2
-  let left = center - popupWidth / 2
-  const maxLeft = window.innerWidth - popupWidth - ZMAN_POPUP_MARGIN
-  left = Math.min(Math.max(left, ZMAN_POPUP_MARGIN), Math.max(ZMAN_POPUP_MARGIN, maxLeft))
-  return {
-    left,
-    bottom: window.innerHeight - rect.top + ZMAN_POPUP_MARGIN,
-    // The popup opens upward from just above the bar; cap its height to the space
-    // between the top margin and the bar so it never overflows the top.
-    maxHeight: Math.max(120, rect.top - ZMAN_POPUP_MARGIN * 2),
-  }
-}
 
 function computeZmanPopupAnchor() {
   const button = zmanButtonRef.value
@@ -223,7 +201,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
 <template>
   <div ref="dateBarRef" class="date-bar">
     <template v-if="showClockInBar">
-      <span class="bar-item bar-clock">{{ clockTime }}</span>
+      <HomeWorldClockDropdown :clock-time="clockTime" />
       <span class="bar-sep">·</span>
     </template>
     <template v-if="nextZman && showZmanInBar">
@@ -325,10 +303,6 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
 .bar-lbl {
   font-weight: 600;
   color: var(--text-primary);
-}
-.bar-clock {
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
 }
 .bar-item--btn {
   background: none;
