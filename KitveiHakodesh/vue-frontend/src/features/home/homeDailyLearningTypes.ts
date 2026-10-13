@@ -18,6 +18,13 @@ export interface HomeDailyLearningItem {
     | 'chofetz-chaim'
     | 'shemirat-halashon'
     | 'weekly-parsha'
+    | 'rambam-1'
+    | 'rambam-3'
+    | 'kitzur-shulchan-aruch'
+    | 'arukh-hashulchan-yomi'
+    | 'perek-yomi'
+    | 'pirkei-avot'
+    | 'daf-weekly'
   label: string
   location: string
   target: HomeDailyLearningTarget

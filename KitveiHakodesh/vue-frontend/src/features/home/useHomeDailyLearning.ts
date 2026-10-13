@@ -10,8 +10,26 @@ import type { HomeSuggestionCard } from './homeSuggestionCard'
 import { bookResumePath } from './homeResumePath'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 
+const DROPDOWN_ONLY_KEYS = new Set<HomeDailyLearningItem['key']>([
+  'rambam-1',
+  'rambam-3',
+  'kitzur-shulchan-aruch',
+  'arukh-hashulchan-yomi',
+  'perek-yomi',
+  'pirkei-avot',
+  'daf-weekly',
+])
+
 interface ResolvedDailyLearningItem extends HomeDailyLearningItem {
   resolved: HomeDailyLearningResolvedTarget
+}
+
+/** One of today's cycles; `open` is null when its book is not in the library. */
+export interface HomeDailyLearningEntry {
+  key: string
+  label: string
+  location: string
+  open: ((openInNewTab: boolean) => void) | null
 }
 
 /**
@@ -20,12 +38,24 @@ interface ResolvedDailyLearningItem extends HomeDailyLearningItem {
  * the library are left out, so the home collection just shows fewer cards.
  */
 export function useHomeDailyLearning() {
+  return useDailyLearningState().cards
+}
+
+/** Every cycle for today, including ones whose book is missing (not navigable). */
+export function useHomeDailyLearningEntries() {
+  return useDailyLearningState().entries
+}
+
+function useDailyLearningState() {
   const paneNavigation = usePaneNavigation()
   const booksDataStore = useBooksDataStore()
   const now = useNow({ interval: 60_000 })
   // Recompute only when the civil date changes, not every minute tick.
   const todayKey = computed(() => now.value.toDateString())
-  const resolvedItems = shallowRef<ResolvedDailyLearningItem[]>([])
+  const allItems = shallowRef<Array<HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null }>>([])
+  const resolvedItems = computed(() =>
+    allItems.value.filter((item): item is ResolvedDailyLearningItem => item.resolved !== null),
+  )
   let generation = 0
 
   watch(
@@ -34,14 +64,15 @@ export function useHomeDailyLearning() {
       const currentGeneration = ++generation
       if (!dbReady.value) return
       const items = await computeHomeDailyLearningItems(new Date())
-      const resolvedCards: ResolvedDailyLearningItem[] = []
+      const withTargets: Array<HomeDailyLearningItem & { resolved: HomeDailyLearningResolvedTarget | null }> = []
       for (const item of items) {
+        let resolved: HomeDailyLearningResolvedTarget | null = null
         try {
-          const resolved = await resolveHomeDailyLearningTarget(item.target)
-          if (resolved) resolvedCards.push({ ...item, resolved })
+          resolved = (await resolveHomeDailyLearningTarget(item.target)) ?? null
         } catch {}
+        withTargets.push({ ...item, resolved })
       }
-      if (currentGeneration === generation) resolvedItems.value = resolvedCards
+      if (currentGeneration === generation) allItems.value = withTargets
     },
     { immediate: true },
   )
@@ -61,8 +92,21 @@ export function useHomeDailyLearning() {
   }
 
   const icon = documentIcon('book')
-  return computed<HomeSuggestionCard[]>(() =>
-    resolvedItems.value.map((item) => ({
+  const entries = computed<HomeDailyLearningEntry[]>(() =>
+    allItems.value.map((item) => {
+      const resolvedItem = item.resolved ? (item as ResolvedDailyLearningItem) : null
+      return {
+        key: item.key,
+        label: item.label,
+        location: item.location,
+        open: resolvedItem ? (openInNewTab: boolean) => open(resolvedItem, openInNewTab) : null,
+      }
+    }),
+  )
+
+  // Cycles added for the date-bar dropdown only; the home cards keep their original set.
+  const cards = computed<HomeSuggestionCard[]>(() =>
+    resolvedItems.value.filter((item) => !DROPDOWN_ONLY_KEYS.has(item.key)).map((item) => ({
       key: `daily:${item.key}`,
       // Shown exactly like a history card: no cycle label, just book + path.
       title: item.resolved.bookTitle,
@@ -76,4 +120,5 @@ export function useHomeDailyLearning() {
       open: (openInNewTab) => open(item, openInNewTab),
     })),
   )
+  return { cards, entries }
 }

@@ -207,5 +207,109 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     }
   })
 
+
+  /** Mishneh Torah reading → card item; `name` is the Hebrew halachot title from hebcal's locale. */
+  const rambamItem = (
+    key: 'rambam-1' | 'rambam-3',
+    label: string,
+    readings: Array<{ name: string; perek: number | string }>,
+  ): HomeDailyLearningItem | null => {
+    const first = readings[0]
+    if (!first) return null
+    const toPerekText = (perek: number | string) => (typeof perek === 'number' ? toLetters(perek) : String(perek))
+    const firstName = cleanHebrew(Locale.gettext(first.name, 'he'))
+    const firstPerek = toPerekText(first.perek)
+    return {
+      key,
+      label,
+      location: readings
+        .map((reading) => `${cleanHebrew(Locale.gettext(reading.name, 'he'))} ${toPerekText(reading.perek)}`)
+        .join(', '),
+      target: {
+        bookQueries: [`רמבם ${firstName}`, `משנה תורה ${firstName}`, firstName],
+        tocPatterns: headingTocPatterns('פרק', firstPerek),
+      },
+    }
+  }
+
+  tryAdd(() => rambamItem('rambam-1', 'רמב"ם פרק אחד', [learning.dailyRambam1(hebrewDate)]))
+  tryAdd(() => rambamItem('rambam-3', 'רמב"ם שלושה פרקים', learning.dailyRambam3(hebrewDate)))
+
+  tryAdd(() => {
+    // kitzurShulchanAruch → { b: "siman:seif", e }; brief render is the Hebrew range.
+    const reading = learning.kitzurShulchanAruch(hebrewDate)
+    if (!reading) return null
+    const siman = parseInt(String(reading.b).split(/[:.]/)[0] ?? '', 10)
+    const simanLetters = siman > 0 ? toLetters(siman) : null
+    return {
+      key: 'kitzur-shulchan-aruch',
+      label: 'קיצור שולחן ערוך',
+      location: cleanHebrew(new learning.KitzurShulchanAruchEvent(hebrewDate, reading).renderBrief('he')),
+      target: {
+        bookQueries: ['קיצור שולחן ערוך'],
+        tocPatterns: simanLetters ? headingTocPatterns('סימן', simanLetters) : [],
+      },
+    }
+  })
+
+  tryAdd(() => {
+    // arukhHaShulchanYomi → { k: section (English), v: "siman.seif-siman.seif" }.
+    const reading = learning.arukhHaShulchanYomi(hebrewDate)
+    if (!reading) return null
+    const section = cleanHebrew(Locale.gettext(reading.k, 'he'))
+    const siman = parseInt(reading.v.split(/[.-]/)[0] ?? '', 10)
+    const simanLetters = siman > 0 ? toLetters(siman) : null
+    return {
+      key: 'arukh-hashulchan-yomi',
+      label: 'ערוך השולחן היומי',
+      location: cleanHebrew(new learning.ArukhHaShulchanYomiEvent(hebrewDate, reading).render('he')),
+      target: {
+        bookQueries: [`ערוך השולחן ${section}`, 'ערוך השולחן'],
+        tocPatterns: simanLetters ? headingTocPatterns('סימן', simanLetters) : [],
+      },
+    }
+  })
+
+  tryAdd(() => {
+    // perekYomi → { k: tractate (English), v: chapter } — the Mishnah-a-chapter cycle.
+    const reading = learning.perekYomi(hebrewDate)
+    const tractate = TRACTATE_HE[reading.k] ?? reading.k
+    const chapterLetters = toLetters(reading.v)
+    return {
+      key: 'perek-yomi',
+      label: 'פרק יומי',
+      location: `${tractate} ${chapterLetters}`,
+      target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', chapterLetters) },
+    }
+  })
+
+  tryAdd(() => {
+    // Summer Shabbatot only; null on every other day (diaspora schedule).
+    const chapters = learning.pirkeiAvot(hebrewDate, false)
+    if (!chapters?.length) return null
+    const firstLetters = toLetters(chapters[0]!)
+    return {
+      key: 'pirkei-avot',
+      label: 'פרקי אבות',
+      location: `פרקי אבות ${chapters.map(toLetters).join('-')}`,
+      target: { bookQueries: ['משנה אבות', 'פרקי אבות'], tocPatterns: headingTocPatterns('פרק', firstLetters) },
+    }
+  })
+
+  tryAdd(() => {
+    const dafText = cleanHebrew(learning.dafWeekly(hebrewDate).render('he'))
+    const parsed = parseDafYomiString(dafText)
+    if (!parsed) return null
+    return {
+      key: 'daf-weekly',
+      label: 'דף שבועי',
+      location: dafText,
+      target: {
+        bookQueries: [`בבלי ${parsed.tractate}`],
+        tocPatterns: [`${parsed.dafPrefix} %`, parsed.dafPrefix, `${parsed.dafPrefix}%`],
+      },
+    }
+  })
+
   return items
 }
