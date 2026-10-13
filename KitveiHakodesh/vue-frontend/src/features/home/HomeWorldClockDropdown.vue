@@ -74,7 +74,7 @@ function computeWorldClockMenuAnchor() {
   if (!button) return
   worldClockMenuAnchor.value = computeBarPopupAnchor(
     button,
-    worldClockMenuRef.value?.offsetWidth || 200,
+    worldClockMenuRef.value?.offsetWidth || 220,
   )
 }
 
@@ -172,40 +172,43 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
   font-variant-numeric: tabular-nums;
   letter-spacing: 0.03em;
 }
+/* Density matches NextZmanPopup (12px rows, 1.4 line-height, 2px row padding). */
 .world-clock-menu {
   position: fixed;
   z-index: 200;
-  min-width: 200px;
+  min-width: 220px;
   overflow-y: auto;
-  padding: 4px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
   outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .world-clock-item {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
   gap: 16px;
-  padding: 6px 10px;
-  border-radius: 6px;
+  padding: 2px 4px;
+  font-size: 12px;
+  line-height: 1.4;
   color: var(--text-primary);
 }
 .world-clock-city {
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--text-secondary);
 }
 .world-clock-time {
-  font-size: 12.5px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
-  letter-spacing: 0.03em;
 }
 .world-clock-day {
   font-size: 11px;
+  font-weight: 400;
   color: var(--text-secondary);
   margin-inline-end: 4px;
 }

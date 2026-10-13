@@ -149,7 +149,7 @@ const learningMenuStyle = computed(() => ({
 function computeLearningMenuAnchor() {
   const button = learningButtonRef.value
   if (!button) return
-  learningMenuAnchor.value = computeBarPopupAnchor(button, learningMenuRef.value?.offsetWidth || 240)
+  learningMenuAnchor.value = computeBarPopupAnchor(button, learningMenuRef.value?.offsetWidth || 220)
 }
 
 const learningCloser = useDropdownClose(
@@ -369,51 +369,53 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
 .learning-btn.on {
   color: var(--accent-color);
 }
+/* Density matches NextZmanPopup (12px rows, 1.4 line-height, 2px row padding). */
 .learning-menu {
   position: fixed;
   z-index: 200;
-  min-width: 240px;
+  min-width: 220px;
   overflow-y: auto;
-  padding: 4px;
+  padding: 6px 8px;
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.28);
+  outline: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 .learning-menu-item {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 6px 10px;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 4px;
   background: none;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   font-family: inherit;
+  font-size: 12px;
+  line-height: 1.4;
   text-align: start;
   cursor: pointer;
   color: var(--text-primary);
-}
-.learning-menu {
-  outline: none;
+  white-space: nowrap;
 }
 .learning-menu-item:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 .learning-menu-item:not(:disabled):hover,
 .learning-menu-item.focused {
   background: var(--hover-bg);
 }
 .learning-menu-label {
-  font-size: 12.5px;
-  font-weight: 600;
+  color: var(--text-secondary);
 }
 .learning-menu-path {
-  font-size: 11px;
-  color: var(--text-secondary);
+  font-weight: 600;
 }
 .zman-popup-anchor {
   position: fixed;
