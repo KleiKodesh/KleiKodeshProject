@@ -126,12 +126,40 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
   })
 
   tryAdd(() => {
+    // perekYomi → { k: tractate (English), v: chapter } — the Mishnah-a-chapter cycle.
+    const reading = learning.perekYomi(hebrewDate)
+    const tractate = TRACTATE_HE[reading.k] ?? reading.k
+    const chapterLetters = toLetters(reading.v)
+    return {
+      key: 'perek-yomi',
+      label: 'פרק יומי',
+      location: `${tractate} ${chapterLetters}`,
+      target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', chapterLetters) },
+    }
+  })
+
+  tryAdd(() => {
     const dafText = cleanHebrew(new learning.DafYomi(hebrewDate).render('he'))
     const parsed = parseDafYomiString(dafText)
     if (!parsed) return null
     return {
       key: 'daf-yomi',
       label: 'דף יומי',
+      location: dafText,
+      target: {
+        bookQueries: [`בבלי ${parsed.tractate}`],
+        tocPatterns: [`${parsed.dafPrefix} %`, parsed.dafPrefix, `${parsed.dafPrefix}%`],
+      },
+    }
+  })
+
+  tryAdd(() => {
+    const dafText = cleanHebrew(learning.dafWeekly(hebrewDate).render('he'))
+    const parsed = parseDafYomiString(dafText)
+    if (!parsed) return null
+    return {
+      key: 'daf-weekly',
+      label: 'דף שבועי',
       location: dafText,
       target: {
         bookQueries: [`בבלי ${parsed.tractate}`],
@@ -167,6 +195,33 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       target: { bookQueries: [`ירושלמי ${tractate}`], tocPatterns: dafTocPatterns(dafLetters) },
     }
   })
+
+  /** Mishneh Torah reading → card item; `name` is the Hebrew halachot title from hebcal's locale. */
+  const rambamItem = (
+    key: 'rambam-1' | 'rambam-3',
+    label: string,
+    readings: Array<{ name: string; perek: number | string }>,
+  ): HomeDailyLearningItem | null => {
+    const first = readings[0]
+    if (!first) return null
+    const toPerekText = (perek: number | string) => (typeof perek === 'number' ? toLetters(perek) : String(perek))
+    const firstName = cleanHebrew(Locale.gettext(first.name, 'he'))
+    const firstPerek = toPerekText(first.perek)
+    return {
+      key,
+      label,
+      location: readings
+        .map((reading) => `${cleanHebrew(Locale.gettext(reading.name, 'he'))} ${toPerekText(reading.perek)}`)
+        .join(', '),
+      target: {
+        bookQueries: [`רמבם ${firstName}`, `משנה תורה ${firstName}`, firstName],
+        tocPatterns: headingTocPatterns('פרק', firstPerek),
+      },
+    }
+  }
+
+  tryAdd(() => rambamItem('rambam-1', 'רמב"ם פרק אחד', [learning.dailyRambam1(hebrewDate)]))
+  tryAdd(() => rambamItem('rambam-3', 'רמב"ם שלושה פרקים', learning.dailyRambam3(hebrewDate)))
 
   tryAdd(() => {
     // chofetzChaim → { k: section, b: klal.seif, e: klal.seif } (numbers like 2.5).
@@ -207,34 +262,6 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     }
   })
 
-
-  /** Mishneh Torah reading → card item; `name` is the Hebrew halachot title from hebcal's locale. */
-  const rambamItem = (
-    key: 'rambam-1' | 'rambam-3',
-    label: string,
-    readings: Array<{ name: string; perek: number | string }>,
-  ): HomeDailyLearningItem | null => {
-    const first = readings[0]
-    if (!first) return null
-    const toPerekText = (perek: number | string) => (typeof perek === 'number' ? toLetters(perek) : String(perek))
-    const firstName = cleanHebrew(Locale.gettext(first.name, 'he'))
-    const firstPerek = toPerekText(first.perek)
-    return {
-      key,
-      label,
-      location: readings
-        .map((reading) => `${cleanHebrew(Locale.gettext(reading.name, 'he'))} ${toPerekText(reading.perek)}`)
-        .join(', '),
-      target: {
-        bookQueries: [`רמבם ${firstName}`, `משנה תורה ${firstName}`, firstName],
-        tocPatterns: headingTocPatterns('פרק', firstPerek),
-      },
-    }
-  }
-
-  tryAdd(() => rambamItem('rambam-1', 'רמב"ם פרק אחד', [learning.dailyRambam1(hebrewDate)]))
-  tryAdd(() => rambamItem('rambam-3', 'רמב"ם שלושה פרקים', learning.dailyRambam3(hebrewDate)))
-
   tryAdd(() => {
     // kitzurShulchanAruch → { b: "siman:seif", e }; brief render is the Hebrew range.
     const reading = learning.kitzurShulchanAruch(hebrewDate)
@@ -271,19 +298,6 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
   })
 
   tryAdd(() => {
-    // perekYomi → { k: tractate (English), v: chapter } — the Mishnah-a-chapter cycle.
-    const reading = learning.perekYomi(hebrewDate)
-    const tractate = TRACTATE_HE[reading.k] ?? reading.k
-    const chapterLetters = toLetters(reading.v)
-    return {
-      key: 'perek-yomi',
-      label: 'פרק יומי',
-      location: `${tractate} ${chapterLetters}`,
-      target: { bookQueries: [`משנה ${tractate}`], tocPatterns: headingTocPatterns('פרק', chapterLetters) },
-    }
-  })
-
-  tryAdd(() => {
     // Summer Shabbatot only; null on every other day (diaspora schedule).
     const chapters = learning.pirkeiAvot(hebrewDate, false)
     if (!chapters?.length) return null
@@ -293,21 +307,6 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
       label: 'פרקי אבות',
       location: `פרקי אבות ${chapters.map(toLetters).join('-')}`,
       target: { bookQueries: ['משנה אבות', 'פרקי אבות'], tocPatterns: headingTocPatterns('פרק', firstLetters) },
-    }
-  })
-
-  tryAdd(() => {
-    const dafText = cleanHebrew(learning.dafWeekly(hebrewDate).render('he'))
-    const parsed = parseDafYomiString(dafText)
-    if (!parsed) return null
-    return {
-      key: 'daf-weekly',
-      label: 'דף שבועי',
-      location: dafText,
-      target: {
-        bookQueries: [`בבלי ${parsed.tractate}`],
-        tocPatterns: [`${parsed.dafPrefix} %`, parsed.dafPrefix, `${parsed.dafPrefix}%`],
-      },
     }
   })
 
