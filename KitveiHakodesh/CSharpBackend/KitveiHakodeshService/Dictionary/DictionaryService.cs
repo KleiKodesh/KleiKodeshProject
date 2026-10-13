@@ -84,6 +84,11 @@ public sealed class DictionaryService
     public List<string> KetivVariants(List<string>? candidates) =>
         Query(d => d.ExistingHeadwords(candidates), "dictKetivVariants") ?? [];
 
+    // ── seforim.db reference works (pointers into seforim.db) ──────────────────
+
+    public List<CoreDictionary.SeforimHeadwordPointer> SeforimHeadwords(string source, string term, string mode) =>
+        Query(d => d.SeforimHeadwords(source, term, mode), "dictSeforimHeadwords") ?? [];
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
 
     /// <summary>

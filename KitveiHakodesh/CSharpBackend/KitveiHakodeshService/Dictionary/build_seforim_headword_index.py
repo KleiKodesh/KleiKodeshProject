@@ -63,11 +63,12 @@ REPOSITORY_ROOT = os.path.abspath(
 # script exists to prevent.
 DICTIONARY_DATABASE_PATHS = [
     os.path.join(REPOSITORY_ROOT, "CSharpBackend", "KitveiHakodeshService", "Dictionary", "Dictionary.db"),
-    os.path.join(REPOSITORY_ROOT, "vue-frontend", "public", "dictionary", "KitveiHakodesh_dictionary.db"),
 ]
 
+# The plain (uncompressed) Zayit library. Its titles are the shorter spellings, which the
+# frontend can widen to a prefix match on an Otzaria library; the reverse is not possible.
 DEFAULT_SEFORIM_DATABASE_PATH = os.path.join(
-    os.environ.get("APPDATA", ""), "otzaria", "books", "seforim.db"
+    os.environ.get("APPDATA", ""), "io.github.kdroidfilter.seforimapp", "databases", "seforim.db"
 )
 
 # The five sources, each with how its books are found and how a headword is marked.

@@ -51,4 +51,17 @@ namespace KitveiHakodesh.Core.Dictionary
         [IgnoreMember]
         public bool Found => MatchedCandidate != null;
     }
+    /// <summary>
+    /// Where a headword of a seforim.db reference work (metzudat, malbim, menachem, aruch,
+    /// micropedia) sits: the book by TITLE (ids change between library builds) and the
+    /// line by lineIndex. The caller fetches the line itself from seforim.db.
+    /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class SeforimHeadwordPointer
+    {
+        public string Source { get; set; } = "";
+        public string BookTitle { get; set; } = "";
+        public int LineIndex { get; set; }
+        public string Word { get; set; } = "";
+    }
 }

@@ -197,14 +197,6 @@ public sealed class ExactTitleArgs { public string Title { get; set; } = ""; }
 public sealed class BookIdsResult { public List<BookIdRow> Rows { get; set; } = new(); }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BoldLinesArgs { public List<int> BookIds { get; set; } = new(); public string Pattern { get; set; } = ""; }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class BoldLinesResult { public List<BoldLineRow> Rows { get; set; } = new(); }
-
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class EitherPatternArgs { public int BookId { get; set; } public string P1 { get; set; } = ""; public string P2 { get; set; } = ""; }
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class LineByIndexArgs { public int BookId { get; set; } public int LineIndex { get; set; } }
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

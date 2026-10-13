@@ -459,6 +459,23 @@ public sealed class DictWordsResult
     public List<string> Words { get; set; } = new();
 }
 
+/// <summary>Args for <c>dictSeforimHeadwords</c>: one seforim.db reference work
+/// (metzudat/malbim/menachem/aruch/micropedia), the term, and the tier
+/// ("exact" | "prefix" | "contains").</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class DictSeforimHeadwordArgs
+{
+    public string? Source { get; set; }
+    public string? Term { get; set; }
+    public string? Mode { get; set; }
+}
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class DictSeforimHeadwordsResult
+{
+    public List<global::KitveiHakodesh.Core.Dictionary.SeforimHeadwordPointer> Rows { get; set; } = new();
+}
+
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
 public sealed class DictLinksResult
 {
@@ -507,6 +524,8 @@ internal static class RpcResponse
 [JsonSerializable(typeof(DictAbbrevResult))]
 [JsonSerializable(typeof(DictWordsResult))]
 [JsonSerializable(typeof(DictLinksResult))]
+[JsonSerializable(typeof(DictSeforimHeadwordArgs))]
+[JsonSerializable(typeof(DictSeforimHeadwordsResult))]
 [JsonSerializable(typeof(CategoryRow))]
 [JsonSerializable(typeof(BookRow))]
 [JsonSerializable(typeof(CategoriesResult))]
@@ -575,10 +594,6 @@ internal static class RpcResponse
 [JsonSerializable(typeof(ExactTitleArgs))]
 [JsonSerializable(typeof(BookIdRow))]
 [JsonSerializable(typeof(BookIdsResult))]
-[JsonSerializable(typeof(BoldLinesArgs))]
-[JsonSerializable(typeof(BoldLineRow))]
-[JsonSerializable(typeof(BoldLinesResult))]
-[JsonSerializable(typeof(EitherPatternArgs))]
 [JsonSerializable(typeof(LineByIndexArgs))]
 [JsonSerializable(typeof(RawLineRow))]
 [JsonSerializable(typeof(RawLinesResult))]

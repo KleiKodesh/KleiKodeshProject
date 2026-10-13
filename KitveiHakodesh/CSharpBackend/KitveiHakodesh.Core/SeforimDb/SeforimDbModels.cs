@@ -233,15 +233,5 @@ namespace KitveiHakodesh.Core.SeforimDb
     public sealed class BookIdRow { public int Id { get; set; } }
 
     [MessagePackObject(keyAsPropertyName: true)]
-    public sealed class BoldLineRow
-    {
-        public string Content { get; set; } = "";
-        public string Title { get; set; } = "";
-        public int BookId { get; set; }
-        public int LineId { get; set; }
-        public int LineIndex { get; set; }
-    }
-
-    [MessagePackObject(keyAsPropertyName: true)]
     public sealed class RawLineRow { public int Id { get; set; } public int LineIndex { get; set; } public string Content { get; set; } = ""; }
 }

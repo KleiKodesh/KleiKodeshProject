@@ -6,7 +6,6 @@
 import { serviceCall } from './serviceClient'
 import {
   boldExact, boldPrefix, boldContains,
-  getMetzudatBookIds, getMalbimBookIds,
   menchemLookup, aruchLookup, micropediaLookup,
 } from './dictionarySeforimDb'
 
@@ -124,11 +123,6 @@ export interface CombinedLookupResult {
  * different structure) and do not participate in the tier gating.
  */
 export async function combinedLookup(term: string): Promise<CombinedLookupResult> {
-  const [metzudatIds, malbimIds] = await Promise.all([
-    getMetzudatBookIds(),
-    getMalbimBookIds(),
-  ])
-
   // מחברת מנחם, מיקרופדיה and ספר הערוך are exact-only — fire them immediately and collect at the end
   const menchemPromise = menchemLookup(term)
   const micropediaPromise = micropediaLookup(term)
@@ -137,8 +131,8 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
   // Tier 1 — exact
   const [dictExactResult, metzudatExactRows, malbimExactRows] = await Promise.all([
     dictExact(term),
-    boldExact(term, metzudatIds),
-    boldExact(term, malbimIds),
+    boldExact(term, 'metzudat'),
+    boldExact(term, 'malbim'),
   ])
 
   if (dictExactResult.isExact || metzudatExactRows.length > 0 || malbimExactRows.length > 0) {
@@ -156,8 +150,8 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
   // Tier 2 — prefix
   const [dictPrefixRows, metzudatPrefixRows, malbimPrefixRows] = await Promise.all([
     dictPrefix(term),
-    boldPrefix(term, metzudatIds),
-    boldPrefix(term, malbimIds),
+    boldPrefix(term, 'metzudat'),
+    boldPrefix(term, 'malbim'),
   ])
 
   if (dictPrefixRows.length > 0 || metzudatPrefixRows.length > 0 || malbimPrefixRows.length > 0) {
@@ -175,8 +169,8 @@ export async function combinedLookup(term: string): Promise<CombinedLookupResult
   // Tier 3 — contains
   const [dictContainsRows, metzudatContainsRows, malbimContainsRows] = await Promise.all([
     dictContains(term),
-    boldContains(term, metzudatIds),
-    boldContains(term, malbimIds),
+    boldContains(term, 'metzudat'),
+    boldContains(term, 'malbim'),
   ])
 
   return {

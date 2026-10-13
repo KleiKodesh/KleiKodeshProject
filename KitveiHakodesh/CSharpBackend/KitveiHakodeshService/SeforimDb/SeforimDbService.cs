@@ -138,12 +138,6 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public List<BookIdRow> GetBookIdByExactTitle(string title) =>
         Run(() => _queries.GetBookIdByExactTitle(title), new List<BookIdRow>(), "getBookIdByExactTitle");
 
-    public List<BoldLineRow> GetLinesWithContentPatternForBooks(List<int> bookIds, string pattern) =>
-        Run(() => _queries.GetLinesWithContentPatternForBooks(bookIds, pattern), new List<BoldLineRow>(), "getLinesWithContentPatternForBooks");
-
-    public List<RawLineRow> GetLinesWithEitherContentPattern(int bookId, string p1, string p2) =>
-        Run(() => _queries.GetLinesWithEitherContentPattern(bookId, p1, p2), new List<RawLineRow>(), "getLinesWithEitherContentPattern");
-
     public List<RawLineRow> GetLineByBookAndLineIndex(int bookId, int lineIndex) =>
         Run(() => _queries.GetLineByBookAndLineIndex(bookId, lineIndex), new List<RawLineRow>(), "getLineByBookAndLineIndex");
 

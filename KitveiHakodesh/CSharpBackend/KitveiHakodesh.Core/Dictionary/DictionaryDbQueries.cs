@@ -96,6 +96,23 @@ namespace KitveiHakodesh.Core.Dictionary
         private const string AbbreviationContainsSql =
             SenseSelect + " WHERE w.headword LIKE @contains LIMIT 30";
 
+        // seforim_headword(source, bookId, lineIndex, word) + seforim_headword_book(id, title),
+        // built by KitveiHakodeshService/Dictionary/build_seforim_headword_index.py.
+        // Prefix is a range on the (source, word) index; contains scans one source's words.
+        private const string SeforimHeadwordSelect =
+            "SELECT DISTINCT h.source, b.title, h.lineIndex, h.word " +
+            "FROM seforim_headword h JOIN seforim_headword_book b ON b.id = h.bookId " +
+            "WHERE h.source = @source AND ";
+
+        private const string SeforimHeadwordExactSql =
+            SeforimHeadwordSelect + "h.word = @term ORDER BY b.title, h.lineIndex LIMIT 50";
+
+        private const string SeforimHeadwordPrefixSql =
+            SeforimHeadwordSelect + "h.word > @term AND h.word < @termEnd ORDER BY h.word, b.title, h.lineIndex LIMIT 50";
+
+        private const string SeforimHeadwordContainsSql =
+            SeforimHeadwordSelect + "h.word LIKE @contains AND h.word NOT LIKE @prefix ORDER BY h.word, b.title, h.lineIndex LIMIT 50";
+
         // ── Construction ──────────────────────────────────────────────────────────────
 
         private readonly string _databasePath;
@@ -319,6 +336,51 @@ namespace KitveiHakodesh.Core.Dictionary
                 if (!reader.IsDBNull(0)) headwords.Add(reader.GetString(0));
 
             return headwords;
+        }
+
+        /// <summary>
+        /// Pointers to seforim.db headword lines of one reference work. <paramref name="mode"/>
+        /// is "exact", "prefix" (starts with, not equal) or "contains" (contains, not starting
+        /// with) - the same tiers as <see cref="Exact"/>/<see cref="Prefix"/>/<see cref="Contains"/>.
+        /// </summary>
+        public List<SeforimHeadwordPointer> SeforimHeadwords(string source, string term, string mode)
+        {
+            var pointers = new List<SeforimHeadwordPointer>();
+            if (!IsAvailable || string.IsNullOrEmpty(term) || string.IsNullOrEmpty(source)) return pointers;
+
+            using var connection = SqliteConnectionFactory.OpenCorpusRead(_databasePath);
+            using var command = connection.CreateCommand();
+            command.Parameters.AddWithValue("@source", source);
+            switch (mode)
+            {
+                case "prefix":
+                    command.CommandText = SeforimHeadwordPrefixSql;
+                    command.Parameters.AddWithValue("@term", term);
+                    command.Parameters.AddWithValue("@termEnd", term + "￿");
+                    break;
+                case "contains":
+                    command.CommandText = SeforimHeadwordContainsSql;
+                    command.Parameters.AddWithValue("@contains", "%" + term + "%");
+                    command.Parameters.AddWithValue("@prefix", term + "%");
+                    break;
+                default:
+                    command.CommandText = SeforimHeadwordExactSql;
+                    command.Parameters.AddWithValue("@term", term);
+                    break;
+            }
+
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                pointers.Add(new SeforimHeadwordPointer
+                {
+                    Source = reader.GetString(0),
+                    BookTitle = reader.GetString(1),
+                    LineIndex = reader.GetInt32(2),
+                    Word = reader.GetString(3),
+                });
+            }
+            return pointers;
         }
 
         private List<DictionarySense> QuerySenses(string sql, params (string Name, object Value)[] parameters)

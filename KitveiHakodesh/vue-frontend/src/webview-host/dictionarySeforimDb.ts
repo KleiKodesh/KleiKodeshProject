@@ -1,14 +1,12 @@
 // Seforim DB queries for the dictionary feature.
 // Queries מצודת ציון, מלבי"ם באור המילות, מחברת מנחם, מיקרופדיה, and ספר הערוך from the main seforim DB.
-// Book IDs are looked up at runtime by title pattern and cached — never hardcoded.
+// Headwords come from the seforim_headword index in the dictionary DB (dictSeforimHeadwords):
+// pointers of (book title, lineIndex). Titles resolve to seforim.db ids at runtime (cached),
+// and only the pointed-to lines are fetched - no LIKE over seforim.db content, which matches
+// nothing on a zstd-compressed library.
 
-import {
-  getBookIdsByTitlePattern,
-  getBookIdByExactTitle,
-  getLinesWithContentPatternForBooks,
-  getLinesWithEitherContentPattern,
-  getLineByBookAndLineIndex,
-} from './seforimApi'
+import { getBookIdByExactTitle, getLineByBookAndLineIndex } from './seforimApi'
+import { serviceCall } from './serviceClient'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,20 +48,68 @@ export interface MicropediaRow {
   lineIndex: number   // the <h2> header lineIndex — used for Ctrl+click navigation
 }
 
-// ── Book ID cache ─────────────────────────────────────────────────────────────
+// ── Headword pointers -> seforim.db lines ─────────────────────────────────────
 
-async function getBookIds(titlePattern: string, cache: { ids: number[] | null }): Promise<number[]> {
-  if (cache.ids !== null) return cache.ids
-  const rows = await getBookIdsByTitlePattern(titlePattern)
-  cache.ids = rows.map(r => r.id)
-  return cache.ids
+type HeadwordSource = 'metzudat' | 'malbim' | 'menachem' | 'aruch' | 'micropedia'
+type HeadwordMode = 'exact' | 'prefix' | 'contains'
+
+interface HeadwordPointer {
+  source:    string
+  bookTitle: string
+  lineIndex: number
+  word:      string
 }
 
-const _metzudatCache   = { ids: null as number[] | null }
-const _malbimCache     = { ids: null as number[] | null }
-const _menchemCache    = { ids: null as number[] | null }
-const _aruchCache      = { ids: null as number[] | null }
-const _micropediaCache = { ids: null as number[] | null }
+interface PointedLine {
+  bookTitle: string
+  bookId:    number
+  lineId:    number
+  lineIndex: number
+  content:   string
+}
+
+async function findHeadwords(source: HeadwordSource, term: string, mode: HeadwordMode): Promise<HeadwordPointer[]> {
+  if (!term) return []
+  return (await serviceCall<{ rows: HeadwordPointer[] }>(
+    'dictSeforimHeadwords', { source, term, mode })).rows
+}
+
+/** Title -> seforim.db book id (null = not in this library). Ids differ between libraries; titles do not. */
+const _bookIdByTitle = new Map<string, Promise<number | null>>()
+
+function resolveBookId(title: string): Promise<number | null> {
+  let pending = _bookIdByTitle.get(title)
+  if (!pending) {
+    pending = getBookIdByExactTitle(title)
+      .then(rows => rows[0]?.id ?? null)
+      .catch(() => { _bookIdByTitle.delete(title); return null })
+    _bookIdByTitle.set(title, pending)
+  }
+  return pending
+}
+
+/** Fetches each pointed-to line once (several word tokens can point at one line), in pointer order. */
+async function fetchPointedLines(pointers: HeadwordPointer[]): Promise<PointedLine[]> {
+  const seen = new Set<string>()
+  const unique = pointers.filter(p => {
+    const key = `${p.bookTitle}::${p.lineIndex}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  const lines = await Promise.all(unique.map(async (p): Promise<PointedLine | null> => {
+    const bookId = await resolveBookId(p.bookTitle)
+    if (bookId === null) return null
+    const line = (await getLineByBookAndLineIndex(bookId, p.lineIndex))[0]
+    if (!line) return null
+    return { bookTitle: p.bookTitle, bookId, lineId: line.id, lineIndex: line.lineIndex, content: line.content }
+  }))
+  return lines.filter((l): l is PointedLine => l !== null)
+}
+
+async function lookupLines(source: HeadwordSource, term: string, mode: HeadwordMode): Promise<PointedLine[]> {
+  return fetchPointedLines(await findHeadwords(source, term, mode))
+}
 
 // ── מצודת ציון / מלבי"ם shared helpers ───────────────────────────────────────
 
@@ -92,21 +138,18 @@ function headerMatchesPrefix(headerWord: string, term: string): boolean {
   return normalized.split(/[,\s]+/).some(token => token.startsWith(term) && token !== term)
 }
 
-async function queryBoldLines(pattern: string, bookIds: number[]): Promise<MetzudatRow[]> {
-  const rows = await getLinesWithContentPatternForBooks(bookIds, pattern)
-  return rows
-    .map(r => parseBoldLine(r.content, r.title, r.bookId, r.lineId, r.lineIndex))
+/** The two bold-headword sources; callers name one instead of passing book ids. */
+export type BoldSource = 'metzudat' | 'malbim'
+
+async function queryBoldLines(source: BoldSource, term: string, mode: HeadwordMode): Promise<MetzudatRow[]> {
+  return (await lookupLines(source, term, mode))
+    .map(r => parseBoldLine(r.content, r.bookTitle, r.bookId, r.lineId, r.lineIndex))
     .filter((r): r is MetzudatRow => r !== null)
 }
 
-export async function boldExact(term: string, bookIds: number[]): Promise<MetzudatRow[]> {
-  if (bookIds.length === 0) return []
-  const [plain, withPunctuation] = await Promise.all([
-    queryBoldLines(`<b>${term}</b>%`, bookIds),
-    queryBoldLines(`<b>${term}%</b>%`, bookIds),
-  ])
+export async function boldExact(term: string, source: BoldSource): Promise<MetzudatRow[]> {
   const seen = new Set<string>()
-  return [...plain, ...withPunctuation].filter(r => {
+  return (await queryBoldLines(source, term, 'exact')).filter(r => {
     if (!headerMatchesExact(r.word, term)) return false
     const key = `${r.bookId}::${r.word}::${r.definition}`
     if (seen.has(key)) return false
@@ -115,29 +158,19 @@ export async function boldExact(term: string, bookIds: number[]): Promise<Metzud
   })
 }
 
-export async function boldPrefix(term: string, bookIds: number[]): Promise<MetzudatRow[]> {
-  if (bookIds.length === 0) return []
-  return (await queryBoldLines(`<b>${term}%</b>%`, bookIds))
+export async function boldPrefix(term: string, source: BoldSource): Promise<MetzudatRow[]> {
+  return (await queryBoldLines(source, term, 'prefix'))
     .filter(r => headerMatchesPrefix(r.word, term))
 }
 
-export async function boldContains(term: string, bookIds: number[]): Promise<MetzudatRow[]> {
-  if (bookIds.length === 0) return []
-  return (await queryBoldLines(`<b>%${term}%</b>%`, bookIds))
+export async function boldContains(term: string, source: BoldSource): Promise<MetzudatRow[]> {
+  return (await queryBoldLines(source, term, 'contains'))
     .filter(r => {
       const normalized = normalizeHeaderWord(r.word)
       return normalized.split(/[,\s]+/).some(
         token => token.includes(term) && !token.startsWith(term)
       )
     })
-}
-
-export async function getMetzudatBookIds(): Promise<number[]> {
-  return getBookIds('%מצודת ציון%', _metzudatCache)
-}
-
-export async function getMalbimBookIds(): Promise<number[]> {
-  return getBookIds('%מלבי%באור המילות%', _malbimCache)
 }
 
 // ── מחברת מנחם ───────────────────────────────────────────────────────────────
@@ -162,17 +195,9 @@ function parseBigWord(content: string): string | null {
 }
 
 export async function menchemLookup(term: string): Promise<MenchemRow[]> {
-  const bookIds = await getBookIds('%מחברת מנחם%', _menchemCache)
-  if (bookIds.length === 0) return []
-  const bookId = bookIds[0]!
-
-  // Only query the dictionary section: <strong><big>HEADWORD</big></strong> lines.
-  // The early synonym/intro section (before the first <big> entry) is skipped entirely —
-  // it is preamble and section headers, not dictionary content.
-  // Pattern covers both with and without trailing space before </big>.
-  const bigRows = await getLinesWithEitherContentPattern(
-    bookId, `%<big>%${term}</big>%`, `%<big>%${term} </big>%`,
-  )
+  // Only the dictionary section (<strong><big>HEADWORD</big></strong> lines) is indexed;
+  // the early synonym/intro preamble is not dictionary content.
+  const bigRows = await lookupLines('menachem', term, 'exact')
 
   const results: MenchemRow[] = []
   for (const row of bigRows) {
@@ -181,15 +206,15 @@ export async function menchemLookup(term: string): Promise<MenchemRow[]> {
     const normalized = word.replace(/[.,;:״"]/g, '').trim()
     if (!normalized.includes(term)) continue
 
-    const nextRows = await getLineByBookAndLineIndex(bookId, row.lineIndex + 1)
+    const nextRows = await getLineByBookAndLineIndex(row.bookId, row.lineIndex + 1)
     const nextLine = nextRows[0]
     if (!nextLine) continue
     results.push({
       word,
       text:      stripAllHtml(nextLine.content),
       title:     null,
-      bookId,
-      lineId:    row.id,
+      bookId:    row.bookId,
+      lineId:    row.lineId,
       lineIndex: row.lineIndex,
     })
   }
@@ -252,26 +277,9 @@ async function resolveMicropediaGloss(bookId: number, headerLineIndex: number): 
 }
 
 export async function micropediaLookup(term: string): Promise<MicropediaRow[]> {
-  if (_micropediaCache.ids === null) {
-    // PREFIX match, not an exact title. Zayit calls this book by the bare word, while
-    // the Otzaria library ships it with a second word appended - an exact match finds
-    // nothing there, which left this lookup silently returning no results on every
-    // Otzaria library. A prefix resolves to exactly one book on both.
-    //
-    // Deliberately NOT a '%...%' contains: for the other sources that would also match a
-    // commentary written ON the book (there is one such title for the Aruch), and the
-    // wrong book's lines would be parsed as dictionary entries.
-    const rows = await getBookIdsByTitlePattern('מיקרופדיה%')
-    _micropediaCache.ids = rows.map(r => r.id)
-  }
-  if (_micropediaCache.ids.length === 0) return []
-  const bookId = _micropediaCache.ids[0]!
-
-  // Match the entry headword exactly (<h2>TERM</h2>) or as a comma-qualified form
-  // (<h2>TERM, …</h2> — e.g. 'אב, המוליד' for the term 'אב').
-  const rows = await getLinesWithEitherContentPattern(
-    bookId, `%<h2>${term}</h2>%`, `%<h2>${term}, %`,
-  )
+  // The index holds every comma/space token of each <h2> headword, so TERM also finds
+  // comma-qualified entries ('TERM, ...'); the guard below keeps only those headed by TERM.
+  const rows = await lookupLines('micropedia', term, 'exact')
 
   const results: MicropediaRow[] = []
   const seen = new Set<string>()
@@ -279,16 +287,15 @@ export async function micropediaLookup(term: string): Promise<MicropediaRow[]> {
     const match = row.content.match(/<h2>([^<]+)<\/h2>/)
     if (!match) continue
     const word = (match[1] ?? '').trim()
-    // Guard the comma pattern: the head before the comma must equal the term.
     const headBeforeComma = word.split(',')[0]!.trim()
     if (headBeforeComma !== term && word !== term) continue
     if (seen.has(word)) continue
     seen.add(word)
 
-    const text = await resolveMicropediaGloss(bookId, row.lineIndex)
+    const text = await resolveMicropediaGloss(row.bookId, row.lineIndex)
     if (!text) continue
 
-    results.push({ word, text, bookId, lineId: row.id, lineIndex: row.lineIndex })
+    results.push({ word, text, bookId: row.bookId, lineId: row.lineId, lineIndex: row.lineIndex })
   }
 
   return results
@@ -313,19 +320,7 @@ function parseBigBoldLine(content: string): { word: string; text: string } | nul
 }
 
 export async function aruchLookup(term: string): Promise<AruchRow[]> {
-  // Use exact title match — '%ספר הערוך%' also matches 'הפלאה שבערכין על ספר הערוך'
-  // which is a different book with no <big> entries.
-  if (_aruchCache.ids === null) {
-    const rows = await getBookIdByExactTitle('ספר הערוך')
-    _aruchCache.ids = rows.map(r => r.id)
-  }
-  if (_aruchCache.ids.length === 0) return []
-  const bookId = _aruchCache.ids[0]!
-
-  // Pattern covers both with and without trailing space before </big>
-  const rows = await getLinesWithEitherContentPattern(
-    bookId, `%<big>${term}</big>%`, `%<big>${term} </big>%`,
-  )
+  const rows = await lookupLines('aruch', term, 'exact')
 
   const results: AruchRow[] = []
   for (const row of rows) {
@@ -337,8 +332,8 @@ export async function aruchLookup(term: string): Promise<AruchRow[]> {
     results.push({
       word:      parsed.word,
       text:      stripAllHtml(parsed.text),
-      bookId,
-      lineId:    row.id,
+      bookId:    row.bookId,
+      lineId:    row.lineId,
       lineIndex: row.lineIndex,
     })
   }

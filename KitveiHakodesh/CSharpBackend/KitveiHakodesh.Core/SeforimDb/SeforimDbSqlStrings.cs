@@ -465,22 +465,6 @@ namespace KitveiHakodesh.Core.SeforimDb
 
         public const string GetBookIdByExactTitle = "SELECT id FROM book WHERE title = @title";
 
-        /// <summary>Bold-tagged headword lines for a set of books matching a content LIKE pattern.</summary>
-        public static string GetLinesWithContentPatternForBooks(SeforimDbSchema schema, int bookCount) => $@"
-            SELECT {C_ContentColumn(schema, "l")}, b.title, b.id AS bookId, l.id AS lineId, l.lineIndex
-            FROM line l{C_ContentJoin(schema, "l")} JOIN book b ON b.id = l.bookId
-            WHERE l.bookId IN ({InPlaceholders("b", bookCount)})
-              AND {C_ContentExpression(schema, "l")} LIKE @pattern
-            LIMIT 50";
-
-        /// <summary>Lines from one book matching either of two content LIKE patterns.</summary>
-        public static string GetLinesWithEitherContentPattern(SeforimDbSchema schema) => $@"
-            SELECT l.id, l.lineIndex, {C_ContentColumn(schema, "l")}
-            FROM line l{C_ContentJoin(schema, "l")}
-            WHERE l.bookId = @bookId AND ({C_ContentExpression(schema, "l")} LIKE @p1
-                                       OR {C_ContentExpression(schema, "l")} LIKE @p2)
-            ORDER BY l.lineIndex LIMIT 20";
-
         /// <summary>A single line from a book by its lineIndex.</summary>
         public static string GetLineByBookAndLineIndex(SeforimDbSchema schema) =>
             "SELECT l.id, l.lineIndex, " + C_ContentColumn(schema, "l")

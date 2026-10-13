@@ -560,6 +560,15 @@ public sealed class Dispatcher(
                 case "dictContains":
                     return RpcResponse.Ok(MsgPack.Ser(new DictSensesResult { Rows = dictionary.Contains(Term(req.Args)) }));
 
+                case "dictSeforimHeadwords":
+                {
+                    var a = MsgPack.De<DictSeforimHeadwordArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new DictSeforimHeadwordsResult
+                    {
+                        Rows = dictionary.SeforimHeadwords(a.Source ?? "", a.Term ?? "", a.Mode ?? "exact"),
+                    }));
+                }
+
                 case "dictLinks":
                     return RpcResponse.Ok(MsgPack.Ser(new DictLinksResult { Links = dictionary.Links(Term(req.Args)) }));
 
@@ -739,18 +748,6 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<ExactTitleArgs>(req.Args);
                     return RpcResponse.Ok(MsgPack.Ser(new BookIdsResult { Rows = seforim.GetBookIdByExactTitle(a.Title) }));
-                }
-
-                case "getLinesWithContentPatternForBooks":
-                {
-                    var a = MsgPack.De<BoldLinesArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new BoldLinesResult { Rows = seforim.GetLinesWithContentPatternForBooks(a.BookIds, a.Pattern) }));
-                }
-
-                case "getLinesWithEitherContentPattern":
-                {
-                    var a = MsgPack.De<EitherPatternArgs>(req.Args);
-                    return RpcResponse.Ok(MsgPack.Ser(new RawLinesResult { Rows = seforim.GetLinesWithEitherContentPattern(a.BookId, a.P1, a.P2) }));
                 }
 
                 case "getLineByBookAndLineIndex":

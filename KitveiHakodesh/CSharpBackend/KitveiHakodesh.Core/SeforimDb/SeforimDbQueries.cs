@@ -745,47 +745,6 @@ namespace KitveiHakodesh.Core.SeforimDb
             return list;
         }
 
-        public List<BoldLineRow> GetLinesWithContentPatternForBooks(List<int> bookIds, string pattern)
-        {
-            var list = new List<BoldLineRow>();
-            if (bookIds is null || bookIds.Count == 0) return list;
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            using var codec = CodecFor(conn);
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesWithContentPatternForBooks(SchemaOf(conn), bookIds.Count);
-            BindList(cmd, "b", bookIds);
-            cmd.Parameters.AddWithValue("@pattern", pattern);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-            {
-                list.Add(new BoldLineRow
-                {
-                    Content = codec.DecodeColumnOrEmpty(r, 0),
-                    Title = r.IsDBNull(1) ? "" : r.GetString(1),
-                    BookId = r.IsDBNull(2) ? 0 : r.GetInt32(2),
-                    LineId = r.IsDBNull(3) ? 0 : r.GetInt32(3),
-                    LineIndex = r.IsDBNull(4) ? 0 : r.GetInt32(4),
-                });
-            }
-            return list;
-        }
-
-        public List<RawLineRow> GetLinesWithEitherContentPattern(int bookId, string p1, string p2)
-        {
-            var list = new List<RawLineRow>();
-            using var conn = Open();
-            using var cmd = conn.CreateCommand();
-            using var codec = CodecFor(conn);
-            cmd.CommandText = SeforimDbSqlStrings.GetLinesWithEitherContentPattern(SchemaOf(conn));
-            cmd.Parameters.AddWithValue("@bookId", bookId);
-            cmd.Parameters.AddWithValue("@p1", p1);
-            cmd.Parameters.AddWithValue("@p2", p2);
-            using var r = cmd.ExecuteReader();
-            while (r.Read())
-                list.Add(new RawLineRow { Id = r.GetInt32(0), LineIndex = r.IsDBNull(1) ? 0 : r.GetInt32(1), Content = codec.DecodeColumnOrEmpty(r, 2) });
-            return list;
-        }
-
         public List<RawLineRow> GetLineByBookAndLineIndex(int bookId, int lineIndex)
         {
             var list = new List<RawLineRow>();

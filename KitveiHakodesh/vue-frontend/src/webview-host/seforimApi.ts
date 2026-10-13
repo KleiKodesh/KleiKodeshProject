@@ -275,20 +275,6 @@ export async function getBookIdByExactTitle(title: string): Promise<{ id: number
   return (await seforimOp<{ rows: { id: number }[] }>('getBookIdByExactTitle', { title })).rows
 }
 
-export async function getLinesWithContentPatternForBooks(
-  bookIds: number[], pattern: string,
-): Promise<{ content: string; title: string; bookId: number; lineId: number; lineIndex: number }[]> {
-  return (await seforimOp<{ rows: { content: string; title: string; bookId: number; lineId: number; lineIndex: number }[] }>(
-      'getLinesWithContentPatternForBooks', { bookIds, pattern })).rows
-}
-
-export async function getLinesWithEitherContentPattern(
-  bookId: number, p1: string, p2: string,
-): Promise<{ id: number; lineIndex: number; content: string }[]> {
-  return (await seforimOp<{ rows: { id: number; lineIndex: number; content: string }[] }>(
-      'getLinesWithEitherContentPattern', { bookId, p1, p2 })).rows
-}
-
 export async function getLineByBookAndLineIndex(
   bookId: number, lineIndex: number,
 ): Promise<{ id: number; lineIndex: number; content: string }[]> {

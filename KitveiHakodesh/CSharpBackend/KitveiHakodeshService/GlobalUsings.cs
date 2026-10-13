@@ -11,7 +11,6 @@
 // shape RPC calls rather than data.
 
 global using AltTocStructureRow = KitveiHakodesh.Core.SeforimDb.AltTocStructureRow;
-global using BoldLineRow = KitveiHakodesh.Core.SeforimDb.BoldLineRow;
 global using BookIdRow = KitveiHakodesh.Core.SeforimDb.BookIdRow;
 global using BookInfo = KitveiHakodesh.Core.SeforimDb.BookInfo;
 global using BookRow = KitveiHakodesh.Core.SeforimDb.BookRow;
