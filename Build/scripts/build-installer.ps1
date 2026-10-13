@@ -47,6 +47,7 @@ Write-Host "Platform     : AnyCPU (the only installer)" -ForegroundColor Gray
 Write-Host ""
 
 # ── 0. Delete Vue build stamp (forces fresh Vue rebuild every release build) ──
+Start-BuildStep "Prepare: drop Vue build stamp, wipe Release folders"
 $vueStamp = Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend\dist\.build-stamp"
 if (Test-Path $vueStamp) {
     Remove-Item $vueStamp -Force
@@ -74,7 +75,7 @@ if (Test-Path $DemoAppReleaseDir) {
 }
 
 # ── 2. Update version ─────────────────────────────────────────────────────────
-Write-Host "Updating version..." -ForegroundColor Yellow
+Start-BuildStep "Stamp version"
 $versionBefore = Get-CurrentVersion
 if ($ManualVersion) {
     & powershell -ExecutionPolicy Bypass -File $UpdateVersionScript `
@@ -120,7 +121,10 @@ elseif (-not $ManualVersion -and $version -eq $versionBefore) {
 }
 
 # ── 3. Clean ──────────────────────────────────────────────────────────────────
-if (-not $NoClean) { Invoke-SolutionClean }
+if (-not $NoClean) {
+    Start-BuildStep "Clean solution"
+    Invoke-SolutionClean
+}
 
 # ── 4. Build the installer (AnyCPU - the ONLY installer since 2026-10-11) ────
 #
@@ -148,19 +152,47 @@ function Build-Variant {
         [string]$Suffix         # ""
     )
 
-    Write-Host ""
-    Write-Host "Building WPF installer (Release|$Platform)..." -ForegroundColor Yellow
+    # The installer build used to be one opaque step: its BuildVstoAndPack target builds
+    # the VSTO (which builds Vue and AOT-publishes the service on the way) and packs the
+    # payload. Each piece runs here as its own timed step instead. The nested builds then
+    # find Vue (stamp) and the service (Inputs/Outputs) up to date and skip them.
+    # -tl:off: dotnet's live terminal logger collapses nested output into one line.
 
     # SDK-style projects ignore PropertyGroup conditions — must pass OutputPath explicitly
     $outputPath = "bin\Release\net48\"
+    $installerProps = @(
+        "-p:Configuration=Release",
+        "-p:VstoConfiguration=Release", "-p:VstoPlatform=$Platform",
+        "-p:InstallerVariant=$Platform",
+        "-p:DeleteFtsIndex=$(if ($DeleteFtsIndex) { 'true' } else { 'false' })",
+        "-p:ForceCleanInstall=$(if ($ForceCleanInstall) { 'true' } else { 'false' })",
+        "-p:OutputPath=$outputPath"
+    )
+    $msbuild = Find-MSBuild
 
-    dotnet build $WpfProjectPath -c Release `
-        -p:VstoConfiguration=Release -p:VstoPlatform=$Platform `
-        -p:InstallerVariant=$Platform `
-        -p:DeleteFtsIndex=$(if ($DeleteFtsIndex) { 'true' } else { 'false' }) `
-        -p:ForceCleanInstall=$(if ($ForceCleanInstall) { 'true' } else { 'false' }) `
-        -p:OutputPath=$outputPath `
-        --verbosity normal
+    Start-BuildStep "Vue frontend (npm run build)"
+    $vueDir = Join-Path $ProjectRoot "KitveiHakodesh\vue-frontend"
+    Push-Location $vueDir
+    try { & "C:\Program Files\nodejs\npm.cmd" run build } finally { Pop-Location }
+    if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: Vue build failed." -ForegroundColor Red; exit 1 }
+    # Same stamp KitveiHakodesh.targets touches, so the VSTO and DemoApp builds skip Vue.
+    New-Item -ItemType File -Path $vueStamp -Force | Out-Null
+
+    Start-BuildStep "KitveiHakodeshService native AOT publish"
+    $libProject = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\KitveiHakodeshLib\KitveiHakodeshLib.csproj"
+    & $msbuild $libProject /t:PublishKitveiHakodeshService /p:Configuration=Release /nologo /verbosity:normal /clp:ShowTimestamp
+    if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: service publish failed." -ForegroundColor Red; exit 1 }
+
+    Start-BuildStep "KleiKodeshVsto build (Release|$Platform)"
+    dotnet msbuild $WpfProjectPath -t:BuildVsto @installerProps -tl:off -clp:ShowTimestamp -v:normal -nologo
+    if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: VSTO build failed." -ForegroundColor Red; exit 1 }
+
+    Start-BuildStep "Pack VSTO payload (chunked LZMA, parallel)"
+    dotnet msbuild $WpfProjectPath -t:PackVstoPayload @installerProps -tl:off -clp:ShowTimestamp -v:normal -nologo
+    if ($LASTEXITCODE -ne 0) { Write-Host "ERROR: payload pack failed." -ForegroundColor Red; exit 1 }
+
+    Start-BuildStep "Compile WPF installer"
+    dotnet build $WpfProjectPath @installerProps -p:SkipVstoPack=true -tl:off -clp:ShowTimestamp -v:minimal -nologo
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: WPF build failed for $Platform." -ForegroundColor Red
         exit 1
@@ -170,7 +202,7 @@ function Build-Variant {
     $wpfExePath = Join-Path $wpfExeDir "KleiKodeshVstoInstallerWpf.exe"
     $outFile = Join-Path $ReleasesDir "KleiKodeshSetup-${version}${Suffix}.exe"
 
-    Write-Host "Building NSIS wrapper ($version$Suffix)..." -ForegroundColor Yellow
+    Start-BuildStep "NSIS wrapper ($version$Suffix)"
     $versionNumeric = $version.TrimStart('v')   # "v8.6.0" → "8.6.0" for VIProductVersion
     & $nsisExe `
         "/DPRODUCT_VERSION=$version" `
@@ -201,8 +233,7 @@ Write-Host ""
 Write-Host "Installer built successfully." -ForegroundColor Green
 
 # ── 4b. Build KitveiHakodeshPortable (DemoApp, Release|AnyCPU) + zip ─────────
-Write-Host ""
-Write-Host "Building KitveiHakodeshPortable (Release|AnyCPU)..." -ForegroundColor Yellow
+Start-BuildStep "Build KitveiHakodeshPortable (DemoApp Release|AnyCPU)"
 
 $msbuild = Find-MSBuild
 if (-not $msbuild) {
@@ -210,11 +241,13 @@ if (-not $msbuild) {
     exit 1
 }
 
-& $msbuild $DemoAppProjectPath /p:Configuration=Release /p:Platform=AnyCPU /nologo /verbosity:minimal
+& $msbuild $DemoAppProjectPath /p:Configuration=Release /p:Platform=AnyCPU /nologo /verbosity:minimal /clp:ShowTimestamp
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: KitveiHakodeshDemoApp build failed." -ForegroundColor Red
     exit 1
 }
+
+Start-BuildStep "Zip KitveiHakodeshPortable"
 
 $portableZip = Join-Path $ReleasesDir "KitveiHakodeshPortable-${version}.zip"
 if (Test-Path $portableZip) { Remove-Item $portableZip -Force }
@@ -229,20 +262,21 @@ if (-not (Test-Path $portableZip)) {
 Write-Host "OK: $(Split-Path -Leaf $portableZip)" -ForegroundColor Green
 
 # ── 5. GitHub release ─────────────────────────────────────────────────────────
-if ($NoRelease) { Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
+if ($NoRelease) { Complete-BuildSteps; Write-Host "GitHub release skipped." -ForegroundColor Yellow; exit 0 }
 
-Write-Host ""
-Write-Host "Creating GitHub release..." -ForegroundColor Yellow
+Start-BuildStep "GitHub release"
 
 $ghCmd = Get-Command gh -ErrorAction SilentlyContinue
 if (-not $ghCmd) {
     Write-Host "GitHub CLI (gh) not found — skipping release. Install from: https://cli.github.com/" -ForegroundColor Yellow
+    Complete-BuildSteps
     exit 0
 }
 
 gh auth status 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host "GitHub CLI not authenticated — skipping release. Run: gh auth login" -ForegroundColor Yellow
+    Complete-BuildSteps
     exit 0
 }
 
@@ -299,8 +333,7 @@ if ($LASTEXITCODE -ne 0) {
 # is never pointed at a URL that 404s. If anything below fails the release itself is
 # already published and intact — only the website lags, and re-running this section
 # (or editing the href by hand) is enough to catch it up.
-Write-Host ""
-Write-Host "Updating website download link..." -ForegroundColor Yellow
+Start-BuildStep "Update website download link"
 
 $downloadUrl = "https://github.com/KleiKodesh/KleiKodeshProject/releases/download/$version/KleiKodeshSetup-$version.exe"
 
@@ -382,5 +415,6 @@ if (-not (Test-Path $WebsiteRepo)) {
     }
 }
 
+Complete-BuildSteps
 Write-Host ""
 Write-Host "SUCCESS: https://github.com/KleiKodesh/KleiKodeshProject/releases/tag/$version" -ForegroundColor Green

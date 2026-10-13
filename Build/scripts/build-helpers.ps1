@@ -18,6 +18,49 @@ $DemoAppReleaseDir   = Join-Path $ProjectRoot "KitveiHakodesh\CSharpBackend\Kitv
 # rewrites its download link to the new version and pushes it.
 $WebsiteRepo         = Join-Path $ProjectRoot "kleikodesh-website"
 
+# -- Step timing --------------------------------------------------------------
+# Start-BuildStep closes the previous step and opens the next, so every stage gets a
+# timestamped header and its own elapsed time. Complete-BuildSteps closes the last one
+# and prints where the time went. A failed build exits mid-step, so the last header
+# printed is the step that failed.
+$script:BuildSteps  = New-Object System.Collections.ArrayList
+$script:CurrentStep = $null
+$script:BuildWatch  = [System.Diagnostics.Stopwatch]::StartNew()
+
+function Format-Elapsed([TimeSpan]$Time) {
+    '{0}m{1:00}s' -f [int][math]::Floor($Time.TotalMinutes), $Time.Seconds
+}
+
+function Stop-CurrentBuildStep {
+    if (-not $script:CurrentStep) { return }
+    $step = $script:CurrentStep
+    $step.Elapsed = $step.Watch.Elapsed
+    Write-Host ("  ({0} took {1})" -f $step.Name, (Format-Elapsed $step.Elapsed)) -ForegroundColor DarkGray
+    [void]$script:BuildSteps.Add($step)
+    $script:CurrentStep = $null
+}
+
+function Start-BuildStep([string]$Name) {
+    Stop-CurrentBuildStep
+    Write-Host ""
+    Write-Host ("[{0:HH:mm:ss}] >> {1}" -f (Get-Date), $Name) -ForegroundColor Yellow
+    $script:CurrentStep = [pscustomobject]@{
+        Name    = $Name
+        Watch   = [System.Diagnostics.Stopwatch]::StartNew()
+        Elapsed = $null
+    }
+}
+
+function Complete-BuildSteps {
+    Stop-CurrentBuildStep
+    Write-Host ""
+    Write-Host "Time per step:" -ForegroundColor Cyan
+    foreach ($step in $script:BuildSteps) {
+        Write-Host ("  {0,8}  {1}" -f (Format-Elapsed $step.Elapsed), $step.Name)
+    }
+    Write-Host ("  {0,8}  total" -f (Format-Elapsed $script:BuildWatch.Elapsed)) -ForegroundColor Cyan
+}
+
 # -- Read current version from source -----------------------------------------
 function Get-CurrentVersion {
     $m = Select-String -Path $AddinInstallerPath -Pattern 'const string Version\s*=\s*"([^"]+)"'
@@ -65,16 +108,21 @@ function Set-Version {
 
 # -- Locate MSBuild -----------------------------------------------------------
 function Find-MSBuild {
+    # foreach statement, not ForEach-Object: `return` inside a ForEach-Object block only
+    # ends that iteration, so the function emitted an array (path + $null). Invoking that
+    # array with & runs nothing and leaves $LASTEXITCODE at 0 - the clean and portable
+    # builds were silently skipped.
     $inPath = Get-Command msbuild -ErrorAction SilentlyContinue
     if ($inPath) { return $inPath.Source }
-    @(
+    $candidates = @(
         "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
         "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
         "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
         "${env:ProgramFiles}\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe",
         "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Professional\MSBuild\Current\Bin\MSBuild.exe",
         "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2019\Community\MSBuild\Current\Bin\MSBuild.exe"
-    ) | ForEach-Object { if (Test-Path $_) { return $_ } }
+    )
+    foreach ($candidate in $candidates) { if (Test-Path $candidate) { return $candidate } }
     return $null
 }
 

@@ -4,7 +4,7 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
     <UseWPF>true</UseWPF>
-    <Version>9.1.5</Version>
+    <Version>1.2.1</Version>
     <ApplicationIcon>KleiKodesh_Main.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Platforms>AnyCPU</Platforms>
@@ -56,9 +56,13 @@
   </ItemGroup>
 
   <!-- Prebuild: build KleiKodeshVsto and pack KleiKodesh.zip — runs in both Debug and Release -->
-  <!-- -p:SkipVstoPack=true compiles the installer alone (quick code check); the payload is not
-       rebuilt, so never ship a build made that way. -->
-  <Target Name="BuildVstoAndPack" BeforeTargets="BeforeBuild" Condition="'$(SkipVstoPack)' != 'true'">
+  <!-- -p:SkipVstoPack=true compiles the installer alone. build-installer.ps1 uses it after
+       running BuildVsto and PackVstoPayload as separate timed steps; anywhere else the
+       payload is not rebuilt, so never ship a build made that way. -->
+  <Target Name="BuildVstoAndPack" BeforeTargets="BeforeBuild" Condition="'$(SkipVstoPack)' != 'true'"
+          DependsOnTargets="BuildVsto;PackVstoPayload" />
+
+  <Target Name="ResolveVstoPackPaths">
     <PropertyGroup>
       <KleiKodeshProject>$(MSBuildProjectDirectory)\..\..\KleiKodeshVsto\KleiKodeshVsto.csproj</KleiKodeshProject>
       <!-- In Release use Release|AnyCPU (or overrides from build script); in Debug use Debug|AnyCPU -->
@@ -84,9 +88,15 @@
       <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
       <MSBuildPath Condition="'$(MSBuildPath)' == '' AND Exists('C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe')">C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe</MSBuildPath>
     </PropertyGroup>
+  </Target>
 
+  <Target Name="BuildVsto" DependsOnTargets="ResolveVstoPackPaths">
     <Message Text="Building KleiKodeshVsto in $(VstoConfig)|$(VstoPlatformParam)..." Importance="high" />
     <Exec Command="&quot;$(MSBuildPath)&quot; &quot;$(KleiKodeshProject)&quot; /p:Configuration=$(VstoConfig) /p:Platform=$(VstoPlatformParam)" ContinueOnError="false" />
+    <Message Text="KleiKodeshVsto built." Importance="high" />
+  </Target>
+
+  <Target Name="PackVstoPayload" DependsOnTargets="ResolveVstoPackPaths">
 
     <Delete Files="$(ZipOutputPath)" Condition="Exists('$(ZipOutputPath)')" />
     <MakeDir Directories="$(TempPackageDir)" />
@@ -98,7 +108,7 @@
     <Copy SourceFiles="@(VstoFiles)" DestinationFolder="$(TempPackageDir)\%(RecursiveDir)" />
 
     <!--
-      The payload is packed here with SOLID LZMA into KleiKodesh.pkg, and NSIS is set
+      The payload is packed here with chunked LZMA (16 MB chunks, compressed in parallel) into KleiKodesh.pkg, and NSIS is set
       to `SetCompressor zlib` so it does NOT compress it again.
 
       Why not a zip: the installer's launch time was dominated by NSIS decompressing
@@ -113,10 +123,11 @@
       the installer embeds; a framing disagreement between writer and reader would
       only surface on a user's machine.
     -->
+    <Message Text="Payload files copied to $(TempPackageDir)." Importance="high" />
     <Message Text="Building payload packer..." Importance="high" />
     <Exec Command="dotnet build &quot;$(PayloadPackerProject)&quot; -c Release -v quiet --nologo" ContinueOnError="false" />
 
-    <Message Text="Packing VSTO payload (solid LZMA)..." Importance="high" />
+    <Message Text="Packing VSTO payload (chunked LZMA)..." Importance="high" />
     <Exec Command="&quot;$(PayloadPackerExe)&quot; &quot;$(TempPackageDir)&quot; &quot;$(ZipOutputPath)&quot;" ContinueOnError="false" />
 
     <RemoveDir Directories="$(TempPackageDir)" />
@@ -147,7 +158,7 @@
       4.5.3. Do not bump without re-testing extraction end to end.
 
       NU1902 (GHSA-6c8g-7p36-r338) is suppressed: it covers path traversal in
-      SharpCompress's archive readers. This code only uses LZipStream (a raw
+      SharpCompress's archive readers. This code only uses LzmaStream (a raw
       compression stream, no entry paths) and reads its own PayloadArchive format.
     -->
     <PackageReference Include="SharpCompress" Version="0.30.1" />
@@ -155,7 +166,7 @@
     <!--
       SharpCompress declares System.Text.Encoding.CodePages for its archive readers
       (legacy zip/rar filename code pages). Nothing here reads archives — only
-      LZipStream, which has no filenames — so the package is excluded outright rather
+      LzmaStream, which has no filenames — so the package is excluded outright rather
       than merely skipped at embed time. See UnusedFacades in EmbedDependencies below.
     -->
     <PackageReference Update="System.Text.Encoding.CodePages" ExcludeAssets="all" />
@@ -174,7 +185,7 @@
 
         System.Text.Encoding.CodePages (759 KB) is used by SharpCompress's ARCHIVE
         READERS to decode legacy zip/rar filename code pages. This installer only uses
-        LZipStream, a raw compression stream with no filenames, so it is never touched
+        LzmaStream, a raw compression stream with no filenames, so it is never touched
         — confirmed by tracing AssemblyResolve across a full 588-file extraction.
         System.Numerics.Vectors (116 KB) is the same story via System.Memory on net48.
 

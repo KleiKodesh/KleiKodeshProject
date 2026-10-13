@@ -1,3 +1,4 @@
+using SharpCompress.Compressors.LZMA;
 using System;
 using System.IO;
 using System.Text;
@@ -5,7 +6,7 @@ using System.Text;
 namespace KleiKodeshVstoInstallerWpf.Helpers
 {
     /// <summary>
-    /// Reader for the solid-LZMA payload archive (KleiKodesh.pkg).
+    /// Reader for the chunked-LZMA payload archive (KleiKodesh.pkg).
     ///
     /// WHY THIS EXISTS INSTEAD OF A ZIP
     /// --------------------------------
@@ -25,18 +26,26 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     ///
     /// FORMAT
     /// ------
-    /// Everything after the header is ONE LZMA stream (SharpCompress LZipStream),
-    /// so the archive is strictly sequential — there is no random access by design.
+    /// The body is cut into fixed-size chunks (16 MB uncompressed), each its own raw
+    /// LZMA stream, so the packer can compress them in parallel: one solid stream
+    /// took 3+ minutes of every build. Chunk boundaries fall anywhere, even inside a
+    /// file; OpenBody joins the chunks back into one sequential body stream. There
+    /// is no random access by design.
     ///
-    ///   "KKPKG1\n"                      magic, 7 bytes ASCII
+    ///   "KKPKG2\n"                      magic, 7 bytes ASCII
     ///   int32   entryCount              little-endian
-    ///   --- begin LZip stream ---
-    ///   per entry, in order:
+    ///   int32   chunkCount
+    ///   per chunk:
+    ///     byte[5] lzmaProperties
+    ///     int64   packedLength
+    ///     int64   rawLength
+    ///     byte[]  packed data           raw LZMA (SharpCompress LzmaStream)
+    ///
+    ///   The joined body, per entry, in order:
     ///     int32  pathByteCount
     ///     byte[] path                   UTF-8, backslash-separated, relative
     ///     int64  length                 uncompressed byte count
     ///     byte[] data                   raw file bytes
-    ///   --- end LZip stream ---
     ///
     /// Directories are NOT stored as entries; the extractor creates them from each
     /// entry's path. The old zip carried explicit directory entries (recognised by
@@ -64,7 +73,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// </summary>
         public const string PathSwitch = "--payload";
 
-        private static readonly byte[] Magic = Encoding.ASCII.GetBytes("KKPKG1\n");
+        private static readonly byte[] Magic = Encoding.ASCII.GetBytes("KKPKG2\n");
 
         /// <summary>One entry's metadata, handed to the extraction callback.</summary>
         public sealed class Entry
@@ -88,12 +97,86 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             {
                 if (magic[i] != Magic[i])
                     throw new InvalidDataException(
-                        "Payload archive header is not valid (expected KKPKG1).");
+                        "Payload archive header is not valid (expected KKPKG2).");
             }
 
-            var countBytes = new byte[4];
-            ReadExactly(stream, countBytes, 4);
-            return BitConverter.ToInt32(countBytes, 0);
+            return ReadInt32(stream);
+        }
+
+        /// <summary>
+        /// Opens the decompressed body. Call after <see cref="ReadHeader"/>; the
+        /// returned stream reads the chunks one after another as a single stream.
+        /// </summary>
+        public static Stream OpenBody(Stream stream)
+        {
+            return new ChunkedBodyStream(stream, ReadInt32(stream));
+        }
+
+        /// <summary>
+        /// Read-only, forward-only stream over the body's LZMA chunks. Each chunk's
+        /// packed bytes are read into memory before decoding (a chunk is a few MB),
+        /// so the decoder can never read past its own chunk into the next one.
+        /// </summary>
+        private sealed class ChunkedBodyStream : Stream
+        {
+            private readonly Stream _source;
+            private int _chunksLeft;
+            private Stream _current;
+
+            public ChunkedBodyStream(Stream source, int chunkCount)
+            {
+                _source = source;
+                _chunksLeft = chunkCount;
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                while (true)
+                {
+                    if (_current != null)
+                    {
+                        int got = _current.Read(buffer, offset, count);
+                        if (got > 0) return got;
+                        _current.Dispose();
+                        _current = null;
+                    }
+                    if (_chunksLeft == 0) return 0;
+                    _current = OpenNextChunk();
+                    _chunksLeft--;
+                }
+            }
+
+            private Stream OpenNextChunk()
+            {
+                var properties = new byte[5];
+                ReadExactly(_source, properties, 5);
+                long packedLength = ReadInt64(_source);
+                long rawLength = ReadInt64(_source);
+
+                var packed = new byte[packedLength];
+                ReadExactly(_source, packed, packed.Length);
+                return new LzmaStream(properties, new MemoryStream(packed), packedLength, rawLength);
+            }
+
+            protected override void Dispose(bool disposing)
+            {
+                if (disposing) _current?.Dispose();
+                base.Dispose(disposing);
+            }
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotSupportedException();
+            public override long Position
+            {
+                get => throw new NotSupportedException();
+                set => throw new NotSupportedException();
+            }
+            public override void Flush() { }
+            public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+            public override void SetLength(long value) => throw new NotSupportedException();
+            public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
         }
 
         /// <summary>
@@ -140,6 +223,20 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 destination.Write(buffer, 0, got);
                 remaining -= got;
             }
+        }
+
+        private static int ReadInt32(Stream stream)
+        {
+            var bytes = new byte[4];
+            ReadExactly(stream, bytes, 4);
+            return BitConverter.ToInt32(bytes, 0);
+        }
+
+        private static long ReadInt64(Stream stream)
+        {
+            var bytes = new byte[8];
+            ReadExactly(stream, bytes, 8);
+            return BitConverter.ToInt64(bytes, 0);
         }
 
         /// <summary>Reads exactly <paramref name="count"/> bytes or throws.</summary>

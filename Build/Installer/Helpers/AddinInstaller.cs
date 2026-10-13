@@ -20,7 +20,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
     {
         public const string AppName         = "KleiKodesh";
         public const string AppDisplayName  = "כלי קודש";
-        public const string Version         = "v9.1.5";
+        public const string Version         = "v1.2.1";
         public const string InstallFolderName = "KleiKodesh";
         public const string VstoFileName    = "KleiKodesh.vsto";
 
@@ -82,7 +82,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             var payloadPaths = new System.Collections.Generic.HashSet<string>(
                 StringComparer.OrdinalIgnoreCase);
 
-            // The payload is a solid-LZMA archive written next to this exe by the NSIS
+            // The payload is a chunked-LZMA archive written next to this exe by the NSIS
             // wrapper (see PayloadArchive for why it is not a zip). It is strictly
             // sequential: every entry must be consumed in order, and skipped entries
             // still have to be drained out of the stream rather than seeked past.
@@ -91,7 +91,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 int total = PayloadArchive.ReadHeader(stream);
                 int current = 0;
 
-                using (var body = new LZipStream(stream, CompressionMode.Decompress))
+                using (var body = PayloadArchive.OpenBody(stream))
                 {
                     for (int i = 0; i < total; i++)
                     {

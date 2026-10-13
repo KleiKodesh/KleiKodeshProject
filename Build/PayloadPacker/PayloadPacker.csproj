@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Build-time tool that packs the VSTO output into KleiKodesh.pkg (solid LZMA).
+    Build-time tool that packs the VSTO output into KleiKodesh.pkg (chunked LZMA).
     Invoked by the prebuild target in Build/Installer/KleiKodeshVstoInstallerWpf.csproj.
 
     This is a separate project rather than an inline PowerShell step because
@@ -17,7 +17,7 @@
 
     NU1902 (GHSA-6c8g-7p36-r338) is suppressed below: the advisory covers path
     traversal in SharpCompress's ARCHIVE READERS (zip/tar/rar entry extraction).
-    Nothing here touches those - the packer uses LZipStream, a raw compression
+    Nothing here touches those - the packer uses LzmaStream, a raw compression
     stream with no entry paths, and the installer side reads its own format
     (PayloadArchive) rather than a SharpCompress archive. The advisory is
     unfixed in every published version, so there is no upgrade that clears it.
