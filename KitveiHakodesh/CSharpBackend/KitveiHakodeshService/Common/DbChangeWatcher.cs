@@ -1,46 +1,19 @@
 namespace KitveiHakodeshService.Common;
 
 using KitveiHakodeshService.SeforimDb;
-using CoreCommon = global::KitveiHakodesh.Core.Common;
+using FtsIndexLogLevel = global::KitveiHakodesh.Core.SeforimDbFullTextSearch.FtsIndexLogLevel;
+using IndexRefreshWatcher = global::KitveiHakodesh.Core.SeforimDb.SeforimDbIndexRefreshWatcher;
 
 /// <summary>
-/// Hosts Core's file and registry watchers for the lifetime of the service, and supplies the
-/// POLICY they call back into: which indexes to rebuild when the database settles, and what to
-/// do when the user switches databases from outside this process.
-///
-/// Startup vs. running:
-///   - At startup each index checks its own change-stamp once (EnsureIndex/ing) and builds if
-///     stale — that path is unchanged.
-///   - While running, a long-lived service would otherwise never notice an in-place DB update
-///     (the startup check is latched to run once). This fills that gap.
-///
-/// The MECHANISM is Core's: watching the database's directory rather than the one file (in WAL
-/// mode the live write lands in the -wal sidecar, which a file-scoped watch would miss),
-/// deciding when writing has stopped, and parking a thread on RegNotifyChangeKeyValue. None of
-/// that is specific to this host, and it used to exist here in a second copy.
-///
-/// What stays here is what only a service can answer: it owns an ILogger, it can stop the
-/// application, it knows FullTextSearchService and CatalogTocSearchService, and it reads the
-/// KHS_DB_WATCH_* overrides that shrink the settle windows for tests.
+/// Hosts Core's <see cref="IndexRefreshWatcher"/> for the lifetime of the service. The policy
+/// (which indexes rebuild when the database settles, retry while another app is mid-update,
+/// what counts as a database switch) is Core's. What stays here: the IHostedService lifetime,
+/// the log hookup, the KHS_DB_WATCH_* test overrides, and the service's answer to a switch —
+/// a clean restart (StopApplication), so the fresh process re-resolves everything.
 /// </summary>
 public sealed class DbChangeWatcher : IHostedService, IDisposable
 {
-    private readonly ILogger<DbChangeWatcher> _logger;
-    private readonly FullTextSearchService _fts;
-    private readonly Catalog.CatalogTocSearchService _catalogToc;
-    private readonly IHostApplicationLifetime _lifetime;
-    private readonly string? _dbPath;
-
-    private CoreCommon.DbChangeWatcher? _fileWatcher;
-    /// <summary>Re-check after a settle that found the file still being updated by another app:
-    /// the watcher only fires on CHANGES, and the update may finish without one more.</summary>
-    private Timer? _notReadyRetry;
-    private static readonly TimeSpan NotReadyRetryDelay = TimeSpan.FromMinutes(1);
-    /// <summary>Guards _notReadyRetry and _disposed: OnSettled runs on the settle timer AND the
-    /// retry timer, and a retry armed after Dispose would outlive the service.</summary>
-    private readonly object _retryLock = new();
-    private bool _disposed;
-    private CoreCommon.RegistryValueWatcher? _registryWatcher;
+    private readonly IndexRefreshWatcher _watcher;
 
     public DbChangeWatcher(
         ILogger<DbChangeWatcher> logger,
@@ -48,126 +21,29 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
         Catalog.CatalogTocSearchService catalogToc,
         IHostApplicationLifetime lifetime)
     {
-        _logger = logger;
-        _fts = fts;
-        _catalogToc = catalogToc;
-        _lifetime = lifetime;
-        _dbPath = SeforimDbLocator.Resolve();
+        _watcher = new IndexRefreshWatcher(
+            SeforimDbLocator.Resolve(),
+            fts.Coordinator,
+            catalogToc.Coordinator,
+            onDatabaseSwitched: lifetime.StopApplication,
+            log: (level, message, ex) =>
+            {
+                switch (level)
+                {
+                    case FtsIndexLogLevel.Error: logger.LogError(ex, "{Message}", message); break;
+                    case FtsIndexLogLevel.Warning: logger.LogWarning(ex, "{Message}", message); break;
+                    case FtsIndexLogLevel.Debug: logger.LogDebug(ex, "{Message}", message); break;
+                    default: logger.LogInformation(ex, "{Message}", message); break;
+                }
+            },
+            settleWindow: TimeSpan.FromMilliseconds(EnvMs("KHS_DB_WATCH_SETTLE_MS", 120_000)),
+            maxDeferral: TimeSpan.FromMilliseconds(EnvMs("KHS_DB_WATCH_MAX_MS", 900_000)));
     }
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        if (!OperatingSystem.IsWindows() || string.IsNullOrWhiteSpace(_dbPath))
-            return Task.CompletedTask;
-
-        // Watch the DB-choice registry value too: the user can SWITCH databases
-        // (Otzaria <-> Zayit) from the hosted app, which writes the registry directly —
-        // the service would otherwise keep serving the old DB from its per-process
-        // caches. See OnPossibleDbSwitch for the response (clean restart).
-        _registryWatcher = new CoreCommon.RegistryValueWatcher(
-            SeforimDbLocator.RegistryKeyPath, OnPossibleDbSwitch, "khs-db-registry-watch");
-        _registryWatcher.Start();
-
-        _fileWatcher = new CoreCommon.DbChangeWatcher(
-            _dbPath, OnSettled,
-            settleWindow: TimeSpan.FromMilliseconds(EnvMs("KHS_DB_WATCH_SETTLE_MS", 120_000)),
-            maxDeferral: TimeSpan.FromMilliseconds(EnvMs("KHS_DB_WATCH_MAX_MS", 900_000)));
-
-        if (_fileWatcher.TryStart(out Exception? startError))
-            _logger.LogInformation("DB change watcher started on {Path}", _dbPath);
-        else if (startError is not null)
-            // The OS refused a watch it should have accepted. A warning, not an aside: live DB
-            // updates are now silently not happening until the next restart.
-            _logger.LogWarning(startError,
-                "DB change watcher could not start ({Path}) — live DB updates will be picked up on restart",
-                _dbPath);
-        else
-            // No folder to watch — a removable drive, an unconfigured path. Ordinary.
-            _logger.LogInformation(
-                "DB change watcher not started ({Path}) — folder unavailable", _dbPath);
-
+        _watcher.Start();
         return Task.CompletedTask;
-    }
-
-    private void OnSettled(bool forced)
-    {
-        try
-        {
-            // The cap ran out instead of the file going quiet, so this rebuild reads a file
-            // that is STILL being written. It is the deliberate escape hatch against a file
-            // that trickles forever, but it is also the one case where a rebuild can pick up
-            // a half-written database — so say it, rather than letting it look routine.
-            if (forced)
-                _logger.LogWarning(
-                    "seforim DB still changing after the maximum deferral — rebuilding anyway");
-
-            // Quiet is not the same as finished: Otzaria parks its download beside the file
-            // and Zayit extracts in place. Indexing now would read half a library.
-            // A FORCED settle has given up waiting for quiet, so only the completeness checks apply.
-            if (_dbPath is not null &&
-                !global::KitveiHakodesh.Core.SeforimDb.SeforimDbReadiness.IsReadyToIndex(_dbPath, out string notReady,
-                    ignoreQuietPeriod: forced))
-            {
-                _logger.LogInformation("seforim DB settled but not ready to index ({Reason}) — checking again in a minute",
-                    notReady);
-                lock (_retryLock)
-                {
-                    if (_disposed) return;
-                    _notReadyRetry?.Dispose();
-                    _notReadyRetry = new Timer(_ => OnSettled(forced), null, NotReadyRetryDelay, Timeout.InfiniteTimeSpan);
-                }
-                return;
-            }
-
-            // Each index recomputes its own stamp and rebuilds ONLY if it truly changed
-            // (its stored ver stamp no longer matches the current file). A settle cycle
-            // ending on a file whose content matches the built index costs one cheap
-            // stamp read and does nothing.
-            bool ftsChanged = _fts.RebuildIfDbChanged();
-            bool catalogChanged = _catalogToc.RebuildIfDbChanged();
-            if (ftsChanged || catalogChanged)
-                _logger.LogInformation(
-                    "seforim DB settled after changing — rebuilding indexes (fts={Fts}, catalog={Cat})",
-                    ftsChanged, catalogChanged);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "DB change watcher: rebuild check failed");
-        }
-    }
-
-    // ── Database SWITCH detection ──────────────────────────────────────────────
-    //
-    // The DB path is chosen via a registry value that BOTH the service RPC and the
-    // hosted app write. A switch made through the service already restarts it
-    // (Dispatcher.RestartSoon); a switch made OUTSIDE the service (hosted app settings,
-    // wizard, manual registry edit) used to go unnoticed — the running process kept its
-    // per-process caches (catalog cache, column probes, index instances, the watcher's
-    // folder) pointed at the OLD database.
-    //
-    // Response: a clean service restart, the same thing the RPC path does. That makes
-    // the "DB is static per process" invariant TRUE BY CONSTRUCTION instead of trying
-    // to invalidate every cache in place. The fresh process re-resolves the path, and
-    // because both index change-stamps INCLUDE the path, both the FTS and catalog
-    // indexes detect the mismatch and reindex automatically. (Switching back to a DB
-    // whose index stamp still matches costs nothing — the stamp matches, no rebuild.)
-    private void OnPossibleDbSwitch()
-    {
-        string? current;
-        try { current = SeforimDbLocator.Resolve(); }
-        catch { return; }
-
-        // Nothing resolvable now (the user cleared the setting, or the file went away). That is
-        // not a SWITCH to act on: restarting would land in the same state, so wait for the next
-        // registry change instead.
-        if (current is null) return;
-        if (string.Equals(current, _dbPath, StringComparison.OrdinalIgnoreCase)) return;
-
-        _logger.LogInformation(
-            "seforim DB switched outside the service ({Old} → {New}) — restarting so the fresh " +
-            "process re-resolves everything; both index stamps include the path, so both reindex",
-            _dbPath, current);
-        _lifetime.StopApplication();
     }
 
     /// <summary>A positive millisecond override from the environment, else the default. Tests
@@ -184,20 +60,5 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
         return Task.CompletedTask;
     }
 
-    public void Dispose()
-    {
-        _fileWatcher?.Dispose();
-        _fileWatcher = null;
-        lock (_retryLock)
-        {
-            _disposed = true;
-            _notReadyRetry?.Dispose();
-            _notReadyRetry = null;
-        }
-        // Disposing the registry watcher closes the watched key, which releases the thread
-        // blocked in RegNotifyChangeKeyValue; it is a background thread either way, so it can
-        // never hold up process exit.
-        _registryWatcher?.Dispose();
-        _registryWatcher = null;
-    }
+    public void Dispose() => _watcher.Dispose();
 }

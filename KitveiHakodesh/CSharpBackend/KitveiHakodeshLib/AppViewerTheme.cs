@@ -1,5 +1,5 @@
 using Dark.Net;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Windows.Forms;
@@ -46,7 +46,7 @@ namespace KitveiHakodeshLib
         {
             Form hostForm = FindForm();
             if (hostForm == null) return;
-            bool isDark = AppSettings.LoadDarkMode();
+            bool isDark = AppSettingsRegistry.GetDarkMode();
             ApplySplashTheme(isDark);
             // Subscribe to the host Form's HandleCreated to apply the per-window theme
             // before the form is shown — the required moment for SetWindowThemeForms.
@@ -69,7 +69,7 @@ namespace KitveiHakodeshLib
         {
             var hostForm = (Form)sender;
             hostForm.HandleCreated -= OnHostFormHandleCreated;
-            bool isDark = AppSettings.LoadDarkMode();
+            bool isDark = AppSettingsRegistry.GetDarkMode();
             try
             {
                 // Form has an HWND but WS_VISIBLE is not yet set — the correct moment
@@ -121,7 +121,7 @@ namespace KitveiHakodeshLib
         public void ApplyTitleBarThemeToForm(Form form)
         {
             if (form == null) return;
-            bool isDark = AppSettings.LoadDarkMode();
+            bool isDark = AppSettingsRegistry.GetDarkMode();
             try { DarkNet.Instance.SetWindowThemeForms(form, isDark ? Theme.Dark : Theme.Light); }
             catch { /* best-effort */ }
             // Track this form so live toggles from HandleSetTheme also update it.
@@ -151,10 +151,10 @@ namespace KitveiHakodeshLib
                 ? bc.GetString()
                 : null;
 
-            AppSettings.SaveDarkMode(isDark);
-            if (chromeColor != null) AppSettings.SaveChromeColor(chromeColor);
-            if (accentColor != null) AppSettings.SaveAccentColor(accentColor);
-            if (borderColor != null) AppSettings.SaveBorderColor(borderColor);
+            AppSettingsRegistry.SetDarkMode(isDark);
+            if (chromeColor != null) AppSettingsRegistry.SetChromeColor(chromeColor);
+            if (accentColor != null) AppSettingsRegistry.SetAccentColor(accentColor);
+            if (borderColor != null) AppSettingsRegistry.SetBorderColor(borderColor);
 
             if (InvokeRequired)
                 Invoke(new Action(() =>

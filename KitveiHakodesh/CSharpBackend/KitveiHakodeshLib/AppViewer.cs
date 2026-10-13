@@ -4,7 +4,7 @@ using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.HebrewBooks;
 using KitveiHakodeshLib.LocalFile;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -477,7 +477,7 @@ namespace KitveiHakodeshLib
             // the Windows app-mode setting, which can contradict the app theme
             // (light app, dark datalist popups). Seed from the persisted preference;
             // live theme toggles update it in HandleSetTheme (AppViewerTheme.cs).
-            ApplyBrowserUiColorScheme(AppSettings.LoadDarkMode());
+            ApplyBrowserUiColorScheme(AppSettingsRegistry.GetDarkMode());
 
             // The app has its own zoom controls (Ctrl+±, pinch) — block the browser's
             // built-in zoom so the two systems don't fight each other.
@@ -606,7 +606,7 @@ namespace KitveiHakodeshLib
         /// </summary>
         private string HostFactsScript() =>
             "window.__webviewShowPopOut=" + (ShowPopOutButton ? "true" : "false") + ";" +
-            "window.__webviewIsDark=" + (AppSettings.LoadDarkMode() ? "true" : "false") + ";";
+            "window.__webviewIsDark=" + (AppSettingsRegistry.GetDarkMode() ? "true" : "false") + ";";
 
         // ── Dispose ─────────────────────────────────────────────────────────────────
 

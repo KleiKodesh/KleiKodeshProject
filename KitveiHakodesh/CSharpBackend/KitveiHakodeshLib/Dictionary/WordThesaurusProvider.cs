@@ -1,44 +1,82 @@
-using Microsoft.Office.Interop.Word;
+using System;
 using System.Collections.Generic;
-using CoreCommon = KitveiHakodeshLib.Common;
+using KitveiHakodeshLib.Common;
+using Word = Microsoft.Office.Interop.Word;
 
 namespace KitveiHakodeshLib.Dictionary
 {
     /// <summary>
-    /// The hosted app's name for Word's thesaurus. Core's
-    /// <see cref="CoreCommon.WordThesaurus"/> underneath.
+    /// Word's own thesaurus, for a word (the page's getWordSynonyms action).
     ///
-    /// This used to be a second copy of the SynonymInfo walk — the same Hebrew language
-    /// constant, the same meaning loop, the same deliberate avoidance of `dynamic` — differing
-    /// only in where it got the Word application from. Core asks
-    /// <see cref="CoreCommon.RunningWordFinder"/>, which is the better answer: it checks the
-    /// host instance is still ALIVE before using it (a severed COM proxy otherwise throws on
-    /// every call for the rest of the session) and can bind to a running Word when there is no
-    /// host at all, so synonyms work outside the add-in too.
+    /// Finds Word through <see cref="RunningWordFinder"/>: the add-in's host instance when it is
+    /// still alive, otherwise a Word that is already running. It never STARTS Word - nobody wants
+    /// a copy of Word launching because they looked up a synonym, so no running instance means
+    /// no synonyms.
     ///
-    /// The name and the signatures stay because the add-in and the message handler use them.
+    /// A different feature from the dictionary database, despite both returning related words:
+    /// one is Microsoft's thesaurus for a language, the other is a curated lexicon.
+    ///
+    /// Hosted (net48) only - Office PIA, in the host's own process.
     /// </summary>
     public static class WordThesaurusProvider
     {
         /// <summary>
-        /// Set once in ThisAddIn_Startup; null outside the VSTO host.
-        ///
-        /// Forwards to <see cref="CoreCommon.RunningWordFinder.HostApplication"/> — that is
-        /// where the lookup reads it from, so keeping a private copy here would leave the
-        /// add-in silently falling back to binding whatever Word happened to be running.
+        /// The VSTO host's Word, set once in ThisAddIn_Startup; null outside the add-in.
+        /// Stored on <see cref="RunningWordFinder.HostApplication"/>, which is where the lookup
+        /// reads it from.
         /// </summary>
-        public static Application HostApplication
+        public static Word.Application HostApplication
         {
-            get => CoreCommon.RunningWordFinder.HostApplication;
-            set => CoreCommon.RunningWordFinder.HostApplication = value;
+            get => RunningWordFinder.HostApplication;
+            set => RunningWordFinder.HostApplication = value;
         }
 
         /// <summary>
-        /// Synonym lists for <paramref name="word"/>, grouped by meaning: each element of the
-        /// outer list is one meaning, the inner list its synonyms. Empty when Word cannot be
-        /// reached or the word has no entry.
+        /// Synonyms grouped by meaning: each inner list is one sense of the word.
+        ///
+        /// Empty when Word is not running, when the word has no entry, or when this Word has no
+        /// Hebrew thesaurus installed - none of them is an error worth interrupting a lookup for.
         /// </summary>
-        public static List<List<string>> GetSynonyms(string word) =>
-            CoreCommon.WordThesaurus.Synonyms(word);
+        public static List<List<string>> GetSynonyms(string word)
+        {
+            var meanings = new List<List<string>>();
+            if (string.IsNullOrWhiteSpace(word)) return meanings;
+
+            Word.Application application = RunningWordFinder.FindRunning();
+            if (application == null) return meanings;
+
+            try
+            {
+                object languageId = Word.WdLanguageID.wdHebrew;
+                Word.SynonymInfo info = application.get_SynonymInfo(word, ref languageId);
+
+                if (!info.Found || info.MeaningCount == 0) return meanings;
+
+                for (int meaning = 1; meaning <= info.MeaningCount; meaning++)
+                {
+                    object index = meaning;
+                    // SynonymList hands back a Variant array; taking it as Array rather than
+                    // dynamic keeps this off the late-bound dispatch path.
+                    object raw = info.get_SynonymList(ref index);
+                    if (!(raw is Array synonyms)) continue;
+
+                    var group = new List<string>();
+                    foreach (object item in synonyms)
+                    {
+                        if (item is string synonym && !string.IsNullOrWhiteSpace(synonym))
+                            group.Add(synonym);
+                    }
+
+                    if (group.Count > 0) meanings.Add(group);
+                }
+            }
+            catch (Exception)
+            {
+                // No thesaurus for this language, or this Word build does not expose one.
+                // Returning what we have is the whole contract: an absent thesaurus is a state.
+            }
+
+            return meanings;
+        }
     }
 }

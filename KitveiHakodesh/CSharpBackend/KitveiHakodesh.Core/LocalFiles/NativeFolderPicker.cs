@@ -1,6 +1,10 @@
+#nullable enable
+using System;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace KitveiHakodeshService.LocalFiles;
+namespace KitveiHakodesh.Core.LocalFiles;
 
 /// <summary>
 /// Native folder-browse dialog for the <c>pickFolder</c> op — dev's replacement for the hosted
@@ -24,29 +28,32 @@ namespace KitveiHakodeshService.LocalFiles;
 /// The dialog runs on a dedicated STA thread (shell dialogs require STA) and is owned by the
 /// current foreground window (the browser that issued the RPC), which keeps it on top.
 /// </summary>
-public static partial class NativeFolderPicker
+public static class NativeFolderPicker
 {
-    [LibraryImport("ole32.dll")]
-    private static partial int CoInitializeEx(nint pvReserved, uint dwCoInit);
+    // DllImport with blittable signatures only: no marshalling under native AOT, and it
+    // compiles in the net48 host that links this file (KitveiHakodeshLib), where the
+    // LibraryImport generator does not exist.
+    [DllImport("ole32.dll")]
+    private static extern int CoInitializeEx(nint pvReserved, uint dwCoInit);
 
-    [LibraryImport("ole32.dll")]
-    private static partial void CoUninitialize();
+    [DllImport("ole32.dll")]
+    private static extern void CoUninitialize();
 
-    [LibraryImport("ole32.dll")]
-    private static partial int CoCreateInstance(
-        in Guid rclsid, nint pUnkOuter, uint dwClsContext, in Guid riid, out nint ppv);
+    [DllImport("ole32.dll")]
+    private static extern int CoCreateInstance(
+        ref Guid rclsid, nint pUnkOuter, uint dwClsContext, ref Guid riid, out nint ppv);
 
-    [LibraryImport("ole32.dll")]
-    private static partial void CoTaskMemFree(nint pointer);
+    [DllImport("ole32.dll")]
+    private static extern void CoTaskMemFree(nint pointer);
 
-    [LibraryImport("user32.dll")]
-    private static partial nint GetForegroundWindow();
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
 
     private const uint COINIT_APARTMENTTHREADED = 0x2;
     private const uint CLSCTX_INPROC_SERVER = 0x1;
 
-    private static readonly Guid CLSID_FileOpenDialog = new("DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7");
-    private static readonly Guid IID_IFileOpenDialog = new("D57C7288-D4AD-4768-BE02-9D969532D960");
+    private const string CLSID_FileOpenDialog = "DC1C5A9C-E88A-4DDE-A5A1-60F82A20AEF7";
+    private const string IID_IFileOpenDialog = "D57C7288-D4AD-4768-BE02-9D969532D960";
 
     private const uint FOS_PICKFOLDERS = 0x00000020;
     private const uint FOS_FORCEFILESYSTEM = 0x00000040; // real paths only, no virtual shell items
@@ -80,8 +87,10 @@ public static partial class NativeFolderPicker
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
     /// <summary>Show the dialog and return the picked absolute folder path, or null when the user
-    /// cancelled (or another pick is already showing). Never throws.</summary>
-    public static async Task<string?> PickAsync(string title)
+    /// cancelled (or another pick is already showing). Never throws.
+    /// <paramref name="owner"/> is the window that owns the dialog; 0 means the current
+    /// foreground window (the service's case: the browser that issued the RPC).</summary>
+    public static async Task<string?> PickAsync(string title, nint owner = 0)
     {
         if (!await Gate.WaitAsync(0)) return null;
         try
@@ -90,7 +99,12 @@ public static partial class NativeFolderPicker
                 TaskCreationOptions.RunContinuationsAsynchronously);
             var thread = new Thread(() =>
             {
-                try { completion.TrySetResult(ShowDialog(title)); }
+                try
+                {
+                    // Per-monitor-v2 on THIS thread, so the dialog is crisp at any scale.
+                    using var dpi = NativeDialogDpiScope.Enter();
+                    completion.TrySetResult(ShowDialog(title, owner));
+                }
                 catch { completion.TrySetResult(null); }
             })
             { IsBackground = true, Name = "khs-folder-picker" };
@@ -101,15 +115,16 @@ public static partial class NativeFolderPicker
         finally { Gate.Release(); }
     }
 
-    private static unsafe string? ShowDialog(string title)
+    private static unsafe string? ShowDialog(string title, nint owner)
     {
         int hr = CoInitializeEx(0, COINIT_APARTMENTTHREADED);
         // S_FALSE (1) means already initialized on this thread — fine; only balance when we did it.
         bool shouldUninitialize = hr >= 0;
         try
         {
-            if (CoCreateInstance(in CLSID_FileOpenDialog, 0, CLSCTX_INPROC_SERVER,
-                    in IID_IFileOpenDialog, out nint dialog) < 0 || dialog == 0)
+            Guid clsid = new Guid(CLSID_FileOpenDialog), iid = new Guid(IID_IFileOpenDialog);
+            if (CoCreateInstance(ref clsid, 0, CLSCTX_INPROC_SERVER,
+                    ref iid, out nint dialog) < 0 || dialog == 0)
                 return null;
 
             try
@@ -132,7 +147,7 @@ public static partial class NativeFolderPicker
                 }
 
                 var show = (delegate* unmanaged[Stdcall]<nint, nint, int>)Vtbl(dialog, SlotShow);
-                int showResult = show(dialog, GetForegroundWindow());
+                int showResult = show(dialog, owner != 0 ? owner : GetForegroundWindow());
                 if (showResult == ERROR_CANCELLED || showResult < 0) return null; // cancelled
 
                 var getResult = (delegate* unmanaged[Stdcall]<nint, nint*, int>)Vtbl(dialog, SlotGetResult);

@@ -63,4 +63,25 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public int MergePassesDone { get; set; }
         public int MergePassesExpected { get; set; }
     }
+
+    /// <summary>FTS result set. <c>Ready</c> is false while the index is still building.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class FtsSearchResult
+    {
+        public bool Ready { get; set; }
+        public string? Error { get; set; }
+        public List<FtsHit> Results { get; set; } = new List<FtsHit>();
+    }
+
+    /// <summary>One pushed frame of a streaming search. The final frame has <c>Done</c> true
+    /// (and the connection closes after it). <c>Ready</c> false = index still building —
+    /// sent as the first and only frame.</summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class FtsStreamChunk
+    {
+        public bool Ready { get; set; } = true;
+        public List<FtsHit> Results { get; set; } = new List<FtsHit>();
+        public bool Done { get; set; }
+        public string? Error { get; set; }
+    }
 }

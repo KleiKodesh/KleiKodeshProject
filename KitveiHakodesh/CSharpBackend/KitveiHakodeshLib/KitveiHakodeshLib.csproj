@@ -58,9 +58,6 @@
     <Reference Include="DarkNet, Version=2.3.0.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\DarkNet.2.3.0\lib\net452\DarkNet.dll</HintPath>
     </Reference>
-    <Reference Include="FolderBrowserEx, Version=1.0.1.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\FolderBrowserEx.1.0.1\lib\net48\FolderBrowserEx.dll</HintPath>
-    </Reference>
     <Reference Include="HtmlAgilityPack, Version=1.12.4.0, Culture=neutral, PublicKeyToken=bd319b19eaf3b43a, processorArchitecture=MSIL">
       <HintPath>..\packages\HtmlAgilityPack.1.12.4\lib\Net45\HtmlAgilityPack.dll</HintPath>
     </Reference>
@@ -153,7 +150,6 @@
          finder + thesaurus (this process shares Word with the VSTO add-in) and the
          environment probes the diagnostics report is made of. -->
     <Compile Include="Common\RunningWordFinder.cs" />
-    <Compile Include="Common\WordThesaurus.cs" />
     <Compile Include="Common\DotNetRuntimeProbe.cs" />
     <Compile Include="Common\OperatingSystemProbe.cs" />
     <Compile Include="Common\ProcessBitnessProbe.cs" />
@@ -162,6 +158,36 @@
          trip, no external library). One source file, linked from Core so the two hosts cannot drift. -->
     <Compile Include="..\KitveiHakodesh.Core\Common\HebrewFonts.cs">
       <Link>Common\HebrewFonts.cs</Link>
+    </Compile>
+    <!-- Core's rules for ops that MUST run in this process (the production service is
+         LocalSystem and refuses desktop-only ops: dialogs, shell-open), plus the shared
+         registry settings. Linked source, NOT a reference: Lib references no Core assembly. -->
+    <Compile Include="..\KitveiHakodesh.Core\Common\TextEncodingDetector.cs">
+      <Link>Core\Common\TextEncodingDetector.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileOpenRules.cs">
+      <Link>Core\LocalFiles\LocalFileOpenRules.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\LocalFileContentTypes.cs">
+      <Link>Core\LocalFiles\LocalFileContentTypes.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\NativeFilePicker.cs">
+      <Link>Core\LocalFiles\NativeFilePicker.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\NativeFolderPicker.cs">
+      <Link>Core\LocalFiles\NativeFolderPicker.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\LocalFiles\NativeDialogDpiScope.cs">
+      <Link>Core\LocalFiles\NativeDialogDpiScope.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\Settings\AppSettingsRegistry.cs">
+      <Link>Core\Settings\AppSettingsRegistry.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\Settings\UserProfile.cs">
+      <Link>Core\Settings\UserProfile.cs</Link>
+    </Compile>
+    <Compile Include="..\KitveiHakodesh.Core\HebrewBooks\HebrewBooksLocalFolder.cs">
+      <Link>Core\HebrewBooks\HebrewBooksLocalFolder.cs</Link>
     </Compile>
     <Compile Include="SplashOverlay.cs">
       <SubType>Component</SubType>
@@ -182,8 +208,6 @@
     <Compile Include="HebrewBooks\HebrewBooksTexts.cs" />
     <Compile Include="Pdf\LocalFileHandler.cs" />
     <Compile Include="Pdf\WordToPdfConverter.cs" />
-    <Compile Include="Settings\AppSettings.cs" />
-    <Compile Include="Settings\SeforimDbPickerTexts.cs" />
     <Compile Include="Dictionary\WordThesaurusProvider.cs" />
     <Compile Include="WordExporter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
@@ -226,9 +250,9 @@
     <KhsPublishedExe>$(KhsPublishDir)KitveiHakodeshService.exe</KhsPublishedExe>
   </PropertyGroup>
   <ItemGroup>
-    <KhsPublishInput Include="$(KhsCSharpBackend)\KitveiHakodeshService\**\*.cs;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.csproj;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.db;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.json;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.manifest"
+    <KhsPublishInput Include="$(KhsCSharpBackend)\KitveiHakodeshService\**\*.cs;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.csproj;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.json;$(KhsCSharpBackend)\KitveiHakodeshService\**\*.manifest"
                      Exclude="$(KhsCSharpBackend)\KitveiHakodeshService\bin\**;$(KhsCSharpBackend)\KitveiHakodeshService\obj\**" />
-    <KhsPublishInput Include="$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.cs;$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.csproj"
+    <KhsPublishInput Include="$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.cs;$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.csproj;$(KhsCSharpBackend)\KitveiHakodesh.Core\**\*.db"
                      Exclude="$(KhsCSharpBackend)\KitveiHakodesh.Core\bin\**;$(KhsCSharpBackend)\KitveiHakodesh.Core\obj\**" />
     <KhsPublishInput Include="$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\**\*.cs;$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\**\*.csproj"
                      Exclude="$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\bin\**;$(KhsCSharpBackend)\FtsLib-Csharp\FtsLib\obj\**" />

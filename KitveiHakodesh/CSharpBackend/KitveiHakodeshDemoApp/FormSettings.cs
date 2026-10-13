@@ -9,7 +9,7 @@
     {
         /// <summary>
         /// Restores the form's size and location. Window state (maximized/normal) is
-        /// managed separately via AppSettings.SaveMainWindowMaximized so it survives
+        /// managed separately via AppSettingsRegistry.SetMainWindowMaximized so it survives
         /// abnormal exits. This method only restores geometry (size + position).
         /// </summary>
         public static void LoadFormSettings(Form form, string appName, string formName)

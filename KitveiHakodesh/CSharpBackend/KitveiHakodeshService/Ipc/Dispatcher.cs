@@ -1,6 +1,9 @@
 using System.Text.Json;
 using KitveiHakodeshService.Catalog;
 using KitveiHakodesh.Core.Settings;
+using KitveiHakodesh.Core.HebrewBooks;
+using KitveiHakodesh.Core.LocalFiles;
+using KitveiHakodesh.Core.WordDocuments;
 using KitveiHakodeshService.Dictionary;
 using KitveiHakodeshService.HebrewBooks;
 using KitveiHakodeshService.Http;
@@ -98,11 +101,10 @@ public sealed class Dispatcher(
                     // OOXML→HTML fallback (wiki-style footnotes) when Word is unavailable. The
                     // FileName's extension (.pdf/.html) tells the client which viewer to use.
                     string servePath = full;
-                    string fileName = System.IO.Path.GetFileName(full);
+                    bool renderedAsHtml = false;
                     if (needsConvert)
                     {
-                        bool isHtml;
-                        try { (servePath, isHtml) = await wordConversion.RenderAsync(full, ct); }
+                        try { (servePath, renderedAsHtml) = await wordConversion.RenderAsync(full, ct); }
                         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                         {
                             // User pressed ביטול — abort quietly (partial output already deleted).
@@ -112,22 +114,20 @@ public sealed class Dispatcher(
                         {
                             return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }));
                         }
-                        fileName = System.IO.Path.GetFileNameWithoutExtension(full) + (isHtml ? ".html" : ".pdf");
                     }
+                    string fileName = LocalFileOpenRules.ServedFileName(full, needsConvert, renderedAsHtml);
 
                     string fileHandle = localFileGrants.Grant(servePath);
-                    string servedExt = System.IO.Path.GetExtension(fileName).ToLowerInvariant();
-                    bool isHtmlFile = servedExt == ".html" || servedExt == ".htm";
+                    bool isHtmlFile = LocalFileOpenRules.IsHtml(fileName);
 
                     // Folder grant for HTML so siblings (CSS/JS/images) load correctly.
                     string folderHandle = "";
                     bool isOtzariaAddin = false;
                     if (isHtmlFile)
                     {
-                        string folder = System.IO.Path.GetDirectoryName(full) ?? full;
+                        string folder = LocalFileOpenRules.AssetFolderOf(full);
                         folderHandle = localFileGrants.GrantFolder(folder);
-                        // Otzaria addins have a manifest.json in the same directory.
-                        isOtzariaAddin = File.Exists(System.IO.Path.Combine(folder, "manifest.json"));
+                        isOtzariaAddin = LocalFileOpenRules.IsOtzariaAddinFolder(folder);
                     }
 
                     return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult
@@ -149,7 +149,7 @@ public sealed class Dispatcher(
                     // An initial folder is optional: the home page's frequent-folder tiles send one,
                     // the plain open-file action sends an empty string.
                     var pickArgs = MsgPack.De<StringArg>(req.Args);
-                    string? picked = await LocalFiles.NativeFilePicker.PickAsync(
+                    string? picked = await NativeFilePicker.PickAsync(
                         initialDir: pickArgs.Value ?? "");
                     return RpcResponse.Ok(MsgPack.Ser(picked is null
                         ? new PickLocalFileResult { Cancelled = true }
@@ -164,7 +164,7 @@ public sealed class Dispatcher(
                 {
                     var a = MsgPack.De<StringArg>(req.Args);
                     string title = string.IsNullOrWhiteSpace(a.Value) ? "בחר תיקייה" : a.Value!;
-                    string? picked = await LocalFiles.NativeFolderPicker.PickAsync(title);
+                    string? picked = await NativeFolderPicker.PickAsync(title);
                     return RpcResponse.Ok(MsgPack.Ser(picked is null
                         ? new PickFolderResult { Cancelled = true }
                         : new PickFolderResult { Path = picked }));
@@ -213,19 +213,10 @@ public sealed class Dispatcher(
                     var a = MsgPack.De<OpenInDefaultAppArgs>(req.Args);
                     if (!localFileGrants.TryValidateForShellOpen(a.Path, out string full, out string error))
                         return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = error }));
-                    try
-                    {
-                        using var p = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                        {
-                            FileName = full,
-                            UseShellExecute = true,
-                        });
-                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Ok = true }));
-                    }
-                    catch (Exception ex)
-                    {
-                        return RpcResponse.Ok(MsgPack.Ser(new OpenInDefaultAppResult { Error = ex.Message }));
-                    }
+                    string? openError = LocalFileOpenRules.OpenInDefaultApp(full);
+                    return RpcResponse.Ok(MsgPack.Ser(openError is null
+                        ? new OpenInDefaultAppResult { Ok = true }
+                        : new OpenInDefaultAppResult { Error = openError }));
                 }
 
                 // System font families that can render Hebrew — the dev-mode equivalent of the
@@ -247,9 +238,7 @@ public sealed class Dispatcher(
                 case "exportToWord":
                 {
                     var a = MsgPack.De<ExportToWordArgs>(req.Args);
-                    if (string.IsNullOrEmpty(a.Html))
-                        return RpcResponse.Ok(MsgPack.Ser(new ExportToWordResult { Error = "No HTML to export." }));
-                    string? exportError = await DocConvertLib.AotWordPaste.ExportAsync(a.Html!, a.Title ?? "");
+                    string? exportError = await WordDocumentExporter.ExportHtmlAsNewDocumentAsync(a.Html, a.Title);
                     return RpcResponse.Ok(MsgPack.Ser(exportError is null
                         ? new ExportToWordResult { Ok = true }
                         : new ExportToWordResult { Error = exportError }));
@@ -263,7 +252,7 @@ public sealed class Dispatcher(
                 // at their document. Runs on an STA thread inside PasteAsync.
                 case "pasteIntoWord":
                 {
-                    string? error = await DocConvertLib.AotWordPaste.PasteAsync();
+                    string? error = await WordDocumentExporter.PasteClipboardAtCursorAsync();
                     return RpcResponse.Ok(MsgPack.Ser(error is null
                         ? new PasteIntoWordResult { Ok = true }
                         : new PasteIntoWordResult { Error = error }));
@@ -347,22 +336,21 @@ public sealed class Dispatcher(
                         Exists = p is not null,
                         // Detected only, never repaired: deleting the journal would corrupt the
                         // database; Otzaria rolls it back or completes it on its next run.
-                        UpdateInterrupted = p is not null &&
-                            (File.Exists(p + "-journal") || File.Exists(p + ".applying")),
+                        UpdateInterrupted = SeforimDbLibrarySwitcher.IsUpdateInterrupted(p),
                     }));
                 }
 
                 case "setSeforimDbPath":
                 {
                     var a = MsgPack.De<DbPathArgs>(req.Args);
-                    string p = (a.Path ?? "").Trim().Trim('"');
-                    if (string.IsNullOrWhiteSpace(p))
-                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Error = "empty path" }));
-                    if (!File.Exists(p))
-                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = p, Error = "file not found" }));
-
-                    UserSettingsCarryOver.CopyIfDestinationMissing(SeforimDbLocator.Resolve(), p, logger);
-                    SeforimDbLocator.SaveRegistryPath(p);
+                    string p = SeforimDbLibrarySwitcher.NormalizePath(a.Path);
+                    switch (SwitchLibrary(p))
+                    {
+                        case SeforimDbLibrarySwitcher.SwitchOutcome.EmptyPath:
+                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Error = "empty path" }));
+                        case SeforimDbLibrarySwitcher.SwitchOutcome.FileNotFound:
+                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = p, Error = "file not found" }));
+                    }
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
@@ -376,15 +364,12 @@ public sealed class Dispatcher(
                 // carries Cancelled so the settings page leaves the field untouched.
                 case "pickSeforimDbPath":
                 {
-                    string? picked = await LocalFiles.NativeFilePicker.PickAsync(
-                        LocalFiles.NativeFilePicker.DatabaseFilter, "בחר קובץ מסד נתונים");
+                    string? picked = await NativeFilePicker.PickAsync(
+                        NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle);
                     if (picked is null)
                         return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Cancelled = true }));
-                    if (!File.Exists(picked))
+                    if (SwitchLibrary(picked) != SeforimDbLibrarySwitcher.SwitchOutcome.Switched)
                         return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = picked, Error = "file not found" }));
-
-                    UserSettingsCarryOver.CopyIfDestinationMissing(SeforimDbLocator.Resolve(), picked, logger);
-                    SeforimDbLocator.SaveRegistryPath(picked);
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
@@ -448,8 +433,7 @@ public sealed class Dispatcher(
                 case "triggerHbDownload":
                 {
                     var a = MsgPack.De<HbDownloadArgs>(req.Args);
-                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
+                    string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
                     if (!a.IsOnline)
                     {
                         // No connectivity — only a local/cache hit can satisfy; otherwise report offline.
@@ -503,8 +487,7 @@ public sealed class Dispatcher(
                 case "restoreHbPdf":
                 {
                     var a = MsgPack.De<HbDownloadArgs>(req.Args);
-                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
+                    string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: false, ct);
                     return RpcResponse.Ok(MsgPack.Ser(r.Path != null
                         ? new HbDownloadResult { Handle = localFileGrants.Grant(r.Path), Path = r.Path }
@@ -514,8 +497,7 @@ public sealed class Dispatcher(
                 case "checkHbLocalFiles":
                 {
                     var a = MsgPack.De<HbCheckLocalArgs>(req.Args);
-                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
+                    string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
                     var existing = hebrewBooks.CheckLocalFiles(a.BookIds ?? new(), folder);
                     return RpcResponse.Ok(MsgPack.Ser(new HbCheckLocalResult { ExistingIds = existing }));
                 }
@@ -523,8 +505,7 @@ public sealed class Dispatcher(
                 case "deleteHbLocalFile":
                 {
                     var a = MsgPack.De<HbDeleteLocalArgs>(req.Args);
-                    string folder = string.IsNullOrWhiteSpace(a.LocalFolder)
-                        ? AppSettingsRegistry.GetHebrewBooksLocalFolder() : a.LocalFolder!;
+                    string folder = HebrewBooksLocalFolder.Resolve(a.LocalFolder);
                     var (ok, notFound, error) = hebrewBooks.DeleteLocalFile(a.BookId ?? "", folder);
                     return RpcResponse.Ok(MsgPack.Ser(new HbDeleteLocalResult { Ok = ok, NotFound = notFound, Error = error }));
                 }
@@ -554,7 +535,7 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new BoolResult { Value = AppSettingsRegistry.GetTurnOffUpdates() }));
                 }
 
-                // ── Dictionary (KitveiHakodesh_dictionary.db) ──────────────────
+                // ── Dictionary (Dictionary.db) ──────────────────
                 case "dictExact":
                     return RpcResponse.Ok(MsgPack.Ser(dictionary.Exact(Term(req.Args))));
 
@@ -896,6 +877,16 @@ public sealed class Dispatcher(
             try { lifetime.StopApplication(); }
             catch (Exception ex) { logger.LogError(ex, "restart after DB path change failed"); }
         });
+
+    /// <summary>Core's library switch (validate, carry annotations over, persist), with the
+    /// carry-over outcome logged.</summary>
+    private SeforimDbLibrarySwitcher.SwitchOutcome SwitchLibrary(string path) =>
+        SeforimDbLibrarySwitcher.SwitchTo(
+            path,
+            onCarriedOver: (source, destination) =>
+                logger.LogInformation("Copied user settings {Source} -> {Destination}", source, destination),
+            onCarryOverFailed: ex =>
+                logger.LogWarning(ex, "Could not carry user settings over to the new library"));
 
     private static UpdateStatusResult ReadUpdateStatus()
     {

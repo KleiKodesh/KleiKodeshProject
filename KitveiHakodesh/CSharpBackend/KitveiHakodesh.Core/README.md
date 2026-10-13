@@ -82,7 +82,7 @@ Dictionary/  HebrewBooks/
 UserAnnotations/      highlights + notes — user CONTENT, the only write path here.
                       (Preferences are Settings/; the DB file keeps its old
                       user_settings.db name because existing installs hold real data.)
-Resources/            Dictionary.db, HebrewBooksCatalog.db — ONE copy of each, ever
+Dictionary/ HebrewBooks/  Dictionary.db, HebrewBooksCatalog.db — ONE copy of each, ever (Content in Core csproj)
 ```
 
 `Common/` holds genuinely reusable code — file location, SQLite connections, update

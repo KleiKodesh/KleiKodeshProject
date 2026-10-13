@@ -1,4 +1,5 @@
-using FolderBrowserEx;
+using KitveiHakodesh.Core.Common;
+using KitveiHakodesh.Core.LocalFiles;
 using KitveiHakodeshLib.Bridge;
 using KitveiHakodeshLib.Pdf;
 using Microsoft.Web.WebView2.Core;
@@ -6,7 +7,6 @@ using Microsoft.Web.WebView2.WinForms;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -14,26 +14,27 @@ using System.Windows.Forms;
 namespace KitveiHakodeshLib.LocalFile
 {
     /// <summary>
-    /// Handles local file picking, Word-to-PDF conversion, virtual host registration,
-    /// and session restore for local file tabs.
+    /// The WebView2 host's side of local files: the native pickers, Word-to-PDF conversion,
+    /// virtual host registration, and session restore for local file tabs.
+    ///
+    /// The RULES are Core's, shared with the service as linked source (see the csproj): which
+    /// types open (LocalFileOpenRules), text decoding (TextEncodingDetector), served content
+    /// types (LocalFileContentTypes), the pickers (NativeFilePicker / NativeFolderPicker). They
+    /// run HERE, in the host's process, because the production service is LocalSystem and
+    /// refuses desktop-only ops. The WebView2 virtual-host mapping is this host's alone.
     /// </summary>
     public class LocalFileHandler
     {
         private static readonly string WordCacheDir =
             Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "KitveiHakodesh", "word-cache");
 
-        // Document types we deliberately DO NOT support (dropped): MS Works, MHTML web
-        // archives, XPS. Rejected at every open entry point (pick / Open-With / restore) so
-        // they can't reach the Word converter even via the picker's "All files" option or a
-        // stale restored tab. Also removed from the picker filter and the DocumentLocator index.
-        private static readonly HashSet<string> UnsupportedExtensions =
-            new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".wps", ".mht", ".mhtml", ".xps" };
+        private const string WordCacheUrl = "http://KitveiHakodesh-vue-app/word-cache/";
 
         private readonly WebBridge _bridge;
         private readonly WebView2 _webView;
         private readonly Dictionary<string, FolderMapping> _hosts =
             new Dictionary<string, FolderMapping>(StringComparer.OrdinalIgnoreCase);
-        // HTML folders are served by us rather than by SetVirtualHostNameToFolderMapping —
+        // HTML folders are served by us rather than by SetVirtualHostNameToFolderMapping -
         // see RegisterServedFolder. Separate from _hosts so the same folder can hold both a
         // natively mapped host (opened .pdf) and a served host (opened .html).
         private readonly Dictionary<string, FolderMapping> _servedHosts =
@@ -52,256 +53,177 @@ namespace KitveiHakodeshLib.LocalFile
         }
 
         /// <summary>
-        /// Opens a file directly by path — used when the app is launched via the Windows
-        /// "Open With" context menu or via a command-line argument.
-        ///
-        /// Pushes exactly the same events as HandlePickFile so the Vue localFileStore
-        /// handles this identically to a user-initiated file pick:
-        ///
-        ///   PDF / HTML / TXT  →  localFileReady { url, fileName, filePath }
-        ///                         Vue: updateActiveTab with correct route + all persisted fields
-        ///
-        ///   Word / RTF        →  localFileConversionStarted { fileName, filePath }
-        ///                         Vue: shows converting placeholder in /pdf-view
-        ///                       localFileConversionReady { url, fileName, filePath }  (fast path via FileSystemWatcher)
-        ///                         Vue: finishLocalFileConversion → sets localFilePath to original
-        ///                              source path (not cache path) so session restore works
-        ///
-        /// No extra events are pushed — the final state is reached via the same event
-        /// sequence that HandlePickFile produces.
+        /// Opens a file directly by path - the Windows "Open With" context menu or a command-line
+        /// argument. Same events as a user pick (see <see cref="OpenAsync"/>), in a new tab.
         /// </summary>
-        public async Task OpenFileFromPathAsync(string filePath)
-        {
-            try
-            {
-                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
-                {
-                    _bridge.PushEvent(new { @event = "localFileError", message = "הקובץ לא נמצא: " + filePath });
-                    return;
-                }
-
-                string ext = Path.GetExtension(filePath).ToLowerInvariant();
-
-                if (UnsupportedExtensions.Contains(ext))
-                {
-                    _bridge.PushEvent(new { @event = "localFileError", message = "סוג קובץ זה אינו נתמך: " + ext, filePath });
-                    return;
-                }
-
-                if (ext == ".txt")
-                {
-                    string content = ReadTextDetectEncoding(filePath);
-                    _bridge.PushEvent(new
-                    {
-                        @event = "localFileTxtReady",
-                        textContent = content,
-                        fileName = Path.GetFileName(filePath),
-                        filePath,
-                        openInNewTab = true,
-                    });
-                }
-                else if (ext == ".pdf" || ext == ".htm" || ext == ".html")
-                {
-                    string url = RegisterFolder(filePath);
-                    bool isOtzariaAddin = File.Exists(Path.Combine(Path.GetDirectoryName(filePath) ?? "", "manifest.json"));
-                    _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath, openInNewTab = true, isOtzariaAddin });
-                }
-                else
-                {
-                    string displayName  = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
-                    string destPath     = GetCachePath(filePath);
-                    string destFileName = Path.GetFileName(destPath);
-
-                    _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath, openInNewTab = true });
-
-                    Directory.CreateDirectory(WordCacheDir);
-                    FileSystemWatcher watcher = null;
-                    bool watcherFired = false;
-                    if (!File.Exists(destPath))
-                    {
-                        watcher = new FileSystemWatcher(WordCacheDir, destFileName)
-                        {
-                            NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-                            EnableRaisingEvents = true,
-                        };
-                        FileSystemEventHandler onReady = null;
-                        onReady = (s, e) =>
-                        {
-                            if (!IsFileReady(e.FullPath)) return;
-                            if (watcherFired) return;
-                            watcherFired = true;
-                            watcher.EnableRaisingEvents = false;
-                            watcher.Dispose();
-                            string url2 = "http://KitveiHakodesh-vue-app/word-cache/" + destFileName;
-                            _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
-                        };
-                        watcher.Created += onReady;
-                        watcher.Changed += onReady;
-                    }
-
-                    string cached = await ConvertToPdfAsync(filePath);
-
-                    if (watcher != null)
-                    {
-                        watcher.EnableRaisingEvents = false;
-                        watcher.Dispose();
-                    }
-
-                    if (cached == null)
-                    {
-                        _bridge.PushEvent(new { @event = "localFileError", message = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן.", filePath });
-                        return;
-                    }
-
-                    if (!watcherFired)
-                    {
-                        string url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached);
-                        _bridge.PushEvent(new { @event = "localFileConversionReady", url, fileName = displayName, filePath });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                _bridge.PushEvent(new { @event = "localFileError", message = ex.Message, filePath });
-            }
-        }
+        public Task OpenFileFromPathAsync(string filePath) => OpenAsync(filePath, openInNewTab: true, replyId: null);
 
         /// <summary>
-        /// Opens a native folder picker dialog and replies with the selected folder path.
-        /// Replies { cancelled: true } if the user cancels.
-        /// Must be called from within a BeginInvoke because it shows a dialog.
+        /// Opens the native folder picker and replies with the selected folder path, or
+        /// { cancelled: true }. Call on the UI thread (it reads the owner's handle).
         /// </summary>
         public void HandlePickFolder(string id, Control owner)
         {
-            owner.BeginInvoke(new Action(() =>
+            IntPtr ownerHandle = owner.Handle;
+            _ = PickFolderAsync(id, ownerHandle);
+        }
+
+        private async Task PickFolderAsync(string id, IntPtr ownerHandle)
+        {
+            try
             {
-                var dlg = new FolderBrowserEx.FolderBrowserDialog();
-                try
-                {
-                    dlg.Title = "בחר תיקיית ספרים מקומית";
-                    if (dlg.ShowDialog() != DialogResult.OK)
-                    {
-                        _bridge.Reply(id, new { cancelled = true });
-                        return;
-                    }
-                    _bridge.Reply(id, new { folderPath = dlg.SelectedFolder });
-                }
-                finally
-                {
-                    dlg.Dispose();
-                }
-            }));
+                string folder = await NativeFolderPicker.PickAsync("בחר תיקיית ספרים מקומית", ownerHandle);
+                if (folder == null) { _bridge.Reply(id, new { cancelled = true }); return; }
+                _bridge.Reply(id, new { folderPath = folder });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         /// <summary>Show the open-file dialog. <paramref name="root"/> may carry an optional
-        /// <c>initialDir</c> (the home page's frequent-folder tiles send one); anything else
-        /// leaves the dialog wherever the shell would put it.</summary>
+        /// <c>initialDir</c> (the home page's frequent-folder tiles send one). Call on the UI
+        /// thread: the open that follows the pick touches CoreWebView2, and the await returns to
+        /// this thread's context.</summary>
         public void HandlePickFile(JsonElement root, string id, Control owner)
         {
-            // Read out of `root` HERE, not inside the queued action below.
-            //
-            // The JsonDocument this element belongs to is owned by a `using` in
-            // OnMessageReceivedAsync, and BeginInvoke returns the instant it has queued the
-            // action - so that `using` disposes the document before the action ever runs.
-            // Touching `root` from in there hits a disposed document: ValueKind throws
-            // ObjectDisposedException, the catch turns it into an error reply, and the
-            // frontend maps an error reply to null and returns quietly. The picker simply
-            // never opened, with nothing to say why. A plain string captured up here has no
-            // such lifetime.
+            // Read out of `root` HERE, before any await: the JsonDocument it belongs to is
+            // disposed by OnMessageReceivedAsync's `using` as soon as this returns. Touching it
+            // later throws ObjectDisposedException and the picker silently never opens.
             string initialDir =
                 root.ValueKind == JsonValueKind.Object
                 && root.TryGetProperty("initialDir", out var initialDirProp)
                 && initialDirProp.ValueKind == JsonValueKind.String
                     ? initialDirProp.GetString()
                     : null;
+            IntPtr ownerHandle = owner.Handle;
+            _ = PickFileAsync(id, initialDir, ownerHandle);
+        }
 
-            owner.BeginInvoke(new Action(async () =>
+        private async Task PickFileAsync(string id, string initialDir, IntPtr ownerHandle)
+        {
+            string filePath;
+            try
             {
-                try
+                // A folder that has since been deleted must not sink the pick: the dialog falls
+                // back to its default when the initial directory does not exist.
+                filePath = await NativeFilePicker.PickAsync(
+                    NativeFilePicker.DocumentFilter, initialDir: initialDir ?? "", owner: ownerHandle);
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); return; }
+
+            if (filePath == null) { _bridge.Reply(id, new { cancelled = true }); return; }
+            await OpenAsync(filePath, openInNewTab: false, replyId: id);
+        }
+
+        /// <summary>
+        /// The one open path behind a pick (<paramref name="replyId"/> set) and Open-With
+        /// (<paramref name="replyId"/> null). Pushes the events the Vue localFileStore handles:
+        ///
+        ///   TXT          ->  localFileTxtReady { textContent, fileName, filePath }
+        ///   PDF / HTML   ->  localFileReady { url, fileName, filePath, isOtzariaAddin }
+        ///   Word family  ->  localFileConversionStarted { fileName, filePath }, then
+        ///                    localFileConversionReady { url, fileName, filePath } (fast path:
+        ///                    a FileSystemWatcher on the cache file, before Word has quit)
+        ///
+        /// A pick also gets a reply (with the url for PDF/HTML/Word). A failure is the reply's
+        /// error for a pick, and a localFileError event for Open-With.
+        /// </summary>
+        private async Task OpenAsync(string filePath, bool openInNewTab, string replyId)
+        {
+            void Fail(string message)
+            {
+                if (replyId != null) _bridge.Reply(replyId, new { error = message });
+                else _bridge.PushEvent(new { @event = "localFileError", message, filePath });
+            }
+
+            try
+            {
+                if (string.IsNullOrWhiteSpace(filePath) || !File.Exists(filePath))
                 {
-                    using (var dlg = new OpenFileDialog())
-                    {
-                        dlg.Title  = "פתח קובץ";
-                        dlg.Filter = "מסמכים (*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt)|*.pdf;*.doc;*.docx;*.docm;*.dot;*.dotx;*.dotm;*.htm;*.html;*.odt;*.rtf;*.txt|כל הקבצים (*.*)|*.*";
-                        // A folder that has since been deleted must not sink the pick: the dialog
-                        // silently falls back to its default when InitialDirectory does not exist.
-                        if (!string.IsNullOrEmpty(initialDir)) dlg.InitialDirectory = initialDir;
-
-                        if (dlg.ShowDialog() != DialogResult.OK) { _bridge.Reply(id, new { cancelled = true }); return; }
-
-                        string filePath = dlg.FileName;
-                        string ext = Path.GetExtension(filePath).ToLowerInvariant();
-
-                        if (UnsupportedExtensions.Contains(ext))
-                        {
-                            _bridge.Reply(id, new { error = "סוג קובץ זה אינו נתמך: " + ext });
-                            return;
-                        }
-
-                        if (ext == ".txt")
-                        {
-                            string content = ReadTextDetectEncoding(filePath);
-                            _bridge.PushEvent(new { @event = "localFileTxtReady", textContent = content, fileName = Path.GetFileName(filePath), filePath, openInNewTab = false });
-                            _bridge.Reply(id, new { cancelled = false });
-                        }
-                        else if (ext == ".pdf" || ext == ".htm" || ext == ".html")
-                        {
-                            string url = RegisterFolder(filePath);
-                            bool isOtzariaAddin = File.Exists(Path.Combine(Path.GetDirectoryName(filePath) ?? "", "manifest.json"));
-                            _bridge.PushEvent(new { @event = "localFileReady", url, fileName = Path.GetFileName(filePath), filePath, isOtzariaAddin });
-                            _bridge.Reply(id, new { cancelled = false, url, fileName = Path.GetFileName(filePath), filePath });
-                        }
-                        else
-                        {
-                            string displayName = Path.GetFileNameWithoutExtension(filePath) + ".pdf";
-                            string destPath = GetCachePath(filePath);
-                            string destFileName = Path.GetFileName(destPath);
-                            _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath });
-
-                            Directory.CreateDirectory(WordCacheDir);
-                            FileSystemWatcher watcher = null;
-                            if (!File.Exists(destPath))
-                            {
-                                watcher = new FileSystemWatcher(WordCacheDir, destFileName)
-                                {
-                                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
-                                    EnableRaisingEvents = true,
-                                };
-                                FileSystemEventHandler onReady = null;
-                                bool fired = false;
-                                onReady = (s, e) =>
-                                {
-                                    if (!IsFileReady(e.FullPath)) return;
-                                    if (fired) return;
-                                    fired = true;
-                                    watcher.EnableRaisingEvents = false;
-                                    watcher.Dispose();
-                                    string url2 = "http://KitveiHakodesh-vue-app/word-cache/" + destFileName;
-                                    _bridge.PushEvent(new { @event = "localFileConversionReady", url = url2, fileName = displayName, filePath });
-                                };
-                                watcher.Created += onReady;
-                                watcher.Changed += onReady;
-                            }
-
-                            string cached = await ConvertToPdfAsync(filePath);
-
-                            if (watcher != null)
-                            {
-                                watcher.EnableRaisingEvents = false;
-                                watcher.Dispose();
-                            }
-
-                            if (cached == null) { _bridge.Reply(id, new { error = "לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן." }); return; }
-                            string url = "http://KitveiHakodesh-vue-app/word-cache/" + Path.GetFileName(cached);
-                            _bridge.Reply(id, new { cancelled = false, url, fileName = displayName, filePath });
-                        }
-                    }
+                    Fail("הקובץ לא נמצא: " + filePath);
+                    return;
                 }
-                catch (Exception ex)
+
+                if (!LocalFileOpenRules.IsSupported(filePath, out bool needsConvert))
                 {
-                    _bridge.Reply(id, new { error = ex.Message });
+                    Fail("סוג קובץ זה אינו נתמך: " + Path.GetExtension(filePath).ToLowerInvariant());
+                    return;
                 }
-            }));
+
+                string fileName = Path.GetFileName(filePath);
+
+                if (LocalFileOpenRules.IsText(filePath))
+                {
+                    string content = TextEncodingDetector.ReadAllText(filePath);
+                    _bridge.PushEvent(new { @event = "localFileTxtReady", textContent = content, fileName, filePath, openInNewTab });
+                    if (replyId != null) _bridge.Reply(replyId, new { cancelled = false });
+                    return;
+                }
+
+                if (!needsConvert)
+                {
+                    string url = RegisterFolder(filePath);
+                    bool isOtzariaAddin = LocalFileOpenRules.IsOtzariaAddinFolder(LocalFileOpenRules.AssetFolderOf(filePath));
+                    _bridge.PushEvent(new { @event = "localFileReady", url, fileName, filePath, openInNewTab, isOtzariaAddin });
+                    if (replyId != null) _bridge.Reply(replyId, new { cancelled = false, url, fileName, filePath });
+                    return;
+                }
+
+                string displayName = LocalFileOpenRules.ServedFileName(filePath, rendered: true, renderedAsHtml: false);
+                _bridge.PushEvent(new { @event = "localFileConversionStarted", fileName = displayName, filePath, openInNewTab });
+
+                bool readyPushed = false;
+                string readyUrl = WordCacheUrl + Path.GetFileName(GetCachePath(filePath));
+                string cached;
+                using (WatchForCachedPdf(filePath, () =>
+                {
+                    readyPushed = true;
+                    _bridge.PushEvent(new { @event = "localFileConversionReady", url = readyUrl, fileName = displayName, filePath });
+                }))
+                {
+                    cached = await ConvertToPdfAsync(filePath);
+                }
+
+                if (cached == null) { Fail("לא ניתן להמיר את הקובץ. ודא ש-Microsoft Word מותקן."); return; }
+
+                string cachedUrl = WordCacheUrl + Path.GetFileName(cached);
+                if (replyId != null)
+                    _bridge.Reply(replyId, new { cancelled = false, url = cachedUrl, fileName = displayName, filePath });
+                else if (!readyPushed)
+                    _bridge.PushEvent(new { @event = "localFileConversionReady", url = cachedUrl, fileName = displayName, filePath });
+            }
+            catch (Exception ex)
+            {
+                Fail(ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// Calls <paramref name="onReady"/> once, the moment Word finishes writing the cached
+        /// PDF - before the converter returns (Word's quit takes a while). Null when the PDF is
+        /// already cached. Dispose stops watching.
+        /// </summary>
+        private static IDisposable WatchForCachedPdf(string sourcePath, Action onReady)
+        {
+            string destPath = GetCachePath(sourcePath);
+            if (File.Exists(destPath)) return null;
+
+            Directory.CreateDirectory(WordCacheDir);
+            var watcher = new FileSystemWatcher(WordCacheDir, Path.GetFileName(destPath))
+            {
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.LastWrite,
+            };
+            bool fired = false;
+            FileSystemEventHandler handler = (s, e) =>
+            {
+                if (fired || !IsFileReady(e.FullPath)) return;
+                fired = true;
+                watcher.EnableRaisingEvents = false;
+                onReady();
+            };
+            watcher.Created += handler;
+            watcher.Changed += handler;
+            watcher.EnableRaisingEvents = true;
+            return watcher;
         }
 
         public async Task HandleRestoreLocalFile(JsonElement root, string id)
@@ -312,12 +234,12 @@ namespace KitveiHakodeshLib.LocalFile
                 if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
 
                 string ext = Path.GetExtension(filePath).ToLowerInvariant();
-                if (UnsupportedExtensions.Contains(ext)) { _bridge.Reply(id, new { error = "סוג קובץ זה אינו נתמך" }); return; }
+                if (!LocalFileOpenRules.IsSupported(filePath, out _)) { _bridge.Reply(id, new { error = "סוג קובץ זה אינו נתמך" }); return; }
                 if (ext == ".txt")
                 {
                     // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
                     // The branches below stay on the UI thread — RegisterFolder touches CoreWebView2.
-                    string content = await Task.Run(() => ReadTextDetectEncoding(filePath)).ConfigureAwait(false);
+                    string content = await Task.Run(() => TextEncodingDetector.ReadAllText(filePath)).ConfigureAwait(false);
                     _bridge.Reply(id, new { textContent = content });
                     return;
                 }
@@ -339,11 +261,9 @@ namespace KitveiHakodeshLib.LocalFile
         }
 
         /// <summary>
-        /// Opens a file in the system's default program for its type (Word for .docx,
-        /// Acrobat for .pdf, etc.) — the equivalent of double-clicking it in Explorer.
-        /// UseShellExecute = true so the shell resolves the registered handler.
-        /// Any file type is allowed here (unlike the in-app viewer's allow-list): the user
-        /// is deliberately handing the file off to whatever program the OS associates with it.
+        /// Opens a file in the system's default program for its type - the equivalent of
+        /// double-clicking it in Explorer. Any file type is allowed here (unlike the in-app
+        /// viewer's allow-list): the user is deliberately handing the file to the OS.
         /// </summary>
         public void HandleOpenInDefaultApp(JsonElement root, string id)
         {
@@ -356,12 +276,8 @@ namespace KitveiHakodeshLib.LocalFile
                     return;
                 }
 
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = filePath,
-                    UseShellExecute = true,
-                });
-                _bridge.Reply(id, new { ok = true });
+                string error = LocalFileOpenRules.OpenInDefaultApp(filePath);
+                _bridge.Reply(id, error == null ? (object)new { ok = true } : new { error });
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
@@ -372,78 +288,15 @@ namespace KitveiHakodeshLib.LocalFile
             {
                 string filePath = root.GetProperty("filePath").GetString();
                 if (!File.Exists(filePath)) { _bridge.Reply(id, new { error = "הקובץ לא נמצא" }); return; }
-                // Read + serialize the whole file off the UI thread (see DbHandler.HandleSql).
-                // Detect the encoding — many Hebrew .txt files are legacy Windows-1255, not UTF-8;
-                // decoding those as UTF-8 fills the view with U+FFFD replacement chars (◇?).
-                string content = await Task.Run(() => ReadTextDetectEncoding(filePath)).ConfigureAwait(false);
+                // Read + decode off the UI thread. Many Hebrew .txt files are legacy
+                // Windows-1255, which TextEncodingDetector detects.
+                string content = await Task.Run(() => TextEncodingDetector.ReadAllText(filePath)).ConfigureAwait(false);
                 _bridge.Reply(id, new { textContent = content });
             }
             catch (Exception ex)
             {
                 _bridge.Reply(id, new { error = ex.Message });
             }
-        }
-
-        /// <summary>
-        /// Reads a text file, detecting its encoding rather than assuming UTF-8.
-        /// Honors a BOM if present (UTF-8 / UTF-16 LE / UTF-16 BE / UTF-32); otherwise
-        /// validates the bytes as UTF-8 and, if they are not valid UTF-8, falls back to
-        /// Windows-1255 (Hebrew ANSI) — the common legacy encoding for Hebrew .txt files.
-        /// </summary>
-        internal static string ReadTextDetectEncoding(string filePath)
-        {
-            byte[] bytes = File.ReadAllBytes(filePath);
-
-            // 1. BOM sniffing — a BOM is authoritative.
-            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
-                return new UTF8Encoding(false).GetString(bytes, 3, bytes.Length - 3);
-            if (bytes.Length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xFE && bytes[2] == 0x00 && bytes[3] == 0x00)
-                return new UTF32Encoding(false, false).GetString(bytes, 4, bytes.Length - 4);
-            if (bytes.Length >= 4 && bytes[0] == 0x00 && bytes[1] == 0x00 && bytes[2] == 0xFE && bytes[3] == 0xFF)
-                return new UTF32Encoding(true, false).GetString(bytes, 4, bytes.Length - 4);
-            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
-                return Encoding.Unicode.GetString(bytes, 2, bytes.Length - 2);       // UTF-16 LE
-            if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
-                return Encoding.BigEndianUnicode.GetString(bytes, 2, bytes.Length - 2); // UTF-16 BE
-
-            // 2. No BOM: if the bytes are valid UTF-8, decode as UTF-8; else Windows-1255.
-            return IsValidUtf8(bytes)
-                ? new UTF8Encoding(false).GetString(bytes)
-                : Encoding.GetEncoding(1255).GetString(bytes);
-        }
-
-        /// <summary>
-        /// True if <paramref name="bytes"/> is a well-formed UTF-8 sequence (pure ASCII
-        /// counts as valid). Used to distinguish UTF-8 without a BOM from single-byte
-        /// legacy codepages such as Windows-1255.
-        /// </summary>
-        private static bool IsValidUtf8(byte[] bytes)
-        {
-            int i = 0;
-            while (i < bytes.Length)
-            {
-                byte b = bytes[i];
-                int extra;          // continuation bytes expected after b
-                int min;            // lowest code point legal for this length (reject overlong)
-                if (b <= 0x7F) { i++; continue; }
-                else if ((b & 0xE0) == 0xC0) { extra = 1; min = 0x80; }
-                else if ((b & 0xF0) == 0xE0) { extra = 2; min = 0x800; }
-                else if ((b & 0xF8) == 0xF0) { extra = 3; min = 0x10000; }
-                else return false;  // 0x80-0xBF lead or 0xF8+ — not valid UTF-8
-
-                if (i + extra >= bytes.Length) return false;
-                int cp = b & (0x7F >> (extra + 1));
-                for (int k = 1; k <= extra; k++)
-                {
-                    byte c = bytes[i + k];
-                    if ((c & 0xC0) != 0x80) return false; // not a continuation byte
-                    cp = (cp << 6) | (c & 0x3F);
-                }
-                if (cp < min) return false;               // overlong encoding
-                if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false; // out of range / surrogate
-                i += extra + 1;
-            }
-            return true;
         }
 
         public void HandleDisposeLocalFileHost(JsonElement root, string id)
@@ -598,59 +451,13 @@ namespace KitveiHakodeshLib.LocalFile
                 byte[] bytes = File.ReadAllBytes(full);
                 e.Response = _webView.CoreWebView2.Environment.CreateWebResourceResponse(
                     new MemoryStream(bytes), 200, "OK",
-                    "Content-Type: " + ContentTypeFor(full, bytes) + "\r\n" +
+                    "Content-Type: " + LocalFileContentTypes.For(full, bytes, truncated: false) + "\r\n" +
                     "Content-Length: " + bytes.Length);
             }
             catch
             {
                 // Leave e.Response null — WebView2 fails the request, same as a missing file.
             }
-        }
-
-        /// <summary>
-        /// Content type for a served file. Text types carry the charset we detected from the
-        /// bytes (UTF-8 with or without BOM, else Windows-1255) so the browser never has to
-        /// guess; a declared charset in the response wins over sniffing.
-        /// </summary>
-        private static string ContentTypeFor(string path, byte[] bytes)
-        {
-            switch (Path.GetExtension(path).ToLowerInvariant())
-            {
-                case ".html":
-                case ".htm":  return "text/html; charset=" + DetectCharset(bytes);
-                case ".css":  return "text/css; charset=" + DetectCharset(bytes);
-                case ".js":
-                case ".mjs":  return "text/javascript; charset=" + DetectCharset(bytes);
-                case ".json": return "application/json; charset=" + DetectCharset(bytes);
-                case ".txt":  return "text/plain; charset=" + DetectCharset(bytes);
-                case ".svg":  return "image/svg+xml; charset=" + DetectCharset(bytes);
-                case ".png":  return "image/png";
-                case ".jpg":
-                case ".jpeg": return "image/jpeg";
-                case ".gif":  return "image/gif";
-                case ".webp": return "image/webp";
-                case ".ico":  return "image/x-icon";
-                case ".woff": return "font/woff";
-                case ".woff2":return "font/woff2";
-                case ".ttf":  return "font/ttf";
-                case ".pdf":  return "application/pdf";
-                default:      return "application/octet-stream";
-            }
-        }
-
-        /// <summary>
-        /// Charset label for text bytes, using the same UTF-8-or-Windows-1255 rule as
-        /// <see cref="ReadTextDetectEncoding"/>. UTF-16/32 BOMs are labelled so the browser
-        /// decodes them correctly too.
-        /// </summary>
-        private static string DetectCharset(byte[] b)
-        {
-            if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF) return "utf-8";
-            if (b.Length >= 4 && b[0] == 0xFF && b[1] == 0xFE && b[2] == 0x00 && b[3] == 0x00) return "utf-32le";
-            if (b.Length >= 4 && b[0] == 0x00 && b[1] == 0x00 && b[2] == 0xFE && b[3] == 0xFF) return "utf-32be";
-            if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE) return "utf-16le";
-            if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF) return "utf-16be";
-            return IsValidUtf8(b) ? "utf-8" : "windows-1255";
         }
 
         private static async Task<string> ConvertToPdfAsync(string sourceFilePath)

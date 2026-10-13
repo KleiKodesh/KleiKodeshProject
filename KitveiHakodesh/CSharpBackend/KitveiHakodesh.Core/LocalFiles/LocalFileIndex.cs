@@ -642,7 +642,7 @@ namespace KitveiHakodesh.Core.LocalFiles
                 // Detect the encoding instead of assuming UTF-8: a Windows-1255 manifest read
                 // as UTF-8 turns the Hebrew addin name into U+FFFD replacement chars, and that
                 // garbage is what gets indexed and shown in search results.
-                try { json = ReadTextDetectEncoding(manifestPath); }
+                try { json = KitveiHakodesh.Core.Common.TextEncodingDetector.ReadAllText(manifestPath); }
                 catch { continue; }
 
                 string name = ReadJsonStringField(json, "name");
@@ -686,79 +686,6 @@ namespace KitveiHakodesh.Core.LocalFiles
                 _searcherManager.MaybeRefreshBlocking();
                 progress?.Invoke($"Otzaria addins enriched: {enriched}");
             }
-        }
-
-        /// <summary>
-        /// Reads a text file, detecting its encoding rather than assuming UTF-8. Honors a BOM if
-        /// present; otherwise validates the bytes as UTF-8 and falls back to Windows-1255
-        /// (Hebrew ANSI), the common legacy encoding for Hebrew text files on Windows.
-        /// </summary>
-        private static string ReadTextDetectEncoding(string filePath)
-        {
-            byte[] b = System.IO.File.ReadAllBytes(filePath);
-
-            if (b.Length >= 3 && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF)
-                return new System.Text.UTF8Encoding(false).GetString(b, 3, b.Length - 3);
-            if (b.Length >= 4 && b[0] == 0xFF && b[1] == 0xFE && b[2] == 0x00 && b[3] == 0x00)
-                return new System.Text.UTF32Encoding(false, false).GetString(b, 4, b.Length - 4);
-            if (b.Length >= 4 && b[0] == 0x00 && b[1] == 0x00 && b[2] == 0xFE && b[3] == 0xFF)
-                return new System.Text.UTF32Encoding(true, false).GetString(b, 4, b.Length - 4);
-            if (b.Length >= 2 && b[0] == 0xFF && b[1] == 0xFE)
-                return System.Text.Encoding.Unicode.GetString(b, 2, b.Length - 2);
-            if (b.Length >= 2 && b[0] == 0xFE && b[1] == 0xFF)
-                return System.Text.Encoding.BigEndianUnicode.GetString(b, 2, b.Length - 2);
-
-            return IsValidUtf8(b)
-                ? new System.Text.UTF8Encoding(false).GetString(b)
-                : Windows1255.GetString(b);
-        }
-
-        /// <summary>
-        /// The Windows-1255 (Hebrew ANSI) encoding. On .NET Framework the codepage is built in;
-        /// on .NET it lives in CodePagesEncodingProvider and <c>Encoding.GetEncoding(1255)</c>
-        /// throws NotSupportedException unless something registered that provider process-wide.
-        /// Nothing in the service does, so take the encoding straight from the provider instead
-        /// of depending on global state we do not own.
-        /// </summary>
-        private static readonly System.Text.Encoding Windows1255 =
-#if NET
-            System.Text.CodePagesEncodingProvider.Instance.GetEncoding(1255);
-#else
-            System.Text.Encoding.GetEncoding(1255);
-#endif
-
-        /// <summary>
-        /// True if <paramref name="bytes"/> is well-formed UTF-8 (pure ASCII counts), rejecting
-        /// overlong encodings, surrogates and out-of-range code points. This is the test that
-        /// distinguishes UTF-8 without a BOM from a single-byte codepage such as Windows-1255.
-        /// </summary>
-        private static bool IsValidUtf8(byte[] bytes)
-        {
-            int i = 0;
-            while (i < bytes.Length)
-            {
-                byte b = bytes[i];
-                int extra;      // continuation bytes expected after b
-                int min;        // lowest code point legal for this length (rejects overlong)
-                if (b <= 0x7F) { i++; continue; }
-                else if ((b & 0xE0) == 0xC0) { extra = 1; min = 0x80; }
-                else if ((b & 0xF0) == 0xE0) { extra = 2; min = 0x800; }
-                else if ((b & 0xF8) == 0xF0) { extra = 3; min = 0x10000; }
-                else return false;
-
-                if (i + extra >= bytes.Length) return false;
-                int cp = b & (0x7F >> (extra + 1));
-                for (int k = 1; k <= extra; k++)
-                {
-                    byte c = bytes[i + k];
-                    if ((c & 0xC0) != 0x80) return false;
-                    cp = (cp << 6) | (c & 0x3F);
-                }
-                if (cp < min) return false;
-                if (cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF)) return false;
-                i += extra + 1;
-            }
-            return true;
         }
 
         /// <summary>

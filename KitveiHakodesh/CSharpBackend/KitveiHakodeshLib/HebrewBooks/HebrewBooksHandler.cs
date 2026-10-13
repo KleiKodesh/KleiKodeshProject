@@ -1,5 +1,5 @@
 using KitveiHakodeshLib.Bridge;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.HebrewBooks;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
 using System;
@@ -52,7 +52,7 @@ namespace KitveiHakodeshLib.HebrewBooks
                 string bookId    = root.GetProperty("bookId").GetString();
                 string bookTitle = root.GetProperty("bookTitle").GetString();
                 string url       = root.GetProperty("url").GetString();
-                if (!IsValidBookId(bookId)) return;
+                if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) return;
 
                 _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle };
                 NavigateSafe(url);
@@ -109,9 +109,9 @@ namespace KitveiHakodeshLib.HebrewBooks
             try
             {
                 string bookId      = root.GetProperty("bookId").GetString();
-                if (!IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
+                if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
                 string localFolder = root.TryGetProperty("localFolder", out var lf) ? (lf.GetString() ?? "") : "";
-                if (string.IsNullOrWhiteSpace(localFolder)) localFolder = AppSettings.LoadHbLocalFolder();
+                localFolder = HebrewBooksLocalFolder.Resolve(localFolder);
 
                 if (string.IsNullOrWhiteSpace(localFolder))
                 {
@@ -119,8 +119,8 @@ namespace KitveiHakodeshLib.HebrewBooks
                     return;
                 }
 
-                string filePath = Path.Combine(localFolder, bookId + ".pdf");
-                if (!File.Exists(filePath))
+                string filePath = HebrewBooksLocalFolder.LocalFolderHit(localFolder, bookId);
+                if (filePath == null)
                 {
                     _bridge.Reply(id, new { notFound = true });
                     return;
@@ -131,10 +131,6 @@ namespace KitveiHakodeshLib.HebrewBooks
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
-
-        /// <summary>A HebrewBooks id is a run of digits; anything else never reaches a URL or a path.</summary>
-        private static bool IsValidBookId(string bookId) =>
-            !string.IsNullOrEmpty(bookId) && Regex.IsMatch(bookId, @"^[0-9]+\z");
 
         private static void Log(string msg) => Debug.WriteLine("[HbHandler] " + msg);
 

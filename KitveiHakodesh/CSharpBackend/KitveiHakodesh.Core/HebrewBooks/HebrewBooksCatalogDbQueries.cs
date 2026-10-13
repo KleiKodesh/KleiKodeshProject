@@ -50,13 +50,11 @@ namespace KitveiHakodesh.Core.HebrewBooks
         }
 
         /// <summary>
-        /// Finds the bundled catalog wherever this host keeps it, or null if it is not
-        /// installed. Probes both layouts in use — Core's own Resources folder and the
-        /// service's HebrewBooks folder.
+        /// Finds the bundled catalog (HebrewBooks\HebrewBooksCatalog.db in the output, shipped
+        /// as Content by this project), or null if it is not installed.
         /// </summary>
         public static string? Locate() =>
-            AppFileLocator.FindFile(Path.Combine("Resources", "HebrewBooksCatalog.db"))
-            ?? AppFileLocator.FindFile(Path.Combine("HebrewBooks", "HebrewBooksCatalog.db"));
+            AppFileLocator.FindFile(Path.Combine("HebrewBooks", "HebrewBooksCatalog.db"));
 
         public string DatabasePath => _databasePath;
 

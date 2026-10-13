@@ -54,3 +54,26 @@ public sealed class CatalogTocHit
     [MessagePack.IgnoreMember]
     public bool MatchesTitleOrAuthor { get; set; }
 }
+
+/// <summary>Result of a catalog TOC search (catalogTocSearch wire shape).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CatalogTocSearchResult
+{
+    /// <summary>False while no index is available yet (first build) — retry later.</summary>
+    public bool Ready { get; set; }
+    public List<CatalogTocHit> Results { get; set; } = new();
+    /// <summary>True when a newer search cancelled this one — discard this response.</summary>
+    public bool Superseded { get; set; }
+    public string? Error { get; set; }
+}
+
+/// <summary>Where the catalog index stands (catalogTocStatus wire shape).</summary>
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class CatalogTocStatus
+{
+    public bool Ready { get; set; }
+    public bool Indexing { get; set; }
+    public int BuiltBooks { get; set; }
+    public int TotalBooks { get; set; }
+    public bool DbMissing { get; set; }
+}

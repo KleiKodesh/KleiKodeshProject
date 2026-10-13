@@ -126,13 +126,11 @@ namespace KitveiHakodesh.Core.Dictionary
         }
 
         /// <summary>
-        /// Finds the bundled dictionary wherever this host keeps it, or null if it is not
-        /// installed. Probes both layouts in use — Core's own Resources folder and the
-        /// service's Dictionary folder — so a caller never has to know which host it is in.
+        /// Finds the bundled dictionary (Dictionary\Dictionary.db in the output, shipped as
+        /// Content by this project), or null if it is not installed.
         /// </summary>
         public static string? Locate() =>
-            AppFileLocator.FindFile(Path.Combine("Resources", "Dictionary.db"))
-            ?? AppFileLocator.FindFile(Path.Combine("Dictionary", "Dictionary.db"));
+            AppFileLocator.FindFile(Path.Combine("Dictionary", "Dictionary.db"));
 
         public string DatabasePath => _databasePath;
 

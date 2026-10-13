@@ -81,7 +81,7 @@ resolve.
 
 ## 7. One copy of everything
 
-One `Dictionary.db`, one `HebrewBooksCatalog.db`, in `Resources/`. No second copy anywhere, no
+One `Dictionary.db` (`Dictionary/`), one `HebrewBooksCatalog.db` (`HebrewBooks/`), declared as Content in Core's csproj only. No second copy anywhere, no
 "keep them identical" rule. If a consumer seems to need its own copy, that is a delivery
 problem to solve, not a copy to create.
 

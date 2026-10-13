@@ -64,7 +64,7 @@ namespace KitveiHakodesh.Core.Common
         }
 
         /// <summary>
-        /// The charset label for a HEAD of a file, for a caller that is about to serve the bytes
+        /// The charset label for a file's bytes (or a HEAD of them), for a caller that is about to serve the bytes
         /// rather than decode them (an HTTP Content-Type, say).
         /// </summary>
         /// <param name="head">The first bytes of the file.</param>
@@ -75,6 +75,13 @@ namespace KitveiHakodesh.Core.Common
         public static string DetectCharset(byte[] head, bool truncated)
         {
             if (head == null || head.Length == 0) return Utf8Label;
+
+            // A BOM is authoritative; label UTF-16/32 too so the browser decodes them right.
+            if (StartsWith(head, 0xEF, 0xBB, 0xBF)) return Utf8Label;
+            if (StartsWith(head, 0xFF, 0xFE, 0x00, 0x00)) return "utf-32le";   // before UTF-16 LE
+            if (StartsWith(head, 0x00, 0x00, 0xFE, 0xFF)) return "utf-32be";
+            if (StartsWith(head, 0xFF, 0xFE)) return "utf-16le";
+            if (StartsWith(head, 0xFE, 0xFF)) return "utf-16be";
 
             int length = head.Length;
             if (truncated)

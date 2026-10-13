@@ -1,6 +1,6 @@
 using FluentChromeTabs;
 using KitveiHakodeshLib;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using System;
 using System.Drawing;
 using System.Threading.Tasks;
@@ -89,19 +89,19 @@ namespace KitveiHakodeshDemoApp
         {
             FormSettingsHelper.LoadFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain");
             _lastNormalBounds = Bounds;
-            if (AppSettings.LoadMainWindowMaximized())
+            if (AppSettingsRegistry.GetMainWindowMaximized())
                 WindowState = FormWindowState.Maximized;
         }
 
         private void MainForm_FormClosing(object sender, FormClosingEventArgs e)
         {
-            AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
+            AppSettingsRegistry.SetMainWindowMaximized(WindowState == FormWindowState.Maximized);
             FormSettingsHelper.SaveFormSettings(this, "KitveiHakodesh", "KitveiHakodeshMain", _lastNormalBounds);
         }
 
         private void MainForm_ResizeEnd(object sender, EventArgs e)
         {
-            AppSettings.SaveMainWindowMaximized(WindowState == FormWindowState.Maximized);
+            AppSettingsRegistry.SetMainWindowMaximized(WindowState == FormWindowState.Maximized);
         }
 
         private void MainForm_BoundsChanged(object sender, EventArgs e)
@@ -137,7 +137,7 @@ namespace KitveiHakodeshDemoApp
         {
             Controls.Remove(_viewer);
 
-            var saved = AppSettings.LoadPopoutBounds();
+            var saved = AppSettingsRegistry.GetPopoutBounds();
             bool hasSaved = saved.X != -1 && saved.Y != -1;
 
             _popoutWindow = new Form
@@ -170,8 +170,11 @@ namespace KitveiHakodeshDemoApp
         {
             if (_popoutWindow == null || _popoutWindow.IsDisposed) return;
             if (_popoutWindow.WindowState != FormWindowState.Normal) return;
-            AppSettings.SavePopoutBounds(_popoutWindow.Bounds);
+            SavePopoutBounds(_popoutWindow.Bounds);
         }
+
+        private static void SavePopoutBounds(System.Drawing.Rectangle bounds) =>
+            AppSettingsRegistry.SetPopoutBounds(bounds.X, bounds.Y, bounds.Width, bounds.Height);
 
         private void PopIn()
         {
@@ -191,7 +194,7 @@ namespace KitveiHakodeshDemoApp
         {
             if (_popoutWindow != null && !_popoutWindow.IsDisposed &&
                 _popoutWindow.WindowState == FormWindowState.Normal)
-                AppSettings.SavePopoutBounds(_popoutWindow.Bounds);
+                SavePopoutBounds(_popoutWindow.Bounds);
             PopIn();
         }
 

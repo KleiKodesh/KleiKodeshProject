@@ -1,5 +1,5 @@
 using KitveiHakodeshLib.Bridge;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.IO;

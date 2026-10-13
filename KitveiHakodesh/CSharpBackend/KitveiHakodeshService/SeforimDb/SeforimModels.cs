@@ -239,14 +239,6 @@ public sealed class FtsSearchArgs
     public bool ExpandRelated { get; set; }
 }
 
-/// <summary>FTS result set. <c>Ready</c> is false while the index is still building.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsSearchResult
-{
-    public bool Ready { get; set; }
-    public string? Error { get; set; }
-    public List<FtsHit> Results { get; set; } = new();
-}
 
 // ── Streaming FTS (ftsSearchStream) — the service PUSHES result frames continuously
 //    over one pipe connection until the search finishes. No polling anywhere. ──
@@ -264,14 +256,3 @@ public sealed class FtsSearchStreamArgs
     public bool ExpandRelated { get; set; }
 }
 
-/// <summary>One pushed frame of a streaming search. The final frame has <c>Done</c> true
-/// (and the connection closes after it). <c>Ready</c> false = index still building —
-/// sent as the first and only frame.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FtsStreamChunk
-{
-    public bool Ready { get; set; } = true;
-    public List<FtsHit> Results { get; set; } = new();
-    public bool Done { get; set; }
-    public string? Error { get; set; }
-}

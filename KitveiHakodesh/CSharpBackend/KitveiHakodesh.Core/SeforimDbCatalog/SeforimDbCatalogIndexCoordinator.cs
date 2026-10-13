@@ -56,7 +56,11 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         private readonly Func<string?> _resolveDatabasePath;
         private readonly string _indexPath;
         private readonly Action<CatalogIndexLogLevel, string, Exception?> _log;
-        private readonly Func<CancellationTokenSource?>? _takeActiveSearchCts;
+        /// <summary>The in-flight <see cref="Search"/>'s cancellation source. A new search
+        /// SUPERSEDES the previous one (latest-wins), and a RESET takes it to stop that search
+        /// before disposing the index it is reading — otherwise the query faults instead of
+        /// coming back superseded.</summary>
+        private CancellationTokenSource? _searchCts;
 
         private readonly object _lock = new object();
         private SeforimDbCatalogIndex? _index;
@@ -83,16 +87,10 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         /// ordinary state, not an error.</param>
         /// <param name="indexPath">The index directory. Fixed for the process.</param>
         /// <param name="log">Where to report. Called from background threads.</param>
-        /// <param name="takeActiveSearchCts">Hands over the in-flight search's cancellation
-        /// source, clearing it, so a RESET can stop that search before disposing the index it is
-        /// reading — otherwise the query faults instead of coming back superseded. Each host owns
-        /// its own search concurrency, so the source lives there; only the ordering is shared.
-        /// Null when a host runs no cancellable searches.</param>
         public SeforimDbCatalogIndexCoordinator(
             Func<string?> resolveDatabasePath,
             string indexPath,
-            Action<CatalogIndexLogLevel, string, Exception?> log,
-            Func<CancellationTokenSource?>? takeActiveSearchCts = null)
+            Action<CatalogIndexLogLevel, string, Exception?> log)
         {
             if (resolveDatabasePath == null) throw new ArgumentNullException(nameof(resolveDatabasePath));
             if (string.IsNullOrWhiteSpace(indexPath))
@@ -102,7 +100,6 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             _resolveDatabasePath = resolveDatabasePath;
             _indexPath = indexPath;
             _log = log;
-            _takeActiveSearchCts = takeActiveSearchCts;
         }
 
         public bool IsReady => _isReady;
@@ -438,7 +435,7 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
 
         private void CancelActiveSearch()
         {
-            try { _takeActiveSearchCts?.Invoke()?.Cancel(); }
+            try { Interlocked.Exchange(ref _searchCts, null)?.Cancel(); }
             catch (ObjectDisposedException) { /* that search already finished and disposed it */ }
         }
 
@@ -502,6 +499,92 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         }
 
         public void Dispose() => Dispose(null);
+
+        /// <summary>Where the index stands, for a status RPC. Opens/starts the index first.
+        /// A near-real-time reader during a build counts as ready (partial results).</summary>
+        public CatalogTocStatus Status()
+        {
+            EnsureIndex();
+            return new CatalogTocStatus
+            {
+                Ready = IsReadyToServe(),
+                Indexing = IsIndexing,
+                BuiltBooks = BuiltBooks,
+                TotalBooks = TotalBooks,
+                DbMissing = DatabasePath == null,
+            };
+        }
+
+        /// <summary>
+        /// Release the open Lucene reader/searcher so its retained memory is freed while idle.
+        /// No-op (and safe) if no index is open or a build is in flight; the next search reopens
+        /// the reader lazily. Returns true when a reader was actually released.
+        /// </summary>
+        public bool ReleaseIdleReader()
+        {
+            if (IsIndexing) return false; // build owns the reader; leave it
+            return CurrentIndex is { } index && index.ReleaseIdleReader();
+        }
+
+        /// <summary>Run a catalog TOC-path search. Results are NEVER capped; ordering is
+        /// (Level, TreeOrder) only. A newer search supersedes this one (Superseded = true).</summary>
+        public CatalogTocSearchResult Search(string query)
+        {
+            EnsureIndex();
+            var result = new CatalogTocSearchResult();
+
+            // Ready as soon as a reader exists — during a build the near-real-time reader
+            // serves partial results, so we don't gate on the build finishing. Only report
+            // not-ready when there is genuinely no reader yet (DB missing, or the very first
+            // build hasn't opened its reader in this split second).
+            if (!TryGetSearchableIndex(out var index))
+            {
+                result.Ready = false;
+                return result;
+            }
+            result.Ready = true;
+            if (string.IsNullOrWhiteSpace(query)) return result;
+
+            using var cts = new CancellationTokenSource();
+            var prev = Interlocked.Exchange(ref _searchCts, cts);
+            // Cancel the superseded search: without the `using` above, one CTS per keystroke-search
+            // accumulates for the process lifetime. Cancel() first — disposing a CTS does not
+            // cancel it. We deliberately do NOT dispose `prev`: its owning Search call is still on
+            // another thread reading that token. ObjectDisposedException: it already finished.
+            if (prev is not null)
+            {
+                try { prev.Cancel(); } catch (ObjectDisposedException) { }
+            }
+            try
+            {
+                // A reset racing in here disposes this index, which is the
+                // ObjectDisposedException the catch below turns into Superseded.
+                result.Results = index.Search(query, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                result.Superseded = true;   // a newer search took over — caller discards this
+            }
+            catch (Exception ex) when (ex is ObjectDisposedException
+                                          or DirectoryNotFoundException
+                                          or FileNotFoundException)
+            {
+                // ResetIndex ran under us: it disposes the index and deletes the directory the
+                // reader's files live in. Not a search failure — same contract as a supersede:
+                // the caller discards this and the rebuild serves the next one.
+                result.Superseded = true;
+            }
+            catch (Exception ex)
+            {
+                _log(CatalogIndexLogLevel.Error, "catalog TOC search failed", ex);
+                result.Error = ex.Message;
+            }
+            finally
+            {
+                Interlocked.CompareExchange(ref _searchCts, null, cts);
+            }
+            return result;
+        }
     }
 
     /// <summary>How serious a coordinator message is. Core does not know what a logger looks

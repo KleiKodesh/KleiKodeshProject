@@ -1,5 +1,5 @@
 using FluentChromeTabs;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -309,10 +309,10 @@ namespace KitveiHakodeshLib
 
         private void ApplyPersistedTheme()
             => ApplyTheme(
-                AppSettings.LoadDarkMode(),
-                AppSettings.LoadChromeColor(),
-                AppSettings.LoadAccentColor(),
-                AppSettings.LoadBorderColor());
+                AppSettingsRegistry.GetDarkMode(),
+                AppSettingsRegistry.GetChromeColor(),
+                AppSettingsRegistry.GetAccentColor(),
+                AppSettingsRegistry.GetBorderColor());
 
         private void ApplyTheme(bool isDark, string chromeColorHex, string accentColorHex, string borderColorHex)
         {

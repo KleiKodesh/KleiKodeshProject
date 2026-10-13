@@ -33,6 +33,9 @@ public sealed class SearchExpansionService
     /// expander is inert and queries pass through unchanged.</summary>
     public bool IsAvailable => _expander.IsAvailable;
 
+    /// <summary>The Core expander, handed to the FTS coordinator.</summary>
+    public SeforimDbFtsRelatedFormExpander Expander => _expander;
+
     /// <summary>Rewrites a query so each plain Hebrew word gains its related forms as OR
     /// alternatives. Never throws — see Core for why expansion degrades rather than fails.</summary>
     public string RewriteQuery(string query, int perTerm = PerTermLimit) =>

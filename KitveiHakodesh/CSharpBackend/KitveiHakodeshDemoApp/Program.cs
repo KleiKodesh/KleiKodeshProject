@@ -1,5 +1,5 @@
 ﻿using KitveiHakodeshLib;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using System;
 using System.IO;
 using System.IO.Pipes;

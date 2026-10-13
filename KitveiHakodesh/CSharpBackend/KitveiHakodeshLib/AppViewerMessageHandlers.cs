@@ -1,7 +1,8 @@
 using KitveiHakodeshLib.Diagnostics;
 using KitveiHakodeshLib.Dictionary;
 using KitveiHakodeshLib.HebrewBooks;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.LocalFiles;
+using KitveiHakodesh.Core.Settings;
 using Microsoft.Web.WebView2.Core;
 using System;
 using System.Text.Json;
@@ -198,28 +199,22 @@ namespace KitveiHakodeshLib
         /// </summary>
         private void HandlePickDbPathDialog(string id)
         {
-            BeginInvoke(new Action(() =>
+            IntPtr ownerHandle = Handle;
+            _ = PickDbPathAsync(id, ownerHandle);
+        }
+
+        private async Task PickDbPathAsync(string id, IntPtr ownerHandle)
+        {
+            try
             {
-                try
-                {
-                    using (var dlg = new OpenFileDialog())
-                    {
-                        dlg.Title  = SeforimDbPickerTexts.DialogTitle;
-                        dlg.Filter = SeforimDbPickerTexts.Filter;
-                        dlg.CheckFileExists = true;
-                        if (dlg.ShowDialog(this) != DialogResult.OK)
-                        {
-                            _bridge.Reply(id, new { cancelled = true });
-                            return;
-                        }
-                        _bridge.Reply(id, new { path = dlg.FileName });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _bridge.Reply(id, new { error = ex.ToString() });
-                }
-            }));
+                string path = await NativeFilePicker.PickAsync(
+                    NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle, owner: ownerHandle);
+                _bridge.Reply(id, path == null ? (object)new { cancelled = true } : new { path });
+            }
+            catch (Exception ex)
+            {
+                _bridge.Reply(id, new { error = ex.ToString() });
+            }
         }
 
         /// <summary>

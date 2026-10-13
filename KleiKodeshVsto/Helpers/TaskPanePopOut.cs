@@ -1,5 +1,5 @@
 ﻿using Dark.Net;
-using KitveiHakodeshLib.Settings;
+using KitveiHakodesh.Core.Settings;
 using Microsoft.Office.Tools;
 using System;
 using System.Drawing;
@@ -424,7 +424,7 @@ namespace KleiKodesh.Helpers
         {
             var form = (Form)sender;
             form.HandleCreated -= OnPopoutFormHandleCreated;
-            bool isDark = AppSettings.LoadDarkMode();
+            bool isDark = AppSettingsRegistry.GetDarkMode();
             try
             {
                 // SetCurrentProcessTheme(Auto) must be called immediately before

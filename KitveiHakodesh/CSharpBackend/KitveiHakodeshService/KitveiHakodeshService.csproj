@@ -42,13 +42,6 @@
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
 
-  <!-- Catalog databases shipped with the service, copied to output only when newer. -->
-  <ItemGroup>
-    <Content Include="HebrewBooks\HebrewBooksCatalog.db">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
-
   <ItemGroup>
     <!-- 10.0.9 (e_sqlite3), NOT 11.x: FtsLib's segment writer does File.Move on a just-written
          SQLite file; 11.x's SourceGear provider keeps the handle open (pooling) and the move
@@ -83,8 +76,5 @@
          net48;net10.0-windows — the net10.0-windows leg is used here, and it is AOT-clean
          (IsAotCompatible) because this project publishes native AOT. -->
     <ProjectReference Include="..\KitveiHakodesh.Core\KitveiHakodesh.Core.csproj" />
-    <!-- Document conversion (Word→PDF via AOT-safe COM; OOXML→HTML fallback with
-         wiki-style footnotes). Multi-targets net48;net10.0 — the net10.0 leg is used here. -->
-    <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
   </ItemGroup>
 </Project>

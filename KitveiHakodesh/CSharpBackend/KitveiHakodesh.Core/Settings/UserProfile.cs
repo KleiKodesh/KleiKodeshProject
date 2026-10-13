@@ -1,3 +1,5 @@
+#nullable enable
+using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using Microsoft.Win32.SafeHandles;
@@ -42,8 +44,6 @@ namespace KitveiHakodesh.Core.Settings
         /// </summary>
         public static void BindToUser(SafeAccessTokenHandle userToken)
         {
-            if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException();
-
             SafeRegistryHandle hiveHandle = System.Security.Principal.WindowsIdentity.RunImpersonated(userToken, () =>
             {
                 int error = RegOpenCurrentUser(KeyAllAccess, out SafeRegistryHandle handle);

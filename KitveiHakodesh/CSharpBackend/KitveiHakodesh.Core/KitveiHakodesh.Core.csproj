@@ -54,11 +54,21 @@
        built-in corpus reader is not used from here. -->
   <ItemGroup>
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
+    <!-- Word -> PDF (COM) and the Office-free OOXML -> HTML fallback (WordDocuments/).
+         net10.0 leg, IsAotCompatible. -->
+    <ProjectReference Include="..\DocConvertLib\DocConvertLib.csproj" />
   </ItemGroup>
 
   <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db. -->
   <ItemGroup>
     <Content Include="Dictionary\Dictionary.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!-- The HebrewBooks catalog. Flows into every referencing project's output as HebrewBooks\HebrewBooksCatalog.db. -->
+  <ItemGroup>
+    <Content Include="HebrewBooks\HebrewBooksCatalog.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

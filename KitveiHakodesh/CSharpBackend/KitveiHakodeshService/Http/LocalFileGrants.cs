@@ -1,3 +1,4 @@
+using KitveiHakodesh.Core.LocalFiles;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
@@ -31,13 +32,6 @@ public sealed class LocalFileGrants
 {
     private const int MaxGrants = 512;
 
-    // Types served DIRECTLY (the file's own bytes): the browser/pdf.js render these as-is.
-    private static readonly string[] DirectExtensions = [".pdf", ".htm", ".html", ".txt"];
-    // Types served after CONVERSION to PDF via Word (see WordConversionService). Matches the
-    // hosted picker's convert-family, minus the dropped .wps/.mht/.mhtml/.xps.
-    private static readonly string[] ConvertExtensions =
-        [".doc", ".docx", ".docm", ".dot", ".dotx", ".dotm", ".odt", ".rtf"];
-
     // File handles: handle → absolute file path.
     private readonly ConcurrentDictionary<string, string> _byHandle = new(StringComparer.Ordinal);
     // Folder handles: handle → absolute folder path (trailing backslash normalised away).
@@ -67,10 +61,8 @@ public sealed class LocalFileGrants
         catch { error = "invalid path"; return false; }
         if (!string.Equals(full, p, StringComparison.OrdinalIgnoreCase)) { error = "non-canonical path"; return false; }
 
-        string ext = Path.GetExtension(full).ToLowerInvariant();
-        bool direct = Array.IndexOf(DirectExtensions, ext) >= 0;
-        needsConvert = Array.IndexOf(ConvertExtensions, ext) >= 0;
-        if (!direct && !needsConvert) { error = "file type not allowed"; return false; }
+        // The supported types (direct vs Word-rendered) are Core's, shared with the WebView2 host.
+        if (!LocalFileOpenRules.IsSupported(full, out needsConvert)) { error = "file type not allowed"; return false; }
         if (!File.Exists(full)) { error = "file not found"; return false; }
         return true;
     }

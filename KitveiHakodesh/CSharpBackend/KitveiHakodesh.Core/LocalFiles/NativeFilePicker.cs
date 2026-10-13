@@ -1,6 +1,10 @@
+#nullable enable
+using System;
 using System.Runtime.InteropServices;
+using System.Threading;
+using System.Threading.Tasks;
 
-namespace KitveiHakodeshService.LocalFiles;
+namespace KitveiHakodesh.Core.LocalFiles;
 
 /// <summary>
 /// Native Windows open-file dialog for the <c>pickLocalFile</c> op — lets DEV use the real C#
@@ -14,14 +18,16 @@ namespace KitveiHakodeshService.LocalFiles;
 /// window (the browser that issued the RPC), which keeps it on top. Filter mirrors the hosted
 /// KitveiHakodeshLib picker exactly.
 /// </summary>
-public static partial class NativeFilePicker
+public static class NativeFilePicker
 {
-    [LibraryImport("comdlg32.dll", EntryPoint = "GetOpenFileNameW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static partial bool GetOpenFileNameW(ref OPENFILENAMEW ofn);
+    // DllImport with blittable signatures only (BOOL as int, pointers as nint): no marshalling
+    // under native AOT, and it compiles in the net48 host that links this file
+    // (KitveiHakodeshLib), where the LibraryImport generator does not exist.
+    [DllImport("comdlg32.dll", EntryPoint = "GetOpenFileNameW")]
+    private static extern int GetOpenFileNameW(ref OPENFILENAMEW ofn);
 
-    [LibraryImport("user32.dll")]
-    private static partial nint GetForegroundWindow();
+    [DllImport("user32.dll")]
+    private static extern nint GetForegroundWindow();
 
     private const uint OFN_EXPLORER = 0x00080000;
     private const uint OFN_FILEMUSTEXIST = 0x00001000;
@@ -69,6 +75,9 @@ public static partial class NativeFilePicker
         "מסד נתונים (*.db;*.sqlite;*.sqlite3)\0*.db;*.sqlite;*.sqlite3\0" +
         "כל הקבצים (*.*)\0*.*\0\0";
 
+    /// <summary>Title of the seforim DB path picker (both hosts).</summary>
+    public const string DatabaseDialogTitle = "בחר קובץ מסד נתונים";
+
     // One dialog at a time — a second concurrent pick returns "cancelled" instead of stacking.
     private static readonly SemaphoreSlim Gate = new(1, 1);
 
@@ -78,9 +87,11 @@ public static partial class NativeFilePicker
     /// it is passed to the dialog verbatim and MUST end with a double \0.
     /// <paramref name="initialDir"/> opens the dialog in that folder; empty (or a folder that no
     /// longer exists) falls back to the shell default, which is what we want for a remembered
-    /// folder the user has since deleted.</summary>
+    /// folder the user has since deleted.
+    /// <paramref name="owner"/> is the window that owns the dialog; 0 means the current
+    /// foreground window (the service's case: the browser that issued the RPC).</summary>
     public static async Task<string?> PickAsync(
-        string filter = DocumentFilter, string title = "פתח קובץ", string initialDir = "")
+        string filter = DocumentFilter, string title = "פתח קובץ", string initialDir = "", nint owner = 0)
     {
         if (!await Gate.WaitAsync(0)) return null;
         try
@@ -88,7 +99,12 @@ public static partial class NativeFilePicker
             var tcs = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
             var t = new Thread(() =>
             {
-                try { tcs.TrySetResult(ShowDialog(filter, title, initialDir)); }
+                try
+                {
+                    // Per-monitor-v2 on THIS thread, so the dialog is crisp at any scale.
+                    using var dpi = NativeDialogDpiScope.Enter();
+                    tcs.TrySetResult(ShowDialog(filter, title, initialDir, owner));
+                }
                 catch { tcs.TrySetResult(null); }
             })
             { IsBackground = true, Name = "khs-file-picker" };
@@ -99,7 +115,7 @@ public static partial class NativeFilePicker
         finally { Gate.Release(); }
     }
 
-    private static unsafe string? ShowDialog(string filter, string title, string initialDir)
+    private static unsafe string? ShowDialog(string filter, string title, string initialDir, nint owner)
     {
         const int MaxPath = 32768; // long-path capable buffer
         char[] fileBuf = new char[MaxPath];
@@ -107,12 +123,12 @@ public static partial class NativeFilePicker
         fixed (char* pFile = fileBuf)
         fixed (char* pFilter = filter)
         fixed (char* pTitle = title)
-        fixed (char* pInitialDir = initialDir.Length == 0 ? null : initialDir)
+        fixed (char* pInitialDir = string.IsNullOrEmpty(initialDir) ? null : initialDir)
         {
             var ofn = new OPENFILENAMEW
             {
                 lStructSize = (uint)sizeof(OPENFILENAMEW),
-                hwndOwner = GetForegroundWindow(), // the browser — keeps the dialog on top of it
+                hwndOwner = owner != 0 ? owner : GetForegroundWindow(), // the browser — keeps the dialog on top of it
                 lpstrFilter = (nint)pFilter,
                 nFilterIndex = 1,
                 lpstrFile = (nint)pFile,
@@ -122,7 +138,7 @@ public static partial class NativeFilePicker
                 Flags = OFN_EXPLORER | OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR,
             };
 
-            if (!GetOpenFileNameW(ref ofn)) return null; // cancelled (or dialog error — treat alike)
+            if (GetOpenFileNameW(ref ofn) == 0) return null; // cancelled (or dialog error — treat alike)
 
             int len = Array.IndexOf(fileBuf, '\0');
             if (len <= 0) return null;
