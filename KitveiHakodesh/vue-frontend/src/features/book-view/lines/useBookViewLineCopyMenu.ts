@@ -8,6 +8,7 @@ import type { useTabStore } from '@/stores/tabStore'
 import type { PaneNavigation } from '@/composables/usePaneNavigation'
 import BookViewAnnotationMenuRow from './BookViewAnnotationMenuRow.vue'
 import { cleanHebrewText } from '@/utils/hebrewTextCleaning'
+import { contentInAnnotationOffsetSpace } from './useBookViewLineRenderer'
 import { escapeHtml, htmlToText, serializeRangeBalanced } from '@/utils/htmlText'
 import { applyCopyExclusivity, type CopyExclusivityToggle } from '../copyFlagExclusivity'
 import { buildLineLink } from '@/utils/appDeepLink'
@@ -392,6 +393,18 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
   }
 
   /**
+   * How a line taken from the MODEL (select-all, or the scrolled-out middle of a long
+   * selection) is rendered for copy. The model holds raw DB text, so even without the
+   * note renderer it must get the screen's diacritics filter and divine-name censor —
+   * otherwise those lines paste niqqud and the full name the screen hides. DOM-read
+   * lines already have both.
+   */
+  function modelLineRenderer(): (raw: string, lineIndex: number, lineId: number) => string {
+    if (settingsStore.copyWithNotes && options.getRenderedLineContent) return options.getRenderedLineContent
+    return (raw) => contentInAnnotationOffsetSpace(raw, settingsStore.diacriticsState, settingsStore.censorOptions)
+  }
+
+  /**
    * Builds the final HTML for the current selection applying all active copy flags.
    * Returns null when there is no selection.
    * See the copy flag semantics block above for a full description of each flag.
@@ -411,8 +424,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
 
     if (isSelectAll.value) {
       // Copy-all: gather every line from the model (virtualization-independent).
-      const renderLine = settingsStore.copyWithNotes ? options.getRenderedLineContent : undefined
-      const result = extractSelection(scrollerEl.value, lines(), true, renderLine)
+      const result = extractSelection(scrollerEl.value, lines(), true, modelLineRenderer())
       if (!result) return null
       joined = result.joined
       firstLineIndex = result.firstLineIndex
@@ -421,7 +433,7 @@ export function useBookViewLineCopyMenu(options: CopyMenuOptions): { items: Cont
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0 || sel.isCollapsed) return null
       const range = sel.getRangeAt(0)
-      const renderLine = settingsStore.copyWithNotes ? options.getRenderedLineContent : undefined
+      const renderLine = modelLineRenderer()
       // A selection long enough to have scrolled its middle out of the DOM is
       // stitched from the model first; only a selection that lives entirely in the
       // rendered window falls through to reading the DOM alone.
