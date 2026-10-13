@@ -60,6 +60,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     public BookInfo? GetBookById(int id) =>
         Run(() => _queries.GetBookById(id), null, "getBookById");
 
+    public BookMetadataRow? GetBookMetadata(int bookId) =>
+        Run(() => _queries.GetBookMetadata(bookId), null, "getBookMetadata");
+
     public List<BookVersionRow> GetBookVersions(int bookId) =>
         Run(() => _queries.GetBookVersions(bookId), new List<BookVersionRow>(), "getBookVersions");
 

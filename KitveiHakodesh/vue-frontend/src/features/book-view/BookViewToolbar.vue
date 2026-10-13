@@ -15,10 +15,13 @@ import {
   IconChevronLeft20Regular,
   IconChevronRight20Regular,
   IconMoreHorizontal24Regular,
+  IconInfo20Regular,
 } from '@iconify-prerendered/vue-fluent'
 import IconTreeRtl from '@/components/IconTreeRtl.vue'
 import BookViewRelatedBooksDropdown from './BookViewRelatedBooksDropdown.vue'
 import BookViewVersionsDropdown from './BookViewVersionsDropdown.vue'
+import BookViewBookInfoDropdown from './BookViewBookInfoDropdown.vue'
+import BookViewBookInfoPanel from './BookViewBookInfoPanel.vue'
 import BookViewWordLinkMarkersDropdown from './BookViewWordLinkMarkersDropdown.vue'
 import BookViewDiacriticsGlyph from './BookViewDiacriticsGlyph.vue'
 import BookViewExportToWordGlyph from './BookViewExportToWordGlyph.vue'
@@ -94,6 +97,12 @@ const EXPORT_TO_WORD_LABEL = 'ייצא ל-Word'
 
 /** The overflow button's name - the same word the nav rail's overflow button wears. */
 const MORE_LABEL = 'פריטים נוספים'
+
+/** The book-info control's name - its tooltip on the toolbar, its row text in the flyout. */
+const BOOK_INFO_LABEL = 'פרטי הספר'
+
+/** Whether the book-info row in the flyout has its panel expanded beneath it. */
+const bookInfoExpandedInOverflow = ref(false)
 
 /**
  * The name the sync-commentaries row shows. It is the first line of that control's own
@@ -292,6 +301,11 @@ watch(hasToolbarOverflow, (has) => {
   if (!has) overflowOpen.value = false
 })
 
+// Each opening of the flyout starts with the info panel folded, like a fresh dropdown.
+watch(overflowOpen, (open) => {
+  if (!open) bookInfoExpandedInOverflow.value = false
+})
+
 defineExpose({ tocBtnRef })
 </script>
 
@@ -397,6 +411,15 @@ defineExpose({ tocBtnRef })
     >
       <IconSearch20Regular />
     </button>
+    <!-- The first control to collapse. In the flyout its row expands the same panel inline
+         rather than opening a second floating layer. -->
+    <BookViewBookInfoDropdown
+      class="collapsible book-info-toolbar-item"
+      :class="{ collapsed: !toolbarButtonVisible('book-info') }"
+      :inert="!toolbarButtonVisible('book-info')"
+      :is-collapsed="!toolbarButtonVisible('book-info')"
+      :book-id="bookId"
+    />
 
     <!-- The separator belongs to the zoom pair it introduces, so it goes when they go. -->
     <div aria-hidden="true" class="separator collapsible" :class="{ collapsed: !toolbarButtonVisible('zoom') }" />
@@ -496,6 +519,28 @@ defineExpose({ tocBtnRef })
         when you pick it: the others are toggles and a zoom you watch, and closing the menu
         under someone about to press again is the wrong answer for all of them.
       -->
+      <!--
+        Expands the info panel inline beneath the row instead of opening a floating dropdown
+        out of the flyout - a second floating layer the flyout does not measure or clamp.
+      -->
+      <template v-if="isOverflowed('book-info')">
+        <button
+          role="menuitem"
+          class="overflow-row"
+          :class="{ active: bookInfoExpandedInOverflow }"
+          :disabled="bookId == null"
+          :aria-expanded="bookInfoExpandedInOverflow"
+          @click="bookInfoExpandedInOverflow = !bookInfoExpandedInOverflow"
+        >
+          <IconInfo20Regular />
+          <span>{{ BOOK_INFO_LABEL }}</span>
+        </button>
+        <BookViewBookInfoPanel
+          v-if="bookInfoExpandedInOverflow"
+          class="overflow-book-info-panel"
+          :book-id="bookId"
+        />
+      </template>
       <button
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
@@ -776,6 +821,18 @@ button:disabled {
   transform: translateX(-50%);
 }
 
+
+/* The info dropdown hangs out of its box, so its clipping is lifted while it is on the bar;
+   collapsing it still clips, as .collapsible intends. */
+.collapsible.book-info-toolbar-item:not(.collapsed) {
+  overflow: visible;
+}
+.overflow-book-info-panel {
+  max-width: 320px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 4px 12px 8px;
+}
 
 /* ── Separators ── */
 .separator {

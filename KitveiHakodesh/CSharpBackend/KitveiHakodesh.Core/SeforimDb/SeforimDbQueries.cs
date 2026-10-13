@@ -814,6 +814,91 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>
+        /// Everything the library records about a book, for the book view's info popover.
+        /// Null when the book does not exist. Both library schemas are probed per call rather
+        /// than cached: it runs once per click, and the user can swap databases under us.
+        /// </summary>
+        public BookMetadataRow? GetBookMetadata(int bookId)
+        {
+            using var conn = Open();
+
+            string descriptionColumn = ColumnExists(conn, "book", "heDesc") ? "b.heDesc" : "NULL";
+            string collectiveTitleColumn = ColumnExists(conn, "book", "collectiveTitleHe") ? "b.collectiveTitleHe" : "NULL";
+
+            BookMetadataRow? metadata = null;
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = SeforimDbSqlStrings.GetBookMetadata(descriptionColumn, collectiveTitleColumn);
+                cmd.Parameters.AddWithValue("@bookId", bookId);
+                using var r = cmd.ExecuteReader();
+                if (r.Read())
+                {
+                    metadata = new BookMetadataRow
+                    {
+                        Title = r.IsDBNull(0) ? "" : r.GetString(0),
+                        HeRef = ReadTextOrNull(r, 1),
+                        ShortDescription = ReadTextOrNull(r, 2),
+                        Description = ReadTextOrNull(r, 3),
+                        CollectiveTitle = ReadTextOrNull(r, 4),
+                        CategoryTitle = ReadTextOrNull(r, 5),
+                        SourceName = ReadTextOrNull(r, 6),
+                    };
+                }
+            }
+            if (metadata == null) return null;
+
+            if (TableExists(conn, "book_author") && TableExists(conn, "author"))
+                metadata.Authors = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataAuthors, bookId);
+            if (TableExists(conn, "book_pub_place") && TableExists(conn, "pub_place"))
+                metadata.PublicationPlaces = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataPublicationPlaces, bookId);
+            if (TableExists(conn, "book_pub_date") && TableExists(conn, "pub_date"))
+                metadata.PublicationDates = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataPublicationDates, bookId);
+            if (TableExists(conn, "book_topic") && TableExists(conn, "topic"))
+                metadata.Topics = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataTopics, bookId);
+
+            // The licence lives in a different place in each library schema.
+            if (TableExists(conn, "book_version") && ColumnExists(conn, "book_version", "license"))
+            {
+                metadata.Licenses = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataLicensesFromVersions, bookId);
+                metadata.EditionSources = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataEditionSourcesFromVersions, bookId);
+            }
+            else if (TableExists(conn, "book_edition") && TableExists(conn, "license") && TableExists(conn, "edition"))
+            {
+                metadata.Licenses = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataLicensesFromEditions, bookId);
+                metadata.EditionSources = ReadBookTextList(conn, SeforimDbSqlStrings.GetBookMetadataEditionSourcesFromEditions, bookId);
+            }
+
+            return metadata;
+        }
+
+        /// <summary>A trimmed text column, or null when it is NULL or blank.</summary>
+        private static string? ReadTextOrNull(SqliteDataReader reader, int ordinal)
+        {
+            if (reader.IsDBNull(ordinal)) return null;
+            var text = Convert.ToString(reader.GetValue(ordinal))?.Trim();
+            return string.IsNullOrEmpty(text) ? null : text;
+        }
+
+        /// <summary>
+        /// Runs a one-column, @bookId-parameterised query and returns its non-blank values,
+        /// de-duplicated in reading order.
+        /// </summary>
+        private static List<string> ReadBookTextList(SqliteConnection conn, string sql, int bookId)
+        {
+            var list = new List<string>();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = sql;
+            cmd.Parameters.AddWithValue("@bookId", bookId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                var text = ReadTextOrNull(r, 0);
+                if (text != null && !list.Contains(text)) list.Add(text);
+            }
+            return list;
+        }
+
+        /// <summary>
         /// The library build number, for stamping a report. Empty on a library with no
         /// schema_meta table — nothing depends on the number, so there is nothing to fail.
         /// </summary>

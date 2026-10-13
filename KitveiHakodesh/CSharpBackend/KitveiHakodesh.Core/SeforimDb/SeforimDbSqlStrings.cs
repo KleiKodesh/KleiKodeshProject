@@ -558,6 +558,48 @@ namespace KitveiHakodesh.Core.SeforimDb
         public const string GetBookSourceName =
             "SELECT s.name AS sourceName FROM book b JOIN source s ON s.id = b.sourceId WHERE b.id = @bookId";
 
+        // ── Book metadata (the book view's info popover) ──────────────────────────────
+
+        /// <summary>
+        /// A book's own descriptive columns plus its category and source names. heDesc and
+        /// collectiveTitleHe exist in only one library schema, so the caller passes NULL in
+        /// their place where the column is missing.
+        /// </summary>
+        public static string GetBookMetadata(string descriptionColumn, string collectiveTitleColumn) => $@"
+            SELECT b.title, b.heRef, b.heShortDesc, {descriptionColumn}, {collectiveTitleColumn},
+                   c.title, s.name
+            FROM book b
+            LEFT JOIN category c ON c.id = b.categoryId
+            LEFT JOIN source s ON s.id = b.sourceId
+            WHERE b.id = @bookId";
+
+        public const string GetBookMetadataAuthors =
+            "SELECT a.name FROM book_author ba JOIN author a ON a.id = ba.authorId WHERE ba.bookId = @bookId";
+
+        public const string GetBookMetadataPublicationPlaces =
+            "SELECT p.name FROM book_pub_place bp JOIN pub_place p ON p.id = bp.pubPlaceId WHERE bp.bookId = @bookId";
+
+        /// <summary>pub_date's value column is `date`, not `name`, in both library schemas.</summary>
+        public const string GetBookMetadataPublicationDates =
+            "SELECT d.date FROM book_pub_date bd JOIN pub_date d ON d.id = bd.pubDateId WHERE bd.bookId = @bookId";
+
+        public const string GetBookMetadataTopics =
+            "SELECT t.name FROM book_topic bt JOIN topic t ON t.id = bt.topicId WHERE bt.bookId = @bookId";
+
+        /// <summary>Licences recorded on the book's versions (Otzaria schema: book_version.license).</summary>
+        public const string GetBookMetadataLicensesFromVersions =
+            "SELECT DISTINCT license FROM book_version WHERE bookId = @bookId";
+
+        /// <summary>Licences recorded on the book's editions (SeforimApp schema: book_edition → license).</summary>
+        public const string GetBookMetadataLicensesFromEditions =
+            "SELECT DISTINCT l.code FROM book_edition be JOIN license l ON l.id = be.licenseId WHERE be.bookId = @bookId";
+
+        public const string GetBookMetadataEditionSourcesFromVersions =
+            "SELECT DISTINCT versionSource FROM book_version WHERE bookId = @bookId";
+
+        public const string GetBookMetadataEditionSourcesFromEditions =
+            "SELECT DISTINCT e.sourceUrl FROM book_edition be JOIN edition e ON e.id = be.editionId WHERE be.bookId = @bookId";
+
         /// <summary>
         /// The library build, for STAMPING a report only. Schema detection goes by table
         /// structure and never by this number — see SeforimDbSchema.

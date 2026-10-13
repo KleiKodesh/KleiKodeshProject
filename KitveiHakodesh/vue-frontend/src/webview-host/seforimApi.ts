@@ -11,7 +11,7 @@
 import { ref } from 'vue'
 import { serviceCall } from './serviceClient'
 import type {
-  BookRow, CategoryRow, BookInfo, TocEntry, AltTocStructure,
+  BookRow, CategoryRow, BookInfo, BookMetadataRow, TocEntry, AltTocStructure,
   LineRow, BookVersionRow, ReverseLineRow, CommentaryLinkRow, WordLinkAnchor, WordLinkTargetRow,
 } from './queries.types'
 
@@ -34,6 +34,11 @@ export async function getAllBooks(): Promise<BookRow[]> {
 
 export async function getBookById(id: number): Promise<BookInfo | undefined> {
   return (await seforimOp<{ book: BookInfo | null }>('getBookById', { id })).book ?? undefined
+}
+
+/** Credits, provenance and licence for the book view's info popover. undefined = no such book. */
+export async function getBookMetadata(bookId: number): Promise<BookMetadataRow | undefined> {
+  return (await seforimOp<{ metadata: BookMetadataRow | null }>('getBookMetadata', { bookId })).metadata ?? undefined
 }
 
 /**

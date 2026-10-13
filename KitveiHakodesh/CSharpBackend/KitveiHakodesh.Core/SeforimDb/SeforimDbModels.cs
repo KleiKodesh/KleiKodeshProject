@@ -33,6 +33,32 @@ namespace KitveiHakodesh.Core.SeforimDb
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class BookSourceNameRow { public string SourceName { get; set; } = ""; }
 
+    /// <summary>
+    /// Everything the library records ABOUT a book - its credits, provenance and licence - for
+    /// the book view's info popover. Every field is optional: the two library schemas differ
+    /// (heDesc, collectiveTitleHe and the licence tables exist in only one of them), and most
+    /// books fill only a few. The lists are empty, never null, when the book has none.
+    /// </summary>
+    [MessagePackObject(keyAsPropertyName: true)]
+    public sealed class BookMetadataRow
+    {
+        public string Title { get; set; } = "";
+        public string? HeRef { get; set; }
+        public string? CollectiveTitle { get; set; }
+        public string? ShortDescription { get; set; }
+        public string? Description { get; set; }
+        public string? CategoryTitle { get; set; }
+        public string? SourceName { get; set; }
+        public List<string> Authors { get; set; } = new();
+        public List<string> PublicationPlaces { get; set; } = new();
+        public List<string> PublicationDates { get; set; } = new();
+        public List<string> Topics { get; set; } = new();
+        /// <summary>Licence codes as the library spells them (CC-BY, Public Domain, ...).</summary>
+        public List<string> Licenses { get; set; } = new();
+        /// <summary>Where the edition text came from - a name or a URL, as recorded.</summary>
+        public List<string> EditionSources { get; set; } = new();
+    }
+
     /// <summary>One value out of the library's schema_meta table.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class SchemaMetaValueRow { public string Value { get; set; } = ""; }

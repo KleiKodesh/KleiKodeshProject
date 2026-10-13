@@ -67,6 +67,7 @@ const TOOLBAR_VERTICAL_CHROME = 2 + TOOLBAR_RESERVED_EDGE
  * flyout renders each one's face and the toolbar dispatches its action.
  */
 export const TOOLBAR_OVERFLOW_ORDER = [
+  'book-info',
   'export-to-word',
   'sync-commentaries',
   'diacritics',

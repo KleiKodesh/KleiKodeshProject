@@ -13,6 +13,7 @@
 global using AltTocStructureRow = KitveiHakodesh.Core.SeforimDb.AltTocStructureRow;
 global using BookIdRow = KitveiHakodesh.Core.SeforimDb.BookIdRow;
 global using BookInfo = KitveiHakodesh.Core.SeforimDb.BookInfo;
+global using BookMetadataRow = KitveiHakodesh.Core.SeforimDb.BookMetadataRow;
 global using BookRow = KitveiHakodesh.Core.SeforimDb.BookRow;
 global using BookSourceNameRow = KitveiHakodesh.Core.SeforimDb.BookSourceNameRow;
 global using BookVersionRow = KitveiHakodesh.Core.SeforimDb.BookVersionRow;

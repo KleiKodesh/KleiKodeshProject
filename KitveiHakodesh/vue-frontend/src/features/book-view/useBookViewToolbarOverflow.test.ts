@@ -31,7 +31,7 @@ function widthsOf(keys: readonly ToolbarOverflowKey[]) {
 
 describe('collapse order', () => {
   it('is the order the product fixed, worst-first', () => {
-    expect(ALL).toEqual(['export-to-word', 'sync-commentaries', 'diacritics', 'zoom'])
+    expect(ALL).toEqual(['book-info', 'export-to-word', 'sync-commentaries', 'diacritics', 'zoom'])
   })
 
   it('charges a separator less than a button', () => {
@@ -73,34 +73,35 @@ describe('keysToCollapse', () => {
   // control went with it.
   it('collapses exactly one control when the toolbar is one button short', () => {
     const room = roomForEverything(PINNED) - BUTTON
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['export-to-word'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info'])
   })
 
   it('collapses one control for a toolbar barely short of fitting', () => {
     const room = roomForEverything(PINNED) - 1
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['export-to-word'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info'])
   })
 
   it('takes the next control only when one is no longer enough', () => {
     const room = roomForEverything(PINNED) - 2 * BUTTON
-    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['export-to-word', 'sync-commentaries'])
+    expect(keysToCollapse(room, PINNED, ALL)).toEqual(['book-info', 'export-to-word'])
   })
 
   it('adds one control per button of deficit', () => {
     const full = roomForEverything(PINNED)
     expect(keysToCollapse(full - 3 * BUTTON, PINNED, ALL)).toEqual([
+      'book-info',
       'export-to-word',
       'sync-commentaries',
-      'diacritics',
     ])
   })
 
   it('counts zoom as the two buttons it is', () => {
-    // Short by four buttons: export, sync and diacritics free one each, and zoom's two
-    // clear the rest. Were zoom counted as one, the toolbar would still be a button over
+    // Short by five buttons: book info, export, sync and diacritics free one each, and zoom's
+    // two clear the rest. Were zoom counted as one, the toolbar would still be a button over
     // with nothing left to collapse.
-    const room = roomForEverything(PINNED) - 4 * BUTTON
+    const room = roomForEverything(PINNED) - 5 * BUTTON
     expect(keysToCollapse(room, PINNED, ALL)).toEqual([
+      'book-info',
       'export-to-word',
       'sync-commentaries',
       'diacritics',
@@ -113,21 +114,21 @@ describe('keysToCollapse', () => {
     // until the surplus clears the hysteresis margin, so a pane parked on the boundary does
     // not flip it in and out.
     const barelyBack = roomForEverything(PINNED)
-    expect(keysToCollapse(barelyBack, PINNED, ALL, ['export-to-word'])).toEqual([
-      'export-to-word',
+    expect(keysToCollapse(barelyBack, PINNED, ALL, ['book-info'])).toEqual([
+      'book-info',
     ])
   })
 
   it('lets a collapsed control back once the room clears the margin', () => {
     const clearlyBack = roomForEverything(PINNED) + BUTTON
-    expect(keysToCollapse(clearlyBack, PINNED, ALL, ['export-to-word'])).toEqual([])
+    expect(keysToCollapse(clearlyBack, PINNED, ALL, ['book-info'])).toEqual([])
   })
 
   it('collapses without delay in the other direction', () => {
     // Only coming back is damped. A control that no longer fits goes now - a button left
     // overflowing the pane for a few pixels of resize would be the bug, not the fix.
     const short = roomForEverything(PINNED) - BUTTON
-    expect(keysToCollapse(short, PINNED, ALL, [])).toEqual(['export-to-word'])
+    expect(keysToCollapse(short, PINNED, ALL, [])).toEqual(['book-info'])
   })
 
   it('never collapses more than what is present', () => {

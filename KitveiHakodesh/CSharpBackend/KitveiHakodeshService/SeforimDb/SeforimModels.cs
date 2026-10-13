@@ -43,6 +43,14 @@ public sealed class LinesPagedArgs
     public int VersionId { get; set; }
 }
 
+// ── Book metadata (info popover) ──────────────────────────────────────────────
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookMetadataArgs { public int BookId { get; set; } }
+
+[MessagePack.MessagePackObject(keyAsPropertyName: true)]
+public sealed class BookMetadataResult { public BookMetadataRow? Metadata { get; set; } }
+
 // ── Versions ────────────────────────────────────────────────────────────────
 
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]

@@ -606,6 +606,12 @@ public sealed class Dispatcher(
                     return RpcResponse.Ok(MsgPack.Ser(new LinesResult { Rows = seforim.GetLinesPaged(a.BookId, a.Limit, a.Offset, a.VersionId) }));
                 }
 
+                case "getBookMetadata":
+                {
+                    var a = MsgPack.De<BookMetadataArgs>(req.Args);
+                    return RpcResponse.Ok(MsgPack.Ser(new BookMetadataResult { Metadata = seforim.GetBookMetadata(a.BookId) }));
+                }
+
                 case "getBookVersions":
                 {
                     var a = MsgPack.De<BookVersionsArgs>(req.Args);

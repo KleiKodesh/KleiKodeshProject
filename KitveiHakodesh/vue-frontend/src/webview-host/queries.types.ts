@@ -48,6 +48,29 @@ export interface BookInfo {
   hasOtherConnection: number
 }
 
+/**
+ * Everything the library records ABOUT a book - credits, provenance, licence - for the
+ * book view's info popover. Mirrors BookMetadataRow in SeforimDbModels.cs. Optional fields
+ * are null when blank or when the open library's schema lacks the column; lists are empty.
+ */
+export interface BookMetadataRow {
+  title: string
+  heRef: string | null
+  collectiveTitle: string | null
+  shortDescription: string | null
+  description: string | null
+  categoryTitle: string | null
+  sourceName: string | null
+  authors: string[]
+  publicationPlaces: string[]
+  publicationDates: string[]
+  topics: string[]
+  /** Licence codes as the library spells them (CC-BY, Public Domain, ...). */
+  licenses: string[]
+  /** Where the edition text came from - a name or a URL, as recorded. */
+  editionSources: string[]
+}
+
 // ── Table of contents ─────────────────────────────────────────────────────────
 
 /**
