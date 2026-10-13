@@ -142,7 +142,17 @@ namespace FtsLib.Fts5
                     Fts5TermDictionaries.Clear(_indexPath);   // leftovers a search still held at publish time
                     return true;                              // already complete: let the caller stamp it
                 }
-                Fts5Index.BuildLines(_openCorpus, _indexPath, limit, totalLines, onProgress, onFlush, ct, backgroundPriority);
+                try
+                {
+                    Fts5Index.BuildLines(_openCorpus, _indexPath, limit, totalLines, onProgress, onFlush, ct, backgroundPriority);
+                }
+                catch (Fts5Index.IndexNoLongerMatchesCorpusException ex)
+                {
+                    // Resuming would index some lines twice and skip others. Start over.
+                    FtsLog.Write("Fts5SeforimIndex", "rebuilding from scratch: " + ex.Message);
+                    Fts5Index.DeleteIndexFiles(_indexPath);
+                    Fts5Index.BuildLines(_openCorpus, _indexPath, limit, totalLines, onProgress, onFlush, ct, backgroundPriority);
+                }
                 ct.ThrowIfCancellationRequested();
                 onMergeProgress?.Invoke(0, 0);
                 Fts5Index.BuildDictionary(_indexPath);

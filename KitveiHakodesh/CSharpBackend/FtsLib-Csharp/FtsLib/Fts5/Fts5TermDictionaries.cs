@@ -15,7 +15,7 @@ namespace FtsLib.Fts5
     /// (counts summed), so a build of N batches keeps at most 3 per level, about 3·log4(N).
     ///
     /// Files per dictionary: {name}.db, {name}.dat (empty, for SegmentHandle), {name}.fmi.
-    /// dictionaries.txt is the manifest: line 1 is the last line id the dictionaries cover,
+    /// dictionaries.txt is the manifest: line 1 is the last line POSITION the dictionaries cover,
     /// then one "name level" per live dictionary. It is replaced atomically AFTER a
     /// dictionary's files are complete, and searches open only what it lists — so a search
     /// never sees a half-written dictionary, nor a merge's inputs together with its output.
@@ -28,7 +28,7 @@ namespace FtsLib.Fts5
 
         internal sealed class Manifest
         {
-            public int CoveredLineId;
+            public long CoveredPosition;
             public List<(string Name, int Level)> Dictionaries = new List<(string, int)>();
         }
 
@@ -53,7 +53,7 @@ namespace FtsLib.Fts5
             }
             catch (FileNotFoundException) { return manifest; }
             if (lines.Length == 0) return manifest;
-            manifest.CoveredLineId = int.Parse(lines[0].Trim());
+            manifest.CoveredPosition = long.Parse(lines[0].Trim());
             for (int i = 1; i < lines.Length; i++)
             {
                 var parts = lines[i].Trim().Split(' ');
@@ -64,9 +64,9 @@ namespace FtsLib.Fts5
 
         /// <summary>
         /// Adds one committed batch: <paramref name="documentCounts"/> = term → lines of the
-        /// batch containing it; <paramref name="coveredLineId"/> = the batch's last line id.
+        /// batch containing it; <paramref name="coveredPosition"/> = the batch's last position.
         /// </summary>
-        public static void AddBatch(string dir, Dictionary<string, int> documentCounts, int coveredLineId)
+        public static void AddBatch(string dir, Dictionary<string, int> documentCounts, long coveredPosition)
         {
             var clock = System.Diagnostics.Stopwatch.StartNew();
             int merges = 0;
@@ -79,7 +79,7 @@ namespace FtsLib.Fts5
                 Write(dir, name, sorted);
                 manifest.Dictionaries.Add((name, 0));
             }
-            manifest.CoveredLineId = coveredLineId;
+            manifest.CoveredPosition = coveredPosition;
             Save(dir, manifest);
 
             // Tiered merging, like FtsLib's segments: once MergeFanout neighbours share a level
@@ -204,7 +204,7 @@ namespace FtsLib.Fts5
 
         static void Save(string dir, Manifest manifest)
         {
-            var lines = new List<string> { manifest.CoveredLineId.ToString() };
+            var lines = new List<string> { manifest.CoveredPosition.ToString() };
             foreach (var (name, level) in manifest.Dictionaries) lines.Add(name + " " + level);
             string path = Path.Combine(dir, ManifestName), tmp = path + ".tmp";
             File.WriteAllLines(tmp, lines);

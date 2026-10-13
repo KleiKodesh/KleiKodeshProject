@@ -127,8 +127,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
         if (!string.IsNullOrWhiteSpace(env)) return env;
         // Next to the service binary (same convention as the hosted app) so deleting
         // the service folder removes the index along with it.
-        // TEMPORARY (FTS5 trial): its own folder, so the FtsLib index in "FtsIndex" stays intact.
-        return Path.Combine(AppContext.BaseDirectory, "FtsIndexFts5");
+        return Path.Combine(AppContext.BaseDirectory, "FtsIndex");
     }
 
     private bool HasDb => !string.IsNullOrWhiteSpace(_dbPath) && File.Exists(_dbPath);
@@ -177,6 +176,16 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // resuming a watermark that belongs to a different database permanently skips every
             // line below it (the 2026-07-28 incident, where a DB swap under an incomplete build
             // left the whole chumash-parshanut corpus unsearchable).
+            // TEMPORARY (FTS5 trial): the trial kept its index in a separate "FtsIndexFts5"
+            // folder; the index lives in "FtsIndex" again (an old FtsLib index there is wiped by
+            // Prepare). Best effort — a folder still held open is retried next start.
+            try
+            {
+                string trialFolder = Path.Combine(AppContext.BaseDirectory, "FtsIndexFts5");
+                if (Directory.Exists(trialFolder)) Directory.Delete(trialFolder, recursive: true);
+            }
+            catch (Exception ex) { logger.LogDebug(ex, "FTS trial folder not removed yet"); }
+
             SeforimDbFtsIndexPlan plan;
             try
             {

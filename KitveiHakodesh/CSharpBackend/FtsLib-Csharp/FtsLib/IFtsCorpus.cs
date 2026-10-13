@@ -73,8 +73,10 @@ namespace FtsLib
         /// <summary>
         /// Text and display title for a set of ids, for turning search hits into results.
         ///
-        /// The ids arrive ASCENDING, as the index produces them, and results must come back in
-        /// that order — the search path relies on it and does no sorting of its own. Stream this
+        /// Return them in ASCENDING id order: FtsLib's own engine passes ascending ids and relies
+        /// on getting them back in that order. (The FTS5 engine passes ids in its index order —
+        /// the catalog order for an IFtsOrderedCorpus — and puts each batch back in that order
+        /// itself, so ascending is still what to return.) Stream this
         /// too: a broad query can match tens of thousands of documents, and the caller yields
         /// each one onward as it arrives.
         ///

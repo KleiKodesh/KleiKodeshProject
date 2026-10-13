@@ -49,7 +49,7 @@ localQuery.value = props.searchQuery
 
 // ── Sort dropdown ─────────────────────────────────────────────────────────────
 const SORT_OPTIONS: { value: FullTextSearchSortOrder; label: string }[] = [
-  { value: 'lineId', label: 'סדר מקורי' },
+  { value: 'catalogOrder', label: 'סדר מקורי' },
   { value: 'relevance', label: 'רלוונטיות' },
   { value: 'bookName', label: 'שם הספר' },
   { value: 'authorName', label: 'שם המחבר' },
@@ -182,7 +182,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         <button
           ref="sortToggleButtonRef"
           class="bar-btn"
-          :class="{ 'filter-active': sortOrder !== 'lineId' }"
+          :class="{ 'filter-active': sortOrder !== 'catalogOrder' }"
           :title="'מיון: ' + SORT_OPTIONS.find((o) => o.value === sortOrder)!.label"
           @click.stop="toggleSortDropdown"
         >

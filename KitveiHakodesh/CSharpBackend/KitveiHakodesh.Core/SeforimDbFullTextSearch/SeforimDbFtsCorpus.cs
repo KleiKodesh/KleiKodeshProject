@@ -30,7 +30,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// queries and wrong for an indexing scan that streams millions of rows over one handle.
     /// Different lifetime, different class.
     /// </summary>
-    public sealed class SeforimDbFtsCorpus : IFtsCorpus
+    public sealed class SeforimDbFtsCorpus : IFtsCorpus, IFtsOrderedCorpus
     {
         /// <summary>SQLite's default variable limit is 999; staying under it caps the IN-lists.</summary>
         private const int NeighborChunkSize = 999;
@@ -101,6 +101,54 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             {
                 ct.ThrowIfCancellationRequested();
                 yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+            }
+        }
+
+        /// <summary>
+        /// Every line in the order the app shows the library: books in catalog tree order
+        /// (<see cref="SeforimDbBookTreeOrder"/>, the frontend's treeOrder), each book's lines
+        /// in reading order — so the full-text index stores, and returns, lines in that order.
+        /// Lines of a book the catalog does not list (none in the shipped databases) follow at
+        /// the end, by book id, so every line is indexed exactly once. <paramref name="skip"/>
+        /// counts lines in this order: whole books are skipped by their line counts.
+        /// </summary>
+        public IEnumerable<(int Id, string Text)> ReadDocumentsInResultOrder(long skip, CancellationToken ct = default)
+        {
+            var treeOrder = SeforimDbBookTreeOrder.Load(_connection);
+
+            var lineCounts = new Dictionary<int, long>();
+            using (var count = _connection.CreateCommand())
+            {
+                count.CommandText = SeforimDbSqlStrings.FtsLineCountsByBook;
+                using var r = count.ExecuteReader();
+                while (r.Read()) lineCounts[r.GetInt32(0)] = r.GetInt64(1);
+            }
+
+            var bookOrder = new List<int>(lineCounts.Keys);
+            bookOrder.Sort((a, b) =>
+            {
+                bool hasA = treeOrder.TryGetValue(a, out int rankA), hasB = treeOrder.TryGetValue(b, out int rankB);
+                if (hasA != hasB) return hasA ? -1 : 1;
+                return hasA ? rankA.CompareTo(rankB) : a.CompareTo(b);
+            });
+
+            using var command = _connection.CreateCommand();
+            command.CommandText = SeforimDbSqlStrings.FtsReadBookLines(_schema);
+            var pBook = command.Parameters.Add("@b", SqliteType.Integer);
+            var pSkip = command.Parameters.Add("@skip", SqliteType.Integer);
+            foreach (int bookId in bookOrder)
+            {
+                long lines = lineCounts[bookId];
+                if (skip >= lines) { skip -= lines; continue; }
+                pBook.Value = bookId;
+                pSkip.Value = skip;
+                skip = 0;
+                using var reader = command.ExecuteReader();
+                while (reader.Read())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1));
+                }
             }
         }
 

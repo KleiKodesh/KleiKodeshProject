@@ -14,8 +14,8 @@ namespace FtsLib.Fts5
     /// <summary>
     /// PROTOTYPE search over an <see cref="Fts5Index"/>, with the same semantics as FtsLib's
     /// SearchPipeline: QueryParser groups (AND across groups, OR within), the production
-    /// wildcard / fuzzy / grammar / ketiv expansion rules, AND across groups and OR within, ascending
-    /// line ids, content fetched from the corpus, and FtsLib's snippet pipeline — the same
+    /// wildcard / fuzzy / grammar / ketiv expansion rules, AND across groups and OR within, results
+    /// in the index's order (catalog order for an IFtsOrderedCorpus, else ascending line ids), content fetched from the corpus, and FtsLib's snippet pipeline — the same
     /// results, with only FtsLib's own limits (expansion caps, wildcard budgets, anchor and
     /// '?' rules). What differs is storage and lookup:
     ///   * the search pass is FTS5's: ONE MATCH expression for the whole query (FTS5 does the
@@ -109,7 +109,7 @@ namespace FtsLib.Fts5
 
         const int ContentBatchSize = 200;
 
-        /// <summary>Matching line ids, ascending, streamed straight off the FTS5 cursor.</summary>
+        /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
         public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
                                           IEnumerable<int> filterIds = null, CancellationToken ct = default)
         {
@@ -119,7 +119,7 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>
-        /// Matching lines, ascending, streamed: FTS5 produces the ids as the caller pulls, and
+        /// Matching lines in the index's order, streamed: FTS5 produces the ids as the caller pulls, and
         /// content is fetched one batch of <see cref="ContentBatchSize"/> ids at a time. Nothing
         /// is collected up front, so the first results cost one batch however broad the query.
         /// </summary>
@@ -214,7 +214,10 @@ namespace FtsLib.Fts5
         IEnumerable<int> StreamIds(QueryPlan plan, CancellationToken ct)
         {
             using var cmd = _lines.CreateCommand();
-            cmd.CommandText = "SELECT rowid FROM line_fts WHERE line_fts MATCH $q ORDER BY rowid";
+            // rowid is the line's position in result order (catalog order); line_position maps
+            // it back to the line id, so the ids come out in that order.
+            cmd.CommandText = "SELECT p.line_id FROM line_fts JOIN line_position p ON p.position = line_fts.rowid " +
+                              "WHERE line_fts MATCH $q ORDER BY line_fts.rowid";
             cmd.Parameters.AddWithValue("$q", plan.MatchExpression);
             using var r = cmd.ExecuteReader();
             while (r.Read())
@@ -229,10 +232,16 @@ namespace FtsLib.Fts5
                                                PreparedQueryGroups prepared, CancellationToken ct)
         {
             if (ids.Count == 0) yield break;
+            // A corpus may return a batch in its own order (by id); results go out in the
+            // index's order, which is the order of ids.
+            var byId = new Dictionary<int, (string Content, string Title)>(ids.Count);
             foreach (var (lineId, content, bookTitle) in corpus.FetchDocuments(ids))
+                byId[lineId] = (content, bookTitle);
+            foreach (int lineId in ids)
             {
                 ct.ThrowIfCancellationRequested();
-                yield return new SearchResult(lineId, bookTitle, content, plan.MatchedGroups, plan.OriginalGroupCount, prepared);
+                if (byId.TryGetValue(lineId, out var row))
+                    yield return new SearchResult(lineId, row.Title, row.Content, plan.MatchedGroups, plan.OriginalGroupCount, prepared);
             }
         }
 

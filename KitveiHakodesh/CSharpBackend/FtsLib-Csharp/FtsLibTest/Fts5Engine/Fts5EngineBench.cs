@@ -42,6 +42,20 @@ namespace FtsLibTest.Fts5Engine
                 Compare(ftsLibDir, fts5Dir, dbPath);
                 return;
             }
+            if (mode == "resume")
+            {
+                // The service's resumable build (Fts5SeforimIndex.BuildIndex) over an existing
+                // directory — for hard-kill tests: kill it, run it again, until "DONE".
+                string dbPath = args[2], dir = args[3];
+                int limit = args.Length > 4 ? int.Parse(args[4]) : 0;
+                var index = new Fts5SeforimIndex(dir, () => new ZayitDb(dbPath));
+                index.GetResumeState(out int lastId, out _, out long offset);
+                Console.WriteLine($"START resume after line {lastId} ({offset} lines done)");
+                index.BuildIndex(limit, n => { if ((offset + n) % 50_000 == 0) Console.WriteLine($"lines {offset + n}"); },
+                                 onMergeProgress: (d, e) => Console.WriteLine($"final phase {d}/{e}"));
+                Console.WriteLine("DONE");
+                return;
+            }
             if (mode == "live")
             {
                 string dbPath = args.Length > 2 ? args[2] : BuildTest.ResolveDbPath();

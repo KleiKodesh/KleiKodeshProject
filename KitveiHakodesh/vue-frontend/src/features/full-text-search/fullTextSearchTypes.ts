@@ -28,14 +28,15 @@ export type SearchFailReason = 'indexNotReady' | 'indexMerging' | 'searchFailed'
 /**
  * How the full-text-search results are ordered.
  *
- * lineId        — original returned order (ascending line ID = document order). Default.
- * relevance     — by minimum word distance (0 = adjacent), then line ID as a tiebreaker.
- * bookName      — alphabetically by book title (Hebrew collation), then line ID within a book.
- * authorName    — alphabetically by author name (Hebrew collation), then book name, then line ID.
+ * catalogOrder  — the order the service streams: the library's catalog tree order, each
+ *                 book in reading order. Default.
+ * relevance     — by minimum word distance (0 = adjacent), then catalog order.
+ * bookName      — alphabetically by book title (Hebrew collation), then catalog order.
+ * authorName    — alphabetically by author name (Hebrew collation), then book name, then catalog order.
  * chronological — by era (תנ"ך → חז"ל → ראשונים → אחרונים → …), then author year within an
  *                 era where known, then catalog tree order. Era-bucket order, not exact dates.
  *
  * Sorting is applied only after the search completes, so it never interferes with
  * the incremental streaming of results.
  */
-export type FullTextSearchSortOrder = 'lineId' | 'relevance' | 'bookName' | 'authorName' | 'chronological'
+export type FullTextSearchSortOrder = 'catalogOrder' | 'relevance' | 'bookName' | 'authorName' | 'chronological'

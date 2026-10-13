@@ -4,6 +4,7 @@ using FtsLib.Search;
 using FtsLib.Tokenization;
 using Microsoft.Data.Sqlite;
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -16,8 +17,11 @@ namespace FtsLib.Fts5
     /// query parser, expanders, snippets — is FtsLib's own code.
     ///
     /// Files in the index directory:
-    ///   lines.fts5.db — contentless, detail=none FTS5 table: term → rowid (line id) lists and
-    ///                   nothing else. Each row is the line's distinct normalized terms joined by
+    ///   lines.fts5.db — contentless, detail=none FTS5 table: term → rowid lists and nothing
+    ///                   else. The rowid is the line's POSITION in result order — the corpus's
+    ///                   own order when it is an IFtsOrderedCorpus (the catalog tree order),
+    ///                   else line-id order — so FTS5 streams matches already in that order.
+    ///                   line_position maps position → line id. Each row is the line's distinct normalized terms joined by
     ///                   spaces (FtsLib's Tokenizer.Extract), split again by FTS5's 'ascii'
     ///                   tokenizer, which only breaks on the spaces. Built IN PLACE in WAL mode
     ///                   and committed in batches, so searches see the index grow during a build.
@@ -56,6 +60,16 @@ namespace FtsLib.Fts5
         static int CommitInterval(long linesDone) => linesDone < 100_000 ? 20_000 : 100_000;
 
         // ── Resume state ──────────────────────────────────────────────
+
+        /// <summary>
+        /// The line table cannot be resumed against this corpus: its positions no longer name the
+        /// lines they named when they were written (the catalog order changed), or it predates
+        /// positions altogether. The caller deletes the index and builds from scratch.
+        /// </summary>
+        internal sealed class IndexNoLongerMatchesCorpusException : Exception
+        {
+            public IndexNoLongerMatchesCorpusException(string message) : base(message) { }
+        }
 
         internal readonly struct BuildState
         {
@@ -127,13 +141,16 @@ namespace FtsLib.Fts5
                 Execute(conn, "CREATE TABLE IF NOT EXISTS build_state(id INTEGER PRIMARY KEY CHECK (id = 1), " +
                               "last_line_id INTEGER NOT NULL, lines_done INTEGER NOT NULL, total_lines INTEGER NOT NULL, complete INTEGER NOT NULL)");
                 Execute(conn, "INSERT OR IGNORE INTO build_state VALUES (1, 0, 0, 0, 0)");
+                Execute(conn, "CREATE TABLE IF NOT EXISTS line_position(position INTEGER PRIMARY KEY, line_id INTEGER NOT NULL)");
                 var state = ReadState(conn);
                 if (state.Complete) return;
                 int lastLineId = state.LastLineId;
                 long linesDone = state.LinesDone;
+                if (linesDone > 0 && !HasPositions(conn))
+                    throw new IndexNoLongerMatchesCorpusException("line table predates line_position");
 
                 var tokenizer = new Tokenizer();
-                CatchUpDictionaries(openCorpus, dir, lastLineId, tokenizer, ct);
+                CatchUpDictionaries(openCorpus, conn, dir, linesDone, tokenizer, ct);
                 if (totalLines > 0) Execute(conn, $"UPDATE build_state SET total_lines = {totalLines}");
 
                 // A limit is the size of the whole index, so a resumed build only adds the rest.
@@ -147,9 +164,13 @@ namespace FtsLib.Fts5
                 var text = new StringBuilder(4096);
                 var batchCounts = new System.Collections.Generic.Dictionary<string, int>(1 << 16, StringComparer.Ordinal);
                 using var insert = conn.CreateCommand();
-                insert.CommandText = "INSERT INTO line_fts(rowid, terms) VALUES ($id, $terms)";
-                var pId = insert.Parameters.Add("$id", SqliteType.Integer);
+                insert.CommandText = "INSERT INTO line_fts(rowid, terms) VALUES ($position, $terms)";
+                var pPosition = insert.Parameters.Add("$position", SqliteType.Integer);
                 var pTerms = insert.Parameters.Add("$terms", SqliteType.Text);
+                using var insertPosition = conn.CreateCommand();
+                insertPosition.CommandText = "INSERT INTO line_position(position, line_id) VALUES ($position, $id)";
+                var pPositionKey = insertPosition.Parameters.Add("$position", SqliteType.Integer);
+                var pLineId = insertPosition.Parameters.Add("$id", SqliteType.Integer);
                 using var watermark = conn.CreateCommand();
                 watermark.CommandText = "UPDATE build_state SET last_line_id = $id, lines_done = $done";
                 var pLastId = watermark.Parameters.Add("$id", SqliteType.Integer);
@@ -157,10 +178,10 @@ namespace FtsLib.Fts5
 
                 // Dictionaries are written and merged on a worker so inserting never waits for
                 // them; at most two finished batches queue up before the inserter waits.
-                // Batches are handled in commit order, so the manifest's covered id only moves
+                // Batches are handled in commit order, so the manifest's covered position only moves
                 // forward (a crash in between is repaired by CatchUpDictionaries).
                 using var dictionaryQueue = new System.Collections.Concurrent.BlockingCollection<
-                    (System.Collections.Generic.Dictionary<string, int> Counts, int CoveredLineId)>(boundedCapacity: 2);
+                    (System.Collections.Generic.Dictionary<string, int> Counts, long CoveredPosition)>(boundedCapacity: 2);
                 // If the worker fails, this is cancelled so an inserter blocked on a full queue
                 // wakes up instead of waiting forever.
                 using var workerFailed = new CancellationTokenSource();
@@ -191,7 +212,7 @@ namespace FtsLib.Fts5
                     tx.Commit(); tx.Dispose();
                     inBatch = 0;
                     // The batch's term dictionary, so wildcard and fuzzy find its terms.
-                    try { dictionaryQueue.Add((batchCounts, lastLineId), workerFailed.Token); }
+                    try { dictionaryQueue.Add((batchCounts, linesDone), workerFailed.Token); }
                     catch (OperationCanceledException) when (workerFailed.IsCancellationRequested)
                     {
                         dictionaryWorker.GetAwaiter().GetResult();   // rethrows the worker's exception
@@ -205,10 +226,16 @@ namespace FtsLib.Fts5
                     if (limit >= 0)
                     using (var corpus = openCorpus())
                     {
-                        var source = lastLineId > 0 ? corpus.ReadDocumentsAfter(lastLineId, remaining, ct)
-                                                    : corpus.ReadDocuments(remaining, ct);
+                        // Result order: the corpus's own when it has one; else ascending ids.
+                        IEnumerable<(int Id, string Text)> source =
+                            corpus is IFtsOrderedCorpus ordered
+                                ? ResumeInResultOrder(ordered, linesDone, lastLineId, ct)
+                                : lastLineId > 0 ? corpus.ReadDocumentsAfter(lastLineId, 0, ct)
+                                                 : corpus.ReadDocuments(0, ct);
+                        long added = 0;
                         foreach (var (id, content) in source)
                         {
+                            if (remaining > 0 && added++ >= remaining) break;
                             text.Clear();
                             foreach (string term in tokenizer.Extract(content))
                             {
@@ -217,10 +244,14 @@ namespace FtsLib.Fts5
                                 batchCounts.TryGetValue(term, out int n);
                                 batchCounts[term] = n + 1;
                             }
-                            pId.Value = id; pTerms.Value = text.ToString();
+                            linesDone++;
+                            pPosition.Value = linesDone; pTerms.Value = text.ToString();
                             insert.Transaction = tx;
                             insert.ExecuteNonQuery();
-                            lastLineId = id; linesDone++; inBatch++; session++;
+                            pPositionKey.Value = linesDone; pLineId.Value = id;
+                            insertPosition.Transaction = tx;
+                            insertPosition.ExecuteNonQuery();
+                            lastLineId = id; inBatch++; session++;
                             onProgress?.Invoke(session);
                             if (inBatch >= CommitInterval(linesDone))
                             {
@@ -320,27 +351,36 @@ namespace FtsLib.Fts5
 
         /// <summary>
         /// A crash between a batch commit and its dictionary leaves lines no dictionary covers.
-        /// Re-tokenizes exactly those lines (after the manifest's covered id, up to the last
-        /// committed line) into one more dictionary, so the term set matches the line table.
+        /// Re-tokenizes exactly those lines (positions after the manifest's covered position, up
+        /// to the last committed one — line_position names them) into one more dictionary, so
+        /// the term set matches the line table. Counts do not depend on order.
         /// </summary>
-        static void CatchUpDictionaries(Func<IFtsCorpus> openCorpus, string dir, int lastCommittedLineId,
-                                        Tokenizer tokenizer, CancellationToken ct)
+        static void CatchUpDictionaries(Func<IFtsCorpus> openCorpus, SqliteConnection conn, string dir,
+                                        long committedPosition, Tokenizer tokenizer, CancellationToken ct)
         {
-            int covered = Fts5TermDictionaries.Read(dir).CoveredLineId;
-            if (covered >= lastCommittedLineId) return;
+            long covered = Fts5TermDictionaries.Read(dir).CoveredPosition;
+            if (covered >= committedPosition) return;
+            var ids = new System.Collections.Generic.List<int>();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = "SELECT line_id FROM line_position WHERE position > $covered ORDER BY position";
+                cmd.Parameters.AddWithValue("$covered", covered);
+                using var r = cmd.ExecuteReader();
+                while (r.Read()) ids.Add(r.GetInt32(0));
+            }
             var counts = new System.Collections.Generic.Dictionary<string, int>(StringComparer.Ordinal);
             using (var corpus = openCorpus())
-                foreach (var (id, content) in corpus.ReadDocumentsAfter(covered, 0, ct))
+                foreach (var (_, content, _) in corpus.FetchDocuments(ids))
                 {
-                    if (id > lastCommittedLineId) break;
+                    ct.ThrowIfCancellationRequested();
                     foreach (string term in tokenizer.Extract(content))
                     {
                         counts.TryGetValue(term, out int n);
                         counts[term] = n + 1;
                     }
                 }
-            Fts5TermDictionaries.AddBatch(dir, counts, lastCommittedLineId);
-            Log($"dictionary catch-up: lines after {covered} up to {lastCommittedLineId}");
+            Fts5TermDictionaries.AddBatch(dir, counts, committedPosition);
+            Log($"dictionary catch-up: positions after {covered} up to {committedPosition}");
         }
 
         public static void MarkComplete(string dir)
@@ -362,6 +402,44 @@ namespace FtsLib.Fts5
                 while (r.Read()) { rowIds.Add((int)r.GetInt64(0)); terms.Add(r.GetString(1)); }
             }
             FmIndex.Build(TermsFmi(dir), terms, rowIds);
+        }
+
+        /// <summary>
+        /// The ordered feed from position <paramref name="linesDone"/> on. Resuming by position
+        /// is only right while the order is unchanged, and the database stamp does not cover
+        /// everything the order depends on (category and book order, lineIndex). So the last
+        /// committed position is read again first: it must still be the line it was.
+        /// </summary>
+        static IEnumerable<(int Id, string Text)> ResumeInResultOrder(
+            IFtsOrderedCorpus corpus, long linesDone, int lastLineId, CancellationToken ct)
+        {
+            if (linesDone == 0)
+            {
+                foreach (var doc in corpus.ReadDocumentsInResultOrder(0, ct)) yield return doc;
+                yield break;
+            }
+            bool first = true;
+            foreach (var doc in corpus.ReadDocumentsInResultOrder(linesDone - 1, ct))
+            {
+                if (first)
+                {
+                    first = false;
+                    if (doc.Id != lastLineId)
+                        throw new IndexNoLongerMatchesCorpusException(
+                            $"position {linesDone} was line {lastLineId}, now line {doc.Id}");
+                    continue;
+                }
+                yield return doc;
+            }
+            if (first)
+                throw new IndexNoLongerMatchesCorpusException($"the corpus has fewer than {linesDone} lines now");
+        }
+
+        static bool HasPositions(SqliteConnection conn)
+        {
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT EXISTS(SELECT 1 FROM line_position)";
+            return Convert.ToInt64(cmd.ExecuteScalar()) != 0;
         }
 
         static BuildState ReadState(SqliteConnection conn)

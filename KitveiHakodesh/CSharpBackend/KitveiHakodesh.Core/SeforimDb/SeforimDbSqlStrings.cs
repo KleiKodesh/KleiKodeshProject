@@ -615,6 +615,17 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.id > @after ORDER BY l.id" + (hasLimit ? " LIMIT @lim" : "");
 
+        /// <summary>Lines per book — lets the catalog-order feed skip whole books on resume.</summary>
+        internal const string FtsLineCountsByBook = "SELECT bookId, COUNT(*) FROM line GROUP BY bookId";
+
+        /// <summary>One book's lines in reading order (lineIndex; id breaks a tie), from the
+        /// @skip-th on — the catalog-order index feed, one book at a time. Served by
+        /// idx_line_book_index.</summary>
+        internal static string FtsReadBookLines(SeforimDbSchema schema) =>
+            "SELECT l.id, " + C_ContentColumn(schema, "l") +
+            " FROM line l" + C_ContentJoin(schema, "l") +
+            " WHERE l.bookId = @b ORDER BY l.lineIndex, l.id LIMIT -1 OFFSET @skip";
+
         /// <summary>One chunk of search-result rows: content + book title in a single JOIN, so
         /// titles never need a second query. IN-list sized to the chunk.</summary>
         internal static string FtsFetchLinesWithTitles(SeforimDbSchema schema, int count) =>

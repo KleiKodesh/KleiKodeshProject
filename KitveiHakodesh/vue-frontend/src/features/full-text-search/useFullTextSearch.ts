@@ -45,10 +45,10 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   const { searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchGrammarWrap } = storeToRefs(settings)
 
   // Sort order is per-search and ephemeral — NOT persisted. Every new search resets it to
-  // 'lineId' (original streamed order), so results always finish in document order and the
+  // 'catalogOrder' (the streamed order), so results always finish in catalog order and the
   // user must actively pick 'relevance' from the toggle (which is only shown once streaming
   // completes) to reorder. See executeSearch (reset) and the watch below (user-driven re-sort).
-  const sortOrder = ref<FullTextSearchSortOrder>('lineId')
+  const sortOrder = ref<FullTextSearchSortOrder>('catalogOrder')
 
   function _buildQueryToSend(normalizedQuery: string): string {
     if (!settings.searchGrammarWrap) return normalizedQuery
@@ -71,6 +71,9 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       settings.searchExpandKetiv ? 'ktv' : '',
       settings.searchExpandRelated ? 'rel' : '',
       `ctx${settings.searchContextMarginWords}`,
+      // Results stream in catalog order since the FTS5 index; entries cached before that are
+      // in line-id order (and from the old index), so they must not match.
+      'catalog',
     ]
       .filter(Boolean)
       .join('|')
@@ -84,13 +87,17 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   // The in-flight stream — aborting it closes the connection, which is the service's
   // cancel signal (no cancel op, no polling).
   let _streamAbort: AbortController | null = null
+  // The result set in the order the service streamed it — the library's catalog tree order
+  // (the index stores lines in that order). 'catalogOrder' restores it, and every other sort
+  // breaks ties by it. Kept apart from `results`, which a re-sort reorders.
+  let streamedOrder: FullTextSearchResult[] = []
 
   // Apply the current relevancy sort to the fully-collected result set. Called only
   // once the search has completed — sorting mid-stream would fight the incremental
-  // append (results paint in ascending line-ID order as they arrive). 'lineId' is the
-  // natural streamed order, so it's a no-op; 'relevance' orders by word-distance score
-  // (smaller = closer) with line ID as a stable tiebreaker. results is a shallowRef, so
-  // we always assign a fresh array to trigger reactivity.
+  // append (results paint in catalog order as they arrive). 'catalogOrder' is the streamed
+  // order itself; 'relevance' orders by word-distance score (smaller = closer) with the
+  // streamed order as a stable tiebreaker. results is a shallowRef, so we always assign a
+  // fresh array to trigger reactivity.
   async function finalizeSort() {
     if (results.value.length < 2) return
 
@@ -104,21 +111,24 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
 
     const sorted = [...results.value]
+    const streamedPosition = new Map(streamedOrder.map((r, i) => [r, i]))
+    const byStream = (a: FullTextSearchResult, b: FullTextSearchResult) =>
+      (streamedPosition.get(a) ?? 0) - (streamedPosition.get(b) ?? 0)
     if (sortOrder.value === 'relevance') {
       // Sole relevancy key: minimum word distance (0 = query words adjacent → most relevant).
-      // Ties keep their original streamed (line-ID) order. We deliberately do NOT tiebreak on
+      // Ties keep their original streamed (catalog) order. We deliberately do NOT tiebreak on
       // `score` (character span) — that reorders equally-adjacent hits by irrelevant length
       // differences (nikud, word length), which reads as nonsense to the user.
       // `?? 0` guards results restored from a cache written before wordDistance existed on
       // the wire — treat a missing distance as "closest" rather than sorting to NaN.
       const wd = (r: FullTextSearchResult) => r.wordDistance ?? 0
-      sorted.sort((a, b) => wd(a) - wd(b) || a.lineId - b.lineId)
+      sorted.sort((a, b) => wd(a) - wd(b) || byStream(a, b))
     } else if (sortOrder.value === 'bookName') {
-      // Alphabetical by book title (Hebrew collation), then line ID so lines within the
+      // Alphabetical by book title (Hebrew collation), then streamed order so lines within the
       // same book stay in document order.
-      sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || a.lineId - b.lineId)
+      sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || byStream(a, b))
     } else if (sortOrder.value === 'authorName') {
-      // Alphabetical by author name (Hebrew collation), then book name, then line ID.
+      // Alphabetical by author name (Hebrew collation), then book name, then streamed order.
       // Authorless books (empty author string) sort last. book.authors is the comma-joined
       // author list; we collate on it as-is (its natural first author leads the string).
       const bookMap = booksStore.allBooksMap
@@ -128,11 +138,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         if (!aa !== !ab) return aa ? -1 : 1 // non-empty authors before authorless
         return aa.localeCompare(ab, 'he') ||
           (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
-          a.lineId - b.lineId
+          byStream(a, b)
       })
     } else if (sortOrder.value === 'chronological') {
       // Author death-year (primary) → precision tier (an exact author year leads an era
-      // estimate landing on the same year) → catalog tree order → book name → line ID.
+      // estimate landing on the same year) → catalog tree order → book name → streamed order.
       // Books with neither an author year nor one of the three trusted era categories carry
       // year = Infinity and sort LAST — an honest "unknown" at the end rather than a
       // fabricated position mid-list. Tree order keeps same-key books in their curated
@@ -165,14 +175,13 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           keyA.precision - keyB.precision ||
           keyA.treeOrder - keyB.treeOrder ||
           (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
-          a.lineId - b.lineId
+          byStream(a, b)
         )
       })
     } else {
-      // 'lineId' — restore the original streamed order (ascending line ID). This is a
-      // no-op right after streaming, but matters when the user switches back from
-      // another order on an already-sorted set.
-      sorted.sort((a, b) => a.lineId - b.lineId)
+      // 'catalogOrder' — restore the streamed order. A no-op right after streaming, but
+      // matters when the user switches back from another order on an already-sorted set.
+      sorted.sort(byStream)
     }
     results.value = sorted
   }
@@ -201,7 +210,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     isSearching.value = true
     hasSearched.value = true
     results.value = []
-    sortOrder.value = 'lineId'   // each new search starts in original order; user re-sorts after
+    streamedOrder = []
+    sortOrder.value = 'catalogOrder'   // each new search starts in streamed order; user re-sorts after
     searchError.value = null
     executedQuery.value = q
 
@@ -236,6 +246,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       let dirty = false
       const flush = () => {
         results.value = acc.slice()
+        streamedOrder = acc
         dirty = false
         lastFlushAt = performance.now()
       }
@@ -253,6 +264,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()
           if (cacheable) await cache.appendBatch(cacheKey, hits).catch(() => {/* best-effort */})
         }
+        if (executedQuery.value !== q) { abort.abort(); return } // superseded while caching
         if (chunk.error) {
           if (dirty) flush() // surface whatever streamed before the error
           if (!acc.length) searchError.value = 'searchFailed'
@@ -262,7 +274,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         }
         if (chunk.done) {
           if (dirty) flush() // final trailing flush before sorting
-          // Search complete — apply the sort now (no-op for 'lineId').
+          // Search complete — apply the sort now (no-op for 'catalogOrder').
           // Done here rather than in `finally` so it runs only on genuine completion,
           // not when the loop exits early via supersession/error.
           await finalizeSort()
@@ -288,6 +300,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   function clearSearch() {
     results.value = []
+    streamedOrder = []
     hasSearched.value = false
     executedQuery.value = ''
     searchError.value = null
@@ -314,6 +327,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       return true
     }
     results.value = cached.results
+    streamedOrder = cached.results   // cached in the order it streamed
     executedQuery.value = q
     hasSearched.value = true
     return true

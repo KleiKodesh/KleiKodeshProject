@@ -47,13 +47,20 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // fts2 (2026-07-22): tokenizer change — inline tags (<b>, <small>, …) became
         // word-transparent and HTML entities word separators, so terms indexed under fts1
         // differ and a clean rebuild is required.
-        public const string IndexFormatVersion = "fts2";
+        // fts3 (2026-10-12): the index is SQLite FTS5 (FtsLib/Fts5) instead of FtsLib's own
+        // segments — a different on-disk format, so every fts2 index rebuilds.
+        // fts4 (2026-10-12): lines are stored in catalog tree order (rowid = position), so
+        // results stream in the order the app shows the library; fts3 rowids were line ids.
+        public const string IndexFormatVersion = "fts4";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";
         private const string ResumeWatermarkFileName = "build.progress";
         // TEMPORARY (FTS5 trial): FtsLib's pattern is "seg_*.dat".
         private const string SegmentFilePattern = SeforimIndex.IndexFileName;
+        // TEMPORARY (FTS5 trial): FtsLib's own segment files. Finding one means the folder
+        // holds an index of the OLD engine, whatever its stamps say — see Prepare.
+        private const string FtsLibSegmentFilePattern = "seg_*.dat";
 
         /// <summary>Progress is reported every this-many lines — often enough for a live
         /// percentage, rare enough that the callback never becomes the build's cost.</summary>
@@ -83,6 +90,19 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         public string IndexPath => _indexPath;
+
+        private bool HasFtsLibSegments()
+        {
+            try
+            {
+                return Directory.Exists(_indexPath)
+                    && Directory.GetFiles(_indexPath, FtsLibSegmentFilePattern).Length > 0;
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
 
         /// <summary>Whether any searchable segment exists yet — what "results before the build
         /// finishes" is gated on.</summary>
@@ -123,6 +143,22 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public SeforimDbFtsIndexPlan Prepare()
         {
             var plan = new SeforimDbFtsIndexPlan();
+
+            // TEMPORARY (FTS5 trial): an index built by FtsLib's own engine is unusable here,
+            // whatever its stamps claim. The format bump to fts4 catches every stamped one; this
+            // catches the rest — no stamp, a legacy stamp, or a half-built FtsLib index — which
+            // the checks below would not even see as index state, because SegmentFilePattern
+            // now names the FTS5 file. Left in place it would also hold ~650 MB of dead segments.
+            // Only while the engine is NOT FtsLib's own: removing the SeforimIndex alias makes
+            // SegmentFilePattern "seg_*.dat" again and switches this off by itself — otherwise it
+            // would wipe every valid FtsLib index on every start.
+            if (SegmentFilePattern != FtsLibSegmentFilePattern && HasFtsLibSegments())
+            {
+                Directory.Delete(_indexPath, recursive: true);
+                plan.WipedStaleState = true;
+                plan.IsReady = false;
+                return plan;
+            }
 
             string completedStampPath = Path.Combine(_indexPath, CompletedStampFileName);
             string currentStamp = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion);
