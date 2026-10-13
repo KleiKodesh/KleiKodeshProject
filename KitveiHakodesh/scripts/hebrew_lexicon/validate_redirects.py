@@ -9,7 +9,7 @@ Usage: python validate_redirects.py redirects/batch_00N.json
 """
 import csv, sqlite3, sys, json, os
 CSV=r"C:\Users\Public\Documents\Dictionary\Backup\merged_pealim_wikiDictinary_shorashim.csv"
-DB=r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodeshService\Dictionary\Dictionary.db"
+DB=r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db"
 
 form_roots={}
 with open(CSV,encoding="utf-8",newline="") as f:

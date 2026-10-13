@@ -34,5 +34,5 @@ Another session works FtsLib/tokenizer in this SAME dir → shared git HEAD. A d
 - Commit to master **via plumbing** (never checkout/reset --hard): `git hash-object -w <db1> <db2>` → temp `GIT_INDEX_FILE` `git read-tree master` + `git update-index --cacheinfo` ×2 → `git write-tree` → `git commit-tree -p master` → `git update-ref refs/heads/master`; then `git reset -q -- <db1> <db2>` to reconcile the index. **Stage ONLY the two .db files; never touch the tokenizer session's FtsLib/*.cs, *.vue, or untracked files.**
 
 The two DBs:
-- `CSharpBackend/KitveiHakodeshService/Dictionary/Dictionary.db`
+- `CSharpBackend/KitveiHakodesh.Core/Dictionary/Dictionary.db`
 - `vue-frontend/public/dictionary/KitveiHakodesh_dictionary.db`

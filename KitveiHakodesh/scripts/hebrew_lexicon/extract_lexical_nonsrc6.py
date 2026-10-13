@@ -22,7 +22,7 @@ Outputs (scratchpad): lexN_review_<start>.txt , lex_cand_<start>.json
 import sqlite3, os, re, sys, json
 
 LEX=r"C:\Users\Public\Documents\Dictionary\Backup\lexical.db"
-DICT=r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodeshService\Dictionary\Dictionary.db"
+DICT=r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db"
 # Output dir: set LEXICON_OUT to point this somewhere specific, else a temp dir.
 SP=os.environ.get("LEXICON_OUT") or os.path.join(__import__("tempfile").gettempdir(), "hebrew_lexicon")
 os.makedirs(SP, exist_ok=True)

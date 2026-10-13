@@ -47,9 +47,6 @@
     <Content Include="HebrewBooks\HebrewBooksCatalog.db">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
-    <Content Include="Dictionary\Dictionary.db">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
   <ItemGroup>

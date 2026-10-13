@@ -33,7 +33,7 @@ keys). Matching splits on commas and whitespace, which is what the frontend's
 headerMatchesExact does today, so the index has to be able to answer the same question.
 
 USAGE
-    cd CSharpBackend/KitveiHakodeshService/Dictionary
+    cd CSharpBackend/KitveiHakodesh.Core/Dictionary
     python build_seforim_headword_index.py [--seforim PATH] [--dry-run]
 """
 
@@ -52,7 +52,7 @@ except ImportError:
 
 
 # This script lives beside the dictionary database it ships with:
-#   CSharpBackend/KitveiHakodeshService/Dictionary/
+#   CSharpBackend/KitveiHakodesh.Core/Dictionary/
 # so the repository root is four levels up.
 REPOSITORY_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
@@ -62,7 +62,7 @@ REPOSITORY_ROOT = os.path.abspath(
 # stay that way; shipping the index to one and not the other is exactly the drift this
 # script exists to prevent.
 DICTIONARY_DATABASE_PATHS = [
-    os.path.join(REPOSITORY_ROOT, "CSharpBackend", "KitveiHakodeshService", "Dictionary", "Dictionary.db"),
+    os.path.join(REPOSITORY_ROOT, "CSharpBackend", "KitveiHakodesh.Core", "Dictionary", "Dictionary.db"),
 ]
 
 # The plain (uncompressed) Zayit library. Its titles are the shorter spellings, which the

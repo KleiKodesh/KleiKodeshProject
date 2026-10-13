@@ -30,7 +30,7 @@ import json, os, sys, glob, sqlite3
 ROOT = os.path.dirname(os.path.abspath(__file__))
 REDIR_DIR = os.path.join(ROOT, "redirects")
 TARGETS = {
-    "service":  r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodeshService\Dictionary\Dictionary.db",
+    "service":  r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db",
     "frontend": r"C:\Users\Public\Documents\KleiKodeshProject\KitveiHakodesh\vue-frontend\public\dictionary\KitveiHakodesh_dictionary.db",
 }
 KETIV = "כתיב"

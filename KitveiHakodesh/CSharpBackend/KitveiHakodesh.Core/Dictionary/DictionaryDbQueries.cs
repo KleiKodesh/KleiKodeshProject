@@ -97,7 +97,7 @@ namespace KitveiHakodesh.Core.Dictionary
             SenseSelect + " WHERE w.headword LIKE @contains LIMIT 30";
 
         // seforim_headword(source, bookId, lineIndex, word) + seforim_headword_book(id, title),
-        // built by KitveiHakodeshService/Dictionary/build_seforim_headword_index.py.
+        // built by KitveiHakodesh.Core/Dictionary/build_seforim_headword_index.py.
         // Prefix is a range on the (source, word) index; contains scans one source's words.
         private const string SeforimHeadwordSelect =
             "SELECT DISTINCT h.source, b.title, h.lineIndex, h.word " +

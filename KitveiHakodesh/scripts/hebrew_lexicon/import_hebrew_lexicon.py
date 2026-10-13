@@ -36,7 +36,7 @@ Reads every terms/batch_*.json. Each file is a JSON array of:
 `nikud` is optional (null/omit when unsure). `defs` is a list of short glosses.
 
 Targets both committed copies:
-    CSharpBackend/KitveiHakodeshService/Dictionary/Dictionary.db      (service)
+    CSharpBackend/KitveiHakodesh.Core/Dictionary/Dictionary.db      (service)
     vue-frontend/public/dictionary/KitveiHakodesh_dictionary.db       (frontend)
 A rebuild/restart of the service is needed for a running dev instance to pick
 up the change (the service reads its bin copy).
@@ -64,7 +64,7 @@ SOURCE_NAME = "מילון עברי"
 
 TARGETS = {
     "service": os.path.join(
-        REPO, "CSharpBackend", "KitveiHakodeshService", "Dictionary", "Dictionary.db"),
+        REPO, "CSharpBackend", "KitveiHakodesh.Core", "Dictionary", "Dictionary.db"),
     "frontend": os.path.join(
         REPO, "vue-frontend", "public", "dictionary", "KitveiHakodesh_dictionary.db"),
 }

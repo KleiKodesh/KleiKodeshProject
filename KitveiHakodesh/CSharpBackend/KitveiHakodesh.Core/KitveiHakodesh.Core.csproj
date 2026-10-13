@@ -56,6 +56,13 @@
     <ProjectReference Include="..\FtsLib-Csharp\FtsLib\FtsLib.csproj" />
   </ItemGroup>
 
+  <!-- The dictionary database. Flows into every referencing project's output as Dictionary\Dictionary.db. -->
+  <ItemGroup>
+    <Content Include="Dictionary\Dictionary.db">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- Codepage 1255 (Hebrew ANSI) is not built into the modern runtime, where
          Encoding.GetEncoding(1255) throws without this provider. TextEncodingDetector

@@ -44,7 +44,7 @@ Each `terms/batch_*.json` is a JSON array of:
 
 Targets **both** committed DB copies:
 
-* `CSharpBackend/KitveiHakodeshService/Dictionary/Dictionary.db`  (the service)
+* `CSharpBackend/KitveiHakodesh.Core/Dictionary/Dictionary.db`  (the service)
 * `vue-frontend/public/dictionary/KitveiHakodesh_dictionary.db`   (the frontend)
 
 Behaviour:

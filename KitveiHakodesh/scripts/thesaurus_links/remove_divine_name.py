@@ -31,7 +31,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 DBS = [
     os.path.normpath(os.path.join(
-        HERE, r"..\..\CSharpBackend\KitveiHakodeshService\Dictionary\Dictionary.db")),
+        HERE, r"..\..\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db")),
     os.path.normpath(os.path.join(
         HERE, r"..\..\vue-frontend\public\dictionary\KitveiHakodesh_dictionary.db")),
 ]

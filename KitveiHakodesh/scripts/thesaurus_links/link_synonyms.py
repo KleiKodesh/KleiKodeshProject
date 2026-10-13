@@ -48,7 +48,7 @@ WD_HEBREW = 1037  # WdLanguageID.wdHebrew
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.path.normpath(os.path.join(
-    HERE, r"..\..\CSharpBackend\KitveiHakodeshService\Dictionary\Dictionary.db"))
+    HERE, r"..\..\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db"))
 SQL_OUT = os.path.join(HERE, "proposed_nardaf_links.sql")
 TSV_OUT = os.path.join(HERE, "proposed_nardaf_report.tsv")
 

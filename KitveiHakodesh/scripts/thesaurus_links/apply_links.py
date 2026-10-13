@@ -29,7 +29,7 @@ SQL_FILE = os.path.join(HERE, "proposed_nardaf_links.sql")
 # Both copies must stay identical (see Dictionary/ADDING_SENSES.md).
 DBS = [
     os.path.normpath(os.path.join(
-        HERE, r"..\..\CSharpBackend\KitveiHakodeshService\Dictionary\Dictionary.db")),
+        HERE, r"..\..\CSharpBackend\KitveiHakodesh.Core\Dictionary\Dictionary.db")),
     os.path.normpath(os.path.join(
         HERE, r"..\..\vue-frontend\public\dictionary\KitveiHakodesh_dictionary.db")),
 ]

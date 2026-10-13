@@ -4,7 +4,7 @@ This folder holds **`Dictionary.db`** — the dictionary the service serves for
 word look-ups. This note explains how to add more words/senses to it correctly.
 
 > **There are TWO copies of this database — keep them identical:**
-> - `CSharpBackend/KitveiHakodeshService/Dictionary/Dictionary.db`  ← this one (service)
+> - `CSharpBackend/KitveiHakodesh.Core/Dictionary/Dictionary.db`  ← this one (Core; ships with the service)
 > - `vue-frontend/public/dictionary/KitveiHakodesh_dictionary.db`   (frontend)
 >
 > Every change must be applied to **both**.
