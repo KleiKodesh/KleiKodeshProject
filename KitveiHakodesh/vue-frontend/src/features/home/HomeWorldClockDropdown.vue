@@ -4,7 +4,6 @@
 import { ref, computed, nextTick } from 'vue'
 import { useNow } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
-import { useListKeys } from '@/composables/useListKeyNav'
 import { computeBarPopupAnchor, type BarPopupAnchor } from './homeBarPopupAnchor'
 
 defineProps<{ clockTime: string }>()
@@ -15,7 +14,7 @@ interface WorldClockZone {
 }
 
 const WORLD_CLOCK_ZONES: WorldClockZone[] = [
-  { timeZone: 'Asia/Jerusalem', cityLabel: 'ירושלים' },
+  { timeZone: 'Asia/Jerusalem', cityLabel: 'ישראל' },
   { timeZone: 'America/New_York', cityLabel: 'ניו יורק' },
   { timeZone: 'America/Los_Angeles', cityLabel: 'לוס אנג׳לס' },
   { timeZone: 'Europe/London', cityLabel: 'לונדון' },
@@ -92,7 +91,6 @@ function toggleWorldClockMenu() {
   const opening = !isWorldClockOpen.value
   isWorldClockOpen.value = opening
   if (opening) {
-    worldClockFocusedIndex.value = 0
     computeWorldClockMenuAnchor()
     nextTick(() => {
       computeWorldClockMenuAnchor()
@@ -100,13 +98,6 @@ function toggleWorldClockMenu() {
     })
   }
 }
-
-// Rows are informational; Enter just closes the menu back to the button.
-const { focusedIndex: worldClockFocusedIndex } = useListKeys(
-  worldClockMenuRef,
-  () => WORLD_CLOCK_ZONES.length,
-  () => closeWorldClockMenuAndRefocus(),
-)
 
 function closeWorldClockMenuAndRefocus() {
   isWorldClockOpen.value = false
@@ -143,12 +134,9 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
       @keydown="onWorldClockMenuKeydown"
     >
       <div
-        v-for="(row, index) in worldClockRows"
+        v-for="row in worldClockRows"
         :key="row.timeZone"
         class="world-clock-item"
-        :class="{ focused: index === worldClockFocusedIndex }"
-        data-nav-item=""
-        @mouseenter="worldClockFocusedIndex = index"
       >
         <span class="world-clock-city">{{ row.cityLabel }}</span>
         <span class="world-clock-time">
@@ -206,10 +194,6 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
   padding: 6px 10px;
   border-radius: 6px;
   color: var(--text-primary);
-  cursor: default;
-}
-.world-clock-item.focused {
-  background: var(--hover-bg);
 }
 .world-clock-city {
   font-size: 12.5px;
