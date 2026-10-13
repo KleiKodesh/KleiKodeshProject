@@ -41,6 +41,7 @@ import { useWordLinkAnchors } from './useWordLinkAnchors'
 import { useCopyExportData } from './useCopyExportData'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
+import { showToast } from '@/composables/useToast'
 
 const emit = defineEmits<{
   scrolled: [firstVisible: number, firstFull: number, isUserScroll: boolean]
@@ -376,9 +377,19 @@ onMounted(() => {
 
 // Toolbar export to Word: the custom copy + paste-into-Word path, over the whole book
 // (as if the user had pressed Ctrl+A first) rather than writing a new document.
-function pasteAllIntoWord(): void {
+//
+// Unlike Ctrl+C, the notes warm-up is awaited IN FULL, so a cold book cannot lose
+// endnotes. If that outlasts the click's clipboard activation, execCommand('copy')
+// does nothing — the warm-up is cached by then, so a second click goes through
+// instantly; the toast says so. The select-all is dropped afterwards either way.
+async function pasteAllIntoWord(): Promise<void> {
   selectAllInContainer()
-  onPasteIntoWord()
+  if (settingsStore.copyWithNotes) {
+    try { await prepareForLines(props.lines.map((l) => l.id)) } catch { /* export degrades; proceed */ }
+  }
+  const copied = triggerCopy(() => pasteIntoWord().catch(() => {}))
+  window.getSelection()?.removeAllRanges()
+  if (!copied) showToast('ההכנה לייצוא הסתיימה — לחץ שוב על ייצוא ל-Word')
 }
 
 defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })
