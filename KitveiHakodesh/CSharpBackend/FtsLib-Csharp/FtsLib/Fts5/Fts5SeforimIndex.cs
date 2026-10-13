@@ -115,9 +115,12 @@ namespace FtsLib.Fts5
         /// Builds (or resumes) the index under FtsLib's write lock, so
         /// <see cref="IsBuildInProgress"/> and concurrent builders behave as with FtsLib.
         /// <paramref name="onProgress"/> counts lines of THIS session, as FtsLib's does;
-        /// <paramref name="onFlush"/> fires after every committed batch. The FTS5 'optimize'
-        /// and the term dictionary run at the end; <paramref name="onMergeProgress"/> gets the
-        /// (0, 0) phase-start signal and (1, 1) when done. <paramref name="resumeOffset"/> and
+        /// <paramref name="onFlush"/> fires after every committed batch. The final phase — FTS5
+        /// 'optimize' + VACUUM, then the term dictionary — reports through
+        /// <paramref name="onMergeProgress"/> as (0, 2) before it starts, (1, 2), (2, 2), so
+        /// the app shows it as its own phase instead of a bar stuck at 99.9%. It runs at
+        /// NORMAL priority: a few minutes of single-threaded work that, throttled by
+        /// background mode, took 16 minutes live; it holds no lock searches wait on. <paramref name="resumeOffset"/> and
         /// <paramref name="forceMergeOnComplete"/> are accepted for signature compatibility.
         /// </summary>
         public bool BuildIndex(int limit = 0, Action<long> onProgress = null, Action onFlush = null,
@@ -154,10 +157,15 @@ namespace FtsLib.Fts5
                     Fts5Index.BuildLines(_openCorpus, _indexPath, limit, totalLines, onProgress, onFlush, ct, backgroundPriority);
                 }
                 ct.ThrowIfCancellationRequested();
-                onMergeProgress?.Invoke(0, 0);
-                Fts5Index.BuildDictionary(_indexPath);
+                onMergeProgress?.Invoke(0, 2);
+                using (BackgroundPriorityScope.Suspend())
+                {
+                    Fts5Index.CompactLines(_indexPath, ct);
+                    onMergeProgress?.Invoke(1, 2);
+                    Fts5Index.BuildDictionary(_indexPath);
+                }
                 Fts5Index.MarkComplete(_indexPath);
-                onMergeProgress?.Invoke(1, 1);
+                onMergeProgress?.Invoke(2, 2);
             }
             return true;
         }

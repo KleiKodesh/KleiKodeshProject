@@ -220,11 +220,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// Writing the stamp anyway would mark the NEW build's directory as a finished index of
         /// the OLD build's content, and the next launch would skip the rebuild entirely.
         /// Defaults to "always current", which is correct for a host that never supersedes.</param>
-        /// <param name="onMergeProgress">(passesDone, passesExpected) during the final force
-        /// merge. That phase reports no LINES, so without these ticks a host can only hold its
-        /// last line percentage for minutes and the build reads as hung. (0, 0) is the
-        /// phase-start signal, sent before the first pass; passesExpected is an estimate that
-        /// moves as the merger discovers how much work is left.</param>
+        /// <param name="onMergeProgress">(passesDone, passesExpected) during the final phase
+        /// after the last line (a force merge, or FTS5's compaction and term dictionary). That
+        /// phase reports no LINES, so without these ticks a host can only hold its last line
+        /// percentage for minutes and the build reads as hung. passesDone = 0 is the
+        /// phase-start signal, sent before any work; FtsLib's merger sends (0, 0) and an
+        /// estimate that moves as it learns how much is left, FTS5 sends 0..2 of 2.</param>
         public bool Build(
             SeforimDbFtsEngine engine,
             Action<long, long>? onProgress = null,

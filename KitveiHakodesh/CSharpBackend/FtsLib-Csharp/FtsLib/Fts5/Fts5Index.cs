@@ -105,6 +105,7 @@ namespace FtsLib.Fts5
             Directory.CreateDirectory(dir);
             DeleteIndexFiles(dir);
             BuildLines(openCorpus, dir, limit, 0, onProgress, null, ct);
+            CompactLines(dir, ct);
             BuildDictionary(dir);
             MarkComplete(dir);
         }
@@ -281,17 +282,32 @@ namespace FtsLib.Fts5
                     catch (Exception) when (insertFailed) { }
                 }
                 Log($"inserted {session:N0} lines ({linesDone:N0} total) in {total.Elapsed.TotalSeconds:F0}s");
-
-                // Merge FTS5's batch segments into one. Readers keep working meanwhile (WAL).
-                var sw = Stopwatch.StartNew();
-                ct.ThrowIfCancellationRequested();
-                Execute(conn, "INSERT INTO line_fts(line_fts) VALUES('optimize')");
-                ct.ThrowIfCancellationRequested();
-                Execute(conn, "VACUUM");
-                Execute(conn, "PRAGMA wal_checkpoint(TRUNCATE)");
-                Log($"optimize + vacuum {sw.Elapsed.TotalSeconds:F0}s");
             }
             SqliteConnection.ClearAllPools();
+        }
+
+        /// <summary>
+        /// After the last line: merges FTS5's batch segments into one ('optimize') and gives
+        /// the pages that frees back to the file system (VACUUM; without it the file stays
+        /// about twice the size). Readers keep working throughout (WAL). Safe to repeat: a
+        /// build killed in here simply does it again on resume.
+        /// </summary>
+        public static void CompactLines(string dir, CancellationToken ct)
+        {
+            using var conn = Open(LinesDb(dir), SqliteOpenMode.ReadWrite);
+            // Per-connection, so set again here: the same cache and sync policy as the inserts
+            // (journal_mode=WAL is stored in the file). A 2 MB default cache makes the full
+            // segment merge and the whole-file VACUUM far slower.
+            Execute(conn, "PRAGMA synchronous=NORMAL; PRAGMA cache_size=-262144;");
+            ct.ThrowIfCancellationRequested();
+            var sw = Stopwatch.StartNew();
+            Execute(conn, "INSERT INTO line_fts(line_fts) VALUES('optimize')");
+            Log($"optimize {sw.Elapsed.TotalSeconds:F0}s");
+            ct.ThrowIfCancellationRequested();
+            sw.Restart();
+            Execute(conn, "VACUUM");
+            Execute(conn, "PRAGMA wal_checkpoint(TRUNCATE)");
+            Log($"vacuum {sw.Elapsed.TotalSeconds:F0}s");
         }
 
         /// <summary>
