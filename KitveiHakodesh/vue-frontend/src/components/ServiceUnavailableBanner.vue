@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import { getDbPathInfo } from '@/webview-host/bridge'
 import {
@@ -40,12 +40,16 @@ const texts = computed(() =>
     ? SERVICE_UNAVAILABLE_TEXTS[serviceUnavailableReason.value]
     : dbUpdateInterrupted.value ? SEFORIM_DB_UPDATE_INTERRUPTED_TEXTS : null,
 )
+
+// The user may close the banner; a DIFFERENT message (or the same one after it cleared) shows again.
+const dismissed = ref(false)
+watch(texts, () => { dismissed.value = false })
 </script>
 
 <template>
   <Teleport to="body">
     <Transition name="service-banner">
-      <div v-if="texts" class="service-banner" role="alert">
+      <div v-if="texts && !dismissed" class="service-banner" role="alert">
         <span class="service-banner-icon" aria-hidden="true">
           <svg viewBox="0 0 20 20" width="18" height="18" fill="currentColor">
             <path d="M10 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16Zm0 10.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Zm0-7a.75.75 0 0 0-.74.65l-.01.1v4.5a.75.75 0 0 0 1.49.1l.01-.1v-4.5A.75.75 0 0 0 10 5.5Z"/>
@@ -62,6 +66,11 @@ const texts = computed(() =>
           @click="retryService"
         >
           {{ isRetryingService ? SERVICE_RETRYING_LABEL : SERVICE_ACTION_LABELS[serviceUnavailableReason!] }}
+        </button>
+        <button class="service-banner-close" aria-label="סגור" @click="dismissed = true">
+          <svg viewBox="0 0 12 12" width="12" height="12" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+            <path d="M2 2l8 8M10 2l-8 8"/>
+          </svg>
         </button>
       </div>
     </Transition>
@@ -126,6 +135,20 @@ const texts = computed(() =>
 .service-banner-retry:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+.service-banner-close {
+  flex-shrink: 0;
+  display: inline-flex;
+  padding: 4px;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.service-banner-close:hover {
+  color: var(--text-primary);
 }
 
 .service-banner-enter-active,
