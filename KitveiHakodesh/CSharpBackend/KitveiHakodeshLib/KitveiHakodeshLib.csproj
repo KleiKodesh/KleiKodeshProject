@@ -244,6 +244,7 @@
           Condition="'$(DesignTimeBuild)' != 'true' and '$(BuildingProject)' != 'false'">
     <Message Text="Publishing KitveiHakodeshService (native AOT, win-x64) into the library payload..." Importance="high" />
     <Exec Command="set &quot;PATH=%PATH%;C:\Program Files (x86)\Microsoft Visual Studio\Installer&quot; &amp;&amp; dotnet publish &quot;$(KhsProject)&quot; -c Release -r win-x64 -p:PublishDir=&quot;$(KhsPublishDir.TrimEnd('\'))&quot; --nologo -v quiet" />
+    <Message Text="KitveiHakodeshService published." Importance="high" />
     <!-- dotnet publish may leave an unchanged exe's timestamp alone; touch it so the
          Inputs/Outputs check sees the publish as up to date. -->
     <Touch Files="$(KhsPublishedExe)" />

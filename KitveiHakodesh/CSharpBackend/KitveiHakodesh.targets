@@ -36,8 +36,10 @@
     <VueSourceFiles Include="$(VueProjectDir)src\**\*.*" />
     <VueSourceFiles Include="$(VueProjectDir)public\**\*.*" />
     <VueSourceFiles Include="$(VueProjectDir)package.json" />
-    <VueSourceFiles Include="$(VueProjectDir)vite.config.ts" />
-    <VueSourceFiles Include="$(VueProjectDir)vite.config.js" />
+    <!-- Wildcard, not named files: an Input that does not exist makes MSBuild treat the
+         target as out of date on EVERY build. A listed vite.config.js (since deleted)
+         reran npm run build in each project that imports this file. -->
+    <VueSourceFiles Include="$(VueProjectDir)vite.config.*" />
     <VueSourceFiles Include="$(VueProjectDir)tsconfig*.json" />
     <VueSourceFiles Include="$(VueProjectDir)index.html" />
   </ItemGroup>

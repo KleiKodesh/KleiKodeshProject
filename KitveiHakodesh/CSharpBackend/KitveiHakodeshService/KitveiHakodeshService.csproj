@@ -28,7 +28,7 @@
          line for an unsigned exe. Keep these Hebrew — with nothing set the SDK defaults
          them to the assembly name and the prompt reads "KitveiHakodeshService". Matters
          whenever this exe elevates (SCM register/unregister of the indexing service). -->
-    <AssemblyTitle>כלי קודש</AssemblyTitle>
+    <AssemblyTitle>כתבי הקודש (שירות)</AssemblyTitle>
     <Product>כלי קודש</Product>
     <Company>כלי קודש</Company>
     <Description>שירות אינדוקס קבצים — כלי קודש</Description>
