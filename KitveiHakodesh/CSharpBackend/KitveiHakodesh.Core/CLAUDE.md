@@ -41,7 +41,10 @@ No `using KitveiHakodeshService.*`, no `KitveiHakodeshLib` types, no transport t
 - **Core finds its own files** via `Common/AppFileLocator` — there is no options object and
   nothing is injected. It probes candidate roots in order and takes the first that exists,
   falling back to `%LocalAppData%\KleiKodesh` last. Core reads **no environment variables**.
-- **No UI.** No `MessageBox`, no dialogs, no windows. Return data.
+- **No app UI.** No `MessageBox`, no forms, no windows of our own. Return data. The one
+  exception is native OS dialogs (file/folder pickers in `LocalFiles/Native*Picker.cs`). They
+  take an owner HWND from the caller, run per-monitor-v2 DPI aware via `NativeDialogDpiScope`,
+  and return the chosen path or null. They live here so every host shares one implementation.
 - **Return data or throw** — never swallow an error into `Debug.WriteLine` (a no-op in
   Release). The orchestrator decides what the user sees.
 - Core's public surface is set by **production callers, never by tests**.
