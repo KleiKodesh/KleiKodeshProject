@@ -34,6 +34,7 @@ import BookViewAbbrevTooltip from '../lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '../lines/useBookViewAbbrevTooltip'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { pasteIntoWord } from '@/webview-host/bridge'
+import { teamimFontStyle } from '@/utils/teamimFont'
 
 const props = defineProps<{
   /**
@@ -659,6 +660,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(scrollerEl)
                 class="line"
                 :class="{ 'line-no-text': (flatItems[vItem.index] as any).lineId === -1 }"
                 :data-line-id="(flatItems[vItem.index] as any).lineId"
+                :style="teamimFontStyle((flatItems[vItem.index] as any).content)"
                 v-html="renderContent((flatItems[vItem.index] as any).content, vItem.index, (flatItems[vItem.index] as any).lineId, props.searchQuery)"
               />
             </div>

@@ -15,6 +15,7 @@ import { useVirtualizedTextSelection } from '@/composables/useVirtualizedTextSel
 import { wrapRtlHtml, htmlToPlainText } from '@/composables/useLineCopy'
 import { buildSelectedResultsHtml, resultReference } from './fullTextSearchResultsCopy'
 import type { FullTextSearchResult, SearchFailReason } from './fullTextSearchTypes'
+import { teamimFontStyle } from '@/utils/teamimFont'
 
 const props = defineProps<{
   results: FullTextSearchResult[]
@@ -557,7 +558,7 @@ defineExpose({
                 :reseed="() => reseedPreview(results[vRow.index]!)"
               />
               <!-- eslint-disable-next-line vue/no-v-html -->
-              <div v-else class="snippet" v-html="renderSnippet(results[vRow.index]!.snippet)" />
+              <div v-else class="snippet" :style="teamimFontStyle(results[vRow.index]!.snippet)" v-html="renderSnippet(results[vRow.index]!.snippet)" />
             </div>
           </div>
         </div>

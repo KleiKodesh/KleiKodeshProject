@@ -29,6 +29,7 @@ import { IconDismiss20Regular, IconZoomIn20Regular, IconZoomOut20Regular } from 
 import { useSettingsStore } from '@/stores/settingsStore'
 import { censorDivineNames } from '@/utils/censorDivineNames'
 import type { WordLinkTooltipData } from './useWordLinkTooltip'
+import { teamimFontStyle } from '@/utils/teamimFont'
 
 const props = withDefaults(
   defineProps<{
@@ -514,11 +515,12 @@ useEventListener(() => window, 'resize', () => emit('close'))
               class="word-link-tooltip-line"
               :class="{ 'is-focus': line.isFocus }"
               :data-focus-line="line.isFocus ? '' : undefined"
+              :style="teamimFontStyle(line.html)"
               v-html="line.html"
             />
           </template>
           <!-- eslint-disable-next-line vue/no-v-html -->
-          <div v-else v-html="html" />
+          <div v-else :style="teamimFontStyle(html)" v-html="html" />
         </div>
       </div>
     </div>

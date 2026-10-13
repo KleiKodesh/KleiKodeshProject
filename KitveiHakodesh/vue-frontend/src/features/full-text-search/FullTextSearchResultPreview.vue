@@ -14,6 +14,7 @@ import { useWordLinkTooltip } from '@/features/book-view/lines/useWordLinkToolti
 import BookViewAbbrevTooltip from '@/features/book-view/lines/BookViewAbbrevTooltip.vue'
 import { useBookViewAbbrevTooltip } from '@/features/book-view/lines/useBookViewAbbrevTooltip'
 import type { PreviewState } from './useFullTextSearchPreview'
+import { teamimFontStyle } from '@/utils/teamimFont'
 
 const props = defineProps<{
   state: PreviewState
@@ -165,6 +166,7 @@ const { abbrevTooltip } = useBookViewAbbrevTooltip(boxEl)
       class="preview-line"
       :class="{ matched: line.lineIndex === state.lineIndex }"
       :data-matched="line.lineIndex === state.lineIndex ? '' : undefined"
+      :style="teamimFontStyle(line.html)"
       v-html="renderHtml(line.html)"
     />
   </div>
