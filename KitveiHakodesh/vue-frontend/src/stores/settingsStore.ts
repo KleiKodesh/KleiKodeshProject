@@ -165,7 +165,7 @@ const DEFAULTS = {
   appZoom: 1.0,
   dictionaryZoom: 100,
   newTabPage: 'homepage' as NewTabPage,
-  booksView: 'list' as BooksView,
+  booksView: 'tiles' as BooksView,
   fileSearchSortOrder:
     'relevance' as import('@/features/local-file-search/useLocalFileSearch').LocalFileSearchSortOrder,
   // The address a "דיווח על טעות" report is sent from. Remembered so the user types

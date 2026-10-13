@@ -213,3 +213,17 @@ export function findCategoryMeta(
     root: rootCat?.title ?? null,
   }
 }
+
+/**
+ * The chain of nodes from `root`'s children down to the category `categoryId`,
+ * inclusive — the catalog's browse path minus the root. Null when the category is
+ * not under `root` (deleted, or hidden from browsing).
+ */
+export function findCategoryChain(root: CategoryNode, categoryId: number): CategoryNode[] | null {
+  for (const child of root.children) {
+    if (child.id === categoryId) return [child]
+    const below = findCategoryChain(child, categoryId)
+    if (below) return [child, ...below]
+  }
+  return null
+}

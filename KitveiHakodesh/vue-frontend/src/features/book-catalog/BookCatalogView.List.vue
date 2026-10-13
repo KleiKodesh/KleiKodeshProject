@@ -79,6 +79,7 @@ function selectItem(index: number, event?: MouseEvent) {
           <IconBookRtl20 v-else />
         </span>
         <span class="title">{{ getTitle(item) }}</span>
+        <span v-if="item.kind === 'book' && item.book.authors" class="author-tag">{{ item.book.authors }}</span>
       </div>
     </div>
   </div>
@@ -133,5 +134,19 @@ function selectItem(index: number, event?: MouseEvent) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+/* Same tag as BookCatalogSearch's .item-author-tag. */
+.author-tag {
+  font-size: 10px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+  flex-shrink: 0;
 }
 </style>

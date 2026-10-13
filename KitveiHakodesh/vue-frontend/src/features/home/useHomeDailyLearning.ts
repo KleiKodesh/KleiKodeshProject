@@ -7,6 +7,8 @@ import { computeHomeDailyLearningItems } from './homeDailyLearningItems'
 import { resolveHomeDailyLearningTarget, type HomeDailyLearningResolvedTarget } from './homeDailyLearningResolver'
 import type { HomeDailyLearningItem } from './homeDailyLearningTypes'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
+import { bookResumePath } from './homeResumePath'
+import { useBooksDataStore } from '@/stores/booksDataStore'
 
 interface ResolvedDailyLearningItem extends HomeDailyLearningItem {
   resolved: HomeDailyLearningResolvedTarget
@@ -19,6 +21,7 @@ interface ResolvedDailyLearningItem extends HomeDailyLearningItem {
  */
 export function useHomeDailyLearning() {
   const paneNavigation = usePaneNavigation()
+  const booksDataStore = useBooksDataStore()
   const now = useNow({ interval: 60_000 })
   // Recompute only when the civil date changes, not every minute tick.
   const todayKey = computed(() => now.value.toDateString())
@@ -61,8 +64,13 @@ export function useHomeDailyLearning() {
   return computed<HomeSuggestionCard[]>(() =>
     resolvedItems.value.map((item) => ({
       key: `daily:${item.key}`,
-      title: item.label,
-      path: item.location,
+      // Shown exactly like a history card: no cycle label, just book + path.
+      title: item.resolved.bookTitle,
+      path: bookResumePath(
+        booksDataStore.allBooksMap.get(item.resolved.bookId),
+        item.resolved.bookTitle,
+        item.location,
+      ),
       icon: icon.icon24,
       color: icon.color,
       open: (openInNewTab) => open(item, openInNewTab),

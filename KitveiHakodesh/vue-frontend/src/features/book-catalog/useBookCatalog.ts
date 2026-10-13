@@ -3,7 +3,8 @@ import { storeToRefs } from 'pinia'
 import { refDebounced } from '@vueuse/core'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { useBookCatalogSearch } from './useBookCatalogSearch'
-import { withoutHiddenCategories } from './bookCatalogTree'
+import { withoutHiddenCategories, findCategoryChain } from './bookCatalogTree'
+import { useFrequentFoldersStore } from '@/stores/frequentFoldersStore'
 import type { CategoryNode } from './bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 export type FsItem =
@@ -48,9 +49,35 @@ export function useBookCatalog() {
 
   const { results: searchItems, searching: tocSearching } = useBookCatalogSearch(searchQuery)
 
+  const frequentFoldersStore = useFrequentFoldersStore()
+
+  /**
+   * Counts a visit to the category at the end of the current path (home's folder
+   * cards). Only categories holding books directly count — a category of
+   * subcategories alone is a waypoint, not a destination.
+   */
+  function trackCurrentCategoryVisit() {
+    const categories = path.value.slice(1)
+    const category = categories[categories.length - 1]
+    if (category && category.books.length > 0) frequentFoldersStore.trackCatalogCategoryVisit(category.id, categories.map((c) => c.title))
+  }
+
   function enter(node: CategoryNode) {
     path.value = [...path.value, node]
     searchQuery.value = ''
+    trackCurrentCategoryVisit()
+  }
+  /**
+   * Jumps straight to a category by id. Returns false while the catalog has not
+   * loaded the category yet (or it no longer exists) — the caller may retry.
+   */
+  function openCategory(categoryId: number): boolean {
+    const chain = findCategoryChain(ROOT.value, categoryId)
+    if (!chain) return false
+    path.value = [ROOT.value, ...chain]
+    searchQuery.value = ''
+    trackCurrentCategoryVisit()
+    return true
   }
   function navigateTo(index: number) {
     path.value = path.value.slice(0, index + 1)
@@ -60,9 +87,11 @@ export function useBookCatalog() {
   function navigateToSibling(index: number, node: CategoryNode) {
     path.value = [...path.value.slice(0, index), node]
     searchQuery.value = ''
+    trackCurrentCategoryVisit()
   }
 
   return {
+    ROOT,
     loading,
     error,
     path,
@@ -73,6 +102,7 @@ export function useBookCatalog() {
     tocSearching,
     load: store.ensureLoaded,
     enter,
+    openCategory,
     navigateTo,
     navigateToSibling,
   }

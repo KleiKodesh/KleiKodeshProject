@@ -114,6 +114,9 @@ export interface Tab {
   // host's "חיפוש ספר בכתבי הקודש" context menu. BookCatalogPage reads this on mount
   // into its reactive searchQuery. Kept separate from searchQuery, which the FTS page owns.
   catalogQuery?: string
+  // Category id the book-catalog page (route '/books') opens at, stamped by a home
+  // folder card. One-shot: BookCatalogPage consumes and clears it. Transient.
+  catalogCategoryId?: number
   // Query for the local-file-search page (route '/file-search'), saved so the input
   // survives navigating away and back. Kept separate from searchQuery, which the FTS
   // page owns — sharing that field leaked an FTS query into the file-search input.
@@ -203,6 +206,7 @@ const POSITION_FIELDS = [
 const TRANSIENT_FIELDS = [
   ...POSITION_FIELDS.filter((f) => f !== 'tocPath'),
   'navNonce',
+  'catalogCategoryId',
   'localFileVirtualUrl',
   'localFileConverting',
   'localFileLoadingType',

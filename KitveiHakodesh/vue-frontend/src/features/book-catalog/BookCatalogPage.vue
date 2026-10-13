@@ -31,8 +31,10 @@ const {
   tocSearching,
   load,
   enter,
+  openCategory,
   navigateTo,
   navigateToSibling,
+  ROOT,
 } = useBookCatalog()
 
 // Persisted in settingsStore alongside every other display preference — it is
@@ -88,6 +90,18 @@ watch(
     if (!seed) return
     searchQuery.value = seed
     paneNavigation.updateActiveTab({ catalogQuery: undefined })
+  },
+  { immediate: true },
+)
+
+// A category to open at, stamped on the tab by a home folder card. One-shot like
+// catalogQuery; re-tried when the catalog finishes loading (ROOT changes), since a
+// cold start stamps it before the categories exist.
+watch(
+  [() => paneNavigation.activeTab.catalogCategoryId, ROOT],
+  ([categoryId]) => {
+    if (categoryId === undefined) return
+    if (openCategory(categoryId)) paneNavigation.updateActiveTab({ catalogCategoryId: undefined })
   },
   { immediate: true },
 )

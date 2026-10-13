@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useBookCatalogCategoryNavigation } from '@/features/book-catalog/useBookCatalogCategoryNavigation'
 import { ref, computed, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
@@ -13,6 +14,7 @@ import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const { navigate, openFolderPicker } = useAppNavigation()
+const { openCatalogCategory } = useBookCatalogCategoryNavigation()
 
 const searchBarRef = ref<HTMLElement | null>(null)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
@@ -76,6 +78,7 @@ const cards = useHomeSuggestionCards(
   {
     openRecent: (entry, openInNewTab) => navigation.openRecentEntry(entry, openInNewTab),
     openFolder: (path, openInNewTab) => openFolderPicker(path, openInNewTab),
+    openCatalogCategory,
   },
   navigate,
 )

@@ -7,8 +7,12 @@ import { useTabStore } from '@/stores/tabStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { locationKey, type NavLocation } from '@/stores/navLocation'
 import { useRecentlyOpenedStore, type RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
-import { useFrequentFoldersStore, type FrequentFolderEntry } from '@/stores/frequentFoldersStore'
-import { bookResumePath } from './homeResumePath'
+import {
+  useFrequentFoldersStore,
+  isCatalogCategoryEntry,
+  type FrequentFolderEntry,
+} from '@/stores/frequentFoldersStore'
+import { bookResumePath, HOME_CARD_PATH_SEPARATOR } from './homeResumePath'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
 
 /**
@@ -22,10 +26,12 @@ const MAX_FOLDER_CARDS = 6
 export interface HomeHistoryCardActions {
   openRecent: (entry: RecentlyOpenedEntry, openInNewTab: boolean) => void
   openFolder: (path: string, openInNewTab: boolean) => void
+  openCatalogCategory: (categoryId: number, openInNewTab: boolean) => void
 }
 
 /**
- * The history cards: recently opened documents, then frequently visited folders.
+ * The history cards: recently opened documents, then frequently visited folders
+ * — file-system folders and book-catalog categories, ranked together.
  *
  * A book card's path is the full place it resumes to — category › book › TOC
  * breadcrumb. The breadcrumb comes from tabStore's recents location for the same
@@ -46,7 +52,9 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
   const visibleFolders = computed(() => {
     if (!showFrequentFolders.value) return []
     const half = showRecentlyOpened.value ? Math.floor(MAX_HISTORY_CARDS / 2) : MAX_HISTORY_CARDS
-    return frequentFolderList.value.slice(0, Math.min(MAX_FOLDER_CARDS, half))
+    // Catalog entries without containsBooks predate the books-only rule — skip them.
+    const shown = frequentFolderList.value.filter((e) => !isCatalogCategoryEntry(e) || e.containsBooks === true)
+    return shown.slice(0, Math.min(MAX_FOLDER_CARDS, half))
   })
 
   const visibleRecents = computed(() => {
@@ -97,10 +105,13 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     return visibleFolders.value.map((entry) => ({
       key: `folder:${entry.path}`,
       title: entry.name,
-      path: entry.path,
+      path: isCatalogCategoryEntry(entry) ? entry.categoryTitles.join(HOME_CARD_PATH_SEPARATOR) : entry.path,
       icon: icon.icon24,
       color: icon.color,
-      open: (openInNewTab) => actions.openFolder(entry.path, openInNewTab),
+      open: (openInNewTab) =>
+        isCatalogCategoryEntry(entry)
+          ? actions.openCatalogCategory(entry.categoryId, openInNewTab)
+          : actions.openFolder(entry.path, openInNewTab),
       pinning: {
         pinned: !!entry.pinned,
         togglePin: () => (frequentFolderList.value = frequentFoldersStore.togglePin(entry.path)),

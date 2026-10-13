@@ -1,9 +1,10 @@
 /**
  * Frequently visited folders store.
  *
- * Tracks which folders the user opens files from, ranked by popularity rather
- * than recency. The home page shows the top few as tiles that reopen the file
- * dialog in that folder.
+ * Tracks two kinds of folder, ranked together by popularity rather than
+ * recency: file-system folders the user opens files from (the home card reopens
+ * the file dialog there) and book-catalog categories the user enters (the home
+ * card reopens the catalog at that category).
  *
  * Ranked by popularity rather than recency — see stores/popularityScore for the
  * scoring model shared with the recently-opened files.
@@ -25,11 +26,40 @@ import {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-export interface FrequentFolderEntry extends PopularityScored {
+export interface FileSystemFolderEntry extends PopularityScored {
+  /** Absent on file-system folders (also on lists written before catalog categories existed). */
+  kind?: 'fileSystem'
   /** Absolute folder path. Also the entry's identity. */
   path: string
   /** Display name — the folder's own last segment. */
   name: string
+}
+
+export interface CatalogCategoryFolderEntry extends PopularityScored {
+  kind: 'catalogCategory'
+  /** The entry's identity: catalogCategoryKey(categoryId). */
+  path: string
+  /** Display name — the category's own title. */
+  name: string
+  categoryId: number
+  /** Category titles from the catalog root down to this category, inclusive. */
+  categoryTitles: string[]
+  /**
+   * Always true when written — callers track only categories holding books
+   * directly. Entries without it predate that rule and are not shown.
+   */
+  containsBooks: true
+}
+
+export type FrequentFolderEntry = FileSystemFolderEntry | CatalogCategoryFolderEntry
+
+/** Identity of a catalog-category entry — prefixed so it never collides with a file-system path. */
+export function catalogCategoryKey(categoryId: number): string {
+  return `catalog-category:${categoryId}`
+}
+
+export function isCatalogCategoryEntry(entry: FrequentFolderEntry): entry is CatalogCategoryFolderEntry {
+  return entry.kind === 'catalogCategory'
 }
 
 const FREQUENT_FOLDERS_DB = 'app-frequent-folders'
@@ -108,34 +138,30 @@ export const useFrequentFoldersStore = defineStore('frequentFolders', () => {
   }
 
   /**
-   * Record that a file was opened from `folderPath`, adding a visit's points.
+   * Adds a visit's points to the entry keyed `key`, creating it with `fresh` when
+   * absent. `fresh` also supplies the descriptive fields, recomputed on every
+   * visit rather than carried forward: the stored ones are only as fresh as the
+   * visit that created them.
    *
    * Fire-and-forget: the in-memory cache updates synchronously so an immediate
    * re-read is correct, and the IDB write is not awaited.
    */
-  function trackFolderVisit(folderPath: string): void {
-    if (!folderPath) return
+  function trackVisit(key: string, fresh: (now: number) => FrequentFolderEntry): void {
     const now = Date.now()
 
     const bump = (list: FrequentFolderEntry[]): FrequentFolderEntry[] => {
-      const existing = list.find((e) => e.path === folderPath)
+      const existing = list.find((e) => e.path === key)
       const entry: FrequentFolderEntry = existing
         ? {
             ...decayEntry(existing, now),
-            // Recomputed rather than carried forward: the stored name is only as
-            // fresh as the visit that created it.
-            name: folderDisplayName(folderPath),
+            ...fresh(now),
+            pinned: existing.pinned,
             score: scoreAfterVisit(existing, now),
-            lastVisitedAt: now,
-          }
-        : {
-            path: folderPath,
-            name: folderDisplayName(folderPath),
-            score: VISIT_POINTS,
             scoredAt: now,
             lastVisitedAt: now,
           }
-      return capList([entry, ...list.filter((e) => e.path !== folderPath)], now, folderPath)
+        : fresh(now)
+      return capList([entry, ...list.filter((e) => e.path !== key)], now, key)
     }
 
     if (_cache !== null) _cache = bump(_cache)
@@ -145,6 +171,35 @@ export const useFrequentFoldersStore = defineStore('frequentFolders', () => {
       _cache = updated
       save(updated)
     })
+  }
+
+  /** Record that a file was opened from `folderPath`. */
+  function trackFolderVisit(folderPath: string): void {
+    if (!folderPath) return
+    trackVisit(folderPath, (now) => ({
+      path: folderPath,
+      name: folderDisplayName(folderPath),
+      score: VISIT_POINTS,
+      scoredAt: now,
+      lastVisitedAt: now,
+    }))
+  }
+
+  /** Record that the user entered a book-catalog category. */
+  function trackCatalogCategoryVisit(categoryId: number, categoryTitles: string[]): void {
+    if (categoryTitles.length === 0) return
+    const key = catalogCategoryKey(categoryId)
+    trackVisit(key, (now) => ({
+      kind: 'catalogCategory',
+      path: key,
+      name: categoryTitles[categoryTitles.length - 1]!,
+      categoryId,
+      categoryTitles,
+      containsBooks: true,
+      score: VISIT_POINTS,
+      scoredAt: now,
+      lastVisitedAt: now,
+    }))
   }
 
   /**
@@ -190,5 +245,5 @@ export const useFrequentFoldersStore = defineStore('frequentFolders', () => {
     return sortByPopularity(_cache, now)
   }
 
-  return { getList, trackFolderVisit, togglePin, removeEntry }
+  return { getList, trackFolderVisit, trackCatalogCategoryVisit, togglePin, removeEntry }
 })
