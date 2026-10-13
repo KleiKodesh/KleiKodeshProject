@@ -345,6 +345,10 @@ public sealed class Dispatcher(
                         Path = p ?? "",
                         IsCustom = SeforimDbLocator.IsCustom(),
                         Exists = p is not null,
+                        // Detected only, never repaired: deleting the journal would corrupt the
+                        // database; Otzaria rolls it back or completes it on its next run.
+                        UpdateInterrupted = p is not null &&
+                            (File.Exists(p + "-journal") || File.Exists(p + ".applying")),
                     }));
                 }
 

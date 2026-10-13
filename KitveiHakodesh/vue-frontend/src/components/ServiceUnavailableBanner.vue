@@ -1,19 +1,44 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
+import { useIntervalFn } from '@vueuse/core'
+import { getDbPathInfo } from '@/webview-host/bridge'
 import {
   serviceUnavailableReason,
   isRetryingService,
   retryService,
 } from '@/webview-host/serviceAvailability'
-import { SERVICE_UNAVAILABLE_TEXTS, SERVICE_ACTION_LABELS, SERVICE_RETRYING_LABEL } from './serviceUnavailableTexts'
+import {
+  SERVICE_UNAVAILABLE_TEXTS,
+  SERVICE_ACTION_LABELS,
+  SERVICE_RETRYING_LABEL,
+  SEFORIM_DB_UPDATE_INTERRUPTED_TEXTS,
+} from './serviceUnavailableTexts'
 
 // The one place the app says the KitveiHakodesh service cannot be reached, and why. Every data
 // op goes through the service, so instead of each feature failing on its own, serviceClient
 // records the failure (serviceAvailability.ts) and this banner explains it with a
 // button that asks before it acts: only a click on it may raise the Windows admin prompt
 // (install / repair when needed) - no data request ever does. Mount ONCE at the app root.
+
+// The service is up but Otzaria's update of the seforim DB stopped half-way: the hot journal
+// beside the file makes every read-only query fail, so the app is empty. Checked every few
+// seconds (one file-exists test in the service); once Otzaria finishes the update the page
+// reloads so every view fetches its data again. Never touches the files.
+const dbUpdateInterrupted = ref(false)
+async function checkDbUpdateInterrupted() {
+  if (serviceUnavailableReason.value) return
+  const info = await getDbPathInfo()
+  if (!info) return // a failed poll is not "cleared" — keep the current state
+  const interrupted = info.updateInterrupted ?? false
+  if (dbUpdateInterrupted.value && !interrupted) location.reload()
+  dbUpdateInterrupted.value = interrupted
+}
+useIntervalFn(checkDbUpdateInterrupted, 5000, { immediateCallback: true })
+
 const texts = computed(() =>
-  serviceUnavailableReason.value ? SERVICE_UNAVAILABLE_TEXTS[serviceUnavailableReason.value] : null,
+  serviceUnavailableReason.value
+    ? SERVICE_UNAVAILABLE_TEXTS[serviceUnavailableReason.value]
+    : dbUpdateInterrupted.value ? SEFORIM_DB_UPDATE_INTERRUPTED_TEXTS : null,
 )
 </script>
 
@@ -31,6 +56,7 @@ const texts = computed(() =>
           <span>{{ texts.body }}</span>
         </div>
         <button
+          v-if="serviceUnavailableReason"
           class="service-banner-retry"
           :disabled="isRetryingService"
           @click="retryService"

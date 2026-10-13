@@ -1054,6 +1054,9 @@ export interface DbPathInfo {
   path: string
   isCustom: boolean
   exists: boolean
+  /** An Otzaria update of the DB stopped half-way (hot journal left behind); no book loads
+   *  until Otzaria finishes it. */
+  updateInterrupted?: boolean
 }
 
 /** Current seforim DB path (+ whether user-set and whether the file exists). */

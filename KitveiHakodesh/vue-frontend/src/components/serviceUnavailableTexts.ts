@@ -34,3 +34,9 @@ export const SERVICE_ACTION_LABELS: Record<ServiceUnavailableReason, string> = {
 }
 
 export const SERVICE_RETRYING_LABEL = 'מנסה...'
+
+/** Banner texts for a seforim DB left mid-update by Otzaria (hot journal beside the file). */
+export const SEFORIM_DB_UPDATE_INTERRUPTED_TEXTS = {
+  title: 'עדכון ספריית אוצריא לא הושלם',
+  body: 'עדכון מאגר הספרים של אוצריא נקטע באמצע, ולכן הספרים אינם נטענים כרגע. נא לפתוח את אוצריא ולתת לה להשלים את העדכון - הספרייה תיטען כאן מחדש אוטומטית. אין למחוק קבצים בתיקיית הספרייה.',
+}

@@ -205,6 +205,10 @@ public sealed class DbPathResult
     public string Path { get; set; } = "";
     public bool IsCustom { get; set; }
     public bool Exists { get; set; }
+    /// <summary><c>getSeforimDbPath</c> only: an Otzaria update of the database stopped
+    /// half-way (its hot -journal or .applying marker is still beside the file), so every
+    /// read-only query fails until Otzaria is opened and finishes it.</summary>
+    public bool UpdateInterrupted { get; set; }
     public bool Restarting { get; set; }
     /// <summary><c>pickSeforimDbPath</c> only: the user dismissed the native dialog, so
     /// nothing was persisted and the caller must leave the current path as-is.</summary>
