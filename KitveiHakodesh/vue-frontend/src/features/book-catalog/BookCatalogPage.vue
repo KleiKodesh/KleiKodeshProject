@@ -151,14 +151,6 @@ function onSearchKeydown(event: KeyboardEvent) {
     return
   }
 
-  // PageUp while browsing climbs one folder, like Backspace in Explorer.
-  if (!isSearching.value && event.code === 'PageUp' && path.value.length > 1) {
-    event.preventDefault()
-    navigateTo(path.value.length - 2)
-    highlightFirstAfterRender()
-    return
-  }
-
   const list = isSearching.value ? searchResultsRef.value : activeViewRef.value
   const pathBefore = path.value
   if (list?.onSearchInputKeydown?.(event)) {
