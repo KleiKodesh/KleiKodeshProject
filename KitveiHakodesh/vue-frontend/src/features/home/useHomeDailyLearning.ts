@@ -14,7 +14,6 @@ const DROPDOWN_ONLY_KEYS = new Set<HomeDailyLearningItem['key']>([
   'rambam-1',
   'rambam-3',
   'kitzur-shulchan-aruch',
-  'arukh-hashulchan-yomi',
   'perek-yomi',
   'pirkei-avot',
   'daf-weekly',

@@ -280,24 +280,6 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
   })
 
   tryAdd(() => {
-    // arukhHaShulchanYomi → { k: section (English), v: "siman.seif-siman.seif" }.
-    const reading = learning.arukhHaShulchanYomi(hebrewDate)
-    if (!reading) return null
-    const section = cleanHebrew(Locale.gettext(reading.k, 'he'))
-    const siman = parseInt(reading.v.split(/[.-]/)[0] ?? '', 10)
-    const simanLetters = siman > 0 ? toLetters(siman) : null
-    return {
-      key: 'arukh-hashulchan-yomi',
-      label: 'ערוך השולחן היומי',
-      location: cleanHebrew(new learning.ArukhHaShulchanYomiEvent(hebrewDate, reading).render('he')),
-      target: {
-        bookQueries: [`ערוך השולחן ${section}`, 'ערוך השולחן'],
-        tocPatterns: simanLetters ? headingTocPatterns('סימן', simanLetters) : [],
-      },
-    }
-  })
-
-  tryAdd(() => {
     // Summer Shabbatot only; null on every other day (diaspora schedule).
     const chapters = learning.pirkeiAvot(hebrewDate, false)
     if (!chapters?.length) return null

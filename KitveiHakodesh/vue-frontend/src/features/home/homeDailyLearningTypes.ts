@@ -21,7 +21,6 @@ export interface HomeDailyLearningItem {
     | 'rambam-1'
     | 'rambam-3'
     | 'kitzur-shulchan-aruch'
-    | 'arukh-hashulchan-yomi'
     | 'perek-yomi'
     | 'pirkei-avot'
     | 'daf-weekly'
