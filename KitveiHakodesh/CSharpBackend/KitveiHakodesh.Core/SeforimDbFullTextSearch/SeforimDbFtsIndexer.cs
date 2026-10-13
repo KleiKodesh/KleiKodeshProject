@@ -106,6 +106,11 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         /// <summary>Whether any searchable segment exists yet — what "results before the build
         /// finishes" is gated on.</summary>
+        /// <summary>A finished build is on disk (its completion stamp and its index file) — whether
+        /// it still matches the database is <see cref="IsIndexStale"/>'s question.</summary>
+        public bool HasCompletedIndex() =>
+            File.Exists(Path.Combine(_indexPath, CompletedStampFileName)) && SegmentsExist();
+
         public bool SegmentsExist()
         {
             try

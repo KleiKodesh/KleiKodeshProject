@@ -67,6 +67,10 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         private volatile bool _isIndexing;
         private volatile bool _buildStarted; // latch: build at most once per process
 
+        /// <summary>The last "database not ready" reason logged, so a status poll per keystroke
+        /// logs a wait once, not on every call.</summary>
+        private string? _lastNotReadyReason;
+
         private int _failedBuilds;
         private bool _resetInFlight;
         private volatile int _builtBooks;
@@ -223,6 +227,21 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
                 // be unreachable and still writing while a reset deletes the directory.
                 if (_buildStarted) return;
 
+                // Another app may be writing the database right now (an update, a reinstall).
+                // Hashing it would read a half-written file as a changed database and rebuild
+                // from half a library. Serve whatever index is already there, and do not latch:
+                // the next call checks again.
+                if (!SeforimDb.SeforimDbReadiness.IsReadyToIndex(databasePath, out string notReady))
+                {
+                    if (notReady != _lastNotReadyReason)
+                        _log(CatalogIndexLogLevel.Information,
+                            "catalog TOC index: waiting for the seforim DB — " + notReady, null);
+                    _lastNotReadyReason = notReady;
+                    if (GetIndex(databasePath).TryOpenActive()) _isReady = true;
+                    return;
+                }
+                _lastNotReadyReason = null;
+
                 // Hashing stays INSIDE the lock, after the latch: in the common already-built
                 // case this is never reached, so an EnsureIndex from a keystroke costs nothing.
                 string currentHash;
@@ -315,6 +334,9 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
         {
             string? databasePath = DatabasePath;
             if (databasePath == null) return false;
+            // Not now: a file still being written would hash as "changed". The caller asks
+            // again once it has settled.
+            if (!SeforimDb.SeforimDbReadiness.IsReadyToIndex(databasePath, out _)) return false;
 
             string current;
             try { current = SeforimDbCatalogIndex.ComputeDbHash(databasePath); }

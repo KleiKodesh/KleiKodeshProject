@@ -32,6 +32,14 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
     private readonly string? _dbPath;
 
     private CoreCommon.DbChangeWatcher? _fileWatcher;
+    /// <summary>Re-check after a settle that found the file still being updated by another app:
+    /// the watcher only fires on CHANGES, and the update may finish without one more.</summary>
+    private Timer? _notReadyRetry;
+    private static readonly TimeSpan NotReadyRetryDelay = TimeSpan.FromMinutes(1);
+    /// <summary>Guards _notReadyRetry and _disposed: OnSettled runs on the settle timer AND the
+    /// retry timer, and a retry armed after Dispose would outlive the service.</summary>
+    private readonly object _retryLock = new();
+    private bool _disposed;
     private CoreCommon.RegistryValueWatcher? _registryWatcher;
 
     public DbChangeWatcher(
@@ -92,6 +100,24 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
             if (forced)
                 _logger.LogWarning(
                     "seforim DB still changing after the maximum deferral — rebuilding anyway");
+
+            // Quiet is not the same as finished: Otzaria parks its download beside the file
+            // and Zayit extracts in place. Indexing now would read half a library.
+            // A FORCED settle has given up waiting for quiet, so only the completeness checks apply.
+            if (_dbPath is not null &&
+                !global::KitveiHakodesh.Core.SeforimDb.SeforimDbReadiness.IsReadyToIndex(_dbPath, out string notReady,
+                    ignoreQuietPeriod: forced))
+            {
+                _logger.LogInformation("seforim DB settled but not ready to index ({Reason}) — checking again in a minute",
+                    notReady);
+                lock (_retryLock)
+                {
+                    if (_disposed) return;
+                    _notReadyRetry?.Dispose();
+                    _notReadyRetry = new Timer(_ => OnSettled(forced), null, NotReadyRetryDelay, Timeout.InfiniteTimeSpan);
+                }
+                return;
+            }
 
             // Each index recomputes its own stamp and rebuilds ONLY if it truly changed
             // (its stored ver stamp no longer matches the current file). A settle cycle
@@ -162,6 +188,12 @@ public sealed class DbChangeWatcher : IHostedService, IDisposable
     {
         _fileWatcher?.Dispose();
         _fileWatcher = null;
+        lock (_retryLock)
+        {
+            _disposed = true;
+            _notReadyRetry?.Dispose();
+            _notReadyRetry = null;
+        }
         // Disposing the registry watcher closes the watched key, which releases the thread
         // blocked in RegNotifyChangeKeyValue; it is a background thread either way, so it can
         // never hold up process exit.

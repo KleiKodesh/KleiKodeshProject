@@ -117,6 +117,13 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     /// </summary>
     private volatile bool _shuttingDown;
 
+    /// <summary>One-shot retry of EnsureIndexing while the database file is not ready to index
+    /// (another app is writing it). Searches and status polls also retry; this covers a quiet
+    /// app with nobody asking.</summary>
+    private Timer? _notReadyRetry;
+    private string? _lastNotReadyReason;
+    private static readonly TimeSpan NotReadyRetryDelay = TimeSpan.FromMinutes(1);
+
     /// <summary>True from the moment a reset is accepted until its wipe-and-rebuild has been
     /// handed off. Guards against a second reset stacking on the first — see ResetIndex.</summary>
     private bool _resetInFlight;
@@ -170,6 +177,25 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
             // collide with its own still-in-flight async segment writes. It resumes from
             // the progress file on the next service start.
             if (_buildStarted) return;
+
+            // Another app may be writing the database right now (an Otzaria update, a Zayit
+            // reinstall). Comparing stamps against a half-written file would wipe the index
+            // and rebuild from half a library. Wait, without latching, and try again.
+            if (!SeforimDbReadiness.IsReadyToIndex(_dbPath!, out string notReady))
+            {
+                if (notReady != _lastNotReadyReason)
+                    logger.LogInformation("FTS: waiting for the seforim DB — {Reason}", notReady);
+                _lastNotReadyReason = notReady;
+                // Meanwhile serve a COMPLETED index if there is one, as the catalog index does.
+                // Its provenance is checked once the file is ready: the DB-change watcher keeps
+                // re-checking an update in progress, and RebuildIfDbChanged wipes it if stale.
+                if (Indexer.HasCompletedIndex()) _isReady = true;
+                else
+                    _notReadyRetry ??= new Timer(_ => { _notReadyRetry = null; EnsureIndexing(); },
+                                                 null, NotReadyRetryDelay, Timeout.InfiniteTimeSpan);
+                return;
+            }
+            _lastNotReadyReason = null;
 
             // Provenance: validate whatever is on disk against the CURRENT database and clear
             // anything that cannot be trusted. Core's, and the same check the hosted app runs —
@@ -358,6 +384,8 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     public bool RebuildIfDbChanged()
     {
         if (_external || !HasDb) return false;
+        // Not now: a file still being written reads as "changed". The watcher asks again.
+        if (!SeforimDbReadiness.IsReadyToIndex(_dbPath!, out _)) return false;
 
         // Core's check, read-only and cheap: fts.ver (completed) or fts.src (in progress) —
         // either is a valid provenance record to invalidate, because a DB swapped MID-BUILD
@@ -378,6 +406,7 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     public void ResetIndex()
     {
         if (_external) return; // an externally-supplied index (FTS_INDEX_PATH) isn't ours to wipe
+        if (_shuttingDown) return; // a late watcher callback must not wipe the index on the way out
 
         // One reset at a time. A second DoReset running concurrently would cancel the
         // rebuild the first one just started, and the two finallys would race to null
@@ -561,6 +590,8 @@ public sealed class FullTextSearchService(ILogger<FullTextSearchService> logger,
     /// </summary>
     public void Shutdown()
     {
+        _notReadyRetry?.Dispose();
+        _notReadyRetry = null;
         Task? build;
         lock (_lock)
         {
