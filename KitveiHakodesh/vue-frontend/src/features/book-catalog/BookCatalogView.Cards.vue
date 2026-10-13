@@ -71,6 +71,10 @@ watch(
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) => onKeydown(event),
+  /** Highlights the first item — the page calls it after a keyboard drill-down. */
+  highlightFirst: () => {
+    if (props.items.length) focusedIndex.value = 0
+  },
 })
 </script>
 
@@ -117,6 +121,5 @@ defineExpose({
    on the card's root wrapper and is painted on the inner button. */
 .is-focused :deep(.card) {
   background: var(--input-bg-focus);
-  border-color: var(--accent-color);
 }
 </style>

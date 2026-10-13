@@ -51,6 +51,10 @@ watch(
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) => onKeydown(event),
+  /** Highlights the first item — the page calls it after a keyboard drill-down. */
+  highlightFirst: () => {
+    if (props.items.length) focusedIndex.value = 0
+  },
 })
 
 function selectItem(index: number, event?: MouseEvent) {

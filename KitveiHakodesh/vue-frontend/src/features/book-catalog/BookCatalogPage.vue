@@ -133,6 +133,7 @@ function copyDiagnostics() {
 type ActiveViewInstance = ComponentPublicInstance & {
   /** Both views forward the search input's keys, keeping the caret in the field. */
   onSearchInputKeydown: (event: KeyboardEvent) => boolean
+  highlightFirst: () => void
 }
 
 const activeViewRef = ref<ActiveViewInstance | null>(null)
@@ -150,8 +151,21 @@ function onSearchKeydown(event: KeyboardEvent) {
     return
   }
 
+  // PageUp while browsing climbs one folder, like Backspace in Explorer.
+  if (!isSearching.value && event.code === 'PageUp' && path.value.length > 1) {
+    event.preventDefault()
+    navigateTo(path.value.length - 2)
+    highlightFirstAfterRender()
+    return
+  }
+
   const list = isSearching.value ? searchResultsRef.value : activeViewRef.value
-  if (list?.onSearchInputKeydown?.(event)) return
+  const pathBefore = path.value
+  if (list?.onSearchInputKeydown?.(event)) {
+    // A keyboard drill-down lands on the first item, so the arrows work at once.
+    if (path.value !== pathBefore) highlightFirstAfterRender()
+    return
+  }
 
   // An Enter the list did not consume (nothing highlighted) falls through to the
   // single-result shortcut.
@@ -159,6 +173,10 @@ function onSearchKeydown(event: KeyboardEvent) {
     onSearchEnter()
     return
   }
+}
+
+function highlightFirstAfterRender() {
+  void nextTick(() => activeViewRef.value?.highlightFirst())
 }
 
 const PLACEHOLDERS = ['בראשית פרק ד', 'בבלי ברכות דף יד', 'רמב"ם משנה תורה']
