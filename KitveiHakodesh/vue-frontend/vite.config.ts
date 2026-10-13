@@ -72,7 +72,10 @@ function injectAddinBridgeStub(body: Buffer): Buffer {
 // bin\Release\net10.0-windows\. Pointing at the old bin\Release\net10.0\ silently runs a
 // stale exe that has no DocumentLocator.dll beside it — searches still answer (via the
 // standalone DocumentLocator service's index) so the staleness is easy to miss.
-const KHS_EXE = path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
+// KHS_EXE env overrides it (e.g. a native-AOT publish, to test what users actually run);
+// an overridden exe is used as-is, never rebuilt.
+const KHS_EXE_OVERRIDE = process.env.KHS_EXE || ''
+const KHS_EXE = KHS_EXE_OVERRIDE || path.join(KHS_DIR, 'bin', 'Release', 'net10.0-windows', 'KitveiHakodeshService.exe')
 const KHS_CONNECT_TIMEOUT_MS = 2_000
 const KHS_STARTUP_TIMEOUT_MS = 120_000 // a cold rebuild can take a while
 const KHS_STARTUP_POLL_MS = 250
@@ -392,6 +395,7 @@ function newestSourceMtimeMs(): number {
  * so an unchanged tree skips the build entirely.
  */
 function serviceNeedsBuild(): boolean {
+  if (KHS_EXE_OVERRIDE) return false
   let exeMtime: number
   try { exeMtime = fs.statSync(KHS_EXE).mtimeMs } catch { return true } // no exe yet → build
   return newestSourceMtimeMs() > exeMtime
