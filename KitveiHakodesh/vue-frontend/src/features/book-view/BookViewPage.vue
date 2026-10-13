@@ -4,7 +4,6 @@ import { useResizeObserver, watchDebounced } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useBookView } from './useBookView'
 import { useBookViewStore } from '@/stores/bookViewStore'
-import { exportToWord as bridgeExportToWord } from '@/webview-host/bridge'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { showToast } from '@/composables/useToast'
 import { isExportRestricted } from './exportRestriction'
@@ -78,7 +77,6 @@ const {
   toggleTocPanel, closeSidePanel,
   ensureStaticFilterGroupsLoaded, staticFilterGroupsLoaded,
   getActiveTocEntry, getTocPath,
-  buildExportHtml,
   bookTitle,
 } = useBookView(
   () => toolbarRef.value,
@@ -298,20 +296,17 @@ const exportRestricted = computed(() =>
   isExportRestricted((bookId != null && booksDataStore.allBooksMap.get(bookId)?.title) || bookTitle),
 )
 
-// Works in both modes — hosted drives Word through the Office PIA, dev through the
-// service. There is deliberately no isHosted guard: isHosted is TRUE in dev, so it
-// never blocked anything here, and the bridge call it let through could only reject
-// (silently, via the catch) until dev got a real export path.
+// Same path as the copy menu's paste-into-Word, over the whole book (select-all), so
+// it lands at the Word cursor with the active copy flags instead of in a new document.
 //
 // Checked here as well as hiding the button, so no second entry point to the export
 // can get past the restriction.
-async function onExportToWord() {
+function onExportToWord() {
   if (exportRestricted.value) {
     showToast(EXPORT_RESTRICTED_MESSAGE, { variant: 'error' })
     return
   }
-  const html = buildExportHtml()
-  await bridgeExportToWord(html, bookTitle ?? '').catch(() => {})
+  linesContentRef.value?.pasteAllIntoWord()
 }
 
 // Opening or closing EITHER side commentary column re-wraps the text, so the lines

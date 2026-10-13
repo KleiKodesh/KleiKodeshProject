@@ -374,7 +374,14 @@ onMounted(() => {
   })
 })
 
-defineExpose({ scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })
+// Toolbar export to Word: the custom copy + paste-into-Word path, over the whole book
+// (as if the user had pressed Ctrl+A first) rather than writing a new document.
+function pasteAllIntoWord(): void {
+  selectAllInContainer()
+  onPasteIntoWord()
+}
+
+defineExpose({ pasteAllIntoWord, scrollToLine, scrollToLineId, focusScroller, captureScrollPos, readCurrentPosition })
 </script>
 
 <template>
