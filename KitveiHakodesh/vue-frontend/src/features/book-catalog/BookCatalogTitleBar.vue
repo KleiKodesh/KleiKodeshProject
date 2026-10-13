@@ -102,7 +102,7 @@ function toggleView() {
         @mousedown.prevent
         @click="toggleView"
       >
-        <component :is="VIEWS[view].icon" :key="view" />
+        <component :is="VIEWS[otherView].icon" :key="otherView" />
       </button>
     </template>
   </TopSearchBar>
