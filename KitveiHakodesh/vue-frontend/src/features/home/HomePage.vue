@@ -71,7 +71,7 @@ const navigation = useHomeSearchNavigation(() => searchBar.reset())
 
 searchBar.openWhenAsyncResultsArrive([catalogTocResults, hebrewBooksResults, fileResults])
 
-useDropdownClose(searchBarRef, searchBar.close, { ignore: [searchDropdownEl] })
+useDropdownClose(searchBarRef, searchBar.close, { ignore: [searchDropdownEl], fitToViewport: false })
 
 // History, today's learning and the destinations — one collection, one card style.
 const cards = useHomeSuggestionCards(

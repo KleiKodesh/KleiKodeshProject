@@ -63,6 +63,15 @@ function meaningfulValues(values: (string | null | undefined)[]): string[] {
     .filter((value) => value !== '' && !UNKNOWN_VALUES.has(value.toLowerCase()))
 }
 
+/** Percent-encoded URLs (Wikisource's Hebrew paths) are unreadable; show them decoded. */
+function decodeUrlForDisplay(value: string): string {
+  try {
+    return decodeURI(value)
+  } catch {
+    return value
+  }
+}
+
 interface BookInfoRow {
   label: string
   value: string
@@ -71,7 +80,8 @@ interface BookInfoRow {
 const infoRows = computed<BookInfoRow[]>(() => {
   const book = metadata.value
   if (!book) return []
-  const candidates: [string, (string | null | undefined)[]][] = [
+  // The third element marks a row whose values are URLs: decoded, one per line.
+  const candidates: [string, (string | null | undefined)[], boolean?][] = [
     ['שם הספר', [book.title]],
     // heRef is often identical to the title; repeating it adds nothing.
     ['כינוי', [book.heRef !== book.title ? book.heRef : null]],
@@ -83,11 +93,16 @@ const infoRows = computed<BookInfoRow[]>(() => {
     ['נושאים', book.topics],
     ['תיאור', [book.description ?? book.shortDescription]],
     ['זכויות יוצרים', book.licenses],
-    ['מקור המהדורה', book.editionSources],
+    ['מקור המהדורה', book.editionSources, true],
     ['מקור דיגיטלי', [book.sourceName]],
   ]
   return candidates
-    .map(([label, values]) => ({ label, value: meaningfulValues(values).join(', ') }))
+    .map(([label, values, isUrlList]) => ({
+      label,
+      value: isUrlList
+        ? meaningfulValues(values).map(decodeUrlForDisplay).join('\n')
+        : meaningfulValues(values).join(', '),
+    }))
     .filter((row) => row.value !== '')
 })
 </script>
@@ -107,11 +122,17 @@ const infoRows = computed<BookInfoRow[]>(() => {
 </template>
 
 <style scoped>
+/* main.css sets `* { user-select: none }` on every element, so opting the panel's root
+   out is not enough - each descendant has to be opted back in too. */
+.book-info-panel,
+.book-info-panel * {
+  user-select: text;
+  cursor: text;
+}
 .book-info-panel {
   text-align: right;
   font-size: 12px;
   color: var(--text-primary);
-  user-select: text;
 }
 .book-info-list {
   margin: 0;

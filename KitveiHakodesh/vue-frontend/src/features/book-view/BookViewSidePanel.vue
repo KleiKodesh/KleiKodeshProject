@@ -19,7 +19,7 @@ const panelRef = ref<HTMLElement | null>(null)
 useDropdownClose(
   panelRef,
   () => { if (props.isOverlay) emit('close') },
-  { toggleButton: computed(() => props.toggleButtonEl ?? null) },
+  { toggleButton: computed(() => props.toggleButtonEl ?? null), fitToViewport: false },
 )
 </script>
 

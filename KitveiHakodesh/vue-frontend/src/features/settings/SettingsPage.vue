@@ -44,6 +44,7 @@ const searchInputRef = ref<HTMLInputElement | null>(null)
 
 const { justClosed } = useDropdownClose(navPanelRef, () => { navPanelOpen.value = false }, {
   toggleButton: navToggleRef,
+  fitToViewport: false,
 })
 
 // ── View state (this session only) ───────────────────────────────────────────

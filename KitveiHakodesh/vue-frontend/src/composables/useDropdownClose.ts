@@ -1,6 +1,7 @@
 import { ref, toValue, type MaybeRefOrGetter } from 'vue'
 import { onClickOutside, useEventListener, type MaybeElementRef } from '@vueuse/core'
 import { onNativeChromePressed } from '@/webview-host/nativeChromePress'
+import { useDropdownViewportFit } from './useDropdownViewportFit'
 
 type MaybeElement = HTMLElement | null | undefined
 
@@ -27,6 +28,9 @@ type MaybeElement = HTMLElement | null | undefined
  *                               button's own click can handle the close
  * @param options.enabled - When it resolves to `false`, neither the outside
  *                          click nor the blur close fires. Defaults to enabled.
+ * @param options.fitToViewport - Defaults to true: the dropdown is kept inside the window
+ *                          and scrolls when taller than the room left (see
+ *                          useDropdownViewportFit). Pass false for targets that are not popups.
  */
 export function useDropdownClose(
   target: MaybeElementRef<MaybeElement>,
@@ -36,8 +40,11 @@ export function useDropdownClose(
     toggleButton?: MaybeElementRef<MaybeElement>
     closeOnBlur?: boolean
     enabled?: MaybeRefOrGetter<boolean>
+    fitToViewport?: boolean
   },
 ) {
+  if (options?.fitToViewport !== false) useDropdownViewportFit(target)
+
   const justClosed = ref(false)
   const isEnabled = () => toValue(options?.enabled) !== false
 
