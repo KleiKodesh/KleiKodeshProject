@@ -35,7 +35,7 @@ const VIEWS: Record<BooksView, { label: string; icon: typeof IconGrid20Regular }
 
 const otherView = computed(() => (props.view === 'list' ? 'tiles' : 'list') as BooksView)
 const viewToggleTitle = computed(
-  () => `${VIEWS[props.view].label} — החלף ל${VIEWS[otherView.value].label}`,
+  () => `החלף ל${VIEWS[otherView.value].label}`,
 )
 
 function toggleView() {
