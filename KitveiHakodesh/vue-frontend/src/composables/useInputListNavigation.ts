@@ -81,6 +81,24 @@ export function countGridColumns(
 
 const PAGE_STEP = 10
 
+// Grids move by column: Down past the bottom of a column wraps to the top of
+// the next column, and Up past the top wraps to the bottom of the previous one.
+function stepDown(index: number, rowStep: number, count: number, isGrid: boolean): number {
+  if (!isGrid || index + rowStep < count) return index + rowStep
+  const nextColumn = (index % rowStep) + 1
+  return nextColumn < rowStep && nextColumn < count ? nextColumn : index
+}
+
+function stepUp(index: number, rowStep: number, count: number, isGrid: boolean): number {
+  if (!isGrid || index - rowStep >= 0) return index - rowStep
+  const previousColumn = index - 1
+  if (previousColumn < 0) return index
+  // Bottom item of the previous column.
+  let bottom = previousColumn
+  while (bottom + rowStep < count) bottom += rowStep
+  return bottom
+}
+
 export function useInputListNavigation(options: UseInputListNavigationOptions) {
   const itemSelector = options.itemSelector ?? '[data-nav-item]'
 
@@ -135,12 +153,12 @@ export function useInputListNavigation(options: UseInputListNavigationOptions) {
 
     if (event.code === 'ArrowDown' && !ctrl) {
       event.preventDefault()
-      moveTo(activeIndex.value < 0 ? 0 : activeIndex.value + rowStep)
+      moveTo(activeIndex.value < 0 ? 0 : stepDown(activeIndex.value, rowStep, count, isGrid))
       return true
     }
     if (event.code === 'ArrowUp' && !ctrl) {
       event.preventDefault()
-      moveTo(activeIndex.value < 0 ? count - 1 : activeIndex.value - rowStep)
+      moveTo(activeIndex.value < 0 ? count - 1 : stepUp(activeIndex.value, rowStep, count, isGrid))
       return true
     }
     // Left/right step WITHIN a row, and so exist only for grids — a list has one

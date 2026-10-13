@@ -15,6 +15,7 @@ const props = defineProps<{ items: FsItem[] }>()
 const emit = defineEmits<{ selectBook: [BookRow, boolean?]; enterFolder: [CategoryNode] }>()
 
 const cardsEl = ref<HTMLElement | null>(null)
+const CARD_CELL = ':scope > *'
 const FOLDER_ICON = markRaw(IconFolder20Filled)
 const BOOK_ICON = markRaw(IconBookRtl20)
 
@@ -53,7 +54,11 @@ const { activeIndex: focusedIndex, onKeydown } = useInputListNavigation({
   getCount: () => props.items.length,
   onActivate: activateIndex,
   containerElement: cardsEl,
-  getColumnsPerRow: () => countGridColumns(cardsEl.value),
+  // The grid cells are the card wrappers. The card's inner button has its own
+  // data-nav-item, but its offsetTop is relative to the wrapper (always 0), so
+  // counting buttons would give the wrong number of columns.
+  itemSelector: CARD_CELL,
+  getColumnsPerRow: () => countGridColumns(cardsEl.value, CARD_CELL),
 })
 
 // A new item list invalidates the old highlight (moveTo clamps past the end).
