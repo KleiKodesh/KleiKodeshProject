@@ -139,6 +139,19 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
   })
 
   tryAdd(() => {
+    // Summer Shabbatot only; null on every other day (diaspora schedule).
+    const chapters = learning.pirkeiAvot(hebrewDate, false)
+    if (!chapters?.length) return null
+    const firstLetters = toLetters(chapters[0]!)
+    return {
+      key: 'pirkei-avot',
+      label: 'פרקי אבות',
+      location: `פרקי אבות ${chapters.map(toLetters).join('-')}`,
+      target: { bookQueries: ['משנה אבות', 'פרקי אבות'], tocPatterns: headingTocPatterns('פרק', firstLetters) },
+    }
+  })
+
+  tryAdd(() => {
     const dafText = cleanHebrew(new learning.DafYomi(hebrewDate).render('he'))
     const parsed = parseDafYomiString(dafText)
     if (!parsed) return null
@@ -276,19 +289,6 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
         bookQueries: ['קיצור שולחן ערוך'],
         tocPatterns: simanLetters ? headingTocPatterns('סימן', simanLetters) : [],
       },
-    }
-  })
-
-  tryAdd(() => {
-    // Summer Shabbatot only; null on every other day (diaspora schedule).
-    const chapters = learning.pirkeiAvot(hebrewDate, false)
-    if (!chapters?.length) return null
-    const firstLetters = toLetters(chapters[0]!)
-    return {
-      key: 'pirkei-avot',
-      label: 'פרקי אבות',
-      location: `פרקי אבות ${chapters.map(toLetters).join('-')}`,
-      target: { bookQueries: ['משנה אבות', 'פרקי אבות'], tocPatterns: headingTocPatterns('פרק', firstLetters) },
     }
   })
 
