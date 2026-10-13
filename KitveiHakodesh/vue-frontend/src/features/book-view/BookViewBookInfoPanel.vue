@@ -9,6 +9,7 @@
  */
 import { ref, computed, watch } from 'vue'
 import { getBookMetadata } from '@/webview-host/seforimApi'
+import { openUrlInSystemBrowser } from '@/webview-host/bridge'
 import type { BookMetadataRow } from '@/webview-host/queries.types'
 
 const props = defineProps<{
@@ -72,15 +73,29 @@ function decodeUrlForDisplay(value: string): string {
   }
 }
 
+/** One URL as a link: the decoded text to show, and the raw address to open. */
+interface BookInfoLink {
+  text: string
+  href: string
+}
+
 interface BookInfoRow {
   label: string
+  /** Plain-text value; empty on a link row. */
   value: string
+  /** Set on the edition-source row: one link per line. */
+  links: BookInfoLink[]
+}
+
+/** Only web addresses become links; anything else in the column stays plain text. */
+function isWebUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
 }
 
 const infoRows = computed<BookInfoRow[]>(() => {
   const book = metadata.value
   if (!book) return []
-  // The third element marks a row whose values are URLs: decoded, one per line.
+  // The third element marks a row whose values are URLs: links, decoded, one per line.
   const candidates: [string, (string | null | undefined)[], boolean?][] = [
     ['שם הספר', [book.title]],
     // heRef is often identical to the title; repeating it adds nothing.
@@ -89,21 +104,25 @@ const infoRows = computed<BookInfoRow[]>(() => {
     ['מחבר', book.authors],
     ['קטגוריה', [book.categoryTitle]],
     ['מקום הדפסה', book.publicationPlaces],
-    ['שנת הדפסה', book.publicationDates],
     ['נושאים', book.topics],
     ['תיאור', [book.description ?? book.shortDescription]],
     ['זכויות יוצרים', book.licenses],
     ['מקור המהדורה', book.editionSources, true],
     ['מקור דיגיטלי', [book.sourceName]],
+    ['שנת הדפסה', book.publicationDates],
   ]
   return candidates
-    .map(([label, values, isUrlList]) => ({
-      label,
-      value: isUrlList
-        ? meaningfulValues(values).map(decodeUrlForDisplay).join('\n')
-        : meaningfulValues(values).join(', '),
-    }))
-    .filter((row) => row.value !== '')
+    .map(([label, values, isUrlList]): BookInfoRow => {
+      const meaningful = meaningfulValues(values)
+      if (!isUrlList) return { label, value: meaningful.join(', '), links: [] }
+      // URLs go one per line; a value that is not a web address stays as text.
+      return {
+        label,
+        value: meaningful.filter((v) => !isWebUrl(v)).join('\n'),
+        links: meaningful.filter(isWebUrl).map((href) => ({ text: decodeUrlForDisplay(href), href })),
+      }
+    })
+    .filter((row) => row.value !== '' || row.links.length > 0)
 })
 </script>
 
@@ -115,7 +134,19 @@ const infoRows = computed<BookInfoRow[]>(() => {
     <dl v-else class="book-info-list">
       <div v-for="row in infoRows" :key="row.label" class="book-info-row">
         <dt>{{ row.label }}</dt>
-        <dd>{{ row.value }}</dd>
+        <dd>
+          <template v-if="row.value">{{ row.value }}</template>
+          <!-- A real href so it reads and behaves as a link; the click goes to the system
+               browser through the host, since a WebView2 popup is not what anyone wants. -->
+          <a
+            v-for="link in row.links"
+            :key="link.href"
+            class="book-info-link"
+            :href="link.href"
+            :title="link.text"
+            @click.prevent="openUrlInSystemBrowser(link.href)"
+          >{{ link.text }}</a>
+        </dd>
       </div>
     </dl>
   </div>
@@ -151,6 +182,20 @@ const infoRows = computed<BookInfoRow[]>(() => {
   margin: 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+/* One line per link, cut with an ellipsis - the full address is in the tooltip. */
+.book-info-link {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--accent-color);
+  cursor: pointer;
+}
+.book-info-link:hover {
+  text-decoration: underline;
 }
 .book-info-message {
   padding: 4px 0;

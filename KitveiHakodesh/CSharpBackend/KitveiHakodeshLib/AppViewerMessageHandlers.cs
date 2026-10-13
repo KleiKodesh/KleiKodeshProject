@@ -68,6 +68,7 @@ namespace KitveiHakodeshLib
                         case "pickFolder": _localFile.HandlePickFolder(id, this); break;
                         case "restoreLocalFile": await _localFile.HandleRestoreLocalFile(root, id); break;
                         case "openInDefaultApp": _localFile.HandleOpenInDefaultApp(root, id); break;
+                        case "openUrlInSystemBrowser": HandleOpenUrlInSystemBrowser(root, id); break;
                         case "readTxtFileContent": await _localFile.HandleReadTxtFileContent(root, id); break;
                         case "disposeLocalFileHost": _localFile.HandleDisposeLocalFileHost(root, id); break;
                         case "appReady": HandleAppReady(id); break;
@@ -237,6 +238,32 @@ namespace KitveiHakodeshLib
                 ApplyTitleBarTheme(false);
             ApplySplashTheme(false);
             _bridge.Reply(id, new { });
+        }
+
+        /// <summary>
+        /// Opens a web address in the user's default browser. Only absolute http/https URLs are
+        /// accepted - anything else (file:, javascript:, a bare path) is refused rather than
+        /// handed to the shell, which would happily run it.
+        /// </summary>
+        private void HandleOpenUrlInSystemBrowser(JsonElement root, string id)
+        {
+            try
+            {
+                string url = root.TryGetProperty("url", out var u) ? u.GetString() : null;
+                if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) ||
+                    (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+                {
+                    _bridge.Reply(id, new { error = "invalid url" });
+                    return;
+                }
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = uri.AbsoluteUri,
+                    UseShellExecute = true,
+                });
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
 
         private void HandleAppReady(string id)
