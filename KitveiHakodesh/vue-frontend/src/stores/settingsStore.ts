@@ -88,6 +88,7 @@ const KEYS = {
   SETTINGS_PDF_FILTERS: 'pdf.pageFilters',
   SETTINGS_DICTIONARY_ZOOM: 'dictionary.zoom',
   SETTINGS_MIDOT_DISCLAIMER: 'midot.disclaimerAccepted',
+  SETTINGS_TERMS_ACCEPTED: 'app.termsAccepted',
   SETTINGS_HB_LOCAL_FOLDER: 'hebrewBooks.localFolder',
   SETTINGS_FILE_SEARCH_SORT_ORDER: 'fileSearch.sortOrder',
   SETTINGS_ERROR_REPORT_EMAIL: 'errorReport.senderEmail',
@@ -292,6 +293,7 @@ export const useSettingsStore = defineStore('settings', () => {
   const defaultAutoSyncCommentary = ref(DEFAULTS.defaultAutoSyncCommentary)
   const setupDone = ref(false)
   const midotDisclaimerAccepted = ref(false)
+  const termsAccepted = ref(false)
   const addressBarHintDone = ref(false)
   const searchContextMarginWords = ref(DEFAULTS.searchContextMarginWords)
   const searchMaxWordDistance = ref(DEFAULTS.searchMaxWordDistance)
@@ -430,6 +432,7 @@ export const useSettingsStore = defineStore('settings', () => {
     loadSetting(KEYS.SETTINGS_SETUP_DONE, setupDone)
     loadSetting(KEYS.SETTINGS_DEFAULT_AUTO_SYNC_COMMENTARY, defaultAutoSyncCommentary)
     loadSetting(KEYS.SETTINGS_MIDOT_DISCLAIMER, midotDisclaimerAccepted)
+    loadSetting(KEYS.SETTINGS_TERMS_ACCEPTED, termsAccepted)
     loadSetting(KEYS.SETTINGS_ADDRESS_BAR_HINT_DONE, addressBarHintDone)
     loadSetting(KEYS.SETTINGS_SEARCH_CONTEXT_MARGIN, searchContextMarginWords)
     loadSetting(KEYS.SETTINGS_SEARCH_MAX_WORD_DISTANCE, searchMaxWordDistance)
@@ -645,6 +648,11 @@ export const useSettingsStore = defineStore('settings', () => {
     lsSet(KEYS.SETTINGS_MIDOT_DISCLAIMER, true)
   }
 
+  function acceptTerms() {
+    termsAccepted.value = true
+    lsSet(KEYS.SETTINGS_TERMS_ACCEPTED, true)
+  }
+
   /**
    * The title bar has taught the reader that its box opens. Called the first time
    * they click into it, and never unset - the hint has done its job for good.
@@ -742,7 +750,7 @@ export const useSettingsStore = defineStore('settings', () => {
     appZoom, dictionaryZoom, newTabPage, pdfPageFilters, resumeLastRead,
     showClock,
     toolbarVisible, toolbarPosition, autoSelectTopLine, splitViewEnabled, splitViewFraction,
-    defaultAutoSyncCommentary, setupDone, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
+    defaultAutoSyncCommentary, setupDone, termsAccepted, midotDisclaimerAccepted, addressBarHintDone, searchContextMarginWords,
     searchMaxWordDistance, searchRequireOrdered, searchExpandKetiv, searchExpandRelated, searchWildcardWrap, searchGrammarWrap,
     copyCleanText,
     copyJoinLines,
@@ -763,7 +771,7 @@ export const useSettingsStore = defineStore('settings', () => {
     errorReportSenderEmail,
     booksView,
     init, cycleDiacritics, cycleDiacriticsNoTeamim, toggleWordLinkMarkers, toggleWordLinkMarkersForBook,
-    togglePdfPageFilters, reset, completeSetup, acceptMidotDisclaimer, completeAddressBarHint,
+    togglePdfPageFilters, reset, completeSetup, acceptTerms, acceptMidotDisclaimer, completeAddressBarHint,
   }
 })
   function normalizeNewTabPage(value: LegacyNewTabPage | null): NewTabPage | null {

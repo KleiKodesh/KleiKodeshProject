@@ -27,7 +27,7 @@ startErrorReportRetries()
 const settingsStore = useSettingsStore()
 const bookViewStore = useBookViewStore()
 const tabStore = useTabStore()
-const { setupDone, showClock } = storeToRefs(settingsStore)
+const { setupDone, termsAccepted, showClock } = storeToRefs(settingsStore)
 
 // ── Split view availability ───────────────────────────────────────────────────
 // Split view requires enough horizontal space for two usable panes. The threshold is
@@ -183,7 +183,7 @@ useEventListener(window, 'beforeunload', (e: BeforeUnloadEvent) => {
     <AppShell v-if="bookViewStore.splitViewEnabled" :pane-id="2" />
 
     <ClockWidget v-if="showClock" />
-    <SetupWizard v-if="!setupDone" />
+    <SetupWizard v-if="!setupDone || !termsAccepted" />
     <GlobalContextMenu />
     <ToastBanner />
     <ServiceUnavailableBanner />

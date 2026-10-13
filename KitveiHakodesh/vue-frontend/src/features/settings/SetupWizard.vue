@@ -10,6 +10,7 @@ import SetupWizardStepGeneral from './SetupWizardStepGeneral.vue'
 import SetupWizardStepBookDisplay from './SetupWizardStepBookDisplay.vue'
 import SetupWizardStepCommentaryDisplay from './SetupWizardStepCommentaryDisplay.vue'
 import SetupWizardStepShortcuts from './SetupWizardStepShortcuts.vue'
+import SetupWizardStepTerms from './SetupWizardStepTerms.vue'
 
 const settings = useSettingsStore()
 
@@ -27,6 +28,7 @@ const settings = useSettingsStore()
 useSettings()
 
 type Step =
+  | 'terms'
   | 'welcome'
   | 'db'
   | 'theme'
@@ -37,10 +39,18 @@ type Step =
 
 // The db step is shown when the service reports that the resolved seforim DB does
 // not exist on disk (dbReady is the same probe, kept current by seforimDb).
+// The terms step is mandatory and is the LAST step, so Skip jumps straight to it. A user who already finished (or
+// skipped) the wizard before the terms existed sees ONLY the terms step. Captured
+// once at mount so accepting the terms does not reshape the flow mid-way.
+const termsOnly = settings.setupDone && !settings.termsAccepted
+const termsAgreed = ref(settings.termsAccepted)
+
 const steps = computed<Step[]>(() => {
+  if (termsOnly) return ['terms']
   const s: Step[] = ['welcome']
   if (!dbReady.value) s.push('db')
   s.push('theme', 'general', 'book-display', 'commentary-display', 'shortcuts')
+  s.push('terms')
   return s
 })
 
@@ -54,6 +64,11 @@ const steps = computed<Step[]>(() => {
  * footnote, not a settings list), but it renders through the same card.
  */
 const STEPS: Record<Step, { title: string; desc?: string; component?: unknown }> = {
+  terms: {
+    title: 'תנאי שימוש וזכויות יוצרים',
+    desc: 'לפני השימוש בתוכנה, נא לקרוא את התנאים ולאשר אותם.',
+    component: SetupWizardStepTerms,
+  },
   welcome: {
     title: 'ברוכים הבאים לכתבי הקודש',
     desc: 'אשף זה ילווה אותך בהגדרת האפליקציה בכמה צעדים קצרים. ניתן לשנות הכל בהמשך.',
@@ -99,9 +114,17 @@ const currentStepMeta = computed(() => STEPS[currentStep.value])
 const isLast = computed(() => stepIndex.value === steps.value.length - 1)
 const dismissed = ref(false)
 
-const progressPct = computed(() => Math.round((stepIndex.value / (steps.value.length - 1)) * 100))
+const progressPct = computed(() =>
+  steps.value.length > 1 ? Math.round((stepIndex.value / (steps.value.length - 1)) * 100) : 100,
+)
+
+const termsBlocking = computed(() => currentStep.value === 'terms' && !termsAgreed.value)
 
 function next() {
+  if (currentStep.value === 'terms') {
+    if (!termsAgreed.value) return
+    settings.acceptTerms()
+  }
   if (!isLast.value) {
     stepIndex.value++
   } else {
@@ -116,6 +139,11 @@ function back() {
 
 function skip() {
   if (resetting.value) return
+  // Skip jumps to the terms (last step) until they are accepted.
+  if (!settings.termsAccepted) {
+    stepIndex.value = steps.value.indexOf('terms')
+    return
+  }
   settings.completeSetup()
   dismissed.value = true
 }
@@ -154,7 +182,7 @@ function skip() {
             </div>
 
             <div class="wizard-card-body toc-thin-scroll">
-              <div class="step-body">
+              <div class="step-body" :class="{ 'step-body--fill': currentStep === 'terms' }">
                 <!-- Welcome: a hero, not a settings list — logo, title and body copy
                      as one centered column. Inline here rather than in a step
                      component because it is the only step whose title is part of its
@@ -164,6 +192,7 @@ function skip() {
                   <h1 class="welcome-title">{{ currentStepMeta.title }}</h1>
                   <p class="welcome-body">{{ currentStepMeta.desc }}</p>
                 </div>
+                <SetupWizardStepTerms v-else-if="currentStep === 'terms'" v-model="termsAgreed" />
                 <component v-else :is="currentStepMeta.component" />
               </div>
             </div>
@@ -171,10 +200,11 @@ function skip() {
         </Transition>
 
         <div class="wizard-card-footer">
-          <button class="skip-btn" :disabled="resetting" @click="skip">דלג</button>
+          <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">דלג</button>
+          <span v-else />
           <div class="nav-btns">
             <button v-if="stepIndex > 0" class="back-btn" @click="back">הקודם</button>
-            <button class="next-btn" :disabled="currentStep === 'db' && !dbReady" @click="next">
+            <button class="next-btn" :disabled="(currentStep === 'db' && !dbReady) || termsBlocking" @click="next">
               {{ currentStep === 'welcome' ? 'התחל' : isLast ? 'סיום' : 'הבא' }}
             </button>
           </div>
@@ -299,6 +329,15 @@ function skip() {
      flow inside — a grid or a centred flex column here would stretch and spread the
      settings rows of every OTHER step. */
   flex: 1 0 auto;
+}
+
+/* Terms: the step body fills the card exactly (no outer scroll) so the text box can
+   take all remaining height and scroll itself. */
+.step-body--fill {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .wizard-card-footer {
