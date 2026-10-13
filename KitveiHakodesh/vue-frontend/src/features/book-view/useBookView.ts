@@ -469,6 +469,7 @@ export function useBookView(
     COMMENTARY_SLOTS.map((slot) => commentaryViewRefs[slot]),
     () => hasToc.value,
     navigateToAdjacentTocSection,
+    () => (bookHasTeamim.value ? settingsStore.cycleDiacritics() : settingsStore.cycleDiacriticsNoTeamim()),
   )
 
   // ── Commentary section navigation ─────────────────────────────────────────

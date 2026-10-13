@@ -6,6 +6,7 @@
  *   useZoomHandler takes over (but we still preventDefault to block the browser).
  *   When focus is elsewhere (toolbar, etc.) we zoom both panels together.
  * - Ctrl+Left / Ctrl+Right: section navigation (RTL — Left = next, Right = previous).
+ * - Ctrl+D: cycle the diacritics stage (the toolbar's diacritics button).
  */
 import { inject } from 'vue'
 import { useEventListener } from '@vueuse/core'
@@ -24,6 +25,7 @@ export function useBookViewKeyboardShortcuts(
   commentaryViewRefs: Array<() => (CommentaryViewInstance & { $el?: HTMLElement }) | null>,
   hasToc: () => boolean,
   navigateToAdjacentTocSection: (direction: 'next' | 'previous') => void,
+  cycleDiacritics: () => void,
 ) {
   const bookViewStore = useBookViewStore()
   const paneNavigation = usePaneNavigation()
@@ -42,6 +44,12 @@ export function useBookViewKeyboardShortcuts(
     const isReset = event.code === 'Digit0' || event.code === 'Numpad0'
     const isNextSection = event.code === 'ArrowLeft'
     const isPreviousSection = event.code === 'ArrowRight'
+
+    if (event.code === 'KeyD' && !event.shiftKey && !event.altKey) {
+      event.preventDefault()
+      cycleDiacritics()
+      return
+    }
 
     if (!isZoomIn && !isZoomOut && !isReset && !isNextSection && !isPreviousSection) return
 

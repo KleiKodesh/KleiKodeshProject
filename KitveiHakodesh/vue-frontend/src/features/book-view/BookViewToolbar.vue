@@ -461,7 +461,7 @@ defineExpose({ tocBtnRef })
         { collapsed: !toolbarButtonVisible('diacritics') },
         { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
       ]"
-      :title="diacriticsTitle"
+      :title="`${diacriticsTitle} (Ctrl+D)`"
       @click="onDiacriticsClick()"
     >
       <BookViewDiacriticsGlyph :state="diacriticsState" />
@@ -570,7 +570,7 @@ defineExpose({ tocBtnRef })
           'diacritics-btn',
           { 'state-1': diacriticsState === 1, 'state-2': diacriticsState === 2 },
         ]"
-        :title="diacriticsTitle"
+        :title="`${diacriticsTitle} (Ctrl+D)`"
         @click="onDiacriticsClick()"
       >
         <BookViewDiacriticsGlyph :state="diacriticsState" />
