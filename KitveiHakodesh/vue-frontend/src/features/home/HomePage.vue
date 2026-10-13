@@ -5,6 +5,7 @@ import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
 import HomeTile from './HomePageTile.vue'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import HomePageDateBar from './HomePageDateBar.vue'
+import HomePageDailyLearning from './HomePageDailyLearning.vue'
 import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
@@ -210,6 +211,7 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
           @remove="onRemoveRecent(entry)"
         />
       </div>
+      <HomePageDailyLearning :style="{ maxWidth: `${gridMaxWidth}px` }" />
     </div>
 
     <HomePageDateBar />

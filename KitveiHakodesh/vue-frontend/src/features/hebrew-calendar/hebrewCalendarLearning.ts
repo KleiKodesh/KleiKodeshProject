@@ -29,7 +29,7 @@ import {
 
 // ── Hebrew tractate names ─────────────────────────────────────────────────────
 
-const TRACTATE_HE: Record<string, string> = {
+export const TRACTATE_HE: Record<string, string> = {
   Berakhot: 'ברכות',
   Peah: 'פאה',
   Demai: 'דמאי',

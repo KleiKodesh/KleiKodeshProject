@@ -13,7 +13,7 @@ import type { PaneNavigation } from '@/composables/usePaneNavigation'
  *
  * Returns null when the string does not match the expected shape.
  */
-function parseDafYomiString(dafYomi: string): { tractate: string; dafPrefix: string } | null {
+export function parseDafYomiString(dafYomi: string): { tractate: string; dafPrefix: string } | null {
   // Find the last occurrence of "דף" — everything before it is the tractate,
   // everything after it is the daf number (possibly with trailing . or :)
   const dafIndex = dafYomi.lastIndexOf('דף')
