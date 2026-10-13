@@ -145,7 +145,7 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
               @keydown="searchBar.onKeydown"
             />
             <button
-              class="home-search-bar__search-button"
+              class="bar-btn home-search-bar__search-button"
               tabindex="-1"
               title="הקלד לחיפוש שם ספר. לחץ כאן לחיפוש תוכן במאגרץ"
               @click="searchBar.submit"
@@ -315,12 +315,13 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   gap: 6px;
   width: 100%;
   height: 30px;
-  /* The end side matches the button's 3px top/bottom inset (28px inner height,
-     22px button), so the round button sits evenly inside the pill's round end. */
-  padding-inline: 12px 3px;
+  /* Same insets and inset shadow as TopSearchBar, so the button sits where the FTS
+     bar's does. */
+  padding-inline: 12px;
   background: var(--input-bg);
   border: 1px solid var(--border-color);
   border-radius: 999px;
+  box-shadow: inset 0 1px 1px color-mix(in srgb, var(--text-primary) 6%, transparent);
   transition: background 150ms;
   overflow: hidden;
   min-width: 0;
@@ -351,26 +352,12 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   filter: grayscale(1) opacity(0.4);
 }
 
+/* Box, hover and press come from the global .bar-btn rule — same size as the
+   FullTextSearchBar's search button. */
 .home-search-bar__search-button {
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   padding: 0;
-  /* Round, to echo the pill's own round end. */
-  border-radius: 50%;
-  color: var(--text-secondary);
-}
-
-.home-search-bar__search-button svg {
-  width: 16px;
-  height: 16px;
-}
-
-.home-search-bar__search-button:hover {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
 }
 </style>
