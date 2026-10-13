@@ -25,17 +25,54 @@ import masked
 
 masked.install()
 
-from expansion import Expander, corpus_freq  # noqa: E402
+from expansion import (  # noqa: E402
+    Expander, corpus_freq, SEFARIA_DEFAULT_LEXICONS)
 
 CORPUS = "all" if "--corpus" in sys.argv and "all" in sys.argv else "tanach"
 OUT = f"expansion-{'seforim' if CORPUS == 'all' else 'tanach'}.db"
+
+
+def command_line_value(option):
+    """The argument after `option`, or None when the option is absent."""
+    if option in sys.argv[:-1]:
+        return sys.argv[sys.argv.index(option) + 1]
+    return None
+
+
+# Optional rabbinic-forms input (see expansion.py). Absent -> the build is
+# exactly the pre-Sefaria build.
+SEFARIA_LEXICON = command_line_value("--sefaria-lexicon")
+SEFARIA_LEXICON_IDS = SEFARIA_DEFAULT_LEXICONS + (
+    (3,) if "--sefaria-include-klein" in sys.argv else ())
+
+
+def write_sefaria_lemma_sources(con, ex, lemmas):
+    """sefaria_lemma(lemma, source): which lemmas' infl rows are Sefaria
+    forms, so the routed merge can tag them. Written only when the channel
+    ran, so a plain build's file is unchanged."""
+    con.execute("drop table if exists sefaria_lemma")
+    if not ex.sefaria_source_of:
+        return
+    con.execute("create table sefaria_lemma (lemma TEXT PRIMARY KEY, "
+                "source TEXT) WITHOUT ROWID")
+    with con:
+        con.executemany("insert into sefaria_lemma values (?, ?)",
+                        ((lm, ex.sefaria_source_of[lm]) for lm in lemmas
+                         if lm in ex.sefaria_source_of))
+
+
+def print_sefaria_drop_counts(ex):
+    print(f"sefaria groups admitted: {len(ex.sefaria_forms_of):,} "
+          f"({len(ex.sefaria_headword_of):,} forms)")
+    for reason, count in sorted(ex.sefaria_drop_counts.items()):
+        print(f"  sefaria dropped [{reason}]: {count:,}")
 
 
 def main():
     freq = corpus_freq(CORPUS)
     print(f"{CORPUS} surface vocab: {len(freq):,} "
           f"({sum(freq.values())/1e6:.0f}M tokens)")
-    ex = Expander(freq)
+    ex = Expander(freq, SEFARIA_LEXICON, SEFARIA_LEXICON_IDS)
     print(f"match-frequency ceiling for this corpus: {ex.match_max:,}")
 
     lemmas = sorted({ex.lemma_of(t) for t in freq})
@@ -69,6 +106,7 @@ def main():
                             (lm, i, f, ch))
                 stats[ch] += 1
                 rows += 1
+    write_sefaria_lemma_sources(con, ex, lemmas)
     with con:
         for k, v in [("corpus", CORPUS), ("surfaces", len(freq)),
                      ("lemmas", len(lemmas)), ("lemmas_with_exp", lemmas_with),
@@ -82,6 +120,8 @@ def main():
     print(f"lemmas with expansions: {lemmas_with:,} "
           f"({lemmas_with/len(lemmas)*100:.0f}%)")
     print(f"exp rows: {rows:,}  by channel: {stats}")
+    if SEFARIA_LEXICON:
+        print_sefaria_drop_counts(ex)
     print(f"wrote {OUT} ({os.path.getsize(OUT)/1e6:.1f} MB)")
 
 

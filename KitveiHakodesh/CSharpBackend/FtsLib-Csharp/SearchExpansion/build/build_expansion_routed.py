@@ -14,10 +14,14 @@ Consumer policy encoded in meta and enforced downstream:
   - synonyms: trust only source='tanach' rows (the library-side synonym
     channel failed audit in both registers — antonyms, collocates, modern
     register — see FINDINGS 27); inflections are shippable from both.
+  - optional Sefaria rabbinic forms (build_expansion_table.py
+    --sefaria-lexicon): 'infl' rows tagged source='sefaria-<lexicon>', folds
+    likewise; they only fill surfaces/lemmas that folded to themselves.
 """
 import os
 import sqlite3
 import sys
+from collections import Counter
 
 sys.path.insert(0, "tools")
 sys.path.insert(0, ".")
@@ -25,9 +29,12 @@ import masked
 
 masked.install()
 
-from expansion import tokens, SEFORIM  # noqa: E402
+from expansion import tokens, finalize_last_letter, SEFORIM  # noqa: E402
 
 OUT = "expansion-routed.db"
+# optional: `--sefaria-review <path.tsv>` writes the Sefaria rows for review
+SEFARIA_REVIEW_TSV = (sys.argv[sys.argv.index("--sefaria-review") + 1]
+                      if "--sefaria-review" in sys.argv[:-1] else None)
 
 # Biblical-Aramaic register guard (FINDINGS 27c). Books 35/36 carry the
 # Daniel/Ezra Aramaic spans. A surface that is DISTINCTIVE to those spans
@@ -74,12 +81,105 @@ def register_freqs():
     return span, outside
 
 
+# ── optional Sefaria rabbinic-forms rows (absent in a plain build) ─────────
+# The per-corpus tables mark which lemmas' 'infl' rows are Sefaria forms
+# (sefaria_lemma). Those rows keep channel 'infl' but carry their own source
+# tag (e.g. 'sefaria-jastrow'): the runtime gates only syn rows by source, so
+# they are served on every search while staying identifiable here.
+
+def read_sefaria_lemma_sources(*tables):
+    """lemma -> source tag; {} when no per-corpus table ran the channel."""
+    sources = {}
+    for con in tables:
+        if con.execute("select 1 from sqlite_master "
+                       "where name = 'sefaria_lemma'").fetchone():
+            sources.update(con.execute("select lemma, source from sefaria_lemma"))
+    return sources
+
+
+def withhold_sefaria_folds(tfold, sefaria_source_of):
+    """Turn Sefaria folds back into self-folds so the Aramaic register rules
+    run on exactly the pre-Sefaria table; returns them for re-application.
+    (Lexical folds never target a Sefaria headword — the loader admits only
+    headwords lexical.db does not know.)"""
+    withheld = {sf: lm for sf, lm in tfold.items()
+                if lm in sefaria_source_of and sf != lm}
+    for sf in withheld:
+        tfold[sf] = sf
+    return withheld
+
+
+def reapply_sefaria_folds(tfold, withheld):
+    """Re-apply a Sefaria fold only where the Aramaic rules left the surface
+    self-folding — a rule-made or hand-pinned fold always wins."""
+    applied = set()
+    for sf, lm in withheld.items():
+        if tfold.get(sf, sf) == sf:
+            tfold[sf] = lm
+            applied.add(sf)
+    return applied
+
+
+def drop_refolded_sefaria_rows(rows_of_lemma, sefaria_source_of, final_lemma,
+                               sefaria_stats):
+    """A Sefaria form whose final fold went elsewhere must not be offered as
+    this lemma's inflection — the fold and the paradigm would disagree."""
+    for lm in set(rows_of_lemma) & sefaria_source_of.keys():
+        kept = [(f, ch) for f, ch in rows_of_lemma[lm]
+                if ch != "infl" or final_lemma(f) == lm]
+        sefaria_stats["exp row dropped: form folds elsewhere"] += \
+            len(rows_of_lemma[lm]) - len(kept)
+        rows_of_lemma[lm] = kept
+
+
+def write_sefaria_summary(con, sefaria_stats):
+    """Print + record in meta the Sefaria rows that reached the artifact."""
+    rows_by_source = dict(con.execute(
+        "select source, count(*) from exp where source like 'sefaria-%' "
+        "group by source"))
+    lemmas_gaining = con.execute(
+        "select count(distinct lemma) from exp "
+        "where source like 'sefaria-%'").fetchone()[0]
+    folds_by_source = dict(con.execute(
+        "select source, count(*) from fold where source like 'sefaria-%' "
+        "group by source"))
+    print(f"sefaria exp rows by source: {rows_by_source}")
+    print(f"sefaria fold rows by source: {folds_by_source}")
+    print(f"lemmas gaining sefaria rows: {lemmas_gaining:,}")
+    for reason, count in sorted(sefaria_stats.items()):
+        print(f"  sefaria routed [{reason}]: {count:,}")
+    with con:
+        con.execute("insert into meta values (?, ?)",
+                    ("exp_rows_sefaria", str(rows_by_source)))
+        con.execute("insert into meta values (?, ?)",
+                    ("policy_sefaria", "rabbinic inflections from Sefaria "
+                     "lexicons; channel infl, used like any infl row"))
+
+
+def write_sefaria_review_tsv(con, path):
+    """UTF-8 TSV for a human reviewer: one line per lemma that gained Sefaria
+    rows — lemma, its forms in rank order (space-separated), source tag."""
+    forms_of = {}
+    for lemma, form, source in con.execute(
+            "select lemma, form, source from exp where source like 'sefaria-%' "
+            "order by lemma, rank"):
+        forms_of.setdefault((lemma, source), []).append(form)
+    with open(path, "w", encoding="utf-8", newline="") as f:
+        f.write("lemma\tforms\tsource\n")
+        for (lemma, source), forms in forms_of.items():
+            f.write(f"{lemma}\t{' '.join(forms)}\t{source}\n")
+    print(f"wrote sefaria review file {path} ({len(forms_of):,} lemmas)")
+
+
 def main():
     t = sqlite3.connect("file:expansion-tanach.db?mode=ro", uri=True)
     s = sqlite3.connect("file:expansion-seforim.db?mode=ro", uri=True)
 
     tfold = dict(t.execute("select surface, lemma from fold"))
     sfold = dict(s.execute("select surface, lemma from fold"))
+    sefaria_source_of = read_sefaria_lemma_sources(t, s)
+    withheld_sefaria_folds = withhold_sefaria_folds(tfold, sefaria_source_of)
+    sefaria_stats = Counter()
 
     span, outside = register_freqs()
     distinctive = {w for w, f in span.items()
@@ -95,12 +195,7 @@ def main():
     # the fold itself stays guarded (remainder must be well-attested in the
     # spans), so widening candidates only adds guarded folds
     span_only = {w for w, f in span.items() if outside.get(w, 0) <= OUTSIDE_MAX}
-    FINALIZE = str.maketrans("כמנפצ", "ךםןףץ")
-
-    def finalize(s):
-        """word-final kaf/mem/nun/pe/tsadi must take the final letterform —
-        stripping a suffix exposes a non-final letter that matches nothing"""
-        return s[:-1] + s[-1].translate(FINALIZE) if s else s
+    finalize = finalize_last_letter
 
     no_fold = set()
     bl_path = os.path.join("tools", "aramaic_fold_blocklist.txt")
@@ -183,6 +278,9 @@ def main():
     print(f"aramaic register guard: {len(distinctive)} distinctive surfaces, "
           f"{len(prefix_folds)} proclitic folds, {len(overrides)} self-lemma "
           f"overrides, {len(span_infl)} lemmas gain span paradigms")
+    sefaria_tanach_folds = reapply_sefaria_folds(tfold, withheld_sefaria_folds)
+    sefaria_stats["fold lost to aramaic rules"] = \
+        len(withheld_sefaria_folds) - len(sefaria_tanach_folds)
 
     con = sqlite3.connect(OUT)
     con.executescript("""
@@ -197,11 +295,27 @@ def main():
         """)
 
     lib_only = {sf: lm for sf, lm in sfold.items() if sf not in tfold}
+
+    def fold_source(surface, lemma, side):
+        is_sefaria_fold = (surface in sefaria_tanach_folds if side == "tanach"
+                           else surface != lemma and lemma in sefaria_source_of)
+        return sefaria_source_of[lemma] if is_sefaria_fold else side
+
+    def row_source(lemma, channel, side):
+        if channel == "infl" and lemma in sefaria_source_of:
+            return sefaria_source_of[lemma]
+        return side
+
+    def final_lemma(form):
+        return tfold.get(form) or lib_only.get(form) or form
+
     with con:
-        con.executemany("insert into fold values (?, ?, 'tanach')",
-                        tfold.items())
-        con.executemany("insert into fold values (?, ?, 'library')",
-                        lib_only.items())
+        con.executemany("insert into fold values (?, ?, ?)",
+                        ((sf, lm, fold_source(sf, lm, "tanach"))
+                         for sf, lm in tfold.items()))
+        con.executemany("insert into fold values (?, ?, ?)",
+                        ((sf, lm, fold_source(sf, lm, "library"))
+                         for sf, lm in lib_only.items()))
 
     t_lemmas = set(tfold.values())
     lib_lemmas = {lm for lm in lib_only.values() if lm not in t_lemmas}
@@ -214,6 +328,8 @@ def main():
     for lm, r, f, ch in s.execute(
             "select lemma, rank, form, channel from exp order by lemma, rank"):
         lib_rows[lm].append((f, ch))
+    drop_refolded_sefaria_rows(lib_rows, sefaria_source_of, final_lemma,
+                               sefaria_stats)
 
     with con:
         # Tanach-owned lemmas: validated rows first, then UNION in the
@@ -225,6 +341,8 @@ def main():
         for lm, r, f, ch in t.execute(
                 "select lemma, rank, form, channel from exp order by lemma, rank"):
             cur_lemma_rows[lm].append((f, ch))
+        drop_refolded_sefaria_rows(cur_lemma_rows, sefaria_source_of,
+                                   final_lemma, sefaria_stats)
         # Verified merge filters (reader audit 2026-08-04, ~88% -> ~98% safe):
         # - thin-anchor gate: a lemma with <=3 validated inflection forms
         #   cannot discipline the guard against high-frequency rabbinic/
@@ -239,8 +357,8 @@ def main():
             anchor = sum(1 for _, ch in trows if ch == "infl")
             rank = 0
             for f, ch in trows:
-                con.execute("insert into exp values (?, ?, ?, ?, 'tanach')",
-                            (lm, rank, f, ch))
+                con.execute("insert into exp values (?, ?, ?, ?, ?)",
+                            (lm, rank, f, ch, row_source(lm, ch, "tanach")))
                 rank += 1
                 rows["tanach"] += 1
             # biblical-Aramaic paradigm forms (register-guarded, span-attested)
@@ -256,8 +374,8 @@ def main():
                 continue                     # thin anchor: no library merge
             for f, ch in lib_rows.get(lm, ()):
                 if ch != "syn" and f not in have and not f.endswith(NONFINAL_END):
-                    con.execute("insert into exp values "
-                                "(?, ?, ?, ?, 'library')", (lm, rank, f, ch))
+                    con.execute("insert into exp values (?, ?, ?, ?, ?)",
+                                (lm, rank, f, ch, row_source(lm, ch, "library")))
                     have.add(f)
                     rank += 1
                     rows["merged_forms"] += 1
@@ -268,8 +386,8 @@ def main():
             for f, ch in lib_rows.get(lm, ()):
                 if f.endswith(NONFINAL_END):
                     continue                 # normalization artifacts
-                con.execute("insert into exp values (?, ?, ?, ?, 'library')",
-                            (lm, r, f, ch))
+                con.execute("insert into exp values (?, ?, ?, ?, ?)",
+                            (lm, r, f, ch, row_source(lm, ch, "library")))
                 r += 1
                 rows["library"] += 1
     print(f"tanach-owned lemmas gaining library forms: {len(merged_lemmas):,}")
@@ -282,6 +400,10 @@ def main():
                      ("policy_synonyms", "trust source='tanach' only (FINDINGS 27)"),
                      ("policy_inflections", "both sources shippable")]:
             con.execute("insert into meta values (?, ?)", (k, str(v)))
+    if sefaria_source_of:
+        write_sefaria_summary(con, sefaria_stats)
+        if SEFARIA_REVIEW_TSV:
+            write_sefaria_review_tsv(con, SEFARIA_REVIEW_TSV)
     con.execute("analyze")
     con.execute("vacuum")
     con.close()

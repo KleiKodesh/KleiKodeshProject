@@ -49,7 +49,9 @@ meta (key TEXT PRIMARY KEY, value TEXT)                     -- design + policy n
 
 `channel` is `infl` (another form of the same lexeme), `syn` (dictionary
 synonym), or `bridge` (Targum equivalent). `source` is `tanach` (the validated
-register) or `library` (the rest of the corpus).
+register), `library` (the rest of the corpus), or `sefaria-<lexicon>` (e.g.
+`sefaria-jastrow`) for inflection rows and folds that came from the optional
+Sefaria lexicon input (see "Optional: Sefaria rabbinic forms").
 
 **Consumer policy — enforced in code, not by the data:** synonym rows are
 trusted only where `source='tanach'`; inflection and bridge rows are used from
@@ -66,6 +68,10 @@ read-only and paths are constants at the top of `expansion.py`:
 | seforim corpus | `C:\ProgramData\otzaria\books\seforim.db` | attested surface forms + frequencies |
 | lexicon | `C:\Users\Public\Documents\Dictionary\Backup\lexical.db` | surface -> lexeme groups |
 | dictionary | `%LOCALAPPDATA%\KleiKodesh\KitveiHakodesh\dictionary\KitveiHakodesh_dictionary.db` | synonym links + gloss texts for the sense gate |
+
+Optional fourth input, passed on the command line (never shipped, ~700 MB):
+`sefaria-lexicon.db`, Sefaria's lexicon export. See "Optional: Sefaria rabbinic
+forms".
 
 Python 3.11+ with only the standard library (`sqlite3`, `re`, `csv`). No pip
 install, no network.
@@ -102,6 +108,39 @@ aramaic register guard: 191 distinctive surfaces, 85 proclitic folds, ...
 fold: 39,764 tanach + 1,380,914 library-only
 exp rows: {'tanach': ..., 'library': ..., 'merged_forms': ...}
 ```
+
+## Optional: Sefaria rabbinic forms
+
+`lexical.db` is mostly biblical, so most rabbinic and Aramaic words fold only to
+themselves and get no expansion. `--sefaria-lexicon` adds inflection groups from
+Sefaria's Jastrow and Krupnik dictionaries (Klein with `--sefaria-include-klein`)
+to fill that gap. BDB and Strong are skipped: they group whole roots, which is
+too broad for inflection, and `lexical.db` already covers Tanach.
+
+```bash
+python build_expansion_table.py --sefaria-lexicon <path>\sefaria-lexicon.db
+python build_expansion_table.py --corpus all --sefaria-lexicon <path>\sefaria-lexicon.db
+python build_expansion_routed.py --sefaria-review sefaria_review.tsv
+```
+
+What the loader (`_load_sefaria_rabbinic_forms` in `expansion.py`) does:
+
+- Reads word forms linked to headwords, alternate headwords, and plural forms.
+- Strips nikud and drops multi-word forms and forms under 3 letters.
+- Drops every form that belongs to two or more headwords (homograph guard).
+- Runs the rest through the same gates as `lexical.db` groups.
+- Only adds groups for words that currently fold to themselves. It never
+  overrides an existing `lexical.db` group.
+
+The new rows use channel `infl` and source `sefaria-<lexicon>`. The runtime
+gates only `syn` rows by source, so they are served like any other inflection
+row with no C# change. Without the flags, the build behaves exactly as before.
+
+`--sefaria-review` writes a UTF-8 TSV (lemma, forms in rank order, source) of
+every Sefaria row that reached the final artifact. Have a Hebrew-literate
+reviewer go through it before committing the artifact (see "Auditing"). Watch
+Jastrow plural notes in particular: some list other forms marked "resp." that
+are not plurals.
 
 ## Reproducibility — the artifact tracks its inputs
 
