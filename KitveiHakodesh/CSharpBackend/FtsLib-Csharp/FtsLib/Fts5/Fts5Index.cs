@@ -55,9 +55,36 @@ namespace FtsLib.Fts5
 
         /// <summary>
         /// Lines per committed batch. Small at first, so a fresh build becomes searchable
-        /// within seconds; larger later, because every commit costs FTS5 a segment merge.
+        /// within seconds; large later, because every commit flushes FTS5 segments and queues
+        /// a term dictionary.
         /// </summary>
-        static int CommitInterval(long linesDone) => linesDone < 100_000 ? 20_000 : 100_000;
+        static int CommitInterval(long linesDone) => linesDone < 100_000 ? 20_000 : 500_000;
+
+        /// <summary>
+        /// Insert-time FTS5 tuning, applied at every build start (the values are stored in the
+        /// table, so a resumed build has them too). No merging while lines go in: automerge off
+        /// and crisis merging pushed out of reach, so each segment is written once and merged
+        /// once, by the 'optimize' in <see cref="CompactLines"/>. A 16 MB pending-terms buffer
+        /// (default 1 MB) means far fewer, larger segments.
+        /// </summary>
+        const string BuildTuning =
+            "INSERT INTO line_fts(line_fts, rank) VALUES('automerge', 0);" +
+            "INSERT INTO line_fts(line_fts, rank) VALUES('crisismerge', 1000);" +
+            "INSERT INTO line_fts(line_fts, rank) VALUES('hashsize', 16777216);";
+
+        /// <summary>FTS5's defaults, restored once the build is over (see BuildTuning).</summary>
+        const string DefaultTuning =
+            "INSERT INTO line_fts(line_fts, rank) VALUES('automerge', 4);" +
+            "INSERT INTO line_fts(line_fts, rank) VALUES('crisismerge', 16);" +
+            "INSERT INTO line_fts(line_fts, rank) VALUES('hashsize', 1048576);";
+
+        /// <summary>
+        /// Per-connection write PRAGMAs. page_size only takes effect on a new file (before the
+        /// first table, and before WAL). 64 MB cache: the build doesn't re-read pages, and a
+        /// larger cache only shows up as idle-looking RAM during the build.
+        /// </summary>
+        const string WritePragmas =
+            "PRAGMA synchronous=NORMAL; PRAGMA cache_size=-65536; PRAGMA temp_store=MEMORY;";
 
         // ── Resume state ──────────────────────────────────────────────
 
@@ -137,7 +164,7 @@ namespace FtsLib.Fts5
             long session = 0;
             using (var conn = Open(LinesDb(dir), SqliteOpenMode.ReadWriteCreate))
             {
-                Execute(conn, "PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA cache_size=-262144;");
+                Execute(conn, "PRAGMA page_size=65536; PRAGMA journal_mode=WAL; " + WritePragmas);
                 Execute(conn, "CREATE VIRTUAL TABLE IF NOT EXISTS line_fts USING fts5(terms, content='', detail=none, columnsize=0, tokenize='ascii')");
                 Execute(conn, "CREATE TABLE IF NOT EXISTS build_state(id INTEGER PRIMARY KEY CHECK (id = 1), " +
                               "last_line_id INTEGER NOT NULL, lines_done INTEGER NOT NULL, total_lines INTEGER NOT NULL, complete INTEGER NOT NULL)");
@@ -145,6 +172,7 @@ namespace FtsLib.Fts5
                 Execute(conn, "CREATE TABLE IF NOT EXISTS line_position(position INTEGER PRIMARY KEY, line_id INTEGER NOT NULL)");
                 var state = ReadState(conn);
                 if (state.Complete) return;
+                Execute(conn, BuildTuning);   // after the check: a finished index keeps its defaults
                 int lastLineId = state.LastLineId;
                 long linesDone = state.LinesDone;
                 if (linesDone > 0 && !HasPositions(conn))
@@ -298,8 +326,9 @@ namespace FtsLib.Fts5
             // Per-connection, so set again here: the same cache and sync policy as the inserts
             // (journal_mode=WAL is stored in the file). A 2 MB default cache makes the full
             // segment merge and the whole-file VACUUM far slower.
-            Execute(conn, "PRAGMA synchronous=NORMAL; PRAGMA cache_size=-262144;");
+            Execute(conn, WritePragmas);
             ct.ThrowIfCancellationRequested();
+            Execute(conn, DefaultTuning);
             var sw = Stopwatch.StartNew();
             Execute(conn, "INSERT INTO line_fts(line_fts) VALUES('optimize')");
             Log($"optimize {sw.Elapsed.TotalSeconds:F0}s");
