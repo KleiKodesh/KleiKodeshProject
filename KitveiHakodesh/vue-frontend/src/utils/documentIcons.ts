@@ -79,9 +79,9 @@ const ICONS: Record<DocumentIconKey, DocumentIcon> = {
   txt:      { key: 'txt',      color: '#9e9e9e', icon20: IconDocumentText20Filled,  icon24: IconDocumentText24Filled },
   addin:    { key: 'addin',    color: '#7b5ea7', icon20: IconPuzzlePiece20Regular,  icon24: IconPuzzlePiece24Regular },
   document: { key: 'document', color: '#3478f6', icon20: IconDocument20Filled,      icon24: IconDocument24Filled },
-  // Destination routes. These mirror the home page's static navigation tiles
-  // (useHomeTiles) glyph-for-glyph and colour-for-colour, so a tab for one of them
-  // is recognisably the same thing as its tile.
+  // Destination routes. These mirror the home page's navigation cards
+  // (useHomeNavCards) glyph-for-glyph and colour-for-colour, so a tab for one of them
+  // is recognisably the same thing as its card.
   library:  { key: 'library',  color: '#B5451B', icon20: IconLibrary20Filled,       icon24: IconLibrary24Filled },
   hbooks:   { key: 'hbooks',   color: '#D94F1E', icon20: IconBookOpen20Filled,      icon24: IconBookOpen24Filled },
   dict:     { key: 'dict',     color: '#7b5ea7', icon20: IconBookLetter20Filled,    icon24: IconBookLetter24Filled },

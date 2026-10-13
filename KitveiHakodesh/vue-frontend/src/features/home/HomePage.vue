@@ -1,42 +1,24 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useElementSize, useEventListener } from '@vueuse/core'
+import { useEventListener } from '@vueuse/core'
 import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
-import HomeTile from './HomePageTile.vue'
+import HomeSuggestionCard from './HomeSuggestionCard.vue'
 import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.vue'
 import HomePageDateBar from './HomePageDateBar.vue'
-import HomePageDailyLearning from './HomePageDailyLearning.vue'
 import { useGlobalSearch } from '@/features/global-search/useGlobalSearch'
 import { useHomeSearchBar } from './useHomeSearchBar'
 import { useHomeSearchNavigation } from './useHomeSearchNavigation'
-import { useHomeTiles } from './useHomeTiles'
+import { useHomeSuggestionCards } from './useHomeSuggestionCards'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useAppNavigation } from '@/composables/useAppNavigation'
 
 const { navigate, openFolderPicker } = useAppNavigation()
 
-const innerRef = ref<HTMLElement | null>(null)
 const searchBarRef = ref<HTMLElement | null>(null)
 const searchBarInputRef = ref<HTMLInputElement | null>(null)
 const searchDropdownRef = ref<InstanceType<typeof GlobalSearchDropdown> | null>(null)
 const searchDropdownEl = computed(() => searchDropdownRef.value?.element ?? null)
 
-const { width: containerWidth } = useElementSize(innerRef)
-
-const {
-  tiles,
-  gridMaxWidth,
-  tileRowWidth,
-  visibleFrequentFolderList,
-  visibleRecentlyOpenedList,
-  totalTileCount,
-  getFolderTileIcon,
-  getRecentTileIcon,
-  onTogglePinFolder,
-  onRemoveFolder,
-  onTogglePinRecent,
-  onRemoveRecent,
-} = useHomeTiles(containerWidth)
 
 const homeSearchQuery = ref('')
 
@@ -89,9 +71,19 @@ searchBar.openWhenAsyncResultsArrive([catalogTocResults, hebrewBooksResults, fil
 
 useDropdownClose(searchBarRef, searchBar.close, { ignore: [searchDropdownEl] })
 
-function onTileKeydown(event: KeyboardEvent, index: number) {
-  const isLastTile = index === totalTileCount.value - 1
-  if (event.code === 'Tab' && !event.shiftKey && isLastTile) {
+// History, today's learning and the destinations — one collection, one card style.
+const cards = useHomeSuggestionCards(
+  {
+    openRecent: (entry, openInNewTab) => navigation.openRecentEntry(entry, openInNewTab),
+    openFolder: (path, openInNewTab) => openFolderPicker(path, openInNewTab),
+  },
+  navigate,
+)
+
+// Tab off the last card wraps back to the search bar.
+function onCardKeydown(event: KeyboardEvent, index: number) {
+  const isLastCard = index === cards.value.length - 1
+  if (event.code === 'Tab' && !event.shiftKey && isLastCard) {
     event.preventDefault()
     searchBarInputRef.value?.focus()
   }
@@ -113,26 +105,16 @@ function focusSearchInput() {
 
 onMounted(focusSearchInput)
 
-async function onTap(label: string) {
-  await navigate(label)
-}
-
-// The tile's own tap event carries whether Ctrl/meta was held, the same modifier
-// every other tile uses to mean "open in a new tab".
-function onFolderTap(entry: { path: string }, newTab: boolean) {
-  openFolderPicker(entry.path, newTab)
-}
 </script>
 
 <template>
   <div class="home-page">
-    <div ref="innerRef" class="home-inner">
+    <div class="home-inner">
       <div class="home-search-blanket">
         <div
           ref="searchBarRef"
           class="home-search-bar-wrapper"
-          :style="{ maxWidth: `${tileRowWidth}px` }"
-        >
+          >
           <div class="home-search-bar">
             <input
               ref="searchBarInputRef"
@@ -176,42 +158,14 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
           />
         </div>
       </div>
-      <div class="home-grid" :style="{ maxWidth: `${gridMaxWidth}px` }">
-        <HomeTile
-          v-for="(tile, index) in tiles"
-          :key="tile.label"
-          v-bind="tile"
-          @tap="onTap(tile.label)"
-          @keydown="onTileKeydown($event, index)"
-        />
-        <HomeTile
-          v-for="(entry, index) in visibleFrequentFolderList"
-          :key="entry.path"
-          :label="entry.name"
-          :icon="getFolderTileIcon().icon"
-          :color="getFolderTileIcon().color"
-          :pinned="entry.pinned"
-          actions
-          @tap="onFolderTap(entry, $event)"
-          @keydown="onTileKeydown($event, tiles.length + index)"
-          @toggle-pin="onTogglePinFolder(entry)"
-          @remove="onRemoveFolder(entry)"
-        />
-        <HomeTile
-          v-for="(entry, index) in visibleRecentlyOpenedList"
-          :key="entry.key"
-          :label="entry.title"
-          :icon="getRecentTileIcon(entry).icon"
-          :color="getRecentTileIcon(entry).color"
-          :pinned="entry.pinned"
-          actions
-          @tap="navigation.openRecentEntry(entry, $event)"
-          @keydown="onTileKeydown($event, tiles.length + visibleFrequentFolderList.length + index)"
-          @toggle-pin="onTogglePinRecent(entry)"
-          @remove="onRemoveRecent(entry)"
+      <div class="home-cards">
+        <HomeSuggestionCard
+          v-for="(card, index) in cards"
+          :key="card.key"
+          :card="card"
+          @keydown="onCardKeydown($event, index)"
         />
       </div>
-      <HomePageDailyLearning :style="{ maxWidth: `${gridMaxWidth}px` }" />
     </div>
 
     <HomePageDateBar />
@@ -227,9 +181,11 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   outline: none;
   position: relative;
   container-type: inline-size;
+  /* Shared width cap of the search bar and the card collection. */
+  --home-content-width: 720px;
 }
 
-/* Search + tiles scroll together as one group. Only the date bar stays fixed.
+/* Search + cards scroll together as one group. Only the date bar stays fixed.
 
    Centered or top-anchored is decided purely by WIDTH (see the container query
    below), never by how tall the content is. Narrow is the default: a narrow pane
@@ -246,7 +202,7 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   scrollbar-color: var(--border-color) transparent;
   /* No top padding: the sticky search wrapper supplies its own top spacing so
      it can stick flush to the scroll-area top with nothing peeking above it. */
-  padding: 0 24px 16px;
+  padding: 0 clamp(12px, 4cqi, 24px) 16px;
 }
 
 /* Wide pane: center the group vertically.
@@ -259,8 +215,8 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
    to start-alignment in exactly that case.
 
    `safe` used to make this read as top-anchored even on a wide screen, but that
-   was the 45-tile budget overflowing almost every pane. With the flat cap in
-   useHomeTiles the content fits, so `safe` centers as intended and only yields in
+   was the 45-tile budget overflowing almost every pane. With the flat card cap
+   (useHomeHistoryCards) the content fits, so `safe` centers as intended and only yields in
    the short-pane case where centering cannot be rendered anyway.
 
    A container query, not a media query, so a split pane is judged on ITS OWN
@@ -271,18 +227,20 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   }
 }
 
-.home-grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 4px 8px;
-  /* Width cap comes from useHomeTiles: one full row of static tiles. */
+.home-cards {
+  display: grid;
+  /* Card min-width scales with the pane (cqi), so narrow panes still fit 2+
+     columns instead of collapsing to one full-width card per row. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, clamp(140px, 30cqi, 220px)), 1fr));
+  gap: 8px;
+  width: 100%;
+  max-width: var(--home-content-width);
 }
 
-/* Search bar — flows with the tiles (centered as a group when there's room),
-   but sticks to the top of the scroll area once the tiles scroll under it.
+/* Search bar — flows with the cards (centered as a group when there's room),
+   but sticks to the top of the scroll area once the cards scroll under it.
    The blanket spans the scroll area's full width with an opaque page-colored
-   backdrop, so tiles scrolling underneath truly disappear instead of peeking
+   backdrop, so cards scrolling underneath truly disappear instead of peeking
    out around the sides of the search pill. */
 .home-search-blanket {
   position: sticky;
@@ -296,11 +254,11 @@ function onFolderTap(entry: { path: string }, newTab: boolean) {
   background: var(--bg-primary);
 }
 
-/* max-width is bound inline from useHomeTiles' tileRowWidth: the bar is never
-   wider than the row of tiles beneath it, at any pane width. */
+/* Same width cap as the card collection beneath it. */
 .home-search-bar-wrapper {
   display: block;
   width: 100%;
+  max-width: var(--home-content-width);
   /* Trimmed with the pill, so the height it saves is not handed straight back as
      whitespace around it. */
   padding: 12px 0 6px;

@@ -4,7 +4,7 @@ import { useIntervalFn } from '@vueuse/core'
 import { useBookCatalog } from './useBookCatalog'
 import BookCatalogTitleBar from './BookCatalogTitleBar.vue'
 import BookCatalogViewList from './BookCatalogView.List.vue'
-import BookCatalogViewTiles from './BookCatalogView.Tiles.vue'
+import BookCatalogViewCards from './BookCatalogView.Cards.vue'
 import BookCatalogSearch from './BookCatalogSearch.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -39,7 +39,7 @@ const {
 // app-wide, not per-tab, so it needs no load-on-mount step.
 const { booksView: view } = storeToRefs(useSettingsStore())
 const activeViewComponent = computed(() =>
-  view.value === 'tiles' ? BookCatalogViewTiles : BookCatalogViewList,
+  view.value === 'tiles' ? BookCatalogViewCards : BookCatalogViewList,
 )
 
 function setView(v: BooksView) {

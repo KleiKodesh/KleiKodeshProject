@@ -9,6 +9,7 @@ import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
 import type { FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import type { TocFsItem } from '@/features/book-catalog/useBookCatalogSearch'
 import type { RecentlyOpenedEntry } from '@/stores/recentlyOpenedStore'
+import { locationKey } from '@/stores/navLocation'
 
 /**
  * Turns a selection in the home search dropdown (or a recently-opened tile) into
@@ -128,8 +129,14 @@ export function useHomeSearchNavigation(resetSearch: () => void) {
 
   function openRecentEntry(entry: RecentlyOpenedEntry, openInNewTab = false) {
     if (entry.route === '/book-view' && entry.bookId !== undefined) {
+      // Resume where the reader stopped: the recents location for this book carries
+      // the saved position (the home card shows its breadcrumb), exactly as the
+      // address bar's recents rows apply it.
+      const bookKey = `book:${entry.bookId}`
+      const location = tabStore.recentLocations.find((l) => locationKey(l) === bookKey)
+      const resumePatch = location ? tabStore.locationPatch(location.id) : undefined
       paneNavigation.openOrUpdateActiveTab(
-        { route: '/book-view', title: entry.title, bookId: entry.bookId },
+        resumePatch ?? { route: '/book-view', title: entry.title, bookId: entry.bookId },
         openInNewTab,
       )
       return

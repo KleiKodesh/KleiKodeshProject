@@ -119,8 +119,7 @@ function selectItem(i: number, event?: MouseEvent) {
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
 }
-/* Same three states, same curve and scales as the home page tiles
-   (HomePageTile.vue) — the icon grows on hover, grows further when it is the
+/* Three states — the icon grows on hover, grows further when it is the
    keyboard-focused tile, and dips on press. Only the icon moves; the label and
    the tile box stay put, so a grid of them does not jitter. */
 .tile:hover .tile-icon {
