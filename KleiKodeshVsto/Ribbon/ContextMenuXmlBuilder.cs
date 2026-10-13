@@ -103,11 +103,11 @@ namespace KleiKodesh.Ribbon
             if (!openLinkOnly)
             {
                 AppendButton(sb, "SearchFtsFromSelection" + suffix,
-                             FtsLabel, FtsTip, "contextMenu_Click", null);
+                             FtsLabel, FtsTip, "contextMenu_Click", "getKitveiHakodeshContextVisible");
                 AppendButton(sb, "SearchCatalogFromSelection" + suffix,
-                             CatalogLabel, CatalogTip, "contextMenu_Click", null);
+                             CatalogLabel, CatalogTip, "contextMenu_Click", "getKitveiHakodeshContextVisible");
                 AppendButton(sb, "CompareWithKitveiHakodesh" + suffix,
-                             CompareLabel, CompareTip, "compareText_Click", null);
+                             CompareLabel, CompareTip, "compareText_Click", "getKitveiHakodeshContextVisible");
             }
 
             // getVisible hides this item unless the selection really holds a supported

@@ -191,9 +191,19 @@ namespace KleiKodesh.Ribbon
         // right-click, so this reflects the current selection every time.
         public bool getContextVisible(Office.IRibbonControl control)
         {
+            if (!IsKitveiHakodeshEnabled())
+                return false;
             try { return FindSelectionHostLink() != null; }
             catch { return false; }
         }
+
+        // Context-menu items belong to the Kitvei Hakodesh feature: hide them when
+        // the user unchecks it in the settings pane.
+        public bool getKitveiHakodeshContextVisible(Office.IRibbonControl control) =>
+            IsKitveiHakodeshEnabled();
+
+        private static bool IsKitveiHakodeshEnabled() =>
+            SettingsManager.GetBool("Ribbon", "KitveiHakodesh_Visible", true);
 
         /// <summary>
         /// Returns the first link among the hyperlinks overlapping the current selection
