@@ -7,11 +7,18 @@ import { documentIcon, type DocumentIconKey } from '@/utils/documentIcons'
 import { dbReady } from '@/webview-host/seforimDb'
 import { useSettingsStore } from '@/stores/settingsStore'
 import type { HomeSuggestionCard } from './homeSuggestionCard'
+import { APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM } from '@/layout/appNavItems'
 
 /** A destination's icon + colour, taken from the shared table (utils/documentIcons). */
 function destinationIcon(key: DocumentIconKey): { icon: Component; color: string } {
   const icon = documentIcon(key)
   return { icon: icon.icon24, color: icon.color }
+}
+
+/** A shared destination: label + description from appNavItems, icon from the shared table. */
+function navDestination(key: DocumentIconKey, label: string) {
+  const item = [...APP_NAV_ITEMS, APP_NAV_SETTINGS_ITEM].find((navItem) => navItem.label === label)
+  return { label, description: item?.description ?? '', ...destinationIcon(key) }
 }
 
 /**
@@ -29,25 +36,26 @@ export function useHomeNavCards(navigate: (label: string) => unknown) {
   return computed<HomeSuggestionCard[]>(() => {
     if (settingsStore.getNavSidebarVisible(paneId)) return []
     const dbMissing = !dbReady.value
-    const destinations: { label: string; icon: Component; color: string }[] = [
+    const destinations: { label: string; description: string; icon: Component; color: string }[] = [
       dbMissing
-        ? { label: 'הורד מסד ספרים', icon: IconArrowDownload24Filled, color: '#B5451B' }
-        : { label: 'קטלוג הספרים', ...destinationIcon('library') },
+        ? { label: 'הורד מסד ספרים', description: 'הורדת מאגר הספרים למחשב', icon: IconArrowDownload24Filled, color: '#B5451B' }
+        : navDestination('library', 'קטלוג הספרים'),
       dbMissing
-        ? { label: 'בחר מסד ספרים', icon: IconDatabase24Filled, color: '#3478f6' }
-        : { label: 'חיפוש', ...destinationIcon('search') },
-      { label: 'היברו-בוקס', ...destinationIcon('hbooks') },
-      { label: 'פתח קובץ', ...destinationIcon('folder') },
-      { label: 'חיפוש קבצים', ...destinationIcon('fileSearch') },
-      { label: 'מילון', ...destinationIcon('dict') },
-      { label: 'לוח שנה', ...destinationIcon('calendar') },
-      { label: 'מידות ושיעורים', ...destinationIcon('ruler') },
-      { label: 'הגדרות', ...destinationIcon('settings') },
+        ? { label: 'בחר מסד ספרים', description: 'בחירת מאגר ספרים קיים', icon: IconDatabase24Filled, color: '#3478f6' }
+        : navDestination('search', 'חיפוש'),
+      navDestination('hbooks', 'היברו-בוקס'),
+      navDestination('folder', 'פתח קובץ'),
+      navDestination('fileSearch', 'חיפוש קבצים'),
+      navDestination('dict', 'מילון'),
+      navDestination('calendar', 'לוח שנה'),
+      navDestination('ruler', 'מידות ושיעורים'),
+      navDestination('settings', 'הגדרות'),
     ]
     return destinations.map((destination) => ({
       key: `nav:${destination.label}`,
       title: destination.label,
-      path: '',
+      // Shown in the card's muted subtitle line (.card-path).
+      path: destination.description,
       icon: destination.icon,
       color: destination.color,
       open: () => void navigate(destination.label),
