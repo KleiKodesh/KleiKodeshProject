@@ -128,7 +128,10 @@ let lastScrollOffset: number | undefined
 // as a centered card so the user can set them before launching the first search.
 const showAdvancedCard = computed(
   () => !hasSearched.value && !isSearching.value && !executedQuery.value && !isAdvancedOpen.value
-     && !indexingState.value.dbNotFound && !searchError.value,
+     && !indexingState.value.dbNotFound && !searchError.value
+     // A tab returning to a saved search restores it asynchronously (onMounted); the saved
+     // query is known synchronously, so gate on it or the card flashes before the restore.
+     && !paneNavigation.tabs.find((t) => t.id === tabId)?.searchQuery,
 )
 
 const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
