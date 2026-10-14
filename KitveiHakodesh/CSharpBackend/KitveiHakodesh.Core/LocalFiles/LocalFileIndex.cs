@@ -68,6 +68,18 @@ namespace KitveiHakodesh.Core.LocalFiles
         private readonly List<Thread> _liveThreads = new List<Thread>();
         private volatile bool _liveUpdatesStopped;
 
+        // Cancelled by Dispose: closes every live thread's volume handle (unblocking its
+        // kernel wait) and wakes the rescan loop, so a disposed index leaves no thread
+        // behind. Linked with the caller's token in StartLiveUpdates/StartPeriodicRescan.
+        private readonly CancellationTokenSource _stopCts = new CancellationTokenSource();
+
+        // Number of background writers (a live USN delta or a periodic rescan) in flight.
+        // Read by IsWriting so an idle release never closes the index under them.
+        private int _backgroundWrites;
+
+        /// <summary>True while a live USN delta or a periodic rescan is writing the index.</summary>
+        public bool IsWriting => Volatile.Read(ref _backgroundWrites) > 0;
+
         // Drives indexed WITHOUT a live USN watcher (volume handle refused — not elevated).
         // Guarded by the _liveThreads lock, which already serialises live-update state.
         private readonly List<char> _unwatchedDrives = new List<char>();
@@ -750,6 +762,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         public void StartLiveUpdates(CancellationToken ct, Action<string, Exception> onError = null)
         {
             if (_liveUpdatesStopped) return;
+            ct = CancellationTokenSource.CreateLinkedTokenSource(ct, _stopCts.Token).Token;
             lock (_liveThreads)
             {
                 if (_liveThreads.Count > 0) return; // already running
@@ -789,7 +802,7 @@ namespace KitveiHakodesh.Core.LocalFiles
         /// point-in-time snapshot — nothing tracks changes after the build, so
         /// <see cref="StartPeriodicRescan"/> is what keeps it current.
         /// </summary>
-        private bool HasUnwatchedDrives
+        public bool HasUnwatchedDrives
         {
             get { lock (_liveThreads) return _unwatchedDrives.Count > 0; }
         }
@@ -840,6 +853,7 @@ namespace KitveiHakodesh.Core.LocalFiles
 
             if (interval <= TimeSpan.Zero) return;
 
+            ct = CancellationTokenSource.CreateLinkedTokenSource(ct, _stopCts.Token).Token;
             lock (_rescanLock)
             {
                 if (_rescanThread != null) return; // already running
@@ -890,7 +904,9 @@ namespace KitveiHakodesh.Core.LocalFiles
                 {
                     onRescan?.Invoke("Rescanning file index (no live file-system watcher)");
 
-                    Build(null, ct);
+                    Interlocked.Increment(ref _backgroundWrites);
+                    try { Build(null, ct); }
+                    finally { Interlocked.Decrement(ref _backgroundWrites); }
                 }
                 catch (OperationCanceledException) { return; }
                 catch (Exception ex)
@@ -966,7 +982,10 @@ namespace KitveiHakodesh.Core.LocalFiles
                         var changeList = new List<LocalFileIndexUsnJournal.ChangeRecord>(changes);
                         if (changeList.Count > 0)
                         {
-                            bool ok = ApplyDelta(driveLetter, changeList, readResult.AdvancedCursor);
+                            bool ok;
+                            Interlocked.Increment(ref _backgroundWrites);
+                            try { ok = ApplyDelta(driveLetter, changeList, readResult.AdvancedCursor); }
+                            finally { Interlocked.Decrement(ref _backgroundWrites); }
                             if (!ok)
                             {
                                 // Delta too large — full rebuild needed.
@@ -1063,6 +1082,20 @@ namespace KitveiHakodesh.Core.LocalFiles
         {
             // Also stops the periodic-rescan loop, which polls this flag between slices.
             _liveUpdatesStopped = true;
+            try { _stopCts.Cancel(); } catch (ObjectDisposedException) { }
+
+            // Let the live threads see the cancellation and exit before the writer closes, so
+            // none is mid-delta against a disposed writer. Their wait is a kernel call that the
+            // cancellation unblocks at once; the timeout only bounds a thread stuck applying a
+            // large delta (it then fails on the closed writer, and since its cursor was not
+            // saved, that delta is simply replayed from the journal by the next Build).
+            Thread[] live;
+            lock (_liveThreads) live = _liveThreads.ToArray();
+            foreach (var t in live)
+            {
+                if (t != Thread.CurrentThread) t.Join(TimeSpan.FromSeconds(2));
+            }
+
             _searcherManager?.Dispose();
             _writer?.Dispose();
             _directory?.Dispose();

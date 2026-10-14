@@ -35,6 +35,21 @@ namespace KitveiHakodesh.Core.SeforimDb
         private List<BookRow>? _booksCache;
         private readonly object _catalogCacheLock = new();
 
+        /// <summary>
+        /// Idle memory release: drops the cached catalog (every book + category row). The next
+        /// <see cref="GetAllBooks"/>/<see cref="GetAllCategories"/> reloads it from the database
+        /// once. Thread-safe: callers already holding a list keep using it unchanged; a load
+        /// racing this simply re-caches correct data.
+        /// </summary>
+        public void ClearCatalogCache()
+        {
+            lock (_catalogCacheLock)
+            {
+                _categoriesCache = null;
+                _booksCache = null;
+            }
+        }
+
         public List<CategoryRow> GetAllCategories()
         {
             lock (_catalogCacheLock)

@@ -4,6 +4,7 @@ using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
 using KitveiHakodesh.Core.LocalFiles;
+using KitveiHakodeshService.Diagnostics;
 using KitveiHakodeshService.Ipc;
 
 namespace KitveiHakodeshService.Http;
@@ -31,9 +32,14 @@ namespace KitveiHakodeshService.Http;
 /// </summary>
 public sealed class HttpHostServer(
     Dispatcher dispatcher, HttpHostState state, LocalFileGrants localFileGrants,
+    IdleMemoryTrimmer trimmer, KitveiHakodeshService.SeforimDb.FullTextSearchService fts,
+    KitveiHakodeshService.Catalog.CatalogTocSearchService catalogToc,
     ILogger<HttpHostServer> logger) : BackgroundService
 {
     private TcpListener? _listener;
+
+    private static readonly bool DiagTrimEnabled =
+        Environment.GetEnvironmentVariable("KHS_DIAG_TRIM") is "1" or "true";
 
     // Loopback TCP is reachable by any local process before the bearer token is checked, so the
     // pre-auth phase is bounded in both directions: a cap on how many sockets can sit in a handler
@@ -148,6 +154,25 @@ public sealed class HttpHostServer(
                 if (req.Method == "GET" && req.Path.StartsWith("/file/", StringComparison.Ordinal))
                 {
                     await ServeFileAsync(stream, req, ct);
+                    return;
+                }
+
+                // GET /khs-diag — plain-text memory report (numbers only; see MemoryDiagnostics).
+                // GET /khs-diag/trim — trim first, then report. Deliberately not an RPC op:
+                // it must not touch the idle clock it reports on. /trim forces work (GCs, index
+                // close) on a tokenless GET any web page could fire, so it only exists when
+                // KHS_DIAG_TRIM=1 (dev measurement); otherwise it is a plain report.
+                if (req.Method == "GET" && req.Path is "/khs-diag" or "/khs-diag/trim")
+                {
+                    string report = "";
+                    if (req.Path == "/khs-diag/trim" && DiagTrimEnabled)
+                    {
+                        report = MemoryDiagnostics.Report(fts.IsBusy, catalogToc.IsBusy) + "\n== after trim ==\n";
+                        trimmer.TrimNow();
+                    }
+                    report += MemoryDiagnostics.Report(fts.IsBusy, catalogToc.IsBusy);
+                    await HttpProtocol.WriteBufferedAsync(stream, 200, "OK", "text/plain; charset=utf-8",
+                        Encoding.UTF8.GetBytes(report), req.Origin, ct);
                     return;
                 }
 

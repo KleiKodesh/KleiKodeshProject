@@ -136,19 +136,17 @@ public sealed partial class SeforimDbCatalogIndex
         {
             if (_writer is not null) return false; // build in flight — keep the NRT reader
             if (_reader is null) return false;     // nothing open
+            // Dispose drops only the OWNER's reference: a search that took its own
+            // reference (TryAcquireSearcher) keeps the reader open until it finishes.
             _reader.Dispose();
             _reader = null;
             _searcher = null;
-            // _variants is deliberately KEPT. It is a materialized vocab set + skeleton map
-            // with no reference back to the reader, so it stays valid and correct after the
-            // reader goes. Nulling it here looks like a memory win but costs correctness:
-            // Search reads the searcher and the variants under two SEPARATE lock
-            // acquisitions, so a trim landing between them hands the search a live searcher
-            // and null variants — GetVariantsLocked cannot rebuild with _reader null — and
-            // the query silently loses its prefix/spelling expansion and its literal-vs-
-            // variant ranking. It would also re-scan the whole term dictionary inside _lock
-            // on the first search after every trim. Only a vocabulary change invalidates
-            // this, which is why SwapReaderLocked nulls it and we do not.
+            // The variant tables (vocab set + skeleton map, often the biggest survivor) are
+            // dropped too. Safe because Search takes searcher + variants together in ONE
+            // lock acquisition (TryAcquireSearcher): it can never see a live searcher with
+            // null variants. They are rebuilt lazily (one term-dictionary scan) by the first
+            // search after the reader reopens.
+            _variants = null;
             return true;
         }
     }
@@ -200,17 +198,48 @@ public sealed partial class SeforimDbCatalogIndex
         var tokens = SeforimDbCatalogTextNormalizer.TokenizeQuery(query);
         if (tokens.Count == 0) return [];
 
-        IndexSearcher? searcher;
-        lock (_lock) searcher = _searcher;
-        if (searcher is null)
+        // Searcher AND variants are taken together, in ONE lock acquisition, with a
+        // reference held on the reader (see TryAcquireSearcher) — so an idle release or a
+        // reader swap landing mid-search can neither close the reader under us nor hand
+        // us a live searcher with mismatched/null variants.
+        if (!TryAcquireSearcher(out var searcher, out var variants))
         {
-            if (!TryOpenActive()) return [];
-            lock (_lock) searcher = _searcher;
-            if (searcher is null) return [];
+            if (!TryOpenActive() || !TryAcquireSearcher(out searcher, out variants)) return [];
         }
+        try
+        {
+            return SearchOnSearcher(searcher, variants, tokens, query, ct);
+        }
+        finally
+        {
+            searcher.IndexReader.DecRef();
+        }
+    }
 
-        VariantIndex? variants;
-        lock (_lock) variants = GetVariantsLocked();
+    /// <summary>
+    /// Snapshot the current searcher and its variant tables under one lock, and take a
+    /// reference on the reader (<see cref="IndexReader.TryIncRef"/>) so it stays open until
+    /// the caller's <see cref="IndexReader.DecRef"/> even if <see cref="ReleaseIdleReader"/>
+    /// or a reader swap disposes it meanwhile (Dispose only drops the owner's reference).
+    /// The variants are built from the SAME reader inside the same lock, so the pair is
+    /// always consistent. False when no reader is open.
+    /// </summary>
+    private bool TryAcquireSearcher(out IndexSearcher searcher, out VariantIndex? variants)
+    {
+        lock (_lock)
+        {
+            searcher = _searcher!;
+            variants = null;
+            if (_searcher is null || !_searcher.IndexReader.TryIncRef()) return false;
+            variants = GetVariantsLocked();
+            return true;
+        }
+    }
+
+    private List<CatalogTocHit> SearchOnSearcher(
+        IndexSearcher searcher, VariantIndex? variants,
+        List<SeforimDbCatalogTextNormalizer.QueryToken> tokens, string query, CancellationToken ct)
+    {
 
         // Accuracy-first ranking (see SortKeyCollector): literal (exact / non-variant)
         // matches rank ahead of variant/fuzzy-only ones. To tag each hit BEFORE the
