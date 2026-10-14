@@ -32,7 +32,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private readonly string _indexPath;
         private readonly string _seforimDbPath;
 
-        private SeforimIndex _index;
+        private SeforimIndex? _index;
         private bool _disposed;
 
         /// <param name="indexPath">The index directory.</param>

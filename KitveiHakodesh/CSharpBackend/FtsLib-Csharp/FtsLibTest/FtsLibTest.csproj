@@ -15,6 +15,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
     <!-- For Corpus/SeforimLineContent.cs: schema 6 of the seforim database stores line content
          zstd-compressed with a dictionary shipped inside the database. This belongs HERE, not in
          the engine — the test suite is what reads that corpus now. Pure-C# port, nothing native

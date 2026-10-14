@@ -595,7 +595,10 @@ public static class AotWordPaste
             // the await always returns.
             try
             {
+                // Word COM is Windows-only; this library never runs anywhere else.
+#pragma warning disable CA1416
                 thread.SetApartmentState(ApartmentState.STA);
+#pragma warning restore CA1416
                 thread.Start();
             }
             catch (Exception ex)

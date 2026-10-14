@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO;
 
 namespace KitveiHakodesh.Core.Common
@@ -58,6 +59,7 @@ namespace KitveiHakodesh.Core.Common
             }
         }
 
+        [UnconditionalSuppressMessage("SingleFile", "IL3000", Justification = "Empty Assembly.Location is filtered out; see IL3000 note below.")]
         private static IEnumerable<string?> EnumerateRootsRaw()
         {
             // 1. Next to the running assembly. Correct for the portable DemoApp and for the
@@ -74,7 +76,6 @@ namespace KitveiHakodesh.Core.Common
             // dropped by the IsNullOrWhiteSpace filter in CandidateRoots and the next candidate
             // is tried. Suppressed rather than removed because these two are the only roots
             // that resolve when the library is loaded from outside the entry app's folder.
-#pragma warning disable IL3000
             yield return SafeDirectory(() =>
                 Path.GetDirectoryName(typeof(AppFileLocator).Assembly.Location));
 
@@ -83,7 +84,6 @@ namespace KitveiHakodesh.Core.Common
                 var entry = System.Reflection.Assembly.GetEntryAssembly();
                 return entry == null ? null : Path.GetDirectoryName(entry.Location);
             });
-#pragma warning restore IL3000
 
             // 4. The working directory — right when launched from a shortcut whose "Start in"
             //    points at the app, wrong often enough not to rank higher.

@@ -35,6 +35,8 @@
          This is for the engine's OWN segment files (the index), not for any content database:
          the engine reads content only through IFtsCorpus, which the caller supplies. -->
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 
   <!-- ZstdSharp.Port and the net48 Microsoft.VisualBasic reference used to live here for the

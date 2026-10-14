@@ -54,6 +54,8 @@
          fails with a sharing violation. 10.0.9 matches FtsLib and is AOT/AnyCPU-friendly. -->
     <PackageReference Include="MessagePack" Version="3.1.8" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    <!-- Lifts the native SQLite past 2.1.11 (GHSA-2m69-gcr7-jv3q) that Microsoft.Data.Sqlite 10.0.9 pulls in. -->
+    <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.14" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.9" />
     <!-- Windows-service lifetime (SCM start/stop) for the installed service; a no-op when the
          exe is spawned as a console process (dev, portable). -->
