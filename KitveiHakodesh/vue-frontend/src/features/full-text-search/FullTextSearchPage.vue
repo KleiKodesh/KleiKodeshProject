@@ -472,12 +472,17 @@ onBeforeUnmount(() => {
         @clear="onClearSearch"
       />
       </Teleport>
-      <div
-        v-if="isSearching && stageLabel"
-        class="search-stage-label"
-        dir="rtl"
-        aria-live="polite"
-      >{{ stageLabel }}...</div>
+      <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
+      <div class="search-stage-row" dir="rtl" aria-live="polite">
+        <template v-if="isSearching">
+          {{ stageLabel }}
+          <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
+        </template>
+        <template v-else-if="results.length">
+          <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
+          תוצאות
+        </template>
+      </div>
       <FullTextSearchAdvancedPanel
         v-if="isAdvancedOpen"
         ref="advancedPanelRef"
@@ -562,13 +567,19 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.search-stage-label {
-  padding: 2px 12px;
-  font-size: 0.8em;
-  opacity: 0.65;
+.search-stage-row {
+  height: 14px;
+  line-height: 14px;
+  padding: 0 12px;
+  font-size: 11px;
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.search-stage-count {
+  unicode-bidi: isolate;
+  direction: ltr;
 }
 .search-page {
   display: flex;
