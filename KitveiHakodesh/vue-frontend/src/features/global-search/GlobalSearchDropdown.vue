@@ -349,6 +349,9 @@ function getTabIcon(route: string): FileIconInfo {
             <span v-if="item.book.author" class="global-search-dropdown__item-path">
               {{ item.book.author }}
             </span>
+            <span v-if="item.book.printingYear" class="global-search-dropdown__item-path">
+              ({{ item.book.printingYear }})
+            </span>
           </div>
         </template>
 
