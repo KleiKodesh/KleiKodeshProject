@@ -2,6 +2,7 @@
 import { ref, computed } from 'vue'
 import { IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 
 const props = defineProps<{
@@ -28,7 +29,10 @@ const dropdownLeft = ref(0)
 const { justClosed } = useDropdownClose(wrapperRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
   ignore: [dropdownRef],
+  // The wrapper sits inline in the breadcrumb; only the popup is fitted.
+  fitToViewport: false,
 })
+useDropdownViewportFit(dropdownRef)
 
 function onToggle() {
   if (justClosed.value) return
