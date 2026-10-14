@@ -42,14 +42,13 @@ interface SearchStreamChunk {
 
 /** Short labels for the service's search stage keys. Unknown keys show nothing. */
 export const SEARCH_STAGE_LABELS: Record<string, string> = {
-  validate: 'בודק את החיפוש',
-  rewrite: 'מוסיף צורות קרובות',
-  parse: 'מפענח את השאילתה',
-  expand: 'מרחיב מונחים',
-  lookup: 'מחפש באינדקס',
-  fetch: 'טוען טקסטים',
-  snippets: 'בונה קטעים',
-  enrich: 'משלים פרטי תוצאות',
+  rewrite: 'מעבד',
+  parse: 'מעבד',
+  expand: 'מרחיב תצורות של המילים',
+  lookup: 'מחפש במאגר',
+  fetch: 'מכין את התוצאות',
+  snippets: 'מכין את התוצאות',
+  enrich: 'מכין את התוצאות',
 }
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
