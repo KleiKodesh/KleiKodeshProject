@@ -123,6 +123,13 @@ let restoringNonce: number | null = null
 let lastScrollIndex: number | undefined
 let lastScrollOffset: number | undefined
 
+// Clean page (nothing searched yet, no popup open): offer the advanced options up front
+// as a centered card so the user can set them before launching the first search.
+const showAdvancedCard = computed(
+  () => !hasSearched.value && !isSearching.value && !executedQuery.value && !isAdvancedOpen.value
+     && !indexingState.value.dbNotFound && !searchError.value,
+)
+
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
      || !expandKetiv.value
@@ -475,7 +482,24 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="results-area">
-      <div class="results-list-wrap">
+      <div v-if="showAdvancedCard" class="advanced-card-wrap">
+        <FullTextSearchAdvancedPanel
+          as-card
+          :max-word-distance="maxWordDistance"
+          :require-ordered="requireOrdered"
+          :context-words="settings.searchContextMarginWords"
+          :expand-ketiv="expandKetiv"
+          :expand-related="expandRelated"
+          :grammar-wrap="grammarWrap"
+          @update:max-word-distance="maxWordDistance = $event"
+          @update:require-ordered="requireOrdered = $event"
+          @update:context-words="settings.searchContextMarginWords = $event"
+          @update:expand-ketiv="expandKetiv = $event"
+          @update:expand-related="expandRelated = $event"
+          @update:grammar-wrap="grammarWrap = $event"
+        />
+      </div>
+      <div v-else class="results-list-wrap">
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
@@ -543,6 +567,14 @@ onBeforeUnmount(() => {
   /* z-index without position:relative on the results area below means the dock's
      popups (advanced panel, sort dropdown) paint over the results list. */
   z-index: 5;
+}
+.advanced-card-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
 }
 .results-list-wrap {
   flex: 1;
