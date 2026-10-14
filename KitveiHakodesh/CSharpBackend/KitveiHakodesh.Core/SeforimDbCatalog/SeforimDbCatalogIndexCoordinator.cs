@@ -515,6 +515,10 @@ namespace KitveiHakodesh.Core.SeforimDbCatalog
             };
         }
 
+        /// <summary>What the catalog index keeps resident right now (diagnostics).</summary>
+        public string DescribeResidentState() =>
+            CurrentIndex is { } index ? index.DescribeResidentState() : "no index open";
+
         /// <summary>
         /// Release the open Lucene reader/searcher so its retained memory is freed while idle.
         /// No-op (and safe) if no index is open or a build is in flight; the next search reopens

@@ -12,7 +12,7 @@ namespace KitveiHakodeshService.Diagnostics;
 /// </summary>
 public static class MemoryDiagnostics
 {
-    public static string Report(bool ftsBusy, bool catalogBusy)
+    public static string Report(bool ftsBusy, bool catalogBusy, IEnumerable<(string Name, string State)>? components = null)
     {
         var p = Process.GetCurrentProcess();
         var gc = GC.GetGCMemoryInfo(GCKind.Any);
@@ -38,6 +38,12 @@ public static class MemoryDiagnostics
         sb.AppendLine($"GC counts gen0/1/2            {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}");
         // Commit the GC doesn't own: SQLite page caches, mapped views, native buffers, stacks.
         Line("native (private - GC commit)", Mb(p.PrivateMemorySize64 - gc.TotalCommittedBytes));
+
+        if (components is not null)
+        {
+            sb.AppendLine("== resident components ==");
+            foreach (var (name, state) in components) sb.AppendLine(name.PadRight(30) + state);
+        }
 
         sb.AppendLine("== idle trimmer ==");
         sb.AppendLine($"fts busy                      {ftsBusy}");

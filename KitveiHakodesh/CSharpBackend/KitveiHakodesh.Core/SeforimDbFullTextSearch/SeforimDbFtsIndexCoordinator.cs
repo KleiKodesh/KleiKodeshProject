@@ -172,6 +172,12 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// sessions) — the idle memory trimmer must not run then.</summary>
     public bool IsBusy => _isIndexing || !_sessions.IsEmpty || Volatile.Read(ref _activeOneShotSearches) > 0;
 
+    /// <summary>What the FTS side keeps resident right now (diagnostics).</summary>
+    public string DescribeResidentState()
+    {
+        lock (_lock) return $"engine={(_engine is null ? "none" : "created")} sessions={_sessions.Count}";
+    }
+
     /// <summary>
     /// Idle memory release: drops the open engine handle (the next search reopens it lazily
     /// via <see cref="GetEngine"/>) and the search enrichment's cached catalog (reloaded on

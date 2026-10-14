@@ -43,6 +43,8 @@ public sealed class FullTextSearchService
     /// sessions) — the idle memory trimmer must not run then.</summary>
     public bool IsBusy => _coordinator.IsBusy;
 
+    public string DescribeResidentState() => _coordinator.DescribeResidentState();
+
     /// <summary>Idle memory trim: drop the engine handle and cached catalog (see Core).
     /// Returns false (and releases nothing) while a build or search is running.</summary>
     public bool ReleaseIdleResources() => _coordinator.ReleaseIdleResources();
