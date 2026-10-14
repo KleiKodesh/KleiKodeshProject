@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
 
 namespace KitveiHakodesh.Core.Common
 {
@@ -89,7 +88,7 @@ namespace KitveiHakodesh.Core.Common
         {
             Log("========================================");
             Log("STARTUP  " + appName + "  " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss"));
-            Log("EXE: " + (Assembly.GetEntryAssembly()?.Location ?? "<unknown>"));
+            Log("EXE: " + (System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName ?? "<unknown>"));
             Log("CWD: " + Directory.GetCurrentDirectory());
             Log("OS:  " + Environment.OSVersion);
             Log("CLR: " + Environment.Version);
