@@ -9,6 +9,8 @@ const props = defineProps<{
   expandKetiv: boolean
   expandRelated: boolean
   grammarWrap: boolean
+  /** Rendered inline as a centered card on the empty search page, not as a popup. */
+  asCard?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -36,7 +38,7 @@ function onContextWordsInput(event: Event) {
 </script>
 
 <template>
-  <div class="advanced-panel" @keydown.esc.stop="emit('close')">
+  <div class="advanced-panel" :class="{ 'as-card': asCard }" @keydown.esc.stop="emit('close')">
     <div class="panel-header">
       <div class="tabs">
         <button
@@ -54,7 +56,7 @@ function onContextWordsInput(event: Event) {
           תחביר חיפוש
         </button>
       </div>
-      <button class="close-btn" title="סגור" @click="emit('close')">
+      <button v-if="!asCard" class="close-btn" title="סגור" @click="emit('close')">
         <IconMinimize20Regular />
       </button>
     </div>
@@ -220,6 +222,17 @@ function onContextWordsInput(event: Event) {
     box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
     overflow: hidden;
   }
+}
+/* Empty-page card: in-flow, bordered, centered by the page. Doubled class beats the
+   popup media rule above at every width. */
+.advanced-panel.as-card {
+  position: static;
+  width: 380px;
+  max-width: calc(100% - 32px);
+  max-height: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
 }
 .panel-header {
   display: flex;
