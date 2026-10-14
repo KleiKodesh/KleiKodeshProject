@@ -194,41 +194,26 @@ function onContextWordsInput(event: Event) {
   display: flex;
   flex-direction: column;
   background: var(--bg-secondary);
-  /* Docked (narrow screens), this strip hangs below the search bar. TopSearchBar is
-     transparent and draws no seam of its own, so this panel frames both of its own
-     edges: against the bar above and against the results below. */
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-  flex-shrink: 0;
+  /* A popup below the search bar at every width (narrow screens included), so it
+     behaves as a real dropdown over the results instead of pushing them down. */
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 100%;
+  z-index: 20;
+  width: 360px;
+  max-width: calc(100% - 16px);
   /* Viewport units, NOT a percentage: the containing block (.search-bar-dock)
-     is sized by its content, so `max-height: 60%` resolves against the panel's
-     own content height — clamping the box mid-list and spilling the remaining
-     rows out over the results. */
-  max-height: 60vh;
+     is sized by its content, so a percentage would resolve against the bar. */
+  max-height: min(60vh, 420px);
   min-height: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
   overflow: hidden;
 }
 
-/* Wide screens: stop stretching to the full page width — which stranded every
-   control far from its label — and float as a bounded popup below the search
-   bar instead. Narrow screens keep the full-width docked strip below. */
-@media (min-width: 700px) {
-  .advanced-panel {
-    position: absolute;
-    inset-inline-start: 8px;
-    top: 100%;
-    z-index: 20;
-    width: 360px;
-    max-width: calc(100% - 16px);
-    max-height: min(60vh, 420px);
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgb(0 0 0 / 24%);
-    overflow: hidden;
-  }
-}
-/* Empty-page card: in-flow, bordered, centered by the page. Doubled class beats the
-   popup media rule above at every width. */
+/* Empty-page card: in-flow, bordered, centered by the page. Doubled class overrides the
+   popup rule above. */
 .advanced-panel.as-card {
   position: static;
   width: 380px;
