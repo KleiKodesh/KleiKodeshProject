@@ -23,6 +23,13 @@ function titleHasAuthorTail(titleKey: string, bareAuthor: string): boolean {
   for (let n = 2; n < words.length; n++) {
     if (titleWords.includes(` ${words.slice(-n).join(' ')} `)) return true
   }
+  // "עובדיה מברטנורא" → title "ברטנורא על...": a "from <place>" surname, named
+  // without the מ. 4+ letters left; a bare single surname is NOT matched
+  // (measured: too many first-name collisions like "בן יוסף" vs "עץ יוסף").
+  const last = words[words.length - 1]
+  if (words.length >= 2 && last?.startsWith('מ') && last.length >= 5) {
+    if (titleWords.includes(` ${last.slice(1)} `)) return true
+  }
   return false
 }
 
