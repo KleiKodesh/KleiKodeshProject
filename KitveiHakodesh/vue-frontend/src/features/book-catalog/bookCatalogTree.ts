@@ -113,12 +113,13 @@ export function assignFullPaths(
 ): BookRow[] {
   for (const node of nodes) {
     const nodePath = parentPath ? `${parentPath} / ${node.title}` : node.title
+    // Subcategories before the node's own books — the order the catalog view lists them.
+    assignFullPaths(node.children, nodePath, counter, orderedBooks)
     for (const book of node.books) {
       book.treeOrder = counter.n++
       book.parentPath = nodePath
       orderedBooks.push(book)
     }
-    assignFullPaths(node.children, nodePath, counter, orderedBooks)
   }
   return orderedBooks
 }
