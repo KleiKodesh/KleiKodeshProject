@@ -53,6 +53,8 @@ const props = defineProps<{
   bookHasTeamim: boolean
   // Set for books whose publisher forbids an editable export; the button is not rendered.
   exportRestricted?: boolean
+  // True while an export to Word runs; the button shows a spinner.
+  exportingToWord?: boolean
   filterGroups: CommentaryGroup[]
   relatedBooksLoaded: boolean
   // The book's alternate versions. Empty for most books, which hides the control.
@@ -477,9 +479,12 @@ defineExpose({ tocBtnRef })
       :class="{ collapsed: !toolbarButtonVisible('export-to-word') }"
       :inert="!toolbarButtonVisible('export-to-word')"
       :title="EXPORT_TO_WORD_LABEL"
+      :disabled="exportingToWord"
+      :aria-busy="exportingToWord"
       @click="$emit('exportToWord')"
     >
-      <BookViewExportToWordGlyph />
+      <span v-if="exportingToWord" class="export-spinner" />
+      <BookViewExportToWordGlyph v-else />
     </button>
     <!--
       Stands in for whatever the pane was too narrow to hold. It holds ONE place, at the
@@ -545,9 +550,11 @@ defineExpose({ tocBtnRef })
         v-if="isOverflowed('export-to-word')"
         role="menuitem"
         class="overflow-row"
+        :disabled="exportingToWord"
         @click="overflowOpen = false; $emit('exportToWord')"
       >
-        <BookViewExportToWordGlyph />
+        <span v-if="exportingToWord" class="export-spinner" />
+        <BookViewExportToWordGlyph v-else />
         <span>{{ EXPORT_TO_WORD_LABEL }}</span>
       </button>
       <button
@@ -858,5 +865,17 @@ button:disabled {
 }
 .diacritics-btn.state-2 {
   color: var(--diacritics-2);
+}
+.export-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: export-spin 0.8s linear infinite;
+}
+@keyframes export-spin {
+  to { transform: rotate(360deg); }
 }
 </style>
