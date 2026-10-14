@@ -28,6 +28,7 @@ import GlobalSearchDropdown from '@/features/global-search/GlobalSearchDropdown.
 import { useGlobalSearch, type FileSearchResult } from '@/features/global-search/useGlobalSearch'
 import { addinDisplayTitle } from '@/features/local-file-search/otzariaAddins'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 import { useAppShellPane } from '@/composables/useAppShellPane'
 import { restoreLocalFile, triggerHbDownload, hasNativeChromeTabs } from '@/webview-host/bridge'
 import { useLocalFileStore } from '@/stores/localFileStore'
@@ -94,7 +95,9 @@ const {
   resume: resumeSearch,
 } = useGlobalSearch(searchQuery)
 
-useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl] })
+// The wrapper is the inline bar; only the popup is fitted.
+useDropdownClose(wrapperRef, () => close(), { ignore: [dropdownEl], fitToViewport: false })
+useDropdownViewportFit(dropdownEl)
 
 // ── Recents list (dropdown fallback content) ──────────────────────────────────
 // Shown whenever the search has nothing to display: empty/short query, or a query

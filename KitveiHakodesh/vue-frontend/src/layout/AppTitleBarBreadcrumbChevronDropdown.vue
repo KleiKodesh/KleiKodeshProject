@@ -2,6 +2,7 @@
 import { ref, nextTick } from 'vue'
 import { IconChevronDown16Regular } from '@iconify-prerendered/vue-fluent'
 import { useDropdownClose } from '@/composables/useDropdownClose'
+import { useDropdownViewportFit } from '@/composables/useDropdownViewportFit'
 
 export interface BreadcrumbItem {
   id: number
@@ -28,7 +29,10 @@ const dropdownLeft = ref(0)
 const { justClosed } = useDropdownClose(wrapperRef, () => (isOpen.value = false), {
   toggleButton: toggleButtonRef,
   ignore: [dropdownRef],
+  // The wrapper sits inline in the breadcrumb; only the popup is fitted.
+  fitToViewport: false,
 })
+useDropdownViewportFit(dropdownRef)
 
 function onToggle(event: MouseEvent) {
   event.stopPropagation()
