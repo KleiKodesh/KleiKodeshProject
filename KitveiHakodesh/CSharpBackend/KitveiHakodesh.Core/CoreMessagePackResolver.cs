@@ -13,7 +13,8 @@ namespace KitveiHakodesh.Core
     /// Each host composes this with its own: the Service does
     /// <c>CompositeResolver.Create(KhsMsgPackResolver.Instance, CoreMessagePackResolver.Instance,
     /// StandardResolver.Instance)</c>. StandardResolver supplies the primitive and collection
-    /// formatters; it is AOT-safe.
+    /// formatters for primitives/collections
+    /// only — its reflection fallback for untagged types fails under AOT.
     /// </summary>
     [GeneratedMessagePackResolver]
     public partial class CoreMessagePackResolver

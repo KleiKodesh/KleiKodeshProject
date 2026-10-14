@@ -26,6 +26,8 @@
     <NoWarn>$(NoWarn);CA1416</NoWarn>
     <!-- For SIMD hot-path optimizations (Vector256/512 loads, hardware popcount). -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- The service publishes native AOT and links this lib: surface AOT/trim hazards here as warnings. -->
+    <IsAotCompatible Condition="'$(TargetFramework)'=='net10.0'">true</IsAotCompatible>
   </PropertyGroup>
 
   <ItemGroup>
