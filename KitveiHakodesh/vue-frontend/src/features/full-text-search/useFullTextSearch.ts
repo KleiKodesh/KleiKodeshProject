@@ -126,7 +126,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     if (resultsArrived) return
     resultsArrived = true
     if (stageTimer) { clearTimeout(stageTimer); stageTimer = null }
-    settledStageLabel.value = SEARCH_STAGE_LABELS.fetch
+    settledStageLabel.value = SEARCH_STAGE_LABELS.fetch ?? ''
   }
   onScopeDispose(clearStageLabel)
   /** Text for the stage indicator: generic "searching" until a stage settles. */
