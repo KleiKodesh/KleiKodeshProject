@@ -85,7 +85,9 @@ internal static partial class Program
         }
         builder.Services.AddHostedService<FtsIndexingStarter>();
         builder.Services.AddHostedService<CatalogTocIndexingStarter>();
-        builder.Services.AddHostedService<IdleMemoryTrimmer>();
+        // Singleton too, so the diagnostics endpoint can trigger a trim on the same instance.
+        builder.Services.AddSingleton<IdleMemoryTrimmer>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleMemoryTrimmer>());
         // Grows the bundled HebrewBooks catalog in the background. Checks twice a day and almost
         // always finds nothing to do - the interval between actual walks is a stamp inside the
         // catalog file, not a schedule here.

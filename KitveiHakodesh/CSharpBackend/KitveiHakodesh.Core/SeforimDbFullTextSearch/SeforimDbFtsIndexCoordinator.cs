@@ -74,8 +74,16 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// runs, so one query cannot come back ranked or rendered differently in the two apps.
     /// Enrichment needs corpus queries, hence the SeforimDbQueries.</summary>
     private SeforimDbFtsSearcher Searcher =>
-        _searcher ??= new SeforimDbFtsSearcher(new SeforimDbQueries(_dbPath));
+        _searcher ??= new SeforimDbFtsSearcher(_searcherQueries = new SeforimDbQueries(_dbPath));
     private SeforimDbFtsSearcher? _searcher;
+    /// <summary>The searcher's corpus queries, kept so an idle release can drop their catalog
+    /// cache (see <see cref="ReleaseIdleResources"/>).</summary>
+    private SeforimDbQueries? _searcherQueries;
+
+    /// <summary>One-shot searches (<see cref="Search"/>) in flight. Streaming searches are
+    /// tracked by <c>_sessions</c>; these are not, so they get their own counter. Changed
+    /// under <c>_lock</c> so <see cref="ReleaseIdleResources"/> can test-and-release atomically.</summary>
+    private int _activeOneShotSearches;
     // True when FTS_INDEX_PATH was supplied — use that index as-is, never build into it.
     private readonly bool _external;
 
@@ -162,7 +170,35 @@ public sealed class SeforimDbFtsIndexCoordinator
 
     /// <summary>True while background work is running (index build or live search
     /// sessions) — the idle memory trimmer must not run then.</summary>
-    public bool IsBusy => _isIndexing || !_sessions.IsEmpty;
+    public bool IsBusy => _isIndexing || !_sessions.IsEmpty || Volatile.Read(ref _activeOneShotSearches) > 0;
+
+    /// <summary>
+    /// Idle memory release: drops the open engine handle (the next search reopens it lazily
+    /// via <see cref="GetEngine"/>) and the search enrichment's cached catalog (reloaded on
+    /// the next search). Returns true if anything was released.
+    ///
+    /// Skipped while a build runs (the build publishes through the SAME engine instance —
+    /// see SeforimDbFtsEngine), or while any streaming or one-shot search is in flight. The
+    /// check and the release happen under <c>_lock</c>, and a one-shot search registers under
+    /// the same lock before it touches the engine; a streaming search registers in
+    /// <c>_sessions</c> before it touches the engine, so a release either sees it and skips,
+    /// or completes first and the search then opens a fresh engine.
+    ///
+    /// Note: under the FTS5 engine every search opens and disposes its own SQLite
+    /// connections (Pooling=false), so the engine object itself retains little; this mainly
+    /// matters for engines that keep segment handles open.
+    /// </summary>
+    public bool ReleaseIdleResources()
+    {
+        lock (_lock)
+        {
+            if (_isIndexing || !_sessions.IsEmpty || _activeOneShotSearches > 0) return false;
+            bool released = _engine?.IsOpen == true;
+            _engine?.Invalidate();
+            _searcherQueries?.ClearCatalogCache();
+            return released;
+        }
+    }
 
     private bool SegmentsExist()
     {
@@ -678,6 +714,7 @@ public sealed class SeforimDbFtsIndexCoordinator
         result.Ready = true;
         if (string.IsNullOrWhiteSpace(query)) return result;
 
+        lock (_lock) _activeOneShotSearches++;
         try
         {
             // Core's searcher yields finished batches; the one-shot path just collects them, so
@@ -696,6 +733,10 @@ public sealed class SeforimDbFtsIndexCoordinator
         {
             _log(FtsIndexLogLevel.Error, "FTS search failed", ex);
             result.Error = ex.Message;
+        }
+        finally
+        {
+            lock (_lock) _activeOneShotSearches--;
         }
         return result;
     }

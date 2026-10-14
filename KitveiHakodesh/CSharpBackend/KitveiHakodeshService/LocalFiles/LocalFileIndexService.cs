@@ -38,5 +38,13 @@ public sealed class LocalFileIndexService : IDisposable
 
     public void Warmup() => _coordinator.Warmup();
 
+    /// <summary>True while the local-file index is building, searching or applying a live
+    /// update — the idle memory trimmer must not run then.</summary>
+    public bool IsBusy => _coordinator.IsBusy;
+
+    /// <summary>Idle memory trim: close the Lucene index and its live watchers; reopens and
+    /// catches up from the USN journal on the next search (see Core).</summary>
+    public bool ReleaseIdleResources() => _coordinator.ReleaseIdleResources();
+
     public void Dispose() => _coordinator.Dispose();
 }

@@ -22,6 +22,9 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
 
+    /// <summary>Idle memory trim: drop the cached book/category catalog (see Core).</summary>
+    public void ClearCatalogCache() => _queries.ClearCatalogCache();
+
     /// <summary>
     /// Client-triggered warm-up — called by an app when IT loads (never at service boot; boot
     /// stays idle by design). Pays the one-time cold costs in the background so the user's first

@@ -147,9 +147,29 @@ namespace KitveiHakodesh.Core.SeforimDb
                 return cached;
 
             var dictionaries = ReadDictionaries(connection);
-            if (cacheKey != null) DictionaryBytesByDatabase[cacheKey] = dictionaries;
+            if (cacheKey != null)
+            {
+                // Evict the entries of the SAME file under an older write time / length (a
+                // library update replaced it in place): they can never be hit again, and each
+                // holds megabytes of dictionary bytes.
+                string filePrefix = cacheKey.Substring(0, cacheKey.IndexOf('|') + 1);
+                foreach (var key in DictionaryBytesByDatabase.Keys)
+                {
+                    if (key.StartsWith(filePrefix, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(key, cacheKey, StringComparison.OrdinalIgnoreCase))
+                        DictionaryBytesByDatabase.TryRemove(key, out _);
+                }
+                DictionaryBytesByDatabase[cacheKey] = dictionaries;
+            }
             return dictionaries;
         }
+
+        /// <summary>
+        /// Idle memory release: forgets every cached dictionary (multi-megabyte arrays, often on
+        /// the LOH). Thread-safe: codecs already built keep their own decompressors, and the next
+        /// <see cref="Create"/> simply re-reads `zstd_dict` once and re-caches it.
+        /// </summary>
+        public static void ClearDictionaryCache() => DictionaryBytesByDatabase.Clear();
 
         private static byte[][] ReadDictionaries(DbConnection connection)
         {
