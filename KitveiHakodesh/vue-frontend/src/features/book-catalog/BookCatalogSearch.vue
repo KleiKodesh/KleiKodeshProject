@@ -7,6 +7,7 @@ import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type { BooksView } from '@/stores/settingsStore'
+import { titleWithAuthor } from './titleWithAuthor'
 
 const props = defineProps<{
   items: SearchFsItem[]
@@ -59,7 +60,9 @@ watch(
 )
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc' ? `${item.book.title} ${item.tocPath}` : item.book.title
+  item.kind === 'toc'
+    ? `${item.book.title} ${item.tocPath}`
+    : titleWithAuthor(item.book.title, item.book.authors)
 
 function itemTooltip(item: SearchFsItem): string {
   const title = item.kind === 'toc' ? `${item.book.title} — ${item.tocPath}` : item.book.title
@@ -102,10 +105,7 @@ function selectListItem(i: number, event?: MouseEvent) {
     >
       <span class="icon"><IconBookRtl20 /></span>
       <span class="item-text">
-        <span class="item-title-row">
-          <span class="item-title">{{ itemTitle(item) }}</span>
-          <span v-if="item.book.authors" class="item-author-tag">{{ item.book.authors }}</span>
-        </span>
+        <span class="item-title">{{ itemTitle(item) }}</span>
         <span v-if="item.book.parentPath" class="item-path">{{ item.book.parentPath }}</span>
       </span>
     </div>
@@ -178,22 +178,6 @@ function selectListItem(i: number, event?: MouseEvent) {
   text-overflow: ellipsis;
   min-width: 0;
   flex-shrink: 1;
-}
-.item-title-row {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  overflow: hidden;
-  justify-content: space-between;
-}
-.item-author-tag {
-  font-size: 10px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--text-secondary) 12%, transparent);
-  border-radius: 4px;
-  padding: 1px 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
 }
 .item-path {
   font-size: 11px;

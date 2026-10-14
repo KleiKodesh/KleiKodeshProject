@@ -8,6 +8,7 @@ import type { FsItem } from './useBookCatalog'
 import type { CategoryNode } from '@/features/book-catalog/bookCatalogTree'
 import type { BookRow } from '@/webview-host/queries.types'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
+import { titleWithAuthor } from './titleWithAuthor'
 
 // Drop-in replacement for BookCatalogView.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the home page's card look.
@@ -27,9 +28,9 @@ function activateIndex(index: number, openInNewTab = false) {
     : emit('selectBook', item.book, openInNewTab)
 }
 
-/** Secondary line: book count for a folder, authors for a book. */
+/** Secondary line: book count for a folder; a book's author is in its title. */
 function getSecondaryLine(item: FsItem): string {
-  if (item.kind === 'book') return item.book.authors ?? ''
+  if (item.kind === 'book') return ''
   const count = item.node.subtreeBookIds?.length ?? 0
   return count ? `${count} ספרים` : ''
 }
@@ -37,7 +38,7 @@ function getSecondaryLine(item: FsItem): string {
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
-    title: item.kind === 'folder' ? item.node.title : item.book.title,
+    title: item.kind === 'folder' ? item.node.title : titleWithAuthor(item.book.title, item.book.authors),
     path: getSecondaryLine(item),
     icon: item.kind === 'folder' ? FOLDER_ICON : BOOK_ICON,
     color: item.kind === 'folder' ? 'var(--status-warning)' : '#c1440e',
@@ -126,5 +127,10 @@ defineExpose({
 }
 .is-focused :deep(.card) {
   background: var(--input-bg-focus);
+}
+/* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
+.catalog-cards :deep(.card-title) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>
