@@ -5,6 +5,7 @@ import HomeSuggestionCard from '@/features/home/HomeSuggestionCard.vue'
 import type { HomeSuggestionCard as CardData } from '@/features/home/homeSuggestionCard'
 import type { SearchFsItem } from './useBookCatalogSearch'
 import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
+import { titleWithAuthor } from './titleWithAuthor'
 
 // Drop-in replacement for BookCatalogSearch.Tiles.vue: same props, emits and
 // exposed keyboard hook, rendered with the browse view's card look
@@ -17,13 +18,16 @@ const CARD_CELL = ':scope > *'
 const BOOK_ICON = markRaw(IconBookRtl20)
 
 const itemTitle = (item: SearchFsItem) =>
-  item.kind === 'toc' ? `${item.book.title} ${item.tocPath}` : item.book.title
+  item.kind === 'toc'
+    ? `${item.book.title} ${item.tocPath}`
+    : titleWithAuthor(item.book.title, item.book.authors)
 
+// Same shape as the search list row: author in the title, folder path below.
 const cards = computed((): CardData[] =>
   props.items.map((item, i) => ({
     key: item.uid,
     title: itemTitle(item),
-    path: item.book.authors ?? '',
+    path: item.book.parentPath ?? '',
     icon: BOOK_ICON,
     color: '#c1440e',
     open: (openInNewTab) => {
@@ -98,5 +102,10 @@ defineExpose({
 }
 .is-focused :deep(.card) {
   background: var(--input-bg-focus);
+}
+/* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
+.catalog-cards :deep(.card-title) {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 </style>
