@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEventListener, useMediaQuery } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
-import { useFullTextSearch } from './useFullTextSearch'
+import { useFullTextSearch, SEARCH_STAGE_LABELS } from './useFullTextSearch'
 import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchFilters'
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -61,6 +61,7 @@ watch(
 const {
   results,
   isSearching,
+  currentStage,
   hasSearched,
   executedQuery,
   searchError,
@@ -129,6 +130,8 @@ const showAdvancedCard = computed(
   () => !hasSearched.value && !isSearching.value && !executedQuery.value && !isAdvancedOpen.value
      && !indexingState.value.dbNotFound && !searchError.value,
 )
+
+const cardBarSlotId = `fts-card-bar-${String(tabId).replace(/[^\w-]/g, '_')}`
 
 const isAdvancedActive = computed(
   () => maxWordDistance.value !== 10 || requireOrdered.value
@@ -445,6 +448,9 @@ onBeforeUnmount(() => {
 <template>
   <div class="search-page">
     <div class="search-bar-dock">
+      <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
+           instance (no remount), so typing, focus and refs survive the hop back to the top. -->
+      <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showAdvancedCard">
       <FullTextSearchBar
         ref="searchBarRef"
         v-model:search-query="searchQuery"
@@ -462,6 +468,13 @@ onBeforeUnmount(() => {
         @toggle-advanced="isAdvancedOpen = !isAdvancedOpen"
         @clear="onClearSearch"
       />
+      </Teleport>
+      <div
+        v-if="isSearching && currentStage && SEARCH_STAGE_LABELS[currentStage]"
+        class="search-stage-label"
+        dir="rtl"
+        aria-live="polite"
+      >{{ SEARCH_STAGE_LABELS[currentStage] }}...</div>
       <FullTextSearchAdvancedPanel
         v-if="isAdvancedOpen"
         ref="advancedPanelRef"
@@ -482,7 +495,10 @@ onBeforeUnmount(() => {
     </div>
 
     <div class="results-area">
-      <div v-if="showAdvancedCard" class="advanced-card-wrap">
+      <!-- v-show, not v-if: the Teleport target must stay in the DOM while the bar moves out. -->
+      <div v-show="showAdvancedCard" class="advanced-card-wrap">
+        <div class="advanced-card">
+        <div :id="cardBarSlotId" class="card-bar-slot" />
         <FullTextSearchAdvancedPanel
           as-card
           :max-word-distance="maxWordDistance"
@@ -498,8 +514,9 @@ onBeforeUnmount(() => {
           @update:expand-related="expandRelated = $event"
           @update:grammar-wrap="grammarWrap = $event"
         />
+        </div>
       </div>
-      <div v-else class="results-list-wrap">
+      <div v-if="!showAdvancedCard" class="results-list-wrap">
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
@@ -542,6 +559,14 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.search-stage-label {
+  padding: 2px 12px;
+  font-size: 0.8em;
+  opacity: 0.65;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .search-page {
   display: flex;
   flex-direction: column;
@@ -575,6 +600,28 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   padding: 16px 0;
+}
+.advanced-card {
+  display: flex;
+  flex-direction: column;
+  width: 380px;
+  max-width: calc(100% - 32px);
+  max-height: 100%;
+  min-height: 0;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
+  overflow: hidden;
+}
+/* The card owns the frame; the panel inside is just its lower section. */
+.advanced-card :deep(.advanced-panel.as-card) {
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 .results-list-wrap {
   flex: 1;
