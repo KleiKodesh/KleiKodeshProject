@@ -123,11 +123,15 @@ namespace FtsLib.Fts5
         /// content is fetched one batch of <see cref="ContentBatchSize"/> ids at a time. Nothing
         /// is collected up front, so the first results cost one batch however broad the query.
         /// </summary>
+        /// <param name="onStage">Optional progress hook, fired on the ENUMERATING thread with a
+        /// stable ASCII stage key ("parse", "expand", "lookup", "fetch") as the pipeline moves.</param>
         public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
-                                                IEnumerable<int> filterIds = null, CancellationToken ct = default)
+                                                IEnumerable<int> filterIds = null, CancellationToken ct = default,
+                                                Action<string> onStage = null)
         {
-            var plan = Plan(query, expandKetiv, filterIds, ct);
+            var plan = Plan(query, expandKetiv, filterIds, ct, onStage);
             if (plan == null) yield break;
+            onStage?.Invoke("lookup");
             var prepared = PreparedQueryGroups.FromGroups(plan.MatchedGroups);
 
             IFtsCorpus corpus = null;   // opened on the first hit, like SearchPipeline
@@ -140,6 +144,7 @@ namespace FtsLib.Fts5
                     batch.Add(id);
                     bool capReached = cap > 0 && ++taken >= cap;
                     if (batch.Count < ContentBatchSize && !capReached) continue;
+                    if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
                     foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
                     batch.Clear();
@@ -147,6 +152,7 @@ namespace FtsLib.Fts5
                 }
                 if (batch.Count > 0)
                 {
+                    if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
                     foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
                 }
@@ -174,8 +180,10 @@ namespace FtsLib.Fts5
         }
 
         /// <summary>Parse + expand. Null when the query can match nothing.</summary>
-        QueryPlan Plan(string query, bool expandKetiv, IEnumerable<int> filterIds, CancellationToken ct)
+        QueryPlan Plan(string query, bool expandKetiv, IEnumerable<int> filterIds, CancellationToken ct,
+                       Action<string> onStage = null)
         {
+            onStage?.Invoke("parse");
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty) return null;
 
@@ -187,6 +195,7 @@ namespace FtsLib.Fts5
                 if (filter.Count == 0) return null;
             }
 
+            onStage?.Invoke("expand");
             var groups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
             foreach (var group in parsed.Groups)
             {

@@ -78,28 +78,35 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             bool requireOrdered,
             int contextWords,
             bool expandKetiv,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            Action<string>? onStage = null)
         {
             if (engine == null) throw new ArgumentNullException(nameof(engine));
             var index = engine.Index;
             if (string.IsNullOrWhiteSpace(query)) yield break;
 
+            // Only stage CHANGES are reported: the label follows the stream back to
+            // fetch/snippets/enrich per batch without re-sending a stage twice in a row.
+            string? last = null;
+            Action<string>? stage = onStage == null ? null : s => { if (s != last) { last = s; onStage(s); } };
+
             var batch = new List<SearchResult>(SnippetBatchSize);
 
-            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken))
+            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken, onStage: stage))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 batch.Add(hit);
                 if (batch.Count < SnippetBatchSize) continue;
 
-                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, cancellationToken);
+                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, cancellationToken, stage);
                 batch.Clear();
                 if (built.Count > 0) yield return built;
+                stage?.Invoke("fetch");   // engine only reports its first fetch
             }
 
             if (batch.Count > 0)
             {
-                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, cancellationToken);
+                var built = BuildBatch(index, batch, requireOrdered, contextWords, maxWordDistance, cancellationToken, stage);
                 if (built.Count > 0) yield return built;
             }
         }
@@ -116,8 +123,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             bool requireOrdered,
             int contextWords,
             int maxWordDistance,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            Action<string>? onStage = null)
         {
+            onStage?.Invoke("snippets");   // before Parallel.For: never call onStage from a worker
             var built = new FtsHit?[results.Count];
             var windowWords = new int[results.Count];   // 0 = the hit did not pass
 
@@ -133,6 +142,7 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             // The tail — embellish the short snippets, then enrich — is the same work a host
             // that batches on its own rhythm needs, so it lives in one place.
+            onStage?.Invoke("enrich");
             FinishBatchCore(index, results, built, windowWords, requireOrdered, contextWords,
                             cancellationToken);
 

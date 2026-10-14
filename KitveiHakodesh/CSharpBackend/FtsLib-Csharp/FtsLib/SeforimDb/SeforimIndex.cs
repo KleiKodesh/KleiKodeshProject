@@ -442,10 +442,10 @@ namespace FtsLib.SeforimDb
         /// of merely trimming its output. Null = search everything; an empty
         /// collection matches nothing.</param>
         public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
-            IEnumerable<int> filterIds = null, CancellationToken ct = default)
+            IEnumerable<int> filterIds = null, CancellationToken ct = default, Action<string> onStage = null)
         {
             var lease = AcquireSearchLease(out var livePaths);
-            return SearchPipeline.Search(query, _indexPath, _openCorpus, livePaths, lease, cap, expandKetiv, filterIds, ct);
+            return SearchPipeline.Search(query, _indexPath, _openCorpus, livePaths, lease, cap, expandKetiv, filterIds, ct, onStage);
         }
 
         /// <param name="filterIds">Optional line-ID keep-set — see <see cref="Search"/>.</param>

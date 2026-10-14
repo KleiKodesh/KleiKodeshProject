@@ -83,5 +83,8 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public List<FtsHit> Results { get; set; } = new List<FtsHit>();
         public bool Done { get; set; }
         public string? Error { get; set; }
+        /// <summary>What the engine is doing right now (stable ASCII key: validate, rewrite,
+        /// parse, expand, lookup, fetch, snippets, enrich). Stage-only frames carry no results.</summary>
+        public string? Stage { get; set; }
     }
 }

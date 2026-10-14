@@ -52,8 +52,11 @@ namespace FtsLib.SeforimDb
             int               cap = 0,
             bool              expandKetiv = false,
             IEnumerable<int>  filterIds = null,
-            CancellationToken ct  = default)
+            CancellationToken ct  = default,
+            Action<string>    onStage = null)
         {
+            // onStage fires on the ENUMERATING thread (this iterator is lazy).
+            onStage?.Invoke("parse");
             var parsed = QueryParser.Parse(query);
             if (parsed.IsEmpty)
             {
@@ -79,6 +82,7 @@ namespace FtsLib.SeforimDb
                 var groups         = new List<IEnumerable<string>>(parsed.Groups.Count);
                 var expandedGroups = new List<IReadOnlyCollection<string>>(parsed.Groups.Count);
 
+                onStage?.Invoke("expand");
                 foreach (var group in parsed.Groups)
                 {
                     ct.ThrowIfCancellationRequested();
@@ -94,6 +98,7 @@ namespace FtsLib.SeforimDb
 
                 matchedGroups = expandedGroups;
 
+                onStage?.Invoke("lookup");
                 foreach (var id in reader.Search(groups, filter, ct))
                 {
                     ct.ThrowIfCancellationRequested();
@@ -120,6 +125,7 @@ namespace FtsLib.SeforimDb
             // byte-identical to the single-corpus fetch. Otherwise each contiguous
             // run is fetched from its corpus DB by source-local id and yielded
             // under its app-visible docId, preserving the ascending-id contract.
+            onStage?.Invoke("fetch");
             var runs = docMap.SplitBySource(ids);
             if (runs == null)
             {

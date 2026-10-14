@@ -45,11 +45,12 @@ namespace FtsLib.Fts5
         // ── Search ────────────────────────────────────────────────────
 
         public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
-                                                IEnumerable<int> filterIds = null, CancellationToken ct = default)
+                                                IEnumerable<int> filterIds = null, CancellationToken ct = default,
+                                                Action<string> onStage = null)
         {
             if (!IsBuilt) yield break;
             using var engine = new Fts5SearchEngine(_indexPath, _openCorpus);
-            foreach (var result in engine.Search(query, cap, expandKetiv, filterIds, ct))
+            foreach (var result in engine.Search(query, cap, expandKetiv, filterIds, ct, onStage))
                 yield return result;
         }
 

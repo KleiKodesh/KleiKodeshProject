@@ -7,7 +7,7 @@
  * named pipe. Aborting the stream is the cancel signal, and the service itself supersedes the
  * previous search when a new one starts. Hits arrive fully enriched (bookId + tocText).
  */
-import { ref, shallowRef, watch } from 'vue'
+import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { serviceStream } from '@/webview-host/serviceClient'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
@@ -36,6 +36,20 @@ interface SearchStreamChunk {
   results: FullTextSearchResult[]
   done: boolean
   error?: string
+  /** Stage-only frame: what the engine is doing right now (stable ASCII key). */
+  stage?: string
+}
+
+/** Short labels for the service's search stage keys. Unknown keys show nothing. */
+export const SEARCH_STAGE_LABELS: Record<string, string> = {
+  validate: 'בודק את החיפוש',
+  rewrite: 'מוסיף צורות קרובות',
+  parse: 'מפענח את השאילתה',
+  expand: 'מרחיב מונחים',
+  lookup: 'מחפש באינדקס',
+  fetch: 'טוען טקסטים',
+  snippets: 'בונה קטעים',
+  enrich: 'משלים פרטי תוצאות',
 }
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
@@ -81,6 +95,33 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   const results = shallowRef<FullTextSearchResult[]>([])
   const isSearching = ref(false)
+  /** Live stage key of the running search; null when idle, done, failed or cancelled. */
+  const currentStage = ref<string | null>(null)
+  /** Stage label shown only once a stage has lasted 1s; '' until then. */
+  const settledStageLabel = ref('')
+  let stageTimer: ReturnType<typeof setTimeout> | null = null
+  function clearStageLabel() {
+    if (stageTimer) { clearTimeout(stageTimer); stageTimer = null }
+    settledStageLabel.value = ''
+    shownStage = null
+  }
+  /** Stage key whose label is on screen; when it ends, the next stage shows at once. */
+  let shownStage: string | null = null
+  function enterStage(stage: string) {
+    const shownJustEnded = shownStage !== null && shownStage === currentStage.value && stage !== shownStage
+    currentStage.value = stage
+    if (stageTimer) clearTimeout(stageTimer)
+    shownStage = null
+    // Only the stage right after a slow (1s-settled) one shows at once; it does not chain.
+    if (shownJustEnded && SEARCH_STAGE_LABELS[stage]) settledStageLabel.value = SEARCH_STAGE_LABELS[stage]
+    stageTimer = setTimeout(() => {
+      stageTimer = null
+      if (currentStage.value === stage && SEARCH_STAGE_LABELS[stage]) { shownStage = stage; settledStageLabel.value = SEARCH_STAGE_LABELS[stage] }
+    }, 1000)
+  }
+  onScopeDispose(clearStageLabel)
+  /** Text for the stage indicator: generic "searching" until a stage settles. */
+  const stageLabel = computed(() => isSearching.value ? (settledStageLabel.value || 'מחפש') : '')
   const hasSearched = ref(false)
   const executedQuery = ref('')
   const searchError = ref<SearchFailReason | null>(null)
@@ -201,6 +242,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       _streamAbort = null
     }
     isSearching.value = false
+    currentStage.value = null
+    clearStageLabel()
   }
 
   async function executeSearch(q: string) {
@@ -253,6 +296,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
       for await (const chunk of stream) {
         if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
+        if (chunk.stage) enterStage(chunk.stage)
         if (chunk.ready === false) {
           searchError.value = 'indexNotReady'
           return
@@ -294,7 +338,11 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       }
     } finally {
       if (_streamAbort === abort) _streamAbort = null
-      if (executedQuery.value === q) isSearching.value = false
+      if (executedQuery.value === q) {
+        isSearching.value = false
+        currentStage.value = null
+        clearStageLabel()
+      }
     }
   }
 
@@ -336,6 +384,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   return {
     results,
     isSearching,
+    currentStage,
+    stageLabel,
     hasSearched,
     executedQuery,
     searchError,
