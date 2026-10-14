@@ -42,6 +42,12 @@
     <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
 
+  <!-- GCConserveMemory has no MSBuild property, and PublishAot ignores
+       runtimeconfig.template.json, so it is set here. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="System.GC.ConserveMemory" Value="9" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- 10.0.9 (e_sqlite3), NOT 11.x: FtsLib's segment writer does File.Move on a just-written
          SQLite file; 11.x's SourceGear provider keeps the handle open (pooling) and the move
