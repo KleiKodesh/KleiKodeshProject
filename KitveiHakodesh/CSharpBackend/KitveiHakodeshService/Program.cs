@@ -78,11 +78,12 @@ internal static partial class Program
         if (!WindowsServiceMode.IsWindowsService)
         {
             // The loopback HTTP host is the dev browser's door; a Windows service has no dev
-            // browser and should open no port. The owner watcher stops a console instance once no
-            // program that uses it is running any more (Http/OwnerWatcher).
+            // browser and should open no port.
             builder.Services.AddHostedService<HttpHostServer>();
-            builder.Services.AddHostedService<OwnerWatcher>();
         }
+        // Stops the service (console or installed) once no program that uses it is running any
+        // more; hosts restart it on demand (Http/OwnerWatcher).
+        builder.Services.AddHostedService<OwnerWatcher>();
         builder.Services.AddHostedService<FtsIndexingStarter>();
         builder.Services.AddHostedService<CatalogTocIndexingStarter>();
         // Singleton too, so the diagnostics endpoint can trigger a trim on the same instance.
