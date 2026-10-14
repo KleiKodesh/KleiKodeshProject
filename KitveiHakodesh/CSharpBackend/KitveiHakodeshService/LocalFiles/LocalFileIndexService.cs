@@ -42,6 +42,8 @@ public sealed class LocalFileIndexService : IDisposable
     /// update — the idle memory trimmer must not run then.</summary>
     public bool IsBusy => _coordinator.IsBusy;
 
+    public string DescribeResidentState() => _coordinator.DescribeResidentState();
+
     /// <summary>Idle memory trim: close the Lucene index and its live watchers; reopens and
     /// catches up from the USN journal on the next search (see Core).</summary>
     public bool ReleaseIdleResources() => _coordinator.ReleaseIdleResources();

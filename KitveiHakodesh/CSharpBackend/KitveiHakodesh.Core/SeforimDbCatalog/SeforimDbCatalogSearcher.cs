@@ -117,6 +117,13 @@ public sealed partial class SeforimDbCatalogIndex
         lock (_lock) return _reader?.NumDocs ?? 0;
     }
 
+    /// <summary>What this index keeps resident right now (diagnostics).</summary>
+    public string DescribeResidentState()
+    {
+        lock (_lock)
+            return $"reader={(_reader is null ? "closed" : "open")} variants={(_variants is null ? "none" : "built")} writer={(_writer is null ? "none" : "open")}";
+    }
+
     /// <summary>
     /// Drop the open reader/searcher so their retained state (segment term indexes,
     /// doc-values, materialized stored-field buffers) is freed while the service is idle

@@ -34,9 +34,17 @@ public sealed class HttpHostServer(
     Dispatcher dispatcher, HttpHostState state, LocalFileGrants localFileGrants,
     IdleMemoryTrimmer trimmer, KitveiHakodeshService.SeforimDb.FullTextSearchService fts,
     KitveiHakodeshService.Catalog.CatalogTocSearchService catalogToc,
+    KitveiHakodeshService.LocalFiles.LocalFileIndexService localFiles,
     ILogger<HttpHostServer> logger) : BackgroundService
 {
     private TcpListener? _listener;
+
+    private (string, string)[] DiagComponents() =>
+    [
+        ("catalog TOC index", catalogToc.DescribeResidentState()),
+        ("full-text search", fts.DescribeResidentState()),
+        ("local-file index", localFiles.DescribeResidentState()),
+    ];
 
     private static readonly bool DiagTrimEnabled =
         Environment.GetEnvironmentVariable("KHS_DIAG_TRIM") is "1" or "true";
@@ -167,10 +175,10 @@ public sealed class HttpHostServer(
                     string report = "";
                     if (req.Path == "/khs-diag/trim" && DiagTrimEnabled)
                     {
-                        report = MemoryDiagnostics.Report(fts.IsBusy, catalogToc.IsBusy) + "\n== after trim ==\n";
+                        report = MemoryDiagnostics.Report(fts.IsBusy, catalogToc.IsBusy, DiagComponents()) + "\n== after trim ==\n";
                         trimmer.TrimNow();
                     }
-                    report += MemoryDiagnostics.Report(fts.IsBusy, catalogToc.IsBusy);
+                    report += MemoryDiagnostics.Report(fts.IsBusy, catalogToc.IsBusy, DiagComponents());
                     await HttpProtocol.WriteBufferedAsync(stream, 200, "OK", "text/plain; charset=utf-8",
                         Encoding.UTF8.GetBytes(report), req.Origin, ct);
                     return;

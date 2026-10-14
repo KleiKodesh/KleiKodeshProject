@@ -58,6 +58,8 @@ public sealed class CatalogTocSearchService
     /// fight it.</summary>
     public bool IsBusy => _coordinator.IsIndexing;
 
+    public string DescribeResidentState() => _coordinator.DescribeResidentState();
+
     /// <summary>Release the idle Lucene reader during an idle memory trim (see Core).</summary>
     public void ReleaseIdleResources()
     {

@@ -47,6 +47,17 @@ namespace FtsLib.SeforimDb
             return _builder;
         }
 
+        // A builder's scratch buffers grow to the longest line it has seen and never shrink;
+        // as a [ThreadStatic] on pool threads it would hold them for the life of the process
+        // (measured: 2 x 2 MB token arrays after one search hit a huge line). Past this size,
+        // drop the builder after the call so only ordinary-sized buffers stay cached.
+        private const int MaxRetainedContentLength = 8192;
+
+        private static void ReleaseBuilderIfOversized(string content)
+        {
+            if (content.Length > MaxRetainedContentLength) _builder = null;
+        }
+
         // ── Primary path: content already in hand ────────────────────
 
         /// <summary>
@@ -68,6 +79,7 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, queryGroups, requireOrdered, originalGroupCount);
+            ReleaseBuilderIfOversized(content);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 
@@ -88,6 +100,7 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, prepared, requireOrdered, originalGroupCount);
+            ReleaseBuilderIfOversized(content);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 
@@ -122,7 +135,9 @@ namespace FtsLib.SeforimDb
             sb.Append(content);
             if (!string.IsNullOrEmpty(nextContent)) sb.Append(' ').Append(nextContent);
 
-            var inner = GetBuilder(contextWords).Build(sb.ToString(), prepared, requireOrdered, originalGroupCount);
+            string joined = sb.ToString();
+            var inner = GetBuilder(contextWords).Build(joined, prepared, requireOrdered, originalGroupCount);
+            ReleaseBuilderIfOversized(joined);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 
@@ -135,6 +150,7 @@ namespace FtsLib.SeforimDb
                 return SnippetResult.NoMatch;
 
             var inner = GetBuilder(contextWords).Build(content, queryTerms);
+            ReleaseBuilderIfOversized(content);
             return new SnippetResult(inner.Html, inner.Score, inner.WordDistance, inner.IsMatch, inner.WindowWordCount);
         }
 

@@ -375,6 +375,9 @@ public sealed class LocalFileIndexCoordinator : IDisposable
         }
     }
 
+    /// <summary>What the local-file index keeps resident right now (diagnostics).</summary>
+    public string DescribeResidentState() => _index is null ? "closed" : "open (writer + reader + live watchers)";
+
     /// <summary>
     /// Idle memory release: closes the Lucene writer + reader (segment term indexes, stored-field
     /// buffers, the writer's RAM buffer) and stops the live USN watcher threads. Returns true if
