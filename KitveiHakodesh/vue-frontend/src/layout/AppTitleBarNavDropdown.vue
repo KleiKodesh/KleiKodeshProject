@@ -105,7 +105,8 @@ function onPopOut() {
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === index }"
       data-nav-item
-      :title="`${item.label} (${item.shortcut})`"
+      :title="`${item.label} (${item.shortcut})
+${item.description}`"
       @click="onTap(item.label)"
     >
       <span class="nav-icon">
@@ -119,7 +120,8 @@ function onPopOut() {
       class="nav-row"
       :class="{ 'nav-row--focused': focusedIndex === menuRowIndex('settings') }"
       data-nav-item
-      :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})`"
+      :title="`${APP_NAV_SETTINGS_ITEM.label} (${APP_NAV_SETTINGS_ITEM.shortcut})
+${APP_NAV_SETTINGS_ITEM.description}`"
       @click="onTap(APP_NAV_SETTINGS_ITEM.label)"
     >
       <span class="nav-icon"><component :is="APP_NAV_SETTINGS_ITEM.icon" /></span>

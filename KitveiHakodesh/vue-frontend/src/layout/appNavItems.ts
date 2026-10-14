@@ -19,22 +19,24 @@ export interface AppNavItem {
   /** Undefined means "no explicit colour" - the icon inherits the surrounding text colour. */
   color: string | undefined
   shortcut: string
+  /** One short line on what the destination is for (tooltip / home card subtitle). */
+  description: string
 }
 
-function navItem(label: string, iconKey: DocumentIconKey, shortcut: string): AppNavItem {
+function navItem(label: string, iconKey: DocumentIconKey, shortcut: string, description: string): AppNavItem {
   const icon = documentIcon(iconKey)
-  return { label, icon: icon.icon24, color: icon.color || undefined, shortcut }
+  return { label, icon: icon.icon24, color: icon.color || undefined, shortcut, description }
 }
 
 export const APP_NAV_ITEMS: AppNavItem[] = [
-  navItem('קטלוג הספרים', 'library', 'Ctrl+1'),
-  navItem('חיפוש', 'search', 'Ctrl+2'),
-  navItem('היברו-בוקס', 'hbooks', 'Ctrl+3'),
-  navItem('פתח קובץ', 'folder', 'Ctrl+4'),
-  navItem('חיפוש קבצים', 'fileSearch', 'Ctrl+5'),
-  navItem('מילון', 'dict', 'Ctrl+6'),
-  navItem('לוח שנה', 'calendar', 'Ctrl+7'),
-  navItem('מידות ושיעורים', 'ruler', 'Ctrl+8'),
+  navItem('קטלוג הספרים', 'library', 'Ctrl+1', 'עיון בספרים לפי קטגוריות'),
+  navItem('חיפוש', 'search', 'Ctrl+2', 'חיפוש טקסט מלא בכל הספרים'),
+  navItem('היברו-בוקס', 'hbooks', 'Ctrl+3', 'ספרים סרוקים מאתר היברו-בוקס'),
+  navItem('פתח קובץ', 'folder', 'Ctrl+4', 'פתיחת קובץ או תיקייה מהמחשב'),
+  navItem('חיפוש קבצים', 'fileSearch', 'Ctrl+5', 'חיפוש מסמכים במחשב'),
+  navItem('מילון', 'dict', 'Ctrl+6', 'פירושי מילים בעברית וארמית'),
+  navItem('לוח שנה', 'calendar', 'Ctrl+7', 'תאריך עברי וזמני היום'),
+  navItem('מידות ושיעורים', 'ruler', 'Ctrl+8', 'המרת מידות ושיעורים הלכתיים'),
 ]
 
 /**
@@ -45,4 +47,4 @@ export const APP_NAV_ITEMS: AppNavItem[] = [
  */
 
 /** Settings sits below a divider in both surfaces, so it is not part of the list above. */
-export const APP_NAV_SETTINGS_ITEM: AppNavItem = navItem('הגדרות', 'settings', 'F1')
+export const APP_NAV_SETTINGS_ITEM: AppNavItem = navItem('הגדרות', 'settings', 'F1', 'התאמת התוכנה להעדפותיך')
