@@ -94,17 +94,6 @@ watch(
   { immediate: true },
 )
 
-// A category to open at, stamped on the tab by a home folder card. One-shot like
-// catalogQuery; re-tried when the catalog finishes loading (ROOT changes), since a
-// cold start stamps it before the categories exist.
-watch(
-  [() => paneNavigation.activeTab.catalogCategoryId, ROOT],
-  ([categoryId]) => {
-    if (categoryId === undefined) return
-    if (openCategory(categoryId)) paneNavigation.updateActiveTab({ catalogCategoryId: undefined })
-  },
-  { immediate: true },
-)
 
 // ── Diagnostics (auto-runs when a bitness-mismatch error is detected) ─────────
 
@@ -256,8 +245,26 @@ function onGoHome() {
   focusSearchInput()
 }
 
+// A category to open at, stamped on the tab by a home folder card. One-shot like
+// catalogQuery; re-tried when the catalog finishes loading (ROOT changes), since a
+// cold start stamps it before the categories exist. Arriving at a folder is like
+// entering one: the bar shows the path, not the field.
+watch(
+  [() => paneNavigation.activeTab.catalogCategoryId, ROOT],
+  ([categoryId]) => {
+    if (categoryId === undefined) return
+    if (!openCategory(categoryId)) return
+    paneNavigation.updateActiveTab({ catalogCategoryId: undefined })
+    editingSearch.value = false
+    focusSearchInput()
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   load()
+  // Already at a folder (a home folder card) — keep the path showing.
+  if (path.value.length > 1) return
   // Open with the field ready to type in — the catalog is a place you usually
   // arrive at looking for something. openSearch (not a bare focus call) because
   // the input only exists while showSearch is true: the default is the crumbs, so
