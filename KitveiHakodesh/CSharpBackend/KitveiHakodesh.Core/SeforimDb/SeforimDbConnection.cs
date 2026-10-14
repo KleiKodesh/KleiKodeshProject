@@ -77,7 +77,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// not merely return compressed bytes, they fail outright.
         /// </summary>
         private SeforimDbSchema SchemaOf(SqliteConnection connection)
-            => SeforimDbSchema.ForDatabase(connection, _databasePath);
+            => SeforimDbSchema.ForDatabase(connection, _databasePath!);
 
         /// <summary>
         /// A codec for decoding line content read over this connection.
