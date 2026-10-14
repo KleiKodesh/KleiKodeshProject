@@ -90,6 +90,8 @@ function onContextWordsInput(event: Event) {
         />
       </div>
 
+      <div class="option-separator" />
+
       <!-- Order mode -->
       <div class="option-row">
         <span class="option-label">סדר מילים לפי שאילתא</span>
@@ -132,6 +134,8 @@ function onContextWordsInput(event: Event) {
           >כן</button>
         </div>
       </div>
+
+      <div class="option-separator" />
 
       <!-- Related-forms expansion (inflections / vetted synonyms / Targum bridge) -->
       <div class="option-row">
@@ -291,6 +295,14 @@ function onContextWordsInput(event: Event) {
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--border-color) transparent;
+}
+.option-separator {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+  flex-shrink: 0;
+  transform: scaleY(0.5);
+  opacity: 0.7;
 }
 .option-row {
   display: flex;
