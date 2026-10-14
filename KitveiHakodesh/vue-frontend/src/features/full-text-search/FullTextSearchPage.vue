@@ -450,7 +450,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="search-page">
-    <div class="search-bar-dock">
+    <!-- Hidden while the clean-page card holds the bar, so the empty dock takes no room. -->
+    <div v-show="!showAdvancedCard" class="search-bar-dock">
       <!-- On the clean page the bar lives inside the centered card; Teleport moves the SAME
            instance (no remount), so typing, focus and refs survive the hop back to the top. -->
       <Teleport defer :to="`#${cardBarSlotId}`" :disabled="!showAdvancedCard">
@@ -472,17 +473,6 @@ onBeforeUnmount(() => {
         @clear="onClearSearch"
       />
       </Teleport>
-      <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
-      <div class="search-stage-row" dir="rtl" aria-live="polite">
-        <template v-if="isSearching">
-          {{ stageLabel }}
-          <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
-        </template>
-        <template v-else-if="results.length">
-          <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
-          תוצאות
-        </template>
-      </div>
       <FullTextSearchAdvancedPanel
         v-if="isAdvancedOpen"
         ref="advancedPanelRef"
@@ -525,6 +515,19 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div v-if="!showAdvancedCard" class="results-list-wrap">
+        <!-- Inside the list column (not the top dock) so the filter side panel, a sibling
+             column, runs the full height beside it, and the advanced dropdown covers it. -->
+        <!-- Always reserved (fixed height) so the results never jump when the text hides. -->
+        <div class="search-stage-row" dir="rtl" aria-live="polite">
+          <template v-if="isSearching">
+            {{ stageLabel }}
+            <span v-if="filteredResults.length" class="search-stage-count">{{ filteredResults.length.toLocaleString() }}</span>
+          </template>
+          <template v-else-if="results.length">
+            <span class="search-stage-count">{{ filteredResults.length.toLocaleString() }}<template v-if="filteredResults.length < results.length"> / {{ results.length.toLocaleString() }}</template></span>
+            תוצאות
+          </template>
+        </div>
         <FullTextSearchResultsList
           ref="resultsListRef"
           :results="filteredResults"
@@ -568,11 +571,16 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .search-stage-row {
+  /* Text sits at the left edge (the row is RTL, so `end` = left). */
+  text-align: end;
   height: 14px;
+  flex-shrink: 0;
   line-height: 14px;
-  padding: 0 12px;
+  /* Physical: extra inset on the left nudges the left-aligned text rightward. */
+  padding: 0 12px 0 18px;
   font-size: 11px;
   color: var(--text-secondary);
+  opacity: 0.75;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -603,36 +611,58 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  /* z-index without position:relative on the results area below means the dock's
-     popups (advanced panel, sort dropdown) paint over the results list. */
-  z-index: 5;
+  /* The results area has no stacking context, so its filter shell (z-index 10) competes
+     with this dock directly: stay above it so the dock's popups (advanced panel, sort
+     dropdown) paint over both the results list and the filter side panel. */
+  z-index: 11;
 }
+/* Same frame as the setup wizard (.wizard-card-outer / .wizard-card in
+   settings/SetupWizard.vue) by agreement, not shared code: keep them in step. The outer
+   owns the centred max-width and gutters; the card fills the full height left. */
 .advanced-card-wrap {
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px 0;
-}
-.advanced-card {
+  min-width: 0;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 20px 16px;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  width: 380px;
-  max-width: calc(100% - 32px);
-  max-height: 100%;
+}
+.advanced-card {
+  flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
-  overflow: hidden;
+}
+@media (max-width: 600px) {
+  .advanced-card-wrap {
+    max-width: 100%;
+    padding: 0;
+  }
+  .advanced-card {
+    border: none;
+    border-radius: 0;
+  }
+}
+/* Room around the bar inside the card (TopSearchBar's own 8px/6px is tuned for the
+   page edge, too tight in the card). */
+.card-bar-slot {
+  flex-shrink: 0;
+  padding: 4px 0;
 }
 /* The card owns the frame; the panel inside is just its lower section. */
 .advanced-card :deep(.advanced-panel.as-card) {
   width: 100%;
   max-width: 100%;
   min-height: 0;
+  flex: 1 1 auto;
   border: none;
   border-radius: 0;
   box-shadow: none;
