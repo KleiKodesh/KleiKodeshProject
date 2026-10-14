@@ -226,7 +226,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
       </Teleport>
       <span class="bar-sep">·</span>
     </template>
-    <button class="bar-item bar-item--btn" @click="openHebrewCalendar">
+    <button class="bar-item bar-item--btn" @click="openHebrewCalendar" title="לחץ להצגת לוח שנה">
       {{ dateInfo.hebrewDate }}
     </button>
     <template v-if="dailyLearningEntries.length">
@@ -236,6 +236,7 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
           ref="learningButtonRef"
           class="bar-item bar-item--btn learning-btn"
           :class="{ on: isLearningOpen }"
+          title="לחץ להצגת הלימוד היומי (דף יומי ועוד)"
           @click="toggleLearningMenu"
         >
           לימוד יומי

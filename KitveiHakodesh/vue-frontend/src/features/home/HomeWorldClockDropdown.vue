@@ -117,7 +117,7 @@ function onWorldClockMenuKeydown(event: KeyboardEvent) {
       ref="worldClockButtonRef"
       class="bar-item bar-item--btn bar-clock"
       :class="{ on: isWorldClockOpen }"
-      title="שעון עולמי"
+      title="לחץ להצגת שעון עולמי"
       @click="toggleWorldClockMenu"
     >
       {{ clockTime }}
