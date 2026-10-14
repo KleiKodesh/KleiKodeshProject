@@ -39,6 +39,11 @@ const KHS_FTSLIB_DIR = path.resolve(
   path.dirname(toPath(import.meta.url)),
   '../CSharpBackend/FtsLib-Csharp/FtsLib',
 )
+// KitveiHakodesh.Core — the service's other project reference; same staleness rule.
+const KHS_CORE_DIR = path.resolve(
+  path.dirname(toPath(import.meta.url)),
+  '../CSharpBackend/KitveiHakodesh.Core',
+)
 
 /**
  * Inserts the Otzaria addin SDK stub into an HTML byte stream, right after the
@@ -385,6 +390,7 @@ function newestSourceMtimeMs(): number {
   }
   walk(KHS_DIR)
   walk(KHS_FTSLIB_DIR)
+  walk(KHS_CORE_DIR)
   return newest
 }
 

@@ -45,10 +45,10 @@ export const SEARCH_STAGE_LABELS: Record<string, string> = {
   rewrite: 'מעבד',
   parse: 'מעבד',
   expand: 'מרחיב תצורות של המילים',
-  lookup: 'מחפש במאגר',
-  fetch: 'מכין את התוצאות',
-  snippets: 'מכין את התוצאות',
-  enrich: 'מכין את התוצאות',
+  lookup: 'מחפש באינדקס',
+  fetch: 'התוצאות בטעינה',
+  snippets: 'התוצאות בטעינה',
+  enrich: 'התוצאות בטעינה',
 }
 
 export function useFullTextSearch(isIndexing?: () => boolean) {
@@ -103,10 +103,14 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     if (stageTimer) { clearTimeout(stageTimer); stageTimer = null }
     settledStageLabel.value = ''
     shownStage = null
+    resultsArrived = false
   }
   /** Stage key whose label is on screen; when it ends, the next stage shows at once. */
   let shownStage: string | null = null
+  /** Once hits stream in, the label locks on the results label for the rest of the search. */
+  let resultsArrived = false
   function enterStage(stage: string) {
+    if (resultsArrived) return
     const shownJustEnded = shownStage !== null && shownStage === currentStage.value && stage !== shownStage
     currentStage.value = stage
     if (stageTimer) clearTimeout(stageTimer)
@@ -117,6 +121,12 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       stageTimer = null
       if (currentStage.value === stage && SEARCH_STAGE_LABELS[stage]) { shownStage = stage; settledStageLabel.value = SEARCH_STAGE_LABELS[stage] }
     }, 1000)
+  }
+  function enterResultsStage() {
+    if (resultsArrived) return
+    resultsArrived = true
+    if (stageTimer) { clearTimeout(stageTimer); stageTimer = null }
+    settledStageLabel.value = SEARCH_STAGE_LABELS.fetch
   }
   onScopeDispose(clearStageLabel)
   /** Text for the stage indicator: generic "searching" until a stage settles. */
@@ -302,6 +312,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         }
         const hits = chunk.results ?? []
         if (hits.length) {
+          enterResultsStage()
           for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
           dirty = true
           if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()

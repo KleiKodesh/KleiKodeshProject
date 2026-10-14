@@ -169,12 +169,6 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
       @keydown="onInputKeydown"
     />
     <RecentSearchesDropdown :controller="recents" />
-    <span v-if="resultCount > 0 || (isSearching && resultCount > 0)" class="result-count-badge">
-      {{ resultCount.toLocaleString() }}
-      <template v-if="!isSearching && resultCount < totalResultCount">
-        / {{ totalResultCount.toLocaleString() }}
-      </template>
-    </span>
     <template #right>
       <!-- Sort dropdown — shown only after results finish streaming in (hidden while
            searching / when there are no results), so it never reorders a partial set. -->
@@ -287,13 +281,5 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
 }
 .sort-dropdown__checkmark.is-visible {
   opacity: 1;
-}
-.result-count-badge {
-  font-size: 11px;
-  color: var(--text-secondary);
-  white-space: nowrap;
-  flex-shrink: 0;
-  padding: 0 4px;
-  direction: ltr;
 }
 </style>
