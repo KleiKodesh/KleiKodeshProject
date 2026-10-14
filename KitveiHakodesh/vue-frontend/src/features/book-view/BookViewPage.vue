@@ -139,6 +139,7 @@ const toolbarProps = computed(() => ({
   bookId,
   bookHasTeamim: bookHasTeamim.value,
   exportRestricted: exportRestricted.value,
+  exportingToWord: exportingToWord.value,
   filterGroups: staticFilterGroups.value,
   relatedBooksLoaded: staticFilterGroupsLoaded.value,
   versions: versions.value,
@@ -301,12 +302,20 @@ const exportRestricted = computed(() =>
 //
 // Checked here as well as hiding the button, so no second entry point to the export
 // can get past the restriction.
-function onExportToWord() {
+// Drives the toolbar button's spinner; also blocks a second click mid-export.
+const exportingToWord = ref(false)
+async function onExportToWord() {
   if (exportRestricted.value) {
     showToast(EXPORT_RESTRICTED_MESSAGE, { variant: 'error' })
     return
   }
-  linesContentRef.value?.pasteAllIntoWord()
+  if (exportingToWord.value) return
+  exportingToWord.value = true
+  try {
+    await linesContentRef.value?.pasteAllIntoWord()
+  } finally {
+    exportingToWord.value = false
+  }
 }
 
 // Opening or closing EITHER side commentary column re-wraps the text, so the lines

@@ -387,8 +387,11 @@ async function pasteAllIntoWord(): Promise<void> {
   if (settingsStore.copyWithNotes) {
     try { await prepareForLines(props.lines.map((l) => l.id)) } catch { /* export degrades; proceed */ }
   }
-  const copied = triggerCopy(() => pasteIntoWord().catch(() => {}))
+  // Held so the caller's progress spinner lasts until Word has the paste.
+  let pasting: Promise<unknown> = Promise.resolve()
+  const copied = triggerCopy(() => { pasting = pasteIntoWord().catch(() => {}) })
   window.getSelection()?.removeAllRanges()
+  await pasting
   if (!copied) showToast('ההכנה לייצוא הסתיימה — לחץ שוב על ייצוא ל-Word')
 }
 
