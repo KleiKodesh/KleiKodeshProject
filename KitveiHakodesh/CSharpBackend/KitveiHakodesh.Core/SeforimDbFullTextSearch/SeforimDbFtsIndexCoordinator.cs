@@ -729,7 +729,11 @@ public sealed class SeforimDbFtsIndexCoordinator
         Func<FtsStreamChunk, Task> emit, CancellationToken clientCt, bool expandRelated = false)
     {
         EnsureIndexing();
-        if (expandRelated) query = RewriteRelated(query);
+        if (expandRelated)
+        {
+            try { await emit(new FtsStreamChunk { Stage = "rewrite" }); } catch { /* client gone */ }
+            query = RewriteRelated(query);
+        }
         if (!HasDb || !_isReady) { await emit(new FtsStreamChunk { Ready = false, Done = true }); return; }
         if (string.IsNullOrWhiteSpace(query)) { await emit(new FtsStreamChunk { Done = true }); return; }
 
@@ -762,8 +766,13 @@ public sealed class SeforimDbFtsIndexCoordinator
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(clientCt, session.Cts.Token);
             try
             {
+                await emit(new FtsStreamChunk { Stage = "validate" });
+                // Stage hooks fire synchronously on the enumerating thread (the batch loop
+                // already blocks it per MoveNext); blocking on emit keeps frame order intact.
+                // The service host has no SynchronizationContext, so this cannot deadlock.
                 await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
-                    linked.Token, built => emit(new FtsStreamChunk { Results = built }));
+                    linked.Token, built => emit(new FtsStreamChunk { Results = built }),
+                    stage => emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult());
                 await emit(new FtsStreamChunk { Done = true });
             }
             catch (OperationCanceledException) { /* superseded, reset, or client left */ }
@@ -802,12 +811,12 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// what the search feels like. SearchParallel stays available as a bulk-fetch API.</summary>
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        CancellationToken ct, Func<List<FtsHit>, Task> onBatch)
+        CancellationToken ct, Func<List<FtsHit>, Task> onBatch, Action<string>? onStage = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
         // written to the caller's pipe before the next one is built.
         foreach (var built in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct, onStage))
         {
             await onBatch(built);
         }

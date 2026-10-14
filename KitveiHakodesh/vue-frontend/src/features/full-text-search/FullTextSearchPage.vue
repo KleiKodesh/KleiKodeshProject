@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEventListener, useMediaQuery } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useZoomHandler, ZOOM_CONFIG } from '@/composables/useZoom'
-import { useFullTextSearch, SEARCH_STAGE_LABELS } from './useFullTextSearch'
+import { useFullTextSearch } from './useFullTextSearch'
 import { useFullTextSearchFilters, parseSearchQuery } from './useFullTextSearchFilters'
 import { useFullTextSearchIndexingStatus } from './useFullTextSearchIndexingStatus'
 import { usePaneNavigation } from '@/composables/usePaneNavigation'
@@ -61,7 +61,7 @@ watch(
 const {
   results,
   isSearching,
-  currentStage,
+  stageLabel,
   hasSearched,
   executedQuery,
   searchError,
@@ -470,11 +470,11 @@ onBeforeUnmount(() => {
       />
       </Teleport>
       <div
-        v-if="isSearching && currentStage && SEARCH_STAGE_LABELS[currentStage]"
+        v-if="isSearching && stageLabel"
         class="search-stage-label"
         dir="rtl"
         aria-live="polite"
-      >{{ SEARCH_STAGE_LABELS[currentStage] }}...</div>
+      >{{ stageLabel }}...</div>
       <FullTextSearchAdvancedPanel
         v-if="isAdvancedOpen"
         ref="advancedPanelRef"
