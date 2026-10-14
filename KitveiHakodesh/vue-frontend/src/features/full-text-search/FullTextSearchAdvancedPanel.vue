@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { IconMinimize20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
 
 const props = defineProps<{
   maxWordDistance: number
@@ -57,7 +57,7 @@ function onContextWordsInput(event: Event) {
         </button>
       </div>
       <button v-if="!asCard" class="close-btn" title="סגור" @click="emit('close')">
-        <IconMinimize20Regular />
+        <IconDismiss20Regular />
       </button>
     </div>
 
@@ -218,7 +218,9 @@ function onContextWordsInput(event: Event) {
   position: static;
   width: 380px;
   max-width: calc(100% - 32px);
-  max-height: 100%;
+  /* No cap of its own: the page card around it bounds the height (up to the full
+     results area) and the body scrolls past that. */
+  max-height: none;
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgb(0 0 0 / 12%);
@@ -345,6 +347,34 @@ function onContextWordsInput(event: Event) {
   background: var(--accent-color);
   color: #fff;
   border-color: var(--accent-color);
+}
+/* Sized to the search bar (TopSearchBar: 30px pill, 13px text) so the panel reads as
+   one scale with it, in both the dropdown and the empty-page card. Placed after the
+   base rules above so these win. */
+.option-row {
+  min-height: 28px;
+}
+.option-label,
+.intent {
+  font-size: 13px;
+}
+.option-hint,
+.tab-btn,
+.example {
+  font-size: 11.5px;
+}
+.distance-input {
+  width: 64px;
+  height: 26px;
+  font-size: 12px;
+}
+.toggle-btn {
+  height: 26px;
+  min-width: 56px;
+  font-size: 12px;
+}
+.syntax-row {
+  padding: 6px 8px;
 }
 .syntax-help {
   padding: 8px 12px 10px;
