@@ -19,7 +19,7 @@ internal static class MsgPack
 {
     public static readonly MessagePackSerializerOptions Options =
         MessagePackSerializerOptions.Standard.WithResolver(
-            CompositeResolver.Create(KhsMsgPackResolver.Instance, StandardResolver.Instance));
+            CompositeResolver.Create(KhsMsgPackResolver.Instance, global::KitveiHakodesh.Core.CoreMessagePackResolver.Instance, StandardResolver.Instance));
 
     /// <summary>Serialize a DTO to MessagePack bytes.</summary>
     public static byte[] Ser<T>(T value) => MessagePackSerializer.Serialize(value, Options);

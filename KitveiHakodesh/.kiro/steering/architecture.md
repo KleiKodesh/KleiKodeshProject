@@ -687,6 +687,11 @@ There is no `ZimHandler.cs` — ZIM/Kiwix support was removed.
 
 Wire format is MessagePack with PascalCase keys; the frontend transforms to camelCase. The HTTP surface is a raw loopback `TcpListener` whose port is private — handed over an ACL'd pipe and discovered via `/khs-endpoint`, never written to a file.
 
+**AOT traps (dev JIT hides them — the hosts run the AOT exe):**
+- Every type sent over the wire (and every nested member type) needs `[MessagePackObject]`. `MsgPack.Options` ends in `StandardResolver`, whose reflection fallback makes an untagged type work in JIT dev and fail silently in the demo/VSTO hosts. A type in a new assembly also needs that assembly's `[GeneratedMessagePackResolver]` added to `Ipc/MsgPack.cs` (Core's was missing once — word links died in hosts only).
+- Only `Lucene.Net` is rooted (`<TrimmerRootAssembly>` in the service csproj). Adding another Lucene package (Analysis.Common, QueryParser, ...) needs its own root entry, or codec/SPI reflection breaks under AOT.
+- To test a host-only bug in dev, set `KHS_EXE` to an AOT-published exe (publish outside `%TEMP%`).
+
 Consequence for frontend code: `isHosted` is **true** in browser dev mode. It is therefore the wrong guard for "am I inside the C# WinForms host" — branch on `window.__webviewAction` for that instead.
 
 ### Full-Text Search Pipeline
