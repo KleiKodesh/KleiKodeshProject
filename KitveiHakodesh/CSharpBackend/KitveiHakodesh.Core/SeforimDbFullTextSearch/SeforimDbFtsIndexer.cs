@@ -51,7 +51,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         // segments — a different on-disk format, so every fts2 index rebuilds.
         // fts4 (2026-10-12): lines are stored in catalog tree order (rowid = position), so
         // results stream in the order the app shows the library; fts3 rowids were line ids.
-        public const string IndexFormatVersion = "fts4";
+        // fts5 (2026-10-14): tree order walks a category's subcategories before its own books,
+        // as the catalog view lists them — fts4 positions are in the old order.
+        public const string IndexFormatVersion = "fts5";
 
         private const string CompletedStampFileName = "fts.ver";
         private const string StartedStampFileName = "fts.src";

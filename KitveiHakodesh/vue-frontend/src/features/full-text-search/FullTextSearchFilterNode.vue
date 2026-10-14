@@ -59,13 +59,14 @@ const hasChildren = computed(
 )
 
 function firstNavigableBookId(cat: CategoryNode): number | null {
-  // Prefer a book that has results (when search has run), otherwise first book
-  for (const book of cat.books) {
-    if (!props.hasSearched || props.resultCounts.get(book.id)) return book.id
-  }
+  // Prefer a book that has results (when search has run), otherwise first book.
+  // Subcategories before own books — the catalog's order.
   for (const child of cat.children) {
     const found = firstNavigableBookId(child)
     if (found != null) return found
+  }
+  for (const book of cat.books) {
+    if (!props.hasSearched || props.resultCounts.get(book.id)) return book.id
   }
   return null
 }

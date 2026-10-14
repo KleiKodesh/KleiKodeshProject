@@ -219,12 +219,12 @@ public static class ManualCatalogPipeline
             foreach (var node in level)
             {
                 string nodePath = parentPath.Length > 0 ? parentPath + " / " + node.Title : node.Title;
+                Walk(node.Children, nodePath);   // subcategories before own books, as the catalog shows
                 foreach (var book in node.Books)
                 {
                     book.TreeOrder = counter++;
                     book.ParentPath = nodePath;
                 }
-                Walk(node.Children, nodePath);
             }
         }
         Walk(roots, "");

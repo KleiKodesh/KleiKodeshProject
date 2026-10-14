@@ -10,7 +10,8 @@ namespace KitveiHakodesh.Core.SeforimDb
     /// buildTree + assignFullPaths (vue-frontend bookCatalogTree.ts), which is where the app's
     /// <c>treeOrder</c> comes from: categories nested in load order, custom (negative-id)
     /// entries sorted last per level, orphaned books under a synthetic last root, then a DFS
-    /// that numbers a category's books before descending into its subcategories.
+    /// that numbers a category's subcategories before its own books (folders first, as the
+    /// catalog view lists them).
     ///
     /// One copy for every C# consumer: the catalog index orders its hits by it and the
     /// full-text index stores lines in it, so they cannot drift from each other — and both
@@ -84,10 +85,11 @@ namespace KitveiHakodesh.Core.SeforimDb
             int counter = 0;
             void Walk(int categoryId)
             {
-                if (catBooks.TryGetValue(categoryId, out var bs))
-                    foreach (int bookId in bs) orders[bookId] = counter++;
+                // Subcategories before the category's own books — the order the catalog shows.
                 if (children.TryGetValue(categoryId, out var cs))
                     foreach (int child in cs) Walk(child);
+                if (catBooks.TryGetValue(categoryId, out var bs))
+                    foreach (int bookId in bs) orders[bookId] = counter++;
             }
             foreach (int root in roots) Walk(root);
             foreach (int bookId in orphaned) orders[bookId] = counter++; // synthetic last root
