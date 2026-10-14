@@ -520,7 +520,6 @@ defineExpose({
             }"
           >
             <div class="result-item">
-              <span class="result-number"><span>{{ vRow.index + 1 }}</span></span>
               <div
                 class="result-header"
                 :title="resultTitle(results[vRow.index]!)"
@@ -603,10 +602,7 @@ defineExpose({
   outline: none;
 }
 .result-item {
-  /* Inline padding via a var so the margin number below can sit just outside the text. */
-  --result-pad-inline: 14px;
-  position: relative;
-  padding: 8px var(--result-pad-inline);
+  padding: 8px 14px;
   /* Mirror the book view's text-column width cap (רוחב מקסימלי עבור עמודת הטקסט).
      Centering keeps the result block aligned under the same reading measure. */
   max-width: var(--lines-content-max-width, none);
@@ -617,13 +613,11 @@ defineExpose({
    reacts to THIS pane's width, not the viewport (split-shell aware). */
 @container app-shell (min-width: 600px) {
   .result-item {
-    --result-pad-inline: 24px;
+    padding-inline: 24px;
   }
 }
 .result-header {
   display: flex;
-  /* Shared with .result-number's height so the margin number centers on this row. */
-  min-height: 1.6em;
   align-items: center;
   gap: 5px;
   margin-bottom: 4px;
@@ -635,28 +629,6 @@ defineExpose({
   user-select: text;
   color: var(--accent-color);
   transition: color 120ms;
-}
-.result-number {
-  /* In the start margin, out of the text flow: its end edge sits 6px before the text.
-     Same top and height as .result-header (min-height below), centered the same way,
-     so it lines up with the header row. Outer box keeps the item's font size so the
-     em-based height matches; the inner span carries the smaller type. */
-  position: absolute;
-  top: 8px;
-  height: 1.6em;
-  display: flex;
-  align-items: center;
-  inset-inline-end: calc(100% - var(--result-pad-inline) + 6px);
-  white-space: nowrap;
-  font-family: var(--header-font);
-  color: var(--text-secondary);
-  opacity: 0.25;
-  font-variant-numeric: tabular-nums;
-  /* Position label only: kept out of selections/copies. */
-  user-select: none;
-}
-.result-number > span {
-  font-size: 0.7em;
 }
 .result-header:hover {
   color: color-mix(in srgb, var(--accent-color) 60%, white);
