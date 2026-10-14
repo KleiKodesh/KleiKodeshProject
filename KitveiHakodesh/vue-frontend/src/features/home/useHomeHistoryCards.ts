@@ -30,8 +30,8 @@ export interface HomeHistoryCardActions {
 }
 
 /**
- * The history cards: recently opened documents, then frequently visited folders
- * — file-system folders and book-catalog categories, ranked together.
+ * The history cards: frequently visited folders, then recently opened documents
+ * (folders are file-system folders and book-catalog categories, ranked together).
  *
  * A book card's path is the full place it resumes to — category › book › TOC
  * breadcrumb. The breadcrumb comes from tabStore's recents location for the same
@@ -129,5 +129,5 @@ export function useHomeHistoryCards(actions: HomeHistoryCardActions) {
     frequentFoldersStore.getList().then((list) => (frequentFolderList.value = list))
   })
 
-  return computed(() => [...recentCards.value, ...folderCards.value])
+  return computed(() => [...folderCards.value, ...recentCards.value])
 }
