@@ -2,7 +2,12 @@ import { normalize } from '@/utils/normalizeText'
 import { normalizeBookPath } from '../book-catalog/bookCatalogSearchNormalizer'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { filterBooksByWords } from '../book-catalog/bookCatalogSearch'
-import { getBookIdByExactTitle, getTocEntryByTextPrefix } from '@/webview-host/seforimApi'
+import {
+  getAllAltTocEntries,
+  getAltTocStructures,
+  getBookIdByExactTitle,
+  getTocEntryByTextPrefix,
+} from '@/webview-host/seforimApi'
 import type { HomeDailyLearningTarget } from './homeDailyLearningTypes'
 
 /** A daily-learning target resolved against the library: the book to open and, when found, the TOC entry. */
@@ -62,5 +67,36 @@ export async function resolveHomeDailyLearningTarget(
       }
     }
   }
+
+  const altTocLineIndex = await findAltTocLineIndex(book.id, target.tocPatterns)
+  if (altTocLineIndex != null) return { bookId: book.id, bookTitle: book.title, tocLineIndex: altTocLineIndex }
   return { bookId: book.id, bookTitle: book.title }
+}
+
+/** SQL LIKE pattern (only `%` used) → anchored, case-insensitive RegExp. */
+function likePatternToRegExp(pattern: string): RegExp {
+  const body = pattern
+    .split('%')
+    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    .join('.*')
+  return new RegExp(`^${body}$`, 'i')
+}
+
+/**
+ * Fallback for books whose heading lives only in an alt TOC (e.g. Torah parshiyot):
+ * first alt-TOC entry, across all structures, matching a pattern in pattern order.
+ * Alt entry ids aren't main-TOC ids, so only the line index is returned.
+ */
+async function findAltTocLineIndex(bookId: number, tocPatterns: string[]): Promise<number | null> {
+  if (!tocPatterns.length) return null
+  const structures = await getAltTocStructures(bookId)
+  if (!structures.length) return null
+  const entryLists = await Promise.all(structures.map((structure) => getAllAltTocEntries(structure.id)))
+  const entries = entryLists.flat().filter((entry) => entry.lineIndex != null)
+  for (const pattern of tocPatterns) {
+    const regExp = likePatternToRegExp(pattern)
+    const entry = entries.find((candidate) => regExp.test(candidate.text.trim()))
+    if (entry) return entry.lineIndex
+  }
+  return null
 }
