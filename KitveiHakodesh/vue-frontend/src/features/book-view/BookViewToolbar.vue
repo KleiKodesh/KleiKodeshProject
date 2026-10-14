@@ -551,6 +551,7 @@ defineExpose({ tocBtnRef })
         role="menuitem"
         class="overflow-row"
         :disabled="exportingToWord"
+        :aria-busy="exportingToWord"
         @click="overflowOpen = false; $emit('exportToWord')"
       >
         <span v-if="exportingToWord" class="export-spinner" />
