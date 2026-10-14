@@ -183,7 +183,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         public int SourceBookId { get; set; }
     }
 
-    /// <summary>Supported=false → the DB has no word links at all; callers should stop asking. Core always answers true today (link_anchor or inline markers).</summary>
+    /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class WordLinkAnchorsResult
     {
@@ -201,7 +201,7 @@ namespace KitveiHakodesh.Core.SeforimDb
         public string? Label { get; set; }
     }
 
-    /// <summary>Supported=false → the DB has no word links at all; callers should stop asking. Core always answers true today (link_anchor or inline markers).</summary>
+    /// <summary>Supported=false → the open DB's schema predates link_anchor; callers should stop asking.</summary>
     [MessagePackObject(keyAsPropertyName: true)]
     public sealed class WordLinkTargetsResult
     {
