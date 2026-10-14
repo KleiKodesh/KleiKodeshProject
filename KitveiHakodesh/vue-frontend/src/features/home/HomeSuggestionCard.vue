@@ -126,7 +126,7 @@ function onRemove() {
       <component :is="card.icon" class="card-icon" :style="card.color ? { color: card.color } : undefined" />
       <span class="card-text">
         <span class="card-title">{{ card.title }}</span>
-        <span class="card-path">{{ card.path }}</span>
+        <span v-if="card.path" class="card-path">{{ card.path }}</span>
       </span>
     </button>
 
@@ -173,6 +173,8 @@ function onRemove() {
   gap: 10px;
   width: 100%;
   min-width: 0;
+  min-height: 49px;
+  box-sizing: border-box;
   padding: 8px 12px;
   background: none;
   border: 1px solid var(--border-color);
@@ -217,9 +219,9 @@ function onRemove() {
 }
 
 /* The full path may wrap to two lines, then clips — never overflows the card.
-   Always rendered (even empty) so every card has the same height. */
+   Omitted when empty, so a lone title centres vertically; the card's
+   min-height keeps it as tall as a title+path card. */
 .card-path {
-  min-height: 1.3em;
   font-size: 11px;
   line-height: 1.3;
   color: var(--text-secondary);
