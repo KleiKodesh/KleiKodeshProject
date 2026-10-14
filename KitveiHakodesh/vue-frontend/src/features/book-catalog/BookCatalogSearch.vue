@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
+import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
 import type { BookRow } from '@/webview-host/queries.types'
-import { useInputListNavigation, countGridColumns } from '@/composables/useInputListNavigation'
+import { useInputListNavigation } from '@/composables/useInputListNavigation'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 import type { BooksView } from '@/stores/settingsStore'
 
@@ -19,7 +20,6 @@ const emit = defineEmits<{
 }>()
 
 const scrollEl = ref<HTMLElement | null>(null)
-const tilesEl = ref<HTMLElement | null>(null)
 
 const virtualizer = useVirtualizer(
   computed(() => ({
@@ -41,32 +41,32 @@ const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListN
     virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
 })
 
-const { activeIndex: tilesActiveIndex, onKeydown: onTilesKeydown } = useInputListNavigation({
-  getCount: () => (props.view === 'tiles' ? props.items.length : 0),
-  onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-  containerElement: tilesEl,
-  getColumnsPerRow: () => countGridColumns(tilesEl.value),
-})
+// The grid view (cards; legacy BookCatalogSearch.Tiles.vue is a drop-in swap)
+// owns its own highlight and keyboard navigation.
+const gridRef = ref<InstanceType<typeof BookCatalogSearchCards> | null>(null)
 
 // New results make the old highlight point at a different item — drop it.
 watch(
   () => props.items,
   () => {
     listActiveIndex.value = -1
-    tilesActiveIndex.value = -1
   },
 )
 
-// Switching view carries the highlight across rather than dropping it. Unlike the
-// browse views, which `<component :is>` destroys and rebuilds at -1, both indices
-// live in this one instance for the life of the results — so without this the
-// highlight would vanish on the way out and a stale one would reappear on the way
-// back, pointing at a row that may now be scrolled out of sight.
+// Switching view carries the highlight across rather than dropping it. The list
+// index lives here for the life of the results, so without this the highlight
+// would vanish on the way out and a stale one would reappear on the way back.
+// Pre-flush: on the way out the grid is still mounted; on the way in it mounts
+// after, so its index is set on the next tick.
 watch(
   () => props.view,
   (view) => {
-    if (view === 'tiles') tilesActiveIndex.value = listActiveIndex.value
-    else listActiveIndex.value = tilesActiveIndex.value
+    if (view === 'tiles') {
+      const index = listActiveIndex.value
+      nextTick(() => {
+        if (gridRef.value) gridRef.value.focusedIndex = index
+      })
+    } else listActiveIndex.value = gridRef.value?.focusedIndex ?? -1
   },
 )
 
@@ -89,16 +89,11 @@ function onSelect(item: SearchFsItem, openInNewTab = false) {
 
 defineExpose({
   onSearchInputKeydown: (event: KeyboardEvent) =>
-    props.view === 'tiles' ? onTilesKeydown(event) : onListKeydown(event),
+    props.view === 'tiles' ? !!gridRef.value?.onSearchInputKeydown(event) : onListKeydown(event),
 })
 
 function selectListItem(i: number, event?: MouseEvent) {
   listActiveIndex.value = i
-  onSelect(props.items[i]!, wantsNewTab(event))
-}
-
-function selectTileItem(i: number, event?: MouseEvent) {
-  tilesActiveIndex.value = i
   onSelect(props.items[i]!, wantsNewTab(event))
 }
 </script>
@@ -147,27 +142,12 @@ function selectTileItem(i: number, event?: MouseEvent) {
       </div>
     </div>
   </div>
-  <div v-else ref="tilesEl" class="tiles-grid">
-    <!-- A <button>, like the browse grid's and the home page's: it is a control,
-         and unlike a div it does not stretch to fill its grid cell, which is what
-         keeps it the same 72px as theirs. -->
-    <button
-      v-for="(item, i) in items"
-      :key="item.uid"
-      type="button"
-      class="tile"
-      data-nav-item
-      tabindex="-1"
-      :class="{ 'is-focused': tilesActiveIndex === i }"
-      :title="itemTooltip(item)"
-      @mousedown.prevent
-      @click="selectTileItem(i, $event)"
-      @auxclick.middle="selectTileItem(i, $event)"
-    >
-      <div class="tile-icon"><IconBookRtl20 /></div>
-      <span class="tile-label">{{ itemTitle(item) }}</span>
-    </button>
-  </div>
+  <BookCatalogSearchCards
+    v-else
+    ref="gridRef"
+    :items="items"
+    @select="onSelect"
+  />
 </template>
 
 <style scoped>
@@ -253,79 +233,4 @@ function selectTileItem(i: number, event?: MouseEvent) {
   text-overflow: ellipsis;
 }
 
-.tiles-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(72px, 1fr));
-  gap: 6px;
-  padding: 12px;
-  overflow-x: hidden;
-  overflow-y: auto;
-  height: 100%;
-  box-sizing: border-box;
-  align-content: flex-start;
-}
-/* The same tile as the browse grid's (BookCatalogView.Tiles.vue), which is the
-   home page's: one catalog, one tile. Only the icon differs — these are always
-   books, never folders. */
-.tile {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  width: 72px;
-  padding: 6px 4px;
-  background: none;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
-}
-.tile:hover .tile-icon {
-  transform: scale(1.15);
-}
-.tile:active .tile-icon {
-  transform: scale(0.95);
-}
-/* Keyboard focus reads as the grown icon rather than the global
-   `[data-nav-item].is-focused` fill, matching the browse grid: DOM focus stays in
-   the search field, so the class is the only signal, and a filled square under a
-   grown icon is the same thing said twice. */
-.tile.is-focused {
-  background: none;
-}
-.tile.is-focused .tile-icon {
-  transform: scale(1.25);
-}
-.tile-icon {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 6px;
-  background: none;
-  font-size: 24px;
-  transition:
-    transform 0.15s ease,
-    opacity 0.12s ease;
-}
-.tile-icon svg {
-  width: 1em;
-  height: 1em;
-  color: #c1440e;
-}
-.tile-label {
-  font-size: 11px;
-  color: var(--text-primary);
-  text-align: center;
-  line-height: 1.3;
-  max-width: 68px;
-  overflow: hidden;
-  white-space: normal;
-  word-break: break-word;
-  display: -webkit-box;
-  -webkit-line-clamp: 3;
-  -webkit-box-orient: vertical;
-}
 </style>

@@ -84,7 +84,7 @@ function hideActions() {
   isTouch.value = false
 }
 
-useDropdownClose(wrapRef, hideActions, { enabled: () => isRevealed.value, closeOnBlur: false })
+useDropdownClose(wrapRef, hideActions, { enabled: () => isRevealed.value, closeOnBlur: false, fitToViewport: false })
 
 function onPin() {
   props.card.pinning?.togglePin()
