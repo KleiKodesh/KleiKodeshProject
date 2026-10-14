@@ -112,6 +112,9 @@ function selectItem(index: number, event?: MouseEvent) {
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
+  /* Off-screen rows skip rendering — big folders without a virtualizer. */
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--catalog-row-height, 38px);
 }
 .fs-item:hover {
   background: var(--hover-bg);

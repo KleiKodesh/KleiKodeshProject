@@ -119,6 +119,11 @@ defineExpose({
 }
 /* Keyboard highlight: DOM focus never reaches a card, so it comes from a class
    on the card's root wrapper and is painted on the inner button. */
+/* Off-screen cards skip rendering — big folders without a virtualizer. */
+.catalog-cards > * {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 49px;
+}
 .is-focused :deep(.card) {
   background: var(--input-bg-focus);
 }

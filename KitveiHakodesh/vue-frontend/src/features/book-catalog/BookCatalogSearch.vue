@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { useVirtualizer } from '@tanstack/vue-virtual'
 import IconBookRtl20 from '@/components/IconBookRtl20.vue'
 import BookCatalogSearchCards from './BookCatalogSearch.Cards.vue'
 import type { SearchFsItem, TocFsItem } from './useBookCatalogSearch'
@@ -21,24 +20,13 @@ const emit = defineEmits<{
 
 const scrollEl = ref<HTMLElement | null>(null)
 
-const virtualizer = useVirtualizer(
-  computed(() => ({
-    count: props.view === 'tiles' ? 0 : props.items.length,
-    getScrollElement: () => scrollEl.value,
-    estimateSize: () => 44,
-    overscan: 10,
-    measureElement: (el: Element) => el.getBoundingClientRect().height,
-  })),
-)
-
 // Combobox model: focus stays in the page's search input; the page forwards its
 // keydown events here (onSearchInputKeydown) and the highlight moves through
 // whichever view is active.
 const { activeIndex: listActiveIndex, onKeydown: onListKeydown } = useInputListNavigation({
   getCount: () => (props.view === 'tiles' ? 0 : props.items.length),
   onActivate: (i, openInNewTab) => onSelect(props.items[i]!, openInNewTab),
-  getVirtualizer: () =>
-    virtualizer.value as unknown as import('@tanstack/vue-virtual').Virtualizer<Element, Element>,
+  containerElement: scrollEl,
 })
 
 // The grid view (cards; legacy BookCatalogSearch.Tiles.vue is a drop-in swap)
@@ -101,45 +89,25 @@ function selectListItem(i: number, event?: MouseEvent) {
 <template>
   <p v-if="!items.length && !searching" class="empty">לא נמצאו תוצאות</p>
   <div v-else-if="view !== 'tiles'" ref="scrollEl" class="scroller">
-    <div :style="{ height: `${virtualizer.getTotalSize()}px`, position: 'relative' }">
-      <div
-        v-for="vRow in virtualizer.getVirtualItems()"
-        :key="String(vRow.key)"
-        :ref="(el) => el && virtualizer.measureElement(el as Element)"
-        :data-index="vRow.index"
-        :style="{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          transform: `translateY(${vRow.start}px)`,
-        }"
-      >
-        <div
-          class="fs-item"
-          data-nav-item
-          :class="{
-            'is-focused': listActiveIndex === vRow.index,
-          }"
-          :title="itemTooltip(items[vRow.index]!)"
-          @mousedown.prevent
-          @click="selectListItem(vRow.index, $event)"
-          @auxclick.middle="selectListItem(vRow.index, $event)"
-        >
-          <span class="icon"><IconBookRtl20 /></span>
-          <span class="item-text">
-            <span class="item-title-row">
-              <span class="item-title">{{ itemTitle(items[vRow.index]!) }}</span>
-              <span v-if="items[vRow.index]!.book.authors" class="item-author-tag">{{
-                items[vRow.index]!.book.authors
-              }}</span>
-            </span>
-            <span v-if="items[vRow.index]!.book.parentPath" class="item-path">{{
-              items[vRow.index]!.book.parentPath
-            }}</span>
-          </span>
-        </div>
-      </div>
+    <div
+      v-for="(item, index) in items"
+      :key="item.uid"
+      class="fs-item"
+      data-nav-item
+      :class="{ 'is-focused': listActiveIndex === index }"
+      :title="itemTooltip(item)"
+      @mousedown.prevent
+      @click="selectListItem(index, $event)"
+      @auxclick.middle="selectListItem(index, $event)"
+    >
+      <span class="icon"><IconBookRtl20 /></span>
+      <span class="item-text">
+        <span class="item-title-row">
+          <span class="item-title">{{ itemTitle(item) }}</span>
+          <span v-if="item.book.authors" class="item-author-tag">{{ item.book.authors }}</span>
+        </span>
+        <span v-if="item.book.parentPath" class="item-path">{{ item.book.parentPath }}</span>
+      </span>
     </div>
   </div>
   <BookCatalogSearchCards
@@ -175,6 +143,9 @@ function selectListItem(i: number, event?: MouseEvent) {
   cursor: pointer;
   box-sizing: border-box;
   transition: background 0.1s;
+  /* Results can run to thousands: off-screen rows skip rendering (no virtualizer). */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 44px;
 }
 .fs-item:hover {
   background: var(--hover-bg);
