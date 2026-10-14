@@ -212,29 +212,7 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
         :title="isSearching ? 'ביטול חיפוש' : 'חיפוש'"
         @click="isSearching ? $emit('cancel') : handleSearch()"
       >
-        <div v-if="isSearching" class="spinner-wrap">
-          <svg class="ring" viewBox="0 0 24 24">
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              fill="none"
-              stroke-width="2"
-              stroke="var(--border-color)"
-            />
-            <circle
-              cx="12"
-              cy="12"
-              r="10"
-              fill="none"
-              stroke-width="2"
-              stroke="var(--accent-color)"
-              stroke-dasharray="31.4 31.4"
-              stroke-linecap="round"
-            />
-          </svg>
-          <IconDismiss20Regular class="cancel-icon" />
-        </div>
+        <IconDismiss20Regular v-if="isSearching" />
         <IconSearch20Regular v-else />
       </button>
     </template>
@@ -317,29 +295,5 @@ defineExpose({ focus: recents.focus, filterBtnRef, advancedBtnRef })
   flex-shrink: 0;
   padding: 0 4px;
   direction: ltr;
-}
-.spinner-wrap {
-  position: relative;
-  width: 20px;
-  height: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.ring {
-  width: 20px;
-  height: 20px;
-  animation: spin 1s linear infinite;
-}
-.cancel-icon {
-  position: absolute;
-  width: 12px;
-  height: 12px;
-  color: var(--text-secondary);
-}
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>
