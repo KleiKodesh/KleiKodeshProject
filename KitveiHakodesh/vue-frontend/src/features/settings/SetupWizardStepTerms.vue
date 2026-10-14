@@ -1,14 +1,31 @@
 <script setup lang="ts">
 /**
  * Terms of use / copyright notice. Mandatory: the wizard hides Skip and keeps Next disabled
- * on this step until the checkbox is ticked (see SetupWizard.vue).
+ * on this step until the checkbox is ticked (see SetupWizard.vue). The checkbox itself is
+ * disabled until the terms box has been scrolled to the bottom.
  */
+import { ref, watch } from 'vue'
+import { useScroll } from '@vueuse/core'
+
 const agreed = defineModel<boolean>({ default: false })
+
+// The checkbox stays disabled until the user has scrolled to the bottom of the terms once.
+const termsBox = ref<HTMLElement | null>(null)
+const { arrivedState, measure } = useScroll(termsBox, { offset: { bottom: 4 } })
+const reachedBottom = ref(agreed.value)
+watch(termsBox, (el) => el && measure(), { flush: 'post' })
+watch(
+  () => arrivedState.bottom,
+  (atBottom) => {
+    if (atBottom) reachedBottom.value = true
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
   <div class="terms-step">
-    <div class="terms-box toc-thin-scroll" tabindex="0">
+    <div ref="termsBox" class="terms-box toc-thin-scroll" tabindex="0">
       <h3>כללי</h3>
       <p>
         כתבי הקודש היא תוכנה לעיון ולימוד בספרי הקודש, והיא חלק מפרויקט "כלי קודש" — מיזם
@@ -60,8 +77,8 @@ const agreed = defineModel<boolean>({ default: false })
       <p>יהי רצון שנזכה להגדיל תורה ולהאדירה.</p>
     </div>
 
-    <label class="terms-agree">
-      <input v-model="agreed" type="checkbox" />
+    <label class="terms-agree" :class="{ disabled: !reachedBottom }">
+      <input v-model="agreed" type="checkbox" :disabled="!reachedBottom" />
       <span>קראתי את התנאים ואני מסכים להם</span>
     </label>
   </div>
@@ -117,5 +134,12 @@ const agreed = defineModel<boolean>({ default: false })
   width: 15px;
   height: 15px;
   cursor: pointer;
+}
+.terms-agree.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.terms-agree.disabled input {
+  cursor: not-allowed;
 }
 </style>
