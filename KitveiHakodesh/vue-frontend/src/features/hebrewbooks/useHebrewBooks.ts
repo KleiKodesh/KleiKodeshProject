@@ -23,6 +23,9 @@ export function useHebrewBooks() {
   // For history items: populated via a checkHbLocalFiles round-trip (C# never sees history IDs).
   const localFileBookIds = ref(new Set<string>())
 
+  // IDs of books whose Save As download is running; their download button spins.
+  const downloadingBookIds = ref(new Set<string>())
+
   // History path — C# doesn't know these IDs, so we ask explicitly.
   async function refreshLocalFileIdsFromHistory(bookList: HebrewBook[]) {
     const folder = settings.hebrewBooksLocalFolder
@@ -96,12 +99,25 @@ export function useHebrewBooks() {
     ).catch(() => {})
   }
 
-  function downloadBook(book: HebrewBook) {
+  async function downloadBook(book: HebrewBook) {
     if (!navigator.onLine) {
       localFileStore.downloadErrorMessage = 'אין חיבור לאינטרנט'
       return
     }
-    triggerHbSaveAs(String(book.id), book.title, getHbPdfUrl(book.id)).catch(() => {})
+    const id = String(book.id)
+    if (downloadingBookIds.value.has(id)) return
+    downloadingBookIds.value = new Set(downloadingBookIds.value).add(id)
+    try {
+      const result = await triggerHbSaveAs(id, book.title, getHbPdfUrl(book.id))
+      if (result.notFound) localFileStore.downloadErrorMessage = 'הספר לא נמצא בשרת'
+      else if (result.error) localFileStore.downloadErrorMessage = 'ההורדה נכשלה'
+    } catch {
+      localFileStore.downloadErrorMessage = 'ההורדה נכשלה'
+    } finally {
+      const updated = new Set(downloadingBookIds.value)
+      updated.delete(id)
+      downloadingBookIds.value = updated
+    }
   }
 
   async function deleteLocalFile(book: HebrewBook) {
@@ -136,6 +152,7 @@ export function useHebrewBooks() {
     error,
     searchTerm,
     localFileBookIds,
+    downloadingBookIds,
     load,
     search,
     trackAccess,

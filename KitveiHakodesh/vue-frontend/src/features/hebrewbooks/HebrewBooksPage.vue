@@ -26,6 +26,7 @@ const {
   error,
   searchTerm,
   localFileBookIds,
+  downloadingBookIds,
   load,
   search,
   openBook,
@@ -133,6 +134,7 @@ function onBookClicked(
               :focused="activeIndex === vRow.index"
               :has-local-file="localFileBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @book-clicked="(book, openInNewTab) => onBookClicked(vRow.index, book, openInNewTab)"
+              :downloading="downloadingBookIds.has(String(displayedBooks[vRow.index]!.id))"
               @download-clicked="downloadBook"
               @delete-clicked="deleteLocalFile"
               @reveal-clicked="revealInFolder"

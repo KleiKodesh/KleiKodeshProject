@@ -39,6 +39,9 @@ namespace KitveiHakodeshLib
 
         private void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
+            // A Save As whose navigation failed before any download started gets no other answer.
+            if (!e.IsSuccess) _hb?.NotifySaveAsNavigationFailed(e.WebErrorStatus.ToString());
+
             // A failed navigation off the app shell leaves this WebView2 — the one rendering the
             // whole app — sitting on the WebView error page: no tabs, no close button, no way to
             // open a window, wedged until the process is killed. Book downloads no longer
