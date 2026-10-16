@@ -101,7 +101,7 @@ defineExpose({
   contain-intrinsic-size: auto 49px;
 }
 .is-focused :deep(.card) {
-  background: var(--input-bg-focus);
+  background: color-mix(in srgb, var(--accent-color) 8%, var(--bg-primary));
 }
 /* Catalog titles carry the author too: wrap onto more lines, never ellipsis. */
 .catalog-cards :deep(.card-title) {
