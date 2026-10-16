@@ -219,18 +219,6 @@ public sealed class Dispatcher(
                         : new OpenInDefaultAppResult { Error = openError }));
                 }
 
-                // System font families that can render Hebrew — the dev-mode equivalent of the
-                // hosted app's "getFonts" bridge action. Hosted asks WPF; this service is
-                // native-AOT with no WPF, so HebrewFontsProvider goes to DirectWrite (the API WPF
-                // wraps) and applies the SAME test: does the family have a glyph for א? Returns
-                // an empty list rather than failing if DirectWrite is unavailable, and the
-                // frontend falls back to its canvas probe.
-                case "getFonts":
-                    return RpcResponse.Ok(MsgPack.Ser(new FontsResult
-                    {
-                        Fonts = global::KitveiHakodesh.Core.Common.HebrewFonts.GetHebrewFonts(),
-                    }));
-
                 // Open assembled HTML as a new Word document — the dev-mode equivalent of the
                 // hosted app's "exportToWord" bridge action (WordExporter.ExportCore). Word
                 // imports HTML only by opening a file, so the service writes a temp .html named

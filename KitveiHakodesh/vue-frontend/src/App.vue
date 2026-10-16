@@ -18,6 +18,10 @@ import { useTabSwipeNavigation } from '@/composables/useTabSwipeNavigation'
 import { activateTabAnyPane } from '@/composables/useCrossPaneTabActions'
 import { isVstoEnvironment as isVsto } from '@/webview-host/bridge'
 import { startErrorReportRetries } from '@/features/book-view/errorReport/errorReportService'
+import { detectAvailableFonts } from '@/webview-host/fontsApi'
+
+// Prewarm the per-session font list at launch so the settings font dropdowns open instantly.
+void detectAvailableFonts()
 
 useTabSwipeNavigation()
 // Error reports that could not go out (offline, no endpoint yet) are retried from

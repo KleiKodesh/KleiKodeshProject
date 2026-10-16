@@ -1,23 +1,17 @@
-import { serviceCall } from './serviceClient'
 import { detectFontsByCanvas } from './fontsCanvasProbe'
 
 /**
  * Real system font families that can render Hebrew, sorted alphabetically.
  *
- * Both runtimes ask the OS through DirectWrite, so the picker offers the machine's ACTUAL
- * Hebrew fonts: the WebView2 host enumerates in its own process (`getFonts` host action —
- * nothing about fonts needs the service or an external library), the dev browser asks the
- * service, which runs the same enumerator.
+ * Fetched from C#: the WebView2 host enumerates in its own process through DirectWrite
+ * (`getFonts` host action, Core/Common/HebrewFonts). Never the service. Without a host (plain
+ * dev browser) or if the host fails, fontsCanvasProbe is the fallback; it can only confirm fonts
+ * its own CANDIDATES list names, so it under-reports, but a plausible subset beats an empty picker.
  *
- * fontsCanvasProbe is the last resort when neither answers. It can only confirm fonts its own
- * CANDIDATES list names, so it under-reports — but a plausible subset beats an empty picker.
+ * Lives here rather than in utils/ because it is host I/O. A util may not invoke a host action.
  *
- * Lives here rather than in utils/ because it is entirely host I/O. A util may not invoke a
- * host action.
- *
- * Deliberately NOT cached: the selector loads the list live on every dropdown open (showing a
- * loading row meanwhile), so a long-running session always sees the machine's current fonts —
- * installs and removals included — with no cache to invalidate.
+ * Cached per session: one promise, started at app launch (App.vue) so every font dropdown is
+ * instant on first open. A hard reload clears it because the module is re-evaluated.
  */
 /**
  * Fonts the app ships itself (public/fonts/, declared @font-face in main.css).
@@ -52,24 +46,19 @@ function withBundledFirst(systemFonts: string[]): string[] {
   return [...bundled, ...systemFonts.filter((f) => !bundled.includes(f))]
 }
 
-/**
- * Module-level cache: a single Promise set on the first call and reused for the
- * lifetime of the page. A hard reload clears it because the module is re-evaluated.
- * Every FontSelector dropdown shares one fetch — subsequent opens are instant.
- */
+/** Per-session cache: one promise shared by every FontSelector. See header. */
 let _fontsCache: Promise<string[]> | null = null
 
 async function fetchFonts(): Promise<string[]> {
-  try {
-    const result =
-      typeof window.__webviewAction === 'function'
-        ? ((await window.__webviewAction('getFonts')) as { fonts?: string[] })
-        : await serviceCall<{ fonts?: string[] }>('getFonts')
-    if (Array.isArray(result?.fonts) && result.fonts.length > 0) return withBundledFirst(result.fonts)
-  } catch {
-    // Host or service unreachable — fall through to the canvas probe.
+  if (typeof window.__webviewAction === 'function') {
+    try {
+      const result = (await window.__webviewAction('getFonts')) as { fonts?: string[] }
+      if (Array.isArray(result?.fonts) && result.fonts.length > 0) return withBundledFirst(result.fonts)
+    } catch {
+      // Host enumeration failed — fall through to the canvas probe.
+    }
   }
-  return withBundledFirst(await detectFontsByCanvas())
+  return withBundledFirst(detectFontsByCanvas())
 }
 
 export function detectAvailableFonts(): Promise<string[]> {

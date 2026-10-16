@@ -122,16 +122,6 @@ public sealed class OpenInDefaultAppResult
     public string? Error { get; set; }
 }
 
-/// <summary>Result of <c>getFonts</c>: system font families that can render Hebrew, sorted
-/// alphabetically. Same contract as the hosted <c>getFonts</c> bridge action, so the settings
-/// font picker is identical in dev and hosted. Empty when DirectWrite is unavailable — the
-/// frontend then falls back to its canvas probe.</summary>
-[MessagePack.MessagePackObject(keyAsPropertyName: true)]
-public sealed class FontsResult
-{
-    public string[] Fonts { get; set; } = [];
-}
-
 /// <summary>Args for <c>exportToWord</c> — the assembled document HTML and the book title used
 /// for the temp file name.</summary>
 [MessagePack.MessagePackObject(keyAsPropertyName: true)]
