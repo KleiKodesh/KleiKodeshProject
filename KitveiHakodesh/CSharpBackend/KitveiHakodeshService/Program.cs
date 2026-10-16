@@ -93,6 +93,8 @@ internal static partial class Program
         builder.Services.AddHostedService<OwnerWatcher>();
         builder.Services.AddHostedService<FtsIndexingStarter>();
         builder.Services.AddHostedService<CatalogTocIndexingStarter>();
+        // The local file index too: built at start (after a short delay), not on the first search.
+        builder.Services.AddHostedService<KitveiHakodeshService.LocalFiles.LocalFileIndexingStarter>();
         // Singleton too, so the diagnostics endpoint can trigger a trim on the same instance.
         builder.Services.AddSingleton<IdleMemoryTrimmer>();
         builder.Services.AddHostedService(sp => sp.GetRequiredService<IdleMemoryTrimmer>());
