@@ -54,7 +54,7 @@
     "pdfFilter": "invert(0.9) hue-rotate(180deg) brightness(0.9) contrast(0.9)"
   },
   "violetbeige-light": {
-    "name": "ברירת מחדל בז'",
+    "name": "בז'",
     "family": "violetbeige",
     "isDark": false,
     "reading": {
@@ -81,7 +81,7 @@
     "pdfFilter": "none"
   },
   "violetbeige-dark": {
-    "name": "ברירת מחדל בז'",
+    "name": "בז'",
     "family": "violetbeige",
     "isDark": true,
     "reading": {
