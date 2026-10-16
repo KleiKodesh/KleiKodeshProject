@@ -176,9 +176,11 @@ function onRemove() {
   min-height: 49px;
   box-sizing: border-box;
   padding: 8px 12px;
-  background: none;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  /* Fluent/iOS: spacing separates items, not lines. A barely-there fill gives
+     each item a body (focus) without the grid reading as boxes; no border. */
+  background: color-mix(in srgb, var(--text-primary) 3%, transparent);
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text-primary);
   text-align: start;
   cursor: pointer;
@@ -188,7 +190,7 @@ function onRemove() {
   -webkit-tap-highlight-color: transparent;
 }
 .card:hover {
-  background: var(--input-bg-focus);
+  background: color-mix(in srgb, var(--text-primary) 6.5%, transparent);
 }
 .card:focus-visible {
   outline: 2px solid var(--accent-color);
@@ -200,7 +202,7 @@ function onRemove() {
 
 .card-icon {
   flex-shrink: 0;
-  font-size: 22px;
+  font-size: 20px;
 }
 
 .card-text {
