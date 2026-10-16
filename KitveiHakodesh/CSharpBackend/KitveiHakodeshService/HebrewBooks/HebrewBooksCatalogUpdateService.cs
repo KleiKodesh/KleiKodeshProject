@@ -27,6 +27,12 @@ public sealed class HebrewBooksCatalogUpdateService(
     ILogger<HebrewBooksCatalogUpdateService> logger,
     HttpClient http) : BackgroundService
 {
+    private int _running;
+
+    /// <summary>A catalog walk is running; the service must not stop under it
+    /// (Http/OwnerWatcher).</summary>
+    public bool IsBusy => Volatile.Read(ref _running) == 1;
+
     /// <summary>
     /// How long to wait before the FIRST check. The service has just started, which is when
     /// everything else it owns is competing for the disk — the indexes check their stamps, the
@@ -91,7 +97,10 @@ public sealed class HebrewBooksCatalogUpdateService(
                 var updater = new CoreHebrewBooks.HebrewBooksCatalogUpdater(
                     http, new CoreHebrewBooks.HebrewBooksCatalogDbQueries(catalogPath));
 
-                bool stampedCleanly = await RunOnceAsync(updater, stoppingToken);
+                bool stampedCleanly;
+                Volatile.Write(ref _running, 1);
+                try { stampedCleanly = await RunOnceAsync(updater, stoppingToken); }
+                finally { Volatile.Write(ref _running, 0); }
 
                 // A run that ended without stamping is still due, so asking again at the normal
                 // cadence would restart it immediately. Back off instead — see the constant.
