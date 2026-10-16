@@ -8,6 +8,7 @@
 
 import { hasHostBridge, emitWebviewEvent } from './seforimDb'
 import { serviceCall, serviceCallVoid } from './serviceClient'
+import { ServiceUnavailableError, isPersistentReason } from './serviceAvailability'
 import { decodeTextDetectEncoding } from '@/utils/textEncoding'
 import { showToast } from '@/composables/useToast'
 
@@ -887,15 +888,24 @@ export function triggerHbDownload(
         // The user aborted the download; the tab was already reset, nothing to show.
         emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
       } else {
+        // Anything else carries the service's reason (HTTP status, disk error with the folder,
+        // invalid id) so the store can show it instead of closing the tab silently.
         emitWebviewEvent({
           event: 'hbPdfCancelled',
           tabId,
           notFound: !!r?.notFound,
           noInternet: !!r?.noInternet,
+          error: r?.error || undefined,
         })
       }
-    } catch {
-      emitWebviewEvent({ event: 'hbPdfCancelled', tabId, noInternet: !navigator.onLine })
+    } catch (e) {
+      const noInternet = !navigator.onLine
+      emitWebviewEvent({
+        event: 'hbPdfCancelled',
+        tabId,
+        noInternet,
+        error: noInternet ? undefined : e instanceof Error ? e.message : String(e),
+      })
     }
   })()
   return Promise.resolve({ ok: true })
@@ -1079,6 +1089,44 @@ export interface DbPathInfo {
   updateInterrupted?: boolean
   /** The database answers a query; false with `exists` true = the file cannot be read. */
   readable?: boolean
+  /** Which service instance answered. Changes when the service restarts after a path change. */
+  instanceId?: string
+}
+
+/** The id of the instance that accepted the last path change — it is the one going DOWN.
+ *  Null until a change has been made, or when the service predates the field. */
+let switchedFromInstanceId: string | null = null
+
+/**
+ * Resolves once a NEW service instance answers after a path change (set / pick / clear).
+ *
+ * The instance that accepts the change keeps serving the OLD database for a few seconds
+ * after it replied "restarting" (measured 0.5–3.7 s on the installed service), so reloading
+ * on a fixed timer loaded the old library's catalog and then lost the connection mid-way.
+ * Polls until the answering id differs from the one that accepted the change; a service
+ * without the field (no id known) falls back to a short fixed wait. Bounded so a service
+ * that never comes back still lets the page reload and show its unavailable banner.
+ */
+export async function waitForServiceRestart(timeoutMs = 30_000): Promise<void> {
+  const old = switchedFromInstanceId
+  switchedFromInstanceId = null
+  if (!old) {
+    await new Promise((r) => setTimeout(r, 800))
+    return
+  }
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      const info = await serviceCall<DbPathInfo>('getSeforimDbPath')
+      if (info?.instanceId && info.instanceId !== old) return
+    } catch (err) {
+      // The service going down mid-restart is the expected case; the client flags it
+      // unavailable until the next answer clears it. A reason that will not fix itself
+      // (install declined, will not start) means no new instance is coming: reload now.
+      if (err instanceof ServiceUnavailableError && isPersistentReason(err.reason)) return
+    }
+    await new Promise((r) => setTimeout(r, 250))
+  }
 }
 
 /** Current seforim DB path (+ whether user-set and whether the file exists). */
@@ -1128,10 +1176,11 @@ export async function pickDbPath(): Promise<string | null> {
       await setDbPath(picked.path)
       return picked.path
     }
-    const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string }>(
+    const result = await serviceCall<{ path?: string; cancelled?: boolean; error?: string; instanceId?: string }>(
       'pickSeforimDbPath',
     )
     if (result?.cancelled || result?.error || !result?.path) return null
+    switchedFromInstanceId = result.instanceId ?? null
     return result.path
   } catch {
     return null
@@ -1143,8 +1192,9 @@ export async function pickDbPath(): Promise<string | null> {
  * itself; throws when the file doesn't exist.
  */
 export async function setDbPath(path: string): Promise<void> {
-  const res = await serviceCall<{ path: string; error?: string }>('setSeforimDbPath', { path })
+  const res = await serviceCall<{ path: string; error?: string; instanceId?: string }>('setSeforimDbPath', { path })
   if (res.error) throw new Error(res.error)
+  switchedFromInstanceId = res.instanceId ?? null
 }
 
 /**
@@ -1154,7 +1204,8 @@ export async function setDbPath(path: string): Promise<void> {
  */
 export async function clearDbPath(): Promise<string | null> {
   try {
-    const res = await serviceCall<{ path: string }>('clearSeforimDbPath')
+    const res = await serviceCall<{ path: string; instanceId?: string }>('clearSeforimDbPath')
+    switchedFromInstanceId = res.instanceId ?? null
     return res.path ?? null
   } catch {
     return null
