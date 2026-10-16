@@ -80,7 +80,8 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             // the folder is deleted. The new one stops itself over its pipe; the legacy
             // DocumentLocatorSvc gets its own cooperative shutdown (and, on an elevated run, is
             // deregistered). The repair's reinstall then registers the service afresh.
-            await KitveiHakodeshServiceHelper.StopServiceAsync();
+            await KitveiHakodeshServiceHelper.StopServiceAsync(
+                new Progress<string>(text => progress.Report((0, text))));
             await LegacyServiceRetirement.RetireAllAsync(null);
 
             progress.Report((10, "מוחק תיקיות התקנה..."));
