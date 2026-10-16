@@ -229,7 +229,11 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 if (!installed) return;
                 await Task.Run(() => StartServiceIfStopped()).ConfigureAwait(false);
                 if (!await WaitForPipeAsync().ConfigureAwait(false)) return;
-                await Task.Run(() => TrySendOp("resetDocumentLocatorIndex")).ConfigureAwait(false);
+                // Bounded: the pipe read has no timeout of its own, and the first request also
+                // waits for the data host to come up. The request is delivered either way; only
+                // waiting for its reply is given up, so the install never stalls here.
+                Task send = Task.Run(() => TrySendOp("resetDocumentLocatorIndex"));
+                await Task.WhenAny(send, Task.Delay(15_000)).ConfigureAwait(false);
             }
             catch
             {

@@ -69,10 +69,14 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             status?.Report("מתקין שירות אינדקס...");
             bool serviceRegistered = await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync(status);
 
-            // Trigger a background reindex of the file-system search service
-            // so it reflects any new files from this install. Fire-and-forget —
-            // the service acks immediately and rebuilds without blocking us.
-            _ = KitveiHakodeshServiceHelper.EnsureServiceRunningAndReindexAsync();
+            // Start the service now so its indexing (FTS, catalog, file index) begins right away
+            // instead of when the app first opens. AWAITED, not fire-and-forget: a service that
+            // was started but never received a request sits waiting for its first client and
+            // builds nothing (Hosting/UserSessionBinding), and an installer that closes first
+            // would leave it exactly there. Bounded by the pipe wait; the service acks the
+            // request at once and indexes in the background, stopping itself once done if no
+            // app has opened by then.
+            await KitveiHakodeshServiceHelper.EnsureServiceRunningAndReindexAsync();
 
             // EnsureServiceInstalledAsync returns false both for "registration failed"
             // and for "the package doesn't ship the service at all". Only the former
