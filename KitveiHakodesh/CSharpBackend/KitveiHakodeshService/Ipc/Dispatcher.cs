@@ -34,9 +34,15 @@ public sealed class Dispatcher(
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
+    /// <summary>Ops a host sends on a timer or to poll state, not because the user did
+    /// something. They never touch the idle clock (see DispatchAsync).</summary>
+    private static bool IsHousekeepingOp(string op) => op is
+        "ping" or "getHttpPort" or "registerOwner" or "releaseOwner"
+        or "getSeforimDbPath" or "getUpdateStatus"
+        or "ftsIndexingStatus" or "catalogTocStatus" or "localFileIndexStatus" or "hbDownloadProgress";
+
     public async Task<byte[]> DispatchAsync(byte[] request, CancellationToken ct)
     {
-        IdleMemoryTrimmer.Touch(); // re-arm the idle memory trimmer on every RPC
         RpcRequest? req;
         try
         {
@@ -49,6 +55,11 @@ public sealed class Dispatcher(
 
         if (req is null || string.IsNullOrEmpty(req.Op))
             return RpcResponse.Err("Missing 'op'.");
+
+        // Re-arm the idle memory trimmer on real work only. An open app sends housekeeping on
+        // timers (owner heartbeat every 30 s, DB-health poll every 5 s, status polls); counting
+        // those as activity meant an open-but-idle app never let the trim run (80-100 MB kept).
+        if (!IsHousekeepingOp(req.Op)) IdleMemoryTrimmer.Touch();
 
         // A Windows service lives in session 0: no desktop, no user Word, no shell. The hosts do
         // those themselves; a request that still arrives here is answered, not left to hang.
