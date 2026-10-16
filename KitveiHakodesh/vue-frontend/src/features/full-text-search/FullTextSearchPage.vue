@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageCard from '@/components/PageCard.vue'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useEventListener, useMediaQuery } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
@@ -494,8 +495,7 @@ onBeforeUnmount(() => {
 
     <div class="results-area">
       <!-- v-show, not v-if: the Teleport target must stay in the DOM while the bar moves out. -->
-      <div v-show="showAdvancedCard" class="advanced-card-wrap">
-        <div class="advanced-card">
+      <PageCard v-show="showAdvancedCard">
         <div :id="cardBarSlotId" class="card-bar-slot" />
         <FullTextSearchAdvancedPanel
           as-card
@@ -512,8 +512,7 @@ onBeforeUnmount(() => {
           @update:expand-related="expandRelated = $event"
           @update:grammar-wrap="grammarWrap = $event"
         />
-        </div>
-      </div>
+      </PageCard>
       <div v-if="!showAdvancedCard" class="results-list-wrap">
         <!-- Inside the list column (not the top dock) so the filter side panel, a sibling
              column, runs the full height beside it, and the advanced dropdown covers it. -->
@@ -616,41 +615,6 @@ onBeforeUnmount(() => {
      dropdown) paint over both the results list and the filter side panel. */
   z-index: 11;
 }
-/* Same frame as the setup wizard (.wizard-card-outer / .wizard-card in
-   settings/SetupWizard.vue) by agreement, not shared code: keep them in step. The outer
-   owns the centred max-width and gutters; the card fills the full height left. */
-.advanced-card-wrap {
-  flex: 1;
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 20px 16px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-.advanced-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-}
-@media (max-width: 600px) {
-  .advanced-card-wrap {
-    max-width: 100%;
-    padding: 0;
-  }
-  .advanced-card {
-    border: none;
-    border-radius: 0;
-  }
-}
 /* Room around the bar inside the card (TopSearchBar's own 8px/6px is tuned for the
    page edge, too tight in the card). */
 .card-bar-slot {
@@ -658,7 +622,7 @@ onBeforeUnmount(() => {
   padding: 4px 0;
 }
 /* The card owns the frame; the panel inside is just its lower section. */
-.advanced-card :deep(.advanced-panel.as-card) {
+.results-area :deep(.advanced-panel.as-card) {
   width: 100%;
   max-width: 100%;
   min-height: 0;

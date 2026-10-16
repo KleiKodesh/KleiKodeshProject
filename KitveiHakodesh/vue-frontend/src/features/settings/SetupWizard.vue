@@ -4,6 +4,7 @@ import { useSettingsStore } from '@/stores/settingsStore'
 import { dbReady } from '@/webview-host/seforimDb'
 import { resetting } from './appResetState'
 import { useSettings } from './useSettingsPage'
+import PageCard from '@/components/PageCard.vue'
 import SetupWizardStepDb from './SetupWizardStepDb.vue'
 import SetupWizardStepTheme from './SetupWizardStepTheme.vue'
 import SetupWizardStepGeneral from './SetupWizardStepGeneral.vue'
@@ -159,14 +160,8 @@ function skip() {
 
     <!-- ── The card. It is the static frame: title, body, nav. Only what sits in the
          body changes between steps, so the nav never moves and the card never
-         resizes to its content.
-
-         Wrapper + card, matching the calendar page: the wrapper carries the centred
-         max-width and the page padding, the card fills it. Below 600px the wrapper
-         drops both and the card sheds its border and radius, so it fills the viewport
-         edge to edge in a small window. ── -->
-    <div class="wizard-card-outer">
-      <div class="wizard-card">
+         resizes to its content. ── -->
+    <PageCard>
         <!-- Header and body fade together as one unit, so the title changes with the
              content instead of snapping ahead of it. The nav footer is deliberately
              OUTSIDE this transition: it is the same on every step, and fading it would
@@ -199,6 +194,7 @@ function skip() {
           </div>
         </Transition>
 
+        <template #footer>
         <div class="wizard-card-footer">
           <button v-if="currentStep !== 'terms'" class="skip-btn" :disabled="resetting" @click="skip">דלג</button>
           <span v-else />
@@ -209,8 +205,8 @@ function skip() {
             </button>
           </div>
         </div>
-      </div>
-    </div>
+        </template>
+    </PageCard>
   </div>
 </template>
 
@@ -237,37 +233,8 @@ function skip() {
   transition: width 0.35s ease;
 }
 
-/* ── The card ──
-   One frame for every step: header, body, footer. It fills the wizard area rather
-   than sizing to its content, so the nav row sits at the same height on every step.
-
-   Split in two the way the calendar page is: the outer element owns the centred
-   max-width and the page gutter, the card fills whatever that leaves. That split is
-   what lets the small-viewport rules below drop the gutter and the card's own border
-   independently, so the card can reach the window edges. */
-.wizard-card-outer {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-  padding: 20px 16px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-}
-
-.wizard-card {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-}
-
+/* ── The card ── The frame (centred max-width, gutter, border, edge-to-edge below
+   600px) is components/PageCard.vue, shared with the FTS and calendar pages. */
 .wizard-card-header {
   flex-shrink: 0;
   padding: 18px 20px 14px;
@@ -346,7 +313,6 @@ function skip() {
   align-items: center;
   justify-content: space-between;
   padding: 10px 20px;
-  border-top: 1px solid var(--border-color);
 }
 
 /* ── Step transitions ──
@@ -464,19 +430,5 @@ function skip() {
   cursor: not-allowed;
 }
 
-/* Small viewport — same treatment as the calendar page: the gutter and the max-width
-   go, and the card sheds its border and radius so it fills the window in both
-   directions rather than floating inside it. */
-@media (max-width: 600px) {
-  .wizard-card-outer {
-    max-width: 100%;
-    padding: 0;
-  }
-
-  .wizard-card {
-    border: none;
-    border-radius: 0;
-  }
-}
 
 </style>
