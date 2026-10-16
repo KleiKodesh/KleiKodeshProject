@@ -76,7 +76,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         ///      stopped in step 1).
         /// Best effort: a stuck service never blocks the install; the copy step retries.
         /// </summary>
-        public static async Task StopServiceAsync()
+        public static async Task StopServiceAsync(IProgress<string> status = null)
         {
             await SendShutdownAsync().ConfigureAwait(false);
 
@@ -87,17 +87,25 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
             while (DateTime.UtcNow < deadline && (IsPipeListening() || IsRegisteredServiceStillUp()))
                 await Task.Delay(StartupPollMs).ConfigureAwait(false);
 
-            string serviceFolder = Path.Combine(AddinInstaller.InstallPath, ServiceFolder);
+            // The pipe op did not stop it (an older build without "shutdown", a busy pipe, a
+            // stuck build). Left running, it keeps its exe locked: the copy fails silently, the
+            // registration still looks current, and the OLD service runs on. Stop it through
+            // the SCM instead - one prompt, only in this fallback.
+            if (IsRegisteredServiceStillUp())
+                await StopElevatedAsync(status).ConfigureAwait(false);
+
+            // Every user-mode copy, wherever it runs from: a copy left by an earlier install
+            // location, a portable folder or an older host still holds the pipe name and, once
+            // the SYSTEM service owns it, can never serve - it only keeps databases open.
             foreach (var process in Process.GetProcessesByName(Path.GetFileNameWithoutExtension(ServiceExeName)))
             {
                 try
                 {
+                    // A source checkout's build output is a dev instance on its own private pipe.
                     string path = process.MainModule?.FileName ?? "";
-                    if (path.StartsWith(serviceFolder, StringComparison.OrdinalIgnoreCase))
-                    {
-                        process.Kill();
-                        process.WaitForExit(5_000);
-                    }
+                    if (path.IndexOf(@"\bin\", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    process.Kill();
+                    process.WaitForExit(5_000);
                 }
                 catch { /* not ours to end (SYSTEM), or already gone */ }
                 finally { process.Dispose(); }
@@ -168,6 +176,36 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                 await Task.Delay(300).ConfigureAwait(false);
             }
             return IsServiceInstalled();
+        }
+
+        /// <summary>Stops the registered service with an elevated <c>sc stop</c> and waits,
+        /// bounded, until the SCM reports it stopped. Declining the prompt leaves it running.</summary>
+        private static async Task StopElevatedAsync(IProgress<string> status)
+        {
+            status?.Report(ApprovalPromptStatus);
+            var psi = new ProcessStartInfo
+            {
+                FileName        = Path.Combine(Environment.SystemDirectory, "sc.exe"),
+                Arguments       = "stop " + ServiceName,
+                Verb            = "runas",
+                UseShellExecute = true,
+                WindowStyle     = ProcessWindowStyle.Hidden,
+                ErrorDialog             = true,
+                ErrorDialogParentHandle = InstallerWindowHandle(),
+            };
+            try
+            {
+                await Task.Run(() =>
+                {
+                    using (var proc = Process.Start(psi))
+                        proc?.WaitForExit(30_000);
+                }).ConfigureAwait(false);
+            }
+            catch (System.ComponentModel.Win32Exception) { return; } // declined, or sc.exe missing
+
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline && IsRegisteredServiceStillUp())
+                await Task.Delay(StartupPollMs).ConfigureAwait(false);
         }
 
         /// <summary>Status line shown while Windows prepares the admin prompt.</summary>
@@ -253,6 +291,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
         /// shutdown window and retry a few times. On permanent failure the existing file stays.</summary>
         public static async Task<bool> TryCopyServiceExeAsync(Stream sourceStream, string destPath)
         {
+            ServiceExeUpdateFailed = false;
             await WaitForShutdownWindowAsync().ConfigureAwait(false);
 
             for (int attempt = 1; attempt <= MaxRetries; attempt++)
@@ -273,8 +312,13 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
                     break;
                 }
             }
+            ServiceExeUpdateFailed = true;
             return false;
         }
+
+        /// <summary>The last extraction could not replace the service exe (still locked by a
+        /// running service), so the OLD version stays in place until the next install.</summary>
+        public static bool ServiceExeUpdateFailed { get; private set; }
 
         // ── Private helpers ───────────────────────────────────────────────────────
 

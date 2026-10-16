@@ -71,6 +71,17 @@ namespace KleiKodeshVstoInstallerWpf
                         await KitveiHakodeshServiceHelper.EnsureServiceInstalledAsync(_status);
                 }
 
+                // The running service kept its exe locked (the stop prompt was declined, or it
+                // would not stop): the install finished but the OLD service version runs on.
+                if (KitveiHakodeshServiceHelper.ServiceExeUpdateFailed)
+                {
+                    MessageBox.Show(
+                        "לא ניתן היה לעדכן את שירות האינדקס כי הוא עדיין פועל. הגרסה הקודמת של השירות נשארה. הפעל מחדש את המחשב והרץ את ההתקנה שוב.",
+                        "התקנת שירות אינדקס",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning);
+                }
+
                 while (ProgressBar.Value < ProgressBar.Maximum)
                 {
                     ProgressBar.Value++;

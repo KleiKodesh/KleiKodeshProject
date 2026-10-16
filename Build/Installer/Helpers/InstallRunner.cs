@@ -43,7 +43,7 @@ namespace KleiKodeshVstoInstallerWpf.Helpers
 
             // Stop the running KitveiHakodesh service and WAIT until it is gone: it holds its exe
             // and its databases under KitveiHakodeshService open, and extraction overwrites them.
-            await KitveiHakodeshServiceHelper.StopServiceAsync();
+            await KitveiHakodeshServiceHelper.StopServiceAsync(status);
 
             status?.Report("מחלץ קבצים...");
             await AddinInstaller.ExtractAsync(progress);
