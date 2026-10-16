@@ -168,13 +168,24 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
 
             string completedStampPath = Path.Combine(_indexPath, CompletedStampFileName);
-            string currentStamp = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion);
             string? recordedStamp = ReadStamp(completedStampPath)
                                  ?? ReadStamp(Path.Combine(_indexPath, StartedStampFileName));
 
             bool hasResumeWatermark = File.Exists(Path.Combine(_indexPath, ResumeWatermarkFileName));
             bool hasIndexState = SegmentsExist() || hasResumeWatermark;
             bool completedBuild = File.Exists(completedStampPath) && SegmentsExist() && !hasResumeWatermark;
+
+            string currentStamp;
+            try { currentStamp = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion); }
+            catch (SeforimDbUnreadableException)
+            {
+                // Cannot tell whether the DB changed — a momentary lock is not evidence that it
+                // did. Keep whatever is on disk: a completed index stays ready, an incomplete one
+                // waits for a later check rather than being wiped.
+                plan.DbUnreadable = true;
+                plan.IsReady = completedBuild;
+                return plan;
+            }
 
             if (SeforimDbContentFingerprint.IsLegacy(recordedStamp) && completedBuild)
             {
@@ -339,7 +350,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             if (builtFrom == null) return false;
             if (SeforimDbContentFingerprint.IsLegacy(builtFrom)) return false;
 
-            string current = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion);
+            string current;
+            try { current = SeforimDbContentFingerprint.Compute(_seforimDbPath, IndexFormatVersion); }
+            catch (SeforimDbUnreadableException) { return false; }   // cannot tell — not stale
             return !string.Equals(builtFrom, current, StringComparison.OrdinalIgnoreCase);
         }
 
@@ -377,5 +390,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         /// worth a log line, since its provenance is trust rather than proof until it next
         /// rebuilds.</summary>
         public bool KeptUnverifiableCompletedIndex { get; set; }
+
+        /// <summary>The seforim DB could not be read at the moment of the check, so its stamp
+        /// could not be compared. Nothing was wiped; a completed index is still ready.</summary>
+        public bool DbUnreadable { get; set; }
     }
 }

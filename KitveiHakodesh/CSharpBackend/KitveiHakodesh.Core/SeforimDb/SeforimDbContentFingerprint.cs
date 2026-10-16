@@ -34,6 +34,14 @@ namespace KitveiHakodesh.Core.SeforimDb
     /// Cost is index seeks and a header read. COUNT(*) over `line` is a multi-second full scan
     /// on a real corpus and is deliberately NOT part of the fingerprint.
     /// </summary>
+    /// <summary>The seforim DB exists but its content could not be probed right now, so no
+    /// fingerprint can be computed. Transient by nature; never evidence of a changed DB.</summary>
+    public sealed class SeforimDbUnreadableException : IOException
+    {
+        public SeforimDbUnreadableException(string databasePath)
+            : base("seforim DB could not be read right now (locked or busy): " + databasePath) { }
+    }
+
     public static class SeforimDbContentFingerprint
     {
         /// <summary>Fingerprint format version. Bump when the SHAPE changes, so an older value
@@ -63,8 +71,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             string? content = TryReadContent(databasePath);
             if (content != null) return head + content + ReleaseStamp(databasePath);
 
-            try { return head + "len=" + new FileInfo(databasePath).Length; }
-            catch (Exception) { return head + "unreadable"; }
+            // The file is there but could not be read right now (SQLITE_BUSY/locked by another
+            // process, a drive still waking up, AV holding it). This used to fall back to
+            // "len=<size>" — a value that can never equal a recorded content stamp, so one
+            // transient failure read as "different database" and WIPED a good index. An
+            // exception instead: callers comparing stamps treat it as "cannot tell, keep what
+            // is there and check again later".
+            throw new SeforimDbUnreadableException(databasePath);
         }
 
         /// <summary>
