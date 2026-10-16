@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import PageCard from '@/components/PageCard.vue'
 import { ref, watch, onMounted } from 'vue'
 import { HDate } from '@hebcal/core'
 import { lsGet, lsSet } from '@/utils/persistence'
@@ -72,9 +73,7 @@ onMounted(() => {
 
 <template>
   <div class="page">
-    <div class="page-scroller">
-      <div class="page-inner">
-        <div class="card">
+    <PageCard>
           <CalendarHeader
             :view-mode="viewMode"
             :hebrew-label="
@@ -96,9 +95,7 @@ onMounted(() => {
           />
           <WeeklyView v-if="viewMode === 'weekly'" :weekly="weekly" class="calendar-view" />
           <MonthlyView v-else :monthly="monthly" class="calendar-view" />
-        </div>
-      </div>
-    </div>
+    </PageCard>
   </div>
 </template>
 
@@ -111,56 +108,9 @@ onMounted(() => {
   direction: rtl;
 }
 
-/* Full-width scroller */
-.page-scroller {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Centered content column */
-.page-inner {
-  max-width: 680px;
-  margin: 0 auto;
-  padding: 8px;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  width: 100%;
-}
-
-/* Card styling */
-.card {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  overflow: hidden;
-  flex: 1;
-  min-height: 300px;
-}
-
 .calendar-view {
   flex: 1;
   min-height: 0;
 }
 
-/* Mobile / Android responsiveness */
-@media (max-width: 600px) {
-  .page-inner {
-    padding: 0;
-    max-width: 100%;
-  }
-
-  .card {
-    border-radius: 0;
-    border: none;
-  }
-}
 </style>
