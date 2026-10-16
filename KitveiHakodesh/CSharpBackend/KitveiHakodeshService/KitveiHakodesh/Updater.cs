@@ -22,6 +22,10 @@ public sealed class Updater(HttpClient http, ILogger<Updater> logger)
     /// must not download the same installer side by side.</summary>
     private readonly SemaphoreSlim passGate = new(1, 1);
 
+    /// <summary>A check/download pass is running; the service must not stop under it
+    /// (Http/OwnerWatcher).</summary>
+    public bool IsBusy => passGate.CurrentCount == 0;
+
     private const string RegistryKeyPath = @"SOFTWARE\KleiKodesh";
     private const string LatestReleaseApiUrl =
         "https://api.github.com/repos/KleiKodesh/KleiKodeshProject/releases/latest";

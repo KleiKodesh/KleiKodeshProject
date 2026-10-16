@@ -92,7 +92,9 @@ internal static partial class Program
         // Grows the bundled HebrewBooks catalog in the background. Checks twice a day and almost
         // always finds nothing to do - the interval between actual walks is a stamp inside the
         // catalog file, not a schedule here.
-        builder.Services.AddHostedService<HebrewBooksCatalogUpdateService>();
+        // Singleton too, so the owner watcher can see a walk in progress (Http/OwnerWatcher).
+        builder.Services.AddSingleton<HebrewBooksCatalogUpdateService>();
+        builder.Services.AddHostedService(sp => sp.GetRequiredService<HebrewBooksCatalogUpdateService>());
         // Watches the seforim DB WHILE the service runs and rebuilds both indexes on an
         // in-place DB change (startup uses the one-shot stamp check; this covers live updates).
         builder.Services.AddHostedService<DbChangeWatcher>();

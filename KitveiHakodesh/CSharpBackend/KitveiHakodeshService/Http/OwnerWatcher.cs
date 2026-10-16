@@ -19,8 +19,9 @@ namespace KitveiHakodeshService.Http;
 ///     (<c>releaseOwner</c>);
 ///   • <see cref="OwnerWatcher"/> checks every few seconds which owners are still alive (a host
 ///     that crashed never releases) and stops the service when none is left.
-/// Never while an index is building (the build would only restart on the next start): the stop
-/// waits for it. A service that never had an owner (started by the installer to build the
+/// Never in the middle of long-running work - an index build (FTS, catalog, file index), an
+/// update download, a HebrewBooks catalog walk: each would only restart from scratch on the
+/// next start, so the stop waits until they are done. A service that never had an owner (started by the installer to build the
 /// indexes) stops once it has been idle for <see cref="OwnerlessIdleLimit"/>. In service mode
 /// stopping the data host stops the service (Hosting/UserSessionBinding); the SCM shows it
 /// stopped and the next host to need it starts it again.
@@ -30,6 +31,8 @@ public sealed class OwnerRegistry(
     FullTextSearchService fts,
     CatalogTocSearchService catalogToc,
     LocalFileIndexService localFiles,
+    KitveiHakodeshService.KitveiHakodesh.Updater updater,
+    KitveiHakodeshService.HebrewBooks.HebrewBooksCatalogUpdateService hebrewBooksCatalog,
     ILogger<OwnerRegistry> logger)
 {
     private static readonly TimeSpan OwnerlessIdleLimit = TimeSpan.FromMinutes(5);
@@ -85,14 +88,15 @@ public sealed class OwnerRegistry(
 
     /// <summary>Background work a stop would cut short. While true the stop is deferred; the
     /// watcher's next poll tries again.</summary>
-    private bool IsBusy => fts.IsBusy || catalogToc.IsBusy || localFiles.IsBusy;
+    private bool IsBusy =>
+        fts.IsBusy || catalogToc.IsBusy || localFiles.IsBusy || updater.IsBusy || hebrewBooksCatalog.IsBusy;
 
     private void StopSoon(string why) =>
         _ = Task.Run(async () =>
         {
             await Task.Delay(StopGrace);
             if (!_owners.IsEmpty) return;
-            if (IsBusy) return; // an index build is running; PruneExited retries on the next poll
+            if (IsBusy) return; // long-running work in progress; PruneExited retries on the next poll
             logger.LogInformation("Stopping: {Why}", why);
             lifetime.StopApplication();
         });
