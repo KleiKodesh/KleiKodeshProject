@@ -2,6 +2,7 @@ import { effectScope, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useBookViewStore } from '@/stores/bookViewStore'
 import { useSettingsStore } from '@/stores/settingsStore'
+import { useTabStore } from '@/stores/tabStore'
 
 /**
  * UI chrome visibility, in two halves:
@@ -217,7 +218,7 @@ export function useIframeScrollbarsHidden(getIframe: () => HTMLIFrameElement | n
  * Reading mode — F9, handled in the app-wide block of `useAppTitleBarShortcuts`.
  *
  * A "check all / uncheck all" over the hideable chrome: title bars (Ctrl+H),
- * book-view toolbars (Ctrl+B) and hidden scrollbars (Ctrl+Shift+H). There is
+ * book-view toolbars (Ctrl+B), the PDF.js toolbar (per PDF tab) and hidden scrollbars (Ctrl+Shift+H). There is
  * no stored reading-mode flag — whether it is "on" is derived from the
  * individual states, so the individual shortcuts keep working and F9 never
  * fights them: if anything is still visible, F9 hides everything; only when
@@ -234,10 +235,21 @@ export function toggleReadingMode() {
   const titleBarByPane = { 1: pane1TitleBarVisible, 2: pane2TitleBarVisible } as const
   const panesOnScreen: readonly (1 | 2)[] = bookViewStore.splitViewEnabled ? [1, 2] : [1]
 
+  const tabStore = useTabStore()
+  const activePdfTabOnScreen = (paneId: 1 | 2) => {
+    const id = paneId === 1 ? tabStore.activeTabId : tabStore.pane2ActiveTabId
+    const tab = (paneId === 1 ? tabStore.pane1Tabs : tabStore.pane2Tabs).find((t) => t.id === id)
+    return tab?.route === '/pdf-view' ? tab : undefined
+  }
+
   const everythingHidden =
     settingsStore.scrollbarsHidden &&
     panesOnScreen.every(
-      (paneId) => !titleBarByPane[paneId].value && !bookViewStore.getToolbarVisible(paneId),
+      (paneId) =>
+        !titleBarByPane[paneId].value &&
+        !bookViewStore.getToolbarVisible(paneId) &&
+        (activePdfTabOnScreen(paneId) === undefined ||
+          activePdfTabOnScreen(paneId)!.pdfViewerTitleBarVisible === false),
     )
   const hideAll = !everythingHidden
 
@@ -245,5 +257,9 @@ export function toggleReadingMode() {
   for (const paneId of [1, 2] as const) {
     titleBarByPane[paneId].value = !hideAll
     if (bookViewStore.getToolbarVisible(paneId) === hideAll) bookViewStore.toggleToolbar(paneId)
+  }
+  // PDF.js toolbar (Ctrl+B in a PDF tab) — per tab, so every PDF tab follows.
+  for (const tab of [...tabStore.pane1Tabs, ...tabStore.pane2Tabs]) {
+    if (tab.route === '/pdf-view') tabStore.updateTab(tab.id, { pdfViewerTitleBarVisible: !hideAll })
   }
 }
