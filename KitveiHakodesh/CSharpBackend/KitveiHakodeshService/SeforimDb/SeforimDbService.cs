@@ -22,6 +22,16 @@ public sealed class SeforimDbService(ILogger<SeforimDbService> logger)
     /// the one they chose has moved.</summary>
     public bool HasDb => _queries.IsAvailable;
 
+    /// <summary>The database exists AND answers a query: false for a file that is not a
+    /// seforim database, is corrupt, or is locked. One cheap read; the page polls it for
+    /// its "library cannot be read" banner.</summary>
+    public bool CanRead()
+    {
+        if (!HasDb) return false;
+        try { _queries.GetBookById(1); return true; }
+        catch { return false; } // polled: not logged, the real queries already log why
+    }
+
     /// <summary>Idle memory trim: drop the cached book/category catalog (see Core).</summary>
     public void ClearCatalogCache() => _queries.ClearCatalogCache();
 

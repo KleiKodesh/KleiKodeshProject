@@ -54,6 +54,12 @@ namespace KitveiHakodeshLib
                         // The page's "try again" after the service was unavailable: allow one more
                         // install / repair prompt and bring the service up.
                         case "retryService": await HandleRetryService(id); break;
+                        // The settings page's "install the service" row (shown while a console
+                        // copy serves instead of the Windows service).
+                        case "getServiceStatus":
+                            _bridge.Reply(id, new { canInstall = KitveiHakodeshLib.Service.KitveiHakodeshServiceLauncher.CanInstallService() });
+                            break;
+                        case "installService": await HandleInstallService(id); break;
                         // Replies before reloading on purpose, unlike DeleteFtsIndex: the caller
                         // cannot meaningfully await a navigation that destroys the page making the
                         // call, so the reply exists only to settle the promise. Both frontend
@@ -183,6 +189,19 @@ namespace KitveiHakodeshLib
             try
             {
                 await Task.Run(() => _serviceLauncher.EnsureRunningAsync(System.Threading.CancellationToken.None));
+                _bridge.Reply(id, new { ok = true });
+            }
+            catch (KitveiHakodeshLib.Service.KitveiHakodeshServiceUnavailableException ex)
+            {
+                _bridge.Reply(id, new { ok = false, reason = ex.Reason.ToString(), detail = ex.Message });
+            }
+        }
+
+        private async Task HandleInstallService(string id)
+        {
+            try
+            {
+                await Task.Run(() => _serviceLauncher.InstallServiceAsync(System.Threading.CancellationToken.None));
                 _bridge.Reply(id, new { ok = true });
             }
             catch (KitveiHakodeshLib.Service.KitveiHakodeshServiceUnavailableException ex)

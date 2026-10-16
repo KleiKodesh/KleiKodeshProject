@@ -13,7 +13,25 @@ import {
   getDbPathInfo,
   setDbPath,
   pickDbPath as pickDbPathWithDialog,
+  getServiceInstallOffer,
+  installService,
 } from '@/webview-host/bridge'
+
+// ── Service install ───────────────────────────────────────────────────────────
+// Offered only when the host runs without the Windows service (file search is off).
+// The install raises the admin prompt once; on success the page reloads onto the service.
+
+const serviceInstallOffer = ref(false)
+const installing = ref(false)
+
+async function runInstallService() {
+  installing.value = true
+  try {
+    if (await installService()) location.reload()
+  } finally {
+    installing.value = false
+  }
+}
 
 // ── Database path ─────────────────────────────────────────────────────────────
 // The KitveiHakodesh service owns the setting: it validates, persists (one registry
@@ -22,6 +40,7 @@ import {
 const dbPath = ref('')
 
 onMounted(async () => {
+  serviceInstallOffer.value = await getServiceInstallOffer()
   const info = await getDbPathInfo()
   if (info) dbPath.value = info.path
 })
@@ -90,6 +109,16 @@ function openExcludedFolders() {
   <!-- ── מתקדם ── -->
   <div data-section="section-advanced" data-section-label="מתקדם">
     <div id="section-advanced" class="section-label">מתקדם</div>
+
+    <SettingRow
+      v-if="serviceInstallOffer"
+      label="שירות כתבי הקודש"
+      hint="התוכנה פועלת ללא שירות Windows, ולכן חיפוש קבצים במסמכי המחשב כבוי. התקנת השירות תבקש אישור מנהל פעם אחת."
+    >
+      <button class="manage-btn" :disabled="installing" @click="runInstallService">
+        {{ installing ? 'מתקין...' : 'התקן שירות' }}
+      </button>
+    </SettingRow>
 
     <SettingRow
       label="הגדר תיקיית ספרים מקומית של היברו בוקס"

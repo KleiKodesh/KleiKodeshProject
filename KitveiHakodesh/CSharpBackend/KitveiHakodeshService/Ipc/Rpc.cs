@@ -199,6 +199,10 @@ public sealed class DbPathResult
     /// half-way (its hot -journal or .applying marker is still beside the file), so every
     /// read-only query fails until Otzaria is opened and finishes it.</summary>
     public bool UpdateInterrupted { get; set; }
+    /// <summary><c>getSeforimDbPath</c> only: the database answers a query. False with
+    /// <see cref="Exists"/> true means the file is there but cannot be read (not a seforim
+    /// database, corrupt, locked).</summary>
+    public bool Readable { get; set; }
     public bool Restarting { get; set; }
     /// <summary><c>pickSeforimDbPath</c> only: the user dismissed the native dialog, so
     /// nothing was persisted and the caller must leave the current path as-is.</summary>

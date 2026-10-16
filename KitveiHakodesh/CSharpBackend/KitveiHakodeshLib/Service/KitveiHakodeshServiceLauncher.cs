@@ -15,19 +15,21 @@ namespace KitveiHakodeshLib.Service
     /// The service is a hard dependency of every hosted process. In order:
     ///   1. Listening already: nothing to do.
     ///   2. Registered with Windows (KitveiHakodeshSvc): start it (no prompt - starting is granted
-    ///      to every user). If it will not start (disabled, a broken or moved registration),
-    ///      repair it: run the installed exe's <c>--install</c> elevated (one UAC prompt), which
-    ///      re-registers it, then start it again.
-    ///   3. Not registered, but the product's service exe is installed beside the app
-    ///      (<c>KitveiHakodeshService\KitveiHakodeshService.exe</c>): install it the same way.
-    ///   4. Neither (a dev checkout, a portable copy): spawn the exe as a console process tied to
+    ///      to every user).
+    ///   3. Not started, and the product's service exe is installed
+    ///      (%LocalAppData%\KleiKodesh\KitveiHakodeshService): install / repair it - its
+    ///      <c>--install</c> run elevated (one UAC prompt) re-registers it, enabled - then start
+    ///      it. Not asked, declined or failed: run that exe as a console copy for this user
+    ///      meanwhile; the service ends that copy once it starts.
+    ///   4. Registered but nothing installed to repair it from: fail with the reason.
+    ///   5. Neither (a dev checkout, a portable copy): spawn the exe as a console process tied to
     ///      this one (KHS_OWNER_PID), exactly as the dev server does. No prompt ever.
     ///
     /// The UAC prompt is never raised unasked: data requests and the startup warm-up call with
-    /// allowElevation false and only START the service; when it needs installing or repairing
-    /// they fail with the reason, the page's banner asks the user, and its button (host action
-    /// retryService -> <see cref="AllowAnotherRepairAttempt"/>) runs the elevated step. Never
-    /// two prompts at once: one gate in this process, a machine-wide mutex across processes.
+    /// allowElevation false and only start or spawn; the page's banner says the service needs
+    /// installing, and its button (host action retryService ->
+    /// <see cref="AllowAnotherRepairAttempt"/>) runs the elevated step. Never two prompts at
+    /// once: one gate in this process, a machine-wide mutex across processes.
     /// The failure carries a <see cref="KitveiHakodeshServiceUnavailableReason"/> so the page can
     /// say what is wrong.
     /// </summary>
@@ -121,31 +123,34 @@ namespace KitveiHakodeshLib.Service
                 string installedExe = InstalledExecutable();
                 bool registered = IsRegistered();
 
-                if (registered)
-                {
-                    if (await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
-                    if (installedExe == null || !allowElevation)
-                        throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
-                            "The KitveiHakodesh service is registered but will not start.");
-
-                    // Will not start: re-register it from the installed exe, then try once more.
-                    await RunElevatedInstallAsync(installedExe, cancellationToken).ConfigureAwait(false);
-                    if (await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
-                    throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
-                        "The KitveiHakodesh service was repaired but still will not start.");
-                }
+                if (registered && await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
 
                 if (installedExe != null)
                 {
-                    // The product, but the service was never registered (or was removed).
-                    if (!allowElevation)
-                        throw Unavailable(KitveiHakodeshServiceUnavailableReason.NotInstalled,
-                            "The KitveiHakodesh service is not installed.");
-                    await RunElevatedInstallAsync(installedExe, cancellationToken).ConfigureAwait(false);
-                    if (await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
-                    throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
-                        "The KitveiHakodesh service was installed but will not start.");
+                    // Registered but will not start (disabled, a broken or moved registration),
+                    // or never registered: install / repair it from the installed exe, then start
+                    // it. Only when asked (the banner button): a data request or the startup
+                    // warm-up must never raise a UAC prompt by itself.
+                    if (allowElevation)
+                    {
+                        try
+                        {
+                            await RunElevatedInstallAsync(installedExe, cancellationToken).ConfigureAwait(false);
+                            if (await TryStartRegisteredAsync(cancellationToken).ConfigureAwait(false)) return;
+                        }
+                        catch (KitveiHakodeshServiceUnavailableException) { /* declined or failed: fall back below */ }
+                    }
+
+                    // No service: a console copy of the installed exe serves this user meanwhile,
+                    // so the app keeps working (without the file index, which needs the service's
+                    // MFT access). Once the service runs it ends that copy and takes over.
+                    await SpawnAsync(installedExe, cancellationToken).ConfigureAwait(false);
+                    return;
                 }
+
+                if (registered)
+                    throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
+                        "The KitveiHakodesh service is registered but will not start.");
 
                 // A dev checkout or a portable copy: no Windows service, a console instance.
                 string executable = FindExecutable();
@@ -171,6 +176,71 @@ namespace KitveiHakodeshLib.Service
         }
 
         // ── Installed Windows service ─────────────────────────────────────────────
+
+        /// <summary>
+        /// The product is installed but its Windows service is not the one serving right now
+        /// (never registered, the prompt declined, disabled...): a console copy serves instead,
+        /// without the file index. The settings page shows an "install the service" row then.
+        /// </summary>
+        public static bool CanInstallService() =>
+            InstalledExecutable() != null && !IsInstalledServiceRunning();
+
+        /// <summary>
+        /// The settings page's "install the service": one UAC prompt, re-register from the
+        /// installed exe, start it. The service ends the console copy as it comes up. Throws
+        /// with the reason when declined or failed.
+        /// </summary>
+        public async Task InstallServiceAsync(CancellationToken cancellationToken)
+        {
+            string installedExe = InstalledExecutable();
+            if (installedExe == null)
+                throw Unavailable(KitveiHakodeshServiceUnavailableReason.NotInstalled,
+                    "The product is not installed on this machine.");
+
+            AllowAnotherRepairAttempt();
+            await Gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+            try
+            {
+                await RunElevatedInstallAsync(installedExe, cancellationToken).ConfigureAwait(false);
+                // Not TryStartRegisteredAsync: that is satisfied by ANY listener on the pipe, and
+                // here the console copy is one. Start the service and wait for the SCM to say so.
+                if (!await StartRegisteredAndWaitRunningAsync(cancellationToken).ConfigureAwait(false))
+                    throw Unavailable(KitveiHakodeshServiceUnavailableReason.StartFailed,
+                        "The KitveiHakodesh service was installed but will not start.");
+            }
+            finally { Gate.Release(); }
+        }
+
+        private static async Task<bool> StartRegisteredAndWaitRunningAsync(CancellationToken cancellationToken)
+        {
+            DateTime deadline = DateTime.UtcNow + StartupTimeout;
+            try
+            {
+                using (var controller = new ServiceController(InstalledServiceName))
+                {
+                    if (controller.Status == ServiceControllerStatus.Stopped) controller.Start();
+                    while (DateTime.UtcNow < deadline)
+                    {
+                        controller.Refresh();
+                        if (controller.Status == ServiceControllerStatus.Running) return true;
+                        await Task.Delay(150, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+            }
+            catch (Exception ex) when (ex is InvalidOperationException || ex is Win32Exception) { }
+            return false;
+        }
+
+        private static bool IsInstalledServiceRunning()
+        {
+            try
+            {
+                using (var controller = new ServiceController(InstalledServiceName))
+                    return controller.Status == ServiceControllerStatus.Running
+                        || controller.Status == ServiceControllerStatus.StartPending;
+            }
+            catch { return false; } // not registered, or the SCM refused the query
+        }
 
         private static bool IsRegistered()
         {
@@ -241,6 +311,11 @@ namespace KitveiHakodeshLib.Service
                 UseShellExecute = true,
                 WindowStyle = ProcessWindowStyle.Hidden,
                 WorkingDirectory = Path.GetDirectoryName(installedExe),
+                // .NET Framework passes an owner window to ShellExecuteEx only with ErrorDialog
+                // set. Without one Windows opens the prompt in the background, as a flashing
+                // taskbar button - users saw "nothing happens" on the repair button.
+                ErrorDialog = true,
+                ErrorDialogParentHandle = Process.GetCurrentProcess().MainWindowHandle,
             };
             try
             {
@@ -278,25 +353,18 @@ namespace KitveiHakodeshLib.Service
         }
 
         /// <summary>
-        /// The service exe of the INSTALLED product, or null (dev / portable). Every build of this
-        /// library carries the service in a KitveiHakodeshService folder, so the exe being present
-        /// proves nothing; what makes a copy the installed product is running from the install
-        /// root, %LocalAppData%\KleiKodesh (the installer's AddinInstaller.InstallPath). Only that
-        /// copy may register a Windows service - a dev build or an unzipped portable copy must
-        /// never ask for admin rights.
+        /// The service exe of the INSTALLED product, or null when the product is not installed on
+        /// this machine. Looked up at the install root, %LocalAppData%\KleiKodesh (the installer's
+        /// AddinInstaller.InstallPath), whatever folder THIS host runs from: a host that lives in
+        /// a subfolder, a portable copy or a dev build on a machine with the product installed must
+        /// still install / repair that service, never run beside it. Only that exe is ever
+        /// registered; a portable or dev copy's own exe never asks for admin rights.
         /// </summary>
         private static string InstalledExecutable()
         {
-            string installRoot = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KleiKodesh");
-            string baseDirectory = AppDomain.CurrentDomain.BaseDirectory;
-            if (!string.Equals(
-                    Path.GetFullPath(baseDirectory).TrimEnd('\\'),
-                    Path.GetFullPath(installRoot).TrimEnd('\\'),
-                    StringComparison.OrdinalIgnoreCase))
-                return null;
-
-            string candidate = Path.Combine(baseDirectory, InstalledServiceFolder, ExecutableName);
+            string candidate = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "KleiKodesh", InstalledServiceFolder, ExecutableName);
             return File.Exists(candidate) ? candidate : null;
         }
 

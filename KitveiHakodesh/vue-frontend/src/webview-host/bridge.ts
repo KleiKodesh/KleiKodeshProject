@@ -1078,6 +1078,8 @@ export interface DbPathInfo {
   /** An Otzaria update of the DB stopped half-way (hot journal left behind); no book loads
    *  until Otzaria finishes it. */
   updateInterrupted?: boolean
+  /** The database answers a query; false with `exists` true = the file cannot be read. */
+  readable?: boolean
 }
 
 /** Current seforim DB path (+ whether user-set and whether the file exists). */
@@ -1086,6 +1088,28 @@ export async function getDbPathInfo(): Promise<DbPathInfo | null> {
     return await serviceCall<DbPathInfo>('getSeforimDbPath')
   } catch {
     return null
+  }
+}
+
+/**
+ * Hosted only: whether the product's Windows service is NOT the one serving right now (a
+ * console copy is), so the settings page can offer to install it. Dev: never.
+ */
+export async function getServiceInstallOffer(): Promise<boolean> {
+  if (typeof window.__webviewAction !== 'function') return false
+  try {
+    return (await action<{ canInstall?: boolean }>('getServiceStatus'))?.canInstall ?? false
+  } catch {
+    return false
+  }
+}
+
+/** Hosted only: install / repair the Windows service (one admin prompt). False when declined or failed. */
+export async function installService(): Promise<boolean> {
+  try {
+    return (await action<{ ok?: boolean }>('installService'))?.ok ?? false
+  } catch {
+    return false
   }
 }
 

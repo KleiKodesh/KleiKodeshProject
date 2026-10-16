@@ -14,7 +14,10 @@ namespace KitveiHakodeshService.Ipc;
 /// as a Windows service this process is SYSTEM, whose default pipe DACL would admit no
 /// logged-on user; as a console process the list changes nothing for its own user.
 /// </summary>
-public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger) : BackgroundService
+public sealed class PipeServer(
+    Dispatcher dispatcher,
+    IHostApplicationLifetime lifetime,
+    ILogger<PipeServer> logger) : BackgroundService
 {
     public const string DefaultPipeName = "KitveiHakodesh";
 
@@ -43,6 +46,8 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
         var acceptors = new Task[AcceptorCount];
         for (int i = 0; i < AcceptorCount; i++)
             acceptors[i] = AcceptLoopAsync(stoppingToken);
+        // Second sweep, now that the pipe is ours: see SingleInstanceInstalledServiceWins.
+        if (WindowsServiceMode.IsWindowsService) SingleInstanceInstalledServiceWins.EndOtherCopies();
         await Task.WhenAll(acceptors);
     }
 
@@ -67,6 +72,17 @@ public sealed class PipeServer(Dispatcher dispatcher, ILogger<PipeServer> logger
             catch (OperationCanceledException)
             {
                 pipe?.Dispose();
+                break;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                // Another instance owns this pipe name - typically the installed SYSTEM service,
+                // whose pipe access list lets users connect but not add instances. Retrying can
+                // never succeed and would only keep this copy's databases open next to the real
+                // owner's, so this copy steps aside.
+                pipe?.Dispose();
+                logger.LogError(ex, @"\\.\pipe\{Pipe} is owned by another instance; stopping", _pipeName);
+                lifetime.StopApplication();
                 break;
             }
             catch (Exception ex)
