@@ -58,7 +58,7 @@ function toggleTitleBarButton(buttonId: string) {
       <ThemePicker />
     </SettingRow>
 
-    <SettingRow id="nav-dark-mode" data-nav-label="מצב כהה" label="מצב כהה" hint="החלף בין מצב בהיר לכהה">
+    <SettingRow id="nav-dark-mode" data-nav-label="מצב כהה" label="מצב כהה" hint="החלף בין מצב בהיר לכהה (Ctrl+L)">
       <ToggleGroup
         :model-value="isDarkMode"
         :options="[
