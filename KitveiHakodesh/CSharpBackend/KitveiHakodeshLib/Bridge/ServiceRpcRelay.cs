@@ -30,6 +30,11 @@ namespace KitveiHakodeshLib.Bridge
     ///                               chooses X before it POSTs, so its listener is in place
     ///                               before the first frame can arrive.
     ///   <c>POST /rpc-stream-cancel?id=X</c> closes X's pipe - the service's cancel signal.
+    ///   <c>POST /rpc-stream-ack?id=X&amp;n=N</c> the page consumed N more frames of X. Pushing is
+    ///                               fire-and-forget, so without these credits the pipe's
+    ///                               backpressure stops at this relay: a very common word pumps
+    ///                               every frame into the page faster than it can consume them
+    ///                               and the renderer runs out of memory.
     ///
     /// Every open stream is closed when the page navigates away (reload, app reset): the new
     /// page knows none of the old ids, so pumping on would only leak pipes.
@@ -63,6 +68,10 @@ namespace KitveiHakodeshLib.Bridge
         // Ids cancelled while their pipe was still being opened: the open completes, sees the
         // id here, and closes at once instead of pumping into a page that stopped listening.
         private readonly ConcurrentDictionary<string, byte> _cancelledBeforeOpen = new ConcurrentDictionary<string, byte>();
+        // Frames a stream may have pushed but the page not yet acknowledged (see /rpc-stream-ack).
+        // Must stay above the page's ack interval (STREAM_ACK_EVERY in serviceClient.ts).
+        private const int StreamFrameWindow = 32;
+        private readonly ConcurrentDictionary<string, SemaphoreSlim> _streamCredits = new ConcurrentDictionary<string, SemaphoreSlim>();
 
         public ServiceRpcRelay(CoreWebView2 core, WebBridge bridge, IKitveiHakodeshServiceChannel channel)
         {
@@ -169,8 +178,17 @@ namespace KitveiHakodeshLib.Bridge
                         return TextResponse(202, "Accepted", "");
                     }
                     _openStreams[streamId] = frames;
+                    _streamCredits[streamId] = new SemaphoreSlim(StreamFrameWindow);
                     _ = PumpFramesToPageAsync(streamId, frames);
                     return TextResponse(202, "Accepted", "");
+                }
+                case "/rpc-stream-ack":
+                {
+                    string streamId = StreamIdOf(uri);
+                    int.TryParse(QueryValue(uri, "n"), out int n);
+                    if (streamId != null && n > 0 && _streamCredits.TryGetValue(streamId, out SemaphoreSlim credits))
+                        try { credits.Release(n); } catch (SemaphoreFullException) { } catch (ObjectDisposedException) { }
+                    return TextResponse(200, "OK", "");
                 }
                 case "/rpc-stream-cancel":
                 {
@@ -189,10 +207,14 @@ namespace KitveiHakodeshLib.Bridge
         private async Task PumpFramesToPageAsync(string streamId, Stream frames)
         {
             string error = null;
+            _streamCredits.TryGetValue(streamId, out SemaphoreSlim credits);
             try
             {
                 while (true)
                 {
+                    // Wait for the page to catch up before reading on, so the pipe (and with it
+                    // the service) is held back instead of the page's memory filling up.
+                    if (credits != null) await credits.WaitAsync().ConfigureAwait(false);
                     byte[] frame = await KitveiHakodeshServiceFrameProtocol
                         .ReadFrameAsync(frames, CancellationToken.None).ConfigureAwait(false);
                     if (frame == null) break; // the service closed: the stream is complete
@@ -217,12 +239,18 @@ namespace KitveiHakodeshLib.Bridge
         {
             if (!_openStreams.TryRemove(streamId, out Stream stream)) return false;
             try { stream.Dispose(); } catch { }
+            // Wake a pump parked on credits; its next read hits the disposed pipe and it ends.
+            // Not disposed: the pump may still be waiting on it.
+            if (_streamCredits.TryRemove(streamId, out SemaphoreSlim credits))
+                try { credits.Release(StreamFrameWindow); } catch (SemaphoreFullException) { }
             return true;
         }
 
-        private static string StreamIdOf(Uri uri)
+        private static string StreamIdOf(Uri uri) => QueryValue(uri, "id");
+
+        private static string QueryValue(Uri uri, string name)
         {
-            const string key = "id=";
+            string key = name + "=";
             string query = uri.Query.TrimStart('?');
             foreach (string part in query.Split('&'))
                 if (part.StartsWith(key, StringComparison.Ordinal) && part.Length > key.Length)

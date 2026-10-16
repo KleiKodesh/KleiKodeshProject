@@ -183,6 +183,9 @@ export function serviceCallVoid(op: string, args: object = {}): void {
  * so the listener below is registered before the first frame can possibly arrive. Aborting
  * posts `/rpc-stream-cancel`, which closes the pipe — the service's cancel signal.
  */
+/** Frames consumed between `/rpc-stream-ack` credits; below the relay's StreamFrameWindow. */
+const STREAM_ACK_EVERY = 8
+
 async function* hostedRelayStream<T>(
   op: string,
   args: object,
@@ -210,6 +213,17 @@ async function* hostedRelayStream<T>(
       notify()
     }
   })
+  // The relay pushes only while it holds credits, which the page returns as it CONSUMES
+  // frames (after each yield resumes). That carries the pipe's backpressure through the
+  // fire-and-forget push, so a slow consumer holds back the service instead of piling
+  // every frame of a huge result set up in the queue (renderer out of memory).
+  let unacked = 0
+  const ack = () => {
+    const n = unacked
+    unacked = 0
+    fetch(`${HOSTED_RELAY_ENDPOINT.base}/rpc-stream-ack?id=${encodeURIComponent(streamId)}&n=${n}`, { method: 'POST' })
+      .catch(() => {})
+  }
   const onAbort = () => { ended = true; notify() }
   signal?.addEventListener('abort', onAbort, { once: true })
 
@@ -223,7 +237,9 @@ async function* hostedRelayStream<T>(
         if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
           yield transformKeys(mpDecode(env.Result), decodeKey) as T
+        if (++unacked >= STREAM_ACK_EVERY) ack()
       }
+      if (unacked) ack() // queue drained: hand back the rest so the relay never stalls
       if (signal?.aborted) return
       if (ended) {
         if (endError) throw new Error(endError)
