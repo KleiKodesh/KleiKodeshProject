@@ -1013,31 +1013,30 @@ export function setHbLocalFolderInRegistry(path: string): void {
 }
 
 /**
- * Trigger a HebrewBooks PDF Save As dialog.
+ * Download a book through the native Save As dialog. Resolves only when the save ends -
+ * saved, cancelled, failed or book not found - so the caller can show progress meanwhile.
  */
-export function triggerHbSaveAs(
+export async function triggerHbSaveAs(
   bookId: string,
   bookTitle: string,
   url: string,
-): Promise<{ ok?: boolean }> {
+): Promise<{ ok?: boolean; cancelled?: boolean; notFound?: boolean; error?: string }> {
   if (typeof window.__webviewAction !== 'function') {
     // Dev: no native Save As dialog. Fetch the book into the configured local folder (or the
     // app cache) via the same in-service download, then reveal it so the user can find/move it.
-    ;(async () => {
-      try {
-        const r = await serviceCall<{ handle?: string }>('triggerHbDownload', {
-          bookId,
-          localFolder: '',
-          isOnline: navigator.onLine,
-        })
-        if (r?.handle) window.open(`/khs-file/${r.handle}`, '_blank')
-      } catch {
-        /* ignore — dev convenience only */
-      }
-    })()
-    return Promise.resolve({ ok: true })
+    try {
+      const r = await serviceCall<{ handle?: string }>('triggerHbDownload', {
+        bookId,
+        localFolder: '',
+        isOnline: navigator.onLine,
+      })
+      if (r?.handle) window.open(`/khs-file/${r.handle}`, '_blank')
+      return { ok: true }
+    } catch {
+      return { ok: false } // dev convenience only
+    }
   }
-  return action<{ ok?: boolean }>('triggerHbSaveAs', { bookId, bookTitle, url })
+  return action('triggerHbSaveAs', { bookId, bookTitle, url })
 }
 
 /**

@@ -28,7 +28,16 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         private HbSaveAsInfo? _pendingSaveAs;
 
-        private struct HbSaveAsInfo { public string BookId; public string BookTitle; }
+        // ReplyId: the page's triggerHbSaveAs call, answered only when the save ends (saved,
+        // cancelled, failed or not found) so the page can spin the download button meanwhile.
+        private struct HbSaveAsInfo { public string BookId; public string BookTitle; public string ReplyId; }
+
+        /// <summary>Answers a Save As call once, with how it ended.</summary>
+        private void FinishSaveAs(string replyId, object result)
+        {
+            if (replyId == null) return;
+            try { _bridge.Reply(replyId, result); } catch (Exception ex) { Log("FinishSaveAs: " + ex.Message); }
+        }
 
         public HebrewBooksHandler(WebBridge bridge, WebView2 webView, Control owner)
         {
@@ -41,6 +50,16 @@ namespace KitveiHakodeshLib.HebrewBooks
         // meaning the requested book does not exist on the server. Only Save As can land here.
         internal void NotifyBookNotFound()
         {
+            if (_pendingSaveAs.HasValue) FinishSaveAs(_pendingSaveAs.Value.ReplyId, new { notFound = true });
+            _pendingSaveAs = null;
+        }
+
+        // A navigation that becomes a download clears _pendingSaveAs in DownloadStarting first,
+        // so a pending Save As here means its navigation failed outright.
+        internal void NotifySaveAsNavigationFailed(string reason)
+        {
+            if (!_pendingSaveAs.HasValue) return;
+            FinishSaveAs(_pendingSaveAs.Value.ReplyId, new { error = reason });
             _pendingSaveAs = null;
         }
 
@@ -48,14 +67,15 @@ namespace KitveiHakodeshLib.HebrewBooks
         {
             try
             {
-                _bridge.Reply(id, new { ok = true });
                 string bookId    = root.GetProperty("bookId").GetString();
                 string bookTitle = root.GetProperty("bookTitle").GetString();
                 string url       = root.GetProperty("url").GetString();
-                if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) return;
+                if (!HebrewBooksLocalFolder.IsValidBookId(bookId)) { _bridge.Reply(id, new { error = "invalid book id" }); return; }
 
-                _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle };
-                NavigateSafe(url);
+                // A newer Save As replaces an unfinished one; let the older button stop spinning.
+                if (_pendingSaveAs.HasValue) FinishSaveAs(_pendingSaveAs.Value.ReplyId, new { cancelled = true });
+                _pendingSaveAs = new HbSaveAsInfo { BookId = bookId, BookTitle = bookTitle, ReplyId = id };
+                if (!NavigateSafe(url)) NotifySaveAsNavigationFailed("navigation unavailable");
             }
             catch (Exception ex) { _bridge.Reply(id, new { error = ex.Message }); }
         }
@@ -83,9 +103,18 @@ namespace KitveiHakodeshLib.HebrewBooks
                         }
                     }));
 
-                    if (dest == null) { e.Cancel = true; return; }
+                    if (dest == null) { e.Cancel = true; FinishSaveAs(saveAs.ReplyId, new { cancelled = true }); return; }
 
                     e.ResultFilePath = dest;
+                    var op = e.DownloadOperation;
+                    op.StateChanged += (s, _) =>
+                    {
+                        if (op.State == CoreWebView2DownloadState.InProgress) return;
+                        FinishSaveAs(saveAs.ReplyId,
+                            op.State == CoreWebView2DownloadState.Completed ? new { ok = true }
+                            : op.InterruptReason == CoreWebView2DownloadInterruptReason.UserCanceled ? (object)new { cancelled = true }
+                            : new { error = op.InterruptReason.ToString() });
+                    };
                     return;
                 }
 
@@ -95,6 +124,7 @@ namespace KitveiHakodeshLib.HebrewBooks
             catch (Exception ex)
             {
                 Log("OnDownloadStarting exception: " + ex.Message);
+                if (_pendingSaveAs.HasValue) { FinishSaveAs(_pendingSaveAs.Value.ReplyId, new { error = ex.Message }); _pendingSaveAs = null; }
                 // Cancel the download rather than leaving state inconsistent
                 try { e.Cancel = true; } catch { }
             }
@@ -134,18 +164,24 @@ namespace KitveiHakodeshLib.HebrewBooks
 
         private static void Log(string msg) => Debug.WriteLine("[HbHandler] " + msg);
 
-        private void NavigateSafe(string url)
+        /// <summary>Navigates the WebView2; false when it could not start the navigation.</summary>
+        private bool NavigateSafe(string url)
         {
-            if (_owner.IsDisposed || _webView.IsDisposed) return;
+            if (_owner.IsDisposed || _webView.IsDisposed) return false;
+            bool started = false;
             try
             {
                 _owner.Invoke(new Action(() =>
                 {
                     if (!_owner.IsDisposed && !_webView.IsDisposed && _webView.CoreWebView2 != null)
+                    {
                         _webView.CoreWebView2.Navigate(url);
+                        started = true;
+                    }
                 }));
             }
             catch (Exception) { }
+            return started;
         }
 
         private static string MakeSafeFileName(string name)

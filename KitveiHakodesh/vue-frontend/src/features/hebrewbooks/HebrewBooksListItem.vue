@@ -8,7 +8,7 @@ import {
 import type { HebrewBook } from './hebrewBooksCatalog'
 import { wantsNewTab, withNewTabHint } from '@/composables/useOpenInNewTab'
 
-const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean }>()
+const props = defineProps<{ book: HebrewBook; focused?: boolean; hasLocalFile?: boolean; downloading?: boolean }>()
 const emit = defineEmits<{
   'book-clicked': [book: HebrewBook, openInNewTab: boolean]
   'download-clicked': [book: HebrewBook]
@@ -72,9 +72,12 @@ const tooltip = computed(() => {
           class="dl-btn"
           :title="'הורד ' + book.title"
           tabindex="-1"
+          :disabled="downloading"
+          :aria-busy="downloading"
           @click.stop="emit('download-clicked', book)"
         >
-          <IconArrowDownload20Regular />
+          <span v-if="downloading" class="download-spinner" />
+          <IconArrowDownload20Regular v-else />
         </button>
       </div>
     </div>
@@ -162,6 +165,20 @@ const tooltip = computed(() => {
 }
 .reveal-btn:hover {
   color: #3478f6;
+}
+
+/* Same ring as the book-view toolbar's export-to-Word button. */
+.download-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: download-spin 0.8s linear infinite;
+}
+@keyframes download-spin {
+  to { transform: rotate(360deg); }
 }
 
 .row-bottom {
