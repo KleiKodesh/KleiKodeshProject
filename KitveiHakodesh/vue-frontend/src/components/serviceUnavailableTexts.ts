@@ -40,3 +40,17 @@ export const SEFORIM_DB_UPDATE_INTERRUPTED_TEXTS = {
   title: 'עדכון ספריית אוצריא לא הושלם',
   body: 'עדכון מאגר הספרים של אוצריא נקטע באמצע, ולכן הספרים אינם נטענים כרגע. נא לפתוח את אוצריא ולתת לה להשלים את העדכון - הספרייה תיטען כאן מחדש אוטומטית. אין למחוק קבצים בתיקיית הספרייה.',
 }
+
+/** Banner texts when no seforim DB (the Otzaria library) exists at the configured path. */
+export const SEFORIM_DB_MISSING_TEXTS = {
+  title: 'הספרייה לא נמצאה',
+  body: 'לא נמצא במחשב מאגר ספרים (ספריית אוצריא), ולכן הספרים והחיפוש אינם זמינים. לחיצה על "בחר ספרייה" מאפשרת להצביע על הקובץ seforim.db, או שאפשר להתקין את אוצריא.',
+}
+
+/** Banner texts when the seforim DB file exists but cannot be opened. */
+export const SEFORIM_DB_UNREADABLE_TEXTS = {
+  title: 'לא ניתן לקרוא את הספרייה',
+  body: 'קובץ מאגר הספרים קיים, אך לא ניתן לפתוח אותו (אינו מסד נתונים תקין, פגום, או נעול על ידי תוכנה אחרת). לחיצה על "בחר ספרייה" מאפשרת לבחור קובץ אחר.',
+}
+
+export const SEFORIM_DB_PICK_LABEL = 'בחר ספרייה'

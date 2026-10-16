@@ -35,10 +35,17 @@ internal static partial class Program
 
         if (WindowsServiceMode.IsWindowsService)
         {
+            SingleInstanceInstalledServiceWins.EndOtherCopies();
             var service = Host.CreateApplicationBuilder(args);
             service.Services.AddWindowsService(options => options.ServiceName = WindowsServiceMode.ServiceName);
             service.Services.AddHostedService<UserSessionBinding>();
             service.Build().Run();
+            return 0;
+        }
+
+        if (!SingleInstanceInstalledServiceWins.ConsoleMayRun(out string reason))
+        {
+            Console.Error.WriteLine("Not starting: " + reason + ".");
             return 0;
         }
 
