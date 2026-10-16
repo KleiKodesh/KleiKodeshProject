@@ -204,6 +204,11 @@ public sealed class DbPathResult
     /// database, corrupt, locked).</summary>
     public bool Readable { get; set; }
     public bool Restarting { get; set; }
+    /// <summary>Identifies the service instance that answered. A path change restarts the
+    /// service, but the old instance keeps answering (with the OLD database) for a few seconds
+    /// after it said <see cref="Restarting"/>; the page compares this against later
+    /// <c>getSeforimDbPath</c> replies to know the fresh instance is up before it reloads.</summary>
+    public string InstanceId { get; set; } = "";
     /// <summary><c>pickSeforimDbPath</c> only: the user dismissed the native dialog, so
     /// nothing was persisted and the caller must leave the current path as-is.</summary>
     public bool Cancelled { get; set; }

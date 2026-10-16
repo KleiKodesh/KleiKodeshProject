@@ -34,6 +34,10 @@ public sealed class Dispatcher(
     IHostApplicationLifetime lifetime,
     ILogger<Dispatcher> logger)
 {
+    /// <summary>One id per process: a DB-path change restarts the service and the page waits
+    /// until a reply carries a DIFFERENT id before it reloads (see DbPathResult.InstanceId).</summary>
+    private static readonly string InstanceId = Guid.NewGuid().ToString("N");
+
     /// <summary>Ops a host sends on a timer or to poll state, not because the user did
     /// something. They never touch the idle clock (see DispatchAsync).</summary>
     private static bool IsHousekeepingOp(string op) => op is
@@ -330,6 +334,7 @@ public sealed class Dispatcher(
                     string? p = SeforimDbLocator.Resolve();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = p ?? "",
                         IsCustom = SeforimDbLocator.IsCustom(),
                         Exists = p is not null,
@@ -347,13 +352,14 @@ public sealed class Dispatcher(
                     switch (SwitchLibrary(p))
                     {
                         case SeforimDbLibrarySwitcher.SwitchOutcome.EmptyPath:
-                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Error = "empty path" }));
+                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Error = "empty path" }));
                         case SeforimDbLibrarySwitcher.SwitchOutcome.FileNotFound:
-                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = p, Error = "file not found" }));
+                            return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Path = p, Error = "file not found" }));
                     }
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = p, IsCustom = true, Exists = true, Restarting = true,
                     }));
                 }
@@ -367,12 +373,13 @@ public sealed class Dispatcher(
                     string? picked = await NativeFilePicker.PickAsync(
                         NativeFilePicker.DatabaseFilter, NativeFilePicker.DatabaseDialogTitle);
                     if (picked is null)
-                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Cancelled = true }));
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Cancelled = true }));
                     if (SwitchLibrary(picked) != SeforimDbLibrarySwitcher.SwitchOutcome.Switched)
-                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { Path = picked, Error = "file not found" }));
+                        return RpcResponse.Ok(MsgPack.Ser(new DbPathResult { InstanceId = InstanceId, Path = picked, Error = "file not found" }));
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = picked, IsCustom = true, Exists = true, Restarting = true,
                     }));
                 }
@@ -384,6 +391,7 @@ public sealed class Dispatcher(
                     RestartSoon();
                     return RpcResponse.Ok(MsgPack.Ser(new DbPathResult
                     {
+                        InstanceId = InstanceId,
                         Path = p ?? "", IsCustom = false, Exists = p is not null, Restarting = true,
                     }));
                 }

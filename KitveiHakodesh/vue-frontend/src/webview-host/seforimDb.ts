@@ -83,7 +83,9 @@ export function ensureCategorySchema(): Promise<void> {
  * (no previous path) and re-picking the same folder both keep the reader's history.
  *
  * The service restarts itself on the new DB; the reload makes every store refetch from
- * it, and the service client rides out the restart.
+ * it. The reload waits for the NEW instance to answer (bridge.waitForServiceRestart): the
+ * old one keeps serving the old library for a few seconds after accepting the change, and
+ * a reload landing on it showed the old catalog until the next app launch.
  */
 export async function onDbPathChanged(previousPath: string, newPath: string) {
   dbReady.value = true
@@ -92,7 +94,9 @@ export async function onDbPathChanged(previousPath: string, newPath: string) {
     const { clearStaleBookData } = await import('./dbSwitchCleanup')
     await clearStaleBookData()
   }
-  setTimeout(() => window.location.reload(), 800)
+  const { waitForServiceRestart } = await import('./bridge')
+  await waitForServiceRestart()
+  window.location.reload()
 }
 
 // ── Push event bus ────────────────────────────────────────────────────────────
