@@ -27,7 +27,7 @@ function applyPdfPageFilters(value: boolean) {
 const TITLE_BAR_BUTTONS = [
   { id: 'hamburger',      label: 'תפריט' },
   { id: 'theme-toggle',   label: 'ערכת נושא' },
-  { id: 'toolbar-toggle', label: 'סרגל כלים' },
+  { id: 'toolbar-toggle', label: 'סרגל כלים בספרים' },
   { id: 'split-view',     label: 'תצוגה מפוצלת' },
   { id: 'ocr',            label: 'OCR' },
   { id: 'home',           label: 'בית' },
@@ -138,7 +138,7 @@ function toggleTitleBarButton(buttonId: string) {
       />
     </SettingRow>
 
-    <SettingRow id="nav-title-bar-buttons" data-nav-label="כפתורים בסרגל הכלים" label="כפתורים בסרגל הכלים" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
+    <SettingRow id="nav-title-bar-buttons" data-nav-label="כפתורים בשורת הכתובת" label="כפתורים בשורת הכתובת" hint="לחץ על כפתור כדי להחליף מצב הצגה" wrap>
       <div class="title-bar-chips">
         <button
           v-for="button in TITLE_BAR_BUTTONS"
