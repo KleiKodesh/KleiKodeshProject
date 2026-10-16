@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, defineAsyncComponent } from 'vue'
 import { useNow, useWindowSize } from '@vueuse/core'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { useListKeys } from '@/composables/useListKeyNav'
@@ -12,6 +12,8 @@ import { useNextZman } from './useNextZman'
 import { useHomeDateBarFit } from './useHomeDateBarFit'
 import { computeBarPopupAnchor, type BarPopupAnchor } from './homeBarPopupAnchor'
 import HomeWorldClockDropdown from './HomeWorldClockDropdown.vue'
+// Lazy — the month grid pulls in @hebcal/core, kept out of the home bundle.
+const HomeCalendarPopup = defineAsyncComponent(() => import('./HomeCalendarPopup.vue'))
 import { dateInfo, loadDateInfo } from './homeDateInfo'
 import { useHomeDailyLearningEntries, type HomeDailyLearningEntry } from './useHomeDailyLearning'
 
@@ -129,7 +131,45 @@ function toggleZmanPopup() {
   }
 }
 
+// ── Calendar popup ────────────────────────────────────────────────────────────
+
+const isCalendarOpen = ref(false)
+const calendarBarItemRef = ref<HTMLElement | null>(null)
+const calendarButtonRef = ref<HTMLElement | null>(null)
+const calendarPopupRef = ref<HTMLElement | null>(null)
+const calendarAnchor = ref<BarPopupAnchor>({ left: 0, bottom: 0, maxHeight: 0 })
+const calendarPopupStyle = computed(() => ({
+  left: `${calendarAnchor.value.left}px`,
+  bottom: `${calendarAnchor.value.bottom}px`,
+  maxHeight: `${calendarAnchor.value.maxHeight}px`,
+}))
+
+function computeCalendarAnchor() {
+  const button = calendarButtonRef.value
+  if (!button) return
+  calendarAnchor.value = computeBarPopupAnchor(button, calendarPopupRef.value?.offsetWidth || 440)
+}
+
+const calendarCloser = useDropdownClose(
+  calendarBarItemRef,
+  () => {
+    isCalendarOpen.value = false
+  },
+  { ignore: [calendarPopupRef] },
+)
+
+function toggleCalendarPopup() {
+  if (calendarCloser.justClosed.value) return
+  const opening = !isCalendarOpen.value
+  isCalendarOpen.value = opening
+  if (opening) {
+    computeCalendarAnchor()
+    nextTick(computeCalendarAnchor)
+  }
+}
+
 function openHebrewCalendar() {
+  isCalendarOpen.value = false
   paneNavigation.navigateToDestination('/hebrew-calendar')
 }
 
@@ -226,9 +266,27 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
       </Teleport>
       <span class="bar-sep">·</span>
     </template>
-    <button class="bar-item bar-item--btn" @click="openHebrewCalendar" title="לחץ להצגת לוח שנה">
-      {{ dateInfo.hebrewDate }}
-    </button>
+    <div ref="calendarBarItemRef" class="calendar-wrap">
+      <button
+        ref="calendarButtonRef"
+        class="bar-item bar-item--btn calendar-btn"
+        :class="{ on: isCalendarOpen }"
+        title="לחץ להצגת לוח שנה"
+        @click="toggleCalendarPopup"
+      >
+        {{ dateInfo.hebrewDate }}
+      </button>
+    </div>
+    <Teleport to="body">
+      <div
+        v-if="isCalendarOpen"
+        ref="calendarPopupRef"
+        class="calendar-popup-anchor"
+        :style="calendarPopupStyle"
+      >
+        <HomeCalendarPopup @open-full="openHebrewCalendar" />
+      </div>
+    </Teleport>
     <template v-if="dailyLearningEntries.length">
       <span class="bar-sep">·</span>
       <div ref="learningBarItemRef" class="learning-wrap">
@@ -418,8 +476,19 @@ function onLearningMenuKeydown(event: KeyboardEvent) {
 .learning-menu-path {
   font-weight: 600;
 }
-.zman-popup-anchor {
+.zman-popup-anchor,
+.calendar-popup-anchor {
   position: fixed;
   z-index: 200;
+}
+.calendar-popup-anchor {
+  display: flex;
+}
+.calendar-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.calendar-btn.on {
+  color: var(--accent-color);
 }
 </style>
