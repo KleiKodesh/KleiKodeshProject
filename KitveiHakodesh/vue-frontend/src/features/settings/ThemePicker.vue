@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed, nextTick, watch, onBeforeUnmount } from 'vue'
 import { useDropdownClose } from '@/composables/useDropdownClose'
 import { IconChevronDown20Regular, IconChevronUp20Regular } from '@iconify-prerendered/vue-fluent'
 import themesData from '@/theme/themes.json'
@@ -43,6 +43,12 @@ useDropdownClose(
   },
   { ignore: [boxRef] },
 )
+
+// Hover preview ends whenever the dropdown closes (select, outside click, toggle).
+watch(isOpen, (open) => {
+  if (!open) themeStore.previewTheme(null)
+})
+onBeforeUnmount(() => themeStore.previewTheme(null))
 
 async function toggle() {
   if (isOpen.value) {
@@ -112,6 +118,8 @@ function select(key: ThemeKey) {
             :class="{ active: themePreset === key }"
             :title="theme.name + (theme.isDark ? ' — כהה' : ' — בהיר')"
             @click.stop="select(key)"
+            @mouseenter="themeStore.previewTheme(key)"
+            @mouseleave="themeStore.previewTheme(null)"
           >
             <span
               class="swatch"

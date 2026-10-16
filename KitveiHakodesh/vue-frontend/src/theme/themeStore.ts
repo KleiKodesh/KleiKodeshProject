@@ -85,6 +85,12 @@ export const useThemeStore = defineStore('theme', () => {
     setTheme(themePreset.value.includes('-dark'), chromeStrip, ui?.accentColor, ui?.borderColor)
   }
 
+  /** Momentary hover preview — paints `key` without saving; null restores the chosen theme. */
+  function previewTheme(key: ThemePreset | null) {
+    if (key) applyTheme(key)
+    else apply()
+  }
+
   // Apply defaults immediately (before async init) so the UI doesn't flash
   apply()
 
@@ -97,5 +103,5 @@ export const useThemeStore = defineStore('theme', () => {
     syncHostTheme()
   })
 
-  return { themePreset, readingBackground, toggleDarkMode, init }
+  return { themePreset, readingBackground, toggleDarkMode, previewTheme, init }
 })
