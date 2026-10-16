@@ -286,6 +286,10 @@ public sealed class SeforimDbFtsIndexCoordinator
                 return;
             }
 
+            if (plan.DbUnreadable)
+                _log(FtsIndexLogLevel.Warning,
+                    "FTS: seforim DB could not be read right now — keeping the existing index unverified", null);
+
             if (plan.KeptUnverifiableCompletedIndex)
                 _log(FtsIndexLogLevel.Information,
                     "FTS provenance stamp is an older format — keeping the completed index", null);
