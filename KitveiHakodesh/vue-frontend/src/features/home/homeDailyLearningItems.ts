@@ -223,8 +223,18 @@ export async function computeHomeDailyLearningItems(today: Date): Promise<HomeDa
     return {
       key,
       label,
+      // Consecutive readings of the same halachot collapse: "הלכות X יז יח" not "הלכות X יז, הלכות X יח".
       location: readings
-        .map((reading) => `${cleanHebrew(Locale.gettext(reading.name, 'he'))} ${toPerekText(reading.perek)}`)
+        .reduce<Array<{ name: string; perakim: string[] }>>((groups, reading) => {
+          const name = cleanHebrew(Locale.gettext(reading.name, 'he'))
+          const perek = toPerekText(reading.perek)
+          const last = groups[groups.length - 1]
+          if (last?.name === name) {
+            if (!last.perakim.includes(perek)) last.perakim.push(perek)
+          } else groups.push({ name, perakim: [perek] })
+          return groups
+        }, [])
+        .map((group) => `${group.name} ${group.perakim.join(' ')}`)
         .join(', '),
       target: {
         bookQueries: [`רמבם ${firstName}`, `משנה תורה ${firstName}`, firstName],
