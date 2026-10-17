@@ -147,6 +147,14 @@ interface Envelope {
   Ok: boolean
   Result?: Uint8Array
   Error?: string
+  /** Full C# exception (ToString) for the console; Error is the short message. */
+  Detail?: string
+}
+
+/** A failed envelope: print the service's full failure to the console, then throw the short message. */
+function throwEnvelopeError(op: string, env: Envelope, fallback: string): never {
+  console.error(`[service] '${op}' failed:\n${env.Detail || env.Error || fallback}`)
+  throw new Error(env.Error || fallback)
 }
 
 /**
@@ -163,9 +171,15 @@ export async function serviceCall<T = unknown>(
   signal?: AbortSignal,
 ): Promise<T> {
   const res = await postRpc('/rpc', encodeRequest(op, args), signal)
-  if (!res.ok) throw new Error(`service '${op}' failed: ${res.status} ${res.statusText}`)
+  if (!res.ok) {
+    const msg = `service '${op}' failed: ${res.status} ${res.statusText}`
+    console.error(`[service] ${msg}\n${await res.text().catch(() => '')}`)
+    throw new Error(msg)
+  }
   const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
-  if (!env.Ok) throw new Error(env.Error || `service '${op}' error`)
+  if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' error`)
+  // An op that caught its own failure still answers Ok; Detail carries the exception.
+  if (env.Detail) console.error(`[service] '${op}' failed:\n${env.Detail}`)
   if (!env.Result || env.Result.length === 0) return undefined as T
   return transformKeys(mpDecode(env.Result), decodeKey) as T
 }
@@ -234,7 +248,7 @@ async function* hostedRelayStream<T>(
       while (queue.length) {
         const frame = queue.shift()!
         const env = mpDecode(frame) as Envelope
-        if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
+        if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
           yield transformKeys(mpDecode(env.Result), decodeKey) as T
         if (++unacked >= STREAM_ACK_EVERY) ack()
@@ -299,7 +313,7 @@ export async function* serviceStream<T = unknown>(
         buf = buf.subarray(4 + len)
 
         const env = mpDecode(frame) as Envelope
-        if (!env.Ok) throw new Error(env.Error || `service '${op}' stream error`)
+        if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
           yield transformKeys(mpDecode(env.Result), decodeKey) as T
       }
