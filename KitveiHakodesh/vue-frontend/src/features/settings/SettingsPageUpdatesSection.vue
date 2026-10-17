@@ -2,6 +2,7 @@
 import { ref, computed, onMounted } from 'vue'
 import SettingRow from './SettingRow.vue'
 import ToggleGroup from './ToggleGroup.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
 import {
   updatePromptBody,
@@ -70,7 +71,7 @@ const isCheckNowVisible = computed(
     <SettingRow label="מצב עדכון">
       <div class="updates-status">
         <span class="updates-status-text">{{ updateStatusText }}</span>
-        <span v-if="hasInstallFailed" class="updates-status-error">{{ UPDATE_INSTALL_FAILED }}</span>
+        <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         <button
           v-if="readyVersion"
           class="updates-install-button"
@@ -120,11 +121,6 @@ const isCheckNowVisible = computed(
 .updates-status-text {
   font-size: 12px;
   color: var(--text-secondary);
-}
-
-.updates-status-error {
-  font-size: 12px;
-  color: var(--status-danger);
 }
 
 .updates-install-button {

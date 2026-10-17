@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { onDbPathChanged } from '@/webview-host/seforimDb'
+import MessageBanner from '@/components/MessageBanner.vue'
 import { getDbPathInfo, setDbPath, pickDbPath as pickDbPathWithDialog } from '@/webview-host/bridge'
 import {
   IconFolderOpen20Regular,
@@ -84,7 +85,7 @@ function downloadOtzaria() {
       />
       <button class="db-dev-apply" @click="applyDevPath">אישור</button>
     </div>
-    <p v-if="devError" class="db-dev-error">{{ devError }}</p>
+    <MessageBanner v-if="devError" class="db-dev-error" :message="devError" @dismiss="devError = ''" />
     <p v-if="dbPath && !devError" class="db-dev-ok">✓ {{ dbPath }}</p>
 </template>
 
@@ -163,9 +164,7 @@ function downloadOtzaria() {
   border-color: var(--accent-color);
 }
 .db-dev-error {
-  margin: 6px 2px 0;
-  font-size: 11px;
-  color: var(--danger-color, #d13438);
+  margin-top: 6px;
 }
 .db-dev-ok {
   margin: 6px 2px 0;
