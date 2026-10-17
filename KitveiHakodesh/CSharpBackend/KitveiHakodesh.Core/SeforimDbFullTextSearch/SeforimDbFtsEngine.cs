@@ -76,6 +76,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         }
 
         /// <summary>
+        /// A fresh corpus over the same library the index reads — for Core-side reads the
+        /// engine's own API does not carry (snippet descriptors need neighbour line IDS, not
+        /// just their text). One per operation; the caller disposes it.
+        /// </summary>
+        internal SeforimDbFtsCorpus OpenCorpus() => new SeforimDbFtsCorpus(_seforimDbPath);
+
+        /// <summary>
         /// Whether an engine is currently open. False before the first use and after a
         /// <see cref="Invalidate"/>; asking does not open one.
         /// </summary>

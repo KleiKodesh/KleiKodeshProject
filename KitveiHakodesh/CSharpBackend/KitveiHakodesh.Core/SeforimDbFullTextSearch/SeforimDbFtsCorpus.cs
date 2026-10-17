@@ -209,12 +209,27 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             IReadOnlyList<int> ids, int radius)
         {
             var neighbours = new Dictionary<int, (string Previous, string Next)>(ids?.Count ?? 0);
+            foreach (var entry in FetchNeighbourLines(ids, radius))
+                neighbours[entry.Key] = (entry.Value.Previous, entry.Value.Next);
+            return neighbours;
+        }
+
+        /// <summary>
+        /// <see cref="FetchNeighbourText"/> plus WHICH lines each side was joined from, in the
+        /// same document order — what a snippet descriptor needs so the page can re-join the
+        /// very same text from line ids. Empty neighbour lines are skipped on both counts, so
+        /// joining the ids' texts with single spaces reproduces <c>Previous</c> / <c>Next</c>.
+        /// </summary>
+        public IDictionary<int, SeforimDbFtsNeighbourLines> FetchNeighbourLines(
+            IReadOnlyList<int>? ids, int radius)
+        {
+            var neighbours = new Dictionary<int, SeforimDbFtsNeighbourLines>(ids?.Count ?? 0);
             if (ids == null || ids.Count == 0 || radius <= 0) return neighbours;
 
             // Neighbour lines per matched id, keyed by their lineIndex delta, so each side joins
             // back in document order: previous = negative deltas ascending, next = positive.
-            var previousParts = new Dictionary<int, SortedList<int, string>>();
-            var nextParts = new Dictionary<int, SortedList<int, string>>();
+            var previousParts = new Dictionary<int, SortedList<int, (int Id, string Text)>>();
+            var nextParts = new Dictionary<int, SortedList<int, (int Id, string Text)>>();
 
             using (var command = _connection.CreateCommand())
             {
@@ -235,23 +250,36 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
                         int delta = reader.GetInt32(1);
                         string text = _codec.DecodeColumnOrEmpty(reader, 2);
                         if (text.Length == 0) continue;
+                        int neighbourId = reader.GetInt32(3);
 
                         var side = delta < 0 ? previousParts : nextParts;
                         if (!side.TryGetValue(matchedId, out var parts))
-                            side[matchedId] = parts = new SortedList<int, string>();
-                        parts[delta] = text;
+                            side[matchedId] = parts = new SortedList<int, (int, string)>();
+                        parts[delta] = (neighbourId, text);
                     }
                 }
             }
 
             foreach (int id in ids)
             {
-                string previous = previousParts.TryGetValue(id, out var p) ? string.Join(" ", p.Values) : "";
-                string next = nextParts.TryGetValue(id, out var n) ? string.Join(" ", n.Values) : "";
-                if (previous.Length > 0 || next.Length > 0) neighbours[id] = (previous, next);
+                var entry = new SeforimDbFtsNeighbourLines();
+                if (previousParts.TryGetValue(id, out var p)) Collect(p, entry.PreviousIds, out entry.Previous);
+                if (nextParts.TryGetValue(id, out var n)) Collect(n, entry.NextIds, out entry.Next);
+                if (entry.Previous.Length > 0 || entry.Next.Length > 0) neighbours[id] = entry;
             }
 
             return neighbours;
+
+            static void Collect(SortedList<int, (int Id, string Text)> parts, List<int> idsOut, out string joined)
+            {
+                var texts = new List<string>(parts.Count);
+                foreach (var part in parts.Values)
+                {
+                    idsOut.Add(part.Id);
+                    texts.Add(part.Text);
+                }
+                joined = string.Join(" ", texts);
+            }
         }
 
         /// <summary>Pre-registers @p0..@pN once per command, so chunk loops only assign values
@@ -274,5 +302,15 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             _codec.Dispose();
             _connection.Dispose();
         }
+    }
+
+    /// <summary>One matched line's same-book neighbours: each side's joined text and the ids
+    /// it was joined from, in document order. See <see cref="SeforimDbFtsCorpus.FetchNeighbourLines"/>.</summary>
+    public sealed class SeforimDbFtsNeighbourLines
+    {
+        public string Previous = "";
+        public string Next = "";
+        public readonly List<int> PreviousIds = new List<int>();
+        public readonly List<int> NextIds = new List<int>();
     }
 }
