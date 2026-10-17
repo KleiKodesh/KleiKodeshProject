@@ -292,7 +292,7 @@ const htmlFilter = computed(() => {
         <span>טוען...</span>
       </div>
       <div v-if="error" class="html-overlay html-overlay--error">
-        <span>{{ error }}</span>
+        <MessageBanner class="html-overlay-message" :message="error" :dismissible="false" />
         <button @click="retry">נסה שוב</button>
       </div>
     </div>
@@ -333,5 +333,8 @@ const htmlFilter = computed(() => {
 }
 .html-overlay--error {
   color: var(--text-primary);
+}
+.html-overlay-message {
+  width: min(100% - 32px, 480px);
 }
 </style>

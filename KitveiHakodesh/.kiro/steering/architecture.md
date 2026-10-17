@@ -460,6 +460,7 @@ Reusable UI primitives used across multiple features. No feature-specific logic 
 - `SplitPane.vue` — resizable split pane (the *bottom-panel* splitter inside book view; the left/right pane splitter is in `App.vue`)
 - `TopSearchBar.vue` (every page search bar), `ContextMenu.vue`, `GlobalContextMenu.vue`, `ConfirmDialog.vue`, `AlertDialog.vue`, `LoadingAnimation.vue`, `ToastBanner.vue`, `ClockWidget.vue`
 - `HintIcon.vue` — tooltip hint icon
+- `MessageBanner.vue` — THE inline message strip (Fluent 2 MessageBar; severity error / warning / info / success, message, optional details, dismiss). **All user-facing error / warning / info / success banners inside a page or dialog must use it** — never an ad-hoc coloured `<span>`/`<p>`. Transient messages are `ToastBanner.vue`; the app-wide service-down strip is `ServiceUnavailableBanner.vue`.
 - `common/FloatingSearchBar.vue`, `common/AutofillDropdown.vue` — shared search chrome
 - RTL/custom icon wrappers: `IconTreeRtl.vue`, `IconBookRtl20.vue`, `IconBookRtl24.vue`, `IconEverythingSearch.vue`
 

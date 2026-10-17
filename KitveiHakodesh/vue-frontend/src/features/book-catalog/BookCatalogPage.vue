@@ -16,6 +16,7 @@ import type { BookRow } from '@/webview-host/queries.types'
 import type { TocFsItem } from './useBookCatalogSearch'
 import { getDiagnostics } from '@/webview-host/bridge'
 import { copyTextToClipboard } from '@/utils/clipboard'
+import MessageBanner from '@/components/MessageBanner.vue'
 import type { ComponentPublicInstance } from 'vue'
 
 const paneNavigation = usePaneNavigation()
@@ -330,7 +331,7 @@ function onSearchEnter() {
     <div class="books-content">
       <LoadingAnimation v-if="loading" />
       <div v-else-if="error" class="state error">
-        <span class="error-msg">{{ error }}</span>
+        <MessageBanner class="error-msg" :message="error" :dismissible="false" />
         <button class="retry-btn" @click="load()">נסה שוב</button>
         <template v-if="isBitnessMismatch(error)">
           <div v-if="diagLoading" class="diag-loading">אוסף נתוני אבחון...</div>
@@ -405,11 +406,9 @@ function onSearchEnter() {
 .state.error {
   padding: 32px 16px;
   text-align: center;
-  color: var(--status-danger);
   font-size: 15px;
 }
 .error-msg {
-  display: block;
   margin-bottom: 12px;
 }
 .retry-btn {

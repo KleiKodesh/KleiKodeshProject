@@ -11,6 +11,10 @@ import {
 import { queueErrorReport, sendErrorReport } from './errorReportService'
 import { hasErrorReportEndpoint } from './errorReportEndpoint'
 import { UNKNOWN_LIBRARY_VERSION, type ErrorReportSource } from './errorReportSource'
+import MessageBanner from '@/components/MessageBanner.vue'
+
+const UNVERIFIED_LINE_WARNING =
+  'לא ניתן לאמת את השורה מול הספריה, ולכן ההצעה תישלח כתיאור בלבד ולא כתיקון שניתן להחיל אוטומטית.'
 
 /** What a report carries when the database could not be consulted at all. */
 const UNRESOLVED_SOURCE: ErrorReportSource = {
@@ -251,10 +255,12 @@ useEventListener('keydown', (event: KeyboardEvent) => {
           </p>
           <!-- An unverified line means the proposal travels as a description only.
                Said here, before sending, rather than silently dropped. -->
-          <p v-if="isProposingCorrection && !isResolvingSource && !isCorrectionApplicable" class="report-warning">
-            לא ניתן לאמת את השורה מול הספריה, ולכן ההצעה תישלח כתיאור בלבד ולא כתיקון
-            שניתן להחיל אוטומטית.
-          </p>
+          <MessageBanner
+            v-if="isProposingCorrection && !isResolvingSource && !isCorrectionApplicable"
+            severity="warning"
+            :message="UNVERIFIED_LINE_WARNING"
+            :dismissible="false"
+          />
           <button
             v-if="isProposingCorrection"
             class="report-link-btn"
@@ -469,13 +475,6 @@ useEventListener('keydown', (event: KeyboardEvent) => {
 
 /* A consequence the user should see before sending, not a failure — warning weight
    rather than error weight. */
-.report-warning {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--text-warning, var(--text-secondary));
-}
-
 /* A text-only action inside the form body — it opens or abandons the proposal, it is
    not one of the dialog's three outcomes. */
 .report-link-btn {

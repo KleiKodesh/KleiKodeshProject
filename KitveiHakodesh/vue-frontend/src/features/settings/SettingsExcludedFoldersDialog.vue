@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useEventListener } from '@vueuse/core'
 import { IconFolderAdd20Regular, IconDelete20Regular } from '@iconify-prerendered/vue-fluent'
 import { getExcludedFolders, setExcludedFolders, pickFolder } from '@/webview-host/bridge'
+import MessageBanner from '@/components/MessageBanner.vue'
 
 // Dev-mode counterpart of the hosted app's WinForms ExcludedFoldersForm. Same behaviour —
 // list, add via the native folder dialog, remove the selected row, confirm to persist — and
@@ -97,7 +98,7 @@ async function saveAndClose() {
           </div>
         </div>
 
-        <p v-if="errorMessage" class="excluded-error">{{ errorMessage }}</p>
+        <MessageBanner v-if="errorMessage" :message="errorMessage" @dismiss="errorMessage = ''" />
 
         <div class="excluded-actions">
           <button class="excluded-ok-button" :disabled="isSaving" @click="saveAndClose">
@@ -202,12 +203,6 @@ async function saveAndClose() {
 
 .excluded-item.selected {
   background: color-mix(in srgb, var(--accent-color) 22%, transparent);
-}
-
-.excluded-error {
-  margin: 0;
-  font-size: 11px;
-  color: var(--status-danger);
 }
 
 .excluded-actions {

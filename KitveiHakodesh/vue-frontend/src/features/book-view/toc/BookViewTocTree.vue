@@ -6,6 +6,7 @@ import type { TocEntry } from '@/webview-host/queries.types'
 import { SearchableTree } from './tocSearchUtils'
 import BookViewTocTreeSection from './BookViewTocTreeSection.vue'
 import SplitPane from '@/components/SplitPane.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 
 const props = defineProps<{
   activeTocEntryId?: number
@@ -161,7 +162,9 @@ defineExpose({ snapshotState, restoreState })
 <template>
   <div class="toc-tree">
     <div v-if="loading" class="toc-state">&#x5D8;&#x5D5;&#x5E2;&#x5DF;...</div>
-    <div v-else-if="error" class="toc-state error">{{ error }}</div>
+    <div v-else-if="error" class="toc-state">
+      <MessageBanner :message="error" :dismissible="false" />
+    </div>
     <template v-else>
       <SplitPane :bottom-visible="hasToc && hasAlt" class="toc-body">
         <template #top>
@@ -259,9 +262,5 @@ defineExpose({ snapshotState, restoreState })
   text-align: center;
   font-size: 14px;
   color: var(--text-secondary);
-}
-
-.toc-state.error {
-  color: var(--status-danger);
 }
 </style>

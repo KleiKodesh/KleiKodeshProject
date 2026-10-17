@@ -358,7 +358,7 @@ async function retry() {
       <span>בטעינה...</span>
     </div>
     <div v-else-if="error" class="txt-state-message txt-state-message--error">
-      <span>{{ error }}</span>
+      <MessageBanner class="txt-state-banner" :message="error" :dismissible="false" />
       <button @click="retry">נסה שוב</button>
     </div>
     <div
@@ -457,6 +457,9 @@ async function retry() {
 
 .txt-state-message--error {
   color: var(--text-primary);
+}
+.txt-state-banner {
+  width: min(100% - 32px, 480px);
 }
 
 /* ── Search bar ────────────────────────────────────────────────────────────── */

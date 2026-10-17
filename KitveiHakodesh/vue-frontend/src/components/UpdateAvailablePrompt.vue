@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useSelfUpdate } from '@/composables/useSelfUpdate'
+import MessageBanner from './MessageBanner.vue'
 import {
   UPDATE_PROMPT_TITLE,
   updatePromptBody,
@@ -53,7 +54,7 @@ onBeforeUnmount(() => {
         <div class="update-prompt-text">
           <strong>{{ UPDATE_PROMPT_TITLE }}</strong>
           <span>{{ updatePromptBody(promptedVersion) }}</span>
-          <span v-if="hasInstallFailed" class="update-prompt-error">{{ UPDATE_INSTALL_FAILED }}</span>
+          <MessageBanner v-if="hasInstallFailed" :message="UPDATE_INSTALL_FAILED" :dismissible="false" />
         </div>
         <div class="update-prompt-actions">
           <button class="update-prompt-install" :disabled="isInstalling" @click="installUpdate">
@@ -102,10 +103,6 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 2px;
-}
-
-.update-prompt-error {
-  color: var(--status-danger);
 }
 
 .update-prompt-actions {

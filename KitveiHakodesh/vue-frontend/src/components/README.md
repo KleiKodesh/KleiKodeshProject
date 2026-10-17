@@ -22,6 +22,8 @@ Shared reusable components used across multiple features. Only add a component h
 
 **HintIcon.vue** — small info icon with a tooltip on hover. Pass the hint string as a prop.
 
+**MessageBanner.vue** — THE inline message strip (Fluent 2 MessageBar): `severity` error / warning / info / success, `message`, optional `details`, `dismissible` (default true), emits `dismiss`. Every user-facing error / warning / info / success banner inside a page or dialog must use it — no ad-hoc coloured `<span>` / `<p>` strips. The full visual spec is the comment block at the top of the file. Transient corner messages stay `ToastBanner.vue` / `useToast`; the app-wide service-down strip stays `ServiceUnavailableBanner.vue`.
+
 **IconEverythingSearch.vue** — custom SVG icon for the everything-search feature.
 
 **IconTreeRtl.vue** — `IconTextBulletListTree` pre-flipped for RTL (`transform: scaleX(-1)`). Always use this wrapper instead of the raw icon — the Fluent icon is LTR-designed and always needs the flip in this app.

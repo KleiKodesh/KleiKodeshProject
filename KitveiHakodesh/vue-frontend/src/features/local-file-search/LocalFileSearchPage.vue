@@ -9,6 +9,7 @@ import {
 import { storeToRefs } from 'pinia'
 import TopSearchBar from '@/components/TopSearchBar.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
+import MessageBanner from '@/components/MessageBanner.vue'
 import LocalFileSearchResultsList from './LocalFileSearchResultsList.vue'
 import { useLocalFileSearch } from './useLocalFileSearch'
 import { addinDisplayTitle } from './otzariaAddins'
@@ -259,7 +260,7 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
              rather than in a banner of its own. -->
         <div v-else-if="!results.length" class="empty-state">
           <IconSearch20Regular class="empty-icon" />
-          <span v-if="errorMessage" class="empty-msg error-msg">{{ errorMessage }}</span>
+          <MessageBanner v-if="errorMessage" class="empty-error" :message="errorMessage" :dismissible="false" />
           <span v-else class="empty-msg">{{ searchQuery.trim() ? 'לא נמצאו תוצאות' : 'חפש קבצים...' }}</span>
         </div>
 
@@ -357,10 +358,8 @@ async function onOpenFile(item: LocalFileSearchResult, openInNewTab = false) {
   opacity: 0.25;
   font-weight: 500;
 }
-/* No colour of its own — an error here reads as the empty state's message, same as
-   the placeholder. It only drops the fade, so it is legible rather than a hint. */
-.empty-msg.error-msg {
-  opacity: 1;
+.empty-error {
+  width: min(100% - 32px, 480px);
 }
 
 /* Opening overlay */
