@@ -72,24 +72,26 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// One search's matched-term strings, numbered in first-seen order. Hits carry ids into
     /// it (<see cref="FtsHit.TermIds"/>); a transport sends the strings once — streamed as
     /// they appear (<see cref="TakeNewTerms"/>) or whole at the end (<see cref="All"/>).
-    /// Thread-safe: hits are built across cores.
+    /// Thread-safe: hits are built across cores. Reads are lock-free — a search has a
+    /// handful of distinct terms but millions of marks, so after the first few hits every
+    /// <see cref="IdOf"/> is a lookup of a term already there.
     /// </summary>
     public sealed class FtsTermTable
     {
-        private readonly Dictionary<string, int> _ids = new Dictionary<string, int>();
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, int> _ids =
+            new System.Collections.Concurrent.ConcurrentDictionary<string, int>();
         private readonly List<string> _terms = new List<string>();
         private int _sent;
 
         public int IdOf(string term)
         {
+            if (_ids.TryGetValue(term, out int id)) return id;   // lock-free: the common case
             lock (_terms)
             {
-                if (!_ids.TryGetValue(term, out int id))
-                {
-                    id = _terms.Count;
-                    _terms.Add(term);
-                    _ids[term] = id;
-                }
+                if (_ids.TryGetValue(term, out id)) return id;    // added by another core meanwhile
+                id = _terms.Count;
+                _terms.Add(term);
+                _ids[term] = id;
                 return id;
             }
         }
