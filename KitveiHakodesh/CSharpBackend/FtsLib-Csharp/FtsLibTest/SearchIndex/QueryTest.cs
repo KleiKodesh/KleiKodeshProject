@@ -1,4 +1,5 @@
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -139,14 +140,15 @@ namespace FtsLibTest
 
                 // Use the result's pre-computed matched terms so fuzzy/wildcard
                 // expansions are highlighted correctly.
-                var    snippet   = index.GenerateSnippet(r);
+                var    snippet   = index.LocateSnippetWindow(r);
+                string snippetHtml = SnippetHtmlRenderer.Render(r.Content, snippet);
                 string scoreStr  = snippet.Score == int.MaxValue ? "n/a" : snippet.Score.ToString();
                 string matchMark = snippet.IsMatch ? "✓" : "✗";
                 string plainText = snippet.IsMatch
-                    ? StripTags(snippet.Html, 100)
+                    ? StripTags(snippetHtml, 100)
                     : TestHelpers.Truncate(TestHelpers.StripHtmlAndDiacritics(r.Content), 100);
 
-                report.AddResultCard(r.LineId, r.BookTitle, snippet.Html, snippet.Score, snippet.IsMatch);
+                report.AddResultCard(r.LineId, r.BookTitle, snippetHtml, snippet.Score, snippet.IsMatch);
 
                 Console.WriteLine(
                     $"║  {shown + 1,-6}  {r.LineId,8}  {scoreStr,6}  {matchMark,2}  " +

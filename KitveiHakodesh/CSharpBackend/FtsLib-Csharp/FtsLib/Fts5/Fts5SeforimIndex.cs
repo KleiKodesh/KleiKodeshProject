@@ -1,6 +1,7 @@
 #if NET6_0_OR_GREATER
 using FtsLib.Indexing;
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -63,19 +64,19 @@ namespace FtsLib.Fts5
                 yield return id;
         }
 
-        // ── Snippets (FtsLib's own, unchanged) ───────────────────────
+        // ── Snippet windows (FtsLib's own, unchanged) ────────────────
 
-        public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
-                                             int contextWords = DefaultContextWords)
-            => Fts5SearchEngine.GenerateSnippet(result, requireOrdered, contextWords);
+        public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
+                                                     int contextWords = DefaultContextWords)
+            => Fts5SearchEngine.LocateSnippetWindow(result, requireOrdered, contextWords);
 
-        public SnippetResult GenerateSnippetWithNeighbors(SearchResult result, string prevContent, string nextContent,
-                                                          bool requireOrdered = false, int contextWords = DefaultContextWords)
+        public SnippetDescriptor LocateSnippetWindowOverNeighbourLines(SearchResult result, string previousContent, string nextContent,
+                                                                       bool requireOrdered = false, int contextWords = DefaultContextWords)
         {
-            if (result == null || result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
-            var prepared = result.Prepared ?? FtsLib.Snippets.PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetPipeline.GenerateWithNeighbors(prevContent, result.Content, nextContent, prepared,
-                                                         requireOrdered, result.OriginalGroupCount, contextWords);
+            if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
+            var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
+            return SnippetDescriptorPipeline.LocateOverNeighbourLines(previousContent, result.Content, nextContent, prepared,
+                                                                      requireOrdered, result.OriginalGroupCount, contextWords);
         }
 
         public Dictionary<int, (string Prev, string Next)> FetchNeighborContext(IReadOnlyList<int> lineIds, int radius)

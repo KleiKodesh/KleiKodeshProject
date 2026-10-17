@@ -72,7 +72,7 @@ namespace FtsLibTest
             var hits = new List<Hit>();
             foreach (var r in index.Search(query))
             {
-                var s = index.GenerateSnippet(r);
+                var s = index.LocateSnippetWindow(r);
                 if (!s.IsMatch) continue;                 // false positives are filtered before shipping
                 hits.Add(new Hit(r.LineId, s.WordDistance, s.Score, r.BookTitle));
             }

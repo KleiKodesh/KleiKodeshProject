@@ -89,7 +89,7 @@ namespace FtsLibTest
 
         /// <summary>
         /// Adds a result card. <paramref name="snippetHtml"/> is trusted HTML
-        /// already produced by SnippetBuilder — not escaped.
+        /// already produced by SnippetHtmlRenderer — not escaped.
         /// </summary>
         public void AddResultCard(int lineId, string bookTitle, string snippetHtml,
             int score, bool isMatch)

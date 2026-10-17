@@ -1,32 +1,32 @@
 using FtsLib.Tokenization;
 using System.Collections.Generic;
-using System.Text;
 
 namespace FtsLib.Snippets
 {
     /// <summary>
-    /// Builds a highlighted HTML snippet from raw HTML content and a prepared query.
+    /// Locates the snippet window in a line of raw HTML for a prepared query and describes it
+    /// as offsets — see <see cref="SnippetDescriptor"/>. Emits NO text: no HTML, no stripped
+    /// copy, no string at all. Rendering is the consumer's job (the page), and
+    /// <see cref="SnippetHtmlRenderer"/> shows exactly how the offsets are meant to be read.
     ///
-    /// Single-pass design — the raw HTML is scanned exactly once:
-    ///   1. <see cref="TokenStream"/> tokenizes the raw HTML, producing tokens with
-    ///      raw character positions AND cumulative visible-char offsets.
-    ///   2. A sliding-window algorithm finds the tightest token window covering all terms.
-    ///   3. ExpandWindow binary-searches the token list to add context — O(log n),
-    ///      no re-scanning of the raw string.
-    ///   4. The renderer walks only the snippet range, stripping tags inline.
+    /// Single pass — the raw HTML is scanned exactly once:
+    ///   1. <see cref="TokenStream"/> tokenizes it, producing tokens with raw character
+    ///      positions AND cumulative visible-char offsets.
+    ///   2. A sliding window finds the tightest token window covering all query groups.
+    ///   3. ExpandWindow widens it by context words, reading the token list only — O(1) per
+    ///      side, no re-scan of the raw string.
+    ///   4. CollectMarkRanges walks the tokens inside the window and records the matched ones.
     ///
     /// Query state (the term→group map) lives in <see cref="PreparedQueryGroups"/> —
-    /// immutable, built once per query, shared read-only across every line and every
-    /// thread. The builder itself holds only pure per-call scratch buffers (token
-    /// stream, group counters, render buffer), reused across calls with zero
-    /// per-call heap allocation. Per-line cost is therefore independent of how many
-    /// terms the query expanded to. Not thread-safe — one instance per thread.
+    /// immutable, built once per query, shared read-only across every line and thread. The
+    /// locator holds only per-call scratch (token stream, group counters, mark buffer), reused
+    /// across calls with zero per-call heap allocation; the descriptor it returns views that
+    /// scratch. Per-line cost is independent of how many terms the query expanded to.
+    /// Not thread-safe — one instance per thread.
     /// </summary>
-    internal sealed class SnippetBuilder
+    internal sealed class SnippetWindowLocator
     {
-        private readonly string _preTag;
-        private readonly string _postTag;
-        private readonly int    _contextWords;    // words of context on each side of the match
+        private readonly int _contextWords;    // words of context on each side of the match
 
         // Safety ceiling in visible chars — only fires for pathologically long lines
         // (e.g. a single paragraph with no word breaks). Normal lines never hit this.
@@ -34,50 +34,45 @@ namespace FtsLib.Snippets
 
         // ── Per-call scratch (no query state — that is PreparedQueryGroups) ──
 
-        private readonly TokenStream   _tokenStream = new TokenStream();
-        private          int[]         _groupCount  = new int[8];
-        private readonly StringBuilder _renderBuf   = new StringBuilder(512);
+        private readonly TokenStream _tokenStream = new TokenStream();
+        private          int[]       _groupCount  = new int[8];
+        private readonly List<int>   _markRanges  = new List<int>(24);
 
-        public SnippetBuilder(
-            string preTag       = "<mark>",
-            string postTag      = "</mark>",
-            int    contextWords = 8)
+        public SnippetWindowLocator(int contextWords = 8)
         {
-            _preTag       = preTag;
-            _postTag      = postTag;
             _contextWords = contextWords;
         }
 
         // ── Public API ───────────────────────────────────────────────
 
         /// <summary>
-        /// The core build. <paramref name="prepared"/> is the query's immutable
-        /// term→group map — prepare it ONCE per query (not per line) and share it
-        /// across every result and every thread.
+        /// The core locate. <paramref name="prepared"/> is the query's immutable term→group
+        /// map — prepare it ONCE per query (not per line) and share it across every result
+        /// and every thread. The returned descriptor's marks view this locator's scratch and
+        /// are overwritten by the next call.
         /// </summary>
-        public SnippetResult Build(
+        public SnippetDescriptor Locate(
             string              rawHtml,
             PreparedQueryGroups prepared,
             bool                requireOrdered     = false,
             int                 originalGroupCount = 0)
         {
             if (string.IsNullOrEmpty(rawHtml) || prepared == null || prepared.IsEmpty)
-                return new SnippetResult(Encode(rawHtml ?? string.Empty), int.MaxValue, int.MaxValue, false);
+                return SnippetDescriptor.NoMatch;
 
             var tokens = _tokenStream.Tokenize(rawHtml);
             if (tokens.Count == 0)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
+                return SnippetDescriptor.NoMatch;
 
             var (iLeft, iRight, score) = FindWindow(tokens, prepared);
             if (score == int.MaxValue)
-                return new SnippetResult(Encode(rawHtml), int.MaxValue, int.MaxValue, false);
+                return SnippetDescriptor.NoMatch;
 
             var (snapStart, snapEnd, sIdx, eIdx) = ExpandWindow(tokens, rawHtml.Length, iLeft, iRight);
-            string html = RenderFromRaw(rawHtml, tokens, prepared, snapStart, snapEnd);
+            CollectMarkRanges(tokens, prepared, snapStart, snapEnd);
 
-            // Visible words actually shown in the window — lets the caller detect a
-            // "short" snippet for free (no re-scan, no DB), e.g. to embellish it with
-            // surrounding lines when it spans fewer words than the requested context.
+            // Visible words actually inside the window — lets the caller detect a "short"
+            // snippet for free (no re-scan, no DB) and widen it over neighbouring lines.
             int windowWords = eIdx - sIdx + 1;
 
             // WordDistance = extra words between matched slots (0 = all consecutive).
@@ -86,32 +81,32 @@ namespace FtsLib.Snippets
             int wordDist = iRight - iLeft - (denominator - 1);
             if (wordDist < 0) wordDist = 0;
 
-            if (requireOrdered && prepared.GroupCount > 1 && !HasOrderedMatch(tokens, prepared))
-                return new SnippetResult(html, score, wordDist, false, windowWords);
+            bool isMatch = !(requireOrdered && prepared.GroupCount > 1 && !HasOrderedMatch(tokens, prepared));
 
-            return new SnippetResult(html, score, wordDist, true, windowWords);
+            return new SnippetDescriptor(isMatch, score, wordDist, windowWords, snapStart, snapEnd,
+                leadingEllipsis: snapStart > 0, trailingEllipsis: snapEnd < rawHtml.Length,
+                markRanges: _markRanges, terms: prepared);
         }
 
         /// <summary>
-        /// Convenience for one-off literal-term builds (each term occurrence is its
-        /// own AND slot). Prepares per call — use the <see cref="PreparedQueryGroups"/>
-        /// overload when building snippets for many lines of one query.
+        /// Convenience for one-off literal-term locates (each term occurrence is its own AND
+        /// slot). Prepares per call — use the <see cref="PreparedQueryGroups"/> overload when
+        /// locating for many lines of one query.
         /// </summary>
-        public SnippetResult Build(string rawHtml, IReadOnlyCollection<string> queryTerms)
-            => Build(rawHtml, PreparedQueryGroups.FromLiteralTerms(queryTerms));
+        public SnippetDescriptor Locate(string rawHtml, IReadOnlyCollection<string> queryTerms)
+            => Locate(rawHtml, PreparedQueryGroups.FromLiteralTerms(queryTerms));
 
         /// <summary>
-        /// Convenience for one-off group builds. Prepares per call — use the
-        /// <see cref="PreparedQueryGroups"/> overload when building snippets for
-        /// many lines of one query.
+        /// Convenience for one-off group locates. Prepares per call — use the
+        /// <see cref="PreparedQueryGroups"/> overload when locating for many lines of one query.
         /// </summary>
-        public SnippetResult Build(
+        public SnippetDescriptor Locate(
             string                                     rawHtml,
             IReadOnlyList<IReadOnlyCollection<string>> queryGroups,
             bool                                       requireOrdered     = false,
             int                                        originalGroupCount = 0)
-            => Build(rawHtml, PreparedQueryGroups.FromGroups(queryGroups),
-                     requireOrdered, originalGroupCount);
+            => Locate(rawHtml, PreparedQueryGroups.FromGroups(queryGroups),
+                      requireOrdered, originalGroupCount);
 
         // ── Window finding ────────────────────────────────────────────
         // Returns (iLeft, iRight, score) — token indices, not raw positions.
@@ -258,105 +253,35 @@ namespace FtsLib.Snippets
             return (System.Math.Max(0, snapStart), System.Math.Min(rawLen, snapEnd), sIdx, eIdx);
         }
 
-        // ── Single-pass renderer from raw HTML ────────────────────────
+        // ── Mark ranges ───────────────────────────────────────────────
 
-        private string RenderFromRaw(
-            string              rawHtml,
+        /// <summary>
+        /// Records every query-term token inside [snapStart, snapEnd) as a flat
+        /// (rawStart, rawLength, termOrdinal) triple in <see cref="_markRanges"/>, document
+        /// order, the length clipped to snapEnd, the ordinal being WHICH query term the token
+        /// matched (<see cref="PreparedQueryGroups.TermAt"/>) — so a hit can name its own
+        /// matched terms instead of the whole expansion. A token's raw span may cross inline
+        /// tags (e.g. word-transparent formatting inside a word); the renderer strips those —
+        /// the offsets here are over the raw text, untouched.
+        /// </summary>
+        private void CollectMarkRanges(
             List<TextToken>     tokens,
             PreparedQueryGroups prepared,
             int                 snapStart,
             int                 snapEnd)
         {
-            _renderBuf.Clear();
-            if (snapStart > 0) _renderBuf.Append('…');
-
-            int pos = snapStart;
-
+            _markRanges.Clear();
             foreach (var tok in tokens)
             {
                 if (tok.RawEnd   <= snapStart) continue;
                 if (tok.RawStart >= snapEnd)   break;
-                if (!prepared.ContainsTerm(tok.NormSpan)) continue;
+                if (!prepared.TryGetTerm(tok.NormSpan, out var term)) continue;
 
-                AppendRawStripped(rawHtml, pos, tok.RawStart, snapEnd);
-                pos = tok.RawStart;
-
-                _renderBuf.Append(_preTag);
                 int tokEnd = tok.RawEnd < snapEnd ? tok.RawEnd : snapEnd;
-                // The token's raw span can cross inline tags (word-transparent
-                // formatting, e.g. ורא<b>ה</b>) — strip them instead of copying
-                // raw: a pair that closes beyond the token would emit an
-                // unbalanced opener inside <mark> and bleed formatting over the
-                // rest of the snippet. Nikud and letters pass through untouched.
-                AppendRawStripped(rawHtml, tok.RawStart, tokEnd, snapEnd);
-                _renderBuf.Append(_postTag);
-                pos = tok.RawEnd;
+                _markRanges.Add(tok.RawStart);
+                _markRanges.Add(tokEnd - tok.RawStart);
+                _markRanges.Add(term.Ordinal);
             }
-
-            AppendRawStripped(rawHtml, pos, snapEnd, snapEnd);
-
-            if (snapEnd < rawHtml.Length) _renderBuf.Append('…');
-            return _renderBuf.ToString();
-        }
-
-        /// <summary>
-        /// Appends rawHtml[from..to) to _renderBuf, stripping HTML tags.
-        /// If from lands mid-tag, scans backwards to detect and skip the partial tag.
-        /// HTML entities (e.g. &amp;nbsp;) are passed through as-is — the raw HTML
-        /// already contains valid entities and the output is rendered via v-html.
-        /// Paragraph markers of the form {X} where X is a Hebrew letter are stripped.
-        /// </summary>
-        private void AppendRawStripped(string rawHtml, int from, int to, int limit)
-        {
-            if (to > limit) to = limit;
-
-            bool inTag = false;
-            for (int k = from - 1; k >= 0; k--)
-            {
-                if (rawHtml[k] == '>') break;
-                if (rawHtml[k] == '<') { inTag = true; break; }
-            }
-
-            for (int i = from; i < to; i++)
-            {
-                char c = rawHtml[i];
-                if (inTag) { if (c == '>') inTag = false; continue; }
-                if (c == '<') { inTag = true; continue; }
-
-                // Strip {X} paragraph markers where X is a Hebrew letter (U+05D0–U+05EA).
-                if (c == '{' && i + 2 < to && rawHtml[i + 2] == '}')
-                {
-                    char inner = rawHtml[i + 1];
-                    if (inner >= '\u05D0' && inner <= '\u05EA') { i += 2; continue; }
-                }
-
-                // Pass through as-is — raw HTML already contains valid entities.
-                _renderBuf.Append(c);
-            }
-        }
-
-        /// <summary>
-        /// Strips HTML tags and {X} paragraph markers from a raw HTML string,
-        /// returning plain renderable text. Used for the no-match fallback path.
-        /// </summary>
-        private static string Encode(string s)
-        {
-            if (string.IsNullOrEmpty(s)) return string.Empty;
-            var sb = new StringBuilder(s.Length);
-            bool inTag = false;
-            for (int i = 0; i < s.Length; i++)
-            {
-                char c = s[i];
-                if (inTag) { if (c == '>') inTag = false; continue; }
-                if (c == '<') { inTag = true; continue; }
-                if (c == '{' && i + 2 < s.Length && s[i + 2] == '}')
-                {
-                    char inner = s[i + 1];
-                    if (inner >= '\u05D0' && inner <= '\u05EA') { i += 2; continue; }
-                }
-                sb.Append(c);
-            }
-            return sb.ToString();
         }
     }
 }

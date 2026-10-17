@@ -21,7 +21,7 @@ namespace FtsLibTest
     ///   • Word-distance filter  (tight / loose / zero)
     ///   • Ordered search   (requireOrdered = true)
     ///   • SearchIds()      (ID-only path, no DB fetch)
-    ///   • Snippet generation (GenerateSnippet per result)
+    ///   • Snippet generation (LocateSnippetWindow per result)
     ///   • High-cardinality queries (many results)
     ///   • Zero-result queries (no match)
     ///   • Edge-case queries (single char, nikud, very long pattern)
@@ -388,7 +388,7 @@ namespace FtsLibTest
             int passed = 0, filtered = 0;
             foreach (var result in index.Search(c.Query))
             {
-                var snippet = index.GenerateSnippet(result, c.RequireOrdered);
+                var snippet = index.LocateSnippetWindow(result, c.RequireOrdered);
                 if (!snippet.IsMatch || snippet.WordDistance > c.MaxWordDistance)
                 { filtered++; continue; }
                 passed++;
@@ -402,7 +402,7 @@ namespace FtsLibTest
             long firstBatchMs = -1;
             foreach (var result in index.Search(c.Query))
             {
-                var snippet = index.GenerateSnippet(result, c.RequireOrdered);
+                var snippet = index.LocateSnippetWindow(result, c.RequireOrdered);
                 if (!snippet.IsMatch || snippet.WordDistance > c.MaxWordDistance)
                     continue;
                 firstCount++;

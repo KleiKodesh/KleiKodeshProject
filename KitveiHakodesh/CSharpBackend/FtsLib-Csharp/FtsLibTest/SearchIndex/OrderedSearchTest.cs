@@ -7,11 +7,11 @@ using System.Text;
 namespace FtsLibTest
 {
     /// <summary>
-    /// Unit tests for the ordered-search feature in <see cref="SnippetBuilder"/>.
+    /// Unit tests for the ordered-search feature in <see cref="SnippetWindowLocator"/>.
     ///
     /// All tests are purely in-memory — no index, no database required.
     /// The TokenStream is the heart of the pipeline: every test exercises the
-    /// full path: tokenize → window-find → (ordered check) → render.
+    /// full path: tokenize → window-find → (ordered check) → describe (+ reference render).
     ///
     /// NOTE: The tokenizer drops single-character tokens (buffer.Length > 1),
     /// so all test terms use real multi-character Hebrew words.
@@ -383,8 +383,8 @@ namespace FtsLibTest
             bool                                       ordered,
             bool                                       expectMatch)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(html, groups, ordered);
+            var locator = new SnippetWindowLocator();
+            var result  = locator.Locate(html, groups, ordered);
 
             if (result.IsMatch == expectMatch)
             {
@@ -414,8 +414,8 @@ namespace FtsLibTest
             int                                        maxExpectedDist = int.MaxValue,
             int                                        minExpectedDist = 0)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(html, groups, ordered);
+            var locator = new SnippetWindowLocator();
+            var result  = locator.Locate(html, groups, ordered);
 
             var errors = new List<string>();
 
@@ -455,11 +455,12 @@ namespace FtsLibTest
             bool                                       ordered,
             string                                     mustContain)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(html, groups, ordered);
+            var locator  = new SnippetWindowLocator();
+            var result   = locator.Locate(html, groups, ordered);
+            string rendered = SnippetHtmlRenderer.Render(html, result);
 
-            bool ok     = result.IsMatch && result.Html.Contains(mustContain);
-            string detail = $"IsMatch={result.IsMatch}, Html contains \"{mustContain}\"={result.Html.Contains(mustContain)}";
+            bool ok     = result.IsMatch && rendered.Contains(mustContain);
+            string detail = $"IsMatch={result.IsMatch}, Html contains \"{mustContain}\"={rendered.Contains(mustContain)}";
 
             if (ok)
             {
@@ -471,7 +472,7 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  {name}");
                 Console.WriteLine($"║       {detail}");
-                Console.WriteLine($"║       Html=\"{result.Html}\"");
+                Console.WriteLine($"║       Html=\"{rendered}\"");
             }
         }
 

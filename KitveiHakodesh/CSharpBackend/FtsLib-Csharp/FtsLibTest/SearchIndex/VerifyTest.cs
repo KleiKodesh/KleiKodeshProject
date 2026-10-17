@@ -1,4 +1,5 @@
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -54,8 +55,8 @@ namespace FtsLibTest
                 if (wantIds.Contains(r.LineId))
                 {
                     found.Add(r.LineId);
-                    var snippet = index.GenerateSnippet(r);
-                    string plain = StripTags(snippet.Html, 120);
+                    var snippet = index.LocateSnippetWindow(r);
+                    string plain = StripTags(SnippetHtmlRenderer.Render(r.Content, snippet), 120);
                     Console.WriteLine($"  ✓ FOUND  id={r.LineId}  [{r.BookTitle}]");
                     Console.WriteLine($"    {plain}");
                     Console.WriteLine();

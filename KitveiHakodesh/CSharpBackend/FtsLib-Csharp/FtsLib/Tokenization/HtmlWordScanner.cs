@@ -187,7 +187,7 @@ namespace FtsLib.Tokenization
         /// </param>
         protected abstract void OnWord(int rawStart, int rawEnd, int visibleStart);
 
-        // ── Shared letter test (used by SnippetBuilder for boundary snapping) ──
+        // ── Shared letter test (used by SnippetWindowLocator for boundary snapping) ──
 
         /// <summary>Returns true for Hebrew letters (alef–tav) and ASCII a–z / A–Z.</summary>
         internal static bool IsLetter(char c) => HebrewChars.IsLetter(c);

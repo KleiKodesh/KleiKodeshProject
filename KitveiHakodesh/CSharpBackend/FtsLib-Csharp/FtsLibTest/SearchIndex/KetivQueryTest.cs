@@ -1,4 +1,5 @@
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -67,11 +68,11 @@ namespace FtsLibTest
             foreach (var r in results)
             {
                 if (shown >= MaxResults) break;
-                var snippet = index.GenerateSnippet(r);
+                var snippet = index.LocateSnippetWindow(r);
                 string scoreStr = snippet.Score == int.MaxValue ? "n/a" : snippet.Score.ToString();
                 Console.WriteLine($"║  {shown + 1,-6}  {r.LineId,8}  {scoreStr,6}  {TestHelpers.Truncate(r.BookTitle, 40)}");
                 if (snippet.IsMatch)
-                    Console.WriteLine($"║          {StripTags(snippet.Html, 120)}");
+                    Console.WriteLine($"║          {StripTags(SnippetHtmlRenderer.Render(r.Content, snippet), 120)}");
                 shown++;
             }
 

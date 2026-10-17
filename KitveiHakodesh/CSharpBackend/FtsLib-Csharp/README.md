@@ -34,10 +34,10 @@ index.BuildIndex(onProgress: n => Console.WriteLine($"{n} lines indexed"));
 foreach (var result in index.Search("שלום תורה"))
     Console.WriteLine($"{result.BookTitle}: {result.Content}");
 
-// Snippet with highlighting
-var snippet = index.GenerateSnippet(result);
-if (snippet.IsMatch)
-    Console.WriteLine(snippet.Html);
+// Snippet window (offsets only; the consumer renders)
+var window = index.LocateSnippetWindow(result);
+if (window.IsMatch)
+    Console.WriteLine(window.SnapStart + ".." + window.SnapEnd);
 ```
 
 ---
@@ -103,23 +103,28 @@ post-filtering the results yourself. Verified with `FtsLibTest.exe filtertest fu
 | `LineId` | `int` | Line ID in the seforim DB |
 | `BookTitle` | `string` | Book the line belongs to |
 | `Content` | `string` | Raw HTML content of the line |
-| `MatchedGroups` | `IReadOnlyList<IReadOnlyCollection<string>>` | Expanded term groups per query token — pass to `GenerateSnippet(result)` |
+| `MatchedGroups` | `IReadOnlyList<IReadOnlyCollection<string>>` | Expanded term groups per query token — pass to `LocateSnippetWindow(result)` |
 
-### `GenerateSnippet`
+### `LocateSnippetWindow`
+
+Returns a `SnippetDescriptor` — where the snippet is, as offsets into the line text. No HTML
+is produced; the consumer renders (see `FtsLib/Snippets/README.md`).
 
 ```csharp
 // Preferred — uses pre-computed matched terms (no extra DB fetch)
-SnippetResult snippet = index.GenerateSnippet(result);
+SnippetDescriptor window = index.LocateSnippetWindow(result);
 
 // Fallback — re-parses query; use when you have a lineId but no SearchResult
-SnippetResult snippet = index.GenerateSnippet(lineId, query);
+SnippetDescriptor window = index.LocateSnippetWindow(lineId, query);
 ```
 
-**`SnippetResult` properties:**
+**`SnippetDescriptor` properties:**
 
 | Property | Type | Description |
 |---|---|---|
-| `Html` | `string` | Highlighted HTML with `<mark>` tags around matched terms |
+| `SnapStart` / `SnapEnd` | `int` | Window as raw char offsets into the source text |
+| `MarkRanges` | `IReadOnlyList<int>` | Flat (start, length, termOrdinal) triples to highlight (`MatchedTermAt` names the term); a view of per-thread scratch — copy before the next locate |
+| `LeadingEllipsis` / `TrailingEllipsis` | `bool` | "…" before / after the window |
 | `Score` | `int` | Character span of the tightest window — smaller is better |
 | `WordDistance` | `int` | Token count between leftmost and rightmost matched terms |
 | `IsMatch` | `bool` | False = index false positive; filter this result out |

@@ -102,7 +102,7 @@ namespace FtsLibTest
 
                     var swSnip = Stopwatch.StartNew();
                     foreach (var r in index.Search(query, cap: 2000))
-                        index.GenerateSnippet(r);
+                        index.LocateSnippetWindow(r);
                     swSnip.Stop();
 
                     Console.WriteLine($"   \"{query}\" → {ids:N0} ids  ({sw.ElapsedMilliseconds:N0} ms, snip2k {swSnip.ElapsedMilliseconds:N0} ms)");
@@ -172,7 +172,7 @@ namespace FtsLibTest
                 int snipped = 0;
                 foreach (var r in index.Search(query, cap: 2000))
                 {
-                    index.GenerateSnippet(r);
+                    index.LocateSnippetWindow(r);
                     snipped++;
                 }
                 swSnip.Stop();

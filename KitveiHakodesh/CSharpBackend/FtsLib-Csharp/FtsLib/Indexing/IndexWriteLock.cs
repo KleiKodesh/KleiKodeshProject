@@ -25,7 +25,7 @@ namespace FtsLib.Indexing
     /// can block a subsequent run.
     ///
     /// Scope: one lock instance per index directory. Two different index paths
-    /// never block each other. Multiple readers (Search, GenerateSnippet) never
+    /// never block each other. Multiple readers (Search, LocateSnippetWindow) never
     /// need this lock — only write operations (BuildIndex, Optimize, Purge) do.
     ///
     /// Usage:

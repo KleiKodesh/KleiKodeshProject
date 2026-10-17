@@ -49,7 +49,7 @@ IEnumerable<int> ids = index.SearchIds(query);
 | `LineId` | `int` | Line ID in the seforim DB |
 | `BookTitle` | `string` | Book the line belongs to |
 | `Content` | `string` | Raw HTML content of the line |
-| `MatchedGroups` | `IReadOnlyList<IReadOnlyCollection<string>>` | Per-token expanded term groups (OR within each group). Pass the result to `GenerateSnippet(result)` for accurate highlighting and proximity scoring. |
+| `MatchedGroups` | `IReadOnlyList<IReadOnlyCollection<string>>` | Per-token expanded term groups (OR within each group). Pass the result to `LocateSnippetWindow(result)` for accurate highlighting and proximity scoring. |
 
 **Query syntax:**
 
@@ -76,28 +76,30 @@ Multiple tokens are AND-ed. `|`-separated tokens are OR-ed within one AND slot. 
 
 ---
 
-## GenerateSnippet
+## LocateSnippetWindow
 
-Two overloads:
+Returns a `SnippetDescriptor` — WHERE the snippet is (offsets into the line text), never HTML.
+The consumer renders it; see `Snippets/README.md`.
 
 ```csharp
 // Preferred — uses pre-computed matched terms from the search result.
-// Correctly highlights expanded forms (e.g. ביצחק when query was יצחק~).
-SnippetResult snippet = index.GenerateSnippet(result);
+// Correctly marks expanded forms (e.g. ביצחק when query was יצחק~).
+SnippetDescriptor descriptor = index.LocateSnippetWindow(result);
 
 // Fallback — re-parses the query and uses only the base word forms.
 // Use when you have a lineId but no SearchResult (e.g. direct lookup).
-SnippetResult snippet = index.GenerateSnippet(lineId, query);
+SnippetDescriptor descriptor = index.LocateSnippetWindow(lineId, query);
 
-if (snippet.IsMatch)
-    Console.WriteLine(snippet.Html);   // highlighted HTML, ready to render
+// Short window (WindowWordCount < contextWords): widen over neighbouring lines.
+// Offsets are then into previous + ' ' + line + ' ' + next.
+SnippetDescriptor wider = index.LocateSnippetWindowOverNeighbourLines(result, previous, next);
 ```
-
-Each `SnippetResult` has:
 
 | Property | Type | Description |
 |---|---|---|
-| `Html` | `string` | Highlighted HTML with `<mark>` tags around matched terms |
+| `SnapStart` / `SnapEnd` | `int` | Window as raw char offsets into the source text |
+| `MarkRanges` | `IReadOnlyList<int>` | Flat (start, length, termOrdinal) triples to highlight (`MatchedTermAt` names the term) — a view of per-thread scratch, copy before the next locate |
+| `LeadingEllipsis` / `TrailingEllipsis` | `bool` | "…" before / after the window |
 | `Score` | `int` | Character span of the tightest window covering all terms — smaller is better |
 | `IsMatch` | `bool` | False = index false positive, filter this result out |
 
@@ -119,10 +121,9 @@ Returns the total number of lines in the database. Useful for computing build pr
 SeforimDb/
   SeforimIndex.cs         ← public facade
   SearchResult.cs         ← public result type
-  SnippetResult.cs        ← public snippet result type
   IndexingPipeline.cs     ← build logic
   SearchPipeline.cs       ← query parsing + search execution
-  SnippetPipeline.cs      ← snippet generation
+  SnippetDescriptorPipeline.cs ← per-thread locator, neighbour join, DB fallback
 ```
 
 Content access is NOT here — the caller supplies it through `IFtsCorpus` (one level up).

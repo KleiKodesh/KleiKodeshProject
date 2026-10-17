@@ -1,4 +1,5 @@
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using FtsLib.Tokenization;
 using System;
 using System.Collections.Generic;
@@ -71,21 +72,26 @@ namespace FtsLibTest
             int bugs        = 0;
 
             // Collect all snippets for histogram
-            var snippets = new List<(SearchResult result, FtsLib.SeforimDb.SnippetResult snippet)>(results.Count);
+            // The HTML is rendered right away: a descriptor's marks view per-thread scratch that
+            // the next locate overwrites.
+            var snippets = new List<(SearchResult result, SnippetDescriptor snippet, string html)>(results.Count);
             foreach (var r in results)
-                snippets.Add((r, index.GenerateSnippet(r)));
+            {
+                var descriptor = index.LocateSnippetWindow(r);
+                snippets.Add((r, descriptor, SnippetHtmlRenderer.Render(r.Content, descriptor)));
+            }
 
             // ── Per-result detail (bugs + first 5 OK) ────────────────
             for (int i = 0; i < snippets.Count; i++)
             {
-                var (r, snippet) = snippets[i];
+                var (r, snippet, html) = snippets[i];
 
                 var allTerms = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var g in r.MatchedGroups)
                     foreach (var t in g)
                         allTerms.Add(t);
 
-                string snippetPlain  = StripTags(snippet.Html);
+                string snippetPlain  = StripTags(html);
                 var    snippetTokens = tokenStream.Tokenize(snippetPlain);
                 var    foundInSnippet = new HashSet<string>(StringComparer.Ordinal);
                 foreach (var tok in snippetTokens)
@@ -93,7 +99,7 @@ namespace FtsLibTest
                         foundInSnippet.Add(tok.Normalized);
 
                 bool snippetHasMatch = foundInSnippet.Count > 0;
-                bool markPresent     = snippet.Html.Contains("<mark>");
+                bool markPresent     = html.Contains("<mark>");
 
                 var rawTokens  = tokenStream.Tokenize(r.Content);
                 var foundInRaw = new HashSet<string>(StringComparer.Ordinal);
@@ -135,7 +141,7 @@ namespace FtsLibTest
                 Console.WriteLine($"║      InRaw   : [{string.Join(", ", foundInRaw)}]");
                 Console.WriteLine($"║      InSnip  : [{string.Join(", ", foundInSnippet)}]");
                 Console.WriteLine($"║      Raw     : {TestHelpers.Truncate(StripTags(r.Content), 200)}");
-                Console.WriteLine($"║      Snippet : {TestHelpers.Truncate(snippet.Html, 300)}");
+                Console.WriteLine($"║      Snippet : {TestHelpers.Truncate(html, 300)}");
 
                 if (isBug)
                 {
@@ -157,7 +163,7 @@ namespace FtsLibTest
 
             var distBuckets = new SortedDictionary<int, int>();
             int noMatchCount = 0;
-            foreach (var (_, snippet) in snippets)
+            foreach (var (_, snippet, _) in snippets)
             {
                 if (!snippet.IsMatch) { noMatchCount++; continue; }
                 int bucket = snippet.WordDistance <= 0  ? 0
@@ -195,7 +201,7 @@ namespace FtsLibTest
             foreach (int threshold in thresholds)
             {
                 int kept = 0;
-                foreach (var (_, snippet) in snippets)
+                foreach (var (_, snippet, _) in snippets)
                     if (snippet.IsMatch && snippet.WordDistance <= threshold)
                         kept++;
                 int filteredOut = matchTotal - kept;
