@@ -42,7 +42,8 @@ public sealed class HebrewBooksService
 
     /// <summary>Outcome of an acquire: the resolved on-disk PDF path, or a reason it failed.
     /// Exactly one of Path / NotFound / Error is meaningful.</summary>
-    public readonly record struct HbAcquireResult(string? Path, bool NotFound, string? Error);
+    /// <param name="Detail">Full failure detail (exception ToString, response facts) for the console only.</param>
+    public readonly record struct HbAcquireResult(string? Path, bool NotFound, string? Error, string? Detail = null);
 
     /// <summary>Bytes received / total for an in-flight download of <paramref name="bookId"/>,
     /// or null when no download is active for it.</summary>
@@ -86,7 +87,7 @@ public sealed class HebrewBooksService
 
         // Core answers with a typed failure; the dispatcher's wire shape predates it and still
         // distinguishes the same cases by string. Mapped here rather than at every call site.
-        return result.Failure switch
+        var mapped = result.Failure switch
         {
             // Upstream has no such book. NotFound, so the caller says so rather than showing
             // an error the user can do nothing about.
@@ -105,11 +106,14 @@ public sealed class HebrewBooksService
             CoreHebrewBooks.HebrewBookAcquireFailure.InvalidBookId => new HbAcquireResult(null, false, "invalid book id"),
 
             // Core carries the bare status number; the sentence around it is the host's wording.
+            // The frontend prefixes its own "the download failed:" so this is the reason only.
             CoreHebrewBooks.HebrewBookAcquireFailure.HttpStatus =>
-                new HbAcquireResult(null, false, $"download failed (HTTP {result.Detail})"),
+                new HbAcquireResult(null, false, $"HTTP {result.Detail}"),
 
-            _ => new HbAcquireResult(null, false, result.Detail ?? "download failed"),
+            // Banner gets the exception's first line ("Type: message"); the console gets all of it.
+            _ => new HbAcquireResult(null, false, result.Detail?.Split('\n')[0].Trim() ?? "download failed"),
         };
+        return mapped with { Detail = $"{result.Failure}: {result.Detail}" };
     }
 
     public List<string> CheckLocalFiles(IEnumerable<string> bookIds, string? localFolder) =>

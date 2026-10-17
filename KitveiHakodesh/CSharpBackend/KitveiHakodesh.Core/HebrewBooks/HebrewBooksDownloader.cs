@@ -132,6 +132,9 @@ namespace KitveiHakodesh.Core.HebrewBooks
             CancellationToken downloadToken = cancellation.Token;
 
             string? partPath = null;
+            // Known once the body is confirmed a PDF; a disk failure reports the folder it was
+            // writing to, so the user can tell a full drive from a folder they cannot write.
+            string? destination = null;
             try
             {
                 string url = string.Format(DownloadUrlFormat, bookId);
@@ -142,7 +145,7 @@ namespace KitveiHakodesh.Core.HebrewBooks
                 if (!response.IsSuccessStatusCode)
                 {
                     return response.StatusCode == HttpStatusCode.NotFound
-                        ? HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream)
+                        ? HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream, $"HTTP 404 from '{url}'")
                         : HebrewBookAcquireResult.Failed(
                             HebrewBookAcquireFailure.HttpStatus, ((int)response.StatusCode).ToString());
                 }
@@ -155,9 +158,11 @@ namespace KitveiHakodesh.Core.HebrewBooks
                 byte[] signature = new byte[PdfSignatureLength];
                 int signatureLength = await ReadFullyAsync(body, signature, downloadToken).ConfigureAwait(false);
                 if (!IsPdfSignature(signature, signatureLength))
-                    return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream);
+                    return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.NotFoundUpstream,
+                        $"Not a PDF. Status {(int)response.StatusCode}, Content-Type '{response.Content.Headers.ContentType}', " +
+                        $"final URL '{response.RequestMessage?.RequestUri}', first bytes '{System.Text.Encoding.UTF8.GetString(signature, 0, signatureLength)}'");
 
-                string destination = ChooseDestination(localFolder, bookId, cachedPath);
+                destination = ChooseDestination(localFolder, bookId, cachedPath);
 
                 // Written to a .part first and moved into place only once complete, so a
                 // cancelled or failed download can never leave a truncated PDF that the
@@ -193,21 +198,30 @@ namespace KitveiHakodesh.Core.HebrewBooks
             {
                 return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Cancelled);
             }
+            catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested)
+            {
+                // Neither the user nor the host cancelled — HttpClient's own timeout.
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, "Timeout: " + ex);
+            }
             catch (OperationCanceledException)
             {
                 throw; // the host is shutting down — not this download's failure to report
             }
             catch (HttpRequestException ex)
             {
-                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, ex.Message);
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Network, ex.ToString());
             }
             catch (IOException ex)
             {
-                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, ex.Message);
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, DiskFailureDetail(ex, destination));
             }
             catch (UnauthorizedAccessException ex)
             {
-                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, ex.Message);
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, DiskFailureDetail(ex, destination));
+            }
+            catch (Exception ex)
+            {
+                return HebrewBookAcquireResult.Failed(HebrewBookAcquireFailure.Unexpected, ex.ToString());
             }
             finally
             {
@@ -299,6 +313,15 @@ namespace KitveiHakodesh.Core.HebrewBooks
         /// <summary>Swaps the completed .part into its real name. net48 has no overwriting
         /// File.Move, so the existing file goes first — by this point we hold a complete PDF
         /// and whatever is there is the one we set out to replace.</summary>
+        /// <summary>The exception's own message plus the folder being written, when known. A
+        /// FileStream failure usually names the file already; "not enough space on the disk"
+        /// and friends do not, and the folder is what the user needs to fix either way.</summary>
+        private static string DiskFailureDetail(Exception ex, string? destination)
+        {
+            string? folder = destination is null ? null : Path.GetDirectoryName(destination);
+            return string.IsNullOrEmpty(folder) ? ex.ToString() : $"{ex} ({folder})";
+        }
+
         private static void MoveIntoPlace(string partPath, string destination)
         {
             if (File.Exists(destination)) File.Delete(destination);
