@@ -417,6 +417,15 @@ namespace KitveiHakodesh.Core.SeforimDb
         }
 
         /// <summary>bookId for a batch of line ids (fallback when line_toc has no entry).</summary>
+        /// <summary>Book id + TOC entry id per line (FTS hit enrichment). The TOC entry is the
+        /// line's own line_toc row (one per line); 0 when the line has none — the page resolves
+        /// the entry's path from the book's TOC on demand.</summary>
+        public static string GetTocEntryIdsForLines(int count) => $@"
+            SELECT l.id AS lineId, l.bookId, lt.tocEntryId
+            FROM line l
+            LEFT JOIN line_toc lt ON lt.lineId = l.id
+            WHERE l.id IN ({InPlaceholders("p", count)})";
+
         public static string GetBookIdsForLines(int count) =>
             $"SELECT id AS lineId, bookId FROM line WHERE id IN ({InPlaceholders("p", count)})";
 
@@ -628,13 +637,14 @@ namespace KitveiHakodesh.Core.SeforimDb
         /// <summary>
         /// Neighbour lines for one chunk of matched ids: m is the matched line, n every line in
         /// the SAME BOOK within ±@radius rows by lineIndex, excluding m itself. Returns the
-        /// matched id, the signed delta, and the neighbour's content — the caller buckets by the
+        /// matched id, the signed delta, the neighbour's content and (last, so readers of the
+        /// first three columns are unaffected) the neighbour's own id — the caller buckets by the
         /// delta's sign and joins each side in document order. One self-join per chunk, so a
         /// whole batch of short matches costs one round-trip, and the bookId bound keeps a
         /// snippet from ever bleeding across a book boundary.
         /// </summary>
         internal static string FtsFetchNeighborLines(SeforimDbSchema schema, int count) =>
-            "SELECT m.id, n.lineIndex - m.lineIndex AS delta, " + C_ContentColumn(schema, "n") +
+            "SELECT m.id, n.lineIndex - m.lineIndex AS delta, " + C_ContentColumn(schema, "n") + ", n.id" +
             // The sidecar join must come AFTER this JOIN's own ON clause: putting it between
             // `JOIN line n` and its ON is a syntax error, because the ON would then bind to
             // the sidecar rather than to `n`.

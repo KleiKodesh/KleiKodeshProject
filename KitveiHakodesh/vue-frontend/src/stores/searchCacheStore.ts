@@ -26,6 +26,8 @@ import type { FullTextSearchResult } from '@/features/full-text-search/fullTextS
 
 export interface SearchCacheEntry {
   results: FullTextSearchResult[]
+  /** The search's matched-term table — what each hit's `termIds` index into. */
+  terms: string[]
   /** True when the stream finished (not cancelled or interrupted). */
   complete: boolean
   /**
@@ -44,6 +46,9 @@ interface SearchCacheMeta {
   chunks: number
   complete: boolean
   indexingComplete: boolean
+  /** Written with `complete` — an incomplete entry is re-run, never resumed, so the
+   *  table is only needed once the stream finished. */
+  terms?: string[]
 }
 
 const PREFIX = 'search:'
@@ -132,7 +137,7 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
       if (chunk) results.push(...chunk)
     }
     await touchLru(key, displayQuery)
-    return { results, complete: meta.complete, indexingComplete: meta.indexingComplete }
+    return { results, terms: meta.terms ?? [], complete: meta.complete, indexingComplete: meta.indexingComplete }
   }
 
   /** Write the initial (empty) entry when a new search starts. */
@@ -156,24 +161,21 @@ export const useSearchCacheStore = defineStore('searchCache', () => {
     const meta = await idbGet<SearchCacheMeta>(metaKey(key))
     if (!meta) return
     if (batch.length === 0) return
-    // IDB's structured clone algorithm rejects arrays/objects created in the WebView2
-    // host realm (via PostWebMessageAsString → JSON.parse in the host context). JSON
-    // round-trip re-creates them as plain clonable values IDB accepts. We round-trip
-    // ONLY the new batch here — never the accumulated set — so the cost is O(batch),
-    // not O(total) per append.
-    const clonable = JSON.parse(JSON.stringify(batch)) as FullTextSearchResult[]
-    await idbSet(chunkKey(key, meta.chunks), clonable)
+    // Stored as-is: hits are plain page-realm objects of numbers and int arrays (decoded
+    // from MessagePack in this realm on both runtimes), which IDB's structured clone takes
+    // directly. No serialisation round-trip — this is one `put` of just the new batch.
+    await idbSet(chunkKey(key, meta.chunks), batch)
     // Bump the chunk count only after the chunk write lands, so a crash between the two
     // leaves meta pointing at fewer chunks (a readable prefix) rather than at a chunk
     // index that doesn't exist yet.
     await idbSet(metaKey(key), { ...meta, chunks: meta.chunks + 1 } satisfies SearchCacheMeta)
   }
 
-  /** Mark the entry as complete. */
-  async function markComplete(key: string, indexingComplete: boolean): Promise<void> {
+  /** Mark the entry as complete, recording the search's matched-term table. */
+  async function markComplete(key: string, indexingComplete: boolean, terms: string[]): Promise<void> {
     const meta = await idbGet<SearchCacheMeta>(metaKey(key))
     if (!meta) return
-    await idbSet(metaKey(key), { ...meta, complete: true, indexingComplete } satisfies SearchCacheMeta)
+    await idbSet(metaKey(key), { ...meta, complete: true, indexingComplete, terms } satisfies SearchCacheMeta)
   }
 
   async function clear(): Promise<void> {

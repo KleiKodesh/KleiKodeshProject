@@ -5,7 +5,10 @@
  * one connection (`ftsSearchStream`) until the search finishes. In dev that connection is the
  * service's loopback HTTP host; in the hosted app it is the C# relay in front of the service's
  * named pipe. Aborting the stream is the cancel signal, and the service itself supersedes the
- * previous search when a new one starts. Hits arrive fully enriched (bookId + tocText).
+ * previous search when a new one starts. Hits are NUMBERS ONLY (see FullTextSearchResult):
+ * book id + TOC entry id, a snippet descriptor, and ids into the search's matched-term
+ * table, which streams once per search (`newTerms` per frame) and is resolved here
+ * (matchedTermsOf). Titles, TOC paths and snippet HTML are built per rendered row.
  */
 import { computed, onScopeDispose, ref, shallowRef, watch } from 'vue'
 import { storeToRefs } from 'pinia'
@@ -14,6 +17,8 @@ import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useBooksDataStore } from '@/stores/booksDataStore'
 import { chronologicalKey } from './chronology'
+import { bookTitleOf } from './fullTextSearchReferences'
+import { seedLineTexts } from './fullTextSearchSnippets'
 import type { FullTextSearchResult, SearchFailReason, FullTextSearchSortOrder } from './fullTextSearchTypes'
 
 // Adaptive flush cadence. Each flush reassigns `results` to a fresh array, which costs
@@ -34,6 +39,13 @@ function _flushDelayFor(count: number): number {
 interface SearchStreamChunk {
   ready: boolean
   results: FullTextSearchResult[]
+  /** Matched-term strings first seen in this frame, in id order — appended to the
+   *  search's term table, which the hits' `termIds` index into. */
+  newTerms?: string[]
+  /** Snippet line texts (line id -> text) for the search's first hits, riding on the frame
+   *  (not on the hits): seeded into the snippet cache so the first screen paints without a
+   *  fetch. Later frames carry none. Int map keys arrive as strings from MessagePack. */
+  lineTexts?: Record<string, string>
   done: boolean
   error?: string
   /** Stage-only frame: what the engine is doing right now (stable ASCII key). */
@@ -87,12 +99,31 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       // Results stream in catalog order since the FTS5 index; entries cached before that are
       // in line-id order (and from the old index), so they must not match.
       'catalog',
+      // Hits are numbers only (snippet descriptor, tocEntryId, termIds) since the on-demand
+      // snippets/references. Entries cached in the earlier shapes (snippet HTML, or the
+      // descriptor with per-hit strings) must not match — they are discarded by LRU
+      // eviction, never migrated.
+      'num',
+      // Marks became (start, length, termId) triples and termIds per-hit distinct ids
+      // (stride-2 entries would render wrong).
+      'mk3',
     ]
       .filter(Boolean)
       .join('|')
   }
 
   const results = shallowRef<FullTextSearchResult[]>([])
+  /** The current result set's matched-term table (hit.termIds index into it). */
+  let searchTerms: string[] = []
+  /** The concrete index terms that matched a hit — what the book view highlights. */
+  function matchedTermsOf(hit: FullTextSearchResult): string[] {
+    const out: string[] = []
+    for (const id of hit.termIds ?? []) {
+      const term = searchTerms[id]
+      if (term !== undefined) out.push(term)
+    }
+    return out
+  }
   const isSearching = ref(false)
   /** Live stage key of the running search; null when idle, done, failed or cancelled. */
   const currentStage = ref<string | null>(null)
@@ -176,7 +207,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     } else if (sortOrder.value === 'bookName') {
       // Alphabetical by book title (Hebrew collation), then streamed order so lines within the
       // same book stay in document order.
-      sorted.sort((a, b) => (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') || byStream(a, b))
+      sorted.sort((a, b) => bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') || byStream(a, b))
     } else if (sortOrder.value === 'authorName') {
       // Alphabetical by author name (Hebrew collation), then book name, then streamed order.
       // Authorless books (empty author string) sort last. book.authors is the comma-joined
@@ -187,7 +218,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         const aa = authorOf(a), ab = authorOf(b)
         if (!aa !== !ab) return aa ? -1 : 1 // non-empty authors before authorless
         return aa.localeCompare(ab, 'he') ||
-          (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
           byStream(a, b)
       })
     } else if (sortOrder.value === 'chronological') {
@@ -205,11 +236,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
         let key = keyCache.get(r.bookId)
         if (!key) {
           const book = bookMap.get(r.bookId)
-          // r.bookTitle backs up book.title so the canonical-work lookup still resolves for
-          // a hit whose book is missing from allBooksMap.
-          const { year, precision } = chronologicalKey(
-            book ? { ...book, title: book.title ?? r.bookTitle } : { title: r.bookTitle },
-          )
+          const { year, precision } = chronologicalKey(book ?? { title: '' })
           // Finite fallback, not Infinity — the comparator subtracts these and
           // Infinity-Infinity is NaN (see YEAR_UNKNOWN in chronology/index.ts).
           key = { year, precision, treeOrder: book?.treeOrder ?? Number.MAX_SAFE_INTEGER }
@@ -224,7 +251,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           keyA.year - keyB.year ||
           keyA.precision - keyB.precision ||
           keyA.treeOrder - keyB.treeOrder ||
-          (a.bookTitle ?? '').localeCompare(b.bookTitle ?? '', 'he') ||
+          bookTitleOf(a).localeCompare(bookTitleOf(b), 'he') ||
           byStream(a, b)
         )
       })
@@ -263,6 +290,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     hasSearched.value = true
     results.value = []
     streamedOrder = []
+    searchTerms = []
     sortOrder.value = 'catalogOrder'   // each new search starts in streamed order; user re-sorts after
     searchError.value = null
     executedQuery.value = q
@@ -279,6 +307,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     _streamAbort = abort
     try {
       const acc: FullTextSearchResult[] = []
+      const terms = searchTerms
       const stream = serviceStream<SearchStreamChunk>('ftsSearchStream', {
         query: _buildQueryToSend(normalizedQuery),
         maxWordDistance: settings.searchMaxWordDistance,
@@ -306,6 +335,8 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
       for await (const chunk of stream) {
         if (executedQuery.value !== q) { abort.abort(); return } // superseded locally
         if (chunk.stage) enterStage(chunk.stage)
+        if (chunk.newTerms?.length) for (const t of chunk.newTerms) terms.push(t)
+        seedLineTexts(chunk.lineTexts) // before the hits reach the list: its first render finds them
         if (chunk.ready === false) {
           searchError.value = 'indexNotReady'
           return
@@ -332,7 +363,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           // Done here rather than in `finally` so it runs only on genuine completion,
           // not when the loop exits early via supersession/error.
           await finalizeSort()
-          if (cacheable) await cache.markComplete(cacheKey, false).catch(() => {/* non-fatal */})
+          if (cacheable) await cache.markComplete(cacheKey, false, terms).catch(() => {/* non-fatal */})
           break
         }
       }
@@ -359,6 +390,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
   function clearSearch() {
     results.value = []
     streamedOrder = []
+    searchTerms = []
     hasSearched.value = false
     executedQuery.value = ''
     searchError.value = null
@@ -386,6 +418,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
     }
     results.value = cached.results
     streamedOrder = cached.results   // cached in the order it streamed
+    searchTerms = cached.terms
     executedQuery.value = q
     hasSearched.value = true
     return true
@@ -393,6 +426,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
 
   return {
     results,
+    matchedTermsOf,
     isSearching,
     currentStage,
     stageLabel,

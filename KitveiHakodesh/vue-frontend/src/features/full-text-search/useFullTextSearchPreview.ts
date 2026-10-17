@@ -17,6 +17,7 @@ import type { WordLinkAnchor } from '@/webview-host/queries.types'
 import { highlightFromSnippet } from '@/features/book-view/lines/useBookViewLineRenderer'
 import { applyWordLinkAnchors } from '@/features/book-view/lines/wordLinkAnchors'
 import type { FullTextSearchResult } from './fullTextSearchTypes'
+import { snippetHtmlOf } from './fullTextSearchSnippets'
 
 export interface PreviewLine {
   id: number
@@ -69,7 +70,7 @@ export function useFullTextSearchPreview() {
     return rows.map((row) => ({
       id: row.id,
       lineIndex: row.lineIndex,
-      html: highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), result.snippet),
+      html: highlightFromSnippet(spliceAnchors(row.content ?? '', anchorsByLine.get(row.id)), snippetHtmlOf(result) ?? ''),
     }))
   }
 
@@ -135,8 +136,8 @@ export function useFullTextSearchPreview() {
           id: result.lineId,
           lineIndex: st.lineIndex,
           html: content != null
-            ? highlightFromSnippet(spliceAnchors(content, anchorsByLine.get(result.lineId)), result.snippet)
-            : result.snippet,
+            ? highlightFromSnippet(spliceAnchors(content, anchorsByLine.get(result.lineId)), snippetHtmlOf(result) ?? '')
+            : snippetHtmlOf(result) ?? '',
         }]
         st.atStart = true
         st.atEnd = true

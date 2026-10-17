@@ -730,14 +730,17 @@ public sealed class SeforimDbFtsIndexCoordinator
             // Core's searcher yields finished batches; the one-shot path just collects them, so
             // it gets exactly the same parallel snippeting, short-snippet embellishment and
             // enrichment as the streaming path.
+            var terms = new FtsTermTable();
             foreach (var built in Searcher.SearchInBatches(
-                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv))
+                         GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, terms))
             {
                 result.Results.AddRange(built);
                 if (cap > 0 && result.Results.Count >= cap) break;
             }
             if (cap > 0 && result.Results.Count > cap)
                 result.Results.RemoveRange(cap, result.Results.Count - cap);
+            result.Terms = terms.All();
+            result.LineTexts = Searcher.FetchSnippetLineTexts(result.Results, SeforimDbFtsSearcher.SeedLineTextHitCount);
         }
         catch (Exception ex)
         {
@@ -822,7 +825,7 @@ public sealed class SeforimDbFtsIndexCoordinator
                 // already blocks it per MoveNext); blocking on emit keeps frame order intact.
                 // The service host has no SynchronizationContext, so this cannot deadlock.
                 await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
-                    linked.Token, built => emit(new FtsStreamChunk { Results = built }),
+                    linked.Token, (built, newTerms, lineTexts) => emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, LineTexts = lineTexts }),
                     stage => emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult());
                 await emit(new FtsStreamChunk { Done = true });
             }
@@ -862,14 +865,24 @@ public sealed class SeforimDbFtsIndexCoordinator
     /// what the search feels like. SearchParallel stays available as a bulk-fetch API.</summary>
     private async Task RunSearchCoreAsync(
         string query, int maxWordDistance, bool requireOrdered, int contextWords, bool expandKetiv,
-        CancellationToken ct, Func<List<FtsHit>, Task> onBatch, Action<string>? onStage = null)
+        CancellationToken ct, Func<List<FtsHit>, List<string>, Dictionary<int, string>, Task> onBatch,
+        Action<string>? onStage = null)
     {
         // Backpressure is why this awaits per batch rather than collecting: each batch is
-        // written to the caller's pipe before the next one is built.
+        // written to the caller's pipe before the next one is built. Each batch goes out with
+        // the matched-term strings it introduced (hits carry ids into the search's table), and
+        // the leading SeedLineTextHitCount hits of the search with their snippet line texts,
+        // so the first screen paints without a fetch. Frames past that carry no texts.
+        var terms = new FtsTermTable();
+        int seedLeft = SeforimDbFtsSearcher.SeedLineTextHitCount;
         foreach (var built in Searcher.SearchInBatches(
-                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, ct, onStage))
+                     GetEngine(), query, maxWordDistance, requireOrdered, contextWords, expandKetiv, terms, ct, onStage))
         {
-            await onBatch(built);
+            var lineTexts = seedLeft > 0
+                ? Searcher.FetchSnippetLineTexts(built, seedLeft)
+                : new Dictionary<int, string>();
+            seedLeft = Math.Max(0, seedLeft - built.Count);
+            await onBatch(built, terms.TakeNewTerms(), lineTexts);
         }
     }
 

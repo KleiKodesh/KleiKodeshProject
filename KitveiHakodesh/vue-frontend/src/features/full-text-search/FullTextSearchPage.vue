@@ -61,6 +61,7 @@ watch(
 
 const {
   results,
+  matchedTermsOf,
   isSearching,
   stageLabel,
   hasSearched,
@@ -101,6 +102,7 @@ const {
 } = useFullTextSearchFilters(
   () => results.value,
   () => executedQuery.value,
+  matchedTermsOf,
   executeSearch,
   clearSearch,
 )
