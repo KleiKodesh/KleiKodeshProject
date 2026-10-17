@@ -626,12 +626,13 @@ namespace KitveiHakodesh.Core.SeforimDb
             " FROM line l" + C_ContentJoin(schema, "l") +
             " WHERE l.bookId = @b ORDER BY l.lineIndex, l.id LIMIT -1 OFFSET @skip";
 
-        /// <summary>One chunk of search-result rows: content + book title in a single JOIN, so
-        /// titles never need a second query. IN-list sized to the chunk.</summary>
-        internal static string FtsFetchLinesWithTitles(SeforimDbSchema schema, int count) =>
-            "SELECT l.id, " + C_ContentColumn(schema, "l") + ", b.title" +
+        /// <summary>One chunk of search-result rows: id + content only. No book title: hits
+        /// leave the searcher carrying their book ID (see SeforimDbFtsSearcher.EnrichHits) and
+        /// the page resolves titles from that, so a title per fetched line was a join paid
+        /// for every matched line and read by nothing. IN-list sized to the chunk.</summary>
+        internal static string FtsFetchLines(SeforimDbSchema schema, int count) =>
+            "SELECT l.id, " + C_ContentColumn(schema, "l") +
             " FROM line l" + C_ContentJoin(schema, "l") +
-            " LEFT JOIN book b ON b.id = l.bookId" +
             " WHERE l.id IN (" + InPlaceholders("p", count) + ")";
 
         /// <summary>
