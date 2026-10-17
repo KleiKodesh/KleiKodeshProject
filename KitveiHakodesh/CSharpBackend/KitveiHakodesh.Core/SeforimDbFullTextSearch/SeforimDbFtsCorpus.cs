@@ -165,6 +165,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             }
         }
 
+        /// <summary>Search-result content. The Title slot of the corpus seam is left empty on
+        /// purpose: Core enriches hits with their book ID instead and never reads the engine's
+        /// title, so joining it here was a cost per matched line for nothing. The engine's own
+        /// diagnostics run over the test corpus, which does fill it.</summary>
         public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
         {
             var chunk = new List<int>(SqliteInListChunkSize);
@@ -189,18 +193,13 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         private IEnumerable<(int Id, string Text, string Title)> FetchChunk(
             SqliteCommand command, string[] parameterNames, List<int> ids)
         {
-            command.CommandText = SeforimDbSqlStrings.FtsFetchLinesWithTitles(_schema, ids.Count);
+            command.CommandText = SeforimDbSqlStrings.FtsFetchLines(_schema, ids.Count);
             for (int i = 0; i < ids.Count; i++)
                 command.Parameters[parameterNames[i]].Value = ids[i];
 
             using var reader = command.ExecuteReader();
             while (reader.Read())
-            {
-                yield return (
-                    reader.GetInt32(0),
-                    _codec.DecodeColumnOrEmpty(reader, 1),
-                    reader.IsDBNull(2) ? "" : reader.GetString(2));
-            }
+                yield return (reader.GetInt32(0), _codec.DecodeColumnOrEmpty(reader, 1), "");
         }
 
         public IDictionary<int, (string Previous, string Next)> FetchNeighbourText(
