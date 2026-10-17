@@ -127,7 +127,7 @@ public sealed class Dispatcher(
                         }
                         catch (Exception ex)
                         {
-                            return RpcResponse.Ok(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }));
+                            return RpcResponse.OkWithFailure(MsgPack.Ser(new OpenLocalFileResult { Error = ex.Message }), req.Op, ex);
                         }
                     }
                     string fileName = LocalFileOpenRules.ServedFileName(full, needsConvert, renderedAsHtml);
@@ -211,10 +211,10 @@ public sealed class Dispatcher(
                     }
                     catch (Exception ex)
                     {
-                        return RpcResponse.Ok(MsgPack.Ser(new ExcludedFoldersResult
+                        return RpcResponse.OkWithFailure(MsgPack.Ser(new ExcludedFoldersResult
                         {
                             Folders = locator.GetExcludedFolders(), Error = ex.Message,
-                        }));
+                        }), req.Op, ex);
                     }
                 }
 
@@ -271,6 +271,7 @@ public sealed class Dispatcher(
                 case "checkForUpdateNow":
                 {
                     string checkError = "";
+                    Exception? checkException = null;
                     if (!Hosting.WindowsServiceMode.IsWindowsService)
                         checkError = "updates are checked only by the installed service";
                     else if (AppSettingsRegistry.GetTurnOffUpdates())
@@ -283,11 +284,14 @@ public sealed class Dispatcher(
                         {
                             logger.LogWarning(ex, "Update check (on demand) failed");
                             checkError = ex.Message;
+                            checkException = ex;
                         }
                     }
                     UpdateStatusResult status = ReadUpdateStatus();
                     status.CheckError = checkError;
-                    return RpcResponse.Ok(MsgPack.Ser(status));
+                    return checkException is null
+                        ? RpcResponse.Ok(MsgPack.Ser(status))
+                        : RpcResponse.OkWithFailure(MsgPack.Ser(status), req.Op, checkException);
                 }
                 case "installUpdate":
                 {

@@ -460,6 +460,11 @@ internal static class RpcResponse
 {
     public static byte[] Ok(byte[]? resultBytes) => MsgPack.Ser(new RpcEnvelope { Ok = true, Result = resultBytes });
 
+    /// <summary>A reply that carries an op-level failure in its result (e.g. Error = ex.Message):
+    /// the whole exception rides on the envelope so the client console still shows it.</summary>
+    public static byte[] OkWithFailure(byte[]? resultBytes, string op, Exception ex) =>
+        MsgPack.Ser(new RpcEnvelope { Ok = true, Result = resultBytes, Detail = $"op '{op}' failed:\n{ex}" });
+
     public static byte[] Err(string message, string? detail = null) =>
         MsgPack.Ser(new RpcEnvelope { Ok = false, Error = message, Detail = detail });
 
