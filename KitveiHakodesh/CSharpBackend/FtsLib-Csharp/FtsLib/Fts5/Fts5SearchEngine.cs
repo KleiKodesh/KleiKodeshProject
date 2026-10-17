@@ -3,7 +3,7 @@ using FtsLib;
 using FtsLib.Indexing;
 using FtsLib.Search;
 using FtsLib.SeforimDb;
-using PreparedQueryGroups = FtsLib.Snippets.PreparedQueryGroups;
+using FtsLib.Snippets;
 using Microsoft.Data.Sqlite;
 using System;
 using System.Collections.Generic;
@@ -160,12 +160,12 @@ namespace FtsLib.Fts5
             finally { corpus?.Dispose(); }
         }
 
-        public static SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
-                                                    int contextWords = SeforimIndex.DefaultContextWords)
+        public static SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
+                                                            int contextWords = SeforimIndex.DefaultContextWords)
         {
-            if (result == null || result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
+            if (result == null || result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
             var prepared = result.Prepared ?? PreparedQueryGroups.FromGroups(result.MatchedGroups);
-            return SnippetPipeline.Generate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords);
+            return SnippetDescriptorPipeline.Locate(result.Content, prepared, requireOrdered, result.OriginalGroupCount, contextWords);
         }
 
         // ── Pipeline ──────────────────────────────────────────────────

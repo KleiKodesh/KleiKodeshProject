@@ -10,7 +10,7 @@ namespace FtsLibTest
 {
     /// <summary>
     /// Snippet-generation micro-benchmark. The perf profile shows snippet build dominates for
-    /// result-heavy queries. This isolates SnippetBuilder.Build over a fixed set of real lines
+    /// result-heavy queries. This isolates SnippetWindowLocator.Locate (descriptor only, no HTML) over a fixed set of real lines
     /// (no DB/I-O in the timed loop) and reports BOTH time and bytes allocated per result — to
     /// test the hypothesis that per-token Normalized-string allocation is the cost.
     ///
@@ -38,18 +38,19 @@ namespace FtsLibTest
             Console.WriteLine($"snipbench: {lines.Count:N0} lines, {chars:N0} chars, query=\"{query}\", {reps} reps\n");
 
             var prepared = PreparedQueryGroups.FromLiteralTerms(new[] { query });
-            var builder = new SnippetBuilder();
+            var locator = new SnippetWindowLocator();
 
-            // Content hash over ALL snippet HTML — a strong equivalence check across builds.
+            // Content hash over ALL snippet HTML (reference-rendered from the descriptors) —
+            // a strong equivalence check across builds.
             ulong hash = 14695981039346656037UL;
             foreach (var ln in lines)
             {
-                string h = builder.Build(ln, prepared).Html;
+                string h = SnippetHtmlRenderer.Render(ln, locator.Locate(ln, prepared));
                 foreach (char ch in h) { hash ^= ch; hash *= 1099511628211UL; }
             }
             Console.WriteLine($"HASH(all snippet html) = {hash:X16}\n");
             long sink = 0;
-            foreach (var ln in lines) sink += builder.Build(ln, prepared).Html.Length; // warmup
+            foreach (var ln in lines) sink += locator.Locate(ln, prepared).SnapEnd; // warmup
 
             double bestMs = double.MaxValue; long allocPerRep = 0;
             for (int rep = 0; rep < reps; rep++)
@@ -57,7 +58,7 @@ namespace FtsLibTest
                 GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
                 long a0 = GC.GetAllocatedBytesForCurrentThread();
                 var sw = Stopwatch.StartNew();
-                for (int i = 0; i < lines.Count; i++) sink += builder.Build(lines[i], prepared).Html.Length;
+                for (int i = 0; i < lines.Count; i++) sink += locator.Locate(lines[i], prepared).SnapEnd;
                 sw.Stop();
                 long alloc = GC.GetAllocatedBytesForCurrentThread() - a0;
                 double ms = sw.Elapsed.TotalMilliseconds;

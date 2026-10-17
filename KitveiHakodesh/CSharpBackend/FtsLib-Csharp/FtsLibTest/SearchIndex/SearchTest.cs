@@ -1,4 +1,5 @@
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -368,14 +369,14 @@ namespace FtsLibTest
             Console.WriteLine($"║    Content: {valStatus}  ({swVal.ElapsedMilliseconds} ms)");
 
             // ── 5. Snippet IsMatch — EVERY result ─────────────────────
-            // GenerateSnippet(result) uses already-fetched content — no extra DB cost.
+            // LocateSnippetWindow(result) uses already-fetched content — no extra DB cost.
             int snippetFp = 0;
             var swSnip    = Stopwatch.StartNew();
 
             Console.WriteLine($"║    First {Math.Min(PreviewResults, results.Count)} results:");
             for (int i = 0; i < results.Count; i++)
             {
-                var snippet = index.GenerateSnippet(results[i]);
+                var snippet = index.LocateSnippetWindow(results[i]);
 
                 if (!snippet.IsMatch)
                 {
@@ -390,11 +391,12 @@ namespace FtsLibTest
 
                 if (i < PreviewResults)
                 {
+                    string snippetHtml = SnippetHtmlRenderer.Render(results[i].Content, snippet);
                     report.AddResultCard(results[i].LineId, results[i].BookTitle,
-                        snippet.Html, snippet.Score, snippet.IsMatch);
+                        snippetHtml, snippet.Score, snippet.IsMatch);
                     string scoreStr = snippet.Score == int.MaxValue ? "n/a" : snippet.Score.ToString();
                     string plain    = snippet.IsMatch
-                        ? StripTags(snippet.Html, 120)
+                        ? StripTags(snippetHtml, 120)
                         : TestHelpers.Truncate(
                             TestHelpers.StripHtmlAndDiacritics(results[i].Content), 120);
                     Console.WriteLine(

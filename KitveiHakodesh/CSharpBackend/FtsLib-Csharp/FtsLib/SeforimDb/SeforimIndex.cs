@@ -1,4 +1,5 @@
 using FtsLib.Indexing;
+using FtsLib.Snippets;
 using FtsLib.Tokenization;
 using System;
 using System.Collections.Generic;
@@ -37,10 +38,10 @@ namespace FtsLib.SeforimDb
         private          SegmentStore     _store;
 
         /// <summary>Default visible-character budget for the snippet window.</summary>
-        public const int DefaultSnippetLength = SnippetPipeline.DefaultContextWords; // kept for binary compat
+        public const int DefaultSnippetLength = SnippetDescriptorPipeline.DefaultContextWords; // kept for binary compat
 
         /// <summary>Default number of words of context shown on each side of the match.</summary>
-        public const int DefaultContextWords = SnippetPipeline.DefaultContextWords;
+        public const int DefaultContextWords = SnippetDescriptorPipeline.DefaultContextWords;
 
         /// <summary>
         /// Opens an index over documents the CALLER supplies. This library reads no content
@@ -490,19 +491,20 @@ namespace FtsLib.SeforimDb
             }
         }
 
-        // ── Snippets ──────────────────────────────────────────────────
+        // ── Snippet windows ──────────────────────────────────────────
+        // Descriptors only (offsets into the line text) — never HTML. See SnippetDescriptor.
 
-        public SnippetResult GenerateSnippet(int lineId, string query)
+        public SnippetDescriptor LocateSnippetWindow(int lineId, string query)
         {
             var terms = SearchPipeline.ExtractTerms(query);
-            return SnippetPipeline.GenerateFromDb(lineId, terms, _openCorpus);
+            return SnippetDescriptorPipeline.LocateFromDb(lineId, terms, _openCorpus);
         }
 
         /// <summary>
         /// Batch-fetches the surrounding-line context (up to <paramref name="radius"/>
         /// lines each side, same book) for the given matched line ids — one query per
         /// chunk. Returns id → (prevText, nextText); ids at a book edge or not found are
-        /// simply absent. Used to embellish snippets that came out shorter than the
+        /// simply absent. Used to extend snippet windows that came out shorter than the
         /// requested context. Opening the read-only DB is a cheap pooled checkout.
         /// </summary>
         public System.Collections.Generic.Dictionary<int, (string Prev, string Next)>
@@ -521,11 +523,11 @@ namespace FtsLib.SeforimDb
             }
         }
 
-        public SnippetResult GenerateSnippet(SearchResult result, bool requireOrdered = false,
+        public SnippetDescriptor LocateSnippetWindow(SearchResult result, bool requireOrdered = false,
             int contextWords = DefaultContextWords)
         {
-            if (result == null) return SnippetResult.NoMatch;
-            if (result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
+            if (result == null) return SnippetDescriptor.NoMatch;
+            if (result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
 
             // Results from Search carry the query's prepared
             // term→group map (built once, shared across lines and threads).
@@ -533,7 +535,7 @@ namespace FtsLib.SeforimDb
             var prepared = result.Prepared
                 ?? FtsLib.Snippets.PreparedQueryGroups.FromGroups(result.MatchedGroups);
 
-            return SnippetPipeline.Generate(
+            return SnippetDescriptorPipeline.Locate(
                 result.Content,
                 prepared,
                 requireOrdered,
@@ -542,24 +544,26 @@ namespace FtsLib.SeforimDb
         }
 
         /// <summary>
-        /// Like <see cref="GenerateSnippet(SearchResult,bool,int)"/> but renders the
-        /// snippet over the matched line plus the supplied surrounding lines. Use this
-        /// only for results whose plain snippet was shorter than the requested context
-        /// (<see cref="SnippetResult.WindowWordCount"/> below <c>contextWords</c>) — the
-        /// caller batch-fetches the neighbors, so no per-line DB round-trip happens here.
+        /// Like <see cref="LocateSnippetWindow(SearchResult,bool,int)"/> but over the matched
+        /// line joined with the supplied surrounding lines (see
+        /// <see cref="SnippetDescriptorPipeline.JoinWithNeighbourLines"/>) — the offsets are
+        /// into that joined text. Use this only for results whose plain window was shorter
+        /// than the requested context (<see cref="SnippetDescriptor.WindowWordCount"/> below
+        /// <c>contextWords</c>) — the caller batch-fetches the neighbours, so no per-line DB
+        /// round-trip happens here.
         /// </summary>
-        public SnippetResult GenerateSnippetWithNeighbors(SearchResult result,
-            string prevContent, string nextContent,
+        public SnippetDescriptor LocateSnippetWindowOverNeighbourLines(SearchResult result,
+            string previousContent, string nextContent,
             bool requireOrdered = false, int contextWords = DefaultContextWords)
         {
-            if (result == null) return SnippetResult.NoMatch;
-            if (result.MatchedGroups.Count == 0) return SnippetResult.NoMatch;
+            if (result == null) return SnippetDescriptor.NoMatch;
+            if (result.MatchedGroups.Count == 0) return SnippetDescriptor.NoMatch;
 
             var prepared = result.Prepared
                 ?? FtsLib.Snippets.PreparedQueryGroups.FromGroups(result.MatchedGroups);
 
-            return SnippetPipeline.GenerateWithNeighbors(
-                prevContent,
+            return SnippetDescriptorPipeline.LocateOverNeighbourLines(
+                previousContent,
                 result.Content,
                 nextContent,
                 prepared,

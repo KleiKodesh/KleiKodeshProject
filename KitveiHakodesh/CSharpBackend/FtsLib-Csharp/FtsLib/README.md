@@ -42,13 +42,13 @@ Query execution engine:
 Public API facade — see `SeforimDb/README.md` for detailed API documentation.
 
 Key classes:
-- **SeforimIndex** — Main entry point (build, search, snippet)
+- **SeforimIndex** — Main entry point (build, search, locate snippet window)
 - **SearchResult** — Search result with content
-- **SnippetResult** — Highlighted snippet
 
 ### Snippets/
-- **SnippetBuilder** — Generate highlighted snippets
-- **SnippetResult** — Snippet data
+- **SnippetWindowLocator** — Locate the snippet window (offsets, no HTML)
+- **SnippetDescriptor** — Window offsets, mark ranges, ellipsis flags
+- **SnippetHtmlRenderer** — Reference rendering, tests only
 
 ### Tokenization/
 - **HtmlWordScanner** — Scan words from HTML

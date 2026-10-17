@@ -1,5 +1,6 @@
 using FtsLib.Fts5;
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -153,11 +154,11 @@ namespace FtsLibTest.Fts5Engine
                     bool same = libIds.SequenceEqual(f5Ids);
 
                     sw.Restart();
-                    int libPassed = FirstBatchPassed(ftsLib.Search(c.Query).Take(FirstBatch), r => ftsLib.GenerateSnippet(r, c.RequireOrdered), c.MaxWordDistance);
+                    int libPassed = FirstBatchPassed(ftsLib.Search(c.Query).Take(FirstBatch), r => ftsLib.LocateSnippetWindow(r, c.RequireOrdered), c.MaxWordDistance);
                     double libFirstMs = sw.Elapsed.TotalMilliseconds;
 
                     sw.Restart();
-                    int f5Passed = FirstBatchPassed(fts5.Search(c.Query).Take(FirstBatch), r => Fts5SearchEngine.GenerateSnippet(r, c.RequireOrdered), c.MaxWordDistance);
+                    int f5Passed = FirstBatchPassed(fts5.Search(c.Query).Take(FirstBatch), r => Fts5SearchEngine.LocateSnippetWindow(r, c.RequireOrdered), c.MaxWordDistance);
                     double f5FirstMs = sw.Elapsed.TotalMilliseconds;
 
                     rows.Add((Ascii(c.Label), libIds.Count, same, libIdsMs, f5IdsMs, libFirstMs, f5FirstMs, libPassed, f5Passed));
@@ -180,7 +181,7 @@ namespace FtsLibTest.Fts5Engine
             Console.WriteLine($"median ids ms     lib {Median(rows.Select(r => r.libIds)),9:F1}   fts5 {Median(rows.Select(r => r.f5Ids)),9:F1}");
         }
 
-        static int FirstBatchPassed(IEnumerable<SearchResult> results, Func<SearchResult, SnippetResult> snippet, int maxWordDistance)
+        static int FirstBatchPassed(IEnumerable<SearchResult> results, Func<SearchResult, SnippetDescriptor> snippet, int maxWordDistance)
         {
             int passed = 0;
             foreach (var r in results)

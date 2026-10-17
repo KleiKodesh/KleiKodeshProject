@@ -14,8 +14,8 @@ namespace FtsLibTest
     /// For each query it separates the three real costs and times snippet generation both
     /// sequentially and in parallel (snippet gen is per-hit, independent, CPU-bound):
     ///   FETCH   = Search(q).ToList()  — posting intersection + content read from SQLite
-    ///   SNIP-1  = GenerateSnippet for every hit, single-threaded
-    ///   SNIP-N  = GenerateSnippet for every hit, Parallel.For across cores
+    ///   SNIP-1  = LocateSnippetWindow for every hit, single-threaded
+    ///   SNIP-N  = LocateSnippetWindow for every hit, Parallel.For across cores
     ///
     ///   FtsLibTest.exe bench [tier]            -- build-if-missing + battery
     ///   FtsLibTest.exe bench [tier] rebuild    -- force a fresh build (build-rate bench)
@@ -99,14 +99,14 @@ namespace FtsLibTest
                     sw.Restart();
                     int m1 = 0;
                     for (int k = 0; k < list.Count; k++)
-                        if (index.GenerateSnippet(list[k]).IsMatch) m1++;
+                        if (index.LocateSnippetWindow(list[k]).IsMatch) m1++;
                     sw.Stop();
                     if (sw.Elapsed.TotalMilliseconds < bestSeq) bestSeq = sw.Elapsed.TotalMilliseconds;
 
                     sw.Restart();
                     int m2 = 0;
                     Parallel.For(0, list.Count, () => 0, (k, _, local) =>
-                        index.GenerateSnippet(list[k]).IsMatch ? local + 1 : local,
+                        index.LocateSnippetWindow(list[k]).IsMatch ? local + 1 : local,
                         local => System.Threading.Interlocked.Add(ref m2, local));
                     sw.Stop();
                     if (sw.Elapsed.TotalMilliseconds < bestPar) bestPar = sw.Elapsed.TotalMilliseconds;

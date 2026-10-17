@@ -123,7 +123,7 @@ namespace FtsLibTest
                 int snippets = 0;
                 foreach (var result in index.Search(query))
                 {
-                    index.GenerateSnippet(result);
+                    index.LocateSnippetWindow(result);
                     snippets++;
                 }
                 swD.Stop();
@@ -137,7 +137,7 @@ namespace FtsLibTest
                 long firstBatchMs = -1;
                 foreach (var result in index.Search(query))
                 {
-                    index.GenerateSnippet(result);
+                    index.LocateSnippetWindow(result);
                     firstCount++;
                     if (firstCount == FirstBatchSize)
                     {

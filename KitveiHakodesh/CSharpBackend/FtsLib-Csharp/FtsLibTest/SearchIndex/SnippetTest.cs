@@ -6,7 +6,7 @@ using System.Text;
 namespace FtsLibTest
 {
     /// <summary>
-    /// Unit tests for <see cref="SnippetBuilder"/> — covers snippet text content,
+    /// Unit tests for <see cref="SnippetWindowLocator"/> — covers snippet text content,
     /// highlight placement, window selection, context expansion, and edge cases.
     ///
     /// No index or database required — all content is supplied inline.
@@ -244,19 +244,20 @@ namespace FtsLibTest
             // 7. ELLIPSIS — long lines get trimmed with ellipsis markers
             // ─────────────────────────────────────────────────────────
 
-            // Use a SnippetBuilder with a small snippetLength so the window
+            // Use a SnippetWindowLocator with a small context so the window
             // is forced to trim. contextWords=2 keeps the window tight.
             // The match "שישים גבורים" is placed after a long prefix.
             string ellipsisPrefix = "אחד שתים שלש ארבע חמש שש שבע שמונה תשע עשר ";
             string ellipsisSuffix = " אחד שתים שלש ארבע חמש שש שבע שמונה תשע עשר";
             string ellipsisContent = ellipsisPrefix + "שישים גבורים" + ellipsisSuffix;
 
-            var ellipsisBuilder = new SnippetBuilder(contextWords: 1);
-            var ellipsisResult = ellipsisBuilder.Build(
+            var ellipsisLocator = new SnippetWindowLocator(contextWords: 1);
+            var ellipsisResult = ellipsisLocator.Locate(
                 ellipsisContent,
                 (IReadOnlyList<IReadOnlyCollection<string>>)new[] { new[] { "שישים" }, new[] { "גבורים" } });
+            string ellipsisHtml = SnippetHtmlRenderer.Render(ellipsisContent, ellipsisResult);
 
-            if (ellipsisResult.IsMatch && ellipsisResult.Html.Contains("…"))
+            if (ellipsisResult.IsMatch && ellipsisHtml.Contains("…"))
             {
                 passed++;
                 Console.WriteLine($"║  ✓  long line: ellipsis present when content exceeds snippetLength");
@@ -266,10 +267,10 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  long line: ellipsis present when content exceeds snippetLength");
                 Console.WriteLine($"║       IsMatch={ellipsisResult.IsMatch}");
-                Console.WriteLine($"║       Html=\"{ellipsisResult.Html}\"");
+                Console.WriteLine($"║       Html=\"{ellipsisHtml}\"");
             }
 
-            if (ellipsisResult.IsMatch && ellipsisResult.Html.Contains("שישים"))
+            if (ellipsisResult.IsMatch && ellipsisHtml.Contains("שישים"))
             {
                 passed++;
                 Console.WriteLine($"║  ✓  long line: matched terms still appear in trimmed snippet");
@@ -278,7 +279,7 @@ namespace FtsLibTest
             {
                 failed++;
                 Console.WriteLine($"║  ✗  long line: matched terms still appear in trimmed snippet");
-                Console.WriteLine($"║       Html=\"{ellipsisResult.Html}\"");
+                Console.WriteLine($"║       Html=\"{ellipsisHtml}\"");
             }
 
             // ─────────────────────────────────────────────────────────
@@ -323,7 +324,7 @@ namespace FtsLibTest
             string twoOccurrences =
                 "שישים אנשים הלכו בדרך ובדרך ובדרך ובדרך ובדרך שישים גבורים";
 
-            var twoOccurrencesResult = new SnippetBuilder().Build(
+            var twoOccurrencesResult = new SnippetWindowLocator().Locate(
                 twoOccurrences,
                 (IReadOnlyList<IReadOnlyCollection<string>>)new[] { new[] { "שישים" }, new[] { "גבורים" } });
 
@@ -339,7 +340,7 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  tightest window: adjacent occurrence chosen (WordDistance=0)");
                 Console.WriteLine($"║       IsMatch={twoOccurrencesResult.IsMatch}  WordDistance={twoOccurrencesResult.WordDistance}");
-                Console.WriteLine($"║       Html=\"{twoOccurrencesResult.Html}\"");
+                Console.WriteLine($"║       Html=\"{SnippetHtmlRenderer.Render(twoOccurrences, twoOccurrencesResult)}\"");
             }
 
             // ─────────────────────────────────────────────────────────
@@ -391,14 +392,14 @@ namespace FtsLibTest
             // 15. SCORE — tighter window scores lower (smaller raw span)
             // ─────────────────────────────────────────────────────────
 
-            var builderA = new SnippetBuilder();
-            var builderB = new SnippetBuilder();
+            var locatorA = new SnippetWindowLocator();
+            var locatorB = new SnippetWindowLocator();
 
-            var resultAdjacent = builderA.Build(
+            var resultAdjacent = locatorA.Locate(
                 "שישים גבורים",
                 (IReadOnlyList<IReadOnlyCollection<string>>)new[] { new[] { "שישים" }, new[] { "גבורים" } });
 
-            var resultDistant = builderB.Build(
+            var resultDistant = locatorB.Locate(
                 "שישים אחד שתים שלש ארבע חמש שש שבע שמונה תשע גבורים",
                 (IReadOnlyList<IReadOnlyCollection<string>>)new[] { new[] { "שישים" }, new[] { "גבורים" } });
 
@@ -425,17 +426,18 @@ namespace FtsLibTest
             // Build a line where the two matched terms are far apart and the
             // total visible length far exceeds snippetLength. The trimming loop
             // in ExpandWindow must clamp at iLeft/iRight, not trim past them.
-            var longLineBuilder = new SnippetBuilder(contextWords: 2);
+            var longLineLocator = new SnippetWindowLocator(contextWords: 2);
             string filler = "אחד שתים שלש ארבע חמש שש שבע שמונה תשע עשר " +
                             "אחד שתים שלש ארבע חמש שש שבע שמונה תשע עשר " +
                             "אחד שתים שלש ארבע חמש שש שבע שמונה תשע עשר ";
             string distantContent = filler + "שישים" + " " + filler + "גבורים" + " " + filler;
-            var distantResult = longLineBuilder.Build(
+            var distantResult = longLineLocator.Locate(
                 distantContent,
                 (IReadOnlyList<IReadOnlyCollection<string>>)new[] { new[] { "שישים" }, new[] { "גבורים" } });
+            string distantHtml = SnippetHtmlRenderer.Render(distantContent, distantResult);
 
-            if (distantResult.IsMatch && distantResult.Html.Contains("שישים")
-                                      && distantResult.Html.Contains("גבורים"))
+            if (distantResult.IsMatch && distantHtml.Contains("שישים")
+                                      && distantHtml.Contains("גבורים"))
             {
                 passed++;
                 Console.WriteLine($"║  ✓  distant terms on long line: both terms present in snippet");
@@ -445,7 +447,45 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  distant terms on long line: both terms present in snippet");
                 Console.WriteLine($"║       IsMatch={distantResult.IsMatch}");
-                Console.WriteLine($"║       Html=\"{distantResult.Html}\"");
+                Console.WriteLine($"║       Html=\"{distantHtml}\"");
+            }
+
+            // ─────────────────────────────────────────────────────────
+            // 17. MARK TERM ORDINALS — each mark names WHICH term it matched
+            //     (start, length, termOrdinal triples); only the terms that
+            //     occur in the line appear, not the whole expansion
+            // ─────────────────────────────────────────────────────────
+
+            string ordinalContent = "שישים גבורים סביב לה גבורים";
+            var ordinalResult = new SnippetWindowLocator().Locate(
+                ordinalContent,
+                (IReadOnlyList<IReadOnlyCollection<string>>)new[]
+                {
+                    new[] { "שישים", "ששים" },          // group 0: two alternatives, only one occurs
+                    new[] { "גבורים" },                 // group 1
+                });
+            var marks = ordinalResult.MarkRanges;
+            var markedTerms = new List<string>();
+            bool stride3 = marks.Count % SnippetDescriptor.MarkStride == 0 && marks.Count == 3 * 3;
+            bool offsetsMatch = true;
+            for (int i = 0; stride3 && i + 2 < marks.Count; i += SnippetDescriptor.MarkStride)
+            {
+                string term = ordinalResult.MatchedTermAt(marks[i + 2]);
+                markedTerms.Add(term);
+                if (ordinalContent.Substring(marks[i], marks[i + 1]).TrimEnd() != term) offsetsMatch = false;
+            }
+            if (ordinalResult.IsMatch && stride3 && offsetsMatch
+                && markedTerms.Count == 3
+                && markedTerms[0] == "שישים" && markedTerms[1] == "גבורים" && markedTerms[2] == "גבורים")
+            {
+                passed++;
+                Console.WriteLine($"║  ✓  mark triples name the matched term (3 marks, ordinals resolve to the token)");
+            }
+            else
+            {
+                failed++;
+                Console.WriteLine($"║  ✗  mark triples name the matched term");
+                Console.WriteLine($"║       IsMatch={ordinalResult.IsMatch} markInts={marks.Count} terms=[{string.Join(",", markedTerms)}] offsetsMatch={offsetsMatch}");
             }
 
             Console.WriteLine("║");
@@ -471,7 +511,8 @@ namespace FtsLibTest
             IReadOnlyList<IReadOnlyCollection<string>> groups,
             bool                                       expectMatch)
         {
-            var result = new SnippetBuilder().Build(content, groups);
+            var result = new SnippetWindowLocator().Locate(content, groups);
+            string html = SnippetHtmlRenderer.Render(content, result);
 
             if (result.IsMatch == expectMatch)
             {
@@ -483,7 +524,7 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  {name}");
                 Console.WriteLine($"║       expected IsMatch={expectMatch}, got IsMatch={result.IsMatch}");
-                Console.WriteLine($"║       Html=\"{result.Html}\"");
+                Console.WriteLine($"║       Html=\"{html}\"");
             }
         }
 
@@ -495,7 +536,8 @@ namespace FtsLibTest
             string                                     content,
             IReadOnlyList<IReadOnlyCollection<string>> groups)
         {
-            var result = new SnippetBuilder().Build(content, groups);
+            var result = new SnippetWindowLocator().Locate(content, groups);
+            string html = SnippetHtmlRenderer.Render(content, result);
 
             if (!result.IsMatch)
             {
@@ -507,7 +549,7 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  {name}");
                 Console.WriteLine($"║       expected IsMatch=false, got IsMatch=true");
-                Console.WriteLine($"║       Html=\"{result.Html}\"");
+                Console.WriteLine($"║       Html=\"{html}\"");
             }
         }
 
@@ -520,9 +562,10 @@ namespace FtsLibTest
             IReadOnlyList<IReadOnlyCollection<string>> groups,
             string                                     mustContain)
         {
-            var result = new SnippetBuilder().Build(content, groups);
+            var result = new SnippetWindowLocator().Locate(content, groups);
+            string html = SnippetHtmlRenderer.Render(content, result);
 
-            if (result.IsMatch && result.Html.Contains(mustContain))
+            if (result.IsMatch && html.Contains(mustContain))
             {
                 passed++;
                 Console.WriteLine($"║  ✓  {name}");
@@ -533,7 +576,7 @@ namespace FtsLibTest
                 Console.WriteLine($"║  ✗  {name}");
                 Console.WriteLine($"║       IsMatch={result.IsMatch}");
                 Console.WriteLine($"║       expected Html to contain: \"{mustContain}\"");
-                Console.WriteLine($"║       actual Html: \"{result.Html}\"");
+                Console.WriteLine($"║       actual Html: \"{html}\"");
             }
         }
 
@@ -546,9 +589,10 @@ namespace FtsLibTest
             IReadOnlyList<IReadOnlyCollection<string>> groups,
             string                                     mustNotContain)
         {
-            var result = new SnippetBuilder().Build(content, groups);
+            var result = new SnippetWindowLocator().Locate(content, groups);
+            string html = SnippetHtmlRenderer.Render(content, result);
 
-            if (!result.Html.Contains(mustNotContain))
+            if (!html.Contains(mustNotContain))
             {
                 passed++;
                 Console.WriteLine($"║  ✓  {name}");
@@ -558,7 +602,7 @@ namespace FtsLibTest
                 failed++;
                 Console.WriteLine($"║  ✗  {name}");
                 Console.WriteLine($"║       Html must NOT contain: \"{mustNotContain}\"");
-                Console.WriteLine($"║       actual Html: \"{result.Html}\"");
+                Console.WriteLine($"║       actual Html: \"{html}\"");
             }
         }
 

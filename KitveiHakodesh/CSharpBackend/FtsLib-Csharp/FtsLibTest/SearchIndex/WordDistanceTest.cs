@@ -11,7 +11,7 @@ namespace FtsLibTest
     /// Unit tests for word-distance filtering in the snippet pipeline.
     ///
     /// Tests the full chain:
-    ///   SnippetBuilder.Build → WordDistance on SnippetResult
+    ///   SnippetWindowLocator.Locate → WordDistance on SnippetDescriptor
     ///
     /// No index or database required — all content is supplied inline.
     ///
@@ -30,7 +30,7 @@ namespace FtsLibTest
 
             // ── Helper: build a snippet and return WordDistance ───────
 
-            // We test through SnippetBuilder directly (internal access via
+            // We test through SnippetWindowLocator directly (internal access via
             // same-project reference).  Each test supplies raw HTML content
             // and a list of query groups, then asserts the WordDistance value.
 
@@ -215,8 +215,8 @@ namespace FtsLibTest
             int                                            originalCount,
             int                                            expectedDistance)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(content, groups, requireOrdered: false, originalGroupCount: originalCount);
+            var locator = new SnippetWindowLocator();
+            var result  = locator.Locate(content, groups, requireOrdered: false, originalGroupCount: originalCount);
 
             if (!result.IsMatch)
             {
@@ -249,8 +249,8 @@ namespace FtsLibTest
             string                                     content,
             IReadOnlyList<IReadOnlyCollection<string>> groups)
         {
-            var builder = new SnippetBuilder();
-            var result  = builder.Build(content, groups);
+            var locator = new SnippetWindowLocator();
+            var result  = locator.Locate(content, groups);
 
             if (!result.IsMatch)
             {
@@ -278,8 +278,8 @@ namespace FtsLibTest
             int                                            maxWordDistance,
             bool                                           expectPass)
         {
-            var builder  = new SnippetBuilder();
-            var result   = builder.Build(content, groups, requireOrdered: false, originalGroupCount: originalCount);
+            var locator  = new SnippetWindowLocator();
+            var result   = locator.Locate(content, groups, requireOrdered: false, originalGroupCount: originalCount);
             bool passes  = result.IsMatch && result.WordDistance <= maxWordDistance;
 
             if (passes == expectPass)

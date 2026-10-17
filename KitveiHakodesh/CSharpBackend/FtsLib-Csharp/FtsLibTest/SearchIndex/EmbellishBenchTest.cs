@@ -1,4 +1,5 @@
 using FtsLib.SeforimDb;
+using FtsLib.Snippets;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -12,10 +13,10 @@ namespace FtsLibTest
     /// Measures the cost the short-snippet EMBELLISHMENT adds to the search snippet step.
     ///
     /// For each query, over a real result set, it times two things per rep and keeps the best:
-    ///   BASE   = parallel GenerateSnippet for every hit           (what the service did before)
+    ///   BASE   = parallel LocateSnippetWindow for every hit           (what the service did before)
     ///   EMB    = the same, PLUS: detect snippets shorter than the target context, batch-fetch
     ///            their surrounding lines in ONE query, and re-render only those with
-    ///            GenerateSnippetWithNeighbors                     (the new BuildBatch path)
+    ///            LocateSnippetWindowOverNeighbourLines            (the new BuildBatch path)
     ///
     /// It also reports the fraction of hits that were short (drove the neighbor fetch), so the
     /// added cost can be read against how often it actually fires.
@@ -79,7 +80,7 @@ namespace FtsLibTest
             {
                 var list = index.Search(q).ToList();
                 sets[q] = list;
-                Parallel.For(0, list.Count, k => index.GenerateSnippet(list[k], false, ContextWords));
+                Parallel.For(0, list.Count, k => index.LocateSnippetWindow(list[k], false, ContextWords));
             }
 
             // Baseline (parallel snippet only) is threshold-independent — measure once per query.
@@ -91,9 +92,9 @@ namespace FtsLibTest
                 double best = double.MaxValue;
                 for (int rep = 0; rep < Reps; rep++)
                 {
-                    var snips = new SnippetResult[list.Count];
+                    var snips = new SnippetDescriptor[list.Count];
                     var sw = Stopwatch.StartNew();
-                    Parallel.For(0, list.Count, k => snips[k] = index.GenerateSnippet(list[k], false, ContextWords));
+                    Parallel.For(0, list.Count, k => snips[k] = index.LocateSnippetWindow(list[k], false, ContextWords));
                     sw.Stop();
                     if (sw.Elapsed.TotalMilliseconds < best) best = sw.Elapsed.TotalMilliseconds;
                 }
@@ -120,10 +121,10 @@ namespace FtsLibTest
                     int shortCount = 0;
                     for (int rep = 0; rep < Reps; rep++)
                     {
-                        var embSnips = new SnippetResult[list.Count];
+                        var embSnips = new SnippetDescriptor[list.Count];
                         var sw = Stopwatch.StartNew();
                         Parallel.For(0, list.Count, k =>
-                            embSnips[k] = index.GenerateSnippet(list[k], false, ContextWords));
+                            embSnips[k] = index.LocateSnippetWindow(list[k], false, ContextWords));
 
                         var shortIdx = new List<int>();
                         var shortIds = new List<int>();
@@ -137,7 +138,7 @@ namespace FtsLibTest
                             Parallel.ForEach(shortIdx, k =>
                             {
                                 if (!neighbors.TryGetValue(list[k].LineId, out var ctx)) return;
-                                embSnips[k] = index.GenerateSnippetWithNeighbors(
+                                embSnips[k] = index.LocateSnippetWindowOverNeighbourLines(
                                     list[k], ctx.Prev, ctx.Next, false, ContextWords);
                             });
                         }
@@ -166,17 +167,21 @@ namespace FtsLibTest
                 var list = index.Search(q).ToList();
                 foreach (var r in list)
                 {
-                    var plain = index.GenerateSnippet(r, false, ContextWords);
+                    var plain = index.LocateSnippetWindow(r, false, ContextWords);
                     if (!plain.IsMatch || plain.WindowWordCount >= cutoff) continue;
+                    // Render NOW: the descriptor's marks view per-thread scratch that the next locate overwrites.
+                    string plainHtml = SnippetHtmlRenderer.Render(r.Content, plain);
 
                     var ctx = index.FetchNeighborContext(new List<int> { r.LineId }, radius);
                     if (!ctx.TryGetValue(r.LineId, out var nb)) continue;
-                    var emb = index.GenerateSnippetWithNeighbors(r, nb.Prev, nb.Next, false, ContextWords);
+                    var emb = index.LocateSnippetWindowOverNeighbourLines(r, nb.Prev, nb.Next, false, ContextWords);
+                    string embHtml = SnippetHtmlRenderer.Render(
+                        SnippetDescriptorPipeline.JoinWithNeighbourLines(nb.Prev, r.Content, nb.Next), emb);
 
                     Console.WriteLine($"── query='{q}' lineId={r.LineId} windowWords={plain.WindowWordCount}");
-                    Console.WriteLine($"   PLAIN: {plain.Html}");
-                    Console.WriteLine($"   EMBEL: {emb.Html}");
-                    Console.WriteLine($"   marks: plain={CountMarks(plain.Html)} embel={CountMarks(emb.Html)}  len: plain={plain.Html.Length} embel={emb.Html.Length}");
+                    Console.WriteLine($"   PLAIN: {plainHtml}");
+                    Console.WriteLine($"   EMBEL: {embHtml}");
+                    Console.WriteLine($"   marks: plain={CountMarks(plainHtml)} embel={CountMarks(embHtml)}  len: plain={plainHtml.Length} embel={embHtml.Length}");
                     Console.WriteLine();
                     if (++shown >= 6) return;
                     break; // one sample per query

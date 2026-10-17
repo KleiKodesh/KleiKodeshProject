@@ -23,7 +23,7 @@ namespace FtsLib.Tokenization
 
         /// <summary>
         /// Cumulative count of visible characters up to but not including the first letter of
-        /// this token. Used by SnippetBuilder to measure snippet length without re-scanning.
+        /// this token. Used by SnippetWindowLocator to measure window length without re-scanning.
         /// </summary>
         public readonly int VisibleStart;
 
