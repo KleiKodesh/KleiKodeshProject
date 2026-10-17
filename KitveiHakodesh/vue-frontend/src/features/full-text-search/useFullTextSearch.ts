@@ -347,7 +347,7 @@ export function useFullTextSearch(isIndexing?: () => boolean) {
           for (const c of hits) acc.push(c) // spread-push would overflow on very large chunks
           dirty = true
           if (performance.now() - lastFlushAt >= _flushDelayFor(acc.length)) flush()
-          if (cacheable) await cache.appendBatch(cacheKey, hits).catch(() => {/* best-effort */})
+          if (cacheable) cache.appendBatch(cacheKey, hits) // buffered, never awaited: the cache keeps its own ordered write chain
         }
         if (executedQuery.value !== q) { abort.abort(); return } // superseded while caching
         if (chunk.error) {
