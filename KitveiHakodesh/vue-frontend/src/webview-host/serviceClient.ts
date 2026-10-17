@@ -40,16 +40,26 @@ let khsEndpointPending: Promise<KhsEndpoint> | null = null
 
 async function discoverEndpoint(): Promise<KhsEndpoint> {
   // The dev server answers 503 until the service has reported its endpoint over the pipe; retry.
+  const t0 = performance.now()
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetch('/khs-endpoint', { cache: 'no-store' })
       if (res.ok) {
         const { base, token } = (await res.json()) as { base: string; token: string }
-        if (base && token) return { base, token }
+        if (base && token) {
+          console.info(`[service] endpoint ${base} found after ${attempt + 1} tries, ${Math.round(performance.now() - t0)} ms`)
+          return { base, token }
+        }
       }
-    } catch { /* dev server momentarily unreachable — retry */ }
+      if (attempt % 10 === 0) console.warn(`[service] /khs-endpoint try ${attempt + 1}: ${res.status} (service not reported yet)`)
+    } catch (e) {
+      if (attempt % 10 === 0) console.warn(`[service] /khs-endpoint try ${attempt + 1}: dev server unreachable`, e)
+    }
     await new Promise((r) => setTimeout(r, Math.min(1000, 100 + attempt * 100)))
-    if (attempt > 80) throw new Error('KitveiHakodesh service endpoint never became available')
+    if (attempt > 80) {
+      console.error(`[service] endpoint never became available (${Math.round(performance.now() - t0)} ms)`)
+      throw new Error('KitveiHakodesh service endpoint never became available')
+    }
   }
 }
 
@@ -97,6 +107,7 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
         khsEndpoint = null
         lastReason = res.status === 503 ? parseUnavailableReason(res.headers.get('X-KHS-Unavailable')) : 'NotRunning'
         lastDetail = res.status === 401 ? 'service rejected the token (401)' : await res.text()
+        console.warn(`[service] ${path} attempt ${attempt + 1}: ${res.status} ${lastReason} ${lastDetail}`)
         if (isPersistentReason(lastReason)) break
         await new Promise((r) => setTimeout(r, 60 + attempt * 80))
         continue
@@ -107,11 +118,13 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
       if (signal?.aborted) throw err // a real cancel, not a transient outage — don't retry
       lastReason = 'NotRunning'
       lastDetail = err instanceof Error ? err.message : String(err)
+      console.warn(`[service] ${path} attempt ${attempt + 1}: fetch failed (${lastDetail})`)
       khsEndpoint = null // force re-discovery — port/token may have changed on a respawn
       await new Promise((r) => setTimeout(r, 60 + attempt * 80))
     }
   }
   // Out of attempts: one banner for the whole app says what is wrong (ServiceUnavailableBanner).
+  console.error(`[service] ${path} gave up after 6 attempts: ${lastReason} ${lastDetail}`)
   markServiceUnavailable(lastReason)
   throw new ServiceUnavailableError(lastReason, lastDetail)
 }
@@ -125,9 +138,15 @@ const upperFirst = (k: string) => (k ? k.charAt(0).toUpperCase() + k.slice(1) : 
 const decodeKey = (k: string) => (k === 'SourceId' ? 'source_id' : lowerFirst(k))
 
 /** Recursively transform object keys (arrays + nested objects); leaves values, including
- *  binary (Uint8Array/ArrayBuffer), untouched. */
+ *  binary (Uint8Array/ArrayBuffer), untouched. An array whose first element is a primitive
+ *  is returned as-is: wire arrays are homogeneous, and the int arrays every search hit
+ *  carries (snippet line ids, marks, term ids) would otherwise be copied element by
+ *  element, hundreds of thousands of times over a broad search. */
 function transformKeys(v: any, fn: (k: string) => string): any {
-  if (Array.isArray(v)) return v.map((x) => transformKeys(x, fn))
+  if (Array.isArray(v)) {
+    if (v.length > 0 && (typeof v[0] !== 'object' || v[0] === null)) return v
+    return v.map((x) => transformKeys(x, fn))
+  }
   if (v && typeof v === 'object' && !(v instanceof Uint8Array) && !(v instanceof ArrayBuffer)) {
     const out: Record<string, unknown> = {}
     for (const k in v) out[fn(k)] = transformKeys((v as Record<string, unknown>)[k], fn)
@@ -176,11 +195,18 @@ export async function serviceCall<T = unknown>(
     console.error(`[service] ${msg}\n${await res.text().catch(() => '')}`)
     throw new Error(msg)
   }
+  const t0 = performance.now()
+  console.debug(`[service] -> ${op}`, args)
   const env = mpDecode(new Uint8Array(await res.arrayBuffer())) as Envelope
   if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' error`)
   // An op that caught its own failure still answers Ok; Detail carries the exception.
   if (env.Detail) console.error(`[service] '${op}' failed:\n${env.Detail}`)
-  if (!env.Result || env.Result.length === 0) return undefined as T
+  const ms = Math.round(performance.now() - t0)
+  if (!env.Result || env.Result.length === 0) {
+    console.debug(`[service] <- ${op} ${ms} ms, EMPTY result`)
+    return undefined as T
+  }
+  console.debug(`[service] <- ${op} ${ms} ms, ${env.Result.length} bytes`)
   return transformKeys(mpDecode(env.Result), decodeKey) as T
 }
 
@@ -295,6 +321,7 @@ export async function* serviceStream<T = unknown>(
   const reader = res.body.getReader()
   let buf = new Uint8Array(0)
   try {
+  console.debug(`[service] -> stream ${op}`, args)
     for (;;) {
       const { value, done } = await reader.read()
       if (done) break
