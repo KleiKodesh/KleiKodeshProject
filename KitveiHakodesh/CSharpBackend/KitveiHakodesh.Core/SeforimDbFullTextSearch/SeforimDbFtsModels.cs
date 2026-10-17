@@ -184,7 +184,9 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
         public bool Done { get; set; }
         public string? Error { get; set; }
         /// <summary>What the engine is doing right now (stable ASCII key: validate, rewrite,
-        /// parse, expand, lookup, fetch, snippets, enrich). Stage-only frames carry no results.</summary>
+        /// parse, expand, lookup, fetch, snippets, enrich). Until the first results frame, a
+        /// stage change is a frame of its own carrying no results; after it, the latest stage
+        /// rides on the next results frame.</summary>
         public string? Stage { get; set; }
     }
 }

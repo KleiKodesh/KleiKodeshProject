@@ -821,12 +821,30 @@ public sealed class SeforimDbFtsIndexCoordinator
             try
             {
                 await emit(new FtsStreamChunk { Stage = "validate" });
-                // Stage hooks fire synchronously on the enumerating thread (the batch loop
-                // already blocks it per MoveNext); blocking on emit keeps frame order intact.
-                // The service host has no SynchronizationContext, so this cannot deadlock.
+                // Stage changes ride alone only until the first results frame: before it they
+                // are all the client has to show. After it every batch would otherwise cost
+                // three stage-only frames (fetch, snippets, enrich) on top of its results
+                // frame, so from then on the latest stage is folded into the next results
+                // frame instead. Stage hooks fire synchronously on the enumerating thread
+                // (the batch loop already blocks it per MoveNext); blocking on emit keeps
+                // frame order intact. The service host has no SynchronizationContext, so
+                // this cannot deadlock.
+                bool resultsSent = false;
+                string? stageSinceLastResults = null;
                 await RunSearchCoreAsync(query, maxWordDistance, requireOrdered, contextWords, expandKetiv,
-                    linked.Token, (built, newTerms, lineTexts) => emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, LineTexts = lineTexts }),
-                    stage => emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult());
+                    linked.Token,
+                    (built, newTerms, lineTexts) =>
+                    {
+                        resultsSent = true;
+                        string? stage = stageSinceLastResults;
+                        stageSinceLastResults = null;
+                        return emit(new FtsStreamChunk { Results = built, NewTerms = newTerms, LineTexts = lineTexts, Stage = stage });
+                    },
+                    stage =>
+                    {
+                        if (resultsSent) stageSinceLastResults = stage;
+                        else emit(new FtsStreamChunk { Stage = stage }).GetAwaiter().GetResult();
+                    });
                 await emit(new FtsStreamChunk { Done = true });
             }
             catch (OperationCanceledException) { /* superseded, reset, or client left */ }

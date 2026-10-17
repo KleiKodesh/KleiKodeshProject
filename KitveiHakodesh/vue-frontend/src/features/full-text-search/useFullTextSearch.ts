@@ -48,7 +48,8 @@ interface SearchStreamChunk {
   lineTexts?: Record<string, string>
   done: boolean
   error?: string
-  /** Stage-only frame: what the engine is doing right now (stable ASCII key). */
+  /** What the engine is doing right now (stable ASCII key). A frame of its own before the
+   *  first results frame; folded onto results frames after it. */
   stage?: string
 }
 
