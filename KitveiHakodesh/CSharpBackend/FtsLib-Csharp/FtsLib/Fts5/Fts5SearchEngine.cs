@@ -107,7 +107,8 @@ namespace FtsLib.Fts5
 
         // ── Public API (mirrors SeforimIndex) ─────────────────────────
 
-        const int ContentBatchSize = 200;
+        /// <summary>Content batch size when the caller passes no plan of its own.</summary>
+        const int DefaultContentBatchSize = 256;
 
         /// <summary>Matching line ids in the index's order, streamed straight off the FTS5 cursor.</summary>
         public IEnumerable<int> SearchIds(string query, bool expandKetiv = false,
@@ -120,14 +121,18 @@ namespace FtsLib.Fts5
 
         /// <summary>
         /// Matching lines in the index's order, streamed: FTS5 produces the ids as the caller pulls, and
-        /// content is fetched one batch of <see cref="ContentBatchSize"/> ids at a time. Nothing
-        /// is collected up front, so the first results cost one batch however broad the query.
+        /// content is fetched one batch at a time. Nothing is collected up front, so the first
+        /// results cost one batch however broad the query.
         /// </summary>
         /// <param name="onStage">Optional progress hook, fired on the ENUMERATING thread with a
         /// stable ASCII stage key ("parse", "expand", "lookup", "fetch") as the pipeline moves.</param>
+        /// <param name="batchSizeAt">The caller's batch plan: the number of ids to fetch as
+        /// batch number n (0-based) — so a caller that processes results in batches of its
+        /// own gets them cut at the same places. Null: <see cref="DefaultContentBatchSize"/>
+        /// throughout.</param>
         public IEnumerable<SearchResult> Search(string query, int cap = 0, bool expandKetiv = false,
                                                 IEnumerable<int> filterIds = null, CancellationToken ct = default,
-                                                Action<string> onStage = null)
+                                                Action<string> onStage = null, Func<int, int> batchSizeAt = null)
         {
             var plan = Plan(query, expandKetiv, filterIds, ct, onStage);
             if (plan == null) yield break;
@@ -137,18 +142,21 @@ namespace FtsLib.Fts5
             IFtsCorpus corpus = null;   // opened on the first hit, like SearchPipeline
             try
             {
-                var batch = new List<int>(ContentBatchSize);
+                int batchIndex = 0;
+                int batchSize = Math.Max(1, batchSizeAt?.Invoke(batchIndex) ?? DefaultContentBatchSize);
+                var batch = new List<int>(batchSize);
                 int taken = 0;              // cap counts ids, as SearchPipeline does
                 foreach (int id in StreamIds(plan, ct))
                 {
                     batch.Add(id);
                     bool capReached = cap > 0 && ++taken >= cap;
-                    if (batch.Count < ContentBatchSize && !capReached) continue;
+                    if (batch.Count < batchSize && !capReached) continue;
                     if (corpus == null) onStage?.Invoke("fetch");
                     corpus ??= _openCorpus();
                     foreach (var result in Fetch(corpus, batch, plan, prepared, ct)) yield return result;
                     batch.Clear();
                     if (capReached) yield break;
+                    batchSize = Math.Max(1, batchSizeAt?.Invoke(++batchIndex) ?? DefaultContentBatchSize);
                 }
                 if (batch.Count > 0)
                 {

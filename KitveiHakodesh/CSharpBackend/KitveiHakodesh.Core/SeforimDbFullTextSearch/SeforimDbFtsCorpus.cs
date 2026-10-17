@@ -32,12 +32,10 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// </summary>
     public sealed class SeforimDbFtsCorpus : IFtsCorpus, IFtsOrderedCorpus
     {
-        /// <summary>SQLite's default variable limit is 999; staying under it caps the IN-lists.</summary>
-        private const int NeighborChunkSize = 999;
-
-        /// <summary>Result fetches use smaller chunks so the first hits reach the caller after
-        /// 200 rows, not after the whole ID list — this feeds a UI that streams results in.</summary>
-        private const int FetchChunkSize = 200;
+        /// <summary>SQLite's default variable limit is 999; staying under it caps the IN-lists.
+        /// How many ids a fetch is asked for at a time is the CALLER's decision (the searcher's
+        /// batch plan); this only splits a request that would not fit one statement.</summary>
+        private const int SqliteInListChunkSize = 999;
 
         private readonly SqliteConnection _connection;
 
@@ -169,15 +167,15 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         public IEnumerable<(int Id, string Text, string Title)> FetchDocuments(IEnumerable<int> ids)
         {
-            var chunk = new List<int>(FetchChunkSize);
+            var chunk = new List<int>(SqliteInListChunkSize);
 
             using var command = _connection.CreateCommand();
-            string[] parameterNames = AddChunkParameters(command, FetchChunkSize);
+            string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
 
             foreach (int id in ids)
             {
                 chunk.Add(id);
-                if (chunk.Count == FetchChunkSize)
+                if (chunk.Count == SqliteInListChunkSize)
                 {
                     foreach (var row in FetchChunk(command, parameterNames, chunk)) yield return row;
                     chunk.Clear();
@@ -233,12 +231,12 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
             using (var command = _connection.CreateCommand())
             {
-                string[] parameterNames = AddChunkParameters(command, NeighborChunkSize);
+                string[] parameterNames = AddChunkParameters(command, SqliteInListChunkSize);
                 command.Parameters.AddWithValue("@radius", radius);
 
-                for (int start = 0; start < ids.Count; start += NeighborChunkSize)
+                for (int start = 0; start < ids.Count; start += SqliteInListChunkSize)
                 {
-                    int count = Math.Min(NeighborChunkSize, ids.Count - start);
+                    int count = Math.Min(SqliteInListChunkSize, ids.Count - start);
                     command.CommandText = SeforimDbSqlStrings.FtsFetchNeighborLines(_schema, count);
                     for (int i = 0; i < count; i++)
                         command.Parameters[parameterNames[i]].Value = ids[start + i];

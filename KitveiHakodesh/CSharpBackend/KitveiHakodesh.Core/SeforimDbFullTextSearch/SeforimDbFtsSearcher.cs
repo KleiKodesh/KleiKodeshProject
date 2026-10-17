@@ -30,9 +30,43 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
     /// </summary>
     public sealed class SeforimDbFtsSearcher
     {
-        /// <summary>Batch size for parallel snippeting. Large enough to keep every core busy,
-        /// small enough that the first results reach the caller almost immediately.</summary>
-        private const int SnippetBatchSize = 256;
+        // ── Batch plan ─────────────────────────────────────────────────────────────
+        // ONE plan for the whole pipeline: the engine fetches content in batches of exactly
+        // the size the searcher snippets, so a batch is fetched, snippeted, enriched and
+        // handed on as one unit. Small batches first — the first screen is on the wire
+        // after one fetch of 256 lines — then larger ones, because a broad query has
+        // hundreds of thousands of batches to go and every batch pays fixed costs (a
+        // SQLite round-trip, a Parallel.For spin-up, a frame write on the transport).
+
+        /// <summary>Batch size for the first <see cref="FirstBatchCount"/> batches. Large
+        /// enough to keep every core busy, small enough that the first results reach the
+        /// caller almost immediately.</summary>
+        public const int FirstBatchSize = 256;
+
+        /// <summary>How many batches stay at <see cref="FirstBatchSize"/> before growing —
+        /// a few screens' worth, so paging through early results feels the same.</summary>
+        public const int FirstBatchCount = 16;
+
+        /// <summary>After the first batches the size doubles per batch up to this.</summary>
+        public const int GrownBatchSize = 2048;
+
+        /// <summary>Hard ceiling on any batch the plan can ask for — what the content fetch
+        /// and the snippet arrays are sized against.</summary>
+        public const int MaxBatchSize = 4096;
+
+        /// <summary>The planned size of batch number <paramref name="batchIndex"/> (0-based).
+        /// Shared by the engine's content fetch and this class's snippeting, so both cut the
+        /// stream at the same places.</summary>
+        public static int BatchSizeAt(int batchIndex)
+        {
+            if (batchIndex < FirstBatchCount) return FirstBatchSize;
+            int size = FirstBatchSize;
+            for (int i = FirstBatchCount; i <= batchIndex && size < GrownBatchSize; i++) size *= 2;
+            return Math.Min(size, MaxBatchSize);
+        }
+
+        /// <summary>SQLite's default variable limit is 999; IN-lists are chunked under it.</summary>
+        private const int SqliteInListChunkSize = 999;
 
         /// <summary>
         /// How many lines of context to pull per side when extending a short snippet window
@@ -102,16 +136,19 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
             string? last = null;
             Action<string>? stage = onStage == null ? null : s => { if (s != last) { last = s; onStage(s); } };
 
-            var batch = new List<SearchResult>(SnippetBatchSize);
+            int batchIndex = 0;
+            var batch = new List<SearchResult>(FirstBatchSize);
 
-            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken, onStage: stage))
+            foreach (var hit in index.Search(query, cap: 0, expandKetiv: expandKetiv, ct: cancellationToken,
+                                             onStage: stage, batchSizeAt: BatchSizeAt))
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 batch.Add(hit);
-                if (batch.Count < SnippetBatchSize) continue;
+                if (batch.Count < BatchSizeAt(batchIndex)) continue;
 
                 var built = BuildBatch(engine, batch, requireOrdered, contextWords, maxWordDistance, terms, cancellationToken, stage);
                 batch.Clear();
+                batchIndex++;
                 if (built.Count > 0) yield return built;
                 stage?.Invoke("fetch");   // engine only reports its first fetch
             }
@@ -513,20 +550,24 @@ namespace KitveiHakodesh.Core.SeforimDbFullTextSearch
 
         /// <summary>
         /// Fills each hit's book id and TOC entry id so results leave Core COMPLETE. One
-        /// batched query per batch, straight off the line table: a line with no TOC entry
-        /// (custom books) keeps TocEntryId 0 but still gets its book.
+        /// batched query per 999 hits (SQLite's variable limit), straight off the line
+        /// table: a line with no TOC entry (custom books) keeps TocEntryId 0 but still gets
+        /// its book.
         /// </summary>
         private void EnrichHits(List<FtsHit> hits)
         {
             if (hits.Count == 0) return;
 
-            var lineIds = new List<int>(hits.Count);
-            foreach (var hit in hits) lineIds.Add(hit.LineId);
-
-            var rows = _queries.GetTocEntryIdsForLines(lineIds);
-            if (rows.Count == 0) return;
-            var byLine = new Dictionary<int, LineTocEntryRow>(rows.Count);
-            foreach (var row in rows) byLine[row.LineId] = row;
+            var byLine = new Dictionary<int, LineTocEntryRow>(hits.Count);
+            var lineIds = new List<int>(SqliteInListChunkSize);
+            for (int start = 0; start < hits.Count; start += SqliteInListChunkSize)
+            {
+                lineIds.Clear();
+                int end = Math.Min(hits.Count, start + SqliteInListChunkSize);
+                for (int i = start; i < end; i++) lineIds.Add(hits[i].LineId);
+                foreach (var row in _queries.GetTocEntryIdsForLines(lineIds)) byLine[row.LineId] = row;
+            }
+            if (byLine.Count == 0) return;
             foreach (var hit in hits)
             {
                 if (!byLine.TryGetValue(hit.LineId, out var row)) continue;
