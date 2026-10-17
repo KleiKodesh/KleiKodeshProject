@@ -47,7 +47,7 @@ All book files — both in the user's local folder and in the app cache — are 
 
 - `startHbDownload()` — shows the placeholder spinner (loadingType: 'downloading')
 - `finishHbDownload()` — pushed by C# `hbPdfReady` event; sets the final URL and clears the spinner
-- `cancelHbDownload()` — pushed by C# `hbPdfCancelled` event; closes the tab
+- `cancelHbDownload()` — pushed by C# `hbPdfCancelled` event; navigates the tab back to the HebrewBooks page and shows the failure reason in the banner (a user cancel leaves the tab alone)
 - `restoreTab()` — on app init, restores cached/local books from persisted tab state
 
 ## Settings Integration

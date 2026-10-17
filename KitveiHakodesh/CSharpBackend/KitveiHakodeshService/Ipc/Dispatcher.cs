@@ -54,7 +54,7 @@ public sealed class Dispatcher(
         }
         catch (Exception ex)
         {
-            return RpcResponse.Err("Invalid request: " + ex.Message);
+            return RpcResponse.Err("Invalid request: " + ex.Message, ex.ToString());
         }
 
         if (req is null || string.IsNullOrEmpty(req.Op))
@@ -452,10 +452,11 @@ public sealed class Dispatcher(
                     }
                     var r = await hebrewBooks.AcquireAsync(a.BookId ?? "", folder, allowDownload: true, ct);
                     if (r.Path != null) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Handle = localFileGrants.Grant(r.Path), Path = r.Path }));
-                    if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true }));
+                    // Detail = full C# failure (exception ToString / response facts), printed to the webview console.
+                    if (r.NotFound) return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NotFound = true, Detail = r.Detail }));
                     if (r.Error == "cancelled") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Cancelled = true }));
-                    if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true }));
-                    return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed" }));
+                    if (r.Error == "network error") return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { NoInternet = true, Detail = r.Detail }));
+                    return RpcResponse.Ok(MsgPack.Ser(new HbDownloadResult { Error = r.Error ?? "download failed", Detail = r.Detail }));
                 }
 
                 // Poll the live byte progress of an in-flight HB download (streamed in the service).
@@ -827,7 +828,7 @@ public sealed class Dispatcher(
         }
         catch (Exception ex)
         {
-            return RpcResponse.Err(ex.Message);
+            return RpcResponse.Err(req.Op, ex);
         }
     }
 
@@ -844,6 +845,21 @@ public sealed class Dispatcher(
         try { req = MessagePack.MessagePackSerializer.Deserialize<RpcRequest>(request, MsgPack.Options); }
         catch { return false; }
 
+        try
+        {
+            return await DispatchStreamOpAsync(req, writeFrame, ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Send the failure as a frame so the client console shows the whole exception
+            // instead of a dropped connection. A broken pipe makes that write fail too — ignore.
+            try { await writeFrame(RpcResponse.Err(req!.Op!, ex)); } catch { }
+            return true;
+        }
+    }
+
+    private async Task<bool> DispatchStreamOpAsync(RpcRequest? req, Func<byte[], Task> writeFrame, CancellationToken ct)
+    {
         switch (req?.Op)
         {
             // Full-text search: result batches stream until Done.

@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useVirtualizer } from '@tanstack/vue-virtual'
-import { IconSearch20Regular, IconDismiss20Regular } from '@iconify-prerendered/vue-fluent'
+import { IconSearch20Regular } from '@iconify-prerendered/vue-fluent'
+import MessageBanner from '@/components/MessageBanner.vue'
 import LoadingAnimation from '@/components/LoadingAnimation.vue'
 import HebrewBooksListItem from './HebrewBooksListItem.vue'
 import TopSearchBar from '@/components/TopSearchBar.vue'
@@ -150,12 +151,12 @@ function onBookClicked(
       </div>
     </div>
 
-    <div v-if="downloadErrorMessage" class="hb-error-banner">
-      <span>{{ downloadErrorMessage }}</span>
-      <button class="hb-error-dismiss" @click="downloadErrorMessage = null">
-        <IconDismiss20Regular />
-      </button>
-    </div>
+    <MessageBanner
+      v-if="downloadErrorMessage"
+      class="hb-error-banner"
+      :message="downloadErrorMessage"
+      @dismiss="downloadErrorMessage = null"
+    />
   </div>
 </template>
 
@@ -201,27 +202,10 @@ function onBookClicked(
   direction: rtl;
 }
 
+/* Docked under the list: squared top corners so it reads as part of the page edge. */
 .hb-error-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 12px;
-  background: color-mix(in srgb, var(--status-danger) 12%, var(--bg-secondary));
-  border-top: 1px solid color-mix(in srgb, var(--status-danger) 30%, transparent);
-  flex-shrink: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.hb-error-dismiss {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  padding: 0;
-  color: var(--text-secondary);
-  flex-shrink: 0;
+  border-radius: 0;
+  border-inline: none;
+  border-bottom: none;
 }
 </style>

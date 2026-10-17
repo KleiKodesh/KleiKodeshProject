@@ -39,6 +39,9 @@ public sealed class RpcEnvelope
     public bool Ok { get; set; }
     public byte[]? Result { get; set; }
     public string? Error { get; set; }
+    /// <summary>Full C# failure (exception ToString, with op name) — the client prints it to
+    /// the webview console. Error stays the short message callers may show.</summary>
+    public string? Detail { get; set; }
 }
 
 // ── Tiny status-flag result DTOs (preserve the current response shapes) ──────────

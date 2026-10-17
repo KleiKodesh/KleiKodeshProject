@@ -266,6 +266,9 @@ public sealed class HbDownloadResult
     /// no error banner.</summary>
     public bool Cancelled { get; set; }
     public string? Error { get; set; }
+    /// <summary>Full failure detail (exception ToString, HTTP status/content-type/final URL) for
+    /// the webview console — never shown in the UI.</summary>
+    public string? Detail { get; set; }
 }
 
 /// <summary>Args for <c>checkHbLocalFiles</c>.</summary>
@@ -457,7 +460,11 @@ internal static class RpcResponse
 {
     public static byte[] Ok(byte[]? resultBytes) => MsgPack.Ser(new RpcEnvelope { Ok = true, Result = resultBytes });
 
-    public static byte[] Err(string message) => MsgPack.Ser(new RpcEnvelope { Ok = false, Error = message });
+    public static byte[] Err(string message, string? detail = null) =>
+        MsgPack.Ser(new RpcEnvelope { Ok = false, Error = message, Detail = detail });
+
+    /// <summary>An op threw: short message for callers, the whole exception for the console.</summary>
+    public static byte[] Err(string op, Exception ex) => Err(ex.Message, $"op '{op}' threw:\n{ex}");
 }
 
 /// <summary>AOT-safe source-generated (de)serialization for every RPC type.
@@ -566,9 +573,5 @@ internal static class RpcResponse
 [JsonSerializable(typeof(LineByIndexArgs))]
 [JsonSerializable(typeof(RawLineRow))]
 [JsonSerializable(typeof(RawLinesResult))]
-[JsonSerializable(typeof(FtsSearchArgs))]
-[JsonSerializable(typeof(FtsHit))]
-[JsonSerializable(typeof(FtsSearchResult))]
-[JsonSerializable(typeof(FtsIndexStatus))]
 [JsonSerializable(typeof(string))]
 internal partial class RpcJsonContext : JsonSerializerContext;

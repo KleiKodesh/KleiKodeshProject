@@ -343,7 +343,8 @@ async function servedPdfUrl(r: { handle?: string; path?: string }): Promise<stri
   if (typeof window.__webviewAction !== 'function') return `/khs-file/${r.handle}`
   if (!r.path) return null
   const hosted = await action<{ url?: string; error?: string }>('restoreLocalFile', { filePath: r.path })
-  return hosted.url || null
+  if (!hosted?.url) console.error('[hb-download] host could not serve the PDF', { path: r.path, reply: hosted })
+  return hosted?.url || null
 }
 
 /**
@@ -880,6 +881,7 @@ export function triggerHbDownload(
         noInternet?: boolean
         cancelled?: boolean
         error?: string
+        detail?: string
       }>('triggerHbDownload', { bookId, localFolder: localFolder || '', isOnline: isOnline !== false })
       const url = await servedPdfUrl(r)
       if (url) {
@@ -888,6 +890,7 @@ export function triggerHbDownload(
         // The user aborted the download; the tab was already reset, nothing to show.
         emitWebviewEvent({ event: 'hbPdfCancelled', tabId, cancelled: true })
       } else {
+        console.error(`[hb-download] book ${bookId} failed:\n${r?.detail || r?.error || JSON.stringify(r)}`)
         // Anything else carries the service's reason (HTTP status, disk error with the folder,
         // invalid id) so the store can show it instead of closing the tab silently.
         emitWebviewEvent({
@@ -899,6 +902,7 @@ export function triggerHbDownload(
         })
       }
     } catch (e) {
+      console.error(`[hb-download] book ${bookId} threw:`, e)
       const noInternet = !navigator.onLine
       emitWebviewEvent({
         event: 'hbPdfCancelled',
