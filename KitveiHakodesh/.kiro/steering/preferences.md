@@ -270,7 +270,7 @@ Book catalog search applies Hebrew-specific text transformations so that variant
 - `bookCatalogSearchNormalizer.ts` — all text transformation: abbreviation expansion (שו"ע → שלחן ערוך), spelling normalization (שולחן → שלחן), Hebrew word decomposition into consonantal skeleton + vowel-letter set for חסר/מלא matching, and definite-article stripping (הרמבן → רמבן). Applied symmetrically to indexed tokens at build time and query words at search time.
 - `bookCatalogSearchMatcher.ts` — the score tiers (`SCORE_EXACT` 3, `SCORE_PREFIX` 2, `SCORE_NONE` 0) and per-token scoring. Knows nothing about the index or catalog.
 - `bookCatalogSearch.ts` — the inverted index and query execution: `buildSearchIndex` and `filterBooksByWords`.
-- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`, `bookCatalogTocSearchCache.ts`).
+- `useBookCatalogSearch.ts` — two-phase orchestration and Vue reactivity; decides when to fall back to the TOC heuristics pipeline (`bookCatalogSearchTocHeuristics.ts`, `bookCatalogTocKeywords.ts`).
 
 `bookCatalogTree.ts` owns tree building and category metadata (`buildTree`, `assignSubtreeBookIds`, `assignFullPaths`, `findCategoryMeta`) — it is not part of the search stack.
 

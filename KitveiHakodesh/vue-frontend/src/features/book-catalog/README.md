@@ -33,7 +33,5 @@ The top-level `runTocHeuristics` function runs all four stages in sequence and a
 
 **bookCatalogSearchMatcher.ts** - score constants (EXACT, PREFIX, NONE) and the per-token scoring function. Import score constants from here whenever comparing tiers.
 
-**bookCatalogTocSearchCache.ts** - LRU disk cache for TOC search results (25 entries). Caches the output of Phase 2 so repeated queries skip DB round-trips entirely.
-
 **SEARCH.md** — detailed design document for the book catalog search architecture.
 

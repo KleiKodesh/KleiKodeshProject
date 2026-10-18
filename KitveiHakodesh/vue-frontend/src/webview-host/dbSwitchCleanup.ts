@@ -51,7 +51,6 @@ const STALE_DATABASES = [
   'app-tabs',
   'app-recent-tabs',
   'app-search-cache',
-  'app-catalog-toc-cache',
 ] as const
 
 /**

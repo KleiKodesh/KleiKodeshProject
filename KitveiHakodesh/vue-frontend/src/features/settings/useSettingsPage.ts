@@ -3,7 +3,6 @@ import { storeToRefs } from 'pinia'
 import { useSettingsStore } from '@/stores/settingsStore'
 import { useSearchCacheStore } from '@/stores/searchCacheStore'
 import { resetSearchIndex as bridgeResetSearchIndex, resetDocumentLocatorIndex as bridgeResetDocumentLocatorIndex, resetCatalogTocIndex as bridgeResetCatalogTocIndex, setTheme } from '@/webview-host/bridge'
-import { clearCatalogTocCache } from '@/features/book-catalog/bookCatalogTocSearchCache'
 
 export function useSettings() {
   const settings = useSettingsStore()
@@ -35,13 +34,7 @@ export function useSettings() {
     await bridgeResetDocumentLocatorIndex()
   }
 
-  /**
-   * Clear the frontend's TOC result cache alongside the service-side Lucene index —
-   * otherwise a cached hit keeps serving results from the index we just wiped, which
-   * would make the reset look like it did nothing.
-   */
   async function resetCatalogTocIndexAction() {
-    await clearCatalogTocCache()
     await bridgeResetCatalogTocIndex()
   }
 
