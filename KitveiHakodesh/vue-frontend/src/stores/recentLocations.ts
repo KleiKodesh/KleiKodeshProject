@@ -1,3 +1,4 @@
+import { toRaw } from 'vue'
 import { dbGet, dbSet } from '@/utils/persistence'
 import { locationKey, type NavLocation } from './navLocation'
 
@@ -46,10 +47,8 @@ function isWellFormed(loc: NavLocation): boolean {
 
 export function saveRecentLocations(wsId: string, locations: NavLocation[]): Promise<void> {
   // IndexedDB structured-clones what it stores and cannot clone a Vue reactive
-  // proxy, so deep-copy to plain objects here rather than at each call site.
-  return dbSet<PersistedRecentLocations>(RECENT_DB, key(wsId), {
-    tabs: JSON.parse(JSON.stringify(locations)) as NavLocation[],
-  })
+  // proxy, so unwrap to plain objects here rather than at each call site.
+  return dbSet<PersistedRecentLocations>(RECENT_DB, key(wsId), { tabs: toPlain(locations) })
 }
 
 /**
@@ -69,4 +68,20 @@ export function recordVisit(locations: NavLocation[], visit: NavLocation): NavLo
 /** Most-recent-first, for display. */
 export function sortedByRecency(locations: NavLocation[]): NavLocation[] {
   return [...locations].sort((a, b) => b.recentStamp - a.recentStamp)
+}
+
+/**
+ * Deep-unwraps reactive proxies into plain objects and arrays (strings, numbers and
+ * booleans pass through). A proxy can sit at any depth: an entry patched by spreading
+ * a reactive entry carries its nested `position` as a proxy.
+ */
+function toPlain<T>(value: T): T {
+  const raw = toRaw(value)
+  if (Array.isArray(raw)) return raw.map(toPlain) as T
+  if (raw && typeof raw === 'object') {
+    const out: Record<string, unknown> = {}
+    for (const k in raw) out[k] = toPlain((raw as Record<string, unknown>)[k])
+    return out as T
+  }
+  return raw
 }

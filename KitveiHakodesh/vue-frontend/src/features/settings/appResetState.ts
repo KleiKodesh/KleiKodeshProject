@@ -5,6 +5,8 @@ import {
   lsSetRaw,
   lsDeleteRaw,
   dropDatabase,
+  sealDatabase,
+  sealLocalStorageKeys,
 } from '@/utils/persistence'
 import { resetHostApp } from '@/webview-host/bridge'
 
@@ -87,6 +89,16 @@ async function dropRemainingAppDatabases(): Promise<void> {
  * runtime. Those are swept afterwards by enumeration, which also catches any future
  * `app-` database whose author forgets to add it here.
  */
+// Databases the storage driver owns (the two store-owned ones are dropped by their stores).
+const DRIVER_OWNED_DATABASES = [
+  'app-tabs',
+  'app-recent-tabs',
+  'app-lastread',
+  'app-search-cache',
+  'app-dict-cache',
+  'app-frequent-folders',
+]
+
 async function clearAllLocalStorage(): Promise<void> {
   // These two stores own their own IDB handles, and a handle must be closed before
   // deleteDatabase or it stalls on onblocked. Imported lazily so a reset never
@@ -96,16 +108,15 @@ async function clearAllLocalStorage(): Promise<void> {
   // Driver-owned database, but its store keeps an in-memory list that would be
   // written back out after the drop if it were not cleared too.
   const { resetFrequentFoldersCache } = await import('@/stores/frequentFoldersStore')
+  // Sealed BEFORE the drops: coalesced persistence writes flush on unload, and a
+  // watcher firing mid-wipe would otherwise recreate what was just deleted.
+  for (const name of DRIVER_OWNED_DATABASES) sealDatabase(name)
+  sealLocalStorageKeys('')
   resetFrequentFoldersCache()
   await Promise.all([
-    dropDatabase('app-tabs'),
-    dropDatabase('app-recent-tabs'),
-    dropDatabase('app-lastread'),
+    ...DRIVER_OWNED_DATABASES.map((name) => dropDatabase(name)),
     dropHbHistoryDb(),
     dropRecentlyOpenedDb(),
-    dropDatabase('app-search-cache'),
-    dropDatabase('app-dict-cache'),
-    dropDatabase('app-frequent-folders'),
   ])
   await dropRemainingAppDatabases()
   // MUST come last. These two clear the __pendingReset flag, so clearing it before

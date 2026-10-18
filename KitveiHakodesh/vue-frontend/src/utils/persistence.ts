@@ -48,7 +48,18 @@ export function lsGet<T>(key: string): T | null {
   } catch { return null }
 }
 
+// Prefixes a wipe-then-reload has refused further writes to (see sealLocalStorageKeys).
+const _sealedLsPrefixes: string[] = []
+
+/** Refuse all further lsSet writes to keys starting with `prefix` ('' = every key).
+ *  Called by a wipe that is about to reload, so a coalesced write flushed by the
+ *  unload cannot resurrect what was just deleted. */
+export function sealLocalStorageKeys(prefix: string): void {
+  _sealedLsPrefixes.push(prefix)
+}
+
 export function lsSet<T>(key: string, value: T): void {
+  if (_sealedLsPrefixes.some((prefix) => key.startsWith(prefix))) return
   try { localStorage.setItem(LS_PREFIX + key, JSON.stringify(value)) } catch {}
 }
 
