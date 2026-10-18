@@ -20,7 +20,7 @@
  * The service's DTOs use PascalCase keys on the wire (keyAsPropertyName); this module
  * transforms keys transparently so the rest of the app stays camelCase.
  */
-import { encode as mpEncode, decode as mpDecode } from '@msgpack/msgpack'
+import { encode as mpEncode, decode as mpDecode, Decoder } from '@msgpack/msgpack'
 import { onWebviewEvent } from './seforimDb'
 import {
   isPersistentReason,
@@ -132,16 +132,35 @@ async function postRpc(path: string, body: BodyInit, signal?: AbortSignal): Prom
 const lowerFirst = (k: string) => (k ? k.charAt(0).toLowerCase() + k.slice(1) : k)
 const upperFirst = (k: string) => (k ? k.charAt(0).toUpperCase() + k.slice(1) : k)
 
-// A few wire fields aren't plain PascalCase↔camelCase. SenseRow.SourceId is snake_case
+// A few wire fields aren't plain PascalCase<->camelCase. SenseRow.SourceId is snake_case
 // (source_id) in the hosted JSON path via [JsonPropertyName], so the dev path must deliver
 // the same name to keep dictionary consumers identical across hosted/dev.
 const decodeKey = (k: string) => (k === 'SourceId' ? 'source_id' : lowerFirst(k))
 
-/** Recursively transform object keys (arrays + nested objects); leaves values, including
- *  binary (Uint8Array/ArrayBuffer), untouched. An array whose first element is a primitive
- *  is returned as-is: wire arrays are homogeneous, and the int arrays every search hit
- *  carries (snippet line ids, marks, term ids) would otherwise be copied element by
- *  element, hundreds of thousands of times over a broad search. */
+/** Wire key -> app key, memoised: the same few dozen DTO keys recur across every row of
+ *  every reply, so each key string is converted once per process rather than per object. */
+const decodedKeyByWireKey = new Map<string, string>()
+function decodeMapKey(key: unknown): string | number {
+  if (typeof key === 'number') return key
+  if (typeof key !== 'string') throw new Error(`service reply map key must be string or number, got ${typeof key}`)
+  let out = decodedKeyByWireKey.get(key)
+  if (out === undefined) {
+    out = decodeKey(key)
+    decodedKeyByWireKey.set(key, out)
+  }
+  return out
+}
+
+/** Decodes a reply payload with its keys already camelCased: the rename happens while
+ *  msgpack builds each object, so there is no second pass and no copy of the decoded tree.
+ *  The Decoder is safe to share - it clones itself when re-entered. Envelopes are decoded
+ *  with the plain `mpDecode` because their keys (Ok/Result/Error) are read in PascalCase. */
+const replyDecoder = new Decoder({ mapKeyConverter: decodeMapKey })
+const decodeReply = (bytes: Uint8Array): unknown => replyDecoder.decode(bytes)
+
+/** Recursively PascalCase the keys of an outgoing args object (arrays + nested objects);
+ *  leaves values, including binary (Uint8Array/ArrayBuffer), untouched. An array whose
+ *  first element is a primitive is returned as-is: wire arrays are homogeneous. */
 function transformKeys(v: any, fn: (k: string) => string): any {
   if (Array.isArray(v)) {
     if (v.length > 0 && (typeof v[0] !== 'object' || v[0] === null)) return v
@@ -207,7 +226,7 @@ export async function serviceCall<T = unknown>(
     return undefined as T
   }
   console.debug(`[service] <- ${op} ${ms} ms, ${env.Result.length} bytes`)
-  return transformKeys(mpDecode(env.Result), decodeKey) as T
+  return decodeReply(env.Result) as T
 }
 
 /** Fire-and-forget variant (warmups etc.) — swallows every error. */
@@ -280,7 +299,7 @@ async function* hostedRelayStream<T>(
         const env = mpDecode(frame) as Envelope
         if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
-          yield transformKeys(mpDecode(env.Result), decodeKey) as T
+          yield decodeReply(env.Result) as T
         if (++unacked >= STREAM_ACK_EVERY) ack()
       }
       if (unacked) ack() // queue drained: hand back the rest so the relay never stalls
@@ -346,7 +365,7 @@ export async function* serviceStream<T = unknown>(
         const env = mpDecode(frame) as Envelope
         if (!env.Ok) throwEnvelopeError(op, env, `service '${op}' stream error`)
         if (env.Result && env.Result.length > 0)
-          yield transformKeys(mpDecode(env.Result), decodeKey) as T
+          yield decodeReply(env.Result) as T
       }
     }
   } finally {
