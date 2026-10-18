@@ -25,6 +25,7 @@ import {
   lsSetRaw,
   dropDatabase,
   sealDatabase,
+  sealLocalStorageKeys,
 } from '@/utils/persistence'
 
 /**
@@ -75,7 +76,9 @@ const HIDDEN_WORD_LINK_MARKERS_KEY = 'text.hiddenWordLinkMarkers'
  * makes the surviving stores refetch, and a store that reloads first would write
  * its stale in-memory copy back out.
  */
-export async function clearStaleBookData(): Promise<void> {
+// `reloadFollows` is false only on the boot recovery path: no store has initialised yet,
+// so nothing is pending to seal against, and the session that follows must persist.
+export async function clearStaleBookData(reloadFollows = true): Promise<void> {
   scheduleDbSwitchCleanup()
   // Imported lazily so a switch never forces the lazy-loaded store to initialise
   // earlier than it otherwise would.
@@ -84,6 +87,7 @@ export async function clearStaleBookData(): Promise<void> {
   // copies and re-persist them on any mutation, so a watcher firing mid-wipe would
   // recreate a database that had just been deleted. See sealDatabase.
   STALE_DATABASES.forEach(sealDatabase)
+  if (reloadFollows) STALE_LS_PREFIXES.forEach(sealLocalStorageKeys)
   await Promise.all([
     // Pruned, not dropped — keeps the reader's pinned local files and HebrewBooks.
     pruneSeforimBookEntries(),
@@ -117,7 +121,7 @@ function scheduleDbSwitchCleanup(): void {
 export async function checkAndExecPendingDbSwitchCleanup(): Promise<void> {
   if (lsGetRaw(DB_SWITCH_LS_KEY) !== '1') return
   try {
-    await clearStaleBookData()
+    await clearStaleBookData(false)
   } catch {
     // Drop the flag so a persistently failing wipe cannot stall every launch —
     // booting with stale recent books beats not booting at all. The seal still

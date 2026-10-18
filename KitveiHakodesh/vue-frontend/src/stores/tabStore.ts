@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch, nextTick } from 'vue'
 import { lsGet, lsSet } from '@/utils/persistence'
+import { useCoalescedWrite } from '@/composables/useCoalescedWrite'
 import { tabsListKey } from './workspaceStore'
 import { useWorkspaceStore } from './workspaceStore'
 import {
@@ -396,8 +397,12 @@ export const useTabStore = defineStore('tabs', () => {
 
   // ── Tab list persistence ──────────────────────────────────────────────────
 
-  function persistTabs() {
-    const wsId = useWorkspaceStore().activeId
+  // The workspace id is bound when the write is SCHEDULED, not when it runs: a
+  // workspace switch reassigns activeId and reloads, and a write landing in between
+  // must still go to the workspace these tabs belong to.
+  function persistTabs(wsId: string) {
+    // A workspace deleted while its write was pending must not come back as an orphan key.
+    if (!useWorkspaceStore().workspaces.some((w) => w.id === wsId)) return
     const persistable = tabs.value.filter((t) => !DESTINATION_ROUTES.includes(t.route))
     lsSet<PersistedTabList>(tabsListKey(wsId), {
       tabs: persistable.map(withoutTransientFields).map((t) => {
@@ -682,13 +687,33 @@ export const useTabStore = defineStore('tabs', () => {
   )
   // accessOrder is included so a pane-2 switch (which changes neither the snapshot
   // nor activeTabId) still persists the new recency.
-  watch([_persistedSnapshot, activeTabId, accessOrder], persistTabs)
+  // Both writes are coalesced (trailing ~300ms, flushed on hide/unload): a scroll moves
+  // the breadcrumb on every tick, and each move used to rewrite the whole tab list and
+  // the whole recents list.
+  let pendingTabsWorkspaceId = ''
+  const tabsWrite = useCoalescedWrite(() => persistTabs(pendingTabsWorkspaceId))
+  watch([_persistedSnapshot, activeTabId, accessOrder], () => {
+    const wsId = useWorkspaceStore().activeId
+    // A write still pending for the previous workspace goes out as-is first.
+    if (pendingTabsWorkspaceId !== wsId) tabsWrite.flush()
+    pendingTabsWorkspaceId = wsId
+    tabsWrite.schedule()
+  })
 
   // Locations are plain data, so the list persists whole. Deep watch: positions are
   // folded into existing entries in place by captureCurrentPosition.
+  let pendingRecentsWorkspaceId = ''
+  const recentsWrite = useCoalescedWrite(() => {
+    void saveRecentLocations(pendingRecentsWorkspaceId, recentLocations.value)
+  })
   watch(
     recentLocations,
-    () => { void saveRecentLocations(useWorkspaceStore().activeId, recentLocations.value) },
+    () => {
+      const wsId = useWorkspaceStore().activeId
+      if (pendingRecentsWorkspaceId !== wsId) recentsWrite.flush()
+      pendingRecentsWorkspaceId = wsId
+      recentsWrite.schedule()
+    },
     { deep: true },
   )
 
